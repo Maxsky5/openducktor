@@ -41,7 +41,7 @@ type UseAgentChatComposerEditorArgs = {
   editorRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
   onEditorInput: () => void;
-  primarySubmitMode?: AgentMessageSubmitMode;
+  primaryMode?: AgentMessageSubmitMode;
   onSend: (mode: AgentMessageSubmitMode) => void;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
@@ -87,7 +87,7 @@ export const useAgentChatComposerEditor = ({
   editorRef,
   disabled,
   onEditorInput,
-  primarySubmitMode = "default",
+  primaryMode = "default",
   onSend,
   supportsSlashCommands,
   supportsFileSearch,
@@ -351,7 +351,7 @@ export const useAgentChatComposerEditor = ({
     onDraftChange,
     onEditorInput,
     onAddFiles,
-    primarySubmitMode,
+    primaryMode,
     onSend,
     latestDraftRef,
     selection,

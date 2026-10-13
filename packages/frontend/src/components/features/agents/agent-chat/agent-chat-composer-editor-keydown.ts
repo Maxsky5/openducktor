@@ -68,7 +68,7 @@ type HandleComposerEditorKeyDownArgs = {
   closeSlashMenu: () => void;
   closeReferenceMenu: () => void;
   closeSkillMenu: () => void;
-  primarySubmitMode?: AgentMessageSubmitMode;
+  primaryMode?: AgentMessageSubmitMode;
   onSend: (mode: AgentMessageSubmitMode) => void;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
@@ -485,7 +485,7 @@ export const handleComposerEditorKeyDown = ({
   closeSlashMenu,
   closeReferenceMenu,
   closeSkillMenu,
-  primarySubmitMode = "default",
+  primaryMode = "default",
   onSend,
   clearComposerContents,
   insertNewlineAtSelectionTarget,
@@ -504,7 +504,7 @@ export const handleComposerEditorKeyDown = ({
   if (isSteerShortcut(event)) {
     event.preventDefault();
     if (!disabled && !event.repeat) {
-      onSend(primarySubmitMode === "default" ? "steer" : "default");
+      onSend(primaryMode === "default" ? "steer" : "default");
     }
     return true;
   }
@@ -586,7 +586,7 @@ export const handleComposerEditorKeyDown = ({
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     if (!disabled) {
-      onSend(primarySubmitMode);
+      onSend(primaryMode);
     }
     return true;
   }

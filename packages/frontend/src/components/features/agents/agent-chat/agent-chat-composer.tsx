@@ -68,8 +68,221 @@ export type AgentChatComposerHandle = {
   addFiles: (files: File[]) => void;
 };
 
+export function AgentChatComposer({
+  model,
+  ref,
+}: {
+  model: AgentChatComposerModel;
+  ref?: Ref<AgentChatComposerHandle>;
+}): ReactElement {
+  const chatSettings = useAgentChatSettings();
+  const settingsReady = chatSettings !== null;
+  const primaryMode: AgentMessageSubmitMode = chatSettings?.steerMessagesByDefault
+    ? "steer"
+    : "default";
+  const {
+    displayedSessionKey,
+    isInteractionEnabled,
+    isReadOnly,
+    draftScope,
+    supportsAttachments,
+    accentColor: composerAccentColor,
+    composerEditorRef,
+    onComposerEditorInput,
+  } = model;
+
+  const {
+    draft,
+    commitDraft,
+    setDisplayedDraft,
+    createSubmittedDraftSnapshot,
+    clearSubmittedDraft,
+    restoreSubmittedDraft,
+  } = useAgentChatComposerDraftState({
+    scope: draftScope,
+  });
+  const draftRef = useRef<AgentChatComposerDraft>(draft);
+  const defaultSendDisabledRef = useRef(false);
+  const steerDisabledRef = useRef(false);
+  const modelRef = useRef(model);
+  const settingsReadyRef = useRef(settingsReady);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const isSubmitting = composerIsSubmitting(model);
+  const isComposerInputDisabled = composerInputDisabledFor(model);
+  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
+
+  const handleDraftChange = useCallback(
+    (nextDraft: AgentChatComposerDraft) => {
+      draftRef.current = nextDraft;
+      commitDraft(nextDraft);
+    },
+    [commitDraft],
+  );
+
+  const handleRemoveAttachment = useCallback(
+    (attachmentId: string): void => {
+      handleDraftChange(removeAttachmentFromDraft(draftRef.current, attachmentId));
+      onComposerEditorInput();
+    },
+    [handleDraftChange, onComposerEditorInput],
+  );
+
+  const handleAddFiles = useCallback(
+    (files: File[]): void => {
+      if (attachmentIntakeDisabled) {
+        return;
+      }
+
+      const attachments = buildComposerAttachmentsFromFiles(files);
+      if (attachments.length === 0) {
+        return;
+      }
+      handleDraftChange(appendAttachmentsToDraft(draftRef.current, attachments));
+      onComposerEditorInput();
+    },
+    [attachmentIntakeDisabled, handleDraftChange, onComposerEditorInput],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      addFiles: handleAddFiles,
+    }),
+    [handleAddFiles],
+  );
+
+  const openAttachmentPicker = useCallback((): void => {
+    if (attachmentIntakeDisabled) {
+      return;
+    }
+    attachmentInputRef.current?.click();
+  }, [attachmentIntakeDisabled]);
+
+  const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
+  const {
+    attachmentErrors,
+    hasSlashAttachmentConflict,
+    steerDisabled,
+    defaultSendDisabled,
+    sendDisabled,
+    sendBlockedReason,
+  } = useComposerSendRules({
+    model,
+    draft,
+    primaryMode,
+    settingsReady,
+  });
+
+  useLayoutEffect(() => {
+    draftRef.current = draft;
+    defaultSendDisabledRef.current = defaultSendDisabled;
+    steerDisabledRef.current = steerDisabled;
+    modelRef.current = model;
+    settingsReadyRef.current = settingsReady;
+  }, [draft, model, defaultSendDisabled, steerDisabled, settingsReady]);
+
+  const modelPickerDisabled = isSendOrModelPending || !isInteractionEnabled || isReadOnly;
+  const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
+
+  const scheduleComposerFocus = useAgentChatComposerFocus({
+    composerEditorRef,
+    displayedSessionKey,
+    isComposerInputDisabled,
+    isSubmitting,
+  });
+
+  const handleSubmit = useCallback(
+    async (mode: AgentMessageSubmitMode): Promise<void> => {
+      if (!settingsReadyRef.current) return;
+      const steersTurn = steersRunningTurn(mode, modelRef.current.isSessionWorking);
+      if (steersTurn ? steerDisabledRef.current : defaultSendDisabledRef.current) {
+        return;
+      }
+      const submitDraft = modelRef.current.onSend;
+      const submittedDraft = draftRef.current;
+      // Check before clearing the draft so the user can fix a blocked steer.
+      const steerBlockedReason = steersTurn
+        ? draftSteerBlockedReason(submittedDraft, modelRef.current)
+        : null;
+      if (steerBlockedReason) {
+        toast.error("Cannot steer this message", { description: steerBlockedReason });
+        return;
+      }
+      const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
+      clearSubmittedDraft(submittedSnapshot);
+      setDisplayedDraft(createEmptyComposerDraft());
+      onComposerEditorInput();
+      scheduleComposerFocus();
+      try {
+        const result = await submitDraft(submittedDraft, mode);
+        if (result !== true && result !== false) {
+          restoreSubmittedDraft(submittedSnapshot, result);
+          if (!result.inAppFeedbackHandled)
+            toast.error("Unable to send message", { description: result.error.message });
+          return;
+        }
+        if (!result) {
+          restoreSubmittedDraft(submittedSnapshot);
+          if (modelRef.current.draftScope.key === submittedSnapshot.key) {
+            onComposerEditorInput();
+            scheduleComposerFocus();
+          }
+          return;
+        }
+        if (modelRef.current.draftScope.key === submittedSnapshot.key) scheduleComposerFocus();
+      } catch (error) {
+        const description = error instanceof Error ? error.message : String(error);
+        toast.error("Unable to send message", {
+          description,
+        });
+        restoreSubmittedDraft(submittedSnapshot);
+        if (modelRef.current.draftScope.key === submittedSnapshot.key) {
+          onComposerEditorInput();
+          scheduleComposerFocus();
+        }
+      }
+    },
+    [
+      clearSubmittedDraft,
+      createSubmittedDraftSnapshot,
+      onComposerEditorInput,
+      restoreSubmittedDraft,
+      scheduleComposerFocus,
+      setDisplayedDraft,
+    ],
+  );
+  const submitComposerAction = useCallback((): void => {
+    void handleSubmit(primaryMode);
+  }, [handleSubmit, primaryMode]);
+  return (
+    <AgentChatComposerFormView
+      primaryMode={primaryMode}
+      sendBlockedReason={sendBlockedReason}
+      model={model}
+      draft={draft}
+      attachmentInputRef={attachmentInputRef}
+      attachmentErrors={attachmentErrors}
+      attachmentIntakeDisabled={attachmentIntakeDisabled}
+      composerAccentColor={composerAccentColor}
+      composerPlaceholder={composerPlaceholderFor(model, primaryMode, settingsReady)}
+      hasSlashAttachmentConflict={hasSlashAttachmentConflict}
+      isComposerInputDisabled={isComposerInputDisabled}
+      isSubmitting={isSubmitting}
+      selectorDisabled={selectorDisabled}
+      modelPickerDisabled={modelPickerDisabled}
+      sendDisabled={sendDisabled}
+      onAddFiles={handleAddFiles}
+      onDraftChange={handleDraftChange}
+      onPickAttachments={openAttachmentPicker}
+      onRemoveAttachment={handleRemoveAttachment}
+      onSend={handleSubmit}
+      submitAction={submitComposerAction}
+    />
+  );
+}
+
 type AgentChatComposerFormViewProps = {
-  primarySubmitMode: AgentMessageSubmitMode;
+  primaryMode: AgentMessageSubmitMode;
   sendBlockedReason: string | null;
   model: AgentChatComposerModel;
   draft: AgentChatComposerDraft;
@@ -167,7 +380,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession,
   showSubmittingState,
   sendDisabled,
-  sendBlockedReason,
   pendingSendItems,
 }: {
   speed: AgentChatComposerModel["speed"];
@@ -190,140 +402,132 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   onStopSession: AgentChatComposerModel["onStopSession"];
   showSubmittingState: boolean;
   sendDisabled: boolean;
-  sendBlockedReason: string | null;
   pendingSendItems: AgentChatComposerModel["pendingSendItems"];
 }): ReactElement {
   const hasVariantOptions = variantOptions.length > 0;
 
   return (
-    <>
-      {sendBlockedReason ? (
-        <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">
-          {sendBlockedReason}
-        </p>
-      ) : null}
-      <div className="flex flex-wrap items-end gap-2 px-2 pb-2 pt-1">
-        <div className="flex min-w-0 flex-auto flex-wrap items-center gap-1">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className={cn("size-7 rounded-lg hover:bg-muted", COMPOSER_QUIET_CONTROL_CLASS_NAME)}
-            aria-label="Add attachment"
-            disabled={attachmentIntakeDisabled}
-            onClick={onPickAttachments}
-          >
-            <Paperclip className="size-3.5" />
-          </Button>
-          {supportsProfiles ? (
-            <div className="relative min-w-0">
-              <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Combobox
-                value={selectedModelSelection?.profileId ?? ""}
-                options={agentOptions}
-                className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-                placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-                searchPlaceholder="Search agent..."
-                triggerClassName={cn(
-                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                  "max-w-[min(15rem,100%)] !pl-7 !pr-2",
-                )}
-                disabled={selectorDisabled}
-                onValueChange={onSelectAgent}
-                onOpenChange={(open) => {
-                  if (open) {
-                    onAgentSelectorOpen();
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-
-          <ModelPicker
-            runtimes={modelPicker.runtimes}
-            value={modelPicker.value}
-            favoriteState={modelPicker.favoriteState}
-            selectionPolicy={
-              modelPickerDisabled
-                ? { kind: "read_only", reason: "Model selection is unavailable right now." }
-                : modelPicker.selectionPolicy
-            }
-            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-            triggerClassName={cn(
-              COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-              "max-w-[min(19rem,100%)] !px-2",
-            )}
-            onValueChange={modelPicker.onValueChange}
-            onOpenChange={modelPicker.onOpenChange}
-          />
-
-          {hasVariantOptions ? (
-            <div className="relative min-w-0">
-              <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Combobox
-                value={selectedModelSelection?.variant ?? ""}
-                options={variantOptions}
-                className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
-                placeholder="Effort"
-                searchPlaceholder="Search effort..."
-                triggerClassName={cn(
-                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                  "max-w-[min(12rem,100%)] !pl-7 !pr-2",
-                )}
-                disabled={selectorDisabled}
-                onValueChange={onSelectVariant}
-                onOpenChange={(open) => {
-                  if (open) {
-                    onVariantSelectorOpen();
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-          {speed && (
-            <SpeedSelect
-              key={speed.key}
-              model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
-              compact
-              triggerClassName="hover:bg-muted hover:text-foreground"
-            />
-          )}
-        </div>
-
-        {/* In a narrow pane, the context meter wraps above stop and send, so they stay in view. */}
-        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
-          {contextUsage ? (
-            <AgentContextUsageIndicator
-              className="min-w-0"
-              totalTokens={contextUsage.totalTokens}
-              contextWindow={contextUsage.contextWindow}
-              {...(contextUsage.outputLimit !== undefined
-                ? { outputLimit: contextUsage.outputLimit }
-                : {})}
-            />
-          ) : null}
-          <div className="flex shrink-0 items-center gap-1.5">
-            {canStopSession ? (
-              <Button
-                type="button"
-                size="icon"
-                variant="destructive"
-                className="size-8 rounded-lg"
-                aria-label="Stop session"
-                onClick={onStopSession}
-              >
-                <Square className="size-3 fill-current" />
-              </Button>
-            ) : null}
-            <AgentChatComposerSendControl
-              sendDisabled={sendDisabled}
-              showSubmittingState={showSubmittingState}
-              pendingSendItems={pendingSendItems}
+    <div className="flex flex-wrap items-end gap-2 px-2 pb-2 pt-1">
+      <div className="flex min-w-0 flex-auto flex-wrap items-center gap-1">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className={cn("size-7 rounded-lg hover:bg-muted", COMPOSER_QUIET_CONTROL_CLASS_NAME)}
+          aria-label="Add attachment"
+          disabled={attachmentIntakeDisabled}
+          onClick={onPickAttachments}
+        >
+          <Paperclip className="size-3.5" />
+        </Button>
+        {supportsProfiles ? (
+          <div className="relative min-w-0">
+            <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Combobox
+              value={selectedModelSelection?.profileId ?? ""}
+              options={agentOptions}
+              className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
+              placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
+              searchPlaceholder="Search agent..."
+              triggerClassName={cn(
+                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                "max-w-[min(15rem,100%)] !pl-7 !pr-2",
+              )}
+              disabled={selectorDisabled}
+              onValueChange={onSelectAgent}
+              onOpenChange={(open) => {
+                if (open) {
+                  onAgentSelectorOpen();
+                }
+              }}
             />
           </div>
+        ) : null}
+
+        <ModelPicker
+          runtimes={modelPicker.runtimes}
+          value={modelPicker.value}
+          favoriteState={modelPicker.favoriteState}
+          selectionPolicy={
+            modelPickerDisabled
+              ? { kind: "read_only", reason: "Model selection is unavailable right now." }
+              : modelPicker.selectionPolicy
+          }
+          placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
+          triggerClassName={cn(
+            COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+            "max-w-[min(19rem,100%)] !px-2",
+          )}
+          onValueChange={modelPicker.onValueChange}
+          onOpenChange={modelPicker.onOpenChange}
+        />
+
+        {hasVariantOptions ? (
+          <div className="relative min-w-0">
+            <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Combobox
+              value={selectedModelSelection?.variant ?? ""}
+              options={variantOptions}
+              className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
+              placeholder="Effort"
+              searchPlaceholder="Search effort..."
+              triggerClassName={cn(
+                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                "max-w-[min(12rem,100%)] !pl-7 !pr-2",
+              )}
+              disabled={selectorDisabled}
+              onValueChange={onSelectVariant}
+              onOpenChange={(open) => {
+                if (open) {
+                  onVariantSelectorOpen();
+                }
+              }}
+            />
+          </div>
+        ) : null}
+        {speed && (
+          <SpeedSelect
+            key={speed.key}
+            model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
+            compact
+            triggerClassName="hover:bg-muted hover:text-foreground"
+          />
+        )}
+      </div>
+
+      {/* In a narrow pane, the context meter wraps above stop and send, so they stay in view. */}
+      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
+        {contextUsage ? (
+          <AgentContextUsageIndicator
+            className="min-w-0"
+            totalTokens={contextUsage.totalTokens}
+            contextWindow={contextUsage.contextWindow}
+            {...(contextUsage.outputLimit !== undefined
+              ? { outputLimit: contextUsage.outputLimit }
+              : {})}
+          />
+        ) : null}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {canStopSession ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="destructive"
+              className="size-8 rounded-lg"
+              aria-label="Stop session"
+              onClick={onStopSession}
+            >
+              <Square className="size-3 fill-current" />
+            </Button>
+          ) : null}
+          <AgentChatComposerSendControl
+            sendDisabled={sendDisabled}
+            showSubmittingState={showSubmittingState}
+            pendingSendItems={pendingSendItems}
+          />
         </div>
       </div>
-    </>
+    </div>
   );
 });
 
@@ -377,7 +581,7 @@ const composerCardClassName = ({
 };
 
 function AgentChatComposerFormView({
-  primarySubmitMode,
+  primaryMode,
   sendBlockedReason,
   model,
   draft,
@@ -549,12 +753,12 @@ function AgentChatComposerFormView({
             editorRef={composerEditorRef}
             onEditorInput={onComposerEditorInput}
             onSend={onSend}
-            primarySubmitMode={primarySubmitMode}
+            primaryMode={primaryMode}
             catalog={editorCatalog}
           />
 
+          <SendNotice reason={sendBlockedReason} />
           <AgentChatComposerControls
-            sendBlockedReason={sendBlockedReason}
             speed={model.speed}
             onPickAttachments={onPickAttachments}
             attachmentIntakeDisabled={attachmentIntakeDisabled}
@@ -580,6 +784,15 @@ function AgentChatComposerFormView({
         </div>
       </div>
     </form>
+  );
+}
+
+function SendNotice({ reason }: { reason: string | null }): ReactElement | null {
+  if (!reason) return null;
+  return (
+    <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">
+      {reason}
+    </p>
   );
 }
 
@@ -660,8 +873,8 @@ function useAgentChatComposerFocus({
 
 const composerPlaceholderFor = (
   model: AgentChatComposerModel,
-  primarySubmitMode: AgentMessageSubmitMode,
-  settingsAvailable: boolean,
+  primaryMode: AgentMessageSubmitMode,
+  settingsReady: boolean,
 ): string => {
   const {
     supportsFileSearch,
@@ -685,11 +898,11 @@ const composerPlaceholderFor = (
     referencePlaceholder,
     supportsSlashCommands ? "/ for commands" : null,
     supportsSkillReferences ? "$ for skills" : null,
-    ...queuePlaceholderParts(model, primarySubmitMode),
+    ...queuePlaceholderParts(model, primaryMode),
   ].filter((part): part is string => Boolean(part));
   let composerPlaceholder =
     composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
-  if (!settingsAvailable) composerPlaceholder = "Load chat settings before sending";
+  if (!settingsReady) composerPlaceholder = "Load chat settings before sending";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }
@@ -700,18 +913,17 @@ const composerPlaceholderFor = (
   return composerPlaceholder;
 };
 
-/** While a send would wait in the queue, the placeholder names the keys that queue or steer it. */
 const queuePlaceholderParts = (
   { isSessionWorking, messageQueue, steerBlockedReason }: AgentChatComposerModel,
-  primarySubmitMode: AgentMessageSubmitMode,
+  primaryMode: AgentMessageSubmitMode,
 ): string[] => {
-  const queueKey = primarySubmitMode === "default" ? "Enter" : steerShortcutLabel();
-  const steerKey = primarySubmitMode === "steer" ? "Enter" : steerShortcutLabel();
+  const queueKey = primaryMode === "default" ? "Enter" : steerShortcutLabel();
+  const steerKey = primaryMode === "steer" ? "Enter" : steerShortcutLabel();
   if (isSessionWorking && steerBlockedReason) return [`${queueKey} to queue`];
   const hasQueuedMessages = (messageQueue?.queue?.entries.length ?? 0) > 0;
   if (!isSessionWorking && !hasQueuedMessages) return [];
   const steerAction = isSessionWorking ? "steer" : "send now";
-  if (primarySubmitMode === "steer") {
+  if (primaryMode === "steer") {
     return [`${steerKey} to ${steerAction}`, `${queueKey} to queue`];
   }
   return [`${queueKey} to queue`, `${steerKey} to ${steerAction}`];
@@ -739,20 +951,16 @@ const composerSelectorDisabledFor = (
 ): boolean =>
   model.isSelectionCatalogLoading || modelPickerDisabled || !model.selectedModelSelection;
 
-function useComposerSendState({
+function useComposerSendRules({
   model,
   draft,
-  primarySubmitMode,
-  settingsAvailable,
-  isSendOrModelPending,
-  isComposerInputDisabled,
+  primaryMode,
+  settingsReady,
 }: {
   model: AgentChatComposerModel;
   draft: AgentChatComposerDraft;
-  primarySubmitMode: AgentMessageSubmitMode;
-  settingsAvailable: boolean;
-  isSendOrModelPending: boolean;
-  isComposerInputDisabled: boolean;
+  primaryMode: AgentMessageSubmitMode;
+  settingsReady: boolean;
 }) {
   const defaultAttachmentErrors = useMemo(() => {
     return validateComposerAttachments(
@@ -760,20 +968,22 @@ function useComposerSendState({
       model.selectedModelDescriptor?.attachmentSupport,
     );
   }, [draft.attachments, model.selectedModelDescriptor?.attachmentSupport]);
-  const steersTurn = steersRunningTurn(primarySubmitMode, model.isSessionWorking);
-  const primaryAttachmentSupport = steersTurn
-    ? model.runningTurnModel?.attachmentSupport
-    : model.selectedModelDescriptor?.attachmentSupport;
+  const steersTurn = steersRunningTurn(primaryMode, model.isSessionWorking);
   const attachmentErrors = useMemo(
     () =>
       steersTurn
         ? validateComposerAttachments(
             draft.attachments ?? [],
-            primaryAttachmentSupport,
+            model.runningTurnModel?.attachmentSupport,
             "The model of the running turn",
           )
         : defaultAttachmentErrors,
-    [draft.attachments, primaryAttachmentSupport, steersTurn, defaultAttachmentErrors],
+    [
+      draft.attachments,
+      model.runningTurnModel?.attachmentSupport,
+      steersTurn,
+      defaultAttachmentErrors,
+    ],
   );
   const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
   const hasSlashAttachmentConflict =
@@ -781,21 +991,20 @@ function useComposerSendState({
 
   // A steer checks its attachments against the running turn model when it submits.
   const steerDisabled =
-    isSendOrModelPending ||
-    isSendInputBlocked(model, isComposerInputDisabled) ||
+    composerIsSubmitting(model) ||
+    Boolean(model.isSavingModel) ||
+    isSendInputBlocked(model) ||
     hasSlashAttachmentConflict ||
     !hasComposerSendContent(draft, model.pendingSendItems);
   const defaultSendDisabled = steerDisabled || hasBlockingAttachments;
-  const primarySteerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
-  const sendBlockedReason = settingsAvailable
-    ? primarySteerBlockedReason
+  const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
+  const sendBlockedReason = settingsReady
+    ? steerBlockedReason
     : "Load chat settings before sending. Use Retry settings if the read failed.";
   const sendDisabled =
-    !settingsAvailable ||
+    !settingsReady ||
     (steersTurn
-      ? steerDisabled ||
-        primarySteerBlockedReason !== null ||
-        Object.keys(attachmentErrors).length > 0
+      ? steerDisabled || steerBlockedReason !== null || Object.keys(attachmentErrors).length > 0
       : defaultSendDisabled);
 
   return {
@@ -808,226 +1017,14 @@ function useComposerSendState({
   };
 }
 
-export function AgentChatComposer({
-  model,
-  ref,
-}: {
-  model: AgentChatComposerModel;
-  ref?: Ref<AgentChatComposerHandle>;
-}): ReactElement {
-  const chatSettings = useAgentChatSettings();
-  const settingsAvailable = chatSettings !== null;
-  const primarySubmitMode: AgentMessageSubmitMode = chatSettings?.steerMessagesByDefault
-    ? "steer"
-    : "default";
-  const {
-    displayedSessionKey,
-    isInteractionEnabled,
-    isReadOnly,
-    draftScope,
-    isSending,
-    isStarting,
-    isSessionWorking,
-    isModelSelectionPending,
-    supportsAttachments,
-    accentColor: composerAccentColor,
-    composerEditorRef,
-    onComposerEditorInput,
-  } = model;
-
-  const {
-    draft,
-    commitDraft,
-    setDisplayedDraft,
-    createSubmittedDraftSnapshot,
-    clearSubmittedDraft,
-    restoreSubmittedDraft,
-  } = useAgentChatComposerDraftState({
-    scope: draftScope,
-  });
-  const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
-  const latestSendDisabledRef = useRef(false);
-  const latestSteerDisabledRef = useRef(false);
-  const latestModelRef = useRef(model);
-  const latestSettingsAvailableRef = useRef(settingsAvailable);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const isSubmitting = (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
-  const isComposerInputDisabled = composerInputDisabledFor(model);
-  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
-
-  const handleDraftChange = useCallback(
-    (nextDraft: AgentChatComposerDraft) => {
-      latestDraftRef.current = nextDraft;
-      commitDraft(nextDraft);
-    },
-    [commitDraft],
-  );
-
-  const handleRemoveAttachment = useCallback(
-    (attachmentId: string): void => {
-      handleDraftChange(removeAttachmentFromDraft(latestDraftRef.current, attachmentId));
-      onComposerEditorInput();
-    },
-    [handleDraftChange, onComposerEditorInput],
-  );
-
-  const handleAddFiles = useCallback(
-    (files: File[]): void => {
-      if (attachmentIntakeDisabled) {
-        return;
-      }
-
-      const attachments = buildComposerAttachmentsFromFiles(files);
-      if (attachments.length === 0) {
-        return;
-      }
-      handleDraftChange(appendAttachmentsToDraft(latestDraftRef.current, attachments));
-      onComposerEditorInput();
-    },
-    [attachmentIntakeDisabled, handleDraftChange, onComposerEditorInput],
-  );
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      addFiles: handleAddFiles,
-    }),
-    [handleAddFiles],
-  );
-
-  const openAttachmentPicker = useCallback((): void => {
-    if (attachmentIntakeDisabled) {
-      return;
-    }
-    attachmentInputRef.current?.click();
-  }, [attachmentIntakeDisabled]);
-
-  const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
-  const {
-    attachmentErrors,
-    hasSlashAttachmentConflict,
-    steerDisabled,
-    defaultSendDisabled,
-    sendDisabled,
-    sendBlockedReason,
-  } = useComposerSendState({
-    model,
-    draft,
-    primarySubmitMode,
-    settingsAvailable,
-    isSendOrModelPending,
-    isComposerInputDisabled,
-  });
-
-  useLayoutEffect(() => {
-    latestDraftRef.current = draft;
-    latestSendDisabledRef.current = defaultSendDisabled;
-    latestSteerDisabledRef.current = steerDisabled;
-    latestModelRef.current = model;
-    latestSettingsAvailableRef.current = settingsAvailable;
-  }, [draft, model, defaultSendDisabled, steerDisabled, settingsAvailable]);
-
-  const modelPickerDisabled = isSendOrModelPending || !isInteractionEnabled || isReadOnly;
-  const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
-
-  const scheduleComposerFocus = useAgentChatComposerFocus({
-    composerEditorRef,
-    displayedSessionKey,
-    isComposerInputDisabled,
-    isSubmitting,
-  });
-
-  const handleSubmit = useCallback(
-    async (mode: AgentMessageSubmitMode): Promise<void> => {
-      if (!latestSettingsAvailableRef.current) return;
-      const steersTurn = steersRunningTurn(mode, latestModelRef.current.isSessionWorking);
-      if (steersTurn ? latestSteerDisabledRef.current : latestSendDisabledRef.current) {
-        return;
-      }
-      const submitDraft = latestModelRef.current.onSend;
-      const submittedDraft = latestDraftRef.current;
-      // A blocked steer keeps the draft. It never becomes a queued send.
-      const steerBlockedReason = steersTurn
-        ? draftSteerBlockedReason(submittedDraft, latestModelRef.current)
-        : null;
-      if (steerBlockedReason) {
-        toast.error("Cannot steer this message", { description: steerBlockedReason });
-        return;
-      }
-      const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
-      clearSubmittedDraft(submittedSnapshot);
-      setDisplayedDraft(createEmptyComposerDraft());
-      onComposerEditorInput();
-      scheduleComposerFocus();
-      try {
-        const result = await submitDraft(submittedDraft, mode);
-        if (result !== true && result !== false) {
-          restoreSubmittedDraft(submittedSnapshot, result);
-          if (!result.inAppFeedbackHandled)
-            toast.error("Unable to send message", { description: result.error.message });
-          return;
-        }
-        if (!result) {
-          restoreSubmittedDraft(submittedSnapshot);
-          if (latestModelRef.current.draftScope.key === submittedSnapshot.key) {
-            onComposerEditorInput();
-            scheduleComposerFocus();
-          }
-          return;
-        }
-        if (latestModelRef.current.draftScope.key === submittedSnapshot.key)
-          scheduleComposerFocus();
-      } catch (error) {
-        const description = error instanceof Error ? error.message : String(error);
-        toast.error("Unable to send message", {
-          description,
-        });
-        restoreSubmittedDraft(submittedSnapshot);
-        if (latestModelRef.current.draftScope.key === submittedSnapshot.key) {
-          onComposerEditorInput();
-          scheduleComposerFocus();
-        }
-      }
-    },
-    [
-      clearSubmittedDraft,
-      createSubmittedDraftSnapshot,
-      onComposerEditorInput,
-      restoreSubmittedDraft,
-      scheduleComposerFocus,
-      setDisplayedDraft,
-    ],
-  );
-  const submitComposerAction = useCallback((): void => {
-    void handleSubmit(primarySubmitMode);
-  }, [handleSubmit, primarySubmitMode]);
-  return (
-    <AgentChatComposerFormView
-      primarySubmitMode={primarySubmitMode}
-      sendBlockedReason={sendBlockedReason}
-      model={model}
-      draft={draft}
-      attachmentInputRef={attachmentInputRef}
-      attachmentErrors={attachmentErrors}
-      attachmentIntakeDisabled={attachmentIntakeDisabled}
-      composerAccentColor={composerAccentColor}
-      composerPlaceholder={composerPlaceholderFor(model, primarySubmitMode, settingsAvailable)}
-      hasSlashAttachmentConflict={hasSlashAttachmentConflict}
-      isComposerInputDisabled={isComposerInputDisabled}
-      isSubmitting={isSubmitting}
-      selectorDisabled={selectorDisabled}
-      modelPickerDisabled={modelPickerDisabled}
-      sendDisabled={sendDisabled}
-      onAddFiles={handleAddFiles}
-      onDraftChange={handleDraftChange}
-      onPickAttachments={openAttachmentPicker}
-      onRemoveAttachment={handleRemoveAttachment}
-      onSend={handleSubmit}
-      submitAction={submitComposerAction}
-    />
-  );
-}
-
 // A speed change blocks only send, so the model and effort controls keep their state.
-const isSendInputBlocked = (model: AgentChatComposerModel, isInputDisabled: boolean): boolean =>
-  isInputDisabled || model.speed?.pending === true;
+const isSendInputBlocked = (model: AgentChatComposerModel): boolean =>
+  composerInputDisabledFor(model) || model.speed?.pending === true;
+
+const composerIsSubmitting = ({
+  isSending,
+  isSessionWorking,
+  isStarting,
+  isModelSelectionPending,
+}: AgentChatComposerModel): boolean =>
+  (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;

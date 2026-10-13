@@ -16,7 +16,7 @@ const getEditorRoot = (container: HTMLElement): HTMLElement => {
   return editorRoot;
 };
 
-const steerKeyDown = (container: HTMLElement): void => {
+const pressAlternateShortcut = (container: HTMLElement): void => {
   fireEvent.keyDown(getEditorRoot(container), {
     key: "Enter",
     ...(isApplePlatform() ? { metaKey: true } : { ctrlKey: true }),
@@ -73,7 +73,7 @@ describe("AgentChatComposer steering", () => {
           ).toBe(false);
           fireEvent.click(screen.getByRole("button", { name: "Send message" }));
         } else {
-          steerKeyDown(container);
+          pressAlternateShortcut(container);
         }
 
         await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1), { timeout: 300 });
@@ -106,7 +106,7 @@ describe("AgentChatComposer steering", () => {
       try {
         typeIntoComposer(container, "change course");
         if (steerMessagesByDefault) fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
-        else steerKeyDown(container);
+        else pressAlternateShortcut(container);
         expect(failure).toHaveBeenCalledWith("Cannot steer this message", {
           description: "OpenCode 1.0.0 cannot steer running work.",
         });
@@ -137,7 +137,7 @@ describe("AgentChatComposer steering", () => {
           if (action === "enter") fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
           else if (action === "button")
             fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-          else steerKeyDown(container);
+          else pressAlternateShortcut(container);
           await waitFor(() => expect(onSend).toHaveBeenCalledTimes(index + 1));
         }
         expect(onSend.mock.calls.map(([, mode]) => mode)).toEqual(
@@ -192,7 +192,7 @@ describe("AgentChatComposer steering", () => {
     try {
       typeIntoComposer(container, "keep this draft");
       fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
-      steerKeyDown(container);
+      pressAlternateShortcut(container);
       expect(screen.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
         true,
       );
@@ -251,7 +251,7 @@ describe("AgentChatComposer steering", () => {
         description: "brief.pdf: The model of the running turn does not support pdf attachments.",
       });
       expect(getEditorRoot(container).textContent).toBe("read the brief");
-      steerKeyDown(container);
+      pressAlternateShortcut(container);
       await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
       expect(onSend.mock.calls[0]?.[1]).toBe("default");
     } finally {

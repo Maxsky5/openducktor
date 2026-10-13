@@ -141,7 +141,6 @@ const getLastTextSegment = (container: HTMLElement): HTMLElement => {
   return editable;
 };
 
-/** Supplies the production settings context for focused composer tests. */
 export function AgentChatComposer({
   settings = DEFAULT_CHAT_SETTINGS,
   ...props

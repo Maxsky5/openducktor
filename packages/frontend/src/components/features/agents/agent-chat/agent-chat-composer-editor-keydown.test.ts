@@ -26,7 +26,7 @@ import type {
 } from "./use-agent-chat-composer-editor-selection";
 
 type KeyDownTestSetupOverrides = {
-  primarySubmitMode?: AgentMessageSubmitMode;
+  primaryMode?: AgentMessageSubmitMode;
   sourceDraft?: AgentChatComposerDraft;
   activeSelection?: ActiveTextSelection | null;
   referenceMenuState?: ReferenceMenuState | null;
@@ -171,7 +171,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
         sourceDraft,
         activeSelection: overrides.activeSelection ?? null,
         disabled: overrides.disabled ?? false,
-        primarySubmitMode: overrides.primarySubmitMode ?? "default",
+        primaryMode: overrides.primaryMode ?? "default",
         selection,
         selectComposerContents,
         isComposerContentFullySelected,
@@ -216,9 +216,9 @@ describe("agent-chat-composer-editor-keydown", () => {
 
   test.each<AgentMessageSubmitMode>(["default", "steer"])(
     "sends the alternate mode before autocomplete with primary %s",
-    (primarySubmitMode) => {
+    (primaryMode) => {
       const setup = createKeyDownTestSetup({
-        primarySubmitMode,
+        primaryMode,
         ...steerModifier(),
         slashMenuState: {
           query: "sum",
@@ -232,9 +232,7 @@ describe("agent-chat-composer-editor-keydown", () => {
       expect(setup.handled()).toBe(true);
       expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
       expect(setup.onSend).toHaveBeenCalledTimes(1);
-      expect(setup.onSend).toHaveBeenCalledWith(
-        primarySubmitMode === "steer" ? "default" : "steer",
-      );
+      expect(setup.onSend).toHaveBeenCalledWith(primaryMode === "steer" ? "default" : "steer");
       expect(setup.selectSlashCommand).not.toHaveBeenCalled();
     },
   );
@@ -253,10 +251,10 @@ describe("agent-chat-composer-editor-keydown", () => {
 
   test.each<AgentMessageSubmitMode>(["default", "steer"])(
     "leaves composing Enter to the input method editor with primary %s",
-    (primarySubmitMode) => {
-      const plain = createKeyDownTestSetup({ primarySubmitMode, isComposing: true });
+    (primaryMode) => {
+      const plain = createKeyDownTestSetup({ primaryMode, isComposing: true });
       const steer = createKeyDownTestSetup({
-        primarySubmitMode,
+        primaryMode,
         ...steerModifier(),
         isComposing: true,
       });
