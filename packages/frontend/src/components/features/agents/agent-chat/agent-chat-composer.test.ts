@@ -34,6 +34,7 @@ const buildModel = () => ({
   waitingInputPlaceholder: null,
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
+  speed: null,
   isSelectionCatalogLoading: false,
   supportsAttachments: true,
   supportsSlashCommands: true,

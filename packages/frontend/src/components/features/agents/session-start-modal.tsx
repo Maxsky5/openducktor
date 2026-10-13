@@ -241,7 +241,7 @@ function RuntimeProfileField({
 }
 
 type ModelVariantFieldsProps = {
-  speed: SpeedControlModel | undefined;
+  speed: SpeedControlModel | null;
   isSelectionCatalogLoading: boolean;
   selectedModelSelection: AgentModelSelection | null;
   selectedVariant: string;

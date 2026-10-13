@@ -22,6 +22,7 @@ export const buildModel = () => ({
   waitingInputPlaceholder: null,
   isModelSelectionPending: false,
   selectedModelSelection: buildModelSelection(),
+  speed: null,
   selectedModelDescriptor: null,
   isSelectionCatalogLoading: false,
   supportsAttachments: true,

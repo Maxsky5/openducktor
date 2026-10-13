@@ -132,7 +132,7 @@ const createBaseArgs = (): BuildArgs => {
     sessionActions,
     modelSelection: {
       selectedModelSelection: null,
-      speed: undefined,
+      speed: null,
       selectedModelDescriptor: null,
       isSelectionCatalogLoading: false,
       supportsAttachments: true,
@@ -262,7 +262,8 @@ describe("task chat speed", () => {
     { runtime: CODEX_RUNTIME_DESCRIPTOR, speed: "priority", label: "Fast" },
     { runtime: CLAUDE_RUNTIME_DESCRIPTOR, speed: undefined, label: "Standard" },
     { runtime: CLAUDE_RUNTIME_DESCRIPTOR, speed: "fast", label: "Fast" },
-  ])("renders $runtime.kind $label speed in the composer", ({ runtime, speed, label }) => {
+    { runtime: OPENCODE_RUNTIME_DESCRIPTOR, speed: undefined, label: null },
+  ])("renders $runtime.kind composer speed as $label", ({ runtime, speed, label }) => {
     const base = createBaseArgs();
     const selectedModel = {
       runtimeKind: runtime.kind,
@@ -359,6 +360,7 @@ describe("task chat speed", () => {
     };
     const Composer = () => {
       const { agentChatModel } = useAgentStudioOrchestrationController(args);
+      if (label === null) expect(agentChatModel.composer.speed).toBeNull();
       return createElement(AgentChatComposer, { model: agentChatModel.composer });
     };
     const html = renderToStaticMarkup(
@@ -366,7 +368,11 @@ describe("task chat speed", () => {
     );
     const container = document.createElement("div");
     container.innerHTML = html;
-    expect(container.querySelector(`[aria-label="Speed: ${label}"]`)).not.toBeNull();
+    if (label === null) {
+      expect(container.querySelector('[aria-label^="Speed:"]')).toBeNull();
+    } else {
+      expect(container.querySelector(`[aria-label="Speed: ${label}"]`)).not.toBeNull();
+    }
   });
 });
 

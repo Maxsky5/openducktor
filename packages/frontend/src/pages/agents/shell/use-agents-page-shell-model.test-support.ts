@@ -59,6 +59,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       isWaitingInput: false,
       isModelSelectionPending: false,
       selectedModelSelection: null,
+      speed: null,
       isSelectionCatalogLoading: false,
       supportsAttachments: false,
       supportsSlashCommands: false,

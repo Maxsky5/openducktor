@@ -55,7 +55,7 @@ export type AgentChatComposerConfig = {
     outputLimit?: number;
   } | null;
   selectedModelSelection: AgentModelSelection | null;
-  speed?: AgentChatComposerModel["speed"];
+  speed: AgentChatComposerModel["speed"];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null | undefined;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;

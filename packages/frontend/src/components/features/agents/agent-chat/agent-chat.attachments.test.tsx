@@ -57,6 +57,7 @@ const buildModel = () => ({
     waitingInputPlaceholder: null,
     isModelSelectionPending: false,
     selectedModelSelection: buildModelSelection(),
+    speed: null,
     selectedModelDescriptor: {
       id: "openai/gpt-5.3-codex",
       providerId: "openai",
