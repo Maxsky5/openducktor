@@ -657,6 +657,147 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
+  test.each(["healthy", "missed-event", "pending-read"] as const)(
+    "reattaches the selected observer with %s history coverage",
+    async (continuity) => {
+      const baseline: AgentSessionHistoryMessage = {
+        messageId: "baseline",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:01.000Z",
+        text: "Before reload",
+        parts: [],
+      };
+      const latest = { ...baseline, messageId: "latest", text: "During selected disconnect" };
+      const delayedRead = Promise.withResolvers<void>();
+      let historyCalls = 0;
+      let missedEvent = false;
+      let emitOnDisconnect = false;
+      let attachCount = 0;
+      let pendingRead: Promise<unknown> | undefined;
+      const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
+      AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => {
+        historyCalls += 1;
+        if (continuity === "pending-read" && historyCalls === 1) {
+          await delayedRead.promise;
+          return [{ ...baseline, text: "Obsolete response" }];
+        }
+        return missedEvent ? [baseline, latest] : [baseline];
+      };
+      const snapshot = createAgentSessionLiveSnapshotFixture({ ref: { repoPath: "/tmp/repo-a" } });
+      const liveStream = createLiveSessionStreamFixture([snapshot]);
+      const observe = liveStream.portOverrides.observeAgentSessionLive!;
+      const dependencies = createTestDependencies(
+        {
+          agentSessionsListForTasks: async () => [
+            { taskId: "task-1", agentSessions: [persistedSessionFixture] },
+          ],
+        },
+        {
+          ...liveStream.portOverrides,
+          observeAgentSessionLive: async (input, listener) => {
+            attachCount += 1;
+            const stop = await observe(input, (envelope) =>
+              listener(
+                envelope.type === "snapshot"
+                  ? { ...envelope, isConnectionSnapshot: true }
+                  : envelope,
+              ),
+            );
+            return () => {
+              stop();
+              if (!emitOnDisconnect) return;
+              emitOnDisconnect = false;
+              missedEvent = true;
+              coverage.accept({
+                type: "transcript_event",
+                sequence: 2,
+                event: {
+                  type: "assistant_message",
+                  sessionRef: snapshot.ref,
+                  externalSessionId: snapshot.ref.externalSessionId,
+                  messageId: latest.messageId,
+                  message: latest.text,
+                  timestamp: latest.timestamp,
+                },
+              });
+            };
+          },
+        },
+      );
+      const coverage = sessionHistoryCoverage(dependencies.queryClient).observe("/tmp/repo-a");
+      coverage.accept(
+        createLiveSnapshotEnvelope({ repoPath: "/tmp/repo-a", sessions: [snapshot] }),
+      );
+      const harness = createHookHarness({
+        activeRepo: "/tmp/repo-a",
+        tasks: [taskFixtureWithPersistedBuildSession],
+        refreshTaskData: async () => {},
+        dependencies,
+      });
+      try {
+        await harness.mount();
+        await harness.waitFor((state) =>
+          listHarnessSessions(state).some(
+            (session) => session.externalSessionId === snapshot.ref.externalSessionId,
+          ),
+        );
+        await harness.run(() => {
+          pendingRead = harness.getLatest().operations.loadAgentSessionHistory(snapshot.ref);
+        });
+        await harness.waitFor(() => historyCalls === 1);
+        if (continuity !== "pending-read") {
+          await harness.run(async () => {
+            await pendingRead;
+          });
+        }
+        emitOnDisconnect = continuity !== "healthy";
+        await harness.run(() => harness.getLatest().readModelState.reloadSessionReadModel());
+        await harness.waitFor(
+          (state) =>
+            attachCount >= 2 && state.readModelState.sessionReadModelLoadState.kind === "ready",
+        );
+        const sessionBeforeRead = listHarnessSessions(harness.getLatest()).find(
+          (session) => session.externalSessionId === snapshot.ref.externalSessionId,
+        );
+        expect(sessionBeforeRead?.historyLoadState).toBe(
+          continuity === "healthy"
+            ? "loaded"
+            : continuity === "pending-read"
+              ? "not_requested"
+              : "stale",
+        );
+        delayedRead.resolve();
+        await harness.run(async () => {
+          await pendingRead;
+        });
+        if (continuity === "pending-read") {
+          expect(
+            listHarnessSessions(harness.getLatest()).find(
+              (entry) => entry.externalSessionId === snapshot.ref.externalSessionId,
+            )?.historyLoadState,
+          ).toBe("not_requested");
+        }
+        await harness.run(async () => {
+          await harness.getLatest().operations.loadAgentSessionHistory(snapshot.ref);
+        });
+        const session = listHarnessSessions(harness.getLatest()).find(
+          (entry) => entry.externalSessionId === snapshot.ref.externalSessionId,
+        );
+        expect(historyCalls).toBe(continuity === "healthy" ? 1 : 2);
+        expect(
+          session ? sessionMessagesToArray(session).map((message) => message.content) : [],
+        ).toEqual(continuity === "healthy" ? [baseline.text] : [baseline.text, latest.text]);
+      } finally {
+        emitOnDisconnect = false;
+        delayedRead.resolve();
+        await pendingRead;
+        await harness.unmount();
+        coverage.close();
+        AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      }
+    },
+  );
+
   const retentionCoverageCases = [
     "unknown",
     "covered",

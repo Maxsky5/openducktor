@@ -34,7 +34,10 @@ import {
   buildSessionErrorNoticeMessage,
   buildSessionPolicyNoticeMessage,
 } from "./operations/agent-orchestrator/support/session-notice-messages";
-import { markSessionHistoriesStale } from "./operations/agent-orchestrator/history/session-history-freshness";
+import {
+  markSessionHistoriesStale,
+  markSessionHistoryStale,
+} from "./operations/agent-orchestrator/history/session-history-freshness";
 import type {
   SessionHistoryCoverage,
   SessionHistoryVersion,
@@ -279,13 +282,14 @@ export const createAgentSessionsStore = (
           // Recheck when attachment completes: events may arrive after workspace activation.
           const versions = retainedHistoryVersions.get(envelope.repoPath);
           retainedHistoryVersions.delete(envelope.repoPath);
-          if (versions && !envelope.historyReplayGap) {
+          if (versions || (envelope.isConnectionSnapshot && historyCoverage)) {
             setSessionCollection((current) => {
               let collection = current;
               for (const session of listAgentSessions(current)) {
-                const version = versions.get(agentSessionIdentityKey(session));
+                const version = versions?.get(agentSessionIdentityKey(session));
                 if (
                   session.historyLoadState === "stale" &&
+                  !envelope.historyReplayGap &&
                   version &&
                   historyCoverage?.isCurrent(envelope.repoPath, session, version)
                 ) {
@@ -294,6 +298,18 @@ export const createAgentSessionsStore = (
                     ...session,
                     historyLoadState: "loaded",
                   });
+                } else if (
+                  envelope.isConnectionSnapshot &&
+                  historyCoverage &&
+                  (envelope.historyReplayGap ||
+                    !historyCoverage.isCurrent(
+                      envelope.repoPath,
+                      session,
+                      projectedHistory?.read(session) ?? null,
+                    ))
+                ) {
+                  // The rail can advance while this observer is detached. A snapshot has no transcript.
+                  collection = replaceAgentSession(collection, markSessionHistoryStale(session));
                 }
               }
               return collection;
