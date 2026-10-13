@@ -24,6 +24,7 @@ import { NotificationPermissionNotice } from "./notification-permission-notice";
 import {
   createNotificationSoundOptions,
   notificationCueOptions,
+  resolveNotificationCuePickerValue,
 } from "./settings-notification-sound-options";
 import { NotificationSoundPicker } from "./settings-notification-sound-picker";
 
@@ -123,6 +124,10 @@ function NotificationKindRow({
   onPreview,
 }: NotificationKindRowProps): ReactElement {
   const kindSettings = settings.kinds[kind];
+  const selectedSound =
+    kindSettings.sound === "inherit" || kindSettings.sound === "none"
+      ? kindSettings.sound
+      : resolveNotificationCuePickerValue(kindSettings.sound);
   const kindLabel = NOTIFICATION_KIND_LABELS[kind];
   const updateKind = (next: Partial<typeof kindSettings>): void => {
     onUpdate((current) => ({
@@ -155,7 +160,7 @@ function NotificationKindRow({
         <Label className="text-xs text-muted-foreground xl:sr-only">Sound</Label>
         <NotificationSoundPicker
           label={`Sound for ${kindLabel}`}
-          value={kindSettings.sound}
+          value={selectedSound}
           options={createNotificationSoundOptions(settings.globalCue)}
           disabled={disabled || !kindSettings.enabled}
           onValueChange={(sound) => updateKind({ sound: notificationSoundSchema.parse(sound) })}
@@ -364,7 +369,7 @@ export function SettingsNotificationsSection({
             </div>
             <NotificationSoundPicker
               label="Default sound"
-              value={notifications.globalCue}
+              value={resolveNotificationCuePickerValue(notifications.globalCue)}
               options={notificationCueOptions}
               disabled={disabled}
               onValueChange={(value) =>

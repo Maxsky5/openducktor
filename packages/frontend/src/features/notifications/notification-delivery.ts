@@ -9,6 +9,7 @@ import { ArrowUpRight } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { NotificationCopy } from "./notification-copy";
+import { notificationCueSounds } from "./notification-sound";
 import type { NotificationBridge } from "@/lib/shell-bridge";
 
 type SonnerNotificationOptions = {
@@ -71,7 +72,7 @@ type PlayCuelume = (sound?: SoundName, options?: { volume?: number }) => void;
 
 export const createCuelumeNotificationSoundAdapter = (play: PlayCuelume = playCuelume) => ({
   async play(cue: NotificationCue, volumePercent: number): Promise<void> {
-    play(cue, { volume: volumePercent / 100 });
+    play(notificationCueSounds[cue], { volume: volumePercent / 100 });
   },
 });
 
@@ -116,7 +117,7 @@ export const installCuelumeGestureUnlock = ({
     unlocked = true;
     target.removeEventListener("pointerdown", unlock);
     target.removeEventListener("keydown", unlock);
-    play("chime", { volume: CUELUME_UNLOCK_VOLUME });
+    play("success", { volume: CUELUME_UNLOCK_VOLUME });
   };
 
   target.addEventListener("pointerdown", unlock, { passive: true });

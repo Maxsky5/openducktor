@@ -68,7 +68,7 @@ export function NotificationSoundPicker<Value extends string>({
                   option.value === value && "bg-accent text-accent-foreground",
                 )}
                 onClick={() => {
-                  onValueChange(option.value);
+                  if (option.value !== value) onValueChange(option.value);
                   setOpen(false);
                 }}
               >

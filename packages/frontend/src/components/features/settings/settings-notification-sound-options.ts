@@ -1,8 +1,5 @@
-import {
-  NOTIFICATION_CUE_VALUES,
-  type NotificationCue,
-  type NotificationSound,
-} from "@openducktor/contracts";
+import type { NotificationCue, NotificationSound } from "@openducktor/contracts";
+import { notificationCueSounds } from "@/features/notifications/notification-sound";
 
 export type SoundPickerOption<Value extends string> = {
   value: Value;
@@ -10,14 +7,30 @@ export type SoundPickerOption<Value extends string> = {
   previewCue: NotificationCue | null;
 };
 
-const cueLabel = (cue: NotificationCue): string => cue.charAt(0).toUpperCase() + cue.slice(1);
+// One existing stored value represents each distinct sound in the picker.
+const selectableCues = {
+  success: "success",
+  close: "droplet",
+  open: "bloom",
+  select: "tick",
+  tap: "press",
+  toggle: "toggle",
+  error: "error",
+  navigate: "page",
+  loading: "loading",
+  ready: "ready",
+} satisfies Record<(typeof notificationCueSounds)[NotificationCue], NotificationCue>;
 
-export const notificationCueOptions: SoundPickerOption<NotificationCue>[] =
-  NOTIFICATION_CUE_VALUES.map((cue) => ({
-    value: cue,
-    label: cueLabel(cue),
-    previewCue: cue,
-  }));
+export const notificationCueOptions: SoundPickerOption<NotificationCue>[] = Object.entries(
+  selectableCues,
+).map(([sound, cue]) => ({
+  value: cue,
+  label: sound.charAt(0).toUpperCase() + sound.slice(1),
+  previewCue: cue,
+}));
+
+export const resolveNotificationCuePickerValue = (cue: NotificationCue): NotificationCue =>
+  selectableCues[notificationCueSounds[cue]];
 
 export const createNotificationSoundOptions = (
   globalCue: NotificationCue,

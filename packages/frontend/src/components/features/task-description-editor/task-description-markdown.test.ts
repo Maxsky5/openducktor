@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { Editor } from "@tiptap/core";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import {
   assessVisualMarkdownCompatibility,
   canonicalizeTaskDescriptionMarkdown,
   splitTaskDescriptionFrontMatter,
 } from "./task-description-markdown";
+import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
 
 const supportedFixtures = [
   {
@@ -388,4 +390,70 @@ describe("task description Markdown dialect", () => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
     expect(markdown).toBe(original);
   });
+});
+
+describe("task description list editing", () => {
+  const createEditor = (content: string) =>
+    new Editor({
+      extensions: createTaskDescriptionMarkdownExtensions(),
+      content,
+      contentType: "markdown",
+    });
+
+  for (const { name, toggle, marker, nestedMarkdown } of [
+    {
+      name: "bullet",
+      toggle: "toggleBulletList",
+      marker: "- ",
+      nestedMarkdown: "- first\n  - second",
+    },
+    {
+      name: "ordered",
+      toggle: "toggleOrderedList",
+      marker: "1. ",
+      nestedMarkdown: "1. first\n   1. second",
+    },
+  ] as const) {
+    test(`toggles ${name} list formatting on a paragraph`, () => {
+      const editor = createEditor("hello world");
+      try {
+        expect(editor.commands[toggle]()).toBe(true);
+        expect(editor.getMarkdown().trimEnd()).toBe(`${marker}hello world`);
+        expect(editor.commands[toggle]()).toBe(true);
+        expect(editor.getMarkdown().trimEnd()).toBe("hello world");
+      } finally {
+        editor.destroy();
+      }
+    });
+
+    test(`splits ${name} list items without losing text`, () => {
+      const editor = createEditor(`${marker}hello world`);
+      try {
+        editor.commands.selectTextblockEnd();
+        expect(editor.commands.splitListItem("listItem")).toBe(true);
+        const list = editor.state.doc.firstChild;
+        expect(list?.childCount).toBe(2);
+        expect(list?.firstChild?.textContent).toBe("hello world");
+        expect(list?.lastChild?.textContent).toBe("");
+      } finally {
+        editor.destroy();
+      }
+    });
+
+    test(`nests ${name} list items under the preceding item`, () => {
+      const editor = createEditor(`${marker}first\n${marker}second`);
+      try {
+        let secondItemPosition: number | undefined;
+        editor.state.doc.descendants((node, position) => {
+          if (node.isText && node.text === "second") secondItemPosition = position;
+        });
+        if (secondItemPosition === undefined) throw new Error("Expected a second list item");
+        editor.commands.setTextSelection(secondItemPosition);
+        expect(editor.commands.sinkListItem("listItem")).toBe(true);
+        expect(editor.getMarkdown().trimEnd()).toBe(nestedMarkdown);
+      } finally {
+        editor.destroy();
+      }
+    });
+  }
 });

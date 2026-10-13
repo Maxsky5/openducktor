@@ -154,7 +154,7 @@ describe("notification delivery adapters", () => {
 
     await adapter.play("arrival", 65);
 
-    expect(play).toHaveBeenCalledWith("arrival", { volume: 0.65 });
+    expect(play).toHaveBeenCalledWith("navigate", { volume: 0.65 });
   });
 
   test("unlocks Cuelume once from the first pointer or keyboard gesture", () => {

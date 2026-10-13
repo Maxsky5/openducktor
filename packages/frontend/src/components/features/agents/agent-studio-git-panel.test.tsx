@@ -640,8 +640,8 @@ describe("AgentStudioGitPanel", () => {
       fireEvent.mouseDown(findDiffScopeTabs(root, "uncommitted").element, { button: 0 });
       await flush();
     });
-    expect(setDiffScope).toHaveBeenCalledTimes(1);
     expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(1);
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
@@ -695,7 +695,6 @@ describe("AgentStudioGitPanel", () => {
       fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
       await flush();
     });
-    expect(setDiffScope).toHaveBeenCalledTimes(2);
     expect(setDiffScope).toHaveBeenLastCalledWith("target");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
 

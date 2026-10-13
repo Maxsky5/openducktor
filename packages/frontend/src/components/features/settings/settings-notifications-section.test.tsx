@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   createDefaultNotificationSettings,
   NOTIFICATION_KIND_VALUES,
+  type NotificationSettings,
   type NotificationOsCapability,
 } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -12,6 +13,7 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
+import { createCuelumeNotificationSoundAdapter } from "@/features/notifications/notification-delivery";
 
 afterEach(cleanup);
 
@@ -59,6 +61,60 @@ function NotificationsHarness({ context }: { context: NotificationContextValue }
 }
 
 describe("SettingsNotificationsSection", () => {
+  test.each([
+    ["chime", "Success"],
+    ["sparkle", "Success"],
+    ["droplet", "Close"],
+    ["bloom", "Open"],
+    ["whisper", "Select"],
+    ["tick", "Select"],
+    ["press", "Tap"],
+    ["release", "Tap"],
+    ["toggle", "Toggle"],
+    ["success", "Success"],
+    ["error", "Error"],
+    ["page", "Navigate"],
+    ["loading", "Loading"],
+    ["ready", "Ready"],
+    ["pulse", "Tap"],
+    ["scan", "Select"],
+    ["arrival", "Navigate"],
+  ] as const)("shows saved %s as %s without rewriting it", async (cue, label) => {
+    const notifications = createDefaultNotificationSettings();
+    notifications.globalCue = cue;
+    notifications.kinds["agent.permission_requested"].sound = cue;
+    const onUpdate = mock(
+      (_updater: (current: NotificationSettings) => NotificationSettings) => {},
+    );
+    render(
+      <QueryProvider useIsolatedClient>
+        <NotificationContext.Provider value={createNotificationContext()}>
+          <SettingsNotificationsSection
+            notifications={notifications}
+            disabled={false}
+            onUpdateNotifications={onUpdate}
+          />
+        </NotificationContext.Provider>
+      </QueryProvider>,
+    );
+    await screen.findByText("Allow notifications to receive alerts outside the app.");
+    expect(screen.getByRole("button", { name: "Default sound" }).textContent).toBe(label);
+    expect(screen.getByRole("button", { name: "Sound for Permission Prompt" }).textContent).toBe(
+      label,
+    );
+    expect(onUpdate).not.toHaveBeenCalled();
+    for (const name of ["Default sound", "Sound for Permission Prompt"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      const menu = screen.getByRole("dialog", { name: `${name} menu` });
+      fireEvent.click(within(menu).getByRole("button", { name: label }));
+    }
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole("slider", { name: "Volume" }), { key: "ArrowRight" });
+    const updated = onUpdate.mock.calls[0]?.[0](notifications);
+    expect(updated?.globalCue).toBe(cue);
+    expect(updated?.kinds["agent.permission_requested"].sound).toBe(cue);
+  });
+
   test.each(["prompt", "denied"] as const)(
     "shows %s permission guidance without a last OS error",
     async (permission) => {
@@ -217,10 +273,10 @@ describe("SettingsNotificationsSection", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Sound for Permission Prompt" }));
-    fireEvent.click(screen.getByRole("button", { name: "Preview Sparkle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview Success" }));
     await screen.findByText(/Notification sound could not play: Audio unavailable/);
     fail = false;
-    fireEvent.click(screen.getByRole("button", { name: "Preview Sparkle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview Success" }));
     await waitFor(() =>
       expect(screen.queryByText(/Notification sound could not play/) === null).toBe(true),
     );
@@ -405,22 +461,52 @@ describe("SettingsNotificationsSection", () => {
     expect(volume.getAttribute("aria-valuenow")).toBe("31");
   });
 
-  test("previews a row sound from the dropdown without selecting it", async () => {
-    const previewCue = mock(async () => {});
+  // This flow renders the full form, previews every sound, and changes row and global selections.
+  test("offers distinct sounds and previews them without selecting a row sound", async () => {
+    const play = mock((_sound?: string, _options?: { volume?: number }) => {});
+    const adapter = createCuelumeNotificationSoundAdapter(play);
+    const previewCue = mock(adapter.play);
     render(<NotificationsHarness context={createNotificationContext({ previewCue })} />);
 
     await screen.findByText("Allow notifications to receive alerts outside the app.");
     const soundPicker = screen.getByRole("button", { name: "Sound for Permission Prompt" });
-    expect(soundPicker.textContent).toContain("Bloom");
+    expect(soundPicker.textContent).toBe("Open");
 
     await act(async () => {
       fireEvent.click(soundPicker);
     });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Preview Sparkle" }));
-    });
-
-    expect(previewCue).toHaveBeenCalledWith("sparkle", 30);
-    expect(soundPicker.textContent).toContain("Bloom");
-  });
+    const menu = screen.getByRole("dialog", { name: "Sound for Permission Prompt menu" });
+    const previews = within(menu).getAllByRole("button", { name: /^Preview / });
+    expect(previews.filter((button) => !button.hasAttribute("disabled"))).toHaveLength(11);
+    for (const button of previews) {
+      if (button.hasAttribute("disabled")) continue;
+      await act(async () => fireEvent.click(button));
+      const label = button.getAttribute("aria-label");
+      if (label !== "Preview Use global sound") {
+        expect(play.mock.calls.at(-1)?.[0]).toBe(label?.slice("Preview ".length).toLowerCase());
+      }
+    }
+    const sounds = play.mock.calls.map(([sound]) => sound);
+    // Inherit previews the global Success sound; each other choice plays a distinct cue.
+    expect(sounds[0]).toBe("success");
+    expect(new Set(sounds.slice(1)).size).toBe(10);
+    expect(play.mock.calls.every(([, options]) => options?.volume === 0.3)).toBe(true);
+    expect(soundPicker.textContent).toBe("Open");
+    expect(
+      within(menu).getByRole("button", { name: "Preview No sound" }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(within(menu).getByRole("button", { name: "No sound" }));
+    expect(soundPicker.textContent).toBe("No sound");
+    fireEvent.click(soundPicker);
+    fireEvent.click(screen.getByRole("button", { name: "Use global sound" }));
+    expect(soundPicker.textContent).toBe("Use global sound");
+    fireEvent.click(soundPicker);
+    fireEvent.click(screen.getByRole("button", { name: "Error" }));
+    expect(soundPicker.textContent).toBe("Error");
+    const globalPicker = screen.getByRole("button", { name: "Default sound" });
+    fireEvent.click(globalPicker);
+    fireEvent.click(screen.getByRole("button", { name: "Tap" }));
+    expect(globalPicker.textContent).toBe("Tap");
+    expect(soundPicker.textContent).toBe("Error");
+  }, 2_500);
 });
