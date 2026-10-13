@@ -206,7 +206,8 @@ export type AgentChatComposerModel = {
   messageQueue: AgentChatMessageQueueModel | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
-  speed?: SpeedControlModel | undefined;
+  /** Null when no speed control is available. */
+  speed: SpeedControlModel | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;

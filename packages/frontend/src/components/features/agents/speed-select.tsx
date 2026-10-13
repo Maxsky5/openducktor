@@ -28,7 +28,7 @@ export function SpeedSelect({
   compact = false,
   label,
 }: {
-  model: SpeedControlModel | undefined;
+  model: SpeedControlModel | null;
   className?: string;
   triggerClassName?: string;
   compact?: boolean;

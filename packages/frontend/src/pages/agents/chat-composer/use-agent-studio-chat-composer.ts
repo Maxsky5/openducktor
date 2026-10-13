@@ -80,7 +80,7 @@ type UseAgentStudioChatComposerArgs = {
 };
 
 type AgentStudioChatComposerState = {
-  speed: SpeedControlModel | undefined;
+  speed: SpeedControlModel | null;
   selectionForNewSession: AgentModelSelection | null;
   newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;

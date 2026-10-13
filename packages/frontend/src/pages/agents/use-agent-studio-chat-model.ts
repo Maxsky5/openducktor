@@ -55,7 +55,7 @@ export type AgentStudioChatSessionActionsContext = {
 
 export type AgentStudioChatModelSelectionContext = {
   selectedModelSelection: AgentModelSelection | null;
-  speed?: AgentChatModel["composer"]["speed"];
+  speed: AgentChatModel["composer"]["speed"];
   selectedModelDescriptor?: AgentChatModel["composer"]["selectedModelDescriptor"];
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;

@@ -22,13 +22,13 @@ export function useSpeedControl({
   selection: AgentModelSelection | null;
   disabled: boolean;
   onSelect: (speed: string) => Promise<void> | void;
-}): SpeedControlModel | undefined {
+}): SpeedControlModel | null {
   const [change, setChange] = useState<SpeedChange | null>(null);
   if (
     !runtimeKind ||
     RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].capabilities.speed.support === "none"
   )
-    return undefined;
+    return null;
   const current = change?.key === key ? change : null;
   const model = catalog && selection ? findCatalogModel(catalog, selection) : null;
   const availability = catalog?.speedAvailability;

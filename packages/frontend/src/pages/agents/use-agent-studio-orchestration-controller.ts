@@ -123,6 +123,7 @@ type AgentStudioPageModelsSessionActionsContext = Parameters<
 type AgentStudioPageModelsModelSelectionContext = Pick<
   ReturnType<typeof useAgentStudioChatComposer>,
   | "selectedModelSelection"
+  | "speed"
   | "selectedModelDescriptor"
   | "isSelectionCatalogLoading"
   | "supportsProfiles"
@@ -240,6 +241,7 @@ export function useAgentStudioOrchestrationController({
     selectionForNewSession,
     newSessionCatalog,
     selectedModelSelection,
+    speed,
     prepareSelectedSessionModelForSend,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
@@ -412,6 +414,7 @@ export function useAgentStudioOrchestrationController({
     },
     modelSelection: {
       selectedModelSelection,
+      speed,
       selectedModelDescriptor,
       isSelectionCatalogLoading,
       supportsProfiles: supportsProfiles ?? true,

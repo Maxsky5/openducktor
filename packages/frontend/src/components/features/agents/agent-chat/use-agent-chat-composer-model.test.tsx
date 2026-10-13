@@ -36,6 +36,7 @@ const buildComposerConfig = (
   isStarting: false,
   contextUsage: null,
   selectedModelSelection: buildModelSelection(),
+  speed: null,
   isSelectionCatalogLoading: false,
   supportsAttachments: false,
   supportsSlashCommands: false,

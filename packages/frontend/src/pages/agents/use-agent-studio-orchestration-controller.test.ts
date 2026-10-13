@@ -1,12 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepositoryGitProviderContext,
+  type RuntimeDescriptor,
 } from "@openducktor/contracts";
+import { createElement, type PropsWithChildren } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { QueryProvider } from "@/lib/query-provider";
+import { createAgentSessionsStore, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  ActiveWorkspaceContext,
+  AgentSessionReadModelStateContext,
+  AgentSessionsContext,
+  RuntimeDefinitionsContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
-import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
+import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import {
+  createChatSettingsFixture,
+  createWorkspaceStateFixture,
+} from "@/test-utils/shared-test-fixtures";
+import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
@@ -19,6 +40,7 @@ import { buildAgentStudioSelectedSessionContext } from "./selected-session/selec
 import {
   buildAgentStudioPageModelsArgs,
   resolvePullRequestReviewAvailability,
+  useAgentStudioOrchestrationController,
 } from "./use-agent-studio-orchestration-controller";
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
@@ -110,6 +132,7 @@ const createBaseArgs = (): BuildArgs => {
     sessionActions,
     modelSelection: {
       selectedModelSelection: null,
+      speed: null,
       selectedModelDescriptor: null,
       isSelectionCatalogLoading: false,
       supportsAttachments: true,
@@ -232,6 +255,181 @@ describe("buildAgentStudioPageModelsArgs", () => {
     });
   });
 });
+
+describe("task chat speed", () => {
+  test.each([
+    { runtime: CODEX_RUNTIME_DESCRIPTOR, speed: undefined, label: "Standard" },
+    { runtime: CODEX_RUNTIME_DESCRIPTOR, speed: "priority", label: "Fast" },
+    { runtime: CLAUDE_RUNTIME_DESCRIPTOR, speed: undefined, label: "Standard" },
+    { runtime: CLAUDE_RUNTIME_DESCRIPTOR, speed: "fast", label: "Fast" },
+    { runtime: OPENCODE_RUNTIME_DESCRIPTOR, speed: undefined, label: null },
+  ])("renders $runtime.kind composer speed as $label", ({ runtime, speed, label }) => {
+    const base = createBaseArgs();
+    const selectedModel = {
+      runtimeKind: runtime.kind,
+      providerId: runtime.kind,
+      modelId: "model",
+      speed,
+    };
+    const session = createAgentSessionFixture({
+      runtimeKind: runtime.kind,
+      selectedModel,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+    });
+    const summary = toAgentSessionSummary(session);
+    const selectedSession = {
+      ...base.selectedSession.selectedSession,
+      identity: toAgentSessionIdentity(session),
+      loadedSession: session,
+      selectedModel,
+      runtimeData: {
+        ...base.selectedSession.selectedSession.runtimeData,
+        modelCatalog: {
+          runtime,
+          models: [
+            {
+              id: "model",
+              providerId: runtime.kind,
+              providerName: runtime.label,
+              modelId: "model",
+              modelName: "Model",
+              variants: [],
+              speedLevels: [{ id: runtime.kind === "codex" ? "priority" : "fast", label: "Fast" }],
+            },
+          ],
+          defaultModelsByProvider: { [runtime.kind]: "model" },
+        },
+      },
+    };
+    const operations = createAgentOperationsFixture();
+    const args: Parameters<typeof useAgentStudioOrchestrationController>[0] = {
+      activeWorkspaceId: "workspace-repo",
+      workspaceRepoPath: "/repo",
+      branches: [],
+      runtimeDefinitions: [runtime],
+      repoSettings: null,
+      gitProviderContext: undefined,
+      gitProviderReadError: null,
+      selection: {
+        routeSessionResolution: { kind: "found", session: summary },
+        selectedSessionFromRoute: summary,
+        taskId: "task-1",
+        selectedTask: base.selectedSession.selectedTask,
+        sessionsForTask: [summary],
+        resolvedRouteSession: summary,
+        queryUpdate: null,
+        view: {
+          taskId: "task-1",
+          selectedTask: base.selectedSession.selectedTask,
+          sessionsForTask: [summary],
+          isTaskReady: true,
+          role: "planner",
+          launchActionId: "planner_initial",
+          selectedSession,
+        },
+      },
+      composer: {
+        ...base.composer,
+        draftScope: { taskId: "task-1", role: "planner", session: selectedSession.identity },
+      },
+      actions: {
+        ...operations,
+        scheduleQueryUpdate: () => {},
+        selectAgentStudioSelection: () => {},
+        openTaskDetails: () => {},
+        assertCanPrepareSession: () => {},
+        runSessionStartWorkflow: async () => {
+          throw new Error("Unexpected session start");
+        },
+      },
+      taskExecutionFilePreview: {
+        model: {
+          selectedFile: null,
+          previewSessionKey: 0,
+          preservePreviousSnapshot: false,
+          hasPendingDiscard: false,
+          isApplyingTransition: false,
+          onClose: () => {},
+          onLeavePolicyChange: () => {},
+          onKeepEditing: () => {},
+          onDiscard: () => {},
+        },
+        onSelectFile: () => false,
+        requestContextTransition: () => {},
+      },
+    };
+    const Composer = () => {
+      const { agentChatModel } = useAgentStudioOrchestrationController(args);
+      if (label === null) expect(agentChatModel.composer.speed).toBeNull();
+      return createElement(AgentChatComposer, { model: agentChatModel.composer });
+    };
+    const html = renderToStaticMarkup(
+      createElement(TaskChatProviders, { runtime }, createElement(Composer)),
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    if (label === null) {
+      expect(container.querySelector('[aria-label^="Speed:"]')).toBeNull();
+    } else {
+      expect(container.querySelector(`[aria-label="Speed: ${label}"]`)).not.toBeNull();
+    }
+  });
+});
+
+function TaskChatProviders({
+  runtime,
+  children,
+}: PropsWithChildren<{ runtime: RuntimeDescriptor }>) {
+  return createElement(
+    QueryProvider,
+    { useIsolatedClient: true },
+    createElement(
+      WorkspaceStateContext.Provider,
+      { value: createWorkspaceStateFixture() },
+      createElement(
+        RuntimeDefinitionsContext.Provider,
+        {
+          value: {
+            runtimeDefinitions: [runtime],
+            availableRuntimeDefinitions: [runtime],
+            agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+            isLoadingRuntimeDefinitions: false,
+            runtimeDefinitionsError: null,
+            isLoadingRuntimeSettings: false,
+            runtimeSettingsError: null,
+            hasRuntimeSettingsSnapshot: true,
+            refreshRuntimeSettings: async () => {},
+            refreshRuntimeDefinitions: async () => [runtime],
+            loadRepoRuntimeCatalog: async () => {
+              throw new Error("Unexpected catalog load");
+            },
+            loadRepoRuntimeFileSearch: async () => [],
+          },
+        },
+        createElement(
+          AgentSessionReadModelStateContext.Provider,
+          {
+            value: {
+              sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo"),
+              reloadSessionReadModel: () => {},
+              getSessionFault: () => null,
+              workspaceSessionRecordsError: null,
+            },
+          },
+          createElement(
+            ActiveWorkspaceContext.Provider,
+            { value: { activeWorkspace: null, setActiveWorkspace: () => {} } },
+            createElement(
+              AgentSessionsContext.Provider,
+              { value: createAgentSessionsStore() },
+              createElement(AgentChatSendProviders, null, children),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 describe("resolvePullRequestReviewAvailability", () => {
   test("keeps review visible but unavailable when the provider refresh fails", () => {
