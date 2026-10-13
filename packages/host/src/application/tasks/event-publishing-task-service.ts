@@ -1,4 +1,10 @@
-import type { TaskChangeSet } from "@openducktor/contracts";
+import { createMutationPublisher } from "./task-mutation-publisher";
+import type {
+  TaskChangeSet,
+  TaskDocumentSection,
+  TaskEventCursor,
+  TaskMetadataDocument,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
 import type { TaskSyncService } from "./sync/task-sync-service";
@@ -11,6 +17,7 @@ import type {
   TaskService,
   TaskServiceError,
   TaskServiceWithMutationProgress,
+  TaskSetPlanResult,
 } from "./task-service";
 
 export type CreateEventPublishingTaskServiceInput = {
@@ -25,7 +32,24 @@ export type CreateEventPublishingTaskServiceInput = {
   >;
 };
 
-export type EventPublishingTaskService = TaskService & {
+type PublishedDocument = TaskMetadataDocument & { cursor: TaskEventCursor };
+
+export type EventPublishingTaskService = Omit<
+  TaskService,
+  "setSpec" | "saveSpecDocument" | "savePlanDocument" | "setPlan"
+> & {
+  setPlan(
+    input: Parameters<TaskService["setPlan"]>[0],
+  ): Effect.Effect<TaskSetPlanResult & { document: PublishedDocument }, TaskServiceError>;
+  setSpec(
+    input: Parameters<TaskService["setSpec"]>[0],
+  ): Effect.Effect<PublishedDocument, TaskServiceError>;
+  saveSpecDocument(
+    input: Parameters<TaskService["saveSpecDocument"]>[0],
+  ): Effect.Effect<PublishedDocument, TaskServiceError>;
+  savePlanDocument(
+    input: Parameters<TaskService["savePlanDocument"]>[0],
+  ): Effect.Effect<PublishedDocument, TaskServiceError>;
   transitionTaskDeferredPublication: (
     input: Parameters<TaskService["transitionTask"]>[0],
   ) => Effect.Effect<
@@ -66,48 +90,38 @@ export const createEventPublishingTaskService = ({
             ? Effect.fail(result.failure)
             : Effect.succeed({
                 updated: result.success,
-                publish: taskSyncService.runMutation(
-                  input.repoPath,
-                  taskSyncService.publishTasksUpdated(
+                publish: taskSyncService
+                  .runMutation(
                     input.repoPath,
-                    changeForTask(input.taskId),
-                    "agent-session-update-model",
-                    statusChanges,
-                  ),
-                ),
+                    taskSyncService.publishTasksUpdated(
+                      input.repoPath,
+                      changeForTask(input.taskId),
+                      "agent-session-update-model",
+                      statusChanges,
+                    ),
+                  )
+                  .pipe(Effect.asVoid),
               }),
       );
+  const publishMutation = createMutationPublisher({
+    taskSyncService,
+    listTasks: taskService.listTasks,
+  });
+
   const publishAfterMutation = <A>(
-    operation: TaskMutationOperation,
-    repoPath: string,
-    changes: TaskChangeSet,
-    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
-    successChanges: (result: A) => TaskChangeSet = () => changes,
+    ...args: Parameters<typeof publishMutation<A>>
   ): Effect.Effect<A, TaskServiceError> =>
-    taskSyncService.runStatusMutation(repoPath, operation, mutation, ({ result, statusChanges }) =>
-      Effect.gen(function* () {
-        if (result._tag === "Failure") {
-          if (result.failure instanceof TaskMutationProgressFailure) {
-            yield* taskSyncService.publishTasksUpdated(
-              repoPath,
-              result.failure.changes,
-              operation,
-              statusChanges,
-              result.failure.failure,
-            );
-            return yield* Effect.fail(result.failure.failure);
-          }
-          return yield* Effect.fail(result.failure);
-        }
-        yield* taskSyncService.publishTasksUpdated(
-          repoPath,
-          successChanges(result.success),
-          operation,
-          statusChanges,
-        );
-        return result.success;
-      }),
-    );
+    publishMutation(...args).pipe(Effect.map(({ value }) => value));
+
+  const publishDocument = <A extends TaskMetadataDocument>(
+    operation: TaskMutationOperation,
+    input: { repoPath: string; taskId: string },
+    section: TaskDocumentSection,
+    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
+  ): Effect.Effect<A & { cursor: TaskEventCursor }, TaskServiceError> =>
+    publishMutation(operation, input.repoPath, changeForTask(input.taskId), mutation, {
+      documentChanges: [{ taskId: input.taskId, sections: [section] }],
+    }).pipe(Effect.map(({ value, cursor }) => ({ ...value, cursor })));
 
   const publishAfterConditionalMutation = <A>(
     operation: TaskMutationOperation,
@@ -126,6 +140,7 @@ export const createEventPublishingTaskService = ({
               operation,
               statusChanges,
               result.failure.failure,
+              result.failure.documentChanges,
             );
             return yield* Effect.fail(result.failure.failure);
           }
@@ -157,15 +172,17 @@ export const createEventPublishingTaskService = ({
             ? Effect.fail(result.failure)
             : Effect.succeed({
                 task: result.success,
-                publish: taskSyncService.runMutation(
-                  input.repoPath,
-                  taskSyncService.publishTasksUpdated(
+                publish: taskSyncService
+                  .runMutation(
                     input.repoPath,
-                    changeForTask(input.taskId),
-                    "transition-task",
-                    statusChanges,
-                  ),
-                ),
+                    taskSyncService.publishTasksUpdated(
+                      input.repoPath,
+                      changeForTask(input.taskId),
+                      "transition-task",
+                      statusChanges,
+                    ),
+                  )
+                  .pipe(Effect.asVoid),
               }),
       ),
     agentSessionUpsertDeferredPublication: (input) =>
@@ -173,15 +190,17 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         taskService.agentSessionUpsert(input).pipe(
           Effect.map(() => ({
-            publish: taskSyncService.runMutation(
-              input.repoPath,
-              taskSyncService.publishTasksUpdated(
+            publish: taskSyncService
+              .runMutation(
                 input.repoPath,
-                changeForTask(input.taskId),
-                "agent-session-create",
-                [],
-              ),
-            ),
+                taskSyncService.publishTasksUpdated(
+                  input.repoPath,
+                  changeForTask(input.taskId),
+                  "agent-session-create",
+                  [],
+                ),
+              )
+              .pipe(Effect.asVoid),
           })),
         ),
       ),
@@ -296,7 +315,7 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.deleteTask(input),
-        (result) => result.changes,
+        { changes: (result) => result.changes, previousParentTaskIds: [input.taskId] },
       ),
     closeTask: (input) =>
       publishAfterMutation(
@@ -311,6 +330,7 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.resetImplementation(input),
+        { documentChanges: [{ taskId: input.taskId, sections: ["qa"] }] },
       ),
     resetTask: (input) =>
       publishAfterMutation(
@@ -318,6 +338,7 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.resetTask(input),
+        { documentChanges: [{ taskId: input.taskId, sections: ["spec", "plan", "qa"] }] },
       ),
     updateTask: (input) =>
       publishAfterMutation(
@@ -325,6 +346,7 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.updateTask(input),
+        { previousParentTaskIds: input.patch.parentId !== undefined ? [input.taskId] : [] },
       ),
     transitionTask: (input) =>
       publishAfterMutation(
@@ -335,35 +357,30 @@ export const createEventPublishingTaskService = ({
       ),
     specGet: (input) => taskService.specGet(input),
     setSpec: (input) =>
-      publishAfterMutation(
+      publishDocument(
         "set-spec",
-        input.repoPath,
-        changeForTask(input.taskId),
+        input,
+        "spec",
         Effect.suspend(() => taskService.setSpec(input)),
       ),
     saveSpecDocument: (input) =>
-      publishAfterMutation(
-        "save-spec-document",
-        input.repoPath,
-        changeForTask(input.taskId),
-        taskService.saveSpecDocument(input),
-      ),
+      publishDocument("save-spec-document", input, "spec", taskService.saveSpecDocument(input)),
     planGet: (input) => taskService.planGet(input),
     setPlan: (input) =>
-      publishAfterMutation(
+      publishMutation(
         "set-plan",
         input.repoPath,
         changeForTask(input.taskId),
         Effect.suspend(() => taskService.setPlan(input)),
-        (result) => result.changes,
+        {
+          changes: (result) => result.changes,
+          documentChanges: [{ taskId: input.taskId, sections: ["plan"] }],
+        },
+      ).pipe(
+        Effect.map(({ value, cursor }) => ({ ...value, document: { ...value.document, cursor } })),
       ),
     savePlanDocument: (input) =>
-      publishAfterMutation(
-        "save-plan-document",
-        input.repoPath,
-        changeForTask(input.taskId),
-        taskService.savePlanDocument(input),
-      ),
+      publishDocument("save-plan-document", input, "plan", taskService.savePlanDocument(input)),
     qaGetReport: (input) => taskService.qaGetReport(input),
     buildBlocked: (input) =>
       publishAfterMutation(
@@ -399,6 +416,7 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.qaApproved(input),
+        { documentChanges: [{ taskId: input.taskId, sections: ["qa"] }] },
       ),
     qaRejected: (input) =>
       publishAfterMutation(
@@ -406,6 +424,7 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.qaRejected(input),
+        { documentChanges: [{ taskId: input.taskId, sections: ["qa"] }] },
       ),
     humanRequestChanges: (input) =>
       publishAfterMutation(

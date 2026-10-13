@@ -306,7 +306,6 @@ function ImportTrigger(): ReactElement {
         onOpenChange={setOpen}
         repoPath="/repo"
         provider={createGitProviderContextFixture({ available: false })}
-        onImported={() => {}}
       />
     </>
   );

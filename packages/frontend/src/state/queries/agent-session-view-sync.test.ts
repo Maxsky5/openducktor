@@ -21,6 +21,7 @@ const event = (
   repoPath = "/repo",
 ): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
+  boardChanges: null,
   eventId: `event-${taskIds.join("-")}`,
   repoPath,
   taskIds,

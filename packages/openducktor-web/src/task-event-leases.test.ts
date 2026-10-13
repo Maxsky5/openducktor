@@ -4,20 +4,22 @@ import type {
   TaskEventStreamFrame,
   TaskEventStreamSubscribe,
 } from "@openducktor/contracts";
+import { createTaskEventStream } from "../../host/src/events/task-event-stream";
 import { createTaskEventLeaseManager } from "./task-event-leases";
 
-type Sink = (frame: TaskEventStreamFrame) => void;
+type Sink = (frame: TaskEventStreamFrame) => void | boolean;
 
 const cursor = (sequence: number): TaskEventCursor => ({
   epoch: "fc49d1f9-708c-4198-b56b-f1437b2bbcea",
   sequence,
 });
-const change = (sequence: number): TaskEventStreamFrame => ({
+const change = (sequence: number): Extract<TaskEventStreamFrame, { type: "change" }> => ({
   type: "change",
   cursor: cursor(sequence),
   event: {
     eventId: `event-${sequence}`,
     kind: "external_task_created",
+    boardChanges: null,
     repoPath: "/repo",
     taskId: `task-${sequence}`,
     taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
@@ -36,11 +38,13 @@ const createFakeStream = () => {
       return unsubscribeCalls;
     },
     stream: {
-      publish: () => {},
+      publish: () => cursor(0),
       subscribe: (_input: TaskEventStreamSubscribe, nextSink: Sink) => {
         sink = nextSink;
         return {
           subscriptionId: "host-subscription",
+          resume: () => {},
+          replay: () => {},
           unsubscribe: () => {
             unsubscribeCalls += 1;
           },
@@ -56,7 +60,7 @@ const createController = () => {
   return {
     controller: {
       close: mock(() => {}),
-      desiredSize: null,
+      desiredSize: 1,
       enqueue: mock((value: Uint8Array) => {
         enqueued.push(value);
       }),
@@ -138,22 +142,29 @@ test("clears the creation timer and unsubscribes once on explicit delete or shut
   expect(manager.get(shutdownLease.subscriptionId)).toBeUndefined();
 });
 
-test("replays only unacknowledged frames and preserves late-cancel connection generations", () => {
-  const fake = createFakeStream();
+test("replays only unacknowledged frames and preserves late-cancel connection generations", async () => {
+  const stream = createTaskEventStream({
+    epochFactory: () => cursor(0).epoch,
+    reporter: { report: () => {} },
+  });
   const manager = createTaskEventLeaseManager({
     encodeFrame: (frame) => new TextEncoder().encode(JSON.stringify(frame)),
     reportDeliveryFailure: () => {},
-    taskEventStream: fake.stream,
+    taskEventStream: stream,
   });
   const lease = manager.create({ cursor: cursor(0) }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
   const first = createController();
   const firstGeneration = manager.attach(lease, first.controller);
-  fake.emit(change(1));
+  stream.publish(change(1).event);
+  await Promise.resolve();
+  expect(() => manager.acknowledge(lease, cursor(2))).toThrow();
   manager.acknowledge(lease, cursor(1));
-  fake.emit(change(2));
+  stream.publish(change(2).event);
+  await Promise.resolve();
   const second = createController();
   const secondGeneration = manager.attach(lease, second.controller);
   manager.detach(lease, firstGeneration);
+  await Promise.resolve();
 
   expect(first.enqueued.map((value) => JSON.parse(new TextDecoder().decode(value)))).toEqual([
     change(1),
@@ -163,35 +174,7 @@ test("replays only unacknowledged frames and preserves late-cancel connection ge
     change(2),
   ]);
   expect(lease.connection?.generation).toBe(secondGeneration);
-  expect(fake.acknowledge).toHaveBeenCalledWith({
-    cursor: cursor(1),
-    subscriptionId: "host-subscription",
-  });
-});
-
-test("does not prune a lease when host acknowledgement rejects and snapshot boundaries replace changes", () => {
-  const fake = createFakeStream();
-  const manager = createTaskEventLeaseManager({
-    encodeFrame: (frame) => new TextEncoder().encode(JSON.stringify(frame)),
-    reportDeliveryFailure: () => {},
-    taskEventStream: fake.stream,
-  });
-  const lease = manager.create({ cursor: cursor(0) }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
-  fake.emit(change(1));
-  fake.acknowledge.mockImplementationOnce(() => {
-    throw new Error("host rejected acknowledgement");
-  });
-
-  expect(() => manager.acknowledge(lease, cursor(1))).toThrow("host rejected acknowledgement");
-  expect(lease.pendingFrames).toEqual([change(1)]);
-
-  const snapshot: TaskEventStreamFrame = {
-    type: "snapshot_required",
-    cursor: cursor(2),
-    reason: "buffer_gap",
-  };
-  fake.emit(snapshot);
-  expect(lease.pendingFrames).toEqual([snapshot]);
+  manager.dispose();
 });
 
 test("isolates enqueue failures and deletes host subscriptions on explicit disposal", () => {
@@ -206,7 +189,7 @@ test("isolates enqueue failures and deletes host subscriptions on explicit dispo
   const failure = new Error("closed response");
   const brokenController = {
     close: mock(() => {}),
-    desiredSize: null,
+    desiredSize: 1,
     enqueue: mock(() => {
       throw failure;
     }),
@@ -217,7 +200,6 @@ test("isolates enqueue failures and deletes host subscriptions on explicit dispo
 
   expect(reported).toEqual([failure]);
   expect(lease.connection).toBeNull();
-  expect(lease.pendingFrames).toEqual([change(1)]);
   manager.dispose();
   expect(fake.unsubscribeCalls).toBe(1);
   expect(manager.get(lease.subscriptionId)).toBeUndefined();
@@ -252,75 +234,4 @@ test("cancels reconnect expiry and expires a detached lease exactly once", () =>
   expiryCallback();
   expect(manager.get(lease.subscriptionId)).toBeUndefined();
   expect(fake.unsubscribeCalls).toBe(1);
-});
-
-test("retains immutable committed status changes while a lease waits for reconnection", () => {
-  const fake = createFakeStream();
-  const manager = createTaskEventLeaseManager({
-    encodeFrame: () => new Uint8Array(),
-    reportDeliveryFailure: () => {},
-    scheduleExpiry: createInactiveTimer,
-    taskEventStream: fake.stream,
-  });
-  const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
-  const statusChange = {
-    previousStatus: "open" as const,
-    task: { id: "task-1", title: "Committed title", status: "spec_ready" as const },
-  };
-  fake.emit({
-    type: "change",
-    cursor: cursor(1),
-    event: {
-      kind: "tasks_updated",
-      eventId: "status-change",
-      repoPath: "/repo",
-      taskIds: ["task-1"],
-      removedTaskIds: [],
-      taskSnapshots: [statusChange.task],
-      statusChanges: [statusChange],
-      emittedAt: "2026-09-06T10:00:00.000Z",
-    },
-  });
-  statusChange.task.title = "Changed after delivery";
-  const retained = lease.pendingFrames[0];
-  if (retained?.type !== "change" || retained.event.kind !== "tasks_updated")
-    throw new Error("Expected a retained update");
-  expect(retained.event.statusChanges[0]?.task.title).toBe("Committed title");
-  expect(Object.isFrozen(retained.event.statusChanges)).toBe(true);
-  expect(Object.isFrozen(retained.event.statusChanges[0])).toBe(true);
-  expect(Object.isFrozen(retained.event.statusChanges[0]?.task)).toBe(true);
-  manager.dispose();
-});
-
-test("protects created task snapshots retained for an SSE connection", () => {
-  const fake = createFakeStream();
-  const encoded: TaskEventStreamFrame[] = [];
-  const manager = createTaskEventLeaseManager({
-    encodeFrame: (frame) => {
-      encoded.push(frame);
-      return new Uint8Array();
-    },
-    reportDeliveryFailure: () => {},
-    scheduleExpiry: createInactiveTimer,
-    taskEventStream: fake.stream,
-  });
-  try {
-    const lease = manager.create({ cursor: null }, "05e77c20-ebf2-4e7f-a880-9c95c24627ee");
-    const published = change(1);
-    fake.emit(published);
-    if (published.type !== "change" || published.event.kind !== "external_task_created")
-      throw new Error("Expected created task");
-    published.event.taskSnapshot.title = "Changed after delivery";
-    const retained = lease.pendingFrames[0];
-    if (retained?.type !== "change" || retained.event.kind !== "external_task_created")
-      throw new Error("Expected retained created task");
-    expect(Reflect.set(retained.event.taskSnapshot, "status", "closed")).toBe(false);
-    const connection = createController();
-    manager.attach(lease, connection.controller);
-    expect(encoded).toMatchObject([
-      { event: { taskSnapshot: { id: "task-1", title: "Task", status: "open" } } },
-    ]);
-  } finally {
-    manager.dispose();
-  }
 });

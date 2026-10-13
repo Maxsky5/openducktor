@@ -4,14 +4,17 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
+import { boardEvent, eventCursor } from "./task-view-sync.test-support";
 import { taskQueryKeys, type RepoTaskData } from "./tasks";
 
 const createDeferred = <T>() => {
-  let resolve: (value: T) => void = () => {};
-  const promise = new Promise<T>((nextResolve) => {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
     resolve = nextResolve;
+    reject = nextReject;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
@@ -26,6 +29,225 @@ const createSync = (ports: TaskViewSyncPorts) => {
 };
 
 describe("TaskViewSync races", () => {
+  test.each(["removed", "failed"] as const)(
+    "drops pending changes after a query is %s",
+    async (change) => {
+      const result = createDeferred<RepoTaskData>();
+      const { queryClient, sync } = createSync(createPorts());
+      const key = taskQueryKeys.repoData("/repo");
+      const read = queryClient.fetchQuery({ queryKey: key, queryFn: () => result.promise });
+      void read.catch(() => {});
+      await sync.reconcileExternalEvent(
+        boardEvent("/repo", [createTaskCardFixture({ id: "task-1", title: "Obsolete" })]),
+        "/repo",
+        eventCursor(),
+      );
+      const replacement = createTaskCardFixture({ id: "task-1", title: "Replacement" });
+      if (change === "removed") {
+        queryClient.removeQueries({ queryKey: key, exact: true });
+        queryClient.setQueryData(key, { tasks: [replacement] });
+        result.resolve({ tasks: [] });
+        await Promise.allSettled([read]);
+      } else {
+        result.reject(new Error("first read failed"));
+        await Promise.allSettled([read]);
+        await queryClient.fetchQuery({
+          queryKey: key,
+          queryFn: async () => ({ tasks: [replacement] }),
+        });
+      }
+      expect(queryClient.getQueryData<RepoTaskData>(key)).toEqual({ tasks: [replacement] });
+      queryClient.clear();
+    },
+  );
+
+  test("applies a burst once after the original inactive board and ID reads complete", async () => {
+    const result = createDeferred<RepoTaskData>();
+    const ids = createDeferred<string[]>();
+    const { queryClient, sync } = createSync(createPorts());
+    const queryKey = taskQueryKeys.repoData("/inactive");
+    const idKey = taskQueryKeys.ids("/inactive");
+    const readBoard = mock(() => result.promise);
+    const readIds = mock(() => ids.promise);
+    const options = { queryKey, queryFn: readBoard, gcTime: 0 };
+    const read = queryClient.fetchQuery(options);
+    const idRead = queryClient.fetchQuery({ queryKey: idKey, queryFn: readIds });
+    const observer = new QueryObserver(queryClient, options);
+    const stopObserving = observer.subscribe(() => {});
+    const writes: string[] = [];
+    const stopRecording = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "success" && event.action.manual) {
+        writes.push(event.query.queryHash);
+      }
+    });
+    let changed = createTaskCardFixture({ id: "task-1" });
+    const other = createTaskCardFixture({ id: "task-2" });
+    try {
+      stopObserving();
+      for (let index = 0; index < 50; index++) {
+        changed = createTaskCardFixture({ id: "task-1", title: `Changed ${index}` });
+        await sync.reconcileExternalEvent(
+          boardEvent("/inactive", [changed]),
+          "/repo",
+          eventCursor(),
+        );
+      }
+      expect(queryClient.getQueryData(queryKey)).toBeUndefined();
+      expect(queryClient.getQueryData(idKey)).toBeUndefined();
+      expect(writes).toEqual([]);
+      result.resolve({ tasks: [createTaskCardFixture({ id: "task-1" }), other] });
+      ids.resolve(["task-1", "task-2"]);
+      await Promise.all([read, idRead]);
+      expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks).toEqual([changed, other]);
+      expect(queryClient.getQueryData<string[]>(idKey)).toEqual(["task-1", "task-2"]);
+      expect(writes).toHaveLength(2);
+      expect(new Set(writes).size).toBe(2);
+      expect(readBoard).toHaveBeenCalledTimes(1);
+      expect(readIds).toHaveBeenCalledTimes(1);
+    } finally {
+      result.resolve({ tasks: [] });
+      ids.resolve([]);
+      await Promise.all([read, idRead]);
+      stopObserving();
+      stopRecording();
+      queryClient.clear();
+    }
+  });
+
+  test.each(["cached", "pending"] as const)(
+    "%s boards preserve deletion, recreation, and child visibility in event order",
+    async (baseline) => {
+      const result = createDeferred<RepoTaskData>();
+      const ids = createDeferred<string[]>();
+      const { queryClient, sync } = createSync(createPorts());
+      const queryKey = taskQueryKeys.repoData("/repo");
+      const idKey = taskQueryKeys.ids("/repo");
+      const early = createTaskCardFixture({ id: "early", subtaskIds: ["edge"] });
+      const parent = createTaskCardFixture({ id: "epic" });
+      const other = createTaskCardFixture({
+        id: "other",
+        subtaskIds: ["hidden", "edge", "old", "moving"],
+      });
+      const hidden = createTaskCardFixture({
+        id: "hidden",
+        status: "closed",
+        updatedAt: "2026-04-08T00:00:00.000Z",
+      });
+      const edge = createTaskCardFixture({
+        id: "edge",
+        status: "closed",
+        updatedAt: "2026-04-09T13:10:00.000Z",
+      });
+      const old = createTaskCardFixture({ id: "old" });
+      const moving = createTaskCardFixture({
+        id: "moving",
+        status: "closed",
+        updatedAt: "2026-04-01T00:00:00.000Z",
+      });
+      const tasks = [early, parent, other, hidden, edge, old, moving];
+      const taskIds = tasks.map((card) => card.id);
+      if (baseline === "cached") {
+        queryClient.setQueryData(queryKey, { tasks });
+        queryClient.setQueryData(idKey, taskIds);
+      }
+      const read =
+        baseline === "pending"
+          ? queryClient.fetchQuery({ queryKey, queryFn: () => result.promise })
+          : Promise.resolve();
+      const idRead =
+        baseline === "pending"
+          ? queryClient.fetchQuery({ queryKey: idKey, queryFn: () => ids.promise })
+          : Promise.resolve();
+      const earlyChanged = Object.freeze({ ...early, title: "Changed early" });
+      const firstParent = Object.freeze({ ...parent, subtaskIds: ["hidden", "edge"] });
+      const moved = Object.freeze({ ...moving, status: "open" as const });
+      const marker = Object.freeze(createTaskCardFixture({ id: "marker" }));
+      const lastParent = Object.freeze({
+        ...parent,
+        title: "Latest parent",
+        subtaskIds: ["hidden", "edge", "old", "moving"],
+      });
+      const restored = Object.freeze({ ...old, title: "Recreated" });
+      const reopened = Object.freeze({ ...edge, status: "open" as const });
+      try {
+        await sync.reconcileExternalEvent(
+          boardEvent("/repo", [earlyChanged, firstParent, moved], { removedTaskIds: ["old"] }),
+          "/repo",
+          eventCursor(),
+        );
+        await sync.reconcileExternalEvent(
+          boardEvent("/repo", [marker], { doneVisibleDays: 0 }),
+          "/repo",
+          eventCursor(),
+        );
+        await sync.reconcileExternalEvent(
+          boardEvent("/repo", [lastParent, restored, reopened], { doneVisibleDays: 7 }),
+          "/repo",
+          eventCursor(),
+        );
+        result.resolve({ tasks });
+        ids.resolve(taskIds);
+        await Promise.all([read, idRead]);
+        expect(queryClient.getQueryData<RepoTaskData>(queryKey)?.tasks).toEqual([
+          { ...earlyChanged, subtaskIds: [] },
+          reopened,
+          lastParent,
+          marker,
+          moved,
+          restored,
+          { ...other, subtaskIds: ["moving"] },
+        ]);
+        expect(queryClient.getQueryData<string[]>(idKey)).toEqual([
+          "early",
+          "epic",
+          "other",
+          "hidden",
+          "edge",
+          "moving",
+          "marker",
+          "old",
+        ]);
+      } finally {
+        result.resolve({ tasks: [] });
+        ids.resolve([]);
+        await Promise.all([read, idRead]);
+        queryClient.clear();
+      }
+    },
+  );
+
+  test("a manual refresh supersedes card patches waiting for a cancelled cold read", async () => {
+    const staleRead = createDeferred<RepoTaskData>();
+    const latest = createTaskCardFixture({ id: "task-1", title: "Latest host snapshot" });
+    const queued = createTaskCardFixture({ id: "task-1", title: "Earlier stream change" });
+    const { queryClient, sync } = createSync(createPorts({ listTasks: async () => [latest] }));
+    const key = taskQueryKeys.repoData("/repo");
+    const coldRead = queryClient.fetchQuery({ queryKey: key, queryFn: () => staleRead.promise });
+    void coldRead.catch(() => {});
+    await sync.reconcileExternalEvent(
+      {
+        kind: "tasks_updated",
+        eventId: "earlier-change",
+        repoPath: "/repo",
+        taskIds: [queued.id],
+        removedTaskIds: [],
+        taskSnapshots: [{ id: queued.id, title: queued.title, status: queued.status }],
+        statusChanges: [],
+        boardChanges: { documentChanges: [], cards: [queued], doneVisibleDays: 1 },
+        emittedAt: "2026-04-10T13:10:00.000Z",
+      },
+      "/repo",
+      eventCursor(),
+    );
+
+    await sync.refreshManually("/repo");
+    expect(queryClient.getQueryData<RepoTaskData>(key)).toEqual({ tasks: [latest] });
+    staleRead.resolve({ tasks: [createTaskCardFixture({ id: "task-1", title: "Old read" })] });
+    await Promise.allSettled([coldRead]);
+    expect(queryClient.getQueryData<RepoTaskData>(key)).toEqual({ tasks: [latest] });
+    queryClient.clear();
+  });
+
   test("uses the snapshot task read for a workspace load started at the same time", async () => {
     const taskList = createDeferred<TaskCard[]>();
     const taskListStarted = createDeferred<void>();
@@ -81,145 +303,6 @@ describe("TaskViewSync races", () => {
     });
   });
 
-  test("runs external document refreshes in event order", async () => {
-    const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const secondDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const firstDocumentStarted = createDeferred<void>();
-    const secondDocumentStarted = createDeferred<void>();
-    let documentReadCount = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        loadFreshDocument: async () => {
-          documentReadCount += 1;
-          if (documentReadCount === 1) {
-            firstDocumentStarted.resolve();
-            return firstDocument.promise;
-          }
-          secondDocumentStarted.resolve();
-          return secondDocument.promise;
-        },
-      }),
-    );
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-1"), {
-      markdown: "# Stale",
-      updatedAt: null,
-    });
-
-    const first = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-5",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-    await firstDocumentStarted.promise;
-
-    const second = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-6",
-        repoPath: "/repo",
-        taskIds: ["task-1"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-        emittedAt: "2026-04-10T13:11:00.000Z",
-      },
-      "/repo",
-    );
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(documentReadCount).toBe(1);
-
-    firstDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-    await first;
-    await secondDocumentStarted.promise;
-
-    secondDocument.resolve({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
-    expect(
-      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
-        documentQueryKeys.spec("/repo", "task-1"),
-      ),
-    ).toEqual({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-  });
-
-  test("waits for an earlier external event before applying the next event", async () => {
-    const firstDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const firstDocumentStarted = createDeferred<void>();
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async () => [
-          createTaskCardFixture({ id: "task-a", status: "open" }),
-          createTaskCardFixture({ id: "task-b", status: "open" }),
-        ],
-        loadFreshDocument: async (_repoPath, taskId) => {
-          if (taskId === "task-a") {
-            firstDocumentStarted.resolve();
-            return firstDocument.promise;
-          }
-          return { markdown: "# B2", updatedAt: "2026-04-10T13:11:00.000Z" };
-        },
-      }),
-    );
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-a"), {
-      markdown: "# A0",
-      updatedAt: null,
-    });
-    queryClient.setQueryData(documentQueryKeys.spec("/repo", "task-b"), {
-      markdown: "# B0",
-      updatedAt: null,
-    });
-
-    const first = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-8",
-        repoPath: "/repo",
-        taskIds: ["task-a"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-a", title: "Task A", status: "open" }],
-        emittedAt: "2026-04-10T13:10:00.000Z",
-      },
-      "/repo",
-    );
-    await firstDocumentStarted.promise;
-
-    const second = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-9",
-        repoPath: "/repo",
-        taskIds: ["task-b"],
-        removedTaskIds: [],
-        statusChanges: [],
-        taskSnapshots: [{ id: "task-b", title: "Task B", status: "open" }],
-        emittedAt: "2026-04-10T13:11:00.000Z",
-      },
-      "/repo",
-    );
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    expect(
-      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
-        documentQueryKeys.spec("/repo", "task-b"),
-      ),
-    ).toEqual({ markdown: "# B0", updatedAt: null });
-
-    firstDocument.resolve({ markdown: "# A1", updatedAt: "2026-04-10T13:10:00.000Z" });
-    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
-    expect(
-      queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
-        documentQueryKeys.spec("/repo", "task-b"),
-      ),
-    ).toEqual({ markdown: "# B2", updatedAt: "2026-04-10T13:11:00.000Z" });
-  });
-
   test("runs the next task view refresh after an earlier refresh fails", async () => {
     const firstFailure = new Error("task list unavailable");
     let reads = 0;
@@ -233,8 +316,8 @@ describe("TaskViewSync races", () => {
       }),
     );
 
-    const first = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
-    const second = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+    const first = sync.refreshManually("/repo");
+    const second = sync.refreshManually("/repo");
 
     await expect(first).rejects.toBe(firstFailure);
     await expect(second).resolves.toBeUndefined();
@@ -267,9 +350,9 @@ describe("TaskViewSync races", () => {
       return cancelQueries(...args);
     };
 
-    const first = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+    const first = sync.refreshManually("/repo");
     await firstCancelStarted.promise;
-    const second = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
+    const second = sync.refreshManually("/repo");
 
     try {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -349,417 +432,6 @@ describe("TaskViewSync races", () => {
     } finally {
       unsubscribe();
     }
-  });
-
-  test("keeps a local refresh queued until snapshot document work finishes", async () => {
-    const snapshotList = createDeferred<TaskCard[]>();
-    const snapshotListStarted = createDeferred<void>();
-    const freshDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const freshDocumentStarted = createDeferred<void>();
-    let listReads = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        listTasks: async () => {
-          listReads += 1;
-          if (listReads === 1) {
-            snapshotListStarted.resolve();
-            return snapshotList.promise;
-          }
-          return [createTaskCardFixture({ id: "task-1", status: "open" })];
-        },
-        loadFreshDocument: async () => {
-          freshDocumentStarted.resolve();
-          return freshDocument.promise;
-        },
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo");
-      await snapshotListStarted.promise;
-
-      const localRefresh = sync.refreshAfterLocalMutation("/repo", { kind: "task-list-only" });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(listReads).toBe(1);
-
-      snapshotList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
-      await freshDocumentStarted.promise;
-
-      expect(listReads).toBe(1);
-      freshDocument.resolve({ markdown: "# Fresh", updatedAt: "2026-04-10T13:11:00.000Z" });
-      await Promise.all([snapshot, localRefresh]);
-
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({
-        markdown: "# Fresh",
-        updatedAt: "2026-04-10T13:11:00.000Z",
-      });
-    } finally {
-      snapshotList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
-      freshDocument.resolve({ markdown: "# Fresh", updatedAt: "2026-04-10T13:11:00.000Z" });
-      unsubscribe();
-    }
-  });
-
-  test("runs a same-task document refresh after the snapshot refresh", async () => {
-    const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const successorDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const snapshotDocumentStarted = createDeferred<void>();
-    const successorDocumentStarted = createDeferred<void>();
-    let documentReads = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        loadFreshDocument: async () => {
-          documentReads += 1;
-          if (documentReads === 1) {
-            snapshotDocumentStarted.resolve();
-            return snapshotDocument.promise;
-          }
-          successorDocumentStarted.resolve();
-          return successorDocument.promise;
-        },
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo");
-      await snapshotDocumentStarted.promise;
-
-      const successor = sync.refreshAfterLocalMutation("/repo", {
-        kind: "refresh-documents",
-        taskIds: ["task-1"],
-      });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(documentReads).toBe(1);
-
-      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      await snapshot;
-      await successorDocumentStarted.promise;
-
-      successorDocument.resolve({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-      await successor;
-
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-    } finally {
-      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      successorDocument.resolve({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-      unsubscribe();
-    }
-  });
-
-  test("runs a snapshot after an in-flight same-task document refresh", async () => {
-    const staleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const staleDocumentStarted = createDeferred<void>();
-    let documentReads = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        loadFreshDocument: async () => {
-          documentReads += 1;
-          if (documentReads === 1) {
-            staleDocumentStarted.resolve();
-            return staleDocument.promise;
-          }
-          return { markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" };
-        },
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const refresh = sync.refreshAfterLocalMutation("/repo", {
-        kind: "refresh-documents",
-        taskIds: ["task-1"],
-      });
-      await staleDocumentStarted.promise;
-      const snapshot = sync.reconcileStreamSnapshot("/repo");
-
-      staleDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      await expect(Promise.all([refresh, snapshot])).resolves.toEqual([undefined, ["task-1"]]);
-
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({ markdown: "# V2", updatedAt: "2026-04-10T13:11:00.000Z" });
-    } finally {
-      staleDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      unsubscribe();
-    }
-  });
-
-  test("applies a queued deletion after the snapshot document refresh", async () => {
-    const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const snapshotDocumentStarted = createDeferred<void>();
-    const loadFreshDocument = mock(async () => {
-      snapshotDocumentStarted.resolve();
-      return snapshotDocument.promise;
-    });
-    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo");
-      await snapshotDocumentStarted.promise;
-
-      const remove = sync.refreshAfterLocalMutation("/repo", {
-        kind: "remove-documents",
-        taskIds: ["task-1"],
-      });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(queryClient.getQueryData(documentKey)).toBeDefined();
-
-      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      await snapshot;
-      await remove;
-
-      expect(loadFreshDocument).toHaveBeenCalledTimes(1);
-      expect(queryClient.getQueryData(documentKey)).toBeUndefined();
-    } finally {
-      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      unsubscribe();
-    }
-  });
-
-  test("keeps a completed snapshot successful when a later document refresh fails", async () => {
-    const snapshotDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const snapshotDocumentStarted = createDeferred<void>();
-    const successorDocumentStarted = createDeferred<void>();
-    const successorFailure = new Error("successor document unavailable");
-    let rejectSuccessorDocument!: (cause: unknown) => void;
-    const successorDocument = new Promise<never>((_resolve, reject) => {
-      rejectSuccessorDocument = reject;
-    });
-    let documentReads = 0;
-    const { queryClient, sync } = createSync(
-      createPorts({
-        loadFreshDocument: async () => {
-          documentReads += 1;
-          if (documentReads === 1) {
-            snapshotDocumentStarted.resolve();
-            return snapshotDocument.promise;
-          }
-          successorDocumentStarted.resolve();
-          return successorDocument;
-        },
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => ({ markdown: "# Observed", updatedAt: null }),
-      staleTime: Infinity,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      const snapshotResult = sync.reconcileStreamSnapshot("/repo").then(
-        () => null,
-        (error) => error,
-      );
-      await snapshotDocumentStarted.promise;
-      const successorResult = sync
-        .refreshAfterLocalMutation("/repo", {
-          kind: "refresh-documents",
-          taskIds: ["task-1"],
-        })
-        .then(
-          () => null,
-          (error) => error,
-        );
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(documentReads).toBe(1);
-
-      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      expect(await snapshotResult).toBeNull();
-      await successorDocumentStarted.promise;
-
-      rejectSuccessorDocument(successorFailure);
-
-      expect(await successorResult).toBe(successorFailure);
-    } finally {
-      snapshotDocument.resolve({ markdown: "# V1", updatedAt: "2026-04-10T13:10:00.000Z" });
-      unsubscribe();
-    }
-  });
-
-  test("cancels a stale active event document read before fresh reconciliation", async () => {
-    const staleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const staleDocumentStarted = createDeferred<void>();
-    const { queryClient, sync } = createSync(
-      createPorts({
-        loadFreshDocument: async () => ({
-          markdown: "# Fresh event",
-          updatedAt: "2026-04-10T13:11:00.000Z",
-        }),
-      }),
-    );
-    const documentKey = documentQueryKeys.spec("/repo", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Cached stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => {
-        staleDocumentStarted.resolve();
-        return staleDocument.promise;
-      },
-      staleTime: 0,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      await staleDocumentStarted.promise;
-      await sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-active-stale-read",
-          repoPath: "/repo",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          statusChanges: [],
-          taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-          emittedAt: "2026-04-10T13:11:00.000Z",
-        },
-        "/repo",
-      );
-
-      staleDocument.resolve({ markdown: "# Late stale", updatedAt: null });
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({
-        markdown: "# Fresh event",
-        updatedAt: "2026-04-10T13:11:00.000Z",
-      });
-      expect(queryClient.getQueryState(documentKey)?.isInvalidated).toBe(false);
-    } finally {
-      staleDocument.resolve({ markdown: "# Late stale", updatedAt: null });
-      unsubscribe();
-    }
-  });
-
-  test("cancels a stale inactive event document read without eagerly refreshing it", async () => {
-    const staleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const staleDocumentStarted = createDeferred<void>();
-    const loadFreshDocument = mock(async () => ({ markdown: "# Unexpected", updatedAt: null }));
-    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
-    const documentKey = documentQueryKeys.spec("/inactive", "task-1");
-    queryClient.setQueryData(documentKey, { markdown: "# Cached stale", updatedAt: null });
-    const observer = new QueryObserver(queryClient, {
-      queryKey: documentKey,
-      queryFn: async () => {
-        staleDocumentStarted.resolve();
-        return staleDocument.promise;
-      },
-      staleTime: 0,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-
-    try {
-      await staleDocumentStarted.promise;
-      await sync.reconcileExternalEvent(
-        {
-          kind: "tasks_updated",
-          eventId: "event-inactive-stale-read",
-          repoPath: "/inactive",
-          taskIds: ["task-1"],
-          removedTaskIds: [],
-          statusChanges: [],
-          taskSnapshots: [{ id: "task-1", title: "Task 1", status: "open" }],
-          emittedAt: "2026-04-10T13:11:00.000Z",
-        },
-        "/repo",
-      );
-
-      staleDocument.resolve({ markdown: "# Late stale", updatedAt: null });
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(loadFreshDocument).not.toHaveBeenCalled();
-      expect(
-        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(documentKey),
-      ).toEqual({
-        markdown: "# Cached stale",
-        updatedAt: null,
-      });
-      expect(queryClient.getQueryState(documentKey)?.isInvalidated).toBe(true);
-    } finally {
-      staleDocument.resolve({ markdown: "# Late stale", updatedAt: null });
-      unsubscribe();
-    }
-  });
-
-  test("applies an inactive event after a local task-list refresh", async () => {
-    const staleList = createDeferred<TaskCard[]>();
-    const staleListStarted = createDeferred<void>();
-    const listTasks = mock(async () => {
-      staleListStarted.resolve();
-      return staleList.promise;
-    });
-    const loadFreshDocument = mock(async () => ({ markdown: "# Unexpected", updatedAt: null }));
-    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
-    const taskKey = taskQueryKeys.repoData("/inactive");
-    const documentKey = documentQueryKeys.spec("/inactive", "task-1");
-    queryClient.setQueryData(taskKey, {
-      tasks: [createTaskCardFixture({ id: "task-1", status: "open" })],
-    });
-    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
-
-    const refresh = sync.refreshAfterLocalMutation("/inactive", { kind: "task-list-only" });
-    await staleListStarted.promise;
-    const event = sync.reconcileExternalEvent(
-      {
-        kind: "tasks_updated",
-        eventId: "event-inactive-remove",
-        repoPath: "/inactive",
-        taskIds: ["task-1"],
-        removedTaskIds: ["task-1"],
-        statusChanges: [],
-        taskSnapshots: [],
-        emittedAt: "2026-04-10T13:11:00.000Z",
-      },
-      "/active",
-    );
-
-    staleList.resolve([createTaskCardFixture({ id: "task-1", status: "open" })]);
-    await expect(Promise.all([refresh, event])).resolves.toEqual([undefined, undefined]);
-
-    expect(listTasks).toHaveBeenCalledTimes(1);
-    expect(queryClient.getQueryState(taskKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryData(documentKey)).toBeUndefined();
-    expect(loadFreshDocument).not.toHaveBeenCalled();
   });
 
   test("cancels snapshot document reads per repo and refreshes only active documents", async () => {

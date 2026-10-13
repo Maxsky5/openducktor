@@ -53,7 +53,6 @@ export function KanbanPage(): ReactElement {
           onOpenChange={setImportOpen}
           repoPath={models.taskDetailsController.activeWorkspace.repoPath}
           provider={models.header.importProviderContext}
-          onImported={models.header.onRefreshTasks}
         />
       ) : null}
       <KanbanPageContent model={models.content} />

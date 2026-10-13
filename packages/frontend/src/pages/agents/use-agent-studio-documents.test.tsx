@@ -98,7 +98,9 @@ type UseAgentStudioDocumentsHook =
 
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
-type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
+type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0] & {
+  selectedTask?: ReturnType<typeof createTaskCardFixture> | null;
+};
 type AgentMessage = AgentChatMessage;
 
 const createHookHarness = (
@@ -192,108 +194,43 @@ afterEach(() => {
 });
 
 describe("useAgentStudioDocuments", () => {
-  test("loads each document section and refreshes when task updatedAt changes", async () => {
+  test("ordinary task edits and document summary changes do not reload all sections", async () => {
     const baseArgs = createBaseArgs();
     const harness = createHookHarness(baseArgs);
-
     try {
       await harness.mount();
-
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(1, "spec");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(2, "plan");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(3, "qa");
-
       await harness.update({
         ...baseArgs,
         selectedTask: createTaskCardFixture({
           id: "task-1",
-          updatedAt: "2026-02-22T08:00:00.000Z",
-        }),
-      });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
-
-      await harness.update({
-        ...baseArgs,
-        selectedTask: createTaskCardFixture({
-          id: "task-1",
+          title: "Renamed",
+          priority: 1,
           updatedAt: "2026-02-22T08:30:00.000Z",
-        }),
-      });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(5, "plan");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(6, "qa");
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("reloads documents when document summary timestamps change without task updatedAt changing", async () => {
-    const baseArgs = createBaseArgs();
-    const harness = createHookHarness(baseArgs);
-
-    try {
-      await harness.mount();
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
-
-      await harness.update({
-        ...baseArgs,
-        selectedTask: createTaskCardFixture({
-          id: "task-1",
-          updatedAt: baseArgs.selectedTask?.updatedAt ?? "2026-02-22T08:00:00.000Z",
           documentSummary: {
-            spec: {
-              has: true,
-              updatedAt: "2026-02-22T08:45:00.000Z",
-            },
-            plan: {
-              has: false,
-            },
-            qaReport: {
-              has: false,
-              verdict: "not_reviewed",
-            },
+            spec: { has: true, updatedAt: "2026-02-22T08:30:00.000Z" },
+            plan: { has: false },
+            qaReport: { has: false, verdict: "not_reviewed" },
           },
         }),
       });
-
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(5, "plan");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(6, "qa");
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("scopes document cache and refresh dedupe by active repo", async () => {
+  test("uses the document query scope when the active repository changes", async () => {
     const baseArgs = createBaseArgs();
     const harness = createHookHarness(baseArgs);
-
     try {
       await harness.mount();
-      expect(taskDocumentsHookCalls[taskDocumentsHookCalls.length - 1]).toMatchObject({
-        taskId: "task-1",
-        open: true,
-        cacheScope: "/repo",
-      });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(3);
-
-      await harness.update({
-        ...baseArgs,
-        workspaceRepoPath: "/other-repo",
-      });
-
-      expect(taskDocumentsHookCalls[taskDocumentsHookCalls.length - 1]).toMatchObject({
+      await harness.update({ ...baseArgs, workspaceRepoPath: "/other-repo" });
+      expect(taskDocumentsHookCalls.at(-1)).toEqual({
         taskId: "task-1",
         open: true,
         cacheScope: "/other-repo",
       });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(6);
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(4, "spec");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(5, "plan");
-      expect(reloadDocumentMock).toHaveBeenNthCalledWith(6, "qa");
+      expect(reloadDocumentMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

@@ -8,6 +8,33 @@ import {
   taskEventStreamSubscribeSchema,
   tasksUpdatedEventSchema,
 } from "./external-task-sync-schemas";
+import type { TaskCard } from "./task-schemas";
+
+const card = (id: string): TaskCard => ({
+  id,
+  title: "Task 8",
+  description: "Complete description",
+  status: "open",
+  issueType: "task",
+  priority: 2,
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: false, completed: false },
+    planner: { required: false, canSkip: true, available: false, completed: false },
+    builder: { required: true, canSkip: false, available: false, completed: false },
+    qa: { required: true, canSkip: false, available: false, completed: false },
+  },
+  createdAt: "2026-04-10T13:00:00.000Z",
+  updatedAt: "2026-04-10T13:00:00.000Z",
+});
 
 describe("external-task-sync-schemas", () => {
   test("preserves an optional source role and rejects unknown roles", () => {
@@ -30,6 +57,7 @@ describe("external-task-sync-schemas", () => {
     const parsed = externalTaskSyncEventSchema.parse({
       eventId,
       kind: "external_task_created",
+      boardChanges: null,
       repoPath,
       taskId,
       taskSnapshot: { id: taskId, title: "Task", status: "open" },
@@ -48,6 +76,7 @@ describe("external-task-sync-schemas", () => {
     const parsed = externalTaskSyncEventSchema.parse({
       eventId: "event-2",
       kind: "tasks_updated",
+      boardChanges: null,
       repoPath: "/repo",
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
@@ -71,6 +100,7 @@ describe("external-task-sync-schemas", () => {
     const parsed = tasksUpdatedEventSchema.parse({
       eventId: "event-empty-title",
       kind: "tasks_updated",
+      boardChanges: null,
       repoPath: "/repo",
       taskIds: ["task-8"],
       removedTaskIds: [],
@@ -135,6 +165,7 @@ describe("external-task-sync-schemas", () => {
         tasksUpdatedEventSchema.safeParse({
           eventId: "event-3",
           kind: "tasks_updated",
+          boardChanges: null,
           repoPath: "/repo",
           ...invalidChangeSet,
           emittedAt: "2026-04-10T13:10:00.000Z",
@@ -154,6 +185,7 @@ describe("external-task-sync-schemas", () => {
       tasksUpdatedEventSchema.safeParse({
         eventId: "event-4",
         kind: "tasks_updated",
+        boardChanges: null,
         repoPath: "/repo",
         ...invalidChangeSet,
         emittedAt: "2026-04-10T13:15:00.000Z",
@@ -167,9 +199,17 @@ describe("external-task-sync-schemas", () => {
       repoPath: "/repo",
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
+      statusChanges: [],
+      boardChanges: { documentChanges: [], cards: [card("task-8")], doneVisibleDays: 1 },
       emittedAt: "2026-04-10T13:15:00.000Z",
     };
 
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        taskSnapshots: [{ id: "task-8", title: "Task 8", status: "open" }],
+      }).success,
+    ).toBe(true);
     expect(tasksUpdatedEventSchema.safeParse({ ...event, taskSnapshots: [] }).success).toBe(false);
     expect(
       tasksUpdatedEventSchema.safeParse({
@@ -189,6 +229,70 @@ describe("external-task-sync-schemas", () => {
       }).success,
     ).toBe(false);
   });
+  test("validates complete board cards and their relationship to changed snapshots", () => {
+    const changed = card("task-8");
+    const event = {
+      eventId: "event-board",
+      kind: "tasks_updated" as const,
+      repoPath: "/repo",
+      taskIds: ["task-8"],
+      removedTaskIds: [],
+      statusChanges: [],
+      taskSnapshots: [{ id: changed.id, title: changed.title, status: changed.status }],
+      boardChanges: { documentChanges: [], cards: [changed, card("parent")], doneVisibleDays: 1 },
+      emittedAt: "2026-04-10T13:15:00.000Z",
+    };
+    expect(tasksUpdatedEventSchema.parse(event).boardChanges).toEqual(event.boardChanges);
+    for (const cards of [
+      [],
+      [changed, changed],
+      [{ ...changed, title: "Stale title" }],
+      [{ ...changed, subtaskIds: [1] }],
+    ]) {
+      expect(
+        tasksUpdatedEventSchema.safeParse({
+          ...event,
+          boardChanges: {
+            ...event.boardChanges,
+            cards,
+          },
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        removedTaskIds: [changed.id],
+        taskSnapshots: [],
+      }).success,
+    ).toBe(false);
+    expect(tasksUpdatedEventSchema.safeParse({ ...event, emittedAt: "invalid" }).success).toBe(
+      false,
+    );
+    for (const documentChanges of [
+      [{ taskId: changed.id, sections: [] }],
+      [{ taskId: changed.id, sections: ["spec", "spec"] }],
+      [{ taskId: "missing", sections: ["spec"] }],
+      [
+        { taskId: changed.id, sections: ["spec"] },
+        { taskId: changed.id, sections: ["plan"] },
+      ],
+    ]) {
+      expect(
+        tasksUpdatedEventSchema.safeParse({
+          ...event,
+          boardChanges: { ...event.boardChanges, documentChanges },
+        }).success,
+      ).toBe(false);
+    }
+    const documentChanges = [{ taskId: changed.id, sections: ["spec", "plan"] }];
+    expect(
+      tasksUpdatedEventSchema.safeParse({
+        ...event,
+        boardChanges: { ...event.boardChanges, documentChanges },
+      }).success,
+    ).toBe(true);
+  });
   test("parses strict task event stream cursors, frames, and checkpoints", () => {
     const cursor = { epoch: "be8e34ef-2e0e-4e9a-a63f-72719f95c7b7", sequence: 4 };
     expect(
@@ -198,6 +302,7 @@ describe("external-task-sync-schemas", () => {
         event: {
           eventId: "event-5",
           kind: "external_task_created",
+          boardChanges: null,
           repoPath: "/repo",
           taskId: "task-7",
           taskSnapshot: { id: "task-7", title: "Task", status: "open" },
@@ -237,6 +342,7 @@ test("creation events require a snapshot for the same task", () => {
   const event = {
     eventId: "create-1",
     kind: "external_task_created",
+    boardChanges: null,
     repoPath: "/repo",
     taskId: "task-1",
     emittedAt: "2026-09-06T00:00:00.000Z",
@@ -259,6 +365,7 @@ test("creation events require a snapshot for the same task", () => {
 test("requires source status changes and keeps them distinct from later task snapshots", () => {
   const event = {
     kind: "tasks_updated",
+    boardChanges: null,
     eventId: "committed-change",
     repoPath: "/repo",
     taskIds: ["task-1"],

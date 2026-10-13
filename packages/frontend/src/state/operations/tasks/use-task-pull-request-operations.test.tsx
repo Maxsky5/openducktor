@@ -224,10 +224,6 @@ describe("useTaskPullRequestOperations", () => {
       await testHarness.harness.run(() => testHarness.getLatest().unlinkPullRequest("task-1"));
 
       expect(unlinkPullRequest).toHaveBeenCalledWith("/repo", "task-1");
-      expect(runTaskMutation.mock.calls[0]?.[0].refreshStrategy).toEqual({
-        kind: "task",
-        taskId: "task-1",
-      });
       expectReviewQueryInvalidated(testHarness.queryClient, testHarness.queryKey);
     } finally {
       await testHarness.harness.unmount();

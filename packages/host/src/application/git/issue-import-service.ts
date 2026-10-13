@@ -11,11 +11,17 @@ import type {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { z } from "zod";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  type HostOperationErrorAggregate,
+  HostOperationError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 import type { IssueReaderPort } from "../../ports/git-provider-port";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "./git-provider-resolver";
+import type { TaskSyncService } from "../tasks/sync/task-sync-service";
 
 const cursorSchema = z
   .object({
@@ -116,11 +122,16 @@ export const createIssueImportService = ({
   store,
   workspaceSettingsService,
   publishTaskCreated,
+  runMutation,
 }: {
   resolver: GitProviderResolver;
   store: IssueImportStorePort;
+  runMutation: TaskSyncService["runMutation"];
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath">;
-  publishTaskCreated: (repoPath: string, task: TaskCard) => Effect.Effect<void>;
+  publishTaskCreated: (
+    repoPath: string,
+    task: TaskCard,
+  ) => Effect.Effect<void, HostOperationErrorAggregate>;
 }) => {
   const resolveReader = (repoPath: string) =>
     Effect.gen(function* () {
@@ -359,27 +370,32 @@ export const createIssueImportService = ({
               yield* reconcileSourceScopes(input.repoPath, repoConfig, reader, scope, [
                 review.sourceId,
               ]);
-              const created = yield* store.createImportedTask({
-                repoPath: input.repoPath,
-                sourceIssue: source,
-                task: {
-                  title: source.title,
-                  description: source.description,
-                  issueType: review.issueType,
-                  priority: review.priority,
-                  labels: review.labels,
-                  aiReviewEnabled: true,
-                },
-              });
-              if (created.outcome === "duplicate") {
-                return {
-                  outcome: "failed" as const,
-                  taskId: created.taskId,
-                  reason: `This source item is already linked to Task ${created.taskId}.`,
-                };
-              }
-              yield* publishTaskCreated(input.repoPath, created.task);
-              return { outcome: "created" as const, taskId: created.task.id };
+              return yield* runMutation(
+                input.repoPath,
+                Effect.gen(function* () {
+                  const created = yield* store.createImportedTask({
+                    repoPath: input.repoPath,
+                    sourceIssue: source,
+                    task: {
+                      title: source.title,
+                      description: source.description,
+                      issueType: review.issueType,
+                      priority: review.priority,
+                      labels: review.labels,
+                      aiReviewEnabled: true,
+                    },
+                  });
+                  if (created.outcome === "duplicate") {
+                    return {
+                      outcome: "failed" as const,
+                      taskId: created.taskId,
+                      reason: `This source item is already linked to Task ${created.taskId}.`,
+                    };
+                  }
+                  yield* publishTaskCreated(input.repoPath, created.task);
+                  return { outcome: "created" as const, taskId: created.task.id };
+                }),
+              );
             }),
           );
           if (outcome._tag === "Success") {

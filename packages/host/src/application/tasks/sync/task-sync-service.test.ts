@@ -267,7 +267,12 @@ describe("task mutation gate and pull request sync", () => {
 
     await expect(
       Effect.runPromise(service.syncActiveWorkspacePullRequests().pipe(Effect.flip)),
-    ).resolves.toBe(mutationFailure);
+    ).resolves.toMatchObject({
+      _tag: "HostOperationError",
+      message: expect.stringContaining("second task failed"),
+      cause: { mutationFailure, publicationFailure: publicationCause },
+      details: { durableState: "committed", stage: "acceptance" },
+    });
   });
 
   test("logs a partial sync failure once after publishing one batch in the scheduler loop", async () => {

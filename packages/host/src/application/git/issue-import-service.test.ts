@@ -6,7 +6,14 @@ import {
   type RepoConfig,
   type TaskCard,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
+import { createSerialGate } from "../../effect/serial-gate";
+import type { TaskSyncService } from "../tasks/sync/task-sync-service";
+import {
+  createTaskSyncServiceForTest,
+  createEventBus,
+  task,
+} from "../tasks/sync/task-sync-service.test-support";
 import { HostValidationError } from "../../effect/host-errors";
 import type { GitProviderPort, IssueReaderPort } from "../../ports/git-provider-port";
 import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
@@ -40,7 +47,10 @@ const issue = (sourceId: string, revision = "1"): SourceIssue => ({
   revision,
 });
 
-const fixture = (issueAccess: "browse" | "search" = "search") => {
+const fixture = (
+  issueAccess: "browse" | "search" = "search",
+  taskSyncService?: Pick<TaskSyncService, "runMutation" | "publishExternalTaskCreated">,
+) => {
   const sources = new Map([
     ["1", issue("1")],
     ["2", issue("2")],
@@ -110,7 +120,7 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
           linked.set(id, taskId);
         }
       }),
-    createImportedTask: ({ sourceIssue }) => {
+    createImportedTask: ({ sourceIssue, task: input }) => {
       const taskId = linked.get(sourceIssue.sourceId);
       if (taskId)
         return Effect.succeed({ outcome: "duplicate", taskId } satisfies {
@@ -120,21 +130,29 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
       const id = `task-${sourceIssue.sourceId}`;
       linked.set(sourceIssue.sourceId, id);
       created.push(sourceIssue.sourceId);
-      // SAFETY: The store fixture needs only the created Task ID that the service reads.
-      return Effect.succeed({ outcome: "created", task: { id } as TaskCard } satisfies {
+      return Effect.succeed({
+        outcome: "created",
+        task: task({ id, title: input.title }),
+      } satisfies {
         outcome: "created";
         task: TaskCard;
       });
     },
   };
+  const mutationGate = createSerialGate();
   const service = createIssueImportService({
     resolver,
     store,
     workspaceSettingsService: { getRepoConfigByRepoPath: () => Effect.succeed(currentRepoConfig) },
-    publishTaskCreated: (_repoPath, task) =>
-      Effect.sync(() => {
-        published.push(task.id);
-      }),
+    runMutation:
+      taskSyncService?.runMutation ??
+      ((repoPath, mutation) => mutationGate.run(repoPath, mutation)),
+    publishTaskCreated:
+      taskSyncService?.publishExternalTaskCreated ??
+      ((_repoPath, task) =>
+        Effect.sync(() => {
+          published.push(task.id);
+        })),
   });
   return {
     service,
@@ -153,6 +171,91 @@ const fixture = (issueAccess: "browse" | "search" = "search") => {
 };
 
 describe("Issue import service", () => {
+  test("reports a committed import publication failure without reporting creation success", async () => {
+    const taskSyncService = createTaskSyncServiceForTest({
+      eventBus: {
+        publish: () => {
+          throw new Error("Event transport unavailable");
+        },
+      },
+      taskService: {
+        listTasks: () => Effect.succeed([task({ title: "Issue 1" })]),
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    const { service, created } = fixture("search", taskSyncService);
+    const result = await Effect.runPromise(
+      service.import({
+        repoPath: "/repo",
+        items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
+      }),
+    );
+    expect(created).toEqual(["1"]);
+    expect(result.results).toEqual([
+      {
+        sourceId: "1",
+        outcome: "failed",
+        reason: expect.stringContaining("Do not repeat the change"),
+      },
+    ]);
+  });
+
+  test("publishes an import before a concurrent mutation of the imported task", async () => {
+    const { eventBus, events } = createEventBus();
+    const captured = await Effect.runPromise(Deferred.make<void>());
+    const release = await Effect.runPromise(Deferred.make<void>());
+    let current = task({ title: "Issue 1" });
+    let reads = 0;
+    const taskSyncService = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: {
+        listTasks: () =>
+          Effect.gen(function* () {
+            const snapshot = current;
+            if (reads++ === 0) {
+              yield* Deferred.succeed(captured, undefined);
+              yield* Deferred.await(release);
+            }
+            return [snapshot];
+          }),
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    const { service } = fixture("search", taskSyncService);
+    const imported = Effect.runPromise(
+      service.import({
+        repoPath: "/repo",
+        items: [{ sourceId: "1", revision: "1", issueType: "task", priority: 2, labels: [] }],
+      }),
+    );
+    await Effect.runPromise(Deferred.await(captured));
+    const updated = Effect.runPromise(
+      taskSyncService.runMutation(
+        "/repo",
+        Effect.gen(function* () {
+          current = { ...current, title: "Edited after import", priority: 1 };
+          yield* taskSyncService.publishTasksUpdated(
+            "/repo",
+            { taskIds: [current.id], removedTaskIds: [] },
+            "update-task",
+            [],
+          );
+        }),
+      ),
+    );
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    const [result] = await Promise.all([imported, updated]);
+    expect(result.results).toEqual([{ sourceId: "1", outcome: "created", taskId: "task-1" }]);
+    expect(events.map((event) => event.kind)).toEqual(["external_task_created", "tasks_updated"]);
+    expect(events.map((event) => event.boardChanges?.cards[0]?.title)).toEqual([
+      "Issue 1",
+      "Edited after import",
+    ]);
+    expect(events.at(-1)?.boardChanges?.cards).toEqual([current]);
+  });
+
   test("loads a saved Task image from its original GitHub repository after provider change", async () => {
     const { service, store, reader, resolvedConfigs, setRepoConfig } = fixture();
     setRepoConfig(

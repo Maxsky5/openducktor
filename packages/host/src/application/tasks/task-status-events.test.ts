@@ -1,3 +1,4 @@
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
@@ -28,6 +29,7 @@ const createServices = (
     taskEventStream: {
       publish: (event) => {
         events.push(event);
+        return { epoch: "11111111-1111-4111-8111-111111111111", sequence: events.length };
       },
       subscribe: () => {
         throw new Error("Unexpected subscription");
@@ -46,7 +48,10 @@ const createServices = (
       Effect.sync(() => {
         failures.push(failure);
       }),
-    workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    workspaceSettingsService: {
+      listWorkspaces: () => Effect.succeed([]),
+      getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+    },
   });
   return {
     events,

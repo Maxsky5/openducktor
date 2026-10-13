@@ -1967,6 +1967,7 @@ describe("createTaskService task mutations and reset", () => {
     }
     expect(sessionsCleared).toBe(true);
     expect(result.operation).toBe("reset-implementation");
+    expect(result.documentChanges).toEqual([]);
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear QA reports failed");
     expect(result.failure.message).toContain("Stopped 2 live agent sessions,");
@@ -2099,6 +2100,9 @@ describe("createTaskService task mutations and reset", () => {
     }
     expect(documentsCleared).toBe(true);
     expect(result.operation).toBe("reset-task");
+    expect(result.documentChanges).toEqual([
+      { taskId: "task-1", sections: ["spec", "plan", "qa"] },
+    ]);
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear sessions failed");
     expect(result.failure.message).toContain("cleared workflow documents");

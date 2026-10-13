@@ -23,6 +23,7 @@ const taskStreamCursor = (sequence: number): TaskEventCursor => ({
 const taskStreamEvent = (sequence: number): ExternalTaskSyncEvent => ({
   eventId: `event-${sequence}`,
   kind: "external_task_created",
+  boardChanges: null,
   repoPath: "/repo",
   taskId: `task-${sequence}`,
   taskSnapshot: { id: `task-${sequence}`, title: "Task", status: "open" },
@@ -296,7 +297,7 @@ describe("electron shell bridge", () => {
       taskViewSync: {
         loadWorkspace: async () => {},
         refreshManually: async () => {},
-        refreshAfterLocalMutation: async () => {},
+        refreshDocumentsForTasks: async () => {},
         reconcileExternalEvent,
         reconcileStreamSnapshot,
       },
@@ -320,7 +321,7 @@ describe("electron shell bridge", () => {
 
     stream.publish(taskStreamEvent(1));
     await firstChangeStarted.promise;
-    for (let sequence = 2; sequence <= 257; sequence += 1) {
+    for (let sequence = 2; sequence <= 258; sequence += 1) {
       stream.publish(taskStreamEvent(sequence));
     }
     await flushTaskStream();
@@ -335,7 +336,7 @@ describe("electron shell bridge", () => {
       snapshotTaskIds,
       expect.any(Function),
     );
-    expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(257)]);
+    expect(acknowledgements).toEqual([taskStreamCursor(0), taskStreamCursor(258)]);
     expect(failures).toEqual([]);
 
     await controller.stop();

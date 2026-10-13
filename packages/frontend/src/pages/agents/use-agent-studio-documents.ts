@@ -1,4 +1,3 @@
-import type { TaskCard } from "@openducktor/contracts";
 import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
@@ -19,7 +18,6 @@ type UseAgentStudioDocumentsArgs = {
   taskId: string;
   selectedSessionIdentity: AgentSessionIdentity | null;
   loadedSession: AgentSessionState | null;
-  selectedTask: TaskCard | null;
 };
 
 type WorkflowDocumentTarget = {
@@ -86,7 +84,6 @@ export function useAgentStudioDocuments({
   taskId,
   selectedSessionIdentity,
   loadedSession,
-  selectedTask,
 }: UseAgentStudioDocumentsArgs) {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
   const { specDoc, planDoc, qaDoc, reloadDocument, applyDocumentUpdate } = useTaskDocuments(
@@ -108,43 +105,21 @@ export function useAgentStudioDocuments({
     processedDocumentToolEventsRef.current = new Set<string>();
   }
   const processedDocumentToolEvents = processedDocumentToolEventsRef.current;
-  const refreshedTaskVersionsRef = useRef<Set<string> | null>(null);
-  if (refreshedTaskVersionsRef.current === null) {
-    refreshedTaskVersionsRef.current = new Set<string>();
-  }
-  const refreshedTaskVersions = refreshedTaskVersionsRef.current;
   const previousSessionKeyRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
   const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
   const workflowAliasMetadataReadyRef = useRef(workflowAliasMetadataReady);
   workflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
-  const taskDocumentVersionKey =
-    taskId && selectedTask
-      ? [
-          workspaceRepoPath ?? "",
-          taskId,
-          selectedTask.updatedAt,
-          selectedTask.documentSummary.spec.has ? "1" : "0",
-          selectedTask.documentSummary.spec.updatedAt ?? "",
-          selectedTask.documentSummary.plan.has ? "1" : "0",
-          selectedTask.documentSummary.plan.updatedAt ?? "",
-          selectedTask.documentSummary.qaReport.has ? "1" : "0",
-          selectedTask.documentSummary.qaReport.updatedAt ?? "",
-          selectedTask.documentSummary.qaReport.verdict ?? "",
-        ].join(":")
-      : null;
 
   useEffect(() => {
     void documentContextKey;
     const documentToolEvents = processedDocumentToolEventsRef.current;
-    const taskVersions = refreshedTaskVersionsRef.current;
-    if (documentToolEvents === null || taskVersions === null) {
+    if (documentToolEvents === null) {
       throw new Error("Agent Studio document tracking refs were not initialized.");
     }
 
     documentToolEvents.clear();
-    taskVersions.clear();
     previousSessionKeyRef.current = null;
     previousMessagesRef.current = null;
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReadyRef.current;
@@ -164,21 +139,6 @@ export function useAgentStudioDocuments({
       previousMessagesRef.current = null;
     }
   }, [loadedSession, workflowAliasMetadataReady]);
-
-  useEffect(() => {
-    if (!taskId || taskDocumentVersionKey === null) {
-      return;
-    }
-
-    if (refreshedTaskVersions.has(taskDocumentVersionKey)) {
-      return;
-    }
-
-    const accepted = [reloadDocument("spec"), reloadDocument("plan"), reloadDocument("qa")];
-    if (accepted.every(Boolean)) {
-      refreshedTaskVersions.add(taskDocumentVersionKey);
-    }
-  }, [refreshedTaskVersions, reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
     if (!loadedSession || !selectedSessionKey || !taskId || !workspaceRepoPath) {

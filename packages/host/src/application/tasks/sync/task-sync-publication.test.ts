@@ -9,7 +9,7 @@ import {
 } from "./task-sync-service.test-support";
 
 describe("task event publication", () => {
-  test("reports task publication acceptance failures without rejecting committed work", async () => {
+  test("returns an actionable committed-state error when event transport acceptance fails", async () => {
     const reports: unknown[] = [];
     const service = createTaskSyncServiceForTest({
       eventBus: {
@@ -33,14 +33,20 @@ describe("task event publication", () => {
 
     await expect(
       Effect.runPromise(
-        service.publishTasksUpdated(
-          "/repo",
-          { taskIds: ["task-1"], removedTaskIds: [] },
-          "update-task",
-          [],
-        ),
+        service
+          .publishTasksUpdated(
+            "/repo",
+            { taskIds: ["task-1"], removedTaskIds: [] },
+            "update-task",
+            [],
+          )
+          .pipe(Effect.flip),
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      _tag: "HostOperationError",
+      message: expect.stringContaining("Do not repeat the change"),
+      details: { durableState: "committed", stage: "acceptance", repoPath: "/repo" },
+    });
     expect(reports).toEqual([
       expect.objectContaining({ operation: "update-task", repoPath: "/repo", stage: "acceptance" }),
     ]);
@@ -129,8 +135,13 @@ describe("task event publication", () => {
       const changes = { taskIds: [...taskIds], removedTaskIds: [...removedTaskIds] };
 
       await expect(
-        Effect.runPromise(service.publishTasksUpdated("/repo", changes, "update-task", [])),
-      ).resolves.toBeUndefined();
+        Effect.runPromise(
+          service.publishTasksUpdated("/repo", changes, "update-task", []).pipe(Effect.flip),
+        ),
+      ).resolves.toMatchObject({
+        _tag: "HostOperationError",
+        details: { durableState: "committed", stage: "acceptance" },
+      });
 
       expect(events).toEqual([]);
       expect(reports).toEqual([
@@ -204,6 +215,7 @@ describe("task event publication", () => {
     const service = createTaskSyncServiceForTest({
       eventBus,
       taskService: {
+        listTasks: () => Effect.succeed([task({ title: "Created" })]),
         repoPullRequestSyncDetailed() {
           return Effect.tryPromise({
             try: async () => {

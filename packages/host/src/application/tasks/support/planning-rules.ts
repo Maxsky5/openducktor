@@ -1,4 +1,4 @@
-import type { TaskCard, TaskCreateInput } from "@openducktor/contracts";
+import type { TaskCard, TaskChangeSet, TaskCreateInput } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { validateParentRelationshipsForCreate } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -14,11 +14,12 @@ export const replaceEpicPlanSubtasks = (
 ) =>
   Effect.gen(function* () {
     const directSubtasks = currentTasks.filter((entry) => entry.parentId === task.id);
-    const removedTaskIds: string[] = [];
-    const replacement: Effect.Effect<string[], TaskServiceError> = Effect.gen(function* () {
+    const removedIds: string[] = [];
+    const createdIds: string[] = [];
+    const replacement: Effect.Effect<void, TaskServiceError> = Effect.gen(function* () {
       for (const subtask of directSubtasks) {
         yield* taskStore.deleteTask({ repoPath, taskId: subtask.id, deleteSubtasks: false });
-        removedTaskIds.push(subtask.id);
+        removedIds.push(subtask.id);
       }
       const remainingTasks = currentTasks.filter((entry) => entry.parentId !== task.id);
       const proposalTitles = new Set<string>();
@@ -38,24 +39,23 @@ export const replaceEpicPlanSubtasks = (
             }),
         });
         const created = yield* taskStore.createTask({ repoPath, task: taskInput });
+        createdIds.push(created.id);
         remainingTasks.push(created);
       }
-      return directSubtasks.map((subtask) => subtask.id);
     });
     const result = yield* Effect.result(replacement);
-    if (result._tag === "Success") {
-      return result.success;
-    }
-    if (removedTaskIds.length === 0) {
+    const changes: TaskChangeSet = {
+      taskIds: [task.id, ...removedIds, ...createdIds],
+      removedTaskIds: removedIds,
+    };
+    if (result._tag === "Success") return changes;
+    if (removedIds.length === 0 && createdIds.length === 0) {
       return yield* Effect.fail(result.failure);
     }
     return yield* Effect.fail(
       new TaskMutationProgressFailure({
         operation: "set-plan",
-        changes: {
-          taskIds: [task.id, ...removedTaskIds],
-          removedTaskIds,
-        },
+        changes,
         failure: result.failure,
       }),
     );

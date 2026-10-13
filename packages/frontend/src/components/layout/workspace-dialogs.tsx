@@ -12,13 +12,10 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { useDialogPresence } from "@/components/ui/dialog";
 import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
-import { errorMessage } from "@/lib/errors";
 import type { IssueImportProvider } from "@/pages/kanban/issue-import-provider";
-import { useTaskControlContext } from "@/state/app-state-contexts";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const WorkspaceSessionCreateDialog = lazy(() =>
@@ -132,7 +129,6 @@ function WorkspaceDialogs({
   onOpenSession: (workspace: ActiveWorkspace, record: WorkspaceSession) => void;
   onCloseAutoFocus: (event: Event) => void;
 }): ReactElement {
-  const { refreshTaskData } = useTaskControlContext();
   const chatDialogOpen = dialog?.kind === "chat";
   const chatDialogMounted = useDialogPresence(chatDialogOpen);
   return (
@@ -173,13 +169,6 @@ function WorkspaceDialogs({
           }}
           repoPath={dialog.workspace.repoPath}
           provider={dialog.provider}
-          onImported={() => {
-            void refreshTaskData(dialog.workspace.repoPath).catch((cause: unknown) => {
-              toast.error("Tasks were imported, but the task list did not refresh.", {
-                description: `${errorMessage(cause)} Refresh the Kanban board to see them.`,
-              });
-            });
-          }}
         />
       ) : null}
     </Suspense>

@@ -1,5 +1,6 @@
 import type { TaskAction, TaskCard } from "@openducktor/contracts";
 import {
+  type TaskCompletionContext,
   allowsTransition,
   canManuallyCloseTask,
   canResetImplementationFromStatus,
@@ -15,7 +16,10 @@ const isQaRejectedRework = (task: TaskCard): boolean =>
   (task.status === "in_progress" || task.status === "blocked") &&
   task.documentSummary.qaReport.verdict === "rejected";
 
-export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): TaskAction[] => {
+export const deriveAvailableActions = (
+  task: TaskCard,
+  allTasks: TaskCompletionContext[],
+): TaskAction[] => {
   const actions: TaskAction[] = ["view_details"];
 
   if (canSetSpecFromStatus(task.status)) {

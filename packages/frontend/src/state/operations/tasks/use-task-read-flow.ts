@@ -37,10 +37,7 @@ export function useTaskReadFlow({ activeRepoPath }: UseTaskReadFlowArgs): UseTas
     async (repoPath: string, taskIdOrIds?: string | string[]) => {
       const taskIds = toTaskIds(taskIdOrIds);
       if (taskIds) {
-        await taskViewSync.refreshAfterLocalMutation(repoPath, {
-          kind: "refresh-documents",
-          taskIds,
-        });
+        await taskViewSync.refreshDocumentsForTasks(repoPath, taskIds);
         return;
       }
 

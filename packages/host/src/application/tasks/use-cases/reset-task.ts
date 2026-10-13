@@ -179,7 +179,9 @@ export const createTaskFullResetUseCase = ({
             completedSteps: cleanupProgress.completedSteps,
           });
           const failure = taskStoreWriteCompleted
-            ? createTaskMutationProgressFailure("reset-task", taskId, decoratedFailure)
+            ? createTaskMutationProgressFailure("reset-task", taskId, decoratedFailure, [
+                { taskId, sections: ["spec", "plan", "qa"] },
+              ])
             : decoratedFailure;
           return Effect.fail(failure);
         }),

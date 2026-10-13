@@ -1,14 +1,28 @@
-import type { ExternalTaskSyncEvent, TaskCard } from "@openducktor/contracts";
-import type { QueryClient } from "@tanstack/react-query";
+import type {
+  ExternalTaskSyncEvent,
+  TaskCard,
+  TaskDocumentChange,
+  TaskEventCursor,
+} from "@openducktor/contracts";
+import { CancelledError, type Query, type QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { hostClient as host } from "@/lib/host-client";
 import {
   documentQueryKeys,
   fetchFreshTaskDocumentFromQuery,
+  resetDocumentSaveOwners,
+  recordDocumentVersion,
+  recordDocumentCommit,
   type TaskDocumentReader,
   type TaskDocumentSection,
 } from "./documents";
-import { invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
+import { type RepoTaskData, invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
+import {
+  createBoardChanges,
+  createIdChanges,
+  type TaskQueryChange,
+  type TaskQueryChanges,
+} from "./task-query-changes";
 
 const queryKeyStringSchema = z.string();
 
@@ -17,56 +31,28 @@ export type TaskViewSyncPorts = {
   loadFreshDocument: TaskDocumentReader;
 };
 
-export type LocalMutationImpact =
-  | { kind: "task-list-only" }
-  | { kind: "refresh-documents"; taskIds: string[] }
-  | { kind: "remove-documents"; taskIds: string[] };
-
 export type TaskViewSync = {
   loadWorkspace: (repoPath: string, options?: { forceFresh?: boolean }) => Promise<void>;
   refreshManually: (repoPath: string) => Promise<void>;
   refreshAfterTaskRetentionChange: (activeRepoPath: string | null) => Promise<void>;
-  refreshAfterLocalMutation: (repoPath: string, impact: LocalMutationImpact) => Promise<void>;
+  refreshDocumentsForTasks: (repoPath: string, taskIds: string[]) => Promise<void>;
   reconcileExternalEvent: (
     event: ExternalTaskSyncEvent,
     activeRepoPath: string | null,
+    cursor: TaskEventCursor,
   ) => Promise<void>;
   reconcileStreamSnapshot: (activeRepoPath: string | null) => Promise<string[]>;
 };
 
-const toEventChanges = (event: ExternalTaskSyncEvent) =>
-  event.kind === "external_task_created"
-    ? { taskIds: [event.taskId], removedTaskIds: [] }
-    : { taskIds: event.taskIds, removedTaskIds: event.removedTaskIds };
-
-type CachedDocumentEntry = {
+type CachedDocument = {
   queryKey: readonly unknown[];
   section: TaskDocumentSection;
   taskId: string;
 };
 
-const cachedDocumentEntries = (queryClient: QueryClient, repoPath: string): CachedDocumentEntry[] =>
-  queryClient
-    .getQueryCache()
-    .findAll({ queryKey: documentQueryKeys.all, exact: false })
-    .flatMap<CachedDocumentEntry>((query) => {
-      const [scope, section, cachedRepoPath, taskId] = query.queryKey;
-      const taskIdResult = queryKeyStringSchema.safeParse(taskId);
-      if (
-        scope !== documentQueryKeys.all[0] ||
-        cachedRepoPath !== repoPath ||
-        !taskIdResult.success
-      ) {
-        return [];
-      }
-      if (section === "spec" || section === "plan") {
-        return [{ queryKey: query.queryKey, section, taskId: taskIdResult.data }];
-      }
-      if (section === "qa-report") {
-        return [{ queryKey: query.queryKey, section: "qa" as const, taskId: taskIdResult.data }];
-      }
-      return [];
-    });
+type PendingPatch =
+  | { kind: "board"; changes: TaskQueryChanges<TaskCard[]> }
+  | { kind: "ids"; changes: TaskQueryChanges<string[]> };
 
 export const createTaskViewSync = ({
   queryClient,
@@ -77,6 +63,13 @@ export const createTaskViewSync = ({
 }): TaskViewSync => {
   const repoRefreshes = new Map<string, Promise<void>>();
 
+  const recordCardVersion = (entry: CachedDocument, card: TaskCard): void => {
+    const summary =
+      entry.section === "qa" ? card.documentSummary.qaReport : card.documentSummary[entry.section];
+    const committedAt = summary.has ? summary.updatedAt : card.updatedAt;
+    if (committedAt) recordDocumentVersion(queryClient, entry.queryKey, committedAt);
+  };
+
   const fetchTasks = async (repoPath: string): Promise<TaskCard[]> => {
     const queryKey = taskQueryKeys.repoData(repoPath);
     const taskData = await queryClient.fetchQuery({
@@ -84,15 +77,71 @@ export const createTaskViewSync = ({
       queryFn: async () => ({ tasks: await ports.listTasks(repoPath) }),
       staleTime: 0,
     });
+    const cardById = new Map(taskData.tasks.map((card) => [card.id, card]));
+    for (const entry of cachedDocuments(queryClient, repoPath)) {
+      const card = cardById.get(entry.taskId);
+      if (card) recordCardVersion(entry, card);
+    }
     return taskData.tasks;
   };
 
-  const toTaskIdSet = (tasks: TaskCard[]): Set<string> => new Set(tasks.map((task) => task.id));
+  // Wait for the first full board read before applying events to it.
+  const waitingPatches = new Map<Query, PendingPatch>();
+  const applyPatch = (query: Query, patch: PendingPatch): void => {
+    if (queryClient.getQueryCache().find({ queryKey: query.queryKey, exact: true }) !== query)
+      return;
+    if (patch.kind === "board") {
+      queryClient.setQueryData<RepoTaskData>(query.queryKey, (data) =>
+        data === undefined ? undefined : { tasks: patch.changes.apply(data.tasks) },
+      );
+    } else {
+      queryClient.setQueryData<string[]>(query.queryKey, (data) =>
+        data === undefined ? undefined : patch.changes.apply(data),
+      );
+    }
+  };
+  queryClient.getQueryCache().subscribe((event) => {
+    if (
+      event.type === "removed" ||
+      (event.type === "updated" && event.query.state.status === "error")
+    )
+      waitingPatches.delete(event.query);
+    if (
+      event.type !== "updated" ||
+      event.query.state.status !== "success" ||
+      event.query.state.fetchStatus !== "idle"
+    )
+      return;
+    const patch = waitingPatches.get(event.query);
+    if (!patch) return;
+    waitingPatches.delete(event.query);
+    applyPatch(event.query, patch);
+  });
 
-  const refreshDocumentEntries = async (
-    repoPath: string,
-    entries: ReturnType<typeof cachedDocumentEntries>,
+  const patchQuery = async (
+    queryKey: readonly unknown[],
+    kind: PendingPatch["kind"],
+    change: TaskQueryChange,
   ): Promise<void> => {
+    const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+    if (!query) return;
+    if (query.state.data === undefined && query.state.fetchStatus !== "fetching") return;
+    const pending = query.state.data === undefined ? waitingPatches.get(query) : undefined;
+    const patch: PendingPatch =
+      pending ??
+      (kind === "board"
+        ? { kind: "board", changes: createBoardChanges() }
+        : { kind: "ids", changes: createIdChanges() });
+    patch.changes.merge(change);
+    if (query.state.data === undefined) {
+      waitingPatches.set(query, patch);
+      return;
+    }
+    await queryClient.cancelQueries({ queryKey, exact: true }, { silent: true });
+    applyPatch(query, patch);
+  };
+
+  const refreshDocuments = async (repoPath: string, entries: CachedDocument[]): Promise<void> => {
     await Promise.all(
       entries.map((entry) =>
         fetchFreshTaskDocumentFromQuery(
@@ -106,19 +155,120 @@ export const createTaskViewSync = ({
     );
   };
 
-  const refreshDocuments = async (repoPath: string, taskIds: string[]): Promise<void> => {
-    const taskIdSet = new Set(taskIds);
-    const entries = cachedDocumentEntries(queryClient, repoPath).filter((entry) =>
-      taskIdSet.has(entry.taskId),
+  const updateDocuments = async (
+    repoPath: string,
+    cards: TaskCard[],
+    removed = new Set<string>(),
+    eventTime = Date.now(),
+    previousCards: TaskCard[] = [],
+    commit?: { cursor: TaskEventCursor; documentChanges: TaskDocumentChange[] },
+  ): Promise<void> => {
+    const cardById = new Map(cards.map((card) => [card.id, card]));
+    await Promise.all(
+      cachedDocuments(queryClient, repoPath).map(async (entry) => {
+        const card = cardById.get(entry.taskId);
+        if (!card || removed.has(entry.taskId)) return;
+        const query = queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true });
+        const summary =
+          entry.section === "qa"
+            ? card.documentSummary.qaReport
+            : card.documentSummary[entry.section];
+        const previousCard = previousCards.find((card) => card.id === entry.taskId);
+        const previousSummary =
+          entry.section === "qa"
+            ? previousCard?.documentSummary.qaReport
+            : previousCard?.documentSummary[entry.section];
+        const written =
+          commit?.documentChanges.some(
+            (change) => change.taskId === entry.taskId && change.sections.includes(entry.section),
+          ) === true;
+        const changed =
+          written ||
+          (previousSummary !== undefined &&
+            (previousSummary.has !== summary.has ||
+              previousSummary.updatedAt !== summary.updatedAt));
+        if (commit && !recordDocumentCommit(queryClient, entry.queryKey, commit.cursor, changed))
+          return;
+        let current = queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(
+          entry.queryKey,
+        );
+        if (current?.updatedAt && Date.parse(current.updatedAt) > eventTime) return;
+        recordCardVersion(entry, card);
+        if (!summary.has) {
+          if (current === undefined || current.markdown !== "" || current.updatedAt !== null) {
+            queryClient.setQueryData(entry.queryKey, { markdown: "", updatedAt: null });
+          }
+          return;
+        }
+        if (current === undefined) {
+          if (
+            !written &&
+            previousSummary?.has === summary.has &&
+            previousSummary.updatedAt === summary.updatedAt
+          ) {
+            return;
+          }
+          if (!previousCard && query?.state.fetchStatus === "fetching") {
+            // Without a board baseline, let the first read establish its section version.
+            let pendingRead = query.promise;
+            while (pendingRead) {
+              try {
+                await pendingRead;
+                break;
+              } catch (error) {
+                if (
+                  queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true }) !==
+                  query
+                )
+                  return;
+                if (!(error instanceof CancelledError)) throw error;
+                // Follow an existing reload without starting a request or reusing the cancelled one.
+                const replacement = query.promise;
+                if (replacement && replacement !== pendingRead) {
+                  pendingRead = replacement;
+                  continue;
+                }
+                if (query.state.data === undefined) throw error;
+                break;
+              }
+            }
+            if (
+              queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true }) !== query
+            )
+              return;
+            current = queryClient.getQueryData(entry.queryKey);
+          }
+        }
+        const cachedAt = current?.updatedAt ?? null;
+        if (cachedAt !== null && Date.parse(cachedAt) > eventTime) return;
+        const changedAt = summary.updatedAt ?? null;
+        if (
+          !written &&
+          (cachedAt === changedAt ||
+            (cachedAt !== null &&
+              (changedAt === null || Date.parse(changedAt) <= Date.parse(cachedAt))))
+        )
+          return;
+        await queryClient.cancelQueries(
+          { queryKey: entry.queryKey, exact: true },
+          { silent: true, revert: false },
+        );
+        if (queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true }) !== query)
+          return;
+        await queryClient.invalidateQueries({
+          queryKey: entry.queryKey,
+          exact: true,
+          refetchType: "none",
+        });
+        if (query?.isActive()) await refreshDocuments(repoPath, [entry]);
+      }),
     );
-    await cancelDocuments(repoPath, taskIds);
-    await refreshDocumentEntries(repoPath, entries);
   };
 
   const cancelDocuments = async (repoPath: string, taskIds?: string[]): Promise<void> => {
     const taskIdSet = taskIds ? new Set(taskIds) : null;
     const cancellations: Promise<void>[] = [];
-    for (const entry of cachedDocumentEntries(queryClient, repoPath)) {
+    for (const entry of cachedDocuments(queryClient, repoPath)) {
       if (!taskIdSet || taskIdSet.has(entry.taskId)) {
         cancellations.push(
           queryClient.cancelQueries({ queryKey: entry.queryKey, exact: true }, { silent: true }),
@@ -128,24 +278,17 @@ export const createTaskViewSync = ({
     await Promise.all(cancellations);
   };
 
-  const cancelRepoTaskQueries = (repoPath: string): Promise<void> =>
-    queryClient.cancelQueries(
-      { queryKey: taskQueryKeys.repoDataPrefix(repoPath), exact: false },
-      { silent: true },
-    );
-
-  // An inactive workspace still refreshes a task list that a view observes, such as the
-  // session sidebar in all-workspaces scope. Unobserved lists stay invalidated until read.
-  const refetchObservedTaskList = (repoPath: string): Promise<void> =>
-    queryClient.refetchQueries({
-      queryKey: taskQueryKeys.repoData(repoPath),
-      exact: true,
-      type: "active",
-    });
+  const cancelRepoTaskQueries = (repoPath: string): Promise<void> => {
+    const filters = { queryKey: taskQueryKeys.repoDataPrefix(repoPath), exact: false };
+    for (const query of queryClient.getQueryCache().findAll(filters)) {
+      waitingPatches.delete(query);
+    }
+    return queryClient.cancelQueries(filters, { silent: true });
+  };
 
   const removeDocuments = (repoPath: string, taskIds: string[]): void => {
     const taskIdSet = new Set(taskIds);
-    for (const entry of cachedDocumentEntries(queryClient, repoPath)) {
+    for (const entry of cachedDocuments(queryClient, repoPath)) {
       if (taskIdSet.has(entry.taskId)) {
         queryClient.removeQueries({ queryKey: entry.queryKey, exact: true });
       }
@@ -155,7 +298,7 @@ export const createTaskViewSync = ({
   const invalidateDocuments = async (repoPath: string, taskIds?: string[]): Promise<void> => {
     const taskIdSet = taskIds ? new Set(taskIds) : null;
     const invalidations: Promise<void>[] = [];
-    for (const entry of cachedDocumentEntries(queryClient, repoPath)) {
+    for (const entry of cachedDocuments(queryClient, repoPath)) {
       if (!taskIdSet || taskIdSet.has(entry.taskId)) {
         invalidations.push(
           queryClient.invalidateQueries({
@@ -181,40 +324,11 @@ export const createTaskViewSync = ({
     return current;
   };
 
-  type RefreshOptions = {
-    impact: LocalMutationImpact;
-    refreshDocumentsFor?: string[];
-    prepare?: () => Promise<void>;
-  };
-
-  const refreshActiveNow = async (
-    repoPath: string,
-    options: RefreshOptions,
-  ): Promise<TaskCard[]> => {
-    await options.prepare?.();
-    if (options.impact.kind === "remove-documents") {
-      removeDocuments(repoPath, options.impact.taskIds);
-    }
+  const refreshActiveNow = async (repoPath: string): Promise<TaskCard[]> => {
     await cancelRepoTaskQueries(repoPath);
     await invalidateRepoTaskQueries(queryClient, repoPath);
-    const tasks = await fetchTasks(repoPath);
-    if (options.impact.kind === "refresh-documents") {
-      await refreshDocuments(repoPath, options.impact.taskIds);
-    }
-    if (options.refreshDocumentsFor) {
-      const visibleTaskIds = toTaskIdSet(tasks);
-      await refreshDocuments(
-        repoPath,
-        options.refreshDocumentsFor.filter((taskId) => visibleTaskIds.has(taskId)),
-      );
-    }
-    return tasks;
+    return fetchTasks(repoPath);
   };
-
-  const refreshActive = (repoPath: string, options: RefreshOptions): Promise<void> =>
-    runForRepo(repoPath, async () => {
-      await refreshActiveNow(repoPath, options);
-    });
 
   return {
     loadWorkspace: (repoPath, options) =>
@@ -225,8 +339,8 @@ export const createTaskViewSync = ({
         }
       }),
     refreshManually: (repoPath) =>
-      refreshActive(repoPath, {
-        impact: { kind: "task-list-only" },
+      runForRepo(repoPath, async () => {
+        await refreshActiveNow(repoPath);
       }),
     refreshAfterTaskRetentionChange: async (activeRepoPath) => {
       const taskQueries = queryClient
@@ -255,48 +369,48 @@ export const createTaskViewSync = ({
         ),
       );
     },
-    refreshAfterLocalMutation: (repoPath, impact) => refreshActive(repoPath, { impact }),
-    reconcileExternalEvent: async (event, activeRepoPath) => {
-      const { taskIds, removedTaskIds } = toEventChanges(event);
-      const removedTaskIdSet = new Set(removedTaskIds);
-      const retainedTaskIds: string[] = [];
-      for (const taskId of taskIds) {
-        if (!removedTaskIdSet.has(taskId)) {
-          retainedTaskIds.push(taskId);
-        }
-      }
-      const affectedTaskIds = [...new Set([...taskIds, ...removedTaskIds])];
-      if (activeRepoPath !== event.repoPath) {
-        await runForRepo(event.repoPath, async () => {
-          await Promise.all([
-            cancelDocuments(event.repoPath),
-            cancelRepoTaskQueries(event.repoPath),
-          ]);
-          removeDocuments(event.repoPath, removedTaskIds);
-          await Promise.all([
-            invalidateRepoTaskQueries(queryClient, event.repoPath),
-            invalidateDocuments(event.repoPath),
-          ]);
-          await refetchObservedTaskList(event.repoPath);
-        });
-        return;
-      }
-      await refreshActive(event.repoPath, {
-        impact: { kind: "task-list-only" },
-        refreshDocumentsFor: retainedTaskIds,
-        prepare: async () => {
-          await Promise.all([
-            cancelDocuments(event.repoPath, affectedTaskIds),
-            cancelRepoTaskQueries(event.repoPath),
-          ]);
-          removeDocuments(event.repoPath, removedTaskIds);
-          await invalidateDocuments(event.repoPath, retainedTaskIds);
-        },
+    refreshDocumentsForTasks: (repoPath, taskIds) =>
+      runForRepo(repoPath, async () => {
+        const data = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(repoPath));
+        const taskIdSet = new Set(taskIds);
+        await updateDocuments(repoPath, data?.tasks.filter((card) => taskIdSet.has(card.id)) ?? []);
+      }),
+    reconcileExternalEvent: async (event, _activeRepoPath, cursor) => {
+      if (!event.boardChanges) return;
+      await runForRepo(event.repoPath, async () => {
+        const { cards, doneVisibleDays } = event.boardChanges!;
+        const previousCards =
+          queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(event.repoPath))?.tasks ??
+          [];
+        const { taskIds, removedTaskIds } = toEventChanges(event);
+        const removed = new Set(removedTaskIds);
+        const change: TaskQueryChange = {
+          cards,
+          taskIds,
+          removedTaskIds,
+          cutoff:
+            doneVisibleDays === 0
+              ? Infinity
+              : Date.parse(event.emittedAt) - doneVisibleDays * 86400000,
+        };
+        await patchQuery(taskQueryKeys.repoData(event.repoPath), "board", change);
+        await patchQuery(taskQueryKeys.ids(event.repoPath), "ids", change);
+        await cancelDocuments(event.repoPath, removedTaskIds);
+        removeDocuments(event.repoPath, removedTaskIds);
+        await updateDocuments(
+          event.repoPath,
+          cards,
+          removed,
+          Date.parse(event.emittedAt),
+          previousCards,
+          { cursor, documentChanges: event.boardChanges!.documentChanges },
+        );
       });
     },
     reconcileStreamSnapshot: async (activeRepoPath) => {
-      const activeDocumentEntries = activeRepoPath
-        ? cachedDocumentEntries(queryClient, activeRepoPath).filter(
+      waitingPatches.clear();
+      const activeDocuments = activeRepoPath
+        ? cachedDocuments(queryClient, activeRepoPath).filter(
             (entry) =>
               queryClient
                 .getQueryCache()
@@ -310,6 +424,9 @@ export const createTaskViewSync = ({
       const documentQueries = queryClient
         .getQueryCache()
         .findAll({ queryKey: documentQueryKeys.all, exact: false });
+      // A gap makes pending saves uncertain even for tasks absent from the board.
+      // Reset their owners before recovery yields. Missing cards do not prove deletion.
+      resetDocumentSaveOwners(documentQueries);
       const repos = new Set<string>([
         ...(activeRepoPath ? [activeRepoPath] : []),
         ...taskQueries.flatMap((query) => {
@@ -328,7 +445,12 @@ export const createTaskViewSync = ({
             invalidateRepoTaskQueries(queryClient, repoPath),
             invalidateDocuments(repoPath),
           ]);
-          await refetchObservedTaskList(repoPath);
+          // Observed lists need recovery even when their workspace is inactive.
+          await queryClient.refetchQueries({
+            queryKey: taskQueryKeys.repoData(repoPath),
+            exact: true,
+            type: "active",
+          });
         });
       const inactiveRefreshes: Promise<void>[] = [];
       for (const repoPath of repos) {
@@ -344,14 +466,12 @@ export const createTaskViewSync = ({
       const activeRefresh = runForRepo(activeRepoPath, async () => {
         await cancelDocuments(activeRepoPath);
         await invalidateDocuments(activeRepoPath);
-        const tasks = await refreshActiveNow(activeRepoPath, {
-          impact: { kind: "task-list-only" },
-        });
+        const tasks = await refreshActiveNow(activeRepoPath);
         activeTaskIds = tasks.map((task) => task.id);
-        const visibleTaskIds = toTaskIdSet(tasks);
-        await refreshDocumentEntries(
+        const visibleTaskIds = new Set(activeTaskIds);
+        await refreshDocuments(
           activeRepoPath,
-          activeDocumentEntries.filter((entry) => visibleTaskIds.has(entry.taskId)),
+          activeDocuments.filter((entry) => visibleTaskIds.has(entry.taskId)),
         );
       });
       await Promise.all([activeRefresh, ...inactiveRefreshes]);
@@ -360,16 +480,6 @@ export const createTaskViewSync = ({
   };
 };
 
-const createProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync =>
-  createTaskViewSync({
-    queryClient,
-    ports: {
-      listTasks: (repoPath) => host.tasksList(repoPath),
-      loadFreshDocument: (repoPath, taskId, section) =>
-        host.taskDocumentGet(repoPath, taskId, section),
-    },
-  });
-
 const productionTaskViewSyncs = new WeakMap<QueryClient, TaskViewSync>();
 
 export const getProductionTaskViewSync = (queryClient: QueryClient): TaskViewSync => {
@@ -377,7 +487,42 @@ export const getProductionTaskViewSync = (queryClient: QueryClient): TaskViewSyn
   if (existing) {
     return existing;
   }
-  const taskViewSync = createProductionTaskViewSync(queryClient);
+  const taskViewSync = createTaskViewSync({
+    queryClient,
+    ports: {
+      listTasks: (repoPath) => host.tasksList(repoPath),
+      loadFreshDocument: (repoPath, taskId, section) =>
+        host.taskDocumentGet(repoPath, taskId, section),
+    },
+  });
   productionTaskViewSyncs.set(queryClient, taskViewSync);
   return taskViewSync;
 };
+
+const toEventChanges = (event: ExternalTaskSyncEvent) =>
+  event.kind === "external_task_created"
+    ? { taskIds: [event.taskId], removedTaskIds: [] }
+    : { taskIds: event.taskIds, removedTaskIds: event.removedTaskIds };
+
+const cachedDocuments = (queryClient: QueryClient, repoPath: string): CachedDocument[] =>
+  queryClient
+    .getQueryCache()
+    .findAll({ queryKey: documentQueryKeys.all, exact: false })
+    .flatMap<CachedDocument>((query) => {
+      const [scope, section, cachedRepoPath, taskId] = query.queryKey;
+      const taskIdResult = queryKeyStringSchema.safeParse(taskId);
+      if (
+        scope !== documentQueryKeys.all[0] ||
+        cachedRepoPath !== repoPath ||
+        !taskIdResult.success
+      ) {
+        return [];
+      }
+      if (section === "spec" || section === "plan") {
+        return [{ queryKey: query.queryKey, section, taskId: taskIdResult.data }];
+      }
+      if (section === "qa-report") {
+        return [{ queryKey: query.queryKey, section: "qa" as const, taskId: taskIdResult.data }];
+      }
+      return [];
+    });

@@ -39,20 +39,19 @@ import {
   issueItemsListResultSchema,
   azureAreaPathsResultSchema,
   taskCreateInputSchema,
-  taskMetadataDocumentSchema,
+  type TaskDocumentSaveResult,
+  taskDocumentSaveResultSchema,
   taskMetadataPayloadSchema,
   taskStatusSchema,
   taskStopImpactSchema,
   taskUpdatePatchSchema,
 } from "@openducktor/contracts";
-import type { SetPlanOutput, SetSpecOutput } from "@openducktor/core";
 import { z } from "zod";
 import type { InvokeFn } from "./invoke-utils";
 import {
   arrayResultSchema,
   booleanResultSchema,
   okResultSchema,
-  updatedAtResultSchema,
   voidResultSchema,
 } from "./invoke-utils";
 
@@ -300,28 +299,25 @@ export class HostTaskClient {
     return this.readTaskDocument(repoPath, taskId, "spec");
   }
 
-  async setSpec(input: SetSpecInput): Promise<SetSpecOutput> {
+  async setSpec(input: SetSpecInput): Promise<TaskDocumentSaveResult> {
     const repoPath = this.requireRepoPath(input.repoPath, "spec");
 
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "set_spec",
       { repoPath, taskId: input.taskId, markdown: input.markdown },
-      taskMetadataDocumentSchema,
+      taskDocumentSaveResultSchema,
     );
-
-    return updatedAtResultSchema("set_spec").parse(payload);
   }
 
-  async saveSpecDocument(input: SaveSpecDocumentInput): Promise<SetSpecOutput> {
-    const payload = await this.invokeFn(
+  async saveSpecDocument(input: SaveSpecDocumentInput): Promise<TaskDocumentSaveResult> {
+    return this.invokeFn(
       "spec_save_document",
       { repoPath: input.repoPath, taskId: input.taskId, markdown: input.markdown },
-      taskMetadataDocumentSchema,
+      taskDocumentSaveResultSchema,
     );
-    return updatedAtResultSchema("spec_save_document").parse(payload);
   }
 
-  async setPlan(input: SetPlanInput): Promise<SetPlanOutput> {
+  async setPlan(input: SetPlanInput): Promise<TaskDocumentSaveResult> {
     const repoPath = this.requireRepoPath(input.repoPath, "plan");
 
     const planInput: SetPlanPayloadInput = {
@@ -330,22 +326,19 @@ export class HostTaskClient {
     if (input.subtasks !== undefined) {
       planInput.subtasks = input.subtasks;
     }
-    const payload = await this.invokeFn(
+    return this.invokeFn(
       "set_plan",
       { repoPath, taskId: input.taskId, input: planInput },
-      taskMetadataDocumentSchema,
+      taskDocumentSaveResultSchema,
     );
-
-    return updatedAtResultSchema("set_plan").parse(payload);
   }
 
-  async savePlanDocument(input: SavePlanDocumentInput): Promise<SetPlanOutput> {
-    const payload = await this.invokeFn(
+  async savePlanDocument(input: SavePlanDocumentInput): Promise<TaskDocumentSaveResult> {
+    return this.invokeFn(
       "plan_save_document",
       { repoPath: input.repoPath, taskId: input.taskId, markdown: input.markdown },
-      taskMetadataDocumentSchema,
+      taskDocumentSaveResultSchema,
     );
-    return updatedAtResultSchema("plan_save_document").parse(payload);
   }
 
   async planGet(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {

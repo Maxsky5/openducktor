@@ -234,7 +234,6 @@ export function useAgentStudioOrchestrationController({
     taskId: view.taskId,
     selectedSessionIdentity: selectedSession.identity,
     loadedSession: selectedSession.loadedSession,
-    selectedTask: view.selectedTask,
   });
 
   const {

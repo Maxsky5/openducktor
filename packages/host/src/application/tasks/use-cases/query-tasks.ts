@@ -1,3 +1,4 @@
+import { deriveAgentWorkflows } from "../../../domain/task";
 import { Effect } from "effect";
 import { HostDependencyError, HostInvariantError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";
@@ -27,7 +28,9 @@ export const createTaskQueryUseCases = ({
     return Effect.gen(function* () {
       const tasks = yield* taskStore.listTasks(input);
 
-      return enrichTasks(tasks);
+      return input.taskIds
+        ? tasks.map((task) => ({ ...task, agentWorkflows: deriveAgentWorkflows(task) }))
+        : enrichTasks(tasks);
     });
   },
 

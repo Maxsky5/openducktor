@@ -25,6 +25,7 @@ const epoch = "11111111-1111-4111-8111-111111111111";
 const cursor = (sequence: number): TaskEventCursor => ({ epoch, sequence });
 const event = (taskId: string): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
+  boardChanges: null,
   eventId: `event-${taskId}`,
   repoPath: "/repo",
   taskIds: [taskId],
@@ -81,7 +82,7 @@ const createHarness = ({
     loadWorkspace: async () => {},
     refreshManually: async () => {},
     refreshAfterTaskRetentionChange: async () => {},
-    refreshAfterLocalMutation: async () => {},
+    refreshDocumentsForTasks: async () => {},
     reconcileExternalEvent: mock(async () => {}),
     reconcileStreamSnapshot: mock(async () => []),
     ...taskViewSyncOverrides,
@@ -229,7 +230,7 @@ describe("task stream controller recovery", () => {
 
     expect(harness.agentSessionViewSync.admitExternalEvent).toHaveBeenCalledTimes(2);
     expect(harness.agentSessionViewSync.completeExternalEvents).toHaveBeenCalledTimes(1);
-    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)], [cursor(1)]]);
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(1)]]);
   });
 
   test("a replacement snapshot cancels the record reads of the replaced stream", async () => {
@@ -523,6 +524,7 @@ describe("task stream controller recovery", () => {
         cursor: cursor(1),
         event: {
           kind: "tasks_updated",
+          boardChanges: null,
           eventId: "event-delete",
           repoPath: "/repo",
           taskIds: ["task-1"],
@@ -538,7 +540,7 @@ describe("task stream controller recovery", () => {
 
       expect(await loading).toEqual([]);
       expect(harness.onDegraded).not.toHaveBeenCalled();
-      expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)], [cursor(1)]]);
+      expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(1)]]);
       expect(loadSessionBatch).toHaveBeenCalledTimes(1);
     } finally {
       queryClient.clear();
@@ -833,12 +835,7 @@ describe("task stream controller recovery", () => {
     expect(completeSessions.mock.calls.map(([changes]) => changes.length)).toEqual([1, 3]);
     expect(harness.agentSessionViewSync.admitExternalEvent).toHaveBeenCalledTimes(4);
     expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(4);
-    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([
-      [cursor(0)],
-      [cursor(1)],
-      [cursor(2)],
-      [cursor(3)],
-    ]);
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)], [cursor(3)]]);
   });
 
   test("an acknowledgement failure inside a run recovers without reapplying the run", async () => {
@@ -847,7 +844,7 @@ describe("task stream controller recovery", () => {
       onSubscribe: async (record, index) => {
         if (index === 0) {
           record.acknowledge.mockImplementation(async (nextCursor) => {
-            if (nextCursor.sequence === 1) throw new Error("ack unavailable");
+            if (nextCursor.sequence === 2) throw new Error("ack unavailable");
           });
         }
         return {
@@ -881,7 +878,37 @@ describe("task stream controller recovery", () => {
     expect(completeSessions).toHaveBeenCalledTimes(2);
     expect(harness.agentSessionViewSync.admitExternalEvent).toHaveBeenCalledTimes(3);
     expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(3);
-    expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(1)], [cursor(2)]]);
+    expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(2)]]);
+  });
+
+  test("applies a burst while one acknowledgement is held and coalesces its progress", async () => {
+    const heldAck = deferred<void>();
+    const harness = createHarness({
+      onSubscribe: async (record, index) => {
+        record.acknowledge.mockImplementation(async (next) => {
+          if (next.sequence === 0) await heldAck.promise;
+        });
+        return {
+          subscriptionId: `subscription-${index}`,
+          acknowledge: record.acknowledge,
+          unsubscribe: record.unsubscribe,
+        };
+      },
+    });
+    await harness.controller.start();
+    harness.emit(0, { type: "change", cursor: cursor(0), event: event("zero") });
+    await flush();
+    for (let sequence = 1; sequence <= 20; sequence++) {
+      harness.emit(0, { type: "change", cursor: cursor(sequence), event: event(String(sequence)) });
+    }
+    await flush();
+    expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(21);
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)]]);
+    heldAck.resolve();
+    await flush();
+    expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)], [cursor(20)]]);
+    expect(harness.onDegraded).not.toHaveBeenCalled();
+    await harness.controller.stop();
   });
 
   test("application failure closes the subscription, recovers from a snapshot, and resumes", async () => {
@@ -1141,49 +1168,79 @@ describe("task stream controller recovery", () => {
     expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo", false);
   });
 
-  test("concurrent starts share acquisition and stop waits for acquisition and teardown", async () => {
-    const acquired = deferred<TaskStreamSubscription>();
-    const teardown = deferred<void>();
-    const transport = {
-      subscribeNotificationStream: async () => () => {},
-      subscribeTaskStream: mock(async () => acquired.promise),
-    };
-    const controller = createTaskStreamController({
-      transport,
-      taskViewSync: {
-        loadWorkspace: async () => {},
-        refreshManually: async () => {},
-        refreshAfterTaskRetentionChange: async () => {},
-        refreshAfterLocalMutation: async () => {},
-        reconcileExternalEvent: async () => {},
-        reconcileStreamSnapshot: async () => [],
-      },
-      agentSessionViewSync: {
-        admitExternalEvent: async (sessionEvent) => ({
-          repoPath: sessionEvent.repoPath,
-          changedTaskIds: [],
-        }),
-        completeExternalEvents: async () => {},
-        cancelReads: () => {},
-        reconcileStreamSnapshot: async () => {},
-      },
-      getActiveRepoPath: () => "/repo",
-      onDegraded: () => {},
-    });
-    const firstStart = controller.start();
-    const secondStart = controller.start();
-    const stop = controller.stop();
-    const unsubscribe = mock(async () => teardown.promise);
-    acquired.resolve({ subscriptionId: "pending", acknowledge: async () => {}, unsubscribe });
-    await flush();
+  test.each(["acquisition", "acknowledgement-success", "acknowledgement-failure"] as const)(
+    "concurrent starts share acquisition and stop waits for teardown during %s",
+    async (pending) => {
+      const acquired = deferred<void>();
+      const acknowledgement = deferred<void>();
+      const teardown = deferred<void>();
+      const harness = createHarness({
+        onSubscribe: async (record) => {
+          record.acknowledge.mockImplementation(async () => acknowledgement.promise);
+          record.unsubscribe.mockImplementation(async () => teardown.promise);
+          await acquired.promise;
+          return {
+            subscriptionId: "pending",
+            acknowledge: record.acknowledge,
+            unsubscribe: record.unsubscribe,
+          };
+        },
+      });
+      const firstStart = harness.controller.start();
+      const secondStart = harness.controller.start();
+      let stop: Promise<void> | undefined;
+      try {
+        if (pending !== "acquisition") {
+          acquired.resolve();
+          await firstStart;
+          harness.emit(0, { type: "change", cursor: cursor(0), event: event("first") });
+          await flush();
+          harness.emit(0, { type: "change", cursor: cursor(1), event: event("second") });
+          await flush();
+          expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)]]);
+          expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(2);
+        }
+        stop = harness.controller.stop();
+        expect(harness.controller.stop()).toBe(stop);
+        let stopped = false;
+        void stop.then(() => {
+          stopped = true;
+        });
+        acquired.resolve();
+        await flush();
 
-    expect(firstStart).toBe(secondStart);
-    expect(transport.subscribeTaskStream).toHaveBeenCalledTimes(1);
-    expect(unsubscribe).toHaveBeenCalledTimes(1);
+        expect(firstStart).toBe(secondStart);
+        expect(harness.transport.subscribeTaskStream).toHaveBeenCalledTimes(1);
+        expect(harness.records[0]?.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(stopped).toBe(false);
 
-    teardown.resolve();
-    await Promise.all([firstStart, secondStart, stop]);
-  });
+        teardown.resolve();
+        await flush();
+        expect(stopped).toBe(true);
+        if (pending !== "acquisition") {
+          harness.emit(0, { type: "change", cursor: cursor(2), event: event("stopped") });
+          harness.emit(0, { type: "snapshot_required", cursor: cursor(9), reason: "buffer_gap" });
+          harness.failTerminally(0, new Error("obsolete stream ended"));
+          if (pending === "acknowledgement-failure")
+            acknowledgement.reject(new Error("obsolete acknowledgement failed"));
+          else acknowledgement.resolve();
+          await flush();
+
+          expect(harness.records[0]?.acknowledge.mock.calls).toEqual([[cursor(0)]]);
+          expect(harness.taskViewSync.reconcileExternalEvent).toHaveBeenCalledTimes(2);
+          expect(harness.taskViewSync.reconcileStreamSnapshot).not.toHaveBeenCalled();
+          expect(harness.transport.subscribeTaskStream).toHaveBeenCalledTimes(1);
+          expect(harness.records[0]?.unsubscribe).toHaveBeenCalledTimes(1);
+          expect(harness.onDegraded).not.toHaveBeenCalled();
+        }
+      } finally {
+        acquired.resolve();
+        acknowledgement.resolve();
+        teardown.resolve();
+        await Promise.all([firstStart, secondStart, stop ?? harness.controller.stop()]);
+      }
+    },
+  );
 
   test("ignores frames delivered by the closed subscription", async () => {
     const harness = createHarness({

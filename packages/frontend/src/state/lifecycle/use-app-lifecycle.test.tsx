@@ -31,7 +31,7 @@ const taskViewSync: TaskViewSync = {
   loadWorkspace: async () => {},
   refreshManually: async () => {},
   refreshAfterTaskRetentionChange: async () => {},
-  refreshAfterLocalMutation: async () => {},
+  refreshDocumentsForTasks: async () => {},
   reconcileExternalEvent: async () => {},
   reconcileStreamSnapshot: async () => [],
 };

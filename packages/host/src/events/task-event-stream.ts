@@ -13,6 +13,7 @@ import type { HostErrorDetails } from "../effect/host-errors";
 import { HostValidationError } from "../effect/host-errors";
 
 const TASK_EVENT_STREAM_CAPACITY = 256;
+const TASK_EVENT_STREAM_BYTE_CAPACITY = 8 * 1024 * 1024;
 
 export type TaskEventStreamDeliveryFailure = {
   subscriptionId: string;
@@ -24,15 +25,20 @@ export type TaskEventStreamDeliveryReporter = {
   report(failure: TaskEventStreamDeliveryFailure): void;
 };
 
-export type TaskEventStreamSink = (frame: TaskEventStreamFrame) => void;
+// False pauses delivery until the transport resumes it. Void accepts the frame.
+export type TaskEventStreamSink =
+  | ((frame: TaskEventStreamFrame) => void)
+  | ((frame: TaskEventStreamFrame) => boolean);
 
 export type TaskEventStreamSubscription = {
   subscriptionId: string;
+  resume(): void;
+  replay(): void;
   unsubscribe(): void;
 };
 
 export type TaskEventStreamPort = {
-  publish(event: ExternalTaskSyncEvent): void;
+  publish(event: ExternalTaskSyncEvent): TaskEventCursor;
   subscribe(
     input: TaskEventStreamSubscribe,
     sink: TaskEventStreamSink,
@@ -53,55 +59,9 @@ type Subscription = {
   queue: TaskEventStreamFrame[];
   scheduled: boolean;
   sink: TaskEventStreamSink;
-  snapshotBoundary: TaskEventCursor | null;
+  snapshotBoundary: Extract<TaskEventStreamFrame, { type: "snapshot_required" }> | null;
   subscriptionId: string;
 };
-
-const cursorEquals = (left: TaskEventCursor, right: TaskEventCursor): boolean =>
-  left.epoch === right.epoch && left.sequence === right.sequence;
-
-const freezeCursor = (cursor: TaskEventCursor): TaskEventCursor => Object.freeze({ ...cursor });
-
-const freezeEvent = (event: ExternalTaskSyncEvent): ExternalTaskSyncEvent => {
-  if (event.kind === "external_task_created") {
-    return Object.freeze({ ...event, taskSnapshot: Object.freeze({ ...event.taskSnapshot }) });
-  }
-  const taskIds = [...event.taskIds];
-  const removedTaskIds = [...event.removedTaskIds];
-  const taskSnapshots = event.taskSnapshots.map((task) => Object.freeze({ ...task }));
-  const statusChanges = event.statusChanges.map((change) =>
-    Object.freeze({ ...change, task: Object.freeze({ ...change.task }) }),
-  );
-  Object.freeze(taskIds);
-  Object.freeze(removedTaskIds);
-  Object.freeze(taskSnapshots);
-  Object.freeze(statusChanges);
-  return Object.freeze({ ...event, taskIds, removedTaskIds, taskSnapshots, statusChanges });
-};
-
-const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame =>
-  frame.type === "change"
-    ? Object.freeze({
-        ...frame,
-        cursor: freezeCursor(frame.cursor),
-        event: freezeEvent(frame.event),
-      })
-    : Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
-
-const validationError = <Details extends object>(
-  message: string,
-  field: string,
-  details: HostErrorDetails<Details>,
-) => new HostValidationError({ message, field, details });
-
-const jsonIssues = (
-  issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
-): Array<{ code: string; message: string; path: string[] }> =>
-  issues.map((issue) => ({
-    code: issue.code,
-    message: issue.message,
-    path: issue.path.map(String),
-  }));
 
 export const createTaskEventStream = ({
   epochFactory = () => crypto.randomUUID(),
@@ -110,7 +70,9 @@ export const createTaskEventStream = ({
 }: CreateTaskEventStreamInput): TaskEventStreamPort => {
   const epoch = epochFactory();
   const subscribers = new Map<string, Subscription>();
-  let buffer: readonly TaskEventStreamFrame[] = [];
+  let buffer: { frame: TaskEventStreamFrame; bytes: number }[] = [];
+  let bufferBytes = 0;
+  let replayFloor = 0;
   let sequence = 0;
 
   const currentCursor = (): TaskEventCursor => ({ epoch, sequence });
@@ -118,12 +80,10 @@ export const createTaskEventStream = ({
     if (cursor.epoch !== epoch || cursor.sequence > sequence) {
       return false;
     }
-    const firstRetainedSequence = buffer[0]?.cursor.sequence;
-    return firstRetainedSequence === undefined || cursor.sequence >= firstRetainedSequence - 1;
+    return cursor.sequence >= replayFloor;
   };
-  const enqueue = (subscription: Subscription, frame: TaskEventStreamFrame): void => {
-    subscription.queue.push(frame);
-    if (subscription.scheduled) {
+  const resume = (subscription: Subscription): void => {
+    if (!subscription.active || subscription.scheduled || subscription.queue.length === 0) {
       return;
     }
     subscription.scheduled = true;
@@ -134,9 +94,20 @@ export const createTaskEventStream = ({
         if (!frame) {
           return;
         }
-        subscription.highestDelivered = frame.cursor;
+        const previousDelivered = subscription.highestDelivered;
+        if (
+          frame.type === "snapshot_required" ||
+          !previousDelivered ||
+          previousDelivered.epoch !== epoch ||
+          previousDelivered.sequence < frame.cursor.sequence
+        )
+          subscription.highestDelivered = frame.cursor;
         try {
-          subscription.sink(frame);
+          if (subscription.sink(frame) === false) {
+            subscription.highestDelivered = previousDelivered;
+            subscription.queue.unshift(frame);
+            return;
+          }
         } catch (cause) {
           subscription.active = false;
           subscription.queue = [];
@@ -146,6 +117,10 @@ export const createTaskEventStream = ({
       }
     });
   };
+  const enqueue = (subscription: Subscription, frame: TaskEventStreamFrame): void => {
+    subscription.queue.push(frame);
+    resume(subscription);
+  };
   const enqueueSnapshot = (
     subscription: Subscription,
     reason: TaskEventSnapshotRequiredReason,
@@ -154,16 +129,14 @@ export const createTaskEventStream = ({
       return;
     }
     const cursor = freezeCursor(currentCursor());
-    subscription.snapshotBoundary = cursor;
+    const frame: Extract<TaskEventStreamFrame, { type: "snapshot_required" }> = Object.freeze({
+      type: "snapshot_required",
+      cursor,
+      reason,
+    });
+    subscription.snapshotBoundary = frame;
     subscription.queue = [];
-    enqueue(
-      subscription,
-      freezeFrame({
-        type: "snapshot_required",
-        cursor,
-        reason,
-      }),
-    );
+    enqueue(subscription, frame);
   };
   const enqueueReplay = (subscription: Subscription): void => {
     const cursor = subscription.lastAcknowledged;
@@ -171,7 +144,7 @@ export const createTaskEventStream = ({
       enqueueSnapshot(subscription, "buffer_gap");
       return;
     }
-    for (const frame of buffer) {
+    for (const { frame } of buffer) {
       if (frame.cursor.sequence > cursor.sequence) {
         enqueue(subscription, frame);
       }
@@ -191,17 +164,38 @@ export const createTaskEventStream = ({
         cursor: { epoch, sequence: ++sequence },
         event: parsed.data,
       });
-      buffer = [...buffer, frame].slice(-TASK_EVENT_STREAM_CAPACITY);
+      const bytes = new TextEncoder().encode(JSON.stringify(frame)).byteLength;
+      buffer.push({ frame, bytes });
+      bufferBytes += bytes;
+      while (
+        buffer.length > TASK_EVENT_STREAM_CAPACITY ||
+        bufferBytes > TASK_EVENT_STREAM_BYTE_CAPACITY
+      ) {
+        const removed = buffer.shift()!;
+        bufferBytes -= removed.bytes;
+        replayFloor = removed.frame.cursor.sequence;
+      }
       for (const subscription of subscribers.values()) {
         if (!subscription.active || subscription.snapshotBoundary) {
           continue;
         }
-        if (!subscription.lastAcknowledged || !canReplayFrom(subscription.lastAcknowledged)) {
+        // Reconnection can replay older delivered frames. Bound retention from
+        // the oldest queued frame, even when highestDelivered is farther ahead.
+        const firstQueued = subscription.queue[0];
+        const deliveryProgress = firstQueued
+          ? { epoch, sequence: firstQueued.cursor.sequence - 1 }
+          : (subscription.highestDelivered ?? subscription.lastAcknowledged);
+        if (
+          !subscription.lastAcknowledged ||
+          !deliveryProgress ||
+          !canReplayFrom(deliveryProgress)
+        ) {
           enqueueSnapshot(subscription, "buffer_gap");
           continue;
         }
         enqueue(subscription, frame);
       }
+      return frame.cursor;
     },
     subscribe(input, sink) {
       const parsed = taskEventStreamSubscribeSchema.safeParse(input);
@@ -233,6 +227,13 @@ export const createTaskEventStream = ({
       }
       return {
         subscriptionId: subscription.subscriptionId,
+        resume: () => resume(subscription),
+        replay: () => {
+          if (!subscription.active) return;
+          subscription.queue = [];
+          if (subscription.snapshotBoundary) enqueue(subscription, subscription.snapshotBoundary);
+          else enqueueReplay(subscription);
+        },
         unsubscribe: () => {
           subscription.active = false;
           subscription.queue = [];
@@ -271,13 +272,13 @@ export const createTaskEventStream = ({
       if (subscription.snapshotBoundary) {
         if (
           !subscription.highestDelivered ||
-          !cursorEquals(subscription.highestDelivered, subscription.snapshotBoundary) ||
-          !cursorEquals(cursor, subscription.snapshotBoundary)
+          !cursorEquals(subscription.highestDelivered, subscription.snapshotBoundary.cursor) ||
+          !cursorEquals(cursor, subscription.snapshotBoundary.cursor)
         ) {
           throw validationError(
             "Task event stream acknowledgement must acknowledge the delivered snapshot boundary.",
             "cursor",
-            { expectedCursor: subscription.snapshotBoundary, receivedCursor: cursor },
+            { expectedCursor: subscription.snapshotBoundary.cursor, receivedCursor: cursor },
           );
         }
         subscription.lastAcknowledged = freezeCursor(cursor);
@@ -317,17 +318,83 @@ export const createTaskEventStream = ({
           },
         );
       }
-      if (cursor.sequence !== lastAcknowledged.sequence + 1) {
-        throw validationError(
-          "Task event stream acknowledgement skipped a frame.",
-          "cursor.sequence",
-          {
-            expectedSequence: lastAcknowledged.sequence + 1,
-            receivedCursor: cursor,
-          },
-        );
-      }
       subscription.lastAcknowledged = freezeCursor(cursor);
+      subscription.queue = subscription.queue.filter(
+        (frame) => frame.cursor.sequence > cursor.sequence,
+      );
     },
   };
 };
+
+const cursorEquals = (left: TaskEventCursor, right: TaskEventCursor): boolean =>
+  left.epoch === right.epoch && left.sequence === right.sequence;
+
+const freezeCursor = (cursor: TaskEventCursor): TaskEventCursor => Object.freeze({ ...cursor });
+
+const freezeBoard = (
+  board: ExternalTaskSyncEvent["boardChanges"],
+): ExternalTaskSyncEvent["boardChanges"] => {
+  if (!board) return null;
+  const freeze = <T>(value: T): T => {
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Traverse an already schema-validated value to freeze its nested fields.
+    if (value !== null && typeof value === "object") {
+      for (const child of Object.values(value)) freeze(child);
+      Object.freeze(value);
+    }
+    return value;
+  };
+  return freeze(board);
+};
+
+const freezeEvent = (event: ExternalTaskSyncEvent): ExternalTaskSyncEvent => {
+  const boardChanges = freezeBoard(event.boardChanges);
+  if (event.kind === "external_task_created") {
+    return Object.freeze({
+      ...event,
+      boardChanges,
+      taskSnapshot: Object.freeze({ ...event.taskSnapshot }),
+    });
+  }
+  const taskIds = [...event.taskIds];
+  const removedTaskIds = [...event.removedTaskIds];
+  const taskSnapshots = event.taskSnapshots.map((task) => Object.freeze({ ...task }));
+  const statusChanges = event.statusChanges.map((change) =>
+    Object.freeze({ ...change, task: Object.freeze({ ...change.task }) }),
+  );
+  Object.freeze(taskIds);
+  Object.freeze(removedTaskIds);
+  Object.freeze(taskSnapshots);
+  Object.freeze(statusChanges);
+  return Object.freeze({
+    ...event,
+    boardChanges,
+    taskIds,
+    removedTaskIds,
+    taskSnapshots,
+    statusChanges,
+  });
+};
+
+const freezeFrame = (frame: TaskEventStreamFrame): TaskEventStreamFrame =>
+  frame.type === "change"
+    ? Object.freeze({
+        ...frame,
+        cursor: freezeCursor(frame.cursor),
+        event: freezeEvent(frame.event),
+      })
+    : Object.freeze({ ...frame, cursor: freezeCursor(frame.cursor) });
+
+const validationError = <Details extends object>(
+  message: string,
+  field: string,
+  details: HostErrorDetails<Details>,
+) => new HostValidationError({ message, field, details });
+
+const jsonIssues = (
+  issues: ReadonlyArray<{ code: string; message: string; path: readonly PropertyKey[] }>,
+): Array<{ code: string; message: string; path: string[] }> =>
+  issues.map((issue) => ({
+    code: issue.code,
+    message: issue.message,
+    path: issue.path.map(String),
+  }));
