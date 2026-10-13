@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -30,6 +30,7 @@ const claudeCatalog: AgentModelCatalog = {
       modelId: "claude-opus-4-6",
       modelName: "Claude Opus 4.6",
       variants: ["low", "medium", "high", "xhigh", "max"],
+      speedLevels: [{ id: "fast", label: "Fast" }],
       liveSessionUpdates: {
         profile: false,
         variants: ["low", "medium", "high", "xhigh"],
@@ -53,6 +54,21 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 
 const createHarness = (initialProps: HookArgs) =>
   createHookHarness(useModelSelectionActions, initialProps);
+
+const multiModelCatalog: AgentModelCatalog = {
+  ...claudeCatalog,
+  models: [
+    { ...claudeCatalog.models[0]! },
+    {
+      ...claudeCatalog.models[0]!,
+      id: "claude/claude-sonnet-4-6",
+      modelId: "claude-sonnet-4-6",
+      variants: ["medium", "high"],
+      liveSessionUpdates: { profile: false, variants: ["medium", "high"] },
+      speedLevels: [{ id: "fast", label: "Fast" }],
+    },
+  ],
+};
 
 describe("useModelSelectionActions", () => {
   test("blocks live profile changes when model metadata disallows them", async () => {
@@ -295,7 +311,7 @@ describe("useModelSelectionActions", () => {
       ...claudeCatalog,
       models: [
         { ...claudeCatalog.models[0]!, speedLevels: [{ id: "fast", label: "Fast" }] },
-        { ...claudeCatalog.models[0]!, id: "claude/sonnet", modelId: "sonnet" },
+        { ...claudeCatalog.models[0]!, id: "claude/sonnet", modelId: "sonnet", speedLevels: [] },
       ],
     };
     const harness = createHarness(
@@ -347,6 +363,193 @@ describe("useModelSelectionActions", () => {
       });
     } finally {
       toast.error = originalToastError;
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    { setting: "effort", speedFirst: true },
+    { setting: "effort", speedFirst: false },
+    { setting: "model", speedFirst: true },
+    { setting: "model", speedFirst: false },
+  ])(
+    "preserves overlapping speed and $setting changes with speedFirst=$speedFirst",
+    async (change) => {
+      const firstUpdate = Promise.withResolvers<void>();
+      const updateAgentSessionModel = mock(async () => {
+        if (updateAgentSessionModel.mock.calls.length === 1) await firstUpdate.promise;
+      });
+      const harness = createHarness(
+        createBaseProps({ selectionCatalog: multiModelCatalog, updateAgentSessionModel }),
+      );
+      let speedChange = Promise.resolve();
+      const changeSetting = (state: ReturnType<typeof useModelSelectionActions>) => {
+        if (change.setting === "effort") state.handleSelectVariant("xhigh");
+        else
+          state.handleSelectModelPair(
+            { runtimeKind: "claude", providerId: "claude", modelId: "claude-sonnet-4-6" },
+            multiModelCatalog,
+          );
+      };
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          if (change.speedFirst) speedChange = state.handleSelectSpeed("fast");
+          else changeSetting(state);
+        });
+        await harness.run((state) => {
+          if (change.speedFirst) changeSetting(state);
+          else speedChange = state.handleSelectSpeed("fast");
+        });
+
+        expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+        firstUpdate.resolve();
+        await speedChange;
+        await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 2);
+        expect(updateAgentSessionModel).toHaveBeenLastCalledWith(loadedClaudeSession, {
+          ...claudeSelection,
+          ...(change.setting === "effort"
+            ? { variant: "xhigh" }
+            : { modelId: "claude-sonnet-4-6", variant: "medium" }),
+          speed: "fast",
+        });
+      } finally {
+        firstUpdate.resolve();
+        await speedChange;
+        await harness.unmount();
+      }
+    },
+  );
+
+  test.each([true, false])(
+    "continues from the accepted selection after failure with speedFirst=%s",
+    async (speedFirst) => {
+      const firstUpdate = Promise.withResolvers<void>();
+      const failure = new Error("setting update failed");
+      const toastError = spyOn(toast, "error").mockImplementation(() => "");
+      const updateAgentSessionModel = mock(async () => {
+        if (updateAgentSessionModel.mock.calls.length === 1) await firstUpdate.promise;
+      });
+      const harness = createHarness(createBaseProps({ updateAgentSessionModel }));
+      let speedResult: Promise<void | unknown> = Promise.resolve();
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          if (speedFirst)
+            speedResult = state.handleSelectSpeed("fast").catch((cause: unknown) => cause);
+          else state.handleSelectVariant("xhigh");
+        });
+        await harness.run((state) => {
+          if (speedFirst) state.handleSelectVariant("xhigh");
+          else speedResult = state.handleSelectSpeed("fast").catch((cause: unknown) => cause);
+        });
+
+        expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+        firstUpdate.reject(failure);
+        const result = await speedResult;
+        await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 2);
+        expect(updateAgentSessionModel).toHaveBeenLastCalledWith(loadedClaudeSession, {
+          ...claudeSelection,
+          ...(speedFirst ? { variant: "xhigh" } : { speed: "fast" }),
+        });
+        if (speedFirst) {
+          expect(result).toBe(failure);
+          expect(toastError).not.toHaveBeenCalled();
+        } else {
+          expect(result).toBeUndefined();
+          expect(toastError).toHaveBeenCalledTimes(1);
+          expect(toastError).toHaveBeenCalledWith("Failed to update model", {
+            description: failure.message,
+          });
+        }
+      } finally {
+        firstUpdate.resolve();
+        await speedResult;
+        toastError.mockRestore();
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("keeps pending changes bound to the full session identity across navigation", async () => {
+    const firstUpdate = Promise.withResolvers<void>();
+    const updateAgentSessionModel = mock(async () => {
+      if (updateAgentSessionModel.mock.calls.length === 1) await firstUpdate.promise;
+    });
+    const props = createBaseProps({ updateAgentSessionModel });
+    const harness = createHarness(props);
+    const otherSession = { ...loadedClaudeSession, workingDirectory: "/other-repo" };
+    let speedChange = Promise.resolve();
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        speedChange = state.handleSelectSpeed("fast");
+        state.handleSelectVariant("xhigh");
+      });
+      await harness.update({ ...props, loadedSessionIdentity: otherSession });
+      await harness.run((state) => state.handleSelectSpeed("fast"));
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+      expect(updateAgentSessionModel).toHaveBeenLastCalledWith(otherSession, {
+        ...claudeSelection,
+        speed: "fast",
+      });
+
+      // Returning to the first session must keep its existing queue.
+      await harness.update(props);
+      await harness.run((state) => state.handleSelectVariant("low"));
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+      firstUpdate.resolve();
+      await speedChange;
+      await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 4);
+      expect(updateAgentSessionModel).toHaveBeenLastCalledWith(loadedClaudeSession, {
+        ...claudeSelection,
+        variant: "low",
+        speed: "fast",
+      });
+    } finally {
+      firstUpdate.resolve();
+      await speedChange;
+      await harness.unmount();
+    }
+  });
+
+  test("rejects a queued speed change when the accepted model no longer supports it", async () => {
+    const firstUpdate = Promise.withResolvers<void>();
+    const updateAgentSessionModel = mock(async () => {
+      await firstUpdate.promise;
+    });
+    const selectionCatalog: AgentModelCatalog = {
+      ...multiModelCatalog,
+      models: multiModelCatalog.models.map((model) => ({
+        ...model,
+        speedLevels: model.modelId === "claude-sonnet-4-6" ? [] : model.speedLevels,
+      })),
+    };
+    const harness = createHarness(createBaseProps({ selectionCatalog, updateAgentSessionModel }));
+    let speedResult: Promise<unknown> = Promise.resolve();
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "claude", providerId: "claude", modelId: "claude-sonnet-4-6" },
+          selectionCatalog,
+        );
+        speedResult = state.handleSelectSpeed("fast").catch((cause: unknown) => cause);
+      });
+      firstUpdate.resolve();
+      expect(await speedResult).toEqual(
+        new Error(
+          "The selected model does not support this speed. Choose Standard or a supported speed.",
+        ),
+      );
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+    } finally {
+      firstUpdate.resolve();
+      await speedResult;
       await harness.unmount();
     }
   });
