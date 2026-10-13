@@ -389,6 +389,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitHistoryComparisonSchema",
   "gitHistoryPageRequestSchema",
   "gitHistoryPageSchema",
+  "gitHistoryRefSchema",
   "gitLocalChangeGroupSchema",
   "gitLocalChangesRequestSchema",
   "gitLocalChangesSchema",

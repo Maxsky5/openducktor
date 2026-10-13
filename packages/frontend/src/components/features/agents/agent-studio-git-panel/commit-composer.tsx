@@ -77,19 +77,19 @@ export const CommitComposer = memo(function CommitComposer({
       className="shrink-0 border-t border-border px-2 py-2"
       data-testid="agent-studio-git-commit-form"
     >
-      {/* One input group: the field and the Commit button share one border and one height. */}
       <div
-        // Focus looks like every other field: a soft ring, with the border color kept.
-        className="flex h-8 min-w-0 items-stretch overflow-hidden rounded-md border border-input bg-card shadow-sm has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/40"
+        // One input group: the field and the Commit button share one border, height, and focus.
+        className="flex h-8 min-w-0 items-stretch overflow-hidden rounded-md border border-input bg-card shadow-sm transition-[border-color,box-shadow] has-[input:focus-visible]:field-focus"
         data-testid="agent-studio-git-commit-input-group"
       >
         <Input
+          embedded
           value={message}
           disabled={isCommitting || commit === null}
           placeholder={`Commit message (${modifier}+Enter commits all)`}
           aria-label="Commit message"
           aria-describedby={hintId}
-          className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 text-xs shadow-none focus-visible:ring-0"
+          className="h-full min-w-0 flex-1 px-2.5 text-xs"
           data-testid="agent-studio-git-commit-message-input"
           onKeyDown={onKeyDown}
           onChange={(event) => updateView({ commitMessage: event.currentTarget.value })}

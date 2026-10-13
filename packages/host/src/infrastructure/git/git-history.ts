@@ -1,4 +1,4 @@
-import type { GitHistoryCommit, GitHistoryPage } from "@openducktor/contracts";
+import type { GitHistoryCommit, GitHistoryPage, GitHistoryRef } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -18,7 +18,16 @@ export const GIT_HISTORY_PAGE_SIZE = 100;
 
 const FIELD = "\u0000";
 const RECORD = "\u001e";
-const LOG_FORMAT = ["%H", "%P", "%an", "%aI", "%s", "%B"].join("%x00") + "%x1e";
+const LOG_FORMAT = ["%H", "%P", "%an", "%ae", "%aI", "%s", "%B"].join("%x00") + "%x1e";
+const REF_FORMAT = ["%(objectname)", "%(*objectname)", "%(refname)", "%(HEAD)", "%(symref)"].join(
+  "%00",
+);
+const REF_KINDS = [
+  ["refs/heads/", "local"],
+  ["refs/remotes/", "remote"],
+  ["refs/tags/", "tag"],
+] as const;
+const REF_ORDER = { local: 0, remote: 1, tag: 2 } satisfies Record<GitHistoryRef["kind"], number>;
 
 const splitLines = (output: string): string[] =>
   output
@@ -149,18 +158,60 @@ const readSides = (
     return sides;
   });
 
+/**
+ * The branches and tags of each commit. An annotated tag points at its tag object, so it uses the
+ * commit that the tag peels to. Symbolic refs such as `origin/HEAD` repeat a branch and stay out.
+ */
+const readRefs = (runner: GitCommandRunner, workingDirectory: string) =>
+  Effect.gen(function* () {
+    const output = yield* runGit(runner, workingDirectory, [
+      "for-each-ref",
+      `--format=${REF_FORMAT}`,
+      "refs/heads",
+      "refs/remotes",
+      "refs/tags",
+    ]);
+    const refsByCommit = new Map<string, GitHistoryRef[]>();
+    for (const line of splitLines(output)) {
+      const [object = "", peeled = "", refname = "", head = "", symref = ""] = line.split(FIELD);
+      const kind = REF_KINDS.find(([prefix]) => refname.startsWith(prefix));
+      if (!kind || symref) continue;
+      const commit = peeled || object;
+      const refs = refsByCommit.get(commit) ?? [];
+      refs.push({ name: refname.slice(kind[0].length), kind: kind[1], isHead: head === "*" });
+      refsByCommit.set(commit, refs);
+    }
+    for (const refs of refsByCommit.values()) {
+      refs.sort(
+        (left, right) =>
+          Number(right.isHead) - Number(left.isHead) ||
+          REF_ORDER[left.kind] - REF_ORDER[right.kind] ||
+          left.name.localeCompare(right.name),
+      );
+    }
+    return refsByCommit;
+  });
+
 const parseLog = (
   output: string,
   boundary: ReadonlySet<string>,
   sides: ReadonlyMap<string, "current" | "target">,
+  refsByCommit: ReadonlyMap<string, GitHistoryRef[]>,
 ) =>
   Effect.gen(function* () {
     const commits: GitHistoryCommit[] = [];
     for (const record of output.split(RECORD)) {
       const trimmed = record.replace(/^\r?\n/u, "");
       if (!trimmed) continue;
-      const [oid = "", parents = "", authorName = "", authorDate = "", subject = "", ...body] =
-        trimmed.split(FIELD);
+      const [
+        oid = "",
+        parents = "",
+        authorName = "",
+        authorEmail = "",
+        authorDate = "",
+        subject = "",
+        ...body
+      ] = trimmed.split(FIELD);
       const membership = boundary.has(oid) ? "boundary" : sides.get(oid);
       if (!membership) {
         return yield* Effect.fail(
@@ -181,7 +232,9 @@ const parseLog = (
         subject,
         message: body.join(FIELD).trimEnd(),
         authorName,
+        authorEmail,
         authorDate,
+        refs: refsByCommit.get(oid) ?? [],
       });
     }
     return commits;
@@ -232,22 +285,28 @@ export const readHistoryPage = (
         ...boundaryOids.map((oid) => `${oid}^@`),
       ]),
     );
-    const sides = yield* readSides(runner, workingDirectory, currentTip, targetTip);
     const offset = page?.offset ?? 0;
-    const output = yield* runGit(runner, workingDirectory, [
-      "log",
-      "--topo-order",
-      "--no-show-signature",
-      `--format=${LOG_FORMAT}`,
-      `--skip=${offset}`,
-      `--max-count=${GIT_HISTORY_PAGE_SIZE + 1}`,
-      "--end-of-options",
-      currentTip,
-      targetTip,
-      ...excludedParents.map((oid) => `^${oid}`),
-      "--",
-    ]);
-    const commits = yield* parseLog(output, new Set(boundaryOids), sides);
+    const [sides, refsByCommit, output] = yield* Effect.all(
+      [
+        readSides(runner, workingDirectory, currentTip, targetTip),
+        readRefs(runner, workingDirectory),
+        runGit(runner, workingDirectory, [
+          "log",
+          "--topo-order",
+          "--no-show-signature",
+          `--format=${LOG_FORMAT}`,
+          `--skip=${offset}`,
+          `--max-count=${GIT_HISTORY_PAGE_SIZE + 1}`,
+          "--end-of-options",
+          currentTip,
+          targetTip,
+          ...excludedParents.map((oid) => `^${oid}`),
+          "--",
+        ]),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const commits = yield* parseLog(output, new Set(boundaryOids), sides, refsByCommit);
     let ahead = 0;
     for (const side of sides.values()) if (side === "current") ahead += 1;
     return {

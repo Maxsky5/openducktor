@@ -1,9 +1,12 @@
 import type { GitHistoryCommitMembership } from "@openducktor/contracts";
 import { type ReactElement, type RefObject, useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { authorInitials, type GraphEdge, type GraphRow } from "./git-history-graph-model";
+import { AuthorAvatar } from "./git-history-avatar";
+import type { GraphEdge, GraphRow } from "./git-history-graph-model";
 
 export const ROW_HEIGHT = 32;
+/** The bar in the lane color that ends the graph column. */
+export const GRAPH_ACCENT_WIDTH = 3;
 const LANE_WIDTH = 22;
 const GRAPH_PADDING = 6;
 const AVATAR_RADIUS = 10;
@@ -89,12 +92,16 @@ export const laneX = (lane: number) => GRAPH_PADDING + lane * LANE_WIDTH + LANE_
 export function HistoryGraphCell({
   row,
   graph,
+  connectFromLeft = false,
 }: {
   row: GraphRow;
   graph: GraphView;
+  /** True when the Branch / Tag column on the left labels this commit. */
+  connectFromLeft?: boolean;
 }): ReactElement {
   const clipped = graph.viewWidth < graph.width;
   const color = laneColor(row.commit.membership, row.lane);
+  const nodeX = laneX(row.lane) - graph.offset;
   return (
     <>
       <span
@@ -112,13 +119,23 @@ export function HistoryGraphCell({
             "group-hover/history-row:opacity-25 group-data-[state=open]/history-row:opacity-35 dark:group-hover/history-row:opacity-30",
             color,
           )}
-          style={{ left: Math.max(0, laneX(row.lane) - graph.offset - BAND_INSET) }}
+          style={{ left: Math.max(0, nodeX - BAND_INSET) }}
         />
+        {connectFromLeft ? (
+          // A line from the Branch / Tag column to the node ties the label to its commit.
+          <span
+            aria-hidden="true"
+            className={cn("absolute top-1/2 left-0 h-0.5 -translate-y-1/2 bg-current", color)}
+            style={{ width: Math.max(0, nodeX - AVATAR_RADIUS) }}
+          />
+        ) : null}
         <HistoryGraph row={row} width={graph.width} offset={graph.offset} />
+        {showsAuthor(row) ? <NodeAvatar row={row} left={nodeX} /> : null}
       </span>
       <span
         aria-hidden="true"
-        className={cn("h-[calc(100%-6px)] w-[3px] shrink-0 bg-current", color)}
+        className={cn("h-[calc(100%-6px)] shrink-0 bg-current", color)}
+        style={{ width: GRAPH_ACCENT_WIDTH }}
       />
     </>
   );
@@ -234,32 +251,36 @@ function CommitNode({ x, y, row }: { x: number; y: number; row: GraphRow }): Rea
       />
     );
   }
-  // Missing target commits have an open avatar, so their side does not depend on color alone.
-  const isTarget = commit.membership === "target";
+  // The author photo lies over this ring, so the ring keeps the lane color around it.
   return (
     <g className={color}>
       <circle cx={x} cy={y} r={AVATAR_RADIUS + 1.5} className="fill-card" />
-      <circle
-        cx={x}
-        cy={y}
-        r={AVATAR_RADIUS}
-        className={isTarget ? "fill-card" : undefined}
-        fill={isTarget ? undefined : "currentColor"}
-        stroke="currentColor"
-        strokeWidth={isTarget ? 2 : 0}
-      />
-      <text
-        x={x}
-        y={y}
-        dy="0.36em"
-        textAnchor="middle"
-        className={cn(
-          "font-sans text-[8.5px] font-bold select-none",
-          isTarget ? "fill-current" : "fill-white",
-        )}
-      >
-        {authorInitials(commit.authorName)}
-      </text>
+      <circle cx={x} cy={y} r={AVATAR_RADIUS} fill="currentColor" />
     </g>
+  );
+}
+
+/** True for a commit whose node shows the author, not a merge dot or the base marker. */
+const showsAuthor = (row: GraphRow): boolean =>
+  row.commit.membership !== "boundary" && row.commit.parentOids.length <= 1;
+
+/**
+ * The author photo of a commit node. HTML lies over the SVG ring, so a photo that does not load
+ * falls back to the initials. Missing target commits show their photo faded and their initials
+ * open, so their side does not depend on color alone.
+ */
+function NodeAvatar({ row, left }: { row: GraphRow; left: number }): ReactElement {
+  const isTarget = row.commit.membership === "target";
+  return (
+    <AuthorAvatar
+      name={row.commit.authorName}
+      email={row.commit.authorEmail}
+      className={cn(
+        "pointer-events-none absolute top-1/2 size-[18px] -translate-y-1/2",
+        isTarget ? "bg-card opacity-75 grayscale-[35%]" : "bg-transparent",
+      )}
+      initialsClassName={cn("text-[8px]", isTarget ? "text-current" : "text-white")}
+      style={{ left: left - AVATAR_RADIUS + 1 }}
+    />
   );
 }

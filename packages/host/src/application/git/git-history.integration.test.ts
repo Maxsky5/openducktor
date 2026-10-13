@@ -112,6 +112,38 @@ describe("branch history", () => {
     expect(order.indexOf(mainN)).toBeLessThan(order.indexOf(mainM));
   });
 
+  test("lists the author email and the branches and tags of each commit", async () => {
+    const base = await commit("base.txt", "shared base");
+    git(["tag", "-a", "v1.0.0", "-m", "Release"]);
+    git(["tag", "light"]);
+    git(["checkout", "-b", "feature"]);
+    const tip = await commit("a.txt", "feature a");
+    git(["branch", "feature-copy"]);
+    // A remote-tracking branch and the symbolic remote HEAD that repeats it.
+    git(["update-ref", "refs/remotes/origin/feature", tip]);
+    git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feature"]);
+
+    const page = requirePage(await history("main"));
+    const refsOf = (oid: string) => page.commits.find((entry) => entry.oid === oid)?.refs;
+
+    expect(page.commits.map((entry) => entry.authorEmail)).toEqual([
+      "history@example.invalid",
+      "history@example.invalid",
+    ]);
+    // The checked-out branch comes first, then local branches, remote branches, and tags.
+    expect(refsOf(tip)).toEqual([
+      { name: "feature", kind: "local", isHead: true },
+      { name: "feature-copy", kind: "local", isHead: false },
+      { name: "origin/feature", kind: "remote", isHead: false },
+    ]);
+    // The annotated tag peels to its commit.
+    expect(refsOf(base)).toEqual([
+      { name: "main", kind: "local", isHead: false },
+      { name: "light", kind: "tag", isHead: false },
+      { name: "v1.0.0", kind: "tag", isHead: false },
+    ]);
+  });
+
   test("handles matching tips and a target that is ahead only", async () => {
     const shared = await commit("base.txt", "shared");
     git(["branch", "target"]);

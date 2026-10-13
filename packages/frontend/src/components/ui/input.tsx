@@ -1,13 +1,23 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-function Input({ className, type = "text", ...props }: React.ComponentProps<"input">) {
+/** The border, surface, and focus of a standalone text field. */
+export const FIELD_CHROME_CLASS_NAME =
+  "rounded-md border border-input bg-card shadow-sm transition-[border-color,box-shadow] focus-visible:field-focus read-only:bg-muted/60";
+
+type InputProps = React.ComponentProps<"input"> & {
+  /** The parent draws the border and the focus, as in an input group. */
+  embedded?: boolean;
+};
+
+function Input({ className, type = "text", embedded = false, ...props }: InputProps) {
   return (
     <input
       type={type}
       data-slot="input"
       className={cn(
-        "h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 read-only:bg-muted/60 read-only:text-muted-foreground",
+        "h-9 w-full px-3 py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 read-only:text-muted-foreground",
+        embedded ? "bg-transparent" : FIELD_CHROME_CLASS_NAME,
         className,
       )}
       {...props}

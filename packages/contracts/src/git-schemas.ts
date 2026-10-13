@@ -706,6 +706,16 @@ export type GitHistoryPageRequest = z.infer<typeof gitHistoryPageRequestSchema>;
 export const gitHistoryCommitMembershipSchema = z.enum(["current", "target", "boundary"]);
 export type GitHistoryCommitMembership = z.infer<typeof gitHistoryCommitMembershipSchema>;
 
+/** A branch or tag that points at a commit. */
+export const gitHistoryRefSchema = z.object({
+  /** The short name, such as `main`, `origin/main`, or `v1.2.0`. */
+  name: z.string().min(1),
+  kind: z.enum(["local", "remote", "tag"]),
+  /** True for the branch that the working directory has checked out. */
+  isHead: z.boolean(),
+});
+export type GitHistoryRef = z.infer<typeof gitHistoryRefSchema>;
+
 export const gitHistoryCommitSchema = z.object({
   oid: gitObjectIdSchema,
   parentOids: z.array(gitObjectIdSchema),
@@ -715,8 +725,11 @@ export const gitHistoryCommitSchema = z.object({
   subject: z.string(),
   message: z.string(),
   authorName: z.string(),
+  authorEmail: z.string(),
   /** Strict ISO 8601 with the author's timezone offset. */
   authorDate: z.string().min(1),
+  /** Branches and tags that point at this commit. The checked-out branch comes first. */
+  refs: z.array(gitHistoryRefSchema),
 });
 export type GitHistoryCommit = z.infer<typeof gitHistoryCommitSchema>;
 

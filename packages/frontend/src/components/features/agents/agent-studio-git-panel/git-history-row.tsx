@@ -3,23 +3,24 @@ import type {
   GitHistoryCommitMembership,
   GitHistoryComparison,
 } from "@openducktor/contracts";
-import { GitBranch, type LucideIcon, Target } from "lucide-react";
 import type { ReactElement } from "react";
 import type { RowComponentProps } from "react-window";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import { AuthorAvatar } from "./git-history-avatar";
+import { type HistoryColumnId, historyColumnWidth } from "./git-history-columns";
 import { commitBodyBlocks, commitBodyPreview } from "./git-history-commit-message";
 import { type GraphView, HistoryGraphCell, laneColor } from "./git-history-graph";
 import {
-  authorInitials,
   formatCompactCommitAge,
   formatExactCommitDate,
   formatRelativeCommitDate,
   type GraphRow,
 } from "./git-history-graph-model";
 import { type HistoryFooter, HistoryFooterRow } from "./git-history-messages";
+import { type HistoryRefGroup, HistoryRefsCell, historyRefGroups } from "./git-history-refs";
 
 export type HistoryRowProps = {
   rows: GraphRow[];
@@ -29,7 +30,11 @@ export type HistoryRowProps = {
   targetLabel: string;
   footer: HistoryFooter;
   nowMs: number;
+  /** The shown columns in their order. */
+  columns: HistoryColumnId[];
 };
+
+const SHORT_OID_LENGTH = 7;
 
 export function HistoryRowView({
   index,
@@ -42,6 +47,7 @@ export function HistoryRowView({
   targetLabel,
   footer,
   nowMs,
+  columns,
 }: RowComponentProps<HistoryRowProps>): ReactElement {
   const row = rows[index];
   if (!row) {
@@ -54,53 +60,27 @@ export function HistoryRowView({
   const { commit } = row;
   const color = laneColor(commit.membership, row.lane);
   const exactDate = formatExactCommitDate(commit.authorDate);
-  const preview = commitBodyPreview(commit.message);
+  const refGroups = historyRefGroups(commit, comparison, targetLabel);
+  const cell: CellInput = { row, graph, color, refGroups, nowMs, exactDate };
   return (
     <div style={style} {...ariaAttributes} className="flex min-w-0">
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="group/history-row flex h-full w-full min-w-0 cursor-pointer items-center text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            className="group/history-row flex h-full w-full min-w-0 cursor-pointer items-center text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-muted"
             aria-label={`${membershipLabel(commit.membership)} commit ${commit.subject} by ${commit.authorName}, ${exactDate}`}
             data-testid="agent-studio-git-history-row"
           >
-            <HistoryGraphCell row={row} graph={graph} />
-            <span className="flex h-full min-w-0 flex-1 items-center gap-2 pr-2.5 pl-2 group-hover/history-row:bg-muted/60 group-data-[state=open]/history-row:bg-muted">
-              <RefPills
-                commit={commit}
-                comparison={comparison}
-                color={color}
-                currentLabel={currentLabel}
-                targetLabel={targetLabel}
+            {columns.map((id, position) => (
+              <HistoryCell
+                key={id}
+                id={id}
+                input={cell}
+                // The line to the node shows only when the labels sit right beside the graph.
+                labelsOnLeft={columns[position - 1] === "refs" && refGroups.length > 0}
               />
-              <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden whitespace-nowrap text-xs">
-                <span
-                  className={cn(
-                    "max-w-full shrink-0 truncate",
-                    commit.membership === "target" ? "text-foreground/65" : "text-foreground",
-                  )}
-                >
-                  {commit.subject}
-                </span>
-                {preview ? (
-                  <span className="min-w-0 truncate text-muted-foreground/75">{preview}</span>
-                ) : null}
-              </span>
-              <span
-                className="hidden w-24 shrink-0 truncate text-[11px] text-muted-foreground @[30rem]/history:block"
-                data-testid="agent-studio-git-history-author"
-              >
-                {commit.authorName}
-              </span>
-              <time
-                className="w-8 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums"
-                dateTime={commit.authorDate}
-                title={`${commit.authorName}, ${exactDate}`}
-              >
-                {formatCompactCommitAge(commit.authorDate, nowMs)}
-              </time>
-            </span>
+            ))}
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -117,6 +97,7 @@ export function HistoryRowView({
           <CommitDetails
             commit={commit}
             color={color}
+            refGroups={refGroups}
             nowMs={nowMs}
             currentLabel={currentLabel}
             targetLabel={targetLabel}
@@ -127,106 +108,117 @@ export function HistoryRowView({
   );
 }
 
+type CellInput = {
+  row: GraphRow;
+  graph: GraphView;
+  color: string;
+  refGroups: HistoryRefGroup[];
+  nowMs: number;
+  exactDate: string;
+};
+
+/** One column of a row. Each cell keeps the width of its column title. */
+function HistoryCell({
+  id,
+  input,
+  labelsOnLeft,
+}: {
+  id: HistoryColumnId;
+  input: CellInput;
+  labelsOnLeft: boolean;
+}): ReactElement {
+  const { row, graph, color, refGroups, nowMs, exactDate } = input;
+  const { commit } = row;
+  if (id === "graph") {
+    return <HistoryGraphCell row={row} graph={graph} connectFromLeft={labelsOnLeft} />;
+  }
+  if (id === "message") return <MessageCell commit={commit} />;
+  const width = historyColumnWidth(id, graph.viewWidth) ?? undefined;
+  const fixed = "flex h-full shrink-0 items-center overflow-hidden";
+  if (id === "refs") {
+    return (
+      <span className={cn(fixed, "px-1.5")} style={{ width }}>
+        <HistoryRefsCell groups={refGroups} color={color} />
+      </span>
+    );
+  }
+  if (id === "author") {
+    return (
+      <span
+        className={cn(fixed, "gap-1.5 px-2 text-[11px] text-muted-foreground")}
+        style={{ width }}
+        data-testid="agent-studio-git-history-author"
+      >
+        <AuthorAvatar
+          name={commit.authorName}
+          email={commit.authorEmail}
+          className={cn("size-4 bg-current", color)}
+          initialsClassName="text-[7px] text-white"
+        />
+        <span className="min-w-0 truncate">{commit.authorName}</span>
+      </span>
+    );
+  }
+  if (id === "sha") {
+    return (
+      <code
+        className={cn(fixed, "px-2 font-mono text-[11px] text-muted-foreground")}
+        style={{ width }}
+        title={commit.oid}
+      >
+        {commit.oid.slice(0, SHORT_OID_LENGTH)}
+      </code>
+    );
+  }
+  return (
+    <time
+      className={cn(fixed, "justify-end px-2.5 text-[11px] text-muted-foreground tabular-nums")}
+      style={{ width }}
+      dateTime={commit.authorDate}
+      title={`${commit.authorName}, ${exactDate}`}
+    >
+      {formatCompactCommitAge(commit.authorDate, nowMs)}
+    </time>
+  );
+}
+
+/** The subject, then the body as one muted line. */
+function MessageCell({ commit }: { commit: GitHistoryCommit }): ReactElement {
+  const preview = commitBodyPreview(commit.message);
+  return (
+    <span className="flex h-full min-w-0 flex-1 items-baseline gap-2 self-center overflow-hidden px-2 text-xs leading-8 whitespace-nowrap">
+      <span
+        className={cn(
+          "max-w-full shrink-0 truncate",
+          commit.membership === "target" ? "text-foreground/65" : "text-foreground",
+        )}
+      >
+        {commit.subject}
+      </span>
+      {preview ? (
+        <span className="min-w-0 truncate text-muted-foreground/75">{preview}</span>
+      ) : null}
+    </span>
+  );
+}
+
 const membershipLabel = (membership: GitHistoryCommitMembership): string => {
   if (membership === "current") return "Current branch";
   if (membership === "target") return "Missing target";
   return "Shared base";
 };
 
-type TipRef = { label: string; description: string; color: string; icon: LucideIcon };
-
-/**
- * Branch labels at the tips, tinted with the lane color as in GitKraken. A second label on the
- * same commit folds into a count, so the subject keeps its space.
- */
-function RefPills({
-  commit,
-  comparison,
-  color,
-  currentLabel,
-  targetLabel,
-}: {
-  commit: GitHistoryCommit;
-  comparison: GitHistoryComparison;
-  color: string;
-  currentLabel: string;
-  targetLabel: string;
-}): ReactElement | null {
-  const refs: TipRef[] = [];
-  if (commit.oid === comparison.currentTip) {
-    refs.push({
-      label: currentLabel,
-      description: `Current: ${currentLabel}`,
-      color,
-      icon: GitBranch,
-    });
-  }
-  if (commit.oid === comparison.targetTip) {
-    refs.push({
-      label: targetLabel,
-      description: `Target: ${targetLabel}`,
-      color: laneColor("target", 0),
-      icon: Target,
-    });
-  }
-  const [first, ...others] = refs;
-  if (!first && commit.membership !== "boundary") return null;
-  return (
-    <span
-      className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-1"
-      data-testid="agent-studio-git-history-markers"
-    >
-      {first ? <RefPill {...first} /> : null}
-      {others.length > 0 ? (
-        <span
-          className="inline-flex h-[18px] shrink-0 items-center rounded-[4px] bg-muted px-1 text-[10.5px] leading-none font-semibold text-muted-foreground"
-          title={others.map((ref) => ref.description).join("\n")}
-        >
-          <span className="sr-only">{others.map((ref) => ref.description).join(", ")}</span>
-          <span aria-hidden="true">+{others.length}</span>
-        </span>
-      ) : null}
-      {first ? null : (
-        <span
-          className="inline-flex h-[18px] shrink-0 items-center rounded-[4px] border border-dashed border-border px-1.5 text-[10.5px] leading-none font-medium text-muted-foreground"
-          title="Shared base"
-        >
-          <span className="sr-only">Shared base</span>
-          <span aria-hidden="true">Base</span>
-        </span>
-      )}
-    </span>
-  );
-}
-
-function RefPill({ label, description, color, icon: Icon }: TipRef): ReactElement {
-  return (
-    <span
-      className={cn(
-        "relative inline-flex h-[18px] max-w-full min-w-0 items-center gap-1 overflow-hidden rounded-[4px] border-l-[3px] border-current px-1.5 text-[10.5px] leading-none font-semibold",
-        color,
-      )}
-      title={description}
-    >
-      <span aria-hidden="true" className="absolute inset-0 bg-current opacity-20" />
-      <Icon className="relative size-3 shrink-0" aria-hidden="true" />
-      <span className="sr-only">{description}</span>
-      <span className="relative truncate text-foreground" aria-hidden="true">
-        {label}
-      </span>
-    </span>
-  );
-}
-
 function CommitDetails({
   commit,
   color,
+  refGroups,
   nowMs,
   currentLabel,
   targetLabel,
 }: {
   commit: GitHistoryCommit;
   color: string;
+  refGroups: HistoryRefGroup[];
   nowMs: number;
   currentLabel: string;
   targetLabel: string;
@@ -239,17 +231,12 @@ function CommitDetails({
   return (
     <div className="text-xs" data-testid="agent-studio-git-history-details">
       <div className="flex items-center gap-2.5 px-3 pt-3">
-        <span
-          className={cn(
-            "flex size-8 shrink-0 items-center justify-center rounded-full bg-current",
-            color,
-          )}
-          aria-hidden="true"
-        >
-          <span className="text-[11px] font-bold text-white">
-            {authorInitials(commit.authorName)}
-          </span>
-        </span>
+        <AuthorAvatar
+          name={commit.authorName}
+          email={commit.authorEmail}
+          className={cn("size-8 bg-current", color)}
+          initialsClassName="text-[11px] text-white"
+        />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium text-foreground">{commit.authorName}</span>
           <span className="block truncate text-[11px] text-muted-foreground">
@@ -286,6 +273,11 @@ function CommitDetails({
           />
           <span className="min-w-0 truncate">{side}</span>
         </p>
+        {refGroups.length > 0 ? (
+          <p className="min-w-0 truncate text-[11px] text-muted-foreground">
+            {refGroups.flatMap((group) => group.fullNames).join(", ")}
+          </p>
+        ) : null}
         <div className="flex min-w-0 items-center gap-1">
           <code
             className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/80"

@@ -23,6 +23,8 @@ const commit = (
   subject: name,
   message: name,
   authorName: "Ada",
+  authorEmail: "ada@example.invalid",
+  refs: [],
   authorDate: "2026-10-13T14:05:22+02:00",
 });
 

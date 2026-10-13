@@ -13,12 +13,15 @@ import {
   screen,
   waitFor,
   waitForElementToBeRemoved,
+  within,
 } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { refreshGitHistoryQueries } from "@/state/queries/git";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { HISTORY_COLUMNS_STORAGE_KEY, useHistoryColumnsStore } from "./git-history-columns";
 import { GitHistoryView, type GitHistoryViewProps } from "./git-history-view";
 
 const oid = (name: string) => name.padEnd(40, "0");
@@ -38,6 +41,8 @@ const commit = (
   subject: `Subject ${name}`,
   message: `Subject ${name}\n\nBody of ${name}.`,
   authorName: "Ada Lovelace",
+  authorEmail: "ada@example.invalid",
+  refs: [],
   authorDate: "2026-10-13T14:05:22+02:00",
 });
 
@@ -49,7 +54,16 @@ const firstPage: GitHistoryPage = {
     boundaryOids: [BASE],
     aheadBehind: { ahead: 2, behind: 1 },
   },
-  commits: [commit("c2", ["c1"], "current"), commit("t1", ["b0"], "target")],
+  commits: [
+    {
+      ...commit("c2", ["c1"], "current"),
+      refs: [{ name: "feature", kind: "local", isHead: true }],
+    },
+    {
+      ...commit("t1", ["b0"], "target"),
+      refs: [{ name: "origin/main", kind: "remote", isHead: false }],
+    },
+  ],
   nextOffset: 2,
 };
 
@@ -67,16 +81,21 @@ const props = (overrides: Partial<GitHistoryViewProps> = {}): GitHistoryViewProp
   ...overrides,
 });
 
+// The Git panel gives History its tooltip provider.
 const renderHistory = (overrides: Partial<GitHistoryViewProps> = {}) =>
   render(
     <QueryProvider useIsolatedClient>
-      <div style={{ height: 600 }}>
-        <GitHistoryView {...props(overrides)} />
-      </div>
+      <TooltipProvider>
+        <div style={{ height: 600 }}>
+          <GitHistoryView {...props(overrides)} />
+        </div>
+      </TooltipProvider>
     </QueryProvider>,
   );
 
 beforeEach(() => {
+  globalThis.localStorage.removeItem(HISTORY_COLUMNS_STORAGE_KEY);
+  useHistoryColumnsStore.getState().reset();
   historyPage.mockReset();
   historyPage.mockImplementation(async () => firstPage);
   configureShellBridge(createShellBridgeFixture({ client: { gitGetHistoryPage: historyPage } }));
@@ -88,18 +107,19 @@ afterEach(() => {
 });
 
 describe("GitHistoryView", () => {
-  test("shows each commit with its tip marker, body preview, author, and age", async () => {
+  test("shows each commit with its branches, body preview, author photo, and age", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     renderHistory();
 
     expect(await screen.findByText("Subject c2")).toBeTruthy();
     expect(screen.getByText("Subject t1")).toBeTruthy();
     expect(screen.getByText("Body of c2.")).toBeTruthy();
-    expect(screen.getByTitle("Current: feature")).toBeTruthy();
-    expect(screen.getByTitle("Target: origin/main")).toBeTruthy();
     expect(
-      screen.getAllByTestId("agent-studio-git-history-author").map((author) => author.textContent),
-    ).toEqual(["Ada Lovelace", "Ada Lovelace"]);
+      screen.getAllByTestId("agent-studio-git-history-markers").map((marker) => marker.textContent),
+    ).toEqual(["featurefeature (checked out)", "mainorigin/main (target)"]);
+    // The author column starts hidden, and each node shows the author.
+    expect(screen.queryByTestId("agent-studio-git-history-author")).toBeNull();
+    expect(screen.getAllByTestId("agent-studio-git-history-avatar")).toHaveLength(2);
     const ages = screen.getAllByTitle("Ada Lovelace, 2026-10-13 14:05:22 +02:00");
     expect(ages.map((age) => age.getAttribute("datetime"))).toEqual([
       "2026-10-13T14:05:22+02:00",
@@ -113,8 +133,7 @@ describe("GitHistoryView", () => {
     });
   });
 
-  test("folds a second tip on the same commit into a count with the full names", async () => {
-    const branch = "feature/keep-history-subject-visible-on-a-long-current-branch";
+  test("stacks the other branches and tags of a commit and lists them all on hover", async () => {
     historyPage.mockImplementation(async () => ({
       outcome: "page",
       comparison: {
@@ -123,38 +142,120 @@ describe("GitHistoryView", () => {
         boundaryOids: [CURRENT],
         aheadBehind: { ahead: 0, behind: 0 },
       },
-      commits: [commit("c2", ["c1"], "boundary")],
+      commits: [
+        {
+          ...commit("c2", ["c1"], "boundary"),
+          refs: [
+            { name: "feature", kind: "local", isHead: true },
+            { name: "main", kind: "local", isHead: false },
+            { name: "origin/feature", kind: "remote", isHead: false },
+            { name: "origin/main", kind: "remote", isHead: false },
+            { name: "release", kind: "local", isHead: false },
+            { name: "v1.0.0", kind: "tag", isHead: false },
+            { name: "v1.0.1", kind: "tag", isHead: false },
+          ],
+        },
+      ],
       nextOffset: null,
     }));
-    renderHistory({
-      checkout: { name: branch, detached: false, revision: CURRENT },
-      targetLabel: `origin/${branch}`,
-    });
+    renderHistory({ targetLabel: "origin/main" });
 
     expect(await screen.findByText("Subject c2")).toBeTruthy();
     const markers = screen.getByTestId("agent-studio-git-history-markers");
-    expect([...markers.children].map((marker) => marker.getAttribute("title"))).toEqual([
-      `Current: ${branch}`,
-      `Target: origin/${branch}`,
-    ]);
-    expect(markers.textContent).toContain("+1");
+    // The checked-out branch shows its name. Its remote branch shares the same entry.
+    expect(markers.querySelector(".truncate")?.textContent).toBe("feature");
+    const stack = within(markers).getByTestId("agent-studio-git-history-ref-stack");
+    // Two extra refs stack as icons, and the rest show as a count.
+    expect(stack.children).toHaveLength(3);
+    expect(stack.textContent).toBe("+2");
+    expect(markers.textContent).toContain(
+      "feature, origin/feature (checked out); main, origin/main (target); release; v1.0.0; v1.0.1",
+    );
   });
 
-  test("marks a shared base without a tip", async () => {
+  test("shows the initials when the author photo does not load", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    renderHistory();
+
+    await screen.findByText("Subject c2");
+    const [avatar] = screen.getAllByTestId("agent-studio-git-history-avatar");
+    const photo = await waitFor(() => {
+      const image = avatar?.querySelector("img");
+      if (!image) throw new Error("The photo has not loaded its address yet.");
+      return image;
+    });
+    expect(photo.getAttribute("src")).toMatch(
+      /^https:\/\/gravatar\.com\/avatar\/[0-9a-f]{64}\?s=64&d=404$/u,
+    );
+    fireEvent.error(photo);
+    await waitFor(() =>
+      expect(screen.getAllByTestId("agent-studio-git-history-avatar")[0]?.textContent).toBe("AL"),
+    );
+  });
+
+  test("hides, shows, and reorders columns from the header and keeps the choice", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    renderHistory();
+    await screen.findByText("Subject c2");
+    const titles = () =>
+      within(screen.getByTestId("agent-studio-git-history-header"))
+        .getAllByRole("button", { name: / column\./u })
+        .map((title) => title.textContent);
+    expect(titles()).toEqual(["Branch / Tag", "Graph", "Commit message", "Date"]);
+
+    fireEvent.click(screen.getByTestId("agent-studio-git-history-columns-button"));
+    const menu = within(await screen.findByTestId("agent-studio-git-history-columns-menu"));
+    expect(
+      menu.getByRole("menuitemcheckbox", { name: "Commit message" }).getAttribute("aria-disabled"),
+    ).toBe("true");
+    // The menu stays open, so both columns change in one visit.
+    fireEvent.click(menu.getByRole("menuitemcheckbox", { name: "Author" }));
+    fireEvent.click(menu.getByRole("menuitemcheckbox", { name: "Branch / Tag" }));
+    expect(screen.getByTestId("agent-studio-git-history-columns-menu")).toBeTruthy();
+    fireEvent.keyDown(screen.getByTestId("agent-studio-git-history-columns-menu"), {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("agent-studio-git-history-columns-menu")).toBeNull(),
+    );
+    expect(titles()).toEqual(["Graph", "Commit message", "Author", "Date"]);
+    expect(
+      screen.getAllByTestId("agent-studio-git-history-author").map((author) => author.textContent),
+    ).toEqual(["ALAda Lovelace", "ALAda Lovelace"]);
+
+    fireEvent.keyDown(screen.getByTestId("agent-studio-git-history-column-date"), {
+      key: "ArrowLeft",
+      altKey: true,
+    });
+    expect(titles()).toEqual(["Graph", "Commit message", "Date", "Author"]);
+    expect(JSON.parse(globalThis.localStorage.getItem(HISTORY_COLUMNS_STORAGE_KEY) ?? "")).toEqual({
+      order: ["refs", "graph", "message", "date", "author", "sha"],
+      hidden: ["sha", "refs"],
+    });
+  });
+
+  test("mounts only the visible rows of a long History", async () => {
+    const commits = Array.from({ length: 300 }, (_, index) =>
+      commit(`n${index}`, [`n${index + 1}`], "current"),
+    );
     historyPage.mockImplementation(async () => ({
-      ...firstPage,
-      commits: [...firstPage.commits, commit("b0", [], "boundary")],
+      outcome: "page",
+      comparison: {
+        currentTip: commits[0]?.oid ?? CURRENT,
+        targetTip: BASE,
+        boundaryOids: [BASE],
+        aheadBehind: { ahead: 300, behind: 0 },
+      },
+      commits,
       nextOffset: null,
     }));
     renderHistory();
 
-    expect(await screen.findByText("Subject b0")).toBeTruthy();
-    const markers = screen.getAllByTestId("agent-studio-git-history-markers");
-    expect(markers.map((marker) => marker.textContent)).toEqual([
-      "Current: featurefeature",
-      "Target: origin/mainorigin/main",
-      "Shared baseBase",
-    ]);
+    expect(await screen.findByText("Subject n0")).toBeTruthy();
+    const rows = screen.getAllByTestId("agent-studio-git-history-row");
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(60);
+    expect(screen.queryByText("Subject n299")).toBeNull();
   });
 
   test("loads the next page with the pinned tips and keeps rows when it fails", async () => {
@@ -223,9 +324,11 @@ describe("GitHistoryView", () => {
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
-        <div style={{ height: 600 }}>
-          <GitHistoryView {...props()} />
-        </div>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView {...props()} />
+          </div>
+        </TooltipProvider>
       </QueryClientProvider>,
     );
     await screen.findByText(/Older commits could not load/);
@@ -259,7 +362,9 @@ describe("GitHistoryView", () => {
     const queryClient = createQueryClient();
     render(
       <QueryClientProvider client={queryClient}>
-        <GitHistoryView {...props()} />
+        <TooltipProvider>
+          <GitHistoryView {...props()} />
+        </TooltipProvider>
       </QueryClientProvider>,
     );
     await screen.findByText("No commits yet");

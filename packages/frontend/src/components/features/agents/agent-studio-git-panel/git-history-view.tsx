@@ -14,7 +14,13 @@ import { List } from "react-window";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
 import { gitHistoryQueryOptions } from "@/state/queries/git";
+import {
+  historyColumnLeft,
+  useHistoryColumnsStore,
+  visibleHistoryColumns,
+} from "./git-history-columns";
 import { ROW_HEIGHT, useGraphView } from "./git-history-graph";
+import { HistoryColumnsHeader } from "./git-history-header";
 import { type GraphLayout, layoutHistoryGraph } from "./git-history-graph-model";
 import {
   type HistoryFooter,
@@ -184,6 +190,9 @@ function HistoryCommitList({
 }): ReactElement {
   const [measure, rowWidth] = useObservedWidth();
   const { setOffset, scroller, ...graph } = useGraphView(layout.laneCount, rowWidth);
+  const order = useHistoryColumnsStore((state) => state.order);
+  const hidden = useHistoryColumnsStore((state) => state.hidden);
+  const columns = useMemo(() => visibleHistoryColumns({ order, hidden }), [hidden, order]);
   return (
     <div
       ref={measure}
@@ -191,6 +200,7 @@ function HistoryCommitList({
       data-testid="agent-studio-git-history"
     >
       {refreshFailure}
+      <HistoryColumnsHeader columns={columns} graphWidth={graph.viewWidth} />
       <List
         aria-label={`Commits of ${currentLabel} compared with ${targetLabel}`}
         className="h-0 min-h-0 flex-1 overflow-x-hidden"
@@ -206,20 +216,24 @@ function HistoryCommitList({
           targetLabel,
           footer,
           nowMs: Date.now(),
+          columns,
         }}
         overscanCount={8}
         onRowsRendered={({ stopIndex }) => {
           if (stopIndex >= layout.rows.length - 10 && footer.kind === "more") footer.load();
         }}
       />
-      {graph.viewWidth < graph.width ? (
+      {columns.includes("graph") && graph.viewWidth < graph.width ? (
         <div
           ref={scroller}
           role="region"
           aria-label="Commit graph lanes"
           tabIndex={0}
           className="shrink-0 overflow-x-auto overflow-y-hidden border-t border-border/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          style={{ width: graph.viewWidth }}
+          style={{
+            width: graph.viewWidth,
+            marginLeft: historyColumnLeft(columns, "graph", graph.viewWidth, rowWidth),
+          }}
           onScroll={(event) => setOffset(event.currentTarget.scrollLeft)}
           data-testid="agent-studio-git-history-graph-scroll"
         >
