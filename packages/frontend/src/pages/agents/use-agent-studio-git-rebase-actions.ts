@@ -6,6 +6,7 @@ import { host } from "@/state/operations/shared/host";
 import {
   type GitActionKind,
   type RefreshGitDiffData,
+  refreshAfterGitAction,
   toConflictMessage,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
@@ -108,7 +109,11 @@ export function useAgentStudioGitRebaseActions({
           const message = toConflictMessage(result.conflictedFiles, "pull_rebase");
           captureFreshConflict(conflict);
           toast.error("Pull requires conflict resolution", { description: message });
-          await refreshDiffData("soft");
+          const updateFailure = await refreshAfterGitAction(
+            refreshDiffData,
+            "Git stopped the pull at conflicts",
+          );
+          if (updateFailure && isCurrentContext()) setRebaseError(updateFailure);
           return;
         }
 
@@ -125,7 +130,8 @@ export function useAgentStudioGitRebaseActions({
         } else {
           toast.success("Pulled from upstream");
         }
-        await refreshDiffData("soft");
+        const updateFailure = await refreshAfterGitAction(refreshDiffData, "The pull succeeded");
+        if (updateFailure && isCurrentContext()) setRebaseError(updateFailure);
       } catch (error) {
         const message = toErrorMessage(error, "Pull failed.");
         if (!isCurrentContext()) return;
@@ -193,12 +199,17 @@ export function useAgentStudioGitRebaseActions({
           const message = toConflictMessage(result.conflictedFiles, "rebase");
           captureFreshConflict(conflict);
           toast.error("Rebase requires conflict resolution", { description: message });
-          await refreshDiffData("soft");
+          const updateFailure = await refreshAfterGitAction(
+            refreshDiffData,
+            "Git stopped the rebase at conflicts",
+          );
+          if (updateFailure && isCurrentContext()) setRebaseError(updateFailure);
           return;
         }
 
         clearActionErrors();
-        await refreshDiffData("soft");
+        const updateFailure = await refreshAfterGitAction(refreshDiffData, "The rebase succeeded");
+        if (updateFailure && isCurrentContext()) setRebaseError(updateFailure);
       } catch (error) {
         if (isCurrentContext()) setRebaseError(toErrorMessage(error, fallbackError));
       } finally {

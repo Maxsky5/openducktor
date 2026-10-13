@@ -92,9 +92,12 @@ A confirmed deleted task keeps an empty list while a view observes it. Later rea
 | Branches | 60 sec |
 | Current branch | 60 sec |
 | Worktree status | 0 |
-| Worktree status summary | 0 |
+| Local changes | 0 |
+| Git History pages | Infinity, invalidated by refresh and Git actions |
 
-Use a zero stale time for general worktree status reads. Session Git panels reuse completed comparison and status reads for the same repository, directory, branch, target, and scope. Session activation does not refresh these reads. Manual refresh, file events, Git actions, and focus refresh check Git and update or invalidate the cache. Cancel unfinished status reads when their view ends. Keep view guards separate from cache keys so late reads cannot enter a new view. An unknown branch shows a pending or unavailable label. Only a completed read can show a detached branch.
+History uses one infinite query for each directory, checkout, and target reference. Each later page sends the branch tips of the first page, so a moved tip fails the page instead of mixing two graphs. Refresh and Git actions invalidate History for the directory.
+
+Use a zero stale time for general worktree status reads. Session Git panels observe local changes and Branch changes with an infinite stale time, so a return to the same repository, directory, branch, target, and scope shows the cached result. Session activation does not refresh these reads. Manual refresh, file events, Git actions, and focus refresh check Git and read again or invalidate the cache. Stage, Unstage, and Discard return the local changes after the write. The panel cancels an older unfinished local read, stores the result with `setQueryData`, and invalidates Branch changes, because the index can change how they list a file. These changes keep History, because they make no commit. Cancel unfinished status reads when their context ends. A closed panel keeps them. Keep view guards separate from cache keys so late reads cannot enter a new view. An unknown branch shows a pending or unavailable label. Only a completed read can show a detached branch.
 
 Query modules: `checks.ts`, `filesystem.ts`, and `git.ts`.
 

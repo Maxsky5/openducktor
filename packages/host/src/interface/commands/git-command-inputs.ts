@@ -1,4 +1,9 @@
 import {
+  gitChangeSelectionRequestSchema,
+  gitCommitStagedRequestSchema,
+  gitCurrentBranchSchema,
+  gitHistoryPageRequestSchema,
+  gitLocalChangesRequestSchema,
   gitReadContextSchema,
   type GitResetWorktreeSelectionRequest,
   gitConflictOperationSchema,
@@ -29,6 +34,7 @@ import {
   type HostCommandArgs,
   optionalBoolean,
   optionalString,
+  parseCommandInput,
   requireParsedRecord,
   requireString,
 } from "./command-inputs";
@@ -136,8 +142,29 @@ export const parseGitCommitAllInput = (input: HostCommandArgs): GitCommitAllInpu
     "workingDir",
   );
 
-  return workingDir ? { repoPath, message, workingDir } : { repoPath, message };
+  const result: GitCommitAllInput = workingDir
+    ? { repoPath, message, workingDir }
+    : { repoPath, message };
+  if (record.expectedBranch !== undefined && record.expectedBranch !== null) {
+    const parsed = gitCurrentBranchSchema.safeParse(record.expectedBranch);
+    if (!parsed.success)
+      throw new HostValidationError({ field: "expectedBranch", message: parsed.error.message });
+    result.expectedBranch = parsed.data;
+  }
+  return result;
 };
+
+export const parseGitLocalChangesInput = (input: HostCommandArgs) =>
+  parseCommandInput(gitLocalChangesRequestSchema, input, "git_get_local_changes");
+
+export const parseGitChangeSelectionInput = (input: HostCommandArgs) =>
+  parseCommandInput(gitChangeSelectionRequestSchema, input, "git_change_selection");
+
+export const parseGitCommitStagedInput = (input: HostCommandArgs) =>
+  parseCommandInput(gitCommitStagedRequestSchema, input, "git_commit_staged");
+
+export const parseGitHistoryPageInput = (input: HostCommandArgs) =>
+  parseCommandInput(gitHistoryPageRequestSchema, input, "git_get_history_page");
 
 export const parseGitPushBranchInput = (input: HostCommandArgs): GitPushBranchInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), "Git push input");

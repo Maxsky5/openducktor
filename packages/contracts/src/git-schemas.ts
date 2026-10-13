@@ -435,6 +435,23 @@ export const fileDiffSchema = z.object({
 });
 export type FileDiff = z.infer<typeof fileDiffSchema>;
 
+/**
+ * The kind of a Git file change. Runtime file edits keep the open `FileDiff` type, because
+ * runtimes report them, but Git snapshots use only these kinds.
+ */
+export const gitFileDiffTypeSchema = z.enum([
+  "added",
+  "modified",
+  "deleted",
+  "renamed",
+  "submodule",
+]);
+export type GitFileDiffType = z.infer<typeof gitFileDiffTypeSchema>;
+
+/** A file change in a Git snapshot, such as local changes or Branch changes. */
+export const gitFileDiffSchema = fileDiffSchema.extend({ type: gitFileDiffTypeSchema });
+export type GitFileDiff = z.infer<typeof gitFileDiffSchema>;
+
 /** Full file content emitted by runtime adapters when the tool contract has no diff. */
 export const fileContentSchema = z.object({
   file: z.string(),
@@ -499,7 +516,7 @@ export type GitWorktreeStatusSnapshot = z.infer<typeof gitWorktreeStatusSnapshot
 export const gitWorktreeStatusSchema = z.object({
   currentBranch: gitCurrentBranchSchema,
   fileStatuses: z.array(fileStatusSchema),
-  fileDiffs: z.array(fileDiffSchema),
+  fileDiffs: z.array(gitFileDiffSchema),
   targetAheadBehind: commitsAheadBehindSchema,
   upstreamAheadBehind: gitUpstreamAheadBehindSchema,
   gitConflict: z.preprocess(
@@ -559,12 +576,175 @@ export const gitResetWorktreeSelectionResultSchema = z.object({
 });
 export type GitResetWorktreeSelectionResult = z.infer<typeof gitResetWorktreeSelectionResultSchema>;
 
+const optionalWorkingDirSchema = z.preprocess(
+  (value) => (value === null ? undefined : value),
+  z.string().optional(),
+);
+
+/** Staged content is HEAD to index. Unstaged content is index to working files. */
+export const gitChangeGroupSchema = z.enum(["unstaged", "staged"]);
+export type GitChangeGroup = z.infer<typeof gitChangeGroupSchema>;
+
+export const gitLocalChangeGroupSchema = z.object({
+  fileStatuses: z.array(fileStatusSchema),
+  fileDiffs: z.array(gitFileDiffSchema),
+  snapshot: gitResetSnapshotSchema,
+});
+export type GitLocalChangeGroup = z.infer<typeof gitLocalChangeGroupSchema>;
+
+export const gitLocalChangesRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: optionalWorkingDirSchema,
+  readContext: gitReadContextSchema.optional(),
+});
+export type GitLocalChangesRequest = z.infer<typeof gitLocalChangesRequestSchema>;
+
+export const gitLocalChangesSchema = z.object({
+  currentBranch: gitCurrentBranchSchema,
+  /** One entry for each changed path, in the shape of the HEAD worktree status. */
+  fileStatuses: z.array(fileStatusSchema),
+  unstaged: gitLocalChangeGroupSchema,
+  staged: gitLocalChangeGroupSchema,
+  /** Unresolved paths. They stay out of both groups, and their diff compares HEAD with the file. */
+  conflicted: z.object({
+    fileStatuses: z.array(fileStatusSchema),
+    fileDiffs: z.array(gitFileDiffSchema),
+  }),
+  upstreamAheadBehind: gitUpstreamAheadBehindSchema,
+  gitConflict: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    gitConflictSchema.optional(),
+  ),
+  snapshot: gitWorktreeStatusSnapshotSchema,
+});
+export type GitLocalChanges = z.infer<typeof gitLocalChangesSchema>;
+
+export const gitChangeActionSchema = z.enum(["stage", "unstage", "discard"]);
+export type GitChangeAction = z.infer<typeof gitChangeActionSchema>;
+
+export const gitChangeSelectionSchema = z.union([
+  gitResetWorktreeSelectionSchema,
+  z.object({ kind: z.literal("all") }),
+]);
+export type GitChangeSelection = z.infer<typeof gitChangeSelectionSchema>;
+
+export const gitChangeSelectionRequestSchema = z
+  .object({
+    repoPath: z.string(),
+    workingDir: optionalWorkingDirSchema,
+    expectedBranch: gitCurrentBranchSchema,
+    snapshots: z.object({
+      unstaged: gitResetSnapshotSchema,
+      staged: gitResetSnapshotSchema,
+    }),
+    action: gitChangeActionSchema,
+    group: gitChangeGroupSchema,
+    selection: gitChangeSelectionSchema,
+  })
+  .superRefine((request, context) => {
+    const issue = (path: string, message: string): void => {
+      context.addIssue({ code: "custom", message, path: [path] });
+    };
+    if (request.action === "stage" && request.group !== "unstaged") {
+      issue("group", "Stage applies only to unstaged changes.");
+    }
+    if (request.action === "unstage" && request.group !== "staged") {
+      issue("group", "Unstage applies only to staged changes.");
+    }
+    if (request.action === "discard" && request.selection.kind === "all") {
+      issue("selection", "Discard applies to one file or one chunk.");
+    }
+  });
+export type GitChangeSelectionRequest = z.infer<typeof gitChangeSelectionRequestSchema>;
+
+/**
+ * The paths that a change wrote, and the local changes that Git shows after it. The panel shows
+ * them at once, so it needs no second read before the next change.
+ */
+export const gitChangeSelectionResultSchema = gitResetWorktreeSelectionResultSchema.extend({
+  localChanges: gitLocalChangesSchema,
+});
+export type GitChangeSelectionResult = z.infer<typeof gitChangeSelectionResultSchema>;
+
 export const gitCommitAllRequestSchema = z.object({
   repoPath: z.string(),
-  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
+  workingDir: optionalWorkingDirSchema,
   message: z.string().trim().min(1),
+  /** When present, the host commits only if the checkout still matches. */
+  expectedBranch: gitCurrentBranchSchema.optional(),
 });
 export type GitCommitAllRequest = z.infer<typeof gitCommitAllRequestSchema>;
+
+export const gitCommitStagedRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: optionalWorkingDirSchema,
+  message: z.string().trim().min(1),
+  expectedBranch: gitCurrentBranchSchema,
+  /** The staged content that the user reviewed. Other staged content fails the commit. */
+  stagedSnapshot: gitResetSnapshotSchema,
+});
+export type GitCommitStagedRequest = z.infer<typeof gitCommitStagedRequestSchema>;
+
+const gitObjectIdSchema = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/);
+
+export const gitHistoryPageRequestSchema = z.object({
+  repoPath: z.string(),
+  workingDir: optionalWorkingDirSchema,
+  targetReference: z.string().trim().min(1),
+  expectedBranch: gitCurrentBranchSchema,
+  /** Later pages keep the tips of the first page. */
+  page: z
+    .object({
+      currentTip: gitObjectIdSchema,
+      targetTip: gitObjectIdSchema,
+      offset: z.number().int().positive(),
+    })
+    .optional(),
+});
+export type GitHistoryPageRequest = z.infer<typeof gitHistoryPageRequestSchema>;
+
+export const gitHistoryCommitMembershipSchema = z.enum(["current", "target", "boundary"]);
+export type GitHistoryCommitMembership = z.infer<typeof gitHistoryCommitMembershipSchema>;
+
+export const gitHistoryCommitSchema = z.object({
+  oid: gitObjectIdSchema,
+  parentOids: z.array(gitObjectIdSchema),
+  /** Parents older than the shared boundary. The graph ends these edges at the comparison limit. */
+  outsideParentOids: z.array(gitObjectIdSchema),
+  membership: gitHistoryCommitMembershipSchema,
+  subject: z.string(),
+  message: z.string(),
+  authorName: z.string(),
+  /** Strict ISO 8601 with the author's timezone offset. */
+  authorDate: z.string().min(1),
+});
+export type GitHistoryCommit = z.infer<typeof gitHistoryCommitSchema>;
+
+export const gitHistoryComparisonSchema = z.object({
+  currentTip: gitObjectIdSchema,
+  targetTip: gitObjectIdSchema,
+  boundaryOids: z.array(gitObjectIdSchema).min(1),
+  aheadBehind: commitsAheadBehindSchema,
+});
+export type GitHistoryComparison = z.infer<typeof gitHistoryComparisonSchema>;
+
+export const gitHistoryPageSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("page"),
+    comparison: gitHistoryComparisonSchema,
+    commits: z.array(gitHistoryCommitSchema),
+    /** `null` confirms that the comparison has no more commits. */
+    nextOffset: z.number().int().positive().nullable(),
+  }),
+  z.object({ outcome: z.literal("no_commits") }),
+  z.object({
+    outcome: z.literal("no_common_ancestor"),
+    currentTip: gitObjectIdSchema,
+    targetTip: gitObjectIdSchema,
+    shallow: z.boolean(),
+  }),
+]);
+export type GitHistoryPage = z.infer<typeof gitHistoryPageSchema>;
 
 export const gitCommitAllResultSchema = z.discriminatedUnion("outcome", [
   z.object({

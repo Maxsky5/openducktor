@@ -15,7 +15,7 @@ import {
 import { readFileTreeContext } from "../../infrastructure/git/git-file-tree-context";
 import { createGitReadCapture } from "../../infrastructure/git/git-read-capture";
 import type { GitReadContext, GitCurrentBranch } from "@openducktor/contracts";
-import type { GitFileStatus, GitChangedFile } from "../../ports/git-port";
+import type { GitFileStatus, GitChangedFile, GitPortError } from "../../ports/git-port";
 import { loadChangedFiles } from "../../infrastructure/git/git-changed-files";
 import {
   createDefaultGitRunner,
@@ -27,6 +27,9 @@ import {
   runGitAllowFailure,
 } from "../../infrastructure/git/git-command-runner";
 import { buildFileDiffs, loadDiffPayload } from "../../infrastructure/git/git-diff";
+import { readHistoryPage } from "../../infrastructure/git/git-history";
+import { changeLocalSelection } from "../../infrastructure/git/git-local-change-selection";
+import { commitStaged, loadLocalChanges } from "../../infrastructure/git/git-local-changes";
 import {
   isAncestor,
   isMergeIncluded,
@@ -44,6 +47,7 @@ import {
   parseAheadBehind,
   listBranchesUnchecked,
   parseRemoteNames,
+  readStatusPorcelain,
 } from "../../infrastructure/git/git-status";
 import {
   abortConflict,
@@ -161,6 +165,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
   const captureStatus = createGitReadCapture<GitFileStatus[]>();
   const captureBranch = createGitReadCapture<GitCurrentBranch>();
   const captureChanges = createGitReadCapture<GitChangedFile[]>();
+  const captureStatusOutput = createGitReadCapture<string>();
   const captureIdentity = (dir: string) =>
     runGit(runner, dir, ["rev-parse", "--absolute-git-dir"]).pipe(
       Effect.flatMap((output) =>
@@ -170,30 +175,27 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         }),
       ),
     );
-  const status = (dir: string, context?: GitReadContext) =>
-    Effect.gen(function* () {
-      if (!context) return yield* getStatusUnchecked(runner, dir);
-      return yield* captureStatus(
-        yield* captureIdentity(dir),
-        context,
-        getStatusUnchecked(runner, dir),
-      );
-    });
-  const branch = (dir: string, context?: GitReadContext) =>
-    Effect.gen(function* () {
-      if (!context) return yield* getCurrentBranchUnchecked(runner, dir);
-      return yield* captureBranch(
-        yield* captureIdentity(dir),
-        context,
-        getCurrentBranchUnchecked(runner, dir),
-      );
-    });
+  // One refresh ID shares one read of each kind for the same repository.
+  const captured =
+    <A>(
+      capture: ReturnType<typeof createGitReadCapture<A>>,
+      read: (dir: string) => Effect.Effect<A, GitPortError>,
+    ) =>
+    (dir: string, context?: GitReadContext) =>
+      Effect.gen(function* () {
+        if (!context) return yield* read(dir);
+        return yield* capture(yield* captureIdentity(dir), context, read(dir));
+      });
+  const status = captured(captureStatus, (dir) => getStatusUnchecked(runner, dir));
+  const branch = captured(captureBranch, (dir) => getCurrentBranchUnchecked(runner, dir));
+  const statusOutput = captured(captureStatusOutput, (dir) => readStatusPorcelain(runner, dir));
   return {
     releaseReadCaptures: () =>
       Effect.sync(() => {
         captureStatus.clear();
         captureBranch.clear();
         captureChanges.clear();
+        captureStatusOutput.clear();
       }),
     getFileTreeContext: (dir, target) => readFileTreeContext(runner, dir, target),
     listFileRegions(dir, regions) {
@@ -365,6 +367,18 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         status: () => status(workingDirectory, context),
       });
     },
+    getLocalChanges(workingDirectory, context) {
+      return loadLocalChanges(runner, workingDirectory, {
+        branch: () => branch(workingDirectory, context),
+        statusOutput: () => statusOutput(workingDirectory, context),
+      });
+    },
+    changeSelection(workingDirectory, changes, input) {
+      return changeLocalSelection(runner, workingDirectory, changes, input);
+    },
+    getHistoryPage(workingDirectory, input) {
+      return readHistoryPage(runner, workingDirectory, input);
+    },
     createWorktree(repoPath, worktreePath, branch, createBranch, startPoint) {
       return createWorktree(runner, repoPath, worktreePath, branch, createBranch, startPoint);
     },
@@ -447,6 +461,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     inspectPublication(target) {
       return inspectPublication(runner, target);
+    },
+    commitStaged(workingDirectory, message) {
+      return commitStaged(runner, workingDirectory, message);
     },
     pushBranch(workingDirectory, branch, options) {
       return pushBranch(runner, workingDirectory, branch, options);

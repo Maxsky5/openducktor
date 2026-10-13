@@ -1928,6 +1928,82 @@ describe("HostClient", () => {
     expect(calls[0]?.command).toBe("git_reset_worktree_selection");
   });
 
+  test("git change selection, staged commit, and history send parsed requests", async () => {
+    const branch = { name: "feature", detached: false, revision: "a".repeat(40) };
+    const snapshot = {
+      hashVersion: 2,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    };
+    const localChanges = {
+      currentBranch: branch,
+      fileStatuses: [],
+      unstaged: { fileStatuses: [], fileDiffs: [], snapshot },
+      staged: { fileStatuses: [], fileDiffs: [], snapshot },
+      conflicted: { fileStatuses: [], fileDiffs: [] },
+      upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
+      snapshot: {
+        effectiveWorkingDir: "/repo",
+        targetBranch: "HEAD",
+        diffScope: "uncommitted",
+        observedAtMs: 1,
+        ...snapshot,
+      },
+    };
+    const { client, calls } = createClient((command) => {
+      if (command === "git_change_selection") {
+        return { affectedPaths: ["src/main.ts"], localChanges };
+      }
+      if (command === "git_commit_staged") return { outcome: "no_changes", output: "none" };
+      if (command === "git_commit_all") return { outcome: "no_changes", output: "none" };
+      if (command === "git_get_history_page") return { outcome: "no_commits" };
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    await expect(
+      client.gitChangeSelection({
+        repoPath: "/repo",
+        expectedBranch: branch,
+        snapshots: { unstaged: snapshot, staged: snapshot },
+        action: "stage",
+        group: "staged",
+        selection: { kind: "all" },
+      }),
+    ).rejects.toThrow("Stage applies only to unstaged changes.");
+    expect(calls).toHaveLength(0);
+
+    const changed = await client.gitChangeSelection({
+      repoPath: "/repo",
+      expectedBranch: branch,
+      snapshots: { unstaged: snapshot, staged: snapshot },
+      action: "discard",
+      group: "staged",
+      selection: { kind: "hunk", filePath: "src/main.ts", hunkIndex: 0 },
+    });
+    // The result keeps the local changes that Git shows after the write.
+    expect(changed.localChanges.staged.snapshot).toEqual(snapshot);
+    await client.gitCommitStaged({
+      repoPath: "/repo",
+      message: "Ship",
+      expectedBranch: branch,
+      stagedSnapshot: snapshot,
+    });
+    await client.gitCommitAll("/repo", "Ship all", "/worktree", branch);
+    await client.gitGetHistoryPage({
+      repoPath: "/repo",
+      targetReference: "refs/remotes/origin/main",
+      expectedBranch: branch,
+    });
+
+    expect(calls.map((call) => [call.command, call.args?.workingDir])).toEqual([
+      ["git_change_selection", null],
+      ["git_commit_staged", null],
+      ["git_commit_all", "/worktree"],
+      ["git_get_history_page", null],
+    ]);
+    expect(calls[2]?.args).toMatchObject({ expectedBranch: branch });
+  });
+
   test("git worktree status rejects malformed hash metadata payloads", async () => {
     const { client } = createClient((command) => {
       if (command === "git_get_worktree_status") {

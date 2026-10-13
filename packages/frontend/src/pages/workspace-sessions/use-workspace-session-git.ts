@@ -34,7 +34,7 @@ export function useWorkspaceSessionGit({
     activeBranch,
   });
   const { refreshBranch } = branch;
-  const refreshRef = useRef<((scope: "git" | "all") => Promise<void>) | null>(null);
+  const refreshRef = useRef<(() => Promise<void>) | null>(null);
   const choice = useWorkspaceComparisonChoice({
     workspaceId: workspace.workspaceId,
     sessionId: record.id,
@@ -51,25 +51,20 @@ export function useWorkspaceSessionGit({
     !choice.target && record.executionTarget.kind === "local_worktree" && repoConfig.isError
       ? `Could not read the default target branch: ${errorMessage(repoConfig.error)}`
       : null;
-  const refreshAfterChange = useCallback(
-    (scope: "git" | "all") => {
-      if (isWorktree || scope === "all") refreshBranch();
-      const refresh = isPanelOpen ? refreshRef.current : null;
-      if (workingDirectory && (scope === "git" || !refresh)) {
-        void invalidateGitWorkingDirectoryQueries(
-          queryClient,
-          workspace.repoPath,
-          workingDirectory,
-        );
-      }
-      if (workingDirectory && scope === "all" && !refresh) {
-        // File queries render their own refresh errors.
-        void refreshWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
-      }
-      void refresh?.(scope);
-    },
-    [isWorktree, isPanelOpen, queryClient, refreshBranch, workingDirectory, workspace.repoPath],
-  );
+  /** Refreshes Git and files after a file save or a tool change. */
+  const refreshAfterChange = useCallback(() => {
+    refreshBranch();
+    const refresh = isPanelOpen ? refreshRef.current : null;
+    if (refresh) {
+      // The panel shows a failed read.
+      void refresh().catch(() => {});
+      return;
+    }
+    if (!workingDirectory) return;
+    void invalidateGitWorkingDirectoryQueries(queryClient, workspace.repoPath, workingDirectory);
+    // File queries render their own refresh errors.
+    void refreshWorkspaceFileQueries(queryClient, workingDirectory).catch(() => {});
+  }, [isPanelOpen, queryClient, refreshBranch, workingDirectory, workspace.repoPath]);
   const { refetch: refetchConfig } = repoConfig;
   const retryTarget = useCallback(async () => {
     const result = await refetchConfig();
@@ -83,6 +78,7 @@ export function useWorkspaceSessionGit({
     hasRootBranch: branch.rootBranch.data !== undefined || activeBranch !== null,
     branchError: branchRead.isError ? errorMessage(branchRead.error) : null,
     target,
+    targetChoice: choice.target ?? null,
     targetError,
     applyTarget: choice.applyTarget,
     retryTarget,

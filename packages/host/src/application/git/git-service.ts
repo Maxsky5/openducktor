@@ -1,6 +1,6 @@
 import {
   commitsAheadBehindSchema,
-  fileDiffSchema,
+  gitFileDiffSchema,
   fileStatusSchema,
   gitBranchSchema,
   gitCommitAllResultSchema,
@@ -30,6 +30,7 @@ import {
   validateWorktreePathSegments,
 } from "./git-service-inputs";
 import type { GitService } from "./git-service-types";
+import { createGitLocalChangeMethods, requireCheckout } from "./git-local-change-service";
 import {
   createWorktreeSnapshot,
   hashWorktreeDiffPayload,
@@ -41,9 +42,11 @@ import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
 export type { CreateGitServiceInput } from "./git-service-inputs";
 export type { GitService, GitServiceError } from "./git-service-types";
+
 export const createGitService = (input: GitPort | CreateGitServiceInput): GitService => {
   const { gitPort, settingsConfig, worktreeFiles } = normalizeCreateGitServiceInput(input);
   return {
+    ...createGitLocalChangeMethods(gitPort),
     canonicalizePath(input) {
       return gitPort.canonicalizePath(input.workingDir ?? input.repoPath);
     },
@@ -136,7 +139,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
         const diffs = yield* gitPort.getDiff(workingDirectory, targetBranch);
         return yield* Effect.try({
-          try: () => diffs.map((diff) => fileDiffSchema.parse(diff)),
+          try: () => diffs.map((diff) => gitFileDiffSchema.parse(diff)),
           catch: (cause) =>
             new HostValidationError({
               message: cause instanceof Error ? cause.message : String(cause),
@@ -415,6 +418,9 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
       return Effect.gen(function* () {
         const { repoPath, message, workingDir } = input;
         const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        if (input.expectedBranch) {
+          yield* requireCheckout(gitPort, workingDirectory, input.expectedBranch);
+        }
         const result = yield* gitPort.commitAll(workingDirectory, message);
         return yield* Effect.try({
           try: () => gitCommitAllResultSchema.parse(result),

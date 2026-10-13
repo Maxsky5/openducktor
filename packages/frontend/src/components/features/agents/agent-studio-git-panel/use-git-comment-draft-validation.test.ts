@@ -1,14 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import type { DiffScope } from "@/features/agent-studio-git";
-import {
-  applyFullSnapshot,
-  applyScopeError,
-  applySummarySnapshot,
-  createInitialDiffBatchState,
-  type ScopeSummaryFields,
-} from "@/features/agent-studio-git/model/diff-data-model";
+import { toFailedScopeState } from "@/features/agent-studio-git/model/scope-state";
 import type { AgentStudioGitPanelModel } from "./types";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -44,7 +38,7 @@ const createMemoryStorage = (): TestStorage => {
   };
 };
 
-const createFileDiff = (file: string): FileDiff => ({
+const createFileDiff = (file: string): GitFileDiff => ({
   file,
   type: "modified",
   additions: 1,
@@ -113,6 +107,7 @@ const setScopeState = (
 
 const createModel = (owner: InlineCommentOwner): AgentStudioGitPanelModel => ({
   ...createBuildToolsSnapshotFixture().diffData,
+  refresh: async () => {},
   subjectKey: "chat",
   targetBranch: "main",
   commentOwner: owner,
@@ -234,72 +229,51 @@ for (const owner of [
     );
 
     test.each(["target", "uncommitted"] satisfies DiffScope[])(
-      "keeps restored %s comments through other-scope and summary reads until full recovery",
+      "keeps restored %s comments through a failed read and other-scope reads until recovery",
       async (failedScope) => {
         const storage = createMemoryStorage();
         setCommentStorage(storage);
         seedStoredComments([createCommentInput({ diffScope: failedScope })]);
         reloadCommentStore(storage);
         const savedPayload = storage.getItem(COMMENT_OWNER_KEY);
-        let batch = applyScopeError({
-          state: createInitialDiffBatchState(),
-          scope: failedScope,
-          mode: "full",
-          error: "Failed to read the diff.",
-        });
-        const model = (): AgentStudioGitPanelModel => ({
+        const otherScope = failedScope === "target" ? "uncommitted" : "target";
+        const model = (
+          scopes: Partial<
+            Record<DiffScope, AgentStudioGitPanelModel["scopeStatesByScope"]["target"]>
+          >,
+        ): AgentStudioGitPanelModel => ({
           ...createModel(owner),
-          loadedScopesByScope: batch.loadedByScope,
-          scopeStatesByScope: batch.byScope,
+          loadedScopesByScope: {
+            target: scopes.target !== undefined,
+            uncommitted: scopes.uncommitted !== undefined,
+          },
+          scopeStatesByScope: {
+            target: scopes.target ?? createEmptyScopeStateFixture(),
+            uncommitted: scopes.uncommitted ?? createEmptyScopeStateFixture(),
+          },
         });
-        const harness = createHookHarness(useGitCommentDraftValidation, model());
+        const failed = toFailedScopeState(
+          createEmptyScopeStateFixture(),
+          "Failed to read the diff.",
+        );
+        const harness = createHookHarness(
+          useGitCommentDraftValidation,
+          model({ [failedScope]: failed }),
+        );
         await harness.mount();
         try {
-          const otherScope = failedScope === "target" ? "uncommitted" : "target";
-          batch = applyFullSnapshot({
-            state: batch,
-            scope: otherScope,
-            snapshot: createEmptyScopeStateFixture(),
-            requestSequence: 2,
-            latestSharedSequence: 0,
-          }).nextState;
-          await harness.update(model());
+          await harness.update(
+            model({ [failedScope]: failed, [otherScope]: createEmptyScopeStateFixture() }),
+          );
           expect(pendingCommentPaths()).toEqual(["src/file.ts"]);
           expect(storage.getItem(COMMENT_OWNER_KEY)).toBe(savedPayload);
 
-          const summaryFields: ScopeSummaryFields = {
-            branch: "main",
-            gitConflict: null,
-            uncommittedFileCount: 0,
-            commitsAheadBehind: null,
-            upstreamAheadBehind: null,
-            upstreamStatus: "tracking",
-            error: null,
-            hashVersion: 1,
-            statusHash: "status-1",
-            diffHash: "diff-1",
-          };
-          for (const [index, scope] of ([otherScope, failedScope] as const).entries()) {
-            batch = applySummarySnapshot({
-              state: batch,
-              scope,
-              summaryFields,
-              requestSequence: 3 + index,
-              latestSharedSequence: 2 + index,
-            }).nextState;
-            await harness.update(model());
-            expect(pendingCommentPaths()).toEqual(["src/file.ts"]);
-            expect(storage.getItem(COMMENT_OWNER_KEY)).toBe(savedPayload);
-          }
-
-          batch = applyFullSnapshot({
-            state: batch,
-            scope: failedScope,
-            snapshot: createEmptyScopeStateFixture(),
-            requestSequence: 5,
-            latestSharedSequence: 4,
-          }).nextState;
-          await harness.update(model());
+          await harness.update(
+            model({
+              [failedScope]: createEmptyScopeStateFixture(),
+              [otherScope]: createEmptyScopeStateFixture(),
+            }),
+          );
           expect(pendingCommentPaths()).toEqual([]);
           expect(storage.getItem(COMMENT_OWNER_KEY)).toBeNull();
         } finally {

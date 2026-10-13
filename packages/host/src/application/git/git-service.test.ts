@@ -1,6 +1,6 @@
 import type {
   CommitsAheadBehind,
-  FileDiff,
+  GitFileDiff,
   FileStatus,
   GitBranch,
   GitCommitAllResult,
@@ -42,7 +42,7 @@ type FakeGitPortInput = {
   currentBranches?: Record<string, GitCurrentBranch>;
   remotes?: Record<string, GitRemote[]>;
   statuses?: Record<string, FileStatus[]>;
-  diffs?: Record<string, FileDiff[]>;
+  diffs?: Record<string, GitFileDiff[]>;
   worktreeStatuses?: Record<string, GitWorktreeStatusData>;
   worktreeStatusSummaries?: Record<string, GitWorktreeStatusSummaryData>;
   switchedBranches?: Record<string, GitCurrentBranch>;
@@ -533,6 +533,18 @@ const createFakeGitPort = ({
             cause: cause,
           }),
       });
+    },
+    getLocalChanges() {
+      return Effect.die(new Error("unexpected local changes read"));
+    },
+    changeSelection() {
+      return Effect.die(new Error("unexpected change selection"));
+    },
+    getHistoryPage() {
+      return Effect.die(new Error("unexpected history read"));
+    },
+    commitStaged() {
+      return Effect.die(new Error("unexpected staged commit"));
     },
     abortConflict(workingDir, operation) {
       return Effect.tryPromise({

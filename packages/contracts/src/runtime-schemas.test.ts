@@ -24,6 +24,7 @@ import {
   gitRebaseBranchResultSchema,
   gitResetWorktreeSelectionRequestSchema,
   gitResetWorktreeSelectionResultSchema,
+  gitChangeSelectionResultSchema,
   gitUpstreamAheadBehindSchema,
   gitWorktreeStatusSchema,
   gitWorktreeStatusSnapshotSchema,
@@ -809,6 +810,39 @@ describe("runtime schemas", () => {
     ).toThrow();
 
     expect(() => gitResetWorktreeSelectionResultSchema.parse({ affectedPaths: [] })).toThrow();
+  });
+
+  test("git change selection results carry the local changes after the write", () => {
+    const snapshot = {
+      hashVersion: 2,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    };
+    const localChanges = {
+      currentBranch: { name: "feature", detached: false },
+      fileStatuses: [],
+      unstaged: { fileStatuses: [], fileDiffs: [], snapshot },
+      staged: { fileStatuses: [], fileDiffs: [], snapshot },
+      conflicted: { fileStatuses: [], fileDiffs: [] },
+      upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
+      snapshot: {
+        effectiveWorkingDir: "/repo",
+        targetBranch: "HEAD",
+        diffScope: "uncommitted",
+        observedAtMs: 1,
+        ...snapshot,
+      },
+    };
+
+    const result = gitChangeSelectionResultSchema.parse({
+      affectedPaths: ["src/main.ts"],
+      localChanges,
+    });
+
+    expect(result.localChanges.staged.snapshot).toEqual(snapshot);
+    expect(() =>
+      gitChangeSelectionResultSchema.parse({ affectedPaths: ["src/main.ts"] }),
+    ).toThrow();
   });
 
   test("git schemas parse worktree payloads", () => {

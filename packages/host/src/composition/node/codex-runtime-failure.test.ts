@@ -11,6 +11,8 @@ import {
 import { Effect } from "effect";
 import { createCodexAppServerTransportRegistry } from "../../adapters/codex/codex-app-server-transport-registry";
 import {
+  PROCESS_TEST_TIMEOUT_MS,
+  PROCESS_WAIT_MS,
   processIsAlive,
   stubCommands,
   stubTools,
@@ -27,10 +29,6 @@ import { removeTestDirectory } from "../../test-support/temp-directory";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
 import type { EffectNodeHostCommandRouter } from "./node-host-command-router-types";
-
-// Each case spawns real fixture processes, which start slowly when the parallel suite loads the CPU.
-const PROCESS_WAIT_MS = 3_000;
-const PROCESS_TEST_TIMEOUT_MS = 15_000;
 
 const codexStatus = async (router: EffectNodeHostCommandRouter): Promise<HostRuntimeStatus> => {
   const snapshot = hostRuntimeSnapshotSchema.parse(

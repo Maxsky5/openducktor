@@ -102,7 +102,6 @@ export function useBuildToolsWorktree({
   return {
     worktree,
     queriedPath: read.queriedPath,
-    diffResolutionTaskId: plan.shouldQuery ? taskId : null,
   };
 }
 

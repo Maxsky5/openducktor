@@ -9,6 +9,7 @@ import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
 /** Renders the tools as the right panel does: Diffs while selected, Files always mounted. */
@@ -57,6 +58,7 @@ test("returning to a session checks fresh comparison data while its previous rea
           if (scope === "target" && ++targetCalls === 1) return pending.promise;
           return status(target, scope);
         },
+        gitGetLocalChanges: async () => toLocalChanges(status("HEAD", "uncommitted")),
       },
     }),
   );
@@ -71,6 +73,7 @@ test("returning to a session checks fresh comparison data while its previous rea
     branchReady: true,
     currentBranch: { name: "feature", detached: false },
     target: { branch: "main" },
+    targetChoice: { branch: "main" },
     targetError: null,
     applyTarget: async () => {},
     retryTarget: async () => {},
@@ -157,6 +160,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
           reference: `refs/heads/${target.branch}`,
         }),
         gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => status(target, scope),
+        gitGetLocalChanges: async () => toLocalChanges(status("HEAD", "uncommitted")),
         gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => ({
           currentBranch: status(target, scope).currentBranch,
           fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
@@ -185,6 +189,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
             branchKey="feature"
             branchReady={true}
             target={{ branch: target }}
+            targetChoice={{ branch: target }}
             targetError={null}
             applyTarget={async () => {}}
             retryTarget={async () => {}}
@@ -263,6 +268,7 @@ test.each(["directory", "branch"] as const)(
           gitGetComparisonTarget: async () => ({ kind: "available", reference: "origin/main" }),
           gitGetWorktreeStatus: async (_repoPath, _target, _scope, workingDir) =>
             status(workingDir),
+          gitGetLocalChanges: async (_repoPath, workingDir) => toLocalChanges(status(workingDir)),
           gitGetWorktreeStatusSummary: async (_repoPath, _target, _scope, workingDir) => {
             const full = status(workingDir);
             return {
@@ -305,6 +311,7 @@ test.each(["directory", "branch"] as const)(
               branchKey={branchKey}
               branchReady={true}
               target={{ branch: "main", remote: "origin" }}
+              targetChoice={{ branch: "main", remote: "origin" }}
               targetError={null}
               retryTarget={async () => {}}
               readBranch={async () => branchKey}

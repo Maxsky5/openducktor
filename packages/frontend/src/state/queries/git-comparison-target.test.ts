@@ -4,10 +4,9 @@ import {
   gitComparisonTargetQueryOptions,
   gitQueryKeys,
   invalidateGitWorkingDirectoryQueries,
-  loadWorktreeStatusFromQuery,
-  loadWorktreeStatusSummaryFromQuery,
   currentBranchQueryOptions,
   worktreeBranchQueryOptions,
+  worktreeStatusQueryOptions,
 } from "./git";
 
 test("comparison target reads keep the working directory and target in their query keys", async () => {
@@ -143,47 +142,18 @@ test("Git actions invalidate root status cached without an explicit working dire
       diffHash: "fedcba9876543210",
     },
   });
-  const host = {
-    gitGetWorktreeStatus: async () => status(),
-    gitGetWorktreeStatusSummary: async () => ({
-      ...status(),
-      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-    }),
-  };
-  const options = { branchKey: "feature", staleTime: Infinity };
+  const host = { gitGetWorktreeStatus: async () => status() };
+  const read = () =>
+    client.fetchQuery({
+      ...worktreeStatusQueryOptions("/repo", "HEAD", "uncommitted", null, host, "feature"),
+      staleTime: Infinity,
+    });
   try {
-    await loadWorktreeStatusFromQuery(client, "/repo", "HEAD", "uncommitted", null, options, host);
-    await loadWorktreeStatusSummaryFromQuery(
-      client,
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      null,
-      options,
-      host,
-    );
+    await read();
     revision = 2;
     await invalidateGitWorkingDirectoryQueries(client, "/repo", "/repo");
-    const full = await loadWorktreeStatusFromQuery(
-      client,
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      null,
-      options,
-      host,
-    );
-    const summary = await loadWorktreeStatusSummaryFromQuery(
-      client,
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      null,
-      options,
-      host,
-    );
-    expect(full.targetAheadBehind.ahead).toBe(2);
-    expect(summary.targetAheadBehind.ahead).toBe(2);
+    const status = await read();
+    expect(status.targetAheadBehind.ahead).toBe(2);
   } finally {
     client.clear();
   }

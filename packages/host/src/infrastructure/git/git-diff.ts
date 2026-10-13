@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type { FileDiff, FileStatus } from "@openducktor/contracts";
+import type { FileStatus, GitFileDiff, GitFileDiffType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -164,7 +164,12 @@ const splitDiffByFile = (
   }
   return results;
 };
-const inferDiffType = (diff: string): string => {
+/** A header line that names a submodule entry, which has Git file mode 160000. */
+const SUBMODULE_MODE_LINE =
+  /^(?:index \S+|new file mode|deleted file mode|old mode|new mode) 160000$/mu;
+
+const inferDiffType = (diff: string): GitFileDiffType => {
+  if (SUBMODULE_MODE_LINE.test(diff)) return "submodule";
   for (const line of diff.split(/\r?\n/)) {
     if (line.startsWith("new file mode")) {
       return "added";
@@ -182,7 +187,8 @@ const loadNoIndexDiffPayload = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
-): Effect.Effect<FileDiff, GitDiffError> =>
+  fullIndex: boolean,
+): Effect.Effect<GitFileDiff, GitDiffError> =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
@@ -190,6 +196,7 @@ const loadNoIndexDiffPayload = (
       "--numstat",
       "-z",
       "--patch",
+      ...(fullIndex ? ["--full-index"] : []),
       "--",
       "/dev/null",
       filePath,
@@ -294,11 +301,13 @@ export const buildFileDiffs = (
   fileStatuses: FileStatus[],
   numstatOutput: string,
   diffOutput: string,
-): Effect.Effect<FileDiff[], GitDiffError> =>
+  /** Full object IDs let a content hash detect binary and untracked changes. */
+  options: { fullIndex?: boolean } = {},
+): Effect.Effect<GitFileDiff[], GitDiffError> =>
   Effect.gen(function* () {
     const stats = parseNumstat(numstatOutput);
     const fileDiffs = splitDiffByFile(diffOutput);
-    const results: FileDiff[] = fileDiffs.map(({ file, diff }) => {
+    const results: GitFileDiff[] = fileDiffs.map(({ file, diff }) => {
       const fileStats = stats.get(file) ?? { additions: 0, deletions: 0 };
       return {
         file,
@@ -339,7 +348,8 @@ export const buildFileDiffs = (
     }
     const untrackedDiffs = yield* Effect.forEach(
       untrackedPaths,
-      (filePath) => loadNoIndexDiffPayload(runner, workingDirectory, filePath),
+      (filePath) =>
+        loadNoIndexDiffPayload(runner, workingDirectory, filePath, options.fullIndex === true),
       { concurrency: 4 },
     );
     results.push(...untrackedDiffs);

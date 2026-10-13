@@ -4,24 +4,24 @@ export function useAgentStudioGitActionErrors(scopeKey: string) {
   const [commitError, setCommitError] = useError(scopeKey);
   const [pushError, setPushError] = useError(scopeKey);
   const [rebaseError, setRebaseError] = useError(scopeKey);
-  const [resetError, setResetError] = useError(scopeKey);
+  const [changeError, setChangeError] = useError(scopeKey);
 
   const clearActionErrors = useCallback(() => {
     setCommitError(null);
     setPushError(null);
     setRebaseError(null);
-    setResetError(null);
-  }, [setCommitError, setPushError, setRebaseError, setResetError]);
+    setChangeError(null);
+  }, [setCommitError, setPushError, setRebaseError, setChangeError]);
 
   return {
     commitError,
     pushError,
     rebaseError,
-    resetError,
+    changeError,
     setCommitError,
     setPushError,
     setRebaseError,
-    setResetError,
+    setChangeError,
     clearActionErrors,
   };
 }

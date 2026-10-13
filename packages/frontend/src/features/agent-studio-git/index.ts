@@ -1,15 +1,17 @@
 export type {
+  AgentStudioPendingDiscard,
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
-  AgentStudioPendingReset,
   DiffDataState,
   DiffScope,
   GitConflict,
   GitConflictAction,
   GitConflictOperation,
   GitDiffRefresh,
+  GitChangeIntent,
+  GitCommitMode,
   GitDiffRefreshMode,
-  UseAgentStudioDiffDataInput,
 } from "./contracts";
 export { collectUnmergedFilePaths } from "./model/unmerged-file-paths";
-export { useAgentStudioDiffData } from "./use-agent-studio-diff-data";
+export { gitChangeIntentKey } from "./model/git-change-intent";
+export { applyPendingChanges } from "./model/pending-local-changes";

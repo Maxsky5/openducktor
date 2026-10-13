@@ -7,7 +7,7 @@ import {
   type SelectedLineRange,
 } from "@pierre/diffs";
 import { File as PierreReactFile, FileDiff as PierreReactFileDiff } from "@pierre/diffs/react";
-import { Undo2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   type CSSProperties,
   type ComponentProps,
@@ -28,12 +28,12 @@ import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import {
-  hunkResetAnnotationMetadataSchema,
+  hunkActionAnnotationMetadataSchema,
   type PierreDiffSelection,
 } from "./pierre-diff-viewer-model";
 import {
   buildPierreDiffSelection,
-  getHunkResetAnnotations,
+  getHunkActionAnnotations,
   getRenderableFileDiff,
 } from "./pierre-diff-viewer-model";
 import { useWorkerPool } from "./pierre-diff-viewer-react";
@@ -48,6 +48,14 @@ export type PierreHunkSeparators = Exclude<
   "custom"
 >;
 export type PierreDiffHeightMode = "full" | "scroll";
+/** A control shown at the end of each text chunk. */
+export type PierreHunkAction = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  variant?: "outline" | "destructive";
+  onSelect: (hunkIndex: number) => void;
+};
 export type { PierreDiffSelection } from "./pierre-diff-viewer-model";
 
 type PierreDiffViewerProps = {
@@ -63,9 +71,9 @@ type PierreDiffViewerProps = {
   /** Enable click-to-select on line numbers. */
   enableLineSelection?: boolean;
   enableGutterUtility?: boolean;
-  enableHunkReset?: boolean;
-  isHunkResetDisabled?: boolean;
-  onResetHunk?: ((hunkIndex: number) => void) | undefined;
+  hunkActions?: readonly PierreHunkAction[] | undefined;
+  /** Keeps the chunk controls visible but unavailable, and names the reason. */
+  hunkActionsDisabledReason?: string | null;
   selectedLines?: SelectedLineRange | null;
   onLineSelectionEnd?: ((selection: PierreDiffSelection | null) => void) | undefined;
   lineAnnotations?: DiffLineAnnotation<unknown>[];
@@ -104,11 +112,12 @@ const DIFF_WRAPPER_STYLE: DiffCssProperties = {
 };
 const RAW_DIFF_FALLBACK_BASE_CLASS_NAME =
   "px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
-const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
-const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
-const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
-const HUNK_RESET_BUTTON_CLASS_NAME =
-  "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
+const HUNK_ACTIONS_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
+const HUNK_ACTIONS_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
+const HUNK_ACTIONS_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-actions-annotation";
+const HUNK_ACTIONS_CLASS_NAME =
+  "pointer-events-auto absolute right-3 top-1 flex items-center gap-1 rounded-md bg-background/90 p-0.5 shadow-sm";
+const HUNK_ACTION_BUTTON_CLASS_NAME = "h-6 gap-1 px-2 text-[11px]";
 const PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(50vh,32rem)] overflow-auto";
 const PIERRE_HIGHLIGHT_SKELETON_WIDTHS = [
   "w-3/5",
@@ -118,9 +127,9 @@ const PIERRE_HIGHLIGHT_SKELETON_WIDTHS = [
   "w-1/2",
   "w-3/4",
 ] as const;
-const HUNK_RESET_FLOATING_CSS = `
-[data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]),
-[data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) {
+const HUNK_ACTIONS_FLOATING_CSS = `
+[data-line-annotation]:has([${HUNK_ACTIONS_ANNOTATION_MARKER_ATTRIBUTE}]),
+[data-gutter-buffer='annotation']:has([${HUNK_ACTIONS_ANNOTATION_MARKER_ATTRIBUTE}]) {
   --diffs-line-bg: transparent;
   min-height: 0 !important;
   height: 0 !important;
@@ -128,8 +137,8 @@ const HUNK_RESET_FLOATING_CSS = `
   background-color: transparent !important;
 }
 
-[data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) [data-annotation-content],
-[data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) [data-annotation-content] {
+[data-line-annotation]:has([${HUNK_ACTIONS_ANNOTATION_MARKER_ATTRIBUTE}]) [data-annotation-content],
+[data-gutter-buffer='annotation']:has([${HUNK_ACTIONS_ANNOTATION_MARKER_ATTRIBUTE}]) [data-annotation-content] {
   position: relative;
   min-height: 0 !important;
   height: 0 !important;
@@ -406,9 +415,8 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   heightMode = "scroll",
   enableLineSelection = false,
   enableGutterUtility = false,
-  enableHunkReset = false,
-  isHunkResetDisabled = false,
-  onResetHunk,
+  hunkActions,
+  hunkActionsDisabledReason = null,
   selectedLines,
   onLineSelectionEnd,
   lineAnnotations = EMPTY_LINE_ANNOTATIONS,
@@ -429,12 +437,13 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     [filePath, patch],
   );
   const lineDiffType: "word-alt" | "none" = diffStyle === "split" ? "word-alt" : "none";
+  const hasHunkActions = hunkActions != null && hunkActions.length > 0;
   const mergedLineAnnotations = useMemo(
     () =>
-      enableHunkReset && fileDiff != null && onResetHunk != null
-        ? [...lineAnnotations, ...getHunkResetAnnotations(fileDiff)]
+      hasHunkActions && fileDiff != null
+        ? [...lineAnnotations, ...getHunkActionAnnotations(fileDiff)]
         : lineAnnotations,
-    [enableHunkReset, fileDiff, lineAnnotations, onResetHunk],
+    [fileDiff, hasHunkActions, lineAnnotations],
   );
   const handleLineSelectionEnd = useMemo(
     () =>
@@ -490,14 +499,14 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     if (handleGutterUtilityClick) {
       nextOptions.onGutterUtilityClick = handleGutterUtilityClick;
     }
-    if (enableHunkReset) {
-      nextOptions.unsafeCSS = HUNK_RESET_FLOATING_CSS;
+    if (hasHunkActions) {
+      nextOptions.unsafeCSS = HUNK_ACTIONS_FLOATING_CSS;
     }
     return nextOptions;
   }, [
     diffStyle,
     diffIndicators,
-    enableHunkReset,
+    hasHunkActions,
     enableLineSelection,
     handleGutterUtilityClick,
     handleLineSelectionChange,
@@ -514,27 +523,43 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   const handleRenderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
-      const metadataResult = hunkResetAnnotationMetadataSchema.safeParse(metadata);
-      if (metadataResult.success) {
+      const metadataResult = hunkActionAnnotationMetadataSchema.safeParse(metadata);
+      if (metadataResult.success && hunkActions) {
+        const { hunkIndex } = metadataResult.data;
         return (
-          <div className={HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME}>
+          <div className={HUNK_ACTIONS_ANNOTATION_WRAPPER_CLASS_NAME}>
             <div
-              className={HUNK_RESET_ANNOTATION_CLASS_NAME}
-              {...{ [HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE]: "true" }}
+              className={HUNK_ACTIONS_ANNOTATION_CLASS_NAME}
+              {...{ [HUNK_ACTIONS_ANNOTATION_MARKER_ATTRIBUTE]: "true" }}
             >
-              <Button
-                className={HUNK_RESET_BUTTON_CLASS_NAME}
-                variant="outline"
-                size="sm"
-                aria-label="Reset hunk"
-                title={`Reset hunk in ${filePath}`}
-                data-testid="agent-studio-git-reset-hunk-button"
-                disabled={isHunkResetDisabled}
-                onClick={() => onResetHunk?.(metadataResult.data.hunkIndex)}
+              <div
+                role="group"
+                aria-label={`Chunk ${hunkIndex + 1} actions`}
+                className={HUNK_ACTIONS_CLASS_NAME}
               >
-                <Undo2 className="size-3.5" />
-                <span>Reset hunk</span>
-              </Button>
+                {hunkActions.map(({ id, label, icon: Icon, variant = "outline", onSelect }) => (
+                  <Button
+                    key={id}
+                    className={cn(
+                      HUNK_ACTION_BUTTON_CLASS_NAME,
+                      "disabled:pointer-events-auto disabled:cursor-not-allowed",
+                    )}
+                    variant="outline"
+                    size="sm"
+                    aria-label={`${label} chunk ${hunkIndex + 1} in ${filePath}`}
+                    title={hunkActionsDisabledReason ?? `${label} in ${filePath}`}
+                    data-testid={`agent-studio-git-hunk-${id}-button`}
+                    data-variant={variant}
+                    disabled={hunkActionsDisabledReason !== null}
+                    onClick={() => onSelect(hunkIndex)}
+                  >
+                    <Icon
+                      className={cn("size-3.5", variant === "destructive" && "text-destructive")}
+                    />
+                    <span>{label}</span>
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
         );
@@ -542,7 +567,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
 
       return renderAnnotation?.(annotation) ?? null;
     },
-    [filePath, isHunkResetDisabled, onResetHunk, renderAnnotation],
+    [filePath, hunkActions, hunkActionsDisabledReason, renderAnnotation],
   );
 
   let content: ReactElement;

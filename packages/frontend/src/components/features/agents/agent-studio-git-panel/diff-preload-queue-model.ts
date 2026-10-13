@@ -1,4 +1,4 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 
 type DiffPreloadEntry = {
   file: string;
@@ -6,7 +6,7 @@ type DiffPreloadEntry = {
 };
 
 export const buildDiffPreloadEntries = (
-  fileDiffs: ReadonlyArray<FileDiff>,
+  fileDiffs: ReadonlyArray<GitFileDiff>,
   expandedFiles: ReadonlySet<string>,
   limit: number,
 ): DiffPreloadEntry[] => {

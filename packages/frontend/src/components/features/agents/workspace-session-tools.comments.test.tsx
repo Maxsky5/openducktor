@@ -17,6 +17,7 @@ import {
 } from "@/state/use-inline-comment-draft-store";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
 
 const commentOwner = {
@@ -45,6 +46,7 @@ function ToolsOwner({
     currentBranch: { name: "feature", detached: false },
     branchReady: true,
     target: { branch: "main", remote: "origin" },
+    targetChoice: { branch: "main", remote: "origin" },
     targetError: null,
     applyTarget: async () => {},
     retryTarget: async () => {},
@@ -131,6 +133,9 @@ for (const contextMode of ["repository", "worktree"] as const) {
           client: {
             gitGetComparisonTarget: async () => ({ kind: "available", reference: "origin/main" }),
             gitGetWorktreeStatus: read,
+            // Local changes use the uncommitted status fixture, so `read` records both scopes.
+            gitGetLocalChanges: async (repo) =>
+              toLocalChanges(await read(repo, "HEAD", "uncommitted")),
             gitGetWorktreeStatusSummary: async (_repo, _target, scope = "uncommitted") => {
               const full = status(scope);
               return {

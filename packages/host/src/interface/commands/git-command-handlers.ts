@@ -3,10 +3,14 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import {
   parseGitAbortConflictInput,
   parseGitAheadBehindInput,
+  parseGitChangeSelectionInput,
   parseGitCommitAllInput,
+  parseGitCommitStagedInput,
   parseGitComparisonTargetInput,
   parseGitCreateWorktreeInput,
   parseGitDiffInput,
+  parseGitHistoryPageInput,
+  parseGitLocalChangesInput,
   parseGitPushBranchInput,
   parseGitRebaseBranchInput,
   parseGitRemoveWorktreeInput,
@@ -20,7 +24,9 @@ export const createGitCommandHandlers = (gitService: GitService) =>
   ({
     git_canonicalize_path: (args) => gitService.canonicalizePath(parseGitScopeInput(args)),
     git_abort_conflict: (args) => gitService.abortConflict(parseGitAbortConflictInput(args)),
+    git_change_selection: (args) => gitService.changeSelection(parseGitChangeSelectionInput(args)),
     git_commit_all: (args) => gitService.commitAll(parseGitCommitAllInput(args)),
+    git_commit_staged: (args) => gitService.commitStaged(parseGitCommitStagedInput(args)),
     git_comparison_target_get: (args) =>
       gitService.getComparisonTarget(parseGitComparisonTargetInput(args)),
     git_commits_ahead_behind: (args) =>
@@ -30,6 +36,8 @@ export const createGitCommandHandlers = (gitService: GitService) =>
     git_get_branches: (args) => gitService.getBranches(parseGitScopeInput(args)),
     git_get_current_branch: (args) => gitService.getCurrentBranch(parseGitScopeInput(args)),
     git_get_diff: (args) => gitService.getDiff(parseGitDiffInput(args)),
+    git_get_history_page: (args) => gitService.getHistoryPage(parseGitHistoryPageInput(args)),
+    git_get_local_changes: (args) => gitService.getLocalChanges(parseGitLocalChangesInput(args)),
     git_get_status: (args) => gitService.getStatus(parseGitScopeInput(args)),
     git_get_worktree_status: (args) =>
       gitService.getWorktreeStatus(parseGitWorktreeStatusInput(args)),

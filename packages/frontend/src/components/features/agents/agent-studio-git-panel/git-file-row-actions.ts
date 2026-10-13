@@ -1,0 +1,59 @@
+import type { GitFileDiff, GitChangeGroup } from "@openducktor/contracts";
+import { type LucideIcon, Minus, Plus } from "lucide-react";
+import type { GitChangeIntent } from "@/features/agent-studio-git";
+
+/** Write actions of one local group. Branch changes and conflicts have none. */
+export type GitFileRowActions = {
+  group: GitChangeGroup;
+  /** Why the actions cannot run now, or null when they can. */
+  disabledReason: string | null;
+  changingKey: string | null;
+  onChange: (intent: GitChangeIntent) => void;
+};
+
+/**
+ * Chunk actions need a text chunk that Git can apply alone. The host enforces the same rules in
+ * `git-local-change-selection.ts`. Untracked files have the `added` type.
+ */
+export function chunkActionUnavailableReason(diff: GitFileDiff): string | null {
+  if (diff.type === "submodule") return "Submodule changes have no text chunks.";
+  if (diff.type === "added") return "New files change only as a whole file.";
+  if (diff.type === "deleted") return "Deleted files change only as a whole file.";
+  if (diff.type === "renamed") return "Renamed files change only as a whole file.";
+  if (!/^@@ /mu.test(diff.diff)) {
+    return "This change has no text chunks, for example a binary file.";
+  }
+  return null;
+}
+
+/**
+ * Discard cannot change the commit that a submodule has checked out. The host refuses it with the
+ * same reason in `git-local-change-selection.ts`.
+ */
+export function discardUnavailableReason(diff: GitFileDiff): string | null {
+  return diff.type === "submodule"
+    ? `${diff.file} is a submodule. Discard cannot change the commit that the submodule has checked out. Run \`git submodule update -- ${diff.file}\` to check out the recorded commit, or unstage the change.`
+    : null;
+}
+
+/** The action that moves content of a group to the other group. */
+export const GROUP_TOGGLE = {
+  unstaged: { action: "stage", label: "Stage", icon: Plus },
+  staged: { action: "unstage", label: "Unstage", icon: Minus },
+} satisfies Record<
+  GitChangeGroup,
+  { action: "stage" | "unstage"; label: string; icon: LucideIcon }
+>;
+
+/** Identifies an open diff of one list, because one path can show in two lists. */
+export const listFileKey = (listKey: string, filePath: string): string =>
+  JSON.stringify([listKey, filePath]);
+
+export const fileIntent = (
+  actions: Pick<GitFileRowActions, "group">,
+  action: GitChangeIntent["action"],
+  filePath: string,
+): GitChangeIntent => ({ action, group: actions.group, selection: { kind: "file", filePath } });
+
+export const discardFileLabel = (group: GitChangeGroup): string =>
+  group === "staged" ? "Discard staged changes" : "Discard unstaged changes";

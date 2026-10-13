@@ -1,3 +1,4 @@
+import type { GitFileDiff } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { GitService } from "../../application/git/git-service";
 import { HostOperationError } from "../../effect/host-errors";
@@ -11,6 +12,26 @@ import { createGitCommandHandlers } from "./git-command-handlers";
 
 const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
+
+const SNAPSHOT = { hashVersion: 2, statusHash: "0000000000000001", diffHash: "0000000000000002" };
+const BRANCH = { name: "feature", detached: false, revision: "a".repeat(40) };
+
+const localChangesFixture = () => ({
+  currentBranch: BRANCH,
+  fileStatuses: [],
+  unstaged: { fileStatuses: [], fileDiffs: [], snapshot: SNAPSHOT },
+  staged: { fileStatuses: [], fileDiffs: [], snapshot: SNAPSHOT },
+  conflicted: { fileStatuses: [], fileDiffs: [] },
+  upstreamAheadBehind: { outcome: "untracked" as const, ahead: 0 },
+  snapshot: {
+    effectiveWorkingDir: "/worktree",
+    targetBranch: "HEAD",
+    diffScope: "uncommitted" as const,
+    observedAtMs: 1,
+    ...SNAPSHOT,
+    hashVersion: 1,
+  },
+});
 
 const createRecordingGitService = () => {
   const calls: Array<{
@@ -72,7 +93,7 @@ const createRecordingGitService = () => {
       return Effect.tryPromise({
         try: async () => {
           calls.push({ method: "getDiff", input });
-          return [
+          const diffs: GitFileDiff[] = [
             {
               file: "src/main.ts",
               type: "modified",
@@ -81,6 +102,7 @@ const createRecordingGitService = () => {
               diff: "@@ -1 +1 @@\n-old\n+new\n",
             },
           ];
+          return diffs;
         },
         catch: (cause) =>
           new HostOperationError({
@@ -219,6 +241,30 @@ const createRecordingGitService = () => {
       return Effect.sync(() => {
         calls.push({ method: "pullBranch", input });
         return { outcome: "pulled", output: "Fast-forward" };
+      });
+    },
+    getLocalChanges(input) {
+      return Effect.sync(() => {
+        calls.push({ method: "getLocalChanges", input });
+        return localChangesFixture();
+      });
+    },
+    changeSelection(input) {
+      return Effect.sync(() => {
+        calls.push({ method: "changeSelection", input });
+        return { affectedPaths: ["src/main.ts"], localChanges: localChangesFixture() };
+      });
+    },
+    commitStaged(input) {
+      return Effect.sync(() => {
+        calls.push({ method: "commitStaged", input });
+        return { outcome: "no_changes", output: "No staged changes to commit" };
+      });
+    },
+    getHistoryPage(input) {
+      return Effect.sync(() => {
+        calls.push({ method: "getHistoryPage", input });
+        return { outcome: "no_commits" };
       });
     },
     commitAll(input) {
@@ -581,6 +627,84 @@ describe("createGitCommandHandlers", () => {
     await expect(router.invoke("git_get_branches")).rejects.toThrow(
       "Git command input must be an object.",
     );
+    expect(calls).toEqual([]);
+  });
+  test("routes local change, staged commit, and history commands with contract inputs", async () => {
+    const { calls, service } = createRecordingGitService();
+    const router = createHostCommandRouter({
+      handlers: createGitCommandHandlers(service),
+    });
+    await router.invoke("git_get_local_changes", { repoPath: "/repo", workingDir: "/worktree" });
+    const selection = {
+      repoPath: "/repo",
+      workingDir: "/worktree",
+      expectedBranch: BRANCH,
+      snapshots: { unstaged: SNAPSHOT, staged: SNAPSHOT },
+      action: "stage",
+      group: "unstaged",
+      selection: { kind: "hunk", filePath: "src/main.ts", hunkIndex: 1 },
+    };
+    await expect(router.invoke("git_change_selection", selection)).resolves.toEqual({
+      affectedPaths: ["src/main.ts"],
+      localChanges: localChangesFixture(),
+    });
+    await router.invoke("git_commit_staged", {
+      repoPath: "/repo",
+      workingDir: "/worktree",
+      message: "Ship staged work",
+      expectedBranch: BRANCH,
+      stagedSnapshot: SNAPSHOT,
+    });
+    await router.invoke("git_get_history_page", {
+      repoPath: "/repo",
+      workingDir: "/worktree",
+      targetReference: "refs/remotes/origin/main",
+      expectedBranch: BRANCH,
+    });
+    await router.invoke("git_commit_all", {
+      repoPath: "/repo",
+      message: "Ship all",
+      expectedBranch: BRANCH,
+    });
+    expect(calls.map((call) => call.method)).toEqual([
+      "getLocalChanges",
+      "changeSelection",
+      "commitStaged",
+      "getHistoryPage",
+      "commitAll",
+    ]);
+    expect(calls[1]?.input).toEqual(selection);
+    expect(calls[4]?.input).toEqual({
+      repoPath: "/repo",
+      message: "Ship all",
+      expectedBranch: BRANCH,
+    });
+  });
+  test("rejects change selections whose action does not fit the group", async () => {
+    const { calls, service } = createRecordingGitService();
+    const router = createHostCommandRouter({
+      handlers: createGitCommandHandlers(service),
+    });
+    const request = {
+      repoPath: "/repo",
+      expectedBranch: BRANCH,
+      snapshots: { unstaged: SNAPSHOT, staged: SNAPSHOT },
+      selection: { kind: "file", filePath: "src/main.ts" },
+    };
+    await expect(
+      router.invoke("git_change_selection", { ...request, action: "stage", group: "staged" }),
+    ).rejects.toThrow("Stage applies only to unstaged changes.");
+    await expect(
+      router.invoke("git_change_selection", { ...request, action: "unstage", group: "unstaged" }),
+    ).rejects.toThrow("Unstage applies only to staged changes.");
+    await expect(
+      router.invoke("git_change_selection", {
+        ...request,
+        action: "discard",
+        group: "unstaged",
+        selection: { kind: "all" },
+      }),
+    ).rejects.toThrow("Discard applies to one file or one chunk.");
     expect(calls).toEqual([]);
   });
 });

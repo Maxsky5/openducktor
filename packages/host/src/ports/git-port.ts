@@ -2,17 +2,20 @@ import type {
   GitReadContext,
   WorkspaceFileTreeContext,
   CommitsAheadBehind,
-  FileDiff,
+  GitFileDiff,
   FileStatus,
   GitBranch,
   GitCommitAllResult,
   GitConflict,
   GitConflictAbortResult,
   GitConflictOperation,
+  GitChangeSelectionRequest,
   GitCurrentBranch,
   GitDiffScope,
   GitFetchRemoteResult,
   GitFileStatusCounts,
+  GitHistoryPage,
+  GitHistoryPageRequest,
   GitMergeMethod,
   GitPullBranchResult,
   GitPushBranchResult,
@@ -65,7 +68,7 @@ export type GitFileListOptions = {
 export type GitWorktreeStatusData = {
   currentBranch: GitCurrentBranch;
   fileStatuses: FileStatus[];
-  fileDiffs: FileDiff[];
+  fileDiffs: GitFileDiff[];
   targetAheadBehind: CommitsAheadBehind;
   upstreamAheadBehind: GitUpstreamAheadBehind;
   gitConflict?: GitConflict;
@@ -77,6 +80,26 @@ export type GitWorktreeStatusSummaryData = {
   targetAheadBehind: CommitsAheadBehind;
   upstreamAheadBehind: GitUpstreamAheadBehind;
   gitConflict?: GitConflict;
+};
+export type GitLocalChangeGroupData = {
+  fileStatuses: GitFileStatus[];
+  fileDiffs: GitFileDiff[];
+};
+export type GitLocalChangesData = {
+  currentBranch: GitCurrentBranch;
+  fileStatuses: FileStatus[];
+  unstaged: GitLocalChangeGroupData;
+  staged: GitLocalChangeGroupData;
+  conflicted: GitLocalChangeGroupData;
+  upstreamAheadBehind: GitUpstreamAheadBehind;
+  gitConflict?: GitConflict;
+};
+export type GitChangeInput = Pick<GitChangeSelectionRequest, "action" | "group" | "selection">;
+export type GitHistoryPageInput = {
+  /** The checkout that the service confirmed for this read. */
+  currentBranch: GitCurrentBranch;
+  targetReference: string;
+  page?: GitHistoryPageRequest["page"];
 };
 export type GitPushBranchOptions = {
   remote?: string;
@@ -180,7 +203,7 @@ export type GitPort = {
     targetBranch: string,
     readContext?: GitReadContext,
   ): Effect.Effect<GitChangedFile[], GitPortError>;
-  getDiff(workingDir: string, targetBranch?: string): Effect.Effect<FileDiff[], GitPortError>;
+  getDiff(workingDir: string, targetBranch?: string): Effect.Effect<GitFileDiff[], GitPortError>;
   getWorktreeStatusData(
     workingDir: string,
     targetBranch: string,
@@ -193,6 +216,20 @@ export type GitPort = {
     diffScope: GitDiffScope,
     readContext?: GitReadContext,
   ): Effect.Effect<GitWorktreeStatusSummaryData, GitPortError>;
+  getLocalChanges(
+    workingDir: string,
+    readContext?: GitReadContext,
+  ): Effect.Effect<GitLocalChangesData, GitPortError>;
+  /** Applies a selection that the caller validated against `changes`. */
+  changeSelection(
+    workingDir: string,
+    changes: GitLocalChangesData,
+    input: GitChangeInput,
+  ): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError>;
+  getHistoryPage(
+    workingDir: string,
+    input: GitHistoryPageInput,
+  ): Effect.Effect<GitHistoryPage, GitPortError>;
   createWorktree(
     repoPath: string,
     worktreePath: string,
@@ -249,7 +286,7 @@ export type GitPort = {
   ): Effect.Effect<GitCurrentBranch, GitPortError>;
   resetWorktreeSelection(
     workingDir: string,
-    fileDiffs: FileDiff[],
+    fileDiffs: GitFileDiff[],
     selection: GitResetWorktreeSelection,
   ): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError>;
   restoreWorktreeToReference(
@@ -266,6 +303,10 @@ export type GitPort = {
   ): Effect.Effect<GitFetchRemoteResult, GitPortError>;
   pullBranch(workingDir: string): Effect.Effect<GitPullBranchResult, GitPortError>;
   commitAll(workingDir: string, message: string): Effect.Effect<GitCommitAllResult, GitPortError>;
+  commitStaged(
+    workingDir: string,
+    message: string,
+  ): Effect.Effect<GitCommitAllResult, GitPortError>;
   pushBranch(
     workingDir: string,
     branch: string,

@@ -888,6 +888,7 @@ describe("createGitCliAdapter", () => {
       output: "[feature abc123] Ship Electron host",
     });
     expect(calls).toEqual([
+      "status --porcelain=v1 -z --untracked-files=all",
       "add -A",
       "diff --cached --name-only",
       "commit -m Ship Electron host",

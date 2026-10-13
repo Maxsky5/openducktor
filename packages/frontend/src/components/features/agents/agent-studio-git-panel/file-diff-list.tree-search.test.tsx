@@ -12,7 +12,7 @@ import {
   setupFileDiffListTests,
 } from "./file-diff-list.test-support";
 import type { FileListViewMode } from "./file-list-view-preference";
-import { useFileListState } from "./use-file-list-state";
+import { useFileListSearch, useFileListState } from "./use-file-list-state";
 
 setupFileDiffListTests();
 
@@ -54,10 +54,12 @@ function NavigableFileDiffListHarness({
       return next;
     });
   }, []);
+  const search = useFileListSearch("task-1");
   const listState = useFileListState({
     subjectKey: "task-1",
-    diffScope: "uncommitted",
+    listKey: "unstaged",
     fileDiffs,
+    search,
   });
 
   return (
@@ -66,6 +68,8 @@ function NavigableFileDiffListHarness({
         <FileDiffList
           fileDiffs={fileDiffs}
           diffScope="uncommitted"
+          listKey="unstaged"
+          listLabel="Unstaged files"
           ownerKey={OWNER_KEY}
           conflictedFiles={conflictedFiles}
           diffStyle="unified"
@@ -75,10 +79,9 @@ function NavigableFileDiffListHarness({
           listState={listState}
           expandedFiles={expandedFiles}
           onToggleFile={toggleFile}
+          onViewFile={null}
           preloadLimit={preloadLimit}
-          canResetFiles={false}
-          isResetDisabled={false}
-          resetDisabledReason={null}
+          rowActions={null}
         />
       </div>
     </TooltipProvider>
@@ -107,8 +110,9 @@ const searchField = (): HTMLElement => screen.getByRole("textbox", { name: "Sear
 const typeSearch = (value: string): void => {
   fireEvent.change(searchField(), { target: { value } });
 };
-const fileCountText = (): string =>
-  screen.getByTestId("agent-studio-git-file-count").textContent ?? "";
+/** The match count, or null while no search is active. */
+const fileCountText = (): string | null =>
+  screen.queryByTestId("agent-studio-git-file-count")?.textContent ?? null;
 const lineTotalsText = (): string =>
   screen.getByTestId("agent-studio-git-line-totals").textContent ?? "";
 const rowTop = (rowButton: HTMLElement): number =>
@@ -136,7 +140,9 @@ describe("FileDiffList tree view and search", () => {
     expect(label.textContent).toBe("a.ts");
     expect(label.getAttribute("title")).toBe("src/lib/a.ts");
     expect(label.querySelector("[title]")).toBeNull();
-    expect(within(nestedFile).getByTestId("agent-studio-git-file-stats").textContent).toBe("+1-1");
+    const nestedRow = nestedFile.parentElement;
+    if (!nestedRow) throw new Error("The file toggle has no row.");
+    expect(within(nestedRow).getByTestId("agent-studio-git-file-stats").textContent).toBe("+1-1");
   });
 
   test("hides the files of a closed directory and keeps their expanded state", () => {
@@ -155,11 +161,11 @@ describe("FileDiffList tree view and search", () => {
 
   test("filters the files in both views, highlights matches, and counts only the matches", () => {
     render(<NavigableFileDiffListHarness />);
-    expect(fileCountText()).toBe("3 changed files");
+    expect(fileCountText()).toBeNull();
     expect(lineTotalsText()).toBe("+6-3");
 
     typeSearch("src main");
-    expect(fileCountText()).toBe("1 of 3 changed files");
+    expect(fileCountText()).toBe("1/3");
     expect(lineTotalsText()).toBe("+2-1");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "src",
@@ -170,7 +176,7 @@ describe("FileDiffList tree view and search", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "List view" }));
     expect(searchField()).toHaveProperty("value", "src main");
-    expect(fileCountText()).toBe("1 of 3 changed files");
+    expect(fileCountText()).toBe("1/3");
     const listRow = fileToggle("src/main.ts");
     expect(within(listRow).getByTestId("agent-studio-git-file-path").textContent).toBe(
       "main.tssrc",
@@ -186,7 +192,7 @@ describe("FileDiffList tree view and search", () => {
     expect(screen.getByTestId("agent-studio-git-no-file-matches").textContent).toBe(
       'No files match "zzz"',
     );
-    expect(fileCountText()).toBe("0 of 3 changed files");
+    expect(fileCountText()).toBe("0/3");
     expect(lineTotalsText()).toBe("");
     expect(screen.queryByRole("list")).toBeNull();
     expect(screen.getByRole("button", { name: "Tree view" })).toBeDefined();
@@ -206,7 +212,7 @@ describe("FileDiffList tree view and search", () => {
     expect(searchField()).toHaveProperty("value", "");
     expect(document.activeElement).toBe(searchField());
     expect(screen.queryByRole("button", { name: "Clear search" })).toBeNull();
-    expect(fileCountText()).toBe("3 changed files");
+    expect(fileCountText()).toBeNull();
 
     const documentKeyDown = mock((_event: KeyboardEvent) => {});
     document.addEventListener("keydown", documentKeyDown);
@@ -645,11 +651,11 @@ describe("FileDiffList tree view and search", () => {
     );
     render(<NavigableFileDiffListHarness files={files} />);
 
-    expect(fileCountText()).toBe("1200 changed files");
+    expect(fileCountText()).toBeNull();
     expect(screen.getAllByRole("listitem").length).toBeLessThan(40);
 
     typeSearch("package-7/src/file-1167");
-    expect(fileCountText()).toBe("1 of 1200 changed files");
+    expect(fileCountText()).toBe("1/1200");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "packages/package-7/src",
       "file-1167.ts+1168-1",

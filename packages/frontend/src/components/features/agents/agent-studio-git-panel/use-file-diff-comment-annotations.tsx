@@ -1,8 +1,9 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import { type ReactElement, useCallback, useMemo } from "react";
 import { z } from "zod";
 import type { PierreDiffSelection } from "@/components/features/agents/pierre-diff-viewer";
+import { commentMatchesDiff } from "@/components/features/agents/pierre-diff-viewer-model";
 import type { DiffScope } from "@/features/agent-studio-git";
 import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
 import { DiffAnnotationShell, DraftCommentCard, NewCommentForm } from "./file-diff-comments";
@@ -78,7 +79,7 @@ const mapCommentSideToAnnotationSide = (
 type UseFileDiffCommentAnnotationsArgs = {
   ownerKey: string | null;
   commentPlaceholder?: string | undefined;
-  diff: FileDiff;
+  diff: GitFileDiff;
   diffScope: DiffScope;
   fileComments: InlineCommentDraft[];
   annotationState: FileDiffAnnotationState;
@@ -91,6 +92,9 @@ type FileDiffCommentAnnotations = {
   handleLineSelectionEnd: (selection: PierreDiffSelection | null) => void;
   lineAnnotations: DiffLineAnnotation<GitDiffCommentAnnotationMetadata>[];
   renderAnnotation: (annotation: DiffLineAnnotation<unknown>) => ReactElement | null;
+  /** Comments whose captured lines this diff no longer holds. They stay pending for Send. */
+  unplacedComments: InlineCommentDraft[];
+  renderComment: (comment: InlineCommentDraft) => ReactElement;
 };
 
 export function useFileDiffCommentAnnotations({
@@ -172,8 +176,17 @@ export function useFileDiffCommentAnnotations({
     [dispatchAnnotation, updateComment],
   );
 
+  const { placedComments, unplacedComments } = useMemo(() => {
+    const placed: InlineCommentDraft[] = [];
+    const unplaced: InlineCommentDraft[] = [];
+    for (const comment of fileComments) {
+      (commentMatchesDiff(diff.diff, diff.file, comment) ? placed : unplaced).push(comment);
+    }
+    return { placedComments: placed, unplacedComments: unplaced };
+  }, [diff.diff, diff.file, fileComments]);
+
   const lineAnnotations = useMemo<DiffLineAnnotation<GitDiffCommentAnnotationMetadata>[]>(() => {
-    const commentAnnotations = fileComments.map((comment) => ({
+    const commentAnnotations = placedComments.map((comment) => ({
       side: mapCommentSideToAnnotationSide(comment.side),
       lineNumber: comment.endLine,
       metadata: {
@@ -196,7 +209,31 @@ export function useFileDiffCommentAnnotations({
         } satisfies GitDiffCommentAnnotationMetadata,
       },
     ];
-  }, [fileComments, pendingSelection]);
+  }, [placedComments, pendingSelection]);
+
+  const renderComment = useCallback(
+    (comment: InlineCommentDraft): ReactElement => (
+      <DraftCommentCard
+        comment={comment}
+        isEditing={activeEditingCommentId === comment.id}
+        editingText={editingText}
+        onEditingTextChange={(text) => dispatchAnnotation({ type: "editingTextChanged", text })}
+        onStartEditing={handleStartEditing}
+        onCancelEditing={handleCancelEditing}
+        onSaveEditing={handleSaveEditing}
+        onRemove={removeComment}
+      />
+    ),
+    [
+      activeEditingCommentId,
+      dispatchAnnotation,
+      editingText,
+      handleCancelEditing,
+      handleSaveEditing,
+      handleStartEditing,
+      removeComment,
+    ],
+  );
 
   const renderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>): ReactElement | null => {
@@ -228,35 +265,17 @@ export function useFileDiffCommentAnnotations({
         return null;
       }
 
-      return (
-        <DiffAnnotationShell>
-          <DraftCommentCard
-            comment={comment}
-            isEditing={activeEditingCommentId === comment.id}
-            editingText={editingText}
-            onEditingTextChange={(text) => dispatchAnnotation({ type: "editingTextChanged", text })}
-            onStartEditing={handleStartEditing}
-            onCancelEditing={handleCancelEditing}
-            onSaveEditing={handleSaveEditing}
-            onRemove={removeComment}
-          />
-        </DiffAnnotationShell>
-      );
+      return <DiffAnnotationShell>{renderComment(comment)}</DiffAnnotationShell>;
     },
     [
       clearPendingSelection,
       commentPlaceholder,
       dispatchAnnotation,
       commentsById,
-      activeEditingCommentId,
-      handleCancelEditing,
-      handleSaveEditing,
       handleSaveNewComment,
-      handleStartEditing,
       pendingSelection,
       newCommentText,
-      editingText,
-      removeComment,
+      renderComment,
     ],
   );
 
@@ -266,5 +285,7 @@ export function useFileDiffCommentAnnotations({
     handleLineSelectionEnd,
     lineAnnotations,
     renderAnnotation,
+    unplacedComments,
+    renderComment,
   };
 }

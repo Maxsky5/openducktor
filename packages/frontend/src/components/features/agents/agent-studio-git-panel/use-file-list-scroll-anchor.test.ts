@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import { act, renderHook } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
@@ -16,7 +16,7 @@ const HEADER_DIFFERENCE = FILE_LIST_ROW_HEIGHT.list - FILE_LIST_ROW_HEIGHT.tree;
 const listRows = (...files: string[]): FileListRow[] =>
   buildListRows(
     searchFiles(
-      files.map((file): FileDiff => ({
+      files.map((file): GitFileDiff => ({
         file,
         type: "modified",
         additions: 1,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gitWorktreeStatusSnapshotSchema, type FileDiff } from "@openducktor/contracts";
+import { gitWorktreeStatusSnapshotSchema, type GitFileDiff } from "@openducktor/contracts";
 import type { GitWorktreeStatusData } from "../../ports/git-port";
 import {
   createWorktreeSnapshot,
@@ -16,7 +16,7 @@ const referenceHash = (bytes: Uint8Array): string => {
   return hash.toString(16).padStart(16, "0");
 };
 
-const fileDiff = (overrides: Partial<FileDiff> = {}): FileDiff => ({
+const fileDiff = (overrides: Partial<GitFileDiff> = {}): GitFileDiff => ({
   file: "file.ts",
   type: "modified",
   additions: 1,

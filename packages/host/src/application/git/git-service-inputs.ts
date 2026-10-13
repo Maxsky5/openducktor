@@ -1,4 +1,5 @@
 import type {
+  GitCurrentBranch,
   GitReadContext,
   GitConflictOperation,
   GitDiffScope,
@@ -42,6 +43,7 @@ export type GitRemoveWorktreeInput = {
 };
 export type GitCommitAllInput = GitScopeInput & {
   message: string;
+  expectedBranch?: GitCurrentBranch;
 };
 export type GitPushBranchInput = GitScopeInput & {
   branch: string;

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { FileStatus } from "@openducktor/contracts";
+import type { FileStatus, GitFileDiff } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import fixtures from "./fixtures/no-index-diffs.json";
 import { type GitCommandRunner } from "./git-command-runner";
@@ -277,7 +277,7 @@ test("matches the recorded patches with real Git, including directory expansion"
       const result = await Effect.runPromise(buildFileDiffs(runner, root, [status(".")], "", ""));
       expect(result).toEqual(
         supported
-          .map((fixture) => ({
+          .map((fixture): GitFileDiff => ({
             file: fixture.file,
             type: "added",
             additions: fixture.additions,

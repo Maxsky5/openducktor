@@ -1,4 +1,4 @@
-import { expect, mock, spyOn, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import { QueryClientProvider, useIsFetching } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
@@ -113,7 +113,7 @@ test("branch list failure does not invalidate a valid comparison and retry expos
   }
 });
 
-test("keeps a checked comparison during a same-context refresh and removes it if that read fails", async () => {
+test("keeps a checked comparison during a same-context check and removes it if that check fails", async () => {
   const pending =
     Promise.withResolvers<Awaited<ReturnType<typeof hostClient.gitGetComparisonTarget>>>();
   const read = mock<typeof hostClient.gitGetComparisonTarget>(async () => ({
@@ -132,14 +132,14 @@ test("keeps a checked comparison during a same-context refresh and removes it if
     }),
     { initialProps: initial, wrapper },
   );
-  let running: Promise<string | null> | undefined;
+  let running: Promise<boolean | null> | undefined;
   try {
     await waitFor(() =>
       expect(hook.result.current.comparison.resolvedTarget).toBe("refs/remotes/origin/main"),
     );
     read.mockImplementationOnce(() => pending.promise);
     await act(async () => {
-      running = hook.result.current.comparison.refreshComparison("soft").catch(() => null);
+      running = hook.result.current.comparison.refreshStep?.check().catch(() => null);
     });
     await waitFor(() => expect(hook.result.current.fetching).toBe(1));
     expect(hook.result.current.comparison.resolvedTarget).toBe("refs/remotes/origin/main");
@@ -177,11 +177,9 @@ test("selector keeps local and remote identities plus a missing selected branch"
   );
 });
 
-test("refresh fetches the selected remote on schedule and keeps the fetch cooldown", async () => {
-  let now = Date.now();
+test("the fetch step fetches the selected remote, and the check finds the moved target", async () => {
   let remoteAhead = 0;
   let fetchedAhead = 0;
-  const clock = spyOn(Date, "now").mockImplementation(() => now);
   const fetch = mock(async () => {
     fetchedAhead = remoteAhead;
     return { outcome: "fetched" as const, output: "Fetched." };
@@ -204,118 +202,17 @@ test("refresh fetches the selected remote on schedule and keeps the fetch cooldo
   const hook = renderHook(useSessionComparison, { initialProps: initial, wrapper });
   try {
     await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("revision-0"));
+    const step = hook.result.current.refreshStep;
+    expect(await step?.check()).toBe(false);
     remoteAhead = 1;
+    let changed: boolean | undefined;
     await act(async () => {
-      await hook.result.current.refreshComparison("scheduled");
+      await step?.fetch();
+      changed = await step?.check();
     });
-    await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("revision-1"));
     expect(fetch).toHaveBeenCalledWith("/repo", "refs/remotes/origin/main", "/repo");
-    remoteAhead = 2;
-    now += 60_000;
-    await act(async () => {
-      await hook.result.current.refreshComparison("scheduled");
-    });
-    await act(async () => {
-      await hook.result.current.refreshComparison("soft");
-    });
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(changed).toBe(true);
     await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("revision-1"));
-    now += 4 * 60_000;
-    await act(async () => {
-      await hook.result.current.refreshComparison("scheduled");
-    });
-    await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("revision-2"));
-    expect(fetch).toHaveBeenCalledTimes(2);
-    remoteAhead = 3;
-    await act(async () => {
-      await hook.result.current.refreshComparison("hard");
-    });
-    await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("revision-3"));
-  } finally {
-    hook.unmount();
-    client.clear();
-    clock.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
-  }
-});
-
-test("shares a pending fetch and does not recheck the old session after it completes", async () => {
-  const pending = Promise.withResolvers<Awaited<ReturnType<typeof hostClient.gitFetchRemote>>>();
-  const fetch = mock(() => pending.promise);
-  const read = mock(
-    async (_repo: string, _dir: string, target: NonNullable<SessionComparisonInput["target"]>) => ({
-      kind: "available" as const,
-      reference: `refs/heads/${target.branch}`,
-    }),
-  );
-  configureShellBridge(
-    createShellBridgeFixture({ client: { gitFetchRemote: fetch, gitGetComparisonTarget: read } }),
-  );
-  const client = createQueryClient();
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
-  const hook = renderHook(useSessionComparison, { initialProps: initial, wrapper });
-  let first: Promise<string | null> | undefined;
-  let second: Promise<string | null> | undefined;
-  try {
-    await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("refs/heads/main"));
-    await act(async () => {
-      first = hook.result.current.refreshComparison("scheduled");
-      second = hook.result.current.refreshComparison("scheduled");
-    });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    hook.rerender({ ...initial, viewKey: "session-2", target: { branch: "release" } });
-    await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("refs/heads/release"));
-    const calls = read.mock.calls.length;
-    await act(async () => {
-      pending.resolve({ outcome: "fetched", output: "Fetched." });
-      expect(await first).toBeNull();
-      expect(await second).toBeNull();
-    });
-    expect(read).toHaveBeenCalledTimes(calls);
-    expect(hook.result.current.resolvedTarget).toBe("refs/heads/release");
-  } finally {
-    pending.resolve({ outcome: "fetched", output: "Fetched." });
-    await Promise.all([first, second]);
-    hook.unmount();
-    client.clear();
-    configureShellBridge(createUnavailableShellBridge());
-  }
-});
-
-test("reports a failed scheduled fetch and allows the next refresh to retry", async () => {
-  const fetch = mock(async () => {
-    throw new Error("Check the remote connection.");
-  });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitFetchRemote: fetch,
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
-      },
-    }),
-  );
-  const client = createQueryClient();
-  const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
-  const hook = renderHook(useSessionComparison, { initialProps: initial, wrapper });
-  try {
-    await waitFor(() => expect(hook.result.current.resolvedTarget).toBe("refs/heads/main"));
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let error: unknown;
-      await act(async () => {
-        try {
-          await hook.result.current.refreshComparison("scheduled");
-        } catch (failure) {
-          error = failure;
-        }
-      });
-      expect(error).toBeInstanceOf(Error);
-      expect(error).toMatchObject({ message: "Check the remote connection." });
-    }
-    expect(fetch).toHaveBeenCalledTimes(2);
   } finally {
     hook.unmount();
     client.clear();
@@ -382,7 +279,7 @@ test("updates mounted branch choices after a fetch discovers a remote branch", a
   try {
     await waitFor(() => expect(hook.result.current.control.targetBranchesPending).toBe(false));
     await act(async () => {
-      await hook.result.current.comparison.refreshComparison("hard");
+      await hook.result.current.comparison.refreshStep?.fetch();
     });
     await waitFor(() =>
       expect(
@@ -398,53 +295,32 @@ test("updates mounted branch choices after a fetch discovers a remote branch", a
   }
 });
 
-test.each(["cooldown", "pending"] as const)(
-  "an upstream branch switch does not reuse the old branch's %s fetch",
-  async (state) => {
-    const pending = Promise.withResolvers<Awaited<ReturnType<typeof hostClient.gitFetchRemote>>>();
-    const fetched = { outcome: "fetched" as const, output: "Fetched." };
-    const fetch = mock<typeof hostClient.gitFetchRemote>(async () => fetched);
-    if (state === "pending") fetch.mockImplementationOnce(() => pending.promise);
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          gitFetchRemote: fetch,
-          gitGetBranches: async () => [],
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/remotes/origin/main",
-          }),
-        },
-      }),
-    );
-    const client = createQueryClient();
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-    const upstream = { ...initial, target: { branch: "@{upstream}" } };
-    const hook = renderHook(useSessionComparison, { initialProps: upstream, wrapper });
-    let first: Promise<string | null> | undefined;
-    let second: Promise<string | null> | undefined;
-    try {
-      await waitFor(() => expect(hook.result.current.resolvedTarget).not.toBeNull());
-      await act(async () => {
-        first = hook.result.current.refreshComparison("scheduled");
-        if (state === "cooldown") await first;
-      });
-      hook.rerender({ ...upstream, branchKey: "other" });
-      await waitFor(() => expect(hook.result.current.resolvedTarget).not.toBeNull());
-      await act(async () => {
-        second = hook.result.current.refreshComparison(state === "pending" ? "hard" : "scheduled");
-      });
-      expect(fetch).toHaveBeenCalledTimes(2);
-    } finally {
-      pending.resolve(fetched);
-      await act(async () => {
-        await Promise.all([first, second]);
-      });
-      hook.unmount();
-      client.clear();
-      configureShellBridge(createUnavailableShellBridge());
-    }
-  },
-);
+test("an upstream branch switch gets its own fetch, so it does not reuse the old branch's fetch", async () => {
+  configureShellBridge(
+    createShellBridgeFixture({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/main",
+        }),
+      },
+    }),
+  );
+  const client = createQueryClient();
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const upstream = { ...initial, target: { branch: "@{upstream}" } };
+  const hook = renderHook(useSessionComparison, { initialProps: upstream, wrapper });
+  try {
+    await waitFor(() => expect(hook.result.current.resolvedTarget).not.toBeNull());
+    const firstKey = hook.result.current.refreshStep?.fetchKey;
+    hook.rerender({ ...upstream, branchKey: "other" });
+    await waitFor(() => expect(hook.result.current.resolvedTarget).not.toBeNull());
+    expect(hook.result.current.refreshStep?.fetchKey).not.toBe(firstKey);
+  } finally {
+    hook.unmount();
+    client.clear();
+    configureShellBridge(createUnavailableShellBridge());
+  }
+});

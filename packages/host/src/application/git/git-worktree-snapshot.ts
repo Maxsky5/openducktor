@@ -1,6 +1,6 @@
 import type {
   CommitsAheadBehind,
-  FileDiff,
+  GitFileDiff,
   FileStatus,
   GitCurrentBranch,
   GitDiffScope,
@@ -10,9 +10,11 @@ import type {
   GitWorktreeStatusSnapshot,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
-import type { GitWorktreeStatusData } from "../../ports/git-port";
+import type { GitLocalChangeGroupData, GitWorktreeStatusData } from "../../ports/git-port";
 
 const gitWorktreeHashVersion = 1;
+/** Local group snapshots hash full object IDs and the checkout revision. */
+const gitLocalChangesHashVersion = 2;
 
 class WorktreeSnapshotHasher {
   private high = 0xcbf29ce4 | 0;
@@ -122,7 +124,7 @@ export const hashWorktreeStatusPayload = (
   return hasher.finishHex();
 };
 
-export const hashWorktreeDiffPayload = (fileDiffs: FileDiff[]): string => {
+export const hashWorktreeDiffPayload = (fileDiffs: GitFileDiff[]): string => {
   const hasher = new WorktreeSnapshotHasher();
   hasher.updateU64(fileDiffs.length);
 
@@ -188,5 +190,45 @@ export const validateResetSnapshotMatches = (
   const diffHash = hashWorktreeDiffPayload(statusData.fileDiffs);
   if (snapshot.statusHash !== statusHash || snapshot.diffHash !== diffHash) {
     throw new HostValidationError({ message: staleDiffMessage });
+  }
+};
+
+/** A snapshot of one local group. Diffs with full object IDs cover binary and untracked content. */
+export const hashLocalGroupSnapshot = (
+  currentBranch: GitCurrentBranch,
+  group: GitLocalChangeGroupData,
+): GitResetSnapshot => {
+  const hasher = new WorktreeSnapshotHasher();
+  hashOptionalString(hasher, currentBranch.name);
+  hasher.updateBool(currentBranch.detached);
+  hashOptionalString(hasher, currentBranch.revision);
+  hasher.updateU64(group.fileStatuses.length);
+  for (const status of group.fileStatuses) {
+    hasher.updateString(status.path);
+    hashOptionalString(hasher, status.originalPath);
+    hasher.updateString(status.status);
+  }
+  return {
+    hashVersion: gitLocalChangesHashVersion,
+    statusHash: hasher.finishHex(),
+    diffHash: hashWorktreeDiffPayload(group.fileDiffs),
+  };
+};
+
+const snapshotsEqual = (left: GitResetSnapshot, right: GitResetSnapshot): boolean =>
+  left.hashVersion === right.hashVersion &&
+  left.statusHash === right.statusHash &&
+  left.diffHash === right.diffHash;
+
+/** Rejects a write that the user reviewed in other content than Git has now. */
+export const validateLocalSnapshotsMatch = (
+  expected: readonly GitResetSnapshot[],
+  actual: readonly GitResetSnapshot[],
+): void => {
+  if (expected.some((snapshot, index) => !snapshotsEqual(snapshot, actual[index] ?? snapshot))) {
+    throw new HostValidationError({
+      field: "snapshots",
+      message: "The displayed changes are out of date. Refresh and review them.",
+    });
   }
 };

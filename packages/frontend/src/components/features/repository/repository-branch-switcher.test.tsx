@@ -292,7 +292,7 @@ describe("RepositoryBranchSwitcher", () => {
     expect(html).toContain('data-branch-value="feature/desloppify"');
   });
 
-  test("opens checkout choices from the pencil beside the branch text", async () => {
+  test("opens checkout choices with one click on the inline branch chip", async () => {
     branchSelectorSpy.mockRestore();
     updateBranchState({
       branches: [
@@ -307,17 +307,49 @@ describe("RepositoryBranchSwitcher", () => {
       </BranchStateProvider>,
     );
     try {
-      expect(screen.getByTitle("Current branch: main").textContent).toBe("main");
-      const edit = screen.getByRole("button", { name: "Edit repository branch" });
-      expect(edit.textContent).toBe("");
-      fireEvent.click(edit);
+      const chip = screen.getByRole("button", {
+        name: "Current branch: main. Switch repository branch.",
+      });
+      expect(chip).toBe(screen.getByTestId("repository-branch-switcher-trigger"));
+      expect(chip.textContent).toBe("main");
+      expect(chip.getAttribute("title")).toBe("Current branch: main. Switch repository branch.");
+      expect(chip.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.getAllByRole("button")).toEqual([chip]);
+
+      fireEvent.click(chip);
       expect(screen.getByRole("dialog", { name: "Repository branch" })).toBeTruthy();
+      expect(chip.getAttribute("aria-expanded")).toBe("true");
       fireEvent.click(await screen.findByRole("option", { name: /release/ }));
       await waitFor(() =>
         expect(switchBranch).toHaveBeenCalledWith("release", expect.any(Function)),
       );
       expect(screen.queryByRole("option", { name: /release/ })).toBeNull();
-      expect(screen.getByTitle("Current branch: main").textContent).toBe("main");
+      expect(
+        screen.getByRole("button", { name: "Current branch: main. Switch repository branch." })
+          .textContent,
+      ).toBe("main");
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test("disables the inline branch chip and names the placeholder while branches load", async () => {
+    branchSelectorSpy.mockRestore();
+    updateBranchState({ branches: [], activeBranch: null, isLoadingBranches: true });
+    const RepositoryBranchSwitcher = await importRepositoryBranchSwitcher();
+    const rendered = render(
+      <BranchStateProvider>
+        <RepositoryBranchSwitcher layout="inline" />
+      </BranchStateProvider>,
+    );
+    try {
+      const chip = screen.getByRole("button", {
+        name: "Current branch: Loading branches.... Switch repository branch.",
+      });
+      expect(chip.textContent).toBe("Loading branches...");
+      expect(chip.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(chip);
+      expect(screen.queryByRole("dialog", { name: "Repository branch" })).toBeNull();
     } finally {
       rendered.unmount();
     }

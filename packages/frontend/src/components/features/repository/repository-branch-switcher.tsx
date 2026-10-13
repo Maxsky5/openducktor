@@ -1,11 +1,15 @@
-import { GitBranch, Pencil } from "lucide-react";
+import { ChevronDown, GitBranch } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  BRANCH_CHIP_BUTTON_CLASS_NAME,
+  BRANCH_CHIP_CLASS_NAME,
+} from "@/components/features/repository/branch-chip-classnames";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
-import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 import { useWorkspaceBranchState } from "@/state/app-state-provider";
 
 type RepositoryBranchSwitcherLayout = "stacked" | "inline";
@@ -19,10 +23,10 @@ const LAYOUT_CLASSES = {
     trigger: "",
   },
   inline: {
-    root: "space-y-1",
-    row: "flex h-7 min-w-0 items-center gap-1.5",
+    root: "flex min-w-0 flex-col gap-0.5",
+    row: "flex h-7 min-w-0 items-center",
     label: "sr-only",
-    selector: "shrink-0",
+    selector: "min-w-0 max-w-full",
     trigger: "h-7 text-xs",
   },
 } satisfies Record<RepositoryBranchSwitcherLayout, Record<string, string>>;
@@ -163,17 +167,6 @@ function RepositoryBranchRow({
       <p id={labelId} className={classes.label} title={repoPath}>
         Repository branch
       </p>
-      {layout === "inline" ? (
-        <>
-          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-            title={`Current branch: ${value || placeholder}`}
-          >
-            {value || placeholder}
-          </span>
-        </>
-      ) : null}
       <BranchSelector
         value={value}
         options={options}
@@ -185,17 +178,21 @@ function RepositoryBranchRow({
         {...(layout === "inline"
           ? {
               trigger: (
-                <Button
+                <button
                   type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 shrink-0"
-                  aria-label="Edit repository branch"
-                  title="Switch repository branch"
+                  className={cn(BRANCH_CHIP_CLASS_NAME, BRANCH_CHIP_BUTTON_CLASS_NAME)}
+                  aria-label={`Current branch: ${value || placeholder}. Switch repository branch.`}
+                  title={`Current branch: ${value || placeholder}. Switch repository branch.`}
                   disabled={disabled}
+                  data-testid="repository-branch-switcher-trigger"
                 >
-                  <Pencil className="size-3.5" />
-                </Button>
+                  <GitBranch
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate">{value || placeholder}</span>
+                  <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
+                </button>
               ),
             }
           : {})}

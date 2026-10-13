@@ -1,15 +1,21 @@
 import { describe, expect, mock, test } from "bun:test";
-import { fireEvent, type RenderResult, screen } from "@testing-library/react";
+import type { GitFileDiff, GitHistoryPage, GitHistoryPageRequest } from "@openducktor/contracts";
+import { fireEvent, type RenderResult, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
+import type { GitChangeIntent, GitCommitMode } from "@/features/agent-studio-git";
+import { hostClient } from "@/lib/host-client";
+import { isApplePlatform } from "@/lib/steer-shortcut";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { AgentStudioGitPanel } from "./agent-studio-git-panel";
+import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   baseModel,
   ensureRenderer,
   flush,
+  type PanelModelInput,
   render,
   renderAgentStudioGitPanelElement,
   setupAgentStudioGitPanelTests,
+  toFileDiff,
 } from "./agent-studio-git-panel.test-support";
 
 enableReactActEnvironment();
@@ -181,12 +187,9 @@ describe("AgentStudioGitPanel", () => {
 
   test("renders branch context labels and git action controls", async () => {
     const refresh = mock(async () => {});
-    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
     let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = render(
-        createElement(AgentStudioGitPanel, { model: baseModel({ refresh, setDiffScope }) }),
-      );
+      renderer = render(createElement(AgentStudioGitPanel, { model: baseModel({ refresh }) }));
       await flush();
     });
 
@@ -222,7 +225,9 @@ describe("AgentStudioGitPanel", () => {
     });
 
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+    expect(
+      screen.getByTestId("agent-studio-git-diff-scope-uncommitted").getAttribute("aria-selected"),
+    ).toBe("true");
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -386,7 +391,7 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     const detectButton = findByTestId(root, "agent-studio-git-detect-pr-button");
-    expect(getNodeText(detectButton)).toContain("Detect PR");
+    expect(detectButton.element.getAttribute("aria-label")).toBe("Detect PR");
 
     await act(async () => {
       detectButton.props.onClick();
@@ -455,8 +460,6 @@ describe("AgentStudioGitPanel", () => {
 
   test("shows the repository comparison without a target edit or rebase action", async () => {
     const refresh = mock(async () => {});
-    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
-    const commitAll = mock(async (_message: string) => true);
     const pushBranch = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
     let renderer: RenderResult | null = null;
@@ -468,8 +471,6 @@ describe("AgentStudioGitPanel", () => {
             contextMode: "repository",
             diffScope: "uncommitted",
             refresh,
-            setDiffScope,
-            commitAll,
             pushBranch,
             pullFromUpstream,
           }),
@@ -518,9 +519,6 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     expect(hasVisibleText(root, "No changes against origin/main")).toBe(true);
-    expect(
-      hasVisibleText(root, "Changes since this branch diverged from origin/main appear here."),
-    ).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-pull-button").props.disabled)).toBe(true);
     expect(Boolean(findByTestId(root, "agent-studio-git-push-button").props.disabled)).toBe(false);
 
@@ -531,7 +529,11 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("enforces disabled safety states for rebase and commit controls", async () => {
-    const commitAll = mock(async (_message: string) => true);
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
+    const stagedFile = {
+      fileStatuses: [{ path: "src/a.ts", staged: true, status: "modified" }],
+      fileDiffs: [toFileDiff("src/a.ts")],
+    };
 
     let renderer: RenderResult | null = null;
     await act(async () => {
@@ -541,7 +543,7 @@ describe("AgentStudioGitPanel", () => {
             branch: null,
             diffScope: "uncommitted",
             fileStatuses: [],
-            commitAll,
+            commit,
           }),
         }),
       );
@@ -567,31 +569,31 @@ describe("AgentStudioGitPanel", () => {
     await act(async () => {
       ensureRenderer(renderer).rerender(
         renderAgentStudioGitPanelElement(
-          baseModel({
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-            isPushing: true,
-            diffScope: "uncommitted",
-            commitAll,
-          }),
+          baseModel({ ...stagedFile, isPushing: true, diffScope: "uncommitted", commit }),
         ),
       );
       await flush();
     });
     expect(Boolean(findByTestId(root, "agent-studio-git-rebase-button").props.disabled)).toBe(true);
+    await act(async () => {
+      findByTestId(root, "agent-studio-git-commit-message-input").props.onChange({
+        currentTarget: { value: "feat: commit staged files" },
+      });
+      await flush();
+    });
+    expect(
+      Boolean(findByTestId(root, "agent-studio-git-commit-submit-button").props.disabled),
+    ).toBe(true);
+    expect(getNodeText(findByTestId(root, "agent-studio-git-commit-hint"))).toBe(
+      "Wait for the push to finish.",
+    );
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
         renderAgentStudioGitPanelElement(
-          baseModel({
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-            diffScope: "uncommitted",
-            commitAll,
-          }),
+          baseModel({ ...stagedFile, diffScope: "uncommitted", commit }),
         ),
       );
-      findByTestId(root, "agent-studio-git-commit-message-input").props.onChange({
-        currentTarget: { value: "feat: commit all files" },
-      });
       await flush();
     });
     expect(
@@ -599,10 +601,11 @@ describe("AgentStudioGitPanel", () => {
     ).toBe(false);
 
     await act(async () => {
-      await findByTestId(root, "agent-studio-git-commit-submit-button").props.onClick();
+      findByTestId(root, "agent-studio-git-commit-submit-button").props.onClick();
       await flush();
     });
-    expect(commitAll).toHaveBeenCalledWith("feat: commit all files");
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith("staged", "feat: commit staged files");
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -610,25 +613,22 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("switches diff scope and validates commit-all message input", async () => {
-    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
-    const commitAll = mock(async (_message: string) => true);
+  test("switches diff scope and validates the commit message", async () => {
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
     const refresh = mock(async () => {});
+    const modelFor = (diffScope: "target" | "uncommitted") =>
+      baseModel({
+        diffScope,
+        commit,
+        refresh,
+        fileStatuses: [{ path: "src/a.ts", staged: true, status: "modified" }],
+        fileDiffs: [toFileDiff("src/a.ts")],
+        commitError: "",
+      });
 
     let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = render(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
-            diffScope: "target",
-            setDiffScope,
-            commitAll,
-            refresh,
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-            commitError: "",
-          }),
-        }),
-      );
+      renderer = render(createElement(AgentStudioGitPanel, { model: modelFor("target") }));
       await flush();
     });
 
@@ -640,22 +640,13 @@ describe("AgentStudioGitPanel", () => {
       fireEvent.mouseDown(findDiffScopeTabs(root, "uncommitted").element, { button: 0 });
       await flush();
     });
-    expect(setDiffScope).toHaveBeenCalledWith("uncommitted");
+    expect(
+      screen.getByTestId("agent-studio-git-diff-scope-uncommitted").getAttribute("aria-selected"),
+    ).toBe("true");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(1);
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        renderAgentStudioGitPanelElement(
-          baseModel({
-            diffScope: "uncommitted",
-            setDiffScope,
-            commitAll,
-            refresh,
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-            commitError: "",
-          }),
-        ),
-      );
+      ensureRenderer(renderer).rerender(renderAgentStudioGitPanelElement(modelFor("uncommitted")));
       await flush();
     });
 
@@ -684,7 +675,7 @@ describe("AgentStudioGitPanel", () => {
       submitButtonAfterTyping.props.onClick();
       await flush();
     });
-    expect(commitAll).toHaveBeenCalledWith("  chore: tidy git flow  ");
+    expect(commit).toHaveBeenCalledWith("staged", "  chore: tidy git flow  ");
     const commitInputAfterSubmit = findByTestId(root, "agent-studio-git-commit-message-input");
     expect(commitInputAfterSubmit.props.value).toBe("");
     expect(
@@ -695,7 +686,9 @@ describe("AgentStudioGitPanel", () => {
       fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
       await flush();
     });
-    expect(setDiffScope).toHaveBeenLastCalledWith("target");
+    expect(
+      screen.getByTestId("agent-studio-git-diff-scope-target").getAttribute("aria-selected"),
+    ).toBe("true");
     expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
 
     await act(async () => {
@@ -704,63 +697,61 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("clears optimistic diff-scope requests after model acknowledgement", async () => {
-    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
+  test("keeps Branch changes selected while its comparison loads, fails, and recovers", async () => {
+    const model = (overrides: PanelModelInput) =>
+      baseModel({
+        diffScope: "uncommitted",
+        comparisonReference: null,
+        fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+        ...overrides,
+      });
+    const branchTab = () => screen.getByTestId("agent-studio-git-diff-scope-target");
     let renderer: RenderResult | null = null;
-
     await act(async () => {
       renderer = render(
         createElement(AgentStudioGitPanel, {
-          model: baseModel({
-            diffScope: "uncommitted",
-            setDiffScope,
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          model: model({
+            comparisonPending: true,
+            loadedScopesByScope: { target: false, uncommitted: true },
           }),
         }),
       );
       await flush();
     });
 
-    const root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(1);
-
     await act(async () => {
-      fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
+      fireEvent.mouseDown(branchTab(), { button: 0 });
       await flush();
     });
+    expect(branchTab().getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Checking changes against origin/main...")).toBeTruthy();
 
-    expect(setDiffScope).toHaveBeenCalledWith("target");
-    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
+    const reason = "Comparison branch origin/main is unavailable.";
+    await act(async () => {
+      ensureRenderer(renderer).rerender(
+        renderAgentStudioGitPanelElement(
+          model({ comparisonPending: false, comparisonUnavailableReason: reason, error: reason }),
+        ),
+      );
+      await flush();
+    });
+    expect(branchTab().getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Branch changes are unavailable")).toBeTruthy();
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
         renderAgentStudioGitPanelElement(
-          baseModel({
-            diffScope: "target",
-            setDiffScope,
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          model({
+            comparisonPending: false,
+            comparisonReference: "origin/main",
+            fileDiffs: [toFileDiff("src/a.ts")],
           }),
         ),
       );
       await flush();
     });
-
-    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
-
-    await act(async () => {
-      ensureRenderer(renderer).rerender(
-        renderAgentStudioGitPanelElement(
-          baseModel({
-            diffScope: "uncommitted",
-            setDiffScope,
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-          }),
-        ),
-      );
-      await flush();
-    });
-
-    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(1);
+    expect(branchTab().getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByText("Branch changes are unavailable")).toBeNull();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -852,26 +843,26 @@ describe("AgentStudioGitPanel", () => {
   });
 
   test("disables commit/push/rebase controls during detached branch and action in-flight", async () => {
-    const commitAll = mock(async () => true);
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
     const pushBranch = mock(async () => {});
     const rebaseOntoTarget = mock(async () => {});
     const pullFromUpstream = mock(async () => {});
+    const detachedModel = (overrides: Partial<AgentStudioGitPanelModel> = {}) =>
+      baseModel({
+        branch: null,
+        diffScope: "uncommitted",
+        commit,
+        pushBranch,
+        rebaseOntoTarget,
+        pullFromUpstream,
+        fileStatuses: [{ path: "src/a.ts", staged: true, status: "modified" }],
+        fileDiffs: [toFileDiff("src/a.ts")],
+        ...overrides,
+      });
 
     let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = render(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
-            branch: null,
-            diffScope: "uncommitted",
-            commitAll,
-            pushBranch,
-            rebaseOntoTarget,
-            pullFromUpstream,
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-          }),
-        }),
-      );
+      renderer = render(createElement(AgentStudioGitPanel, { model: detachedModel() }));
       await flush();
     });
 
@@ -896,27 +887,34 @@ describe("AgentStudioGitPanel", () => {
       commitSubmit.props.onClick();
       await flush();
     });
-    expect(commitAll).toHaveBeenCalledWith("fix: handle detached head");
+    expect(commit).toHaveBeenCalledWith("staged", "fix: handle detached head");
 
     await act(async () => {
       ensureRenderer(renderer).rerender(
         renderAgentStudioGitPanelElement(
-          baseModel({
-            branch: null,
-            diffScope: "uncommitted",
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
-            isCommitting: true,
-            commitAll,
-            pushBranch,
-            rebaseOntoTarget,
-            pullFromUpstream,
-          }),
+          detachedModel({ isCommitting: true, committingMode: "staged" }),
         ),
       );
       await flush();
     });
 
     expect(Boolean(commitInput.props.disabled)).toBe(true);
+    expect(Boolean(commitSubmit.props.disabled)).toBe(true);
+    expect(screen.getByTestId("agent-studio-git-commit-status").textContent).toBe(
+      "Committing staged changes",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).rerender(
+        renderAgentStudioGitPanelElement(
+          detachedModel({ isCommitting: true, committingMode: "all" }),
+        ),
+      );
+      await flush();
+    });
+    expect(screen.getByTestId("agent-studio-git-commit-status").textContent).toBe(
+      "Committing all changes",
+    );
     expect(Boolean(commitSubmit.props.disabled)).toBe(true);
     expect(Boolean(rebaseButton.props.disabled)).toBe(true);
     expect(Boolean(pullButton.props.disabled)).toBe(true);
@@ -926,17 +924,11 @@ describe("AgentStudioGitPanel", () => {
     await act(async () => {
       ensureRenderer(renderer).rerender(
         renderAgentStudioGitPanelElement(
-          baseModel({
-            branch: null,
-            diffScope: "uncommitted",
-            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          detachedModel({
             isCommitting: true,
+            committingMode: "staged",
             isPushing: true,
             isRebasing: true,
-            commitAll,
-            pushBranch,
-            rebaseOntoTarget,
-            pullFromUpstream,
           }),
         ),
       );
@@ -1529,29 +1521,14 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("marks conflicted files in the uncommitted changes list", async () => {
+  test("shows conflicted files in their own group before the local groups", async () => {
     let renderer: RenderResult | null = null;
     await act(async () => {
       renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",
-            fileDiffs: [
-              {
-                file: "AGENTS.md",
-                type: "modified",
-                additions: 1,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-              {
-                file: "README.md",
-                type: "modified",
-                additions: 1,
-                deletions: 0,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
+            fileDiffs: [toFileDiff("AGENTS.md"), toFileDiff("README.md")],
             fileStatuses: [
               { path: "AGENTS.md", staged: false, status: "unmerged" },
               { path: "README.md", staged: false, status: "modified" },
@@ -1563,9 +1540,24 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(countByTestId(root, "agent-studio-git-file-conflict-indicator")).toBe(1);
-    expect(countByTestId(root, "agent-studio-git-file-conflict-slot")).toBe(1);
-    expect(getNodeText(findButtonByText(root, "AGENTS.md"))).not.toContain("M");
+    const conflicted = findByTestId(root, "agent-studio-git-group-conflicted");
+    const unstaged = findByTestId(root, "agent-studio-git-group-unstaged");
+    expect(
+      conflicted.element.compareDocumentPosition(unstaged.element) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(getNodeText(findByTestId(root, "agent-studio-git-conflicted-count"))).toBe("1");
+    expect(getNodeText(conflicted)).toContain("AGENTS.md");
+    expect(getNodeText(conflicted)).not.toContain("README.md");
+    expect(countByTestId(conflicted, "agent-studio-git-file-conflict-indicator")).toBe(1);
+    expect(countByTestId(conflicted, "agent-studio-git-stage-file-button")).toBe(0);
+    expect(countByTestId(conflicted, "agent-studio-git-discard-file-button")).toBe(0);
+    expect(getNodeText(unstaged)).toContain("README.md");
+    expect(countByTestId(unstaged, "agent-studio-git-file-conflict-indicator")).toBe(0);
+    expect(countByTestId(unstaged, "agent-studio-git-file-conflict-slot")).toBe(0);
+    expect(getNodeText(findByTestId(root, "agent-studio-git-commit-hint"))).toBe(
+      "Resolve the conflicted files before you commit.",
+    );
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1606,9 +1598,7 @@ describe("AgentStudioGitPanel", () => {
     expect(countByTestId(root, "agent-studio-git-file-conflict-slot")).toBe(0);
     const fileRowButton = findButtonByText(root, "main.ts");
 
-    const rootText = getNodeText(root);
-    expect(rootText).toContain("1 changed file");
-    expect(rootText).toContain("+1");
+    expect(getNodeText(root)).toContain("+1");
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
 
     await act(async () => {
@@ -1632,72 +1622,56 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("shows file reset only in uncommitted scope and opens confirmation without toggling", async () => {
-    const requestFileReset = mock((_filePath: string) => {});
+  test("stages and discards a file from its row without toggling the diff", async () => {
+    const changeSelection = mock((_intent: GitChangeIntent) => {});
+    const model = baseModel({
+      diffScope: "uncommitted",
+      changeSelection,
+      fileDiffs: [toFileDiff("src/main.ts")],
+      fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
+    });
     let renderer: RenderResult | null = null;
     await act(async () => {
-      renderer = render(
-        createElement(AgentStudioGitPanel, {
-          model: baseModel({
-            diffScope: "uncommitted",
-            requestFileReset,
-            confirmReset: async () => {},
-            cancelReset: () => {},
-            pendingReset: { kind: "file", filePath: "src/main.ts" },
-            fileDiffs: [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
-            fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
-          }),
-        }),
-      );
+      renderer = render(createElement(AgentStudioGitPanel, { model }));
       await flush();
     });
 
     const root = getRoot(renderer);
-
-    expect(countByTestId(root, "agent-studio-git-reset-file-button")).toBe(1);
+    expect(countByTestId(root, "agent-studio-git-unstage-file-button")).toBe(0);
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
 
     await act(async () => {
-      findByTestId(root, "agent-studio-git-reset-file-button").props.onClick({
-        stopPropagation: () => {},
-      });
+      fireEvent.click(screen.getByTestId("agent-studio-git-stage-file-button"));
+      fireEvent.click(screen.getByTestId("agent-studio-git-discard-file-button"));
       await flush();
     });
 
-    expect(requestFileReset).toHaveBeenCalledWith("src/main.ts");
+    expect(changeSelection.mock.calls).toEqual([
+      [
+        {
+          action: "stage",
+          group: "unstaged",
+          selection: { kind: "file", filePath: "src/main.ts" },
+        },
+      ],
+      [
+        {
+          action: "discard",
+          group: "unstaged",
+          selection: { kind: "file", filePath: "src/main.ts" },
+        },
+      ],
+    ]);
     expect(countByTestId(root, "mock-pierre-diff-viewer")).toBe(0);
-    expect(findByTestId(root, "agent-studio-git-reset-modal")).toBeTruthy();
 
     await act(async () => {
-      ensureRenderer(renderer).rerender(
-        renderAgentStudioGitPanelElement(
-          baseModel({
-            diffScope: "target",
-            fileDiffs: [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
-            fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
-          }),
-        ),
-      );
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), { button: 0 });
       await flush();
     });
 
-    expect(countByTestId(getRoot(renderer), "agent-studio-git-reset-file-button")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-file-toggle-button")).toBe(1);
+    expect(countByTestId(root, "agent-studio-git-stage-file-button")).toBe(0);
+    expect(countByTestId(root, "agent-studio-git-discard-file-button")).toBe(0);
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1705,25 +1679,54 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
-  test("disables file reset controls when reset actions are unavailable", async () => {
+  test("disables Discard for a submodule and keeps Stage", async () => {
+    const changeSelection = mock((_intent: GitChangeIntent) => {});
+    const submodule: GitFileDiff = {
+      file: "vendor/lib",
+      type: "submodule",
+      additions: 1,
+      deletions: 1,
+      diff: "diff --git a/vendor/lib b/vendor/lib\nindex aaa..bbb 160000\n--- a/vendor/lib\n+++ b/vendor/lib\n@@ -1 +1 @@\n-Subproject commit aaa\n+Subproject commit bbb\n",
+    };
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            changeSelection,
+            fileDiffs: [submodule],
+            fileStatuses: [{ path: "vendor/lib", staged: false, status: "modified" }],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const discard = screen.getByTestId("agent-studio-git-discard-file-button");
+    expect(discard.hasAttribute("disabled")).toBe(true);
+    expect(discard.getAttribute("title")).toContain("vendor/lib is a submodule.");
+    await act(async () => {
+      fireEvent.click(discard);
+      fireEvent.click(screen.getByTestId("agent-studio-git-stage-file-button"));
+      await flush();
+    });
+    expect(changeSelection.mock.calls).toEqual([
+      [{ action: "stage", group: "unstaged", selection: { kind: "file", filePath: "vendor/lib" } }],
+    ]);
+  });
+
+  test("disables file and group change actions with the change blocker reason", async () => {
+    const changeSelection = mock((_intent: GitChangeIntent) => {});
+    const reason = "Wait for the Git change to finish.";
     let renderer: RenderResult | null = null;
     await act(async () => {
       renderer = render(
         createElement(AgentStudioGitPanel, {
           model: baseModel({
             diffScope: "uncommitted",
-            requestFileReset: () => {},
-            isResetDisabled: true,
-            resetDisabledReason: "Cannot reset while git diff data is loading.",
-            fileDiffs: [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
+            changeSelection,
+            changeDisabledReason: reason,
+            fileDiffs: [toFileDiff("src/main.ts")],
             fileStatuses: [{ path: "src/main.ts", staged: false, status: "modified" }],
           }),
         }),
@@ -1732,7 +1735,20 @@ describe("AgentStudioGitPanel", () => {
     });
 
     const root = getRoot(renderer);
-    expect(findByTestId(root, "agent-studio-git-reset-file-button").props.disabled).toBe(true);
+    for (const testId of [
+      "agent-studio-git-stage-file-button",
+      "agent-studio-git-discard-file-button",
+      "agent-studio-git-stage-all-button",
+    ]) {
+      const button = findByTestId(root, testId);
+      expect(button.props.disabled).toBe(true);
+      expect(button.props.title).toBe(reason);
+    }
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-stage-all-button"));
+      await flush();
+    });
+    expect(changeSelection).not.toHaveBeenCalled();
 
     await act(async () => {
       ensureRenderer(renderer).unmount();
@@ -1778,7 +1794,6 @@ describe("AgentStudioGitPanel", () => {
     const headerNode = findByTestId(root, "agent-studio-git-list-header");
     const pathNode = findByTestId(root, "agent-studio-git-file-path");
 
-    expect(headerNode.props.className).toContain("flex-wrap");
     expect(headerNode.props.className).toContain("min-w-0");
     expect(pathNode.props.title).toBe(
       "packages/frontend/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
@@ -1805,7 +1820,6 @@ describe("AgentStudioGitPanel", () => {
     expect(dirNameNode?.props.className).toContain("block truncate");
 
     const statsNode = findByTestId(root, "agent-studio-git-file-stats");
-    expect(statsNode.props.className).toContain("min-w-[4.75rem]");
     expect(statsNode.props.className).toContain("shrink-0");
     expect(statsNode.props.className).not.toContain("border-l");
     expect(getNodeText(statsNode)).toContain("+3");
@@ -1817,26 +1831,467 @@ describe("AgentStudioGitPanel", () => {
       await flush();
     });
   });
+
+  test("shows three tabs and opens History without changing the diff scope", async () => {
+    const currentTip = "a".repeat(40);
+    const targetTip = "b".repeat(40);
+    const historyPage: GitHistoryPage = {
+      outcome: "page",
+      comparison: {
+        currentTip,
+        targetTip,
+        boundaryOids: ["c".repeat(40)],
+        aheadBehind: { ahead: 2, behind: 1 },
+      },
+      commits: [],
+      nextOffset: null,
+    };
+    const readHistory = mock(async (_request: GitHistoryPageRequest) => historyPage);
+    // GitHistoryView reads through the shared host client, so the test replaces one method and restores it.
+    const originalReadHistory = hostClient.gitGetHistoryPage;
+    hostClient.gitGetHistoryPage = readHistory;
+    let renderer: RenderResult | null = null;
+    try {
+      await act(async () => {
+        renderer = render(
+          createElement(AgentStudioGitPanel, {
+            model: baseModel({
+              diffScope: "uncommitted",
+              repoPath: "/repo",
+              comparisonReference: "origin/main",
+              checkout: { name: "feature/task-11", detached: false },
+            }),
+          }),
+        );
+        await flush();
+      });
+
+      expect(screen.getAllByRole("tab").map((tab) => tab.getAttribute("data-testid"))).toEqual([
+        "agent-studio-git-diff-scope-uncommitted",
+        "agent-studio-git-diff-scope-target",
+        "agent-studio-git-tab-history",
+      ]);
+      const historyTab = screen.getByTestId("agent-studio-git-tab-history");
+      expect(historyTab.textContent).toBe("History");
+
+      await act(async () => {
+        fireEvent.mouseDown(historyTab, { button: 0 });
+        await flush();
+      });
+      await waitFor(() => screen.getByTestId("agent-studio-git-history"));
+
+      expect(historyTab.getAttribute("aria-selected")).toBe("true");
+      expect(readHistory).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        workingDir: "/tmp/worktree",
+        targetReference: "origin/main",
+        expectedBranch: { name: "feature/task-11", detached: false },
+      });
+      expect(screen.queryByTestId("agent-studio-git-commit-form")).toBeNull();
+
+      await act(async () => {
+        fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+          button: 0,
+        });
+        await flush();
+      });
+      expect(screen.queryByTestId("agent-studio-git-history")).toBeNull();
+      expect(screen.getByTestId("agent-studio-git-commit-form")).toBeDefined();
+    } finally {
+      hostClient.gitGetHistoryPage = originalReadHistory;
+      await act(async () => {
+        ensureRenderer(renderer).unmount();
+        await flush();
+      });
+    }
+  });
+
+  test("commits staged changes with Enter and every change with Cmd or Ctrl and Enter", async () => {
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            commit,
+            fileStatuses: [
+              { path: "src/staged.ts", staged: true, status: "modified" },
+              { path: "src/unstaged.ts", staged: false, status: "modified" },
+            ],
+            fileDiffs: [toFileDiff("src/staged.ts"), toFileDiff("src/unstaged.ts")],
+          }),
+        }),
+      );
+      await flush();
+    });
+    const input = () => screen.getByTestId("agent-studio-git-commit-message-input");
+    const modifier = isApplePlatform() ? "⌘" : "Ctrl";
+    expect(screen.getByTestId("agent-studio-git-commit-hint").textContent).toBe(
+      `Enter commits 1 staged file. ${modifier}+Enter stages and commits all 2 changed files.`,
+    );
+    expect(input().getAttribute("placeholder")).toBe(
+      `Commit message (${modifier}+Enter commits all)`,
+    );
+
+    await act(async () => {
+      fireEvent.change(input(), { target: { value: "feat: staged only" } });
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-commit-submit-button"));
+      await flush();
+    });
+    expect(commit).toHaveBeenLastCalledWith("staged", "feat: staged only");
+    expect(input()).toHaveProperty("value", "");
+
+    await act(async () => {
+      fireEvent.change(input(), { target: { value: "feat: from the keyboard" } });
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.keyDown(input(), { key: "Enter" });
+      await flush();
+    });
+    expect(commit).toHaveBeenLastCalledWith("staged", "feat: from the keyboard");
+
+    for (const modifierKey of [{ metaKey: true }, { ctrlKey: true }]) {
+      await act(async () => {
+        fireEvent.change(input(), { target: { value: "feat: everything" } });
+        await flush();
+      });
+      await act(async () => {
+        fireEvent.keyDown(input(), { key: "Enter", ...modifierKey });
+        await flush();
+      });
+      expect(commit).toHaveBeenLastCalledWith("all", "feat: everything");
+      expect(input()).toHaveProperty("value", "");
+    }
+    expect(commit).toHaveBeenCalledTimes(4);
+  });
+
+  test("does not commit on Enter while an input method composes text", async () => {
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            commit,
+            fileStatuses: [{ path: "src/staged.ts", staged: true, status: "modified" }],
+            fileDiffs: [toFileDiff("src/staged.ts")],
+          }),
+        }),
+      );
+      await flush();
+    });
+    const input = screen.getByTestId("agent-studio-git-commit-message-input");
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "feat: 日本" } });
+      fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+      await flush();
+    });
+    expect(commit).not.toHaveBeenCalled();
+    expect(input).toHaveProperty("value", "feat: 日本");
+  });
+
+  test("explains a disabled Commit when nothing is staged and keeps Cmd or Ctrl and Enter available", async () => {
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            commit,
+            fileStatuses: [{ path: "src/unstaged.ts", staged: false, status: "modified" }],
+            fileDiffs: [toFileDiff("src/unstaged.ts")],
+          }),
+        }),
+      );
+      await flush();
+    });
+    const input = screen.getByTestId("agent-studio-git-commit-message-input");
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "feat: unstaged work" } });
+      await flush();
+    });
+    expect(
+      screen.getByTestId("agent-studio-git-commit-submit-button").hasAttribute("disabled"),
+    ).toBe(true);
+    const modifier = isApplePlatform() ? "⌘" : "Ctrl";
+    expect(screen.getByTestId("agent-studio-git-commit-hint").textContent).toBe(
+      `Nothing is staged. ${modifier}+Enter stages and commits all 1 changed file.`,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+      await flush();
+    });
+    expect(commit).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+      await flush();
+    });
+    expect(commit).toHaveBeenCalledWith("all", "feat: unstaged work");
+  });
+
+  test("keeps the commit draft across a tab change and a remount", async () => {
+    const model = baseModel({
+      diffScope: "uncommitted",
+      fileStatuses: [{ path: "src/staged.ts", staged: true, status: "modified" }],
+      fileDiffs: [toFileDiff("src/staged.ts")],
+    });
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(createElement(AgentStudioGitPanel, { model }));
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("agent-studio-git-commit-message-input"), {
+        target: { value: "wip: keep this draft" },
+      });
+      await flush();
+    });
+
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-target"), { button: 0 });
+      await flush();
+    });
+    expect(screen.queryByTestId("agent-studio-git-commit-message-input")).toBeNull();
+    await act(async () => {
+      fireEvent.mouseDown(screen.getByTestId("agent-studio-git-diff-scope-uncommitted"), {
+        button: 0,
+      });
+      await flush();
+    });
+    expect(screen.getByTestId("agent-studio-git-commit-message-input")).toHaveProperty(
+      "value",
+      "wip: keep this draft",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+    await act(async () => {
+      renderer = render(createElement(AgentStudioGitPanel, { model }));
+      await flush();
+    });
+    expect(screen.getByTestId("agent-studio-git-commit-message-input")).toHaveProperty(
+      "value",
+      "wip: keep this draft",
+    );
+
+    await act(async () => {
+      ensureRenderer(renderer).rerender(
+        renderAgentStudioGitPanelElement({ ...model, worktreePath: "/tmp/other-worktree" }),
+      );
+      await flush();
+    });
+    expect(screen.getByTestId("agent-studio-git-commit-message-input")).toHaveProperty("value", "");
+  });
+
+  test("clears only the submitted draft after a commit", async () => {
+    const results: Array<(committed: boolean) => void> = [];
+    const commit = mock(
+      (_mode: GitCommitMode, _message: string) =>
+        new Promise<boolean>((resolve) => {
+          results.push(resolve);
+        }),
+    );
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            commit,
+            fileStatuses: [{ path: "src/staged.ts", staged: true, status: "modified" }],
+            fileDiffs: [toFileDiff("src/staged.ts")],
+          }),
+        }),
+      );
+      await flush();
+    });
+    const input = () => screen.getByTestId("agent-studio-git-commit-message-input");
+    const type = async (value: string) => {
+      await act(async () => {
+        fireEvent.change(input(), { target: { value } });
+        await flush();
+      });
+    };
+
+    await type("fix: first");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-commit-submit-button"));
+      await flush();
+    });
+    await type("fix: typed while the commit ran");
+    await act(async () => {
+      results[0]?.(true);
+      await flush();
+    });
+    expect(input()).toHaveProperty("value", "fix: typed while the commit ran");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-studio-git-commit-submit-button"));
+      await flush();
+    });
+    await act(async () => {
+      results[1]?.(false);
+      await flush();
+    });
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(input()).toHaveProperty("value", "fix: typed while the commit ran");
+  });
+
+  test("describes the deletion of an untracked file in the discard dialog", async () => {
+    const confirmDiscard = mock(async () => {});
+    const cancelDiscard = mock(() => {});
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            pendingDiscard: {
+              group: "unstaged",
+              selection: { kind: "file", filePath: "notes/todo.txt" },
+              isUntrackedFile: true,
+            },
+            confirmDiscard,
+            cancelDiscard,
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const dialog = screen.getByTestId("agent-studio-git-discard-modal");
+    expect(screen.getByRole("heading", { name: "Delete untracked file?" })).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "This deletes the untracked file notes/todo.txt. You cannot undo this.",
+    );
+    const summary = screen.getByTestId("agent-studio-git-discard-summary");
+    expect(Array.from(summary.querySelectorAll("dd"), (node) => node.textContent)).toEqual([
+      "notes/todo.txt",
+      "Unstaged",
+      "Whole file",
+    ]);
+    const confirm = screen.getByTestId("agent-studio-git-confirm-discard-button");
+    expect(confirm.textContent).toBe("Delete file");
+
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(screen.getByTestId("agent-studio-git-cancel-discard-button"));
+      await flush();
+    });
+    expect(confirmDiscard).toHaveBeenCalledTimes(1);
+    expect(cancelDiscard).toHaveBeenCalled();
+  });
+
+  test("describes a staged chunk discard in the discard dialog", async () => {
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            pendingDiscard: {
+              group: "staged",
+              selection: { kind: "hunk", filePath: "src/a.ts", hunkIndex: 1 },
+              isUntrackedFile: false,
+            },
+            confirmDiscard: async () => {},
+            cancelDiscard: () => {},
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const dialog = screen.getByTestId("agent-studio-git-discard-modal");
+    expect(screen.getByRole("heading", { name: "Discard staged changes?" })).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "This removes the selected staged chunk of src/a.ts from the next commit and from the working file. Unrelated unstaged edits stay.",
+    );
+    const summary = screen.getByTestId("agent-studio-git-discard-summary");
+    expect(Array.from(summary.querySelectorAll("dd"), (node) => node.textContent)).toEqual([
+      "src/a.ts",
+      "Staged",
+      "Chunk 2",
+    ]);
+    expect(screen.getByTestId("agent-studio-git-confirm-discard-button").textContent).toBe(
+      "Discard chunk",
+    );
+  });
+
+  test("shows a refresh failure notice and spins refresh while a refresh runs", async () => {
+    const model = baseModel({ refreshError: "git fetch failed.", isRefreshing: true });
+    let renderer: RenderResult | null = null;
+    await act(async () => {
+      renderer = render(createElement(AgentStudioGitPanel, { model }));
+      await flush();
+    });
+
+    expect(screen.getByTestId("agent-studio-git-refresh-error").textContent).toBe(
+      "Refresh failed: git fetch failed.",
+    );
+    const refreshButton = screen.getByTestId("agent-studio-git-refresh-button");
+    expect(refreshButton.innerHTML).toContain("animate-spin");
+    expect(refreshButton.hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      ensureRenderer(renderer).rerender(
+        renderAgentStudioGitPanelElement({ ...model, refreshError: null, isRefreshing: false }),
+      );
+      await flush();
+    });
+    expect(screen.queryByTestId("agent-studio-git-refresh-error")).toBeNull();
+    expect(screen.getByTestId("agent-studio-git-refresh-button").innerHTML).not.toContain(
+      "animate-spin",
+    );
+    expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  test("shows a failed Git change above the lists", async () => {
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            changeError: "Stage failed: the index is locked.",
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const notice = screen.getByTestId("agent-studio-git-change-error");
+    expect(notice.getAttribute("role")).toBe("alert");
+    expect(notice.textContent).toBe("Stage failed: the index is locked.");
+  });
 });
 
-test("disables a reset confirmation until a pending push completes", async () => {
+test("disables a discard confirmation until a pending push completes", async () => {
   const confirm = mock(async () => {});
   const model = baseModel({
-    pendingReset: { kind: "file", filePath: "src/main.ts" },
+    pendingDiscard: {
+      group: "unstaged",
+      selection: { kind: "file", filePath: "src/main.ts" },
+      isUntrackedFile: false,
+    },
     isPushing: true,
-    confirmReset: confirm,
-    cancelReset: () => {},
+    confirmDiscard: confirm,
+    cancelDiscard: () => {},
   });
   const view = render(renderAgentStudioGitPanelElement(model));
   try {
-    const button = screen.getByTestId("agent-studio-git-confirm-reset-button");
+    const button = screen.getByTestId("agent-studio-git-confirm-discard-button");
     expect(button.hasAttribute("disabled")).toBe(true);
     fireEvent.click(button);
     expect(confirm).not.toHaveBeenCalled();
     await act(async () => {
       view.rerender(renderAgentStudioGitPanelElement({ ...model, isPushing: false }));
     });
-    const ready = screen.getByTestId("agent-studio-git-confirm-reset-button");
+    const ready = screen.getByTestId("agent-studio-git-confirm-discard-button");
     expect(ready.hasAttribute("disabled")).toBe(false);
     await act(async () => {
       fireEvent.click(ready);

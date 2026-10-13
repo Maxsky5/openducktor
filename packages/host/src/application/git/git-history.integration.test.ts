@@ -1,0 +1,188 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { GitHistoryPage, GitHistoryPageRequest } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
+import { GIT_HISTORY_PAGE_SIZE } from "../../infrastructure/git/git-history";
+import { createGitService } from "./git-service";
+
+// These tests start real Git processes, because the commit graph belongs to Git.
+const service = createGitService(
+  createGitCliAdapter({ resolveCommand: () => Effect.succeed("git") }),
+);
+
+let repo = "";
+const git = (args: string[], input?: string) =>
+  execFileSync("git", args, {
+    cwd: repo,
+    encoding: "utf8",
+    input,
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
+const commit = async (file: string, message: string) => {
+  await writeFile(path.join(repo, file), `${message}\n`);
+  git(["add", file]);
+  git(["commit", "-m", message]);
+  return git(["rev-parse", "HEAD"]);
+};
+
+const history = async (
+  targetReference: string,
+  page?: GitHistoryPageRequest["page"],
+): Promise<GitHistoryPage> => {
+  const expectedBranch = await Effect.runPromise(service.getCurrentBranch({ repoPath: repo }));
+  const request: GitHistoryPageRequest = { repoPath: repo, targetReference, expectedBranch };
+  if (page) request.page = page;
+  return Effect.runPromise(service.getHistoryPage(request));
+};
+
+const requirePage = (page: GitHistoryPage) => {
+  if (page.outcome !== "page") throw new Error(`Expected a page, got ${page.outcome}.`);
+  return page;
+};
+
+const failure = async (promise: Promise<unknown>): Promise<string> => {
+  try {
+    await promise;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  throw new Error("Expected the History read to fail.");
+};
+
+beforeEach(async () => {
+  repo = await mkdtemp(path.join(tmpdir(), "git-history-"));
+  git(["init", "--initial-branch=main"]);
+  git(["config", "user.name", "History Test"]);
+  git(["config", "user.email", "history@example.invalid"]);
+  git(["config", "commit.gpgsign", "false"]);
+});
+
+afterEach(async () => {
+  await rm(repo, { recursive: true, force: true });
+});
+
+describe("branch history", () => {
+  test("shows both sides, merge parents, and the shared boundary", async () => {
+    const older = await commit("base.txt", "older shared");
+    const base = await commit("base.txt", "shared base");
+    git(["checkout", "-b", "feature"]);
+    const featureA = await commit("a.txt", "feature a");
+    git(["checkout", "main"]);
+    const mainM = await commit("m.txt", "main m");
+    git(["checkout", "feature"]);
+    git(["merge", "--no-edit", "main"]);
+    const merge = git(["rev-parse", "HEAD"]);
+    const featureB = await commit("b.txt", "feature b\n\nLonger body line.");
+    git(["checkout", "main"]);
+    const mainN = await commit("n.txt", "main n");
+    git(["checkout", "feature"]);
+
+    const page = requirePage(await history("refs/heads/main"));
+
+    expect(page.comparison).toEqual({
+      currentTip: featureB,
+      targetTip: mainN,
+      boundaryOids: [mainM],
+      aheadBehind: { ahead: 3, behind: 1 },
+    });
+    expect(page.nextOffset).toBeNull();
+    const byOid = new Map(page.commits.map((entry) => [entry.oid, entry]));
+    expect([...byOid.keys()].sort()).toEqual([featureA, merge, featureB, mainN, mainM].sort());
+    expect(byOid.get(merge)?.parentOids).toEqual([featureA, mainM]);
+    expect(byOid.get(featureA)?.parentOids).toEqual([base]);
+    expect(byOid.get(featureA)?.outsideParentOids).toEqual([base]);
+    expect(byOid.get(merge)?.outsideParentOids).toEqual([]);
+    expect(byOid.get(mainM)?.membership).toBe("boundary");
+    expect(byOid.get(mainN)?.membership).toBe("target");
+    expect(byOid.get(featureB)).toMatchObject({
+      membership: "current",
+      subject: "feature b",
+      message: "feature b\n\nLonger body line.",
+      authorName: "History Test",
+    });
+    expect(byOid.get(featureB)?.authorDate).toMatch(/^\d{4}-\d{2}-\d{2}T.+[+-]\d{2}:\d{2}$/u);
+    expect(byOid.has(older)).toBe(false);
+    // Children come before their parents.
+    const order = page.commits.map((entry) => entry.oid);
+    expect(order.indexOf(merge)).toBeLessThan(order.indexOf(featureA));
+    expect(order.indexOf(mainN)).toBeLessThan(order.indexOf(mainM));
+  });
+
+  test("handles matching tips and a target that is ahead only", async () => {
+    const shared = await commit("base.txt", "shared");
+    git(["branch", "target"]);
+
+    const same = requirePage(await history("refs/heads/target"));
+    expect(same.commits.map((entry) => [entry.oid, entry.membership])).toEqual([
+      [shared, "boundary"],
+    ]);
+    expect(same.comparison.aheadBehind).toEqual({ ahead: 0, behind: 0 });
+
+    git(["checkout", "target"]);
+    const missing = await commit("t.txt", "missing on main");
+    git(["checkout", "main"]);
+    const behind = requirePage(await history("refs/heads/target"));
+    expect(behind.commits.map((entry) => [entry.oid, entry.membership])).toEqual([
+      [missing, "target"],
+      [shared, "boundary"],
+    ]);
+    expect(behind.comparison.aheadBehind).toEqual({ ahead: 0, behind: 1 });
+  });
+
+  test("pages with pinned tips and rejects a page after a tip moves", async () => {
+    await commit("base.txt", "base");
+    git(["checkout", "-b", "feature"]);
+    // Fast import writes many commits in one Git process.
+    const count = GIT_HISTORY_PAGE_SIZE + 5;
+    const stream = [`reset refs/heads/feature\nfrom ${git(["rev-parse", "HEAD"])}\n`];
+    for (let index = 0; index < count; index += 1) {
+      stream.push(
+        `commit refs/heads/feature\ncommitter T <t@example.invalid> ${1_700_000_000 + index} +0000\ndata ${`c${index}`.length}\nc${index}\n\n`,
+      );
+    }
+    git(["fast-import", "--quiet"], stream.join(""));
+    git(["reset", "--hard", "-q", "feature"]);
+
+    const first = requirePage(await history("refs/heads/main"));
+    expect(first.commits).toHaveLength(GIT_HISTORY_PAGE_SIZE);
+    expect(first.nextOffset).toBe(GIT_HISTORY_PAGE_SIZE);
+    const pageInput = {
+      currentTip: first.comparison.currentTip,
+      targetTip: first.comparison.targetTip,
+      offset: GIT_HISTORY_PAGE_SIZE,
+    };
+    const second = requirePage(await history("refs/heads/main", pageInput));
+    // The remaining feature commits, then the boundary commit.
+    expect(second.commits).toHaveLength(count - GIT_HISTORY_PAGE_SIZE + 1);
+    expect(second.nextOffset).toBeNull();
+    expect(second.commits.at(-1)?.membership).toBe("boundary");
+
+    await commit("later.txt", "later");
+    expect(await failure(history("refs/heads/main", pageInput))).toContain(
+      "The branches changed while History loaded",
+    );
+  });
+
+  test("reports a branch without commits, a missing target, and unrelated histories", async () => {
+    expect(await history("refs/heads/main")).toEqual({ outcome: "no_commits" });
+
+    const mainTip = await commit("base.txt", "main");
+    expect(await failure(history("refs/heads/missing"))).toContain(
+      "Comparison branch refs/heads/missing is unavailable",
+    );
+
+    git(["checkout", "--orphan", "lonely"]);
+    git(["rm", "-rfq", "."]);
+    const lonelyTip = await commit("lonely.txt", "lonely");
+    expect(await history("refs/heads/main")).toEqual({
+      outcome: "no_common_ancestor",
+      currentTip: lonelyTip,
+      targetTip: mainTip,
+      shallow: false,
+    });
+  });
+});

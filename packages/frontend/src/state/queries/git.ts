@@ -2,11 +2,20 @@ import type {
   GitBranch,
   GitCurrentBranch,
   GitComparisonTarget,
+  GitHistoryPage,
+  GitHistoryPageRequest,
+  GitLocalChanges,
   GitTargetBranch,
   GitWorktreeStatus,
-  GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import {
+  type InfiniteData,
+  infiniteQueryOptions,
+  type QueryClient,
+  type QueryKey,
+  queryOptions,
+} from "@tanstack/react-query";
+import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 import { workspaceReadContext } from "./workspace-refresh";
 import { hostClient as host } from "@/lib/host-client";
 
@@ -14,7 +23,8 @@ type GitBranchesQueryHost = Pick<typeof host, "gitGetBranches">;
 type GitCurrentBranchQueryHost = Pick<typeof host, "gitGetCurrentBranch">;
 type GitComparisonTargetQueryHost = Pick<typeof host, "gitGetComparisonTarget">;
 type GitWorktreeStatusQueryHost = Pick<typeof host, "gitGetWorktreeStatus">;
-type GitWorktreeStatusSummaryQueryHost = Pick<typeof host, "gitGetWorktreeStatusSummary">;
+type GitLocalChangesQueryHost = Pick<typeof host, "gitGetLocalChanges">;
+type GitHistoryQueryHost = Pick<typeof host, "gitGetHistoryPage">;
 
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
 const WORKTREE_STATUS_STALE_TIME_MS = 0;
@@ -57,21 +67,23 @@ export const gitQueryKeys = {
       workingDir ?? repoPath,
       branchKey,
     ] as const,
-  worktreeStatusSummary: (
+  localChanges: (repoPath: string, workingDir: string | null, branchKey = "") =>
+    [...gitQueryKeys.all, "local-changes", repoPath, workingDir ?? repoPath, branchKey] as const,
+  history: (
     repoPath: string,
-    targetBranch: string,
-    diffScope: "target" | "uncommitted",
-    workingDir: string | null,
-    branchKey = "",
+    workingDir: string,
+    checkout: GitCurrentBranch,
+    targetReference: string,
   ) =>
     [
       ...gitQueryKeys.all,
-      "worktree-status-summary",
+      "history",
       repoPath,
-      targetBranch,
-      diffScope,
-      workingDir ?? repoPath,
-      branchKey,
+      workingDir,
+      targetReference,
+      checkout.name ?? "",
+      checkout.detached,
+      checkout.revision ?? "",
     ] as const,
 };
 
@@ -145,9 +157,8 @@ export const invalidateGitWorkingDirectoryQueries = async (
       const key = query.queryKey;
       if (key[2] !== repoPath) return false;
       if (key[1] === "comparison-target") return key[3] === workingDir;
-      if (key[1] === "worktree-status" || key[1] === "worktree-status-summary") {
-        return key[5] === workingDir;
-      }
+      if (key[1] === "local-changes" || key[1] === "history") return key[3] === workingDir;
+      if (key[1] === "worktree-status") return key[5] === workingDir;
       return false;
     },
   };
@@ -156,7 +167,7 @@ export const invalidateGitWorkingDirectoryQueries = async (
   await queryClient.invalidateQueries({ ...filter, refetchType: "none" });
 };
 
-const worktreeStatusQueryOptions = (
+export const worktreeStatusQueryOptions = (
   repoPath: string,
   targetBranch: string,
   diffScope: "target" | "uncommitted",
@@ -164,7 +175,8 @@ const worktreeStatusQueryOptions = (
   hostClient: GitWorktreeStatusQueryHost = host,
   branchKey = "",
 ) =>
-  queryOptions({
+  // A plain key type lets a view swap these options for the skipped options.
+  queryOptions<GitWorktreeStatus, Error, GitWorktreeStatus, QueryKey>({
     queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir, branchKey),
     queryFn: ({ client }): Promise<GitWorktreeStatus> => {
       const args: Parameters<GitWorktreeStatusQueryHost["gitGetWorktreeStatus"]> = [
@@ -180,35 +192,104 @@ const worktreeStatusQueryOptions = (
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 
-const worktreeStatusSummaryQueryOptions = (
+export const localChangesQueryOptions = (
   repoPath: string,
-  targetBranch: string,
-  diffScope: "target" | "uncommitted",
   workingDir: string | null,
-  hostClient: GitWorktreeStatusSummaryQueryHost = host,
-  branchKey = "",
+  branchKey: string,
+  hostClient: GitLocalChangesQueryHost = host,
 ) =>
-  queryOptions({
-    queryKey: gitQueryKeys.worktreeStatusSummary(
-      repoPath,
-      targetBranch,
-      diffScope,
-      workingDir,
-      branchKey,
-    ),
-    queryFn: ({ client }): Promise<GitWorktreeStatusSummary> => {
-      const args: Parameters<GitWorktreeStatusSummaryQueryHost["gitGetWorktreeStatusSummary"]> = [
+  queryOptions<GitLocalChanges, Error, GitLocalChanges, QueryKey>({
+    queryKey: gitQueryKeys.localChanges(repoPath, workingDir, branchKey),
+    queryFn: ({ client }): Promise<GitLocalChanges> =>
+      hostClient.gitGetLocalChanges(
         repoPath,
-        targetBranch,
-        diffScope,
         workingDir ?? undefined,
-      ];
-      const readContext = workspaceReadContext(client, workingDir ?? repoPath);
-      if (readContext) args.push(readContext);
-      return hostClient.gitGetWorktreeStatusSummary(...args);
-    },
+        workspaceReadContext(client, workingDir ?? repoPath),
+      ),
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
+
+/** A local changes read with no repository. Its key matches no live read. */
+export const skippedLocalChangesQueryOptions = () =>
+  skippedQueryOptions<GitLocalChanges>({
+    queryKey: [...gitQueryKeys.all, "local-changes", SKIPPED_QUERY_KEY_SEGMENT],
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+/** A Branch changes read before the comparison is ready. Its key matches no live read. */
+export const skippedWorktreeStatusQueryOptions = () =>
+  skippedQueryOptions<GitWorktreeStatus>({
+    queryKey: [...gitQueryKeys.all, "worktree-status", SKIPPED_QUERY_KEY_SEGMENT],
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+type GitHistoryPageParam = NonNullable<GitHistoryPageRequest["page"]> | null;
+
+/** Each page keeps the tips that the first page read, so rows stay in one graph. */
+export const gitHistoryQueryOptions = (
+  input: {
+    repoPath: string;
+    workingDir: string;
+    checkout: GitCurrentBranch;
+    targetReference: string;
+  },
+  hostClient: GitHistoryQueryHost = host,
+) =>
+  infiniteQueryOptions<
+    GitHistoryPage,
+    Error,
+    InfiniteData<GitHistoryPage, GitHistoryPageParam>,
+    ReturnType<typeof gitQueryKeys.history>,
+    GitHistoryPageParam
+  >({
+    queryKey: gitQueryKeys.history(
+      input.repoPath,
+      input.workingDir,
+      input.checkout,
+      input.targetReference,
+    ),
+    queryFn: ({ pageParam }): Promise<GitHistoryPage> => {
+      const request: GitHistoryPageRequest = {
+        repoPath: input.repoPath,
+        workingDir: input.workingDir,
+        targetReference: input.targetReference,
+        expectedBranch: input.checkout,
+      };
+      if (pageParam) request.page = pageParam;
+      return hostClient.gitGetHistoryPage(request);
+    },
+    initialPageParam: null,
+    getNextPageParam: (page): GitHistoryPageParam =>
+      page.outcome === "page" && page.nextOffset !== null
+        ? {
+            currentTip: page.comparison.currentTip,
+            targetTip: page.comparison.targetTip,
+            offset: page.nextOffset,
+          }
+        : null,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+/**
+ * Reads History again for a directory. A view that shows History reads at once.
+ * With `throwOnError`, the result rejects when one of those reads fails.
+ */
+export const refreshGitHistoryQueries = (
+  queryClient: QueryClient,
+  repoPath: string,
+  workingDir: string,
+  options: { throwOnError: boolean },
+): Promise<void> =>
+  queryClient.invalidateQueries(
+    {
+      queryKey: gitQueryKeys.all,
+      predicate: (query) =>
+        query.queryKey[1] === "history" &&
+        query.queryKey[2] === repoPath &&
+        query.queryKey[3] === workingDir,
+    },
+    options,
+  );
 
 export const loadRepoBranchesFromQuery = (
   queryClient: QueryClient,
@@ -242,83 +323,6 @@ export const invalidateCurrentBranchQuery = (
     exact: true,
     refetchType: "none",
   });
-
-export const loadWorktreeStatusFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  targetBranch: string,
-  diffScope: "target" | "uncommitted",
-  workingDir: string | null,
-  options?: {
-    force?: boolean;
-    branchKey?: string;
-    staleTime?: number;
-  },
-  hostClient?: GitWorktreeStatusQueryHost,
-): Promise<GitWorktreeStatus> => {
-  const branchKey = options?.branchKey ?? "";
-  const queryKey = gitQueryKeys.worktreeStatus(
-    repoPath,
-    targetBranch,
-    diffScope,
-    workingDir,
-    branchKey,
-  );
-
-  if (options?.force === true) {
-    void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-  }
-
-  return queryClient.fetchQuery({
-    ...worktreeStatusQueryOptions(
-      repoPath,
-      targetBranch,
-      diffScope,
-      workingDir,
-      hostClient,
-      branchKey,
-    ),
-    staleTime: options?.force === true ? 0 : (options?.staleTime ?? WORKTREE_STATUS_STALE_TIME_MS),
-  });
-};
-
-export const loadWorktreeStatusSummaryFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  targetBranch: string,
-  diffScope: "target" | "uncommitted",
-  workingDir: string | null,
-  options?: {
-    force?: boolean;
-    branchKey?: string;
-  },
-  hostClient?: GitWorktreeStatusSummaryQueryHost,
-): Promise<GitWorktreeStatusSummary> => {
-  const branchKey = options?.branchKey ?? "";
-  const queryKey = gitQueryKeys.worktreeStatusSummary(
-    repoPath,
-    targetBranch,
-    diffScope,
-    workingDir,
-    branchKey,
-  );
-
-  if (options?.force === true) {
-    void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
-  }
-
-  return queryClient.fetchQuery({
-    ...worktreeStatusSummaryQueryOptions(
-      repoPath,
-      targetBranch,
-      diffScope,
-      workingDir,
-      hostClient,
-      branchKey,
-    ),
-    staleTime: WORKTREE_STATUS_STALE_TIME_MS,
-  });
-};
 
 async function readCurrentBranch(
   client: QueryClient,

@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import type { FileDiff, GitResetWorktreeSelection } from "@openducktor/contracts";
+import type { GitFileDiff, GitResetWorktreeSelection } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -34,7 +34,7 @@ const gitResourceError = (
 ): HostResourceError => new HostResourceError({ message, operation, resource });
 const gitValidationError = (message: string, field: string): HostValidationError =>
   new HostValidationError({ message, field });
-const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff => {
+const findFileDiff = (fileDiffs: GitFileDiff[], filePath: string): GitFileDiff => {
   const fileDiff = fileDiffs.find((diff) => diff.file === filePath);
   if (!fileDiff) {
     throw gitResourceError(
@@ -46,9 +46,9 @@ const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff => {
   return fileDiff;
 };
 const findFileDiffEffect = (
-  fileDiffs: FileDiff[],
+  fileDiffs: GitFileDiff[],
   filePath: string,
-): Effect.Effect<FileDiff, HostResourceErrorAggregate> =>
+): Effect.Effect<GitFileDiff, HostResourceErrorAggregate> =>
   Effect.try({
     try: () => findFileDiff(fileDiffs, filePath),
     catch: (cause) =>
@@ -198,7 +198,7 @@ const resetRenamedFileSelection = (
 const resetFileSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
-  fileDiffs: FileDiff[],
+  fileDiffs: GitFileDiff[],
   filePath: string,
 ) =>
   Effect.gen(function* () {
@@ -236,7 +236,7 @@ const resetFileSelection = (
 const resetHunkSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
-  fileDiffs: FileDiff[],
+  fileDiffs: GitFileDiff[],
   filePath: string,
   hunkIndex: number,
 ) =>
@@ -314,7 +314,7 @@ const resetHunkSelection = (
 export const resetWorktreeSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
-  fileDiffs: FileDiff[],
+  fileDiffs: GitFileDiff[],
   selection: GitResetWorktreeSelection,
 ) => {
   if (selection.kind === "file") {

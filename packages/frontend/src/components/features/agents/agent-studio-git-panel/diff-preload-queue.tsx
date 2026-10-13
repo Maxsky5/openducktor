@@ -1,10 +1,10 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import { memo, type ReactElement, useMemo } from "react";
 import { PierreDiffPreloader } from "@/components/features/agents/pierre-diff-viewer";
 import { buildDiffPreloadEntries } from "./diff-preload-queue-model";
 
 type DiffPreloadQueueProps = {
-  fileDiffs: FileDiff[];
+  fileDiffs: GitFileDiff[];
   expandedFiles: ReadonlySet<string>;
   limit: number;
 };

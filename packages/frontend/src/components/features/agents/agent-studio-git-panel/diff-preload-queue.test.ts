@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import { buildDiffPreloadEntries } from "./diff-preload-queue-model";
 
-const buildDiff = (file: string, diff: string): FileDiff => ({
+const buildDiff = (file: string, diff: string): GitFileDiff => ({
   file,
   type: "modified",
   additions: 1,
