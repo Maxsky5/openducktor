@@ -57,7 +57,7 @@ The runtime catalog keeps inactive results for 60 minutes so a modal can show ca
 
 Agent session lists stay fresh until a task event invalidates them or an explicit refresh requests current records. Session-list queries do not retry on mount after a failure. A failed list stays active in its view, so a later task event reads it again.
 
-Agent history uses an infinite stale time while the workspace live stream proves its coverage version is current. History with no proven coverage uses a zero stale time. See [session history freshness](session-history-freshness.md) for invalidation, workspace retention, and read races.
+Agent history uses an infinite stale time while the workspace live stream proves its coverage version is current. History with no proven coverage uses a zero stale time.
 
 Each task has its own session-list query. The query function sends its read through a shared batch in `agent-session-list-batch.ts`. Reads of one workspace that start before the next microtask share one `agentSessionsListForTasks` request. Each workspace has at most one session-list request in progress. Reads that start during that request share the next request. The batch rejects a response that omits a requested task, repeats a task, or adds a task.
 
