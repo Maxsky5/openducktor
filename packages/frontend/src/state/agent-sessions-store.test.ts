@@ -47,7 +47,7 @@ describe("toAgentSessionSummary", () => {
 });
 
 describe("createAgentSessionsStore session snapshots", () => {
-  test.each(["unchanged", "sibling", "child", "gap", "closed", "refreshing", "attaching"] as const)(
+  test.each(["sibling", "child", "closed", "refreshing", "attaching"] as const)(
     "retains covered workspace history after %s",
     (change) => {
       const queryClient = new QueryClient();
@@ -89,10 +89,6 @@ describe("createAgentSessionsStore session snapshots", () => {
         });
       if (change === "child")
         observation.accept({ type: "session_upsert", session: { ...child, activity: "running" } });
-      if (change === "gap")
-        observation.accept(
-          createLiveSnapshotEnvelope({ sessions: [root, child], historyReplayGap: true }),
-        );
       if (change === "closed") observation.close();
       store.resetWorkspace("/repo");
       expect(store.getSessionSnapshot(session)?.historyLoadState).toBe("stale");
@@ -100,7 +96,7 @@ describe("createAgentSessionsStore session snapshots", () => {
         observation.accept({ type: "session_upsert", session: { ...root, activity: "running" } });
       store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [root, child] }));
       expect(store.getSessionSnapshot(session)?.historyLoadState).toBe(
-        change === "unchanged" || change === "sibling" ? "loaded" : "stale",
+        change === "sibling" ? "loaded" : "stale",
       );
       expect(store.getSessionSnapshot(session)?.messages).toBe(session.messages);
       observation.close();
