@@ -1,6 +1,15 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ReactNode } from "react";
 import { describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { AgentMessageQueueSnapshot, AgentQueuedMessage } from "@openducktor/contracts";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render as renderView,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { toast } from "sonner";
@@ -12,6 +21,8 @@ import {
   type AgentChatMessageQueueComposerModel,
   AgentChatMessageQueuePauseNotice,
 } from "./agent-chat-message-queue";
+
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
 
 type WaitingEntry = Exclude<AgentQueuedMessage, { state: "editing" }>;
 
@@ -172,6 +183,8 @@ describe("AgentChatMessageQueue", () => {
       expect(showsFull()).toBe(false);
     } finally {
       unmount();
+      // Unmount schedules resource cache cleanup on the fake clock.
+      jest.runOnlyPendingTimers();
       jest.useRealTimers();
     }
   });

@@ -75,7 +75,7 @@ type MarkdownRendererCandidate = "mermaid" | "math";
 
 type MarkdownTaskAssetProps = Pick<
   ComponentProps<typeof MarkdownRendererRich>,
-  "taskAssetContext" | "resolveTaskAssetSrc"
+  "taskAssetContext" | "resolveTaskAssetSource"
 >;
 
 const selectMarkdownCandidate = (
@@ -101,9 +101,9 @@ const resolveTaskAssetProps = (
     return {};
   }
   const props: MarkdownTaskAssetProps = { taskAssetContext };
-  const resolveTaskAssetSrc = getShellBridge().resolveTaskAssetSrc;
-  if (resolveTaskAssetSrc) {
-    props.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  const resolveTaskAssetSource = getShellBridge().resolveTaskAssetSource;
+  if (resolveTaskAssetSource) {
+    props.resolveTaskAssetSource = resolveTaskAssetSource;
   }
   return props;
 };

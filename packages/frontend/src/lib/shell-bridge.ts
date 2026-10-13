@@ -1,3 +1,4 @@
+import type { ResourceData } from "@/types/resource-source";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveAttachInput,
@@ -20,10 +21,20 @@ import type {
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 import type { BrowserLiveControlEvent } from "@/types";
 
+/** Reconnect handlers return the recovery that must finish before remote work unlocks. */
+export type BrowserLiveControlListener = (payload: BrowserLiveControlEvent) => void | Promise<void>;
+
+/** Observe async event failures when the transport cannot await a listener. */
+export const observeShellEventResult = (result: void | Promise<void>): void => {
+  void Promise.resolve(result).catch((cause: unknown) => {
+    console.error("Shell event listener failed", cause);
+  });
+};
+
 /** Run events, such as Autopilot outcomes. Browser control events report stream loss and reconnects. */
 export type RunEventListener = (
   payload: HostEventPayload<"openducktor://run-event"> | BrowserLiveControlEvent,
-) => void;
+) => void | Promise<void>;
 export type AzureDevOpsConnectionUpdateListener = (
   payload: HostEventPayload<"openducktor://azure-devops-connection-updated">,
 ) => void;
@@ -32,11 +43,11 @@ export type WorkspaceProviderSetupUpdateListener = (
 ) => void;
 export type WorkspaceSessionUpdateListener = (
   payload: HostEventPayload<"openducktor://workspace-session-updated"> | BrowserLiveControlEvent,
-) => void;
+) => void | Promise<void>;
 /** Host runtime lifecycle changes. Browser control events report stream loss and reconnects. */
 export type RuntimeChangeListener = (
   payload: HostEventPayload<"openducktor://runtime-changed"> | BrowserLiveControlEvent,
-) => void;
+) => void | Promise<void>;
 
 export type TaskStreamFrame = TaskEventStreamFrame;
 
@@ -72,6 +83,7 @@ export type HostBridge = {
     input: { cursor: TaskEventCursor | null },
     onFrame: (frame: TaskStreamFrame) => void,
     onTerminalFailure?: (cause: unknown) => void,
+    signal?: AbortSignal,
   ) => Promise<TaskStreamSubscription>;
 };
 
@@ -96,6 +108,8 @@ export type TerminalTransportConnection = {
 };
 
 export type TerminalBridge = {
+  /** Remote shells await the selected terminal owner's finite restoration. */
+  subscribeRecovery?: (recover: (signal: AbortSignal) => Promise<void>) => () => void;
   connect(
     onFrame: (frame: Uint8Array) => void,
     onStateChange: (state: TerminalTransportState) => void,
@@ -125,12 +139,21 @@ export type NotificationBridge = {
 };
 
 export type ShellBridge = HostBridge & {
+  dispose?: () => Promise<void>;
+  remoteAccess?: import("@openducktor/contracts").RemoteAccessBridge;
+  remoteConnection?: Pick<
+    import("@openducktor/host-client/remote").RemoteHostClient,
+    "readState" | "subscribeState" | "retry"
+  >;
   appUpdates: AppUpdateBridge;
   capabilities: ShellCapabilities;
   notifications: NotificationBridge;
   openExternalUrl: (url: string) => Promise<void>;
-  resolveLocalAttachmentPreviewSrc: (path: string) => Promise<string>;
-  resolveTaskAssetSrc: (context: TaskAssetRenderContext) => Promise<string>;
+  resolveLocalAttachmentPreview: (path: string, signal: AbortSignal) => Promise<ResourceData>;
+  resolveTaskAssetSource: (
+    context: TaskAssetRenderContext,
+    signal: AbortSignal,
+  ) => Promise<ResourceData>;
   terminals: TerminalBridge;
   editorClipboard?: {
     readText(type?: string): Promise<string> | string;
@@ -238,8 +261,8 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
     dispose: () => {},
   },
   openExternalUrl: failUnavailable,
-  resolveLocalAttachmentPreviewSrc: failUnavailable,
-  resolveTaskAssetSrc: failUnavailable,
+  resolveLocalAttachmentPreview: failUnavailable,
+  resolveTaskAssetSource: failUnavailable,
   terminals: { connect: failUnavailable },
 });
 

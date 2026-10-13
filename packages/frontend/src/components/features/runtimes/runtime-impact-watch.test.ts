@@ -73,10 +73,11 @@ describe("watchRuntimeImpact", () => {
     await harness.resolveRead(0, impact("token-1"));
     harness.emit(streamWarning);
 
-    harness.emit(reconnected);
+    const recovery = harness.emit(reconnected);
     expect(harness.reads).toHaveLength(2);
     // A new failure during the recovery read keeps the review blocked.
     harness.emit(streamWarning);
+    await expect(recovery).rejects.toThrow("Event stream lost");
     await harness.resolveRead(1, impact("token-2"));
     expect(harness.latest()?.error).toBe("Event stream lost");
 

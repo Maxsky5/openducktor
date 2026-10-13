@@ -34,6 +34,7 @@ export type TaskEventStreamSubscription = {
   subscriptionId: string;
   resume(): void;
   replay(): void;
+  replayBoundary: TaskEventCursor;
   unsubscribe(): void;
 };
 
@@ -234,6 +235,7 @@ export const createTaskEventStream = ({
           if (subscription.snapshotBoundary) enqueue(subscription, subscription.snapshotBoundary);
           else enqueueReplay(subscription);
         },
+        replayBoundary: freezeCursor({ epoch, sequence }),
         unsubscribe: () => {
           subscription.active = false;
           subscription.queue = [];

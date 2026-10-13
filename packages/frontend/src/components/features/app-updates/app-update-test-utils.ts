@@ -55,6 +55,6 @@ export const createTestShellBridge = (appUpdates: AppUpdateBridge): ShellBridge 
     canPreviewLocalAttachments: true,
   },
   openExternalUrl: async () => {},
-  resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
-  resolveTaskAssetSrc: async () => "asset://task-preview",
+  resolveLocalAttachmentPreview: async () => ({ kind: "url", src: "asset://preview" }),
+  resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
 });

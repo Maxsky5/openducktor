@@ -12,10 +12,10 @@ import {
   type WebError,
   WebResourceError,
   WebValidationError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 import { type LauncherOptions, resolveWebConfigDirScope, runLauncherEffect } from "./launcher";
 import { createWebLogger, type WebLogger, writeWebLogEffect } from "./logger";
-import { parseHostEffect, parseHttpOriginEffect } from "./http-origin";
+import { parseHostEffect, parseHttpOriginEffect } from "@openducktor/remote-host/http-origin";
 
 type CliOptions = {
   workspaceMode: boolean;
@@ -24,6 +24,8 @@ type CliOptions = {
   host?: string;
   externalUrl?: string;
   basePath?: string;
+  remoteEndpoint?: string;
+  remotePort?: number;
 };
 
 type CliInvocation =
@@ -48,6 +50,8 @@ export const createLauncherOptions = (
     ...(cliOptions.externalUrl !== undefined && {
       externalUrl: cliOptions.externalUrl,
     }),
+    ...(cliOptions.remotePort !== undefined && { remotePort: cliOptions.remotePort }),
+    ...(cliOptions.remoteEndpoint !== undefined && { remoteEndpoint: cliOptions.remoteEndpoint }),
     ...(cliOptions.basePath !== undefined && { basePath: cliOptions.basePath }),
   };
   if (cliOptions.workspaceMode) {
@@ -66,7 +70,7 @@ export const createLauncherOptions = (
 
 const printHelp = (): void => {
   console.log(
-    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; wrap IPv6 addresses in brackets, for example [::1]; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example http://100.64.0.1:1420; required when --host is not loopback\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
+    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; wrap IPv6 addresses in brackets, for example [::1]; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example https://host.example; use an HTTPS proxy for network access\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --remote-endpoint <url> Complete remote work endpoint for a proxy layout\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
   );
 };
 
@@ -84,6 +88,7 @@ const isKnownCliFlag = (value: string | undefined): boolean =>
   value === "--host" ||
   value === "--external-url" ||
   value === "--base-path" ||
+  value === "--remote-endpoint" ||
   value === "-h" ||
   value === "--help";
 
@@ -165,6 +170,7 @@ export const parseCliArgsEffect = (
       if (arg === "--backend-port") {
         const value = yield* readFlagValue(args, index, "--backend-port");
         options.backendPort = yield* parsePortEffect(value, "--backend-port");
+        options.remotePort = options.backendPort;
         index += 1;
         continue;
       }
@@ -177,6 +183,17 @@ export const parseCliArgsEffect = (
       if (arg === "--external-url") {
         const value = yield* readFlagValue(args, index, "--external-url");
         options.externalUrl = yield* parseExternalUrlEffect(value, "--external-url");
+        index += 1;
+        continue;
+      }
+      if (arg === "--remote-endpoint") {
+        const value = yield* readFlagValue(args, index, "--remote-endpoint");
+        if (value === undefined)
+          return yield* new WebValidationError({
+            field: "remoteEndpoint",
+            message: "--remote-endpoint requires a complete work endpoint.",
+          });
+        options.remoteEndpoint = value;
         index += 1;
         continue;
       }

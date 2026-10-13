@@ -11,6 +11,8 @@ import {
 } from "@openducktor/contracts";
 import {
   type SerialGate,
+  createSerialGate,
+  createSerialLane,
   createTerminalClientSession,
   type SerialLane,
   type TerminalClientSession,
@@ -32,6 +34,8 @@ export type TerminalWebSocketService = Pick<
 
 export type TerminalWebSocketData = {
   connectionId: string;
+  remoteSignal?: AbortSignal;
+  stopRemote?: () => void;
   terminalService: TerminalWebSocketService;
   clientSession: TerminalClientSession | null;
   backpressured: boolean;
@@ -48,6 +52,79 @@ export type TerminalWebSocketData = {
 };
 
 export type TerminalServerSocket = NodeServerSocket<TerminalWebSocketData>;
+
+export const createSocketData = (
+  input: Pick<
+    TerminalWebSocketData,
+    "connectionId" | "terminalService" | "logger" | "onBackgroundFailure" | "remoteSignal"
+  >,
+): TerminalWebSocketData => {
+  const data: TerminalWebSocketData = {
+    connectionId: input.connectionId,
+    terminalService: input.terminalService,
+    clientSession: null,
+    backpressured: false,
+    inFlightBytes: 0,
+    pendingBytes: 0,
+    pendingFrames: [],
+    drainWaiters: new Set(),
+    attachPermit: createSerialLane(),
+    messageGate: createSerialGate(),
+    closed: false,
+    logger: input.logger,
+    onBackgroundFailure: input.onBackgroundFailure,
+  };
+  if (input.remoteSignal !== undefined) data.remoteSignal = input.remoteSignal;
+  return data;
+};
+
+export const terminalWebSocketHandler = {
+  perMessageDeflate: false,
+  maxPayloadLength: MAX_CLIENT_FRAME_BYTES,
+  message: runClientMessage,
+  drain(socket: TerminalServerSocket) {
+    const data = socket.data;
+    if (data.closed) return;
+    data.backpressured = false;
+    data.inFlightBytes = 0;
+    while (data.pendingFrames.length > 0 && !data.backpressured) {
+      const frame = data.pendingFrames.shift();
+      if (!frame) break;
+      data.pendingBytes -= frame.byteLength;
+      if (!sendFrame(socket, frame)) return;
+    }
+    if (!data.backpressured) {
+      for (const finish of data.drainWaiters) finish(true);
+    }
+  },
+  open(socket: TerminalServerSocket) {
+    const signal = socket.data.remoteSignal;
+    if (!signal) return;
+    const close = () => beginClose(socket, 1001, "Remote connection ended.");
+    signal.addEventListener("abort", close, { once: true });
+    socket.data.stopRemote = () => signal.removeEventListener("abort", close);
+    if (signal.aborted) close();
+  },
+  close(socket: TerminalServerSocket) {
+    socket.data.stopRemote?.();
+    const { clientSession, connectionId, logger, onBackgroundFailure, drainWaiters } = socket.data;
+    socket.data.closed = true;
+    for (const finish of drainWaiters) finish(false);
+    socket.data.pendingFrames.length = 0;
+    socket.data.pendingBytes = 0;
+    socket.data.clientSession = null;
+    if (!clientSession) return;
+    void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {
+      void Effect.runPromise(
+        writeWebLogEffect(
+          logger,
+          "error",
+          `Failed to detach terminals from browser connection ${connectionId}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        ),
+      ).catch(onBackgroundFailure);
+    });
+  },
+};
 
 const beginClose = (socket: TerminalServerSocket, code: number, reason: string): void => {
   if (socket.data.closed) return;
@@ -146,7 +223,7 @@ const getClientSession = (socket: TerminalServerSocket): TerminalClientSession =
   return clientSession;
 };
 
-const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): void => {
+function runClientMessage(socket: TerminalServerSocket, raw: string | Buffer): void {
   if (!Buffer.isBuffer(raw)) {
     sendProtocolError(socket, {
       code: "protocol_error",
@@ -195,43 +272,4 @@ const runClientMessage = (socket: TerminalServerSocket, raw: string | Buffer): v
   Effect.runFork(
     socket.data.messageGate.run("terminalId" in message ? message.terminalId : "", operation),
   );
-};
-
-export const terminalWebSocketHandler = {
-  perMessageDeflate: false,
-  maxPayloadLength: MAX_CLIENT_FRAME_BYTES,
-  message: runClientMessage,
-  drain(socket: TerminalServerSocket) {
-    const data = socket.data;
-    if (data.closed) return;
-    data.backpressured = false;
-    data.inFlightBytes = 0;
-    while (data.pendingFrames.length > 0 && !data.backpressured) {
-      const frame = data.pendingFrames.shift();
-      if (!frame) break;
-      data.pendingBytes -= frame.byteLength;
-      if (!sendFrame(socket, frame)) return;
-    }
-    if (!data.backpressured) {
-      for (const finish of data.drainWaiters) finish(true);
-    }
-  },
-  close(socket: TerminalServerSocket) {
-    const { clientSession, connectionId, logger, onBackgroundFailure, drainWaiters } = socket.data;
-    socket.data.closed = true;
-    for (const finish of drainWaiters) finish(false);
-    socket.data.pendingFrames.length = 0;
-    socket.data.pendingBytes = 0;
-    socket.data.clientSession = null;
-    if (!clientSession) return;
-    void Effect.runPromise(clientSession.close()).catch((cause: unknown) => {
-      void Effect.runPromise(
-        writeWebLogEffect(
-          logger,
-          "error",
-          `Failed to detach terminals from browser connection ${connectionId}: ${cause instanceof Error ? cause.message : String(cause)}`,
-        ),
-      ).catch(onBackgroundFailure);
-    });
-  },
-};
+}

@@ -1,6 +1,7 @@
+import { remoteAccessFixture } from "./remote-access-test-fixture";
 import { describe, expect, test } from "bun:test";
 import { Deferred, Effect, Fiber } from "effect";
-import { WebOperationError } from "./effect/web-errors";
+import { WebOperationError } from "@openducktor/remote-host/effect/web-errors";
 import { createWebLauncherLifecycle, type WebSignalShutdownRequest } from "./launcher-lifecycle";
 import type { FrontendServer } from "./launcher-support";
 
@@ -111,6 +112,7 @@ describe("createWebLauncherLifecycle", () => {
   test("stops a host that registers after launcher shutdown", async () => {
     let hostStopCalls = 0;
     const hostBackend = {
+      remoteAccess: remoteAccessFixture(),
       exited: Promise.resolve(0),
       port: 14327,
       stop: async () => {},

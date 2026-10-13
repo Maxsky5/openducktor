@@ -2,6 +2,9 @@ import { bootstrapOpenDucktorShell, showOpenDucktorStartupFailure } from "@opend
 import "@openducktor/frontend/styles.css";
 import { ELECTRON_WINDOW_TITLE_BAR_HEIGHT } from "../shared/electron-bridge-contract";
 import { createElectronShellBridge, getElectronApi } from "./electron-shell-bridge";
+import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
+import { createBrowserRemoteTransport } from "@openducktor/frontend/lib/remote/transport";
+import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 
 const initializeElectronWindowChrome = (): void => {
   const { platform } = getElectronApi();
@@ -14,6 +17,20 @@ bootstrapOpenDucktorShell({
   createShellBridge: createElectronShellBridge,
   prepare: initializeElectronWindowChrome,
   routerMode: "hash",
+  hosts: {
+    localHost: "electron",
+    createRemoteBridge: (endpoint, local) => {
+      const version = getAppVersion();
+      if (!version || !local) throw new Error("The desktop shell is not ready.");
+      return createRemoteShellBridge({
+        endpoint,
+        version,
+        transport: createBrowserRemoteTransport(),
+        notifications: local.notifications,
+      });
+    },
+    navigate: () => getElectronApi().selectHost(),
+  },
 }).catch((cause: unknown) => {
   showOpenDucktorStartupFailure();
   console.error("Critical Electron bootstrap failure", cause);

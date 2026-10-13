@@ -14,7 +14,7 @@ export default function MarkdownRendererRich({
   markdown,
   components,
   linkPolicy,
-  resolveTaskAssetSrc,
+  resolveTaskAssetSource,
   taskAssetContext,
   premiumCodeBlocks = false,
   fallback,
@@ -22,7 +22,7 @@ export default function MarkdownRendererRich({
   markdown: string;
   components: Components;
   linkPolicy?: MarkdownLinkPolicy | undefined;
-  resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
+  resolveTaskAssetSource?: ShellBridge["resolveTaskAssetSource"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
@@ -37,8 +37,8 @@ export default function MarkdownRendererRich({
   const componentInput: Parameters<typeof createTaskDescriptionComponents>[0] = {
     components: premiumComponents,
   };
-  if (resolveTaskAssetSrc) {
-    componentInput.resolveTaskAssetSrc = resolveTaskAssetSrc;
+  if (resolveTaskAssetSource) {
+    componentInput.resolveTaskAssetSource = resolveTaskAssetSource;
   }
   if (taskAssetContext) {
     componentInput.taskAssetContext = taskAssetContext;

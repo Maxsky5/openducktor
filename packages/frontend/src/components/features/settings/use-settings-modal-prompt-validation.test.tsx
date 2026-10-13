@@ -75,6 +75,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.promptValidationState.totalErrorCount).toBe(0);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
+      "remote-access": 0,
       git: 0,
       runtimes: 0,
       repositories: 0,
@@ -108,6 +109,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.selectedRepoPromptRoleTabErrorCounts.build).toBe(1);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
+      "remote-access": 0,
       git: 0,
       runtimes: 0,
       repositories: 1,

@@ -1,6 +1,10 @@
 import { Effect } from "effect";
 import { type HostErrorResponse, hostErrorResponseSchema } from "@openducktor/contracts";
-import { errorMessage, runWebBoundary, WebDependencyError } from "./effect/web-errors";
+import {
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+} from "@openducktor/remote-host/effect/web-errors";
 
 export type LocalHostErrorPayload = { message: string; payload: HostErrorResponse | null };
 

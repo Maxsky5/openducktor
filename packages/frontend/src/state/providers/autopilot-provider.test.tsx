@@ -107,10 +107,13 @@ const renderProvider = (
       listeners.splice(listeners.indexOf(listener), 1);
     };
   };
-  bridge.client.autopilotStateRead = mock(async ({ workspaceId }) => {
-    calls.push(`read:${workspaceId}`);
-    return held[workspaceId] ?? { outcomes: [], failure: null };
-  });
+  const readState = mock(
+    async ({ workspaceId }: { workspaceId: string }): Promise<AutopilotState> => {
+      calls.push(`read:${workspaceId}`);
+      return held[workspaceId] ?? { outcomes: [], failure: null };
+    },
+  );
+  bridge.client.autopilotStateRead = readState;
   bridge.client.workspaceGetSettingsSnapshot = mock(readSettings);
   configureShellBridge(bridge);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -127,10 +130,11 @@ const renderProvider = (
   );
   const rendered = render(view(alpha, [alpha, beta]));
   const emit: RunEventListener = (payload) => {
-    for (const listener of listeners) listener(payload);
+    return Promise.all(listeners.map((listener) => listener(payload))).then(() => {});
   };
   return {
     calls,
+    readState,
     emit,
     queryClient,
     rerender: (activeWorkspace: WorkspaceRecord, workspaces: WorkspaceRecord[]) =>
@@ -147,6 +151,47 @@ const renderProvider = (
 const shownToastIds = () => info.mock.calls.map((call) => call[1]?.id);
 
 describe("AutopilotProvider", () => {
+  test.each([false, true])(
+    "awaits held outcome recovery and propagates failure %s",
+    async (failure) => {
+      const provider = renderProvider({});
+      const replacement = Promise.withResolvers<AutopilotState>();
+      try {
+        await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+        // Query has no observer for this read. The reconnect owner must await its application.
+        provider.readState.mockImplementationOnce(() => replacement.promise);
+        const recovery = provider.emit({
+          __openducktorBrowserLive: true,
+          kind: "reconnected",
+          missedEvents: true,
+        });
+        let settled = false;
+        const outcome = Promise.resolve(recovery).then(
+          () => {
+            settled = true;
+            return null;
+          },
+          (cause: unknown) => {
+            settled = true;
+            return cause;
+          },
+        );
+        await Bun.sleep(0);
+        expect(settled).toBe(false);
+        if (failure) replacement.reject(new Error("Autopilot recovery failed."));
+        else replacement.resolve({ outcomes: [skipped("recovered", alpha)], failure: null });
+        const cause = await outcome;
+        if (failure) expect(cause).toMatchObject({ message: "Autopilot recovery failed." });
+        else {
+          expect(cause).toBeNull();
+          expect(shownToastIds()).toEqual(["autopilot:recovered"]);
+        }
+      } finally {
+        replacement.resolve({ outcomes: [], failure: null });
+        provider.unmount();
+      }
+    },
+  );
   test("subscribes before it reads held outcomes, and reads again when a workspace is selected", async () => {
     const provider = renderProvider({
       alpha: { outcomes: [skipped("alpha-held", alpha)], failure: null },

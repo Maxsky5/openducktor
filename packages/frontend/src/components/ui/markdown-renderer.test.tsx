@@ -1,6 +1,7 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -13,6 +14,8 @@ import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
+
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
 
 const renderMarkdownLink = (href: string, label: string) => {
   return render(
@@ -289,10 +292,13 @@ describe("rich task description rendering", () => {
   }, 12_000);
 
   test("resolves logical task assets through the shell without persisting runtime URLs", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const view = render(
@@ -313,18 +319,24 @@ describe("rich task description rendering", () => {
         ),
       { timeout: 3000 },
     );
-    expect(resolveTaskAssetSrc).toHaveBeenCalledWith({
-      workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-      taskId: "task-1",
-      scope: "description",
-      assetId,
-    });
+    expect(resolveTaskAssetSource).toHaveBeenCalledWith(
+      {
+        workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+        taskId: "task-1",
+        scope: "description",
+        assetId,
+      },
+      expect.any(AbortSignal),
+    );
   }, 4000);
 
   test("shows an actionable error when a resolved task asset response cannot load", async () => {
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc: async () => "openducktor-task-asset://asset/missing",
+      resolveTaskAssetSource: async () => ({
+        kind: "url",
+        src: "openducktor-task-asset://asset/missing",
+      }),
     });
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const view = render(
@@ -347,10 +359,13 @@ describe("rich task description rendering", () => {
   });
 
   test("resolves the first definition when an image reference identifier is duplicated", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const first = "550e8400-e29b-41d4-a716-446655440000";
     const second = "750e8400-e29b-41d4-a716-446655440001";
@@ -378,20 +393,26 @@ describe("rich task description rendering", () => {
         ),
       { timeout: 3000 },
     );
-    expect(resolveTaskAssetSrc).toHaveBeenCalledTimes(1);
-    expect(resolveTaskAssetSrc).toHaveBeenCalledWith({
-      workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-      taskId: "task-1",
-      scope: "description",
-      assetId: first,
-    });
+    expect(resolveTaskAssetSource).toHaveBeenCalledTimes(1);
+    expect(resolveTaskAssetSource).toHaveBeenCalledWith(
+      {
+        workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+        taskId: "task-1",
+        scope: "description",
+        assetId: first,
+      },
+      expect.any(AbortSignal),
+    );
   }, 4000);
 
   test("does not request a logical task asset without task context", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const view = render(
       <MarkdownRenderer markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)" />,
@@ -399,14 +420,17 @@ describe("rich task description rendering", () => {
 
     expect(view.getByRole("alert").textContent).toContain("task context is unavailable");
     expect(view.queryByRole("img", { name: "Architecture" })).toBeNull();
-    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+    expect(resolveTaskAssetSource).not.toHaveBeenCalled();
   });
 
   test("uses a caller-provided image component for a task asset without task context", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const view = render(
       <MarkdownRenderer
@@ -419,14 +443,17 @@ describe("rich task description rendering", () => {
 
     expect((await view.findByTestId("image-placeholder")).textContent).toBe("Architecture");
     expect(view.queryByRole("alert")).toBeNull();
-    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+    expect(resolveTaskAssetSource).not.toHaveBeenCalled();
   });
 
   test("renders task asset markdown through the caller image component on the lightweight path", () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const view = render(
       <MarkdownRenderer
@@ -440,7 +467,7 @@ describe("rich task description rendering", () => {
 
     expect(view.getByTestId("image-placeholder").textContent).toBe("Architecture");
     expect(view.queryByRole("alert")).toBeNull();
-    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+    expect(resolveTaskAssetSource).not.toHaveBeenCalled();
   });
 
   test("uses a caller-provided image component for an invalid task asset reference", async () => {
@@ -458,10 +485,13 @@ describe("rich task description rendering", () => {
   });
 
   test("resolves a task asset with context before a caller image component", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const view = render(
       <MarkdownRenderer
@@ -488,10 +518,13 @@ describe("rich task description rendering", () => {
   }, 4000);
 
   test("does not resolve a forged logical asset ID", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://asset/resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://asset/resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const view = render(
       <MarkdownRenderer
@@ -506,7 +539,7 @@ describe("rich task description rendering", () => {
 
     expect(view.getByRole("alert").textContent).toContain("task asset reference is invalid");
     expect(view.queryByRole("img", { name: "Forged" })).toBeNull();
-    expect(resolveTaskAssetSrc).not.toHaveBeenCalled();
+    expect(resolveTaskAssetSource).not.toHaveBeenCalled();
   });
 
   test("renders a Mermaid diagram without exposing its source and suppresses raw HTML", async () => {

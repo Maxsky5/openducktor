@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { getShellBridge } from "@/lib/shell-bridge";
+import { SettingsRemoteAccessSection } from "./settings-remote-access-section";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SettingsAutopilotSection } from "./settings-autopilot-section";
@@ -104,6 +106,10 @@ export function SettingsModalContent({
 
   if (section === "general") {
     return <GeneralSettingsSection disabled={isInteractionDisabled} />;
+  }
+
+  if (section === "remote-access") {
+    return <SettingsRemoteAccessSection bridge={getShellBridge().remoteAccess} />;
   }
 
   if (section === "custom-agent-roles") {

@@ -21,20 +21,6 @@ import { autopilotQueryKeys, autopilotStateQueryOptions } from "../queries/autop
 import { taskWorktreeQueryKeys } from "../queries/build-runtime";
 import { invalidateTerminalList } from "../queries/terminals";
 
-// A settled launch, also a failed one, can create the task worktree and its terminals.
-const refreshLaunchedTaskViews = async (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-): Promise<void> => {
-  await Promise.all([
-    invalidateTerminalList(queryClient, { kind: "task", repoPath, taskId }),
-    queryClient.invalidateQueries({
-      queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
-    }),
-  ]);
-};
-
 /**
  * Shows the outcomes of host Autopilot from every workspace. The host detects task changes and
  * starts the actions, so this client only presents results and recovery controls.
@@ -77,18 +63,11 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   // shows the ones it missed.
   const readHeldOutcomes = useCallback(
     (workspaceId: string, { workspaceSelected }: { workspaceSelected: boolean }) => {
-      queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then(
-        (state) => {
-          if (activeWorkspaceIdRef.current !== workspaceId) return;
-          for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
-          presenter.presentFailure(state.failure);
-        },
-        (cause: unknown) =>
-          toast.error("Autopilot outcomes could not load.", {
-            id: "autopilot-read",
-            description: `${errorMessage(cause)} Select the workspace again to retry.`,
-          }),
-      );
+      return queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then((state) => {
+        if (activeWorkspaceIdRef.current !== workspaceId) return;
+        for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
+        presenter.presentFailure(state.failure);
+      });
     },
     [presenter, queryClient],
   );
@@ -106,9 +85,16 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
         if ("__openducktorBrowserLive" in payload) {
           const workspaceId = activeWorkspaceIdRef.current;
           if (payload.kind !== BROWSER_LIVE_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
-          if (workspaceId) readHeldOutcomes(workspaceId, { workspaceSelected: false });
           // A missed settings event can leave old Autopilot rules in the cache.
           reloadSavedRules();
+          if (workspaceId) {
+            return readHeldOutcomes(workspaceId, { workspaceSelected: false }).catch(
+              (cause: unknown) => {
+                reportHeldOutcomeFailure(cause);
+                throw cause;
+              },
+            );
+          }
           return;
         }
         // Another client can save the rules, so this client reads them again.
@@ -147,7 +133,9 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
 
   useEffect(() => {
     if (subscribed && activeWorkspaceId)
-      readHeldOutcomes(activeWorkspaceId, { workspaceSelected: true });
+      void readHeldOutcomes(activeWorkspaceId, { workspaceSelected: true }).catch(
+        reportHeldOutcomeFailure,
+      );
   }, [activeWorkspaceId, readHeldOutcomes, subscribed]);
 
   useEffect(() => {
@@ -158,3 +146,24 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
 
   return <>{children}</>;
 }
+
+// A failed launch can still create the task worktree and its terminals.
+const refreshLaunchedTaskViews = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  taskId: string,
+): Promise<void> => {
+  await Promise.all([
+    invalidateTerminalList(queryClient, { kind: "task", repoPath, taskId }),
+    queryClient.invalidateQueries({
+      queryKey: taskWorktreeQueryKeys.taskWorktree({ repoPath, taskId }),
+    }),
+  ]);
+};
+
+const reportHeldOutcomeFailure = (cause: unknown): void => {
+  toast.error("Autopilot outcomes could not load.", {
+    id: "autopilot-read",
+    description: `${errorMessage(cause)} Select the workspace again to retry.`,
+  });
+};

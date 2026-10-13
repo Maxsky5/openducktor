@@ -27,6 +27,7 @@ export type BrowserNotificationConstructor = {
 };
 
 type CreateBrowserNotificationBridgeOptions = {
+  scope?: string | undefined;
   NativeNotification?: BrowserNotificationConstructor | null;
   coordinator?: BrowserNotificationCoordinator;
   canGuaranteeSilent?: boolean;
@@ -46,8 +47,9 @@ const detectSilentSupport = (NativeNotification: BrowserNotificationConstructor 
   Boolean(NativeNotification && "silent" in NativeNotification.prototype);
 
 export const createBrowserNotificationBridge = ({
+  scope,
   NativeNotification = globalThis.Notification ?? null,
-  coordinator = createBrowserNotificationCoordinator(),
+  coordinator = createBrowserNotificationCoordinator({ scope }),
   canGuaranteeSilent = detectSilentSupport(NativeNotification),
   focusWindow = () => window.focus(),
 }: CreateBrowserNotificationBridgeOptions = {}): NotificationBridge => {

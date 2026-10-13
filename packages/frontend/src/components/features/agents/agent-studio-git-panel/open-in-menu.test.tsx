@@ -13,25 +13,12 @@ import { QueryProvider } from "@/lib/query-provider";
 import { toRightPanelStorageKey } from "@/pages/agents/agents-page-selection";
 import { host } from "@/state/operations/host";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
-import { withCapturedConsole } from "@/test-utils/console-capture";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { OpenInMenu } from "./open-in-menu";
 
 enableReactActEnvironment();
-
-const REACT_ACT_ENVIRONMENT_WARNING =
-  "The current testing environment is not configured to support act";
-
-const runWithReactAct = async (run: () => void | Promise<void>): Promise<void> => {
-  await withCapturedConsole("error", async (calls) => {
-    await act(run);
-    for (const call of calls) {
-      expect(String(call[0] ?? "")).toContain(REACT_ACT_ENVIRONMENT_WARNING);
-    }
-  });
-};
 
 describe("OpenInMenu", () => {
   let rendered: ReturnType<typeof render> | null = null;
@@ -56,7 +43,7 @@ describe("OpenInMenu", () => {
 
   afterEach(async () => {
     if (rendered) {
-      await runWithReactAct(async () => {
+      await act(async () => {
         rendered?.unmount();
       });
       rendered = null;
@@ -102,7 +89,7 @@ describe("OpenInMenu", () => {
         screen.getByTestId("agent-studio-git-open-in-default-button").getAttribute("aria-label"),
       ).toBe("Open task worktree in Finder");
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
       });
 
@@ -117,7 +104,7 @@ describe("OpenInMenu", () => {
         screen.getByTestId<HTMLImageElement>("agent-studio-git-open-in-icon-zed").tagName,
       ).toBe("IMG");
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-ghostty"));
       });
 
@@ -157,11 +144,11 @@ describe("OpenInMenu", () => {
         "agent-studio-git-open-in-default-button",
       );
       expect(button.disabled).toBe(true);
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(button);
       });
       expect(onOpenInTool).not.toHaveBeenCalled();
-      await runWithReactAct(async () => {
+      await act(async () => {
         settings.resolve(
           settingsSnapshotSchema.parse({
             theme: "light",
@@ -204,10 +191,10 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
       await screen.findByRole("button", { name: "Open repository root in Finder" });
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getAllByTestId("agent-studio-git-open-in-trigger")[0]!);
       });
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-item-zed"));
       });
       expect(saveSettings).not.toHaveBeenCalled();
@@ -215,7 +202,7 @@ describe("OpenInMenu", () => {
         screen.getByRole<HTMLButtonElement>("button", { name: "Open repository root in Finder" })
           .disabled,
       ).toBe(true);
-      await runWithReactAct(async () => {
+      await act(async () => {
         completeLaunch();
       });
       await waitFor(
@@ -254,7 +241,7 @@ describe("OpenInMenu", () => {
         [{}, "Finder"],
       ] as const) {
         system = preference;
-        await runWithReactAct(async () => {
+        await act(async () => {
           await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.settingsSnapshot() });
         });
         await screen.findByRole("button", { name: `Open repository root in ${label}` });
@@ -365,7 +352,7 @@ describe("OpenInMenu", () => {
         );
 
         await screen.findByTestId("agent-studio-git-open-in-icon-zed");
-        await runWithReactAct(async () => {
+        await act(async () => {
           fireEvent.click(screen.getByTestId("agent-studio-git-open-in-default-button"));
           await Promise.resolve();
         });
@@ -414,13 +401,13 @@ describe("OpenInMenu", () => {
         "Zed",
       );
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-default-button"));
       });
 
       expect(onOpenInTool).toHaveBeenCalledWith("zed");
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
       });
 
@@ -495,7 +482,7 @@ describe("OpenInMenu", () => {
       );
       expect(defaultButton.disabled).toBe(true);
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByTestId("agent-studio-git-open-in-trigger"));
       });
 
@@ -536,7 +523,7 @@ describe("OpenInMenu", () => {
         </QueryProvider>,
       );
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
       });
 
@@ -545,7 +532,7 @@ describe("OpenInMenu", () => {
         screen.getByTestId<HTMLButtonElement>("agent-studio-git-open-in-default-button").disabled,
       ).toBe(true);
 
-      await runWithReactAct(async () => {
+      await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
         await Promise.resolve();
         await Promise.resolve();
@@ -581,13 +568,13 @@ describe("OpenInMenu", () => {
           </QueryProvider>,
         );
 
-        await runWithReactAct(async () => {
+        await act(async () => {
           fireEvent.click(await screen.findByTestId("agent-studio-git-open-in-trigger"));
         });
 
         expect(await screen.findByTestId("agent-studio-git-open-in-error")).toBeTruthy();
 
-        await runWithReactAct(async () => {
+        await act(async () => {
           fireEvent.click(screen.getByRole("button", { name: "Retry" }));
           await Promise.resolve();
           await Promise.resolve();

@@ -21,7 +21,7 @@ import {
   type TerminalWebSocketData,
   terminalWebSocketHandler,
   type TerminalWebSocketService,
-} from "./terminal-websocket-handler";
+} from "@openducktor/remote-host/terminals/terminal-websocket-handler";
 
 const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
   Effect.die(new Error(`Unexpected terminal service operation: ${operation}`));

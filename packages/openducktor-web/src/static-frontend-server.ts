@@ -7,15 +7,23 @@ import {
   type BrowserRuntimeConfigState,
   readBrowserRuntimeConfig,
 } from "./browser-runtime-config-state";
-import { errorMessage, WebDependencyError, WebResourceError } from "./effect/web-errors";
-import { allowedHostnamesFor, isRequestHostAllowed, LOCALHOST } from "./http-origin";
+import {
+  errorMessage,
+  WebDependencyError,
+  WebResourceError,
+} from "@openducktor/remote-host/effect/web-errors";
+import {
+  allowedHostnamesFor,
+  isRequestHostAllowed,
+  LOCALHOST,
+} from "@openducktor/remote-host/http-origin";
 import {
   type FrontendServer,
   indexStaticAssetPaths,
   resolveIndexedStaticAssetPath,
 } from "./launcher-support";
-import { startNodeFetchServer } from "./node-fetch-server";
-import { nodeReadableStream } from "./node-readable-stream";
+import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
+import { nodeReadableStream } from "@openducktor/remote-host/node-readable-stream";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 
 type StaticFrontendOptions = {

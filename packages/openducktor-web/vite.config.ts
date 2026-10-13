@@ -15,7 +15,8 @@ export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string 
   return versionOverride || packageJson.version;
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  ...(mode === "standalone" && { cacheDir: "node_modules/.vite-client" }),
   plugins: [createOpenDucktorStartupSplashPlugin(), react(), tailwindcss()],
   resolve: {
     dedupe: ["@tanstack/react-query", "react", "react-dom", "react-router"],
@@ -33,6 +34,7 @@ export default defineConfig({
     ],
   },
   define: {
+    "import.meta.env.VITE_ODT_STANDALONE": JSON.stringify(mode === "standalone" ? "true" : "false"),
     "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(resolveAppVersion()),
   },
   clearScreen: false,
@@ -41,10 +43,10 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 1420,
+    port: mode === "standalone" ? 1421 : 1420,
     strictPort: true,
     warmup: {
       clientFiles: ["./src/main.tsx"],
     },
   },
-});
+}));

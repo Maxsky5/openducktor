@@ -99,6 +99,7 @@ export type BrowserNotificationCoordinator = {
 };
 
 type CreateBrowserNotificationCoordinatorOptions = {
+  scope?: string | undefined;
   createChannel?: (() => BroadcastChannelLike) | null;
   locks?: LockManagerLike | null;
   focusDocument?: FocusDocument | null;
@@ -116,12 +117,15 @@ type PublicationSettlement = {
   reject(cause: Error): void;
 };
 
-const getDefaultChannelFactory = (): (() => BroadcastChannelLike) | null => {
+const getDefaultChannelFactory = (scope: string): (() => BroadcastChannelLike) | null => {
   const NativeBroadcastChannel = globalThis.BroadcastChannel;
   if (!NativeBroadcastChannel) {
     return null;
   }
-  return () => new NativeBroadcastChannel(OCCURRENCE_CHANNEL_NAME);
+  return () =>
+    new NativeBroadcastChannel(
+      scope ? `${OCCURRENCE_CHANNEL_NAME}:${scope}` : OCCURRENCE_CHANNEL_NAME,
+    );
 };
 
 const getDefaultLocks = (): LockManagerLike | null => {
@@ -147,12 +151,14 @@ const getDefaultLocks = (): LockManagerLike | null => {
 };
 
 export const createBrowserNotificationCoordinator = ({
-  createChannel = getDefaultChannelFactory(),
+  scope = "",
+  createChannel = getDefaultChannelFactory(scope),
   locks = getDefaultLocks(),
   focusDocument = globalThis.document ?? null,
   focusWindow = globalThis.window ?? null,
   tabId = globalThis.crypto.randomUUID(),
 }: CreateBrowserNotificationCoordinatorOptions = {}): BrowserNotificationCoordinator => {
+  const key = (name: string) => (scope ? `${name}:${scope}` : name);
   const supported = Boolean(createChannel && locks && focusDocument && focusWindow);
   if (!createChannel || !locks || !focusDocument || !focusWindow) {
     const failureMessage = "This browser cannot coordinate notifications and sound across tabs.";
@@ -195,7 +201,8 @@ export const createBrowserNotificationCoordinator = ({
   const claimWaiters = new Map<string, Map<string, (focusUnavailable?: boolean) => void>>();
   const publicationSettlements = new Map<string, Set<PublicationSettlement>>();
   const activeClaimPropagations = new Set<Promise<void>>();
-  const tabLockName = `${TAB_LOCK_NAME_PREFIX}${tabId}`;
+  const tabPrefix = scope ? `${key(TAB_LOCK_NAME_PREFIX)}:` : TAB_LOCK_NAME_PREFIX;
+  const tabLockName = `${tabPrefix}${tabId}`;
 
   const recordFailure = (operation: CoordinationOperation, cause: unknown): void => {
     failureMessages.set(operation, cause instanceof Error ? cause.message : String(cause));
@@ -260,8 +267,8 @@ export const createBrowserNotificationCoordinator = ({
   };
 
   const getTabId = (lock: { name?: string }): string | null => {
-    if (!lock.name?.startsWith(TAB_LOCK_NAME_PREFIX)) return null;
-    return lock.name.slice(TAB_LOCK_NAME_PREFIX.length) || null;
+    if (!lock.name?.startsWith(tabPrefix)) return null;
+    return lock.name.slice(tabPrefix.length) || null;
   };
 
   const waitForClaimAcknowledgementOrExit = (
@@ -289,7 +296,7 @@ export const createBrowserNotificationCoordinator = ({
     claimWaiters.set(claimId, tabWaiters);
     const exited = locks
       .request(
-        `${TAB_LOCK_NAME_PREFIX}${recipientTabId}`,
+        `${tabPrefix}${recipientTabId}`,
         { mode: "exclusive", signal: controller.signal },
         async () => {},
       )
@@ -468,7 +475,7 @@ export const createBrowserNotificationCoordinator = ({
     externalDeliveryLockAbortController = controller;
     void locks
       .request(
-        EXTERNAL_DELIVERY_LOCK_NAME,
+        key(EXTERNAL_DELIVERY_LOCK_NAME),
         { mode: "exclusive", signal: controller.signal },
         async () => {
           if (disposed) return;
@@ -524,14 +531,18 @@ export const createBrowserNotificationCoordinator = ({
     const current = { controller, release: () => {}, released: Promise.resolve() };
     focusLock = current;
     current.released = locks
-      .request(APP_FOCUS_LOCK_NAME, { mode: "shared", signal: controller.signal }, async () => {
-        if (disposed || !focusDocument.hasFocus() || focusLock !== current) return;
-        failureMessages.delete("focus_lock");
-        await new Promise<void>((resolve) => {
-          current.release = resolve;
-          markReady();
-        });
-      })
+      .request(
+        key(APP_FOCUS_LOCK_NAME),
+        { mode: "shared", signal: controller.signal },
+        async () => {
+          if (disposed || !focusDocument.hasFocus() || focusLock !== current) return;
+          failureMessages.delete("focus_lock");
+          await new Promise<void>((resolve) => {
+            current.release = resolve;
+            markReady();
+          });
+        },
+      )
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) recordFailure("focus_lock", cause);
       })
@@ -639,7 +650,7 @@ export const createBrowserNotificationCoordinator = ({
       try {
         const snapshot = await locks.query();
         failureMessages.delete("focus_query");
-        return snapshot.held?.some((lock) => lock.name === APP_FOCUS_LOCK_NAME) ?? false;
+        return snapshot.held?.some((lock) => lock.name === key(APP_FOCUS_LOCK_NAME)) ?? false;
       } catch (cause) {
         recordFailure("focus_query", cause);
         throw cause;

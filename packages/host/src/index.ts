@@ -191,3 +191,5 @@ export {
   verifyLiveTerminalPtyNaturalExitCleanup,
   verifyLiveTerminalPtyProcessTreeTermination,
 } from "./testing/terminal-pty-conformance";
+
+export { HostOperationError } from "./effect/host-errors";

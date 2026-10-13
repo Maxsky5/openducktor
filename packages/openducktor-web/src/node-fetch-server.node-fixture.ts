@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocket } from "ws";
-import { startNodeFetchServer } from "./node-fetch-server";
+import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
 
 type CorkState = { socket?: Duplex; corked: boolean };
 

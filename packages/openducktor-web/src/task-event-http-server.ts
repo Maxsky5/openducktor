@@ -1,25 +1,20 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-  taskEventCursorSchema,
-  taskEventStreamSubscribeSchema,
-  type TaskEventStreamFrame,
-} from "@openducktor/contracts";
+import { taskEventCursorSchema, taskEventStreamSubscribeSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType } from "zod";
-import { errorMessage, WebHostRequestError } from "./effect/web-errors";
-import type { TaskEventLeaseManager } from "./task-event-leases";
+import { errorMessage, WebHostRequestError } from "@openducktor/remote-host/effect/web-errors";
+import type { TaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
+import type { NodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
+import { createTaskEventSseResponse } from "@openducktor/remote-host/task-event-sse";
 
 export type WebRequestBody = Record<string, JSONType>;
 
 export const TASK_EVENT_STREAM_TOKEN_HEADER = "x-openducktor-task-stream-token";
 const TASK_EVENT_SUBSCRIPTIONS_PATH = "/task-events/subscriptions";
-const TASK_SSE_READY_COMMENT = new TextEncoder().encode(": openducktor-ready\n\n");
 
-type RequestTimeoutController = {
-  timeout(request: Request, seconds: number): void;
-};
+type RequestTimeoutController = Pick<NodeFetchServer<unknown>, "timeout">;
 
-type TaskEventHttpServerContext = {
+type RequestContext = {
   appToken: string;
   controlToken: string;
   corsHeaders: HeadersInit;
@@ -39,114 +34,10 @@ type TaskEventHttpServerContext = {
   ) => Effect.Effect<void, WebHostRequestError>;
 };
 
-type TaskEventSubscriptionResponse = {
+type SubscriptionResponse = {
   streamToken: string;
   subscriptionId: string;
 };
-
-const reject = (message: string, status: number): Effect.Effect<never, WebHostRequestError> =>
-  Effect.fail(new WebHostRequestError({ message, status }));
-
-const jsonResponse = (
-  payload: TaskEventSubscriptionResponse,
-  init: ResponseInit,
-  corsHeaders: HeadersInit,
-): Response =>
-  new Response(JSON.stringify(payload), {
-    ...init,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      ...corsHeaders,
-      ...init.headers,
-    },
-  });
-
-const taskEventStreamCapability = (controlToken: string, subscriptionId: string): string =>
-  createHmac("sha256", controlToken)
-    .update(`task-event-stream:v1:${subscriptionId}`)
-    .digest("base64url");
-
-const isValidTaskEventStreamCapability = (
-  controlToken: string,
-  subscriptionId: string,
-  receivedToken: string | null,
-): boolean => {
-  if (!receivedToken) return false;
-  const expected = Buffer.from(taskEventStreamCapability(controlToken, subscriptionId));
-  const received = Buffer.from(receivedToken);
-  if (received.length !== expected.length) return false;
-  return timingSafeEqual(received, expected);
-};
-
-const isPublicSubscriptionId = (subscriptionId: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(subscriptionId);
-
-export const writeTaskFrameSseEvent = (frame: TaskEventStreamFrame): Uint8Array => {
-  const { cursor } = frame;
-  return new TextEncoder().encode(
-    [
-      `id: ${cursor.epoch}:${cursor.sequence}`,
-      "event: task-frame",
-      `data: ${JSON.stringify(frame)}`,
-      "",
-      "",
-    ].join("\n"),
-  );
-};
-
-const createTaskEventSseResponse = (
-  leaseManager: TaskEventLeaseManager,
-  subscriptionId: string,
-  corsHeaders: HeadersInit,
-  signal: AbortSignal,
-): Response => {
-  let generation = 0;
-  const detach = (): void => {
-    signal.removeEventListener("abort", detach);
-    const lease = leaseManager.get(subscriptionId);
-    if (lease) leaseManager.detach(lease, generation);
-  };
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const lease = leaseManager.get(subscriptionId);
-      if (!lease) {
-        controller.error(new Error("Task event stream lease was released before connection."));
-        return;
-      }
-      controller.enqueue(TASK_SSE_READY_COMMENT);
-      generation = leaseManager.attach(lease, controller);
-      signal.addEventListener("abort", detach, { once: true });
-      if (signal.aborted) detach();
-    },
-    pull() {
-      const lease = leaseManager.get(subscriptionId);
-      if (lease) leaseManager.resume(lease, generation);
-    },
-    cancel: detach,
-  });
-  return new Response(body, {
-    headers: {
-      ...corsHeaders,
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-      "content-type": "text/event-stream; charset=utf-8",
-    },
-  });
-};
-
-const parseTaskEventAckCursor = (
-  body: WebRequestBody,
-): Effect.Effect<ReturnType<typeof taskEventCursorSchema.parse>, WebHostRequestError> =>
-  Effect.gen(function* () {
-    if (Object.keys(body).length !== 1 || !("cursor" in body)) {
-      return yield* reject("Task event stream acknowledgement body must contain only cursor.", 400);
-    }
-    const parsed = taskEventCursorSchema.safeParse(body.cursor);
-    if (!parsed.success) {
-      return yield* reject("Task event stream acknowledgement cursor is invalid.", 400);
-    }
-    return parsed.data;
-  });
 
 export const routeTaskEventHttpRequest = ({
   appToken,
@@ -160,7 +51,7 @@ export const routeTaskEventHttpRequest = ({
   taskEventLeaseManager,
   validateAppCookieOrHeader,
   validateAppSessionCookie,
-}: TaskEventHttpServerContext): Effect.Effect<Response | null, WebHostRequestError> =>
+}: RequestContext): Effect.Effect<Response | null, WebHostRequestError> =>
   Effect.gen(function* () {
     const requestUrl = new URL(request.url);
     if (requestUrl.pathname === TASK_EVENT_SUBSCRIPTIONS_PATH && request.method === "POST") {
@@ -190,7 +81,7 @@ export const routeTaskEventHttpRequest = ({
       });
       return jsonResponse(
         {
-          streamToken: taskEventStreamCapability(controlToken, subscriptionId),
+          streamToken: streamToken(controlToken, subscriptionId),
           subscriptionId,
         },
         { status: 201 },
@@ -214,10 +105,10 @@ export const routeTaskEventHttpRequest = ({
       operation === "stream"
         ? requestUrl.searchParams.get("token")
         : request.headers.get(TASK_EVENT_STREAM_TOKEN_HEADER);
-    const validCapability = subscriptionId
-      ? isValidTaskEventStreamCapability(controlToken, subscriptionId, token)
+    const validToken = subscriptionId
+      ? acceptsStreamToken(controlToken, subscriptionId, token)
       : false;
-    if (!subscriptionId || !isPublicSubscriptionId(subscriptionId) || !validCapability) {
+    if (!subscriptionId || !isSubscriptionId(subscriptionId) || !validToken) {
       return yield* reject("Task event stream capability is invalid.", 403);
     }
     if (!taskEventLeaseManager) {
@@ -255,7 +146,7 @@ export const routeTaskEventHttpRequest = ({
           410,
         );
       }
-      const cursor = yield* parseTaskEventAckCursor(yield* parseJsonObjectBody(request));
+      const cursor = yield* parseAckCursor(yield* parseJsonObjectBody(request));
       yield* Effect.try({
         try: () => taskEventLeaseManager.acknowledge(lease, cursor),
         catch: (cause) =>
@@ -275,4 +166,55 @@ export const routeTaskEventHttpRequest = ({
     }
 
     return null;
+  });
+
+const reject = (message: string, status: number): Effect.Effect<never, WebHostRequestError> =>
+  Effect.fail(new WebHostRequestError({ message, status }));
+
+const jsonResponse = (
+  payload: SubscriptionResponse,
+  init: ResponseInit,
+  corsHeaders: HeadersInit,
+): Response =>
+  new Response(JSON.stringify(payload), {
+    ...init,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      ...corsHeaders,
+      ...init.headers,
+    },
+  });
+
+const streamToken = (controlToken: string, subscriptionId: string): string =>
+  createHmac("sha256", controlToken)
+    .update(`task-event-stream:v1:${subscriptionId}`)
+    .digest("base64url");
+
+const acceptsStreamToken = (
+  controlToken: string,
+  subscriptionId: string,
+  receivedToken: string | null,
+): boolean => {
+  if (!receivedToken) return false;
+  const expected = Buffer.from(streamToken(controlToken, subscriptionId));
+  const received = Buffer.from(receivedToken);
+  if (received.length !== expected.length) return false;
+  return timingSafeEqual(received, expected);
+};
+
+const isSubscriptionId = (subscriptionId: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(subscriptionId);
+
+const parseAckCursor = (
+  body: WebRequestBody,
+): Effect.Effect<ReturnType<typeof taskEventCursorSchema.parse>, WebHostRequestError> =>
+  Effect.gen(function* () {
+    if (Object.keys(body).length !== 1 || !("cursor" in body)) {
+      return yield* reject("Task event stream acknowledgement body must contain only cursor.", 400);
+    }
+    const parsed = taskEventCursorSchema.safeParse(body.cursor);
+    if (!parsed.success) {
+      return yield* reject("Task event stream acknowledgement cursor is invalid.", 400);
+    }
+    return parsed.data;
   });
