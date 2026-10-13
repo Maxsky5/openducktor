@@ -271,7 +271,7 @@ export const createAgentSessionsStore = (
     commitSessionCollection,
     applyLiveSessionEnvelope: (envelope) => {
       switch (envelope.type) {
-        case "snapshot":
+        case "snapshot": {
           if (envelope.repoPath !== workspaceRepoPath) return;
           // Recheck when attachment completes: events may arrive after workspace activation.
           const versions = retainedHistoryVersions.get(envelope.repoPath);
@@ -298,6 +298,7 @@ export const createAgentSessionsStore = (
           clearLiveNotices();
           for (const snapshot of envelope.sessions) retainLiveNotices(snapshot);
           return;
+        }
         case "session_upsert":
           if (envelope.session.ref.repoPath !== workspaceRepoPath) return;
           retainLiveNotices(envelope.session);

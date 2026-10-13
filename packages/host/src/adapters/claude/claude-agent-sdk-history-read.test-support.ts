@@ -10,12 +10,14 @@ import type {
 
 // Run in a child process so instrumentation and the SDK config cannot affect other tests.
 const config = process.env.CLAUDE_CONFIG_DIR!;
-const cwd = join(config, "repo");
+await fsPromises.mkdir(join(config, "repo"), { recursive: true });
+const cwd = await fsPromises.realpath(join(config, "repo"));
 const sessionId = "00000000-0000-4000-8000-000000000001";
-const project = join(config, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+// Use the SDK's project-directory setting instead of duplicating its path shortening and hashing.
+process.env.CLAUDE_CODE_PROJECT_DIR_NAME = "history-read-fixture";
+const project = join(config, "projects", process.env.CLAUDE_CODE_PROJECT_DIR_NAME);
 await fsPromises.mkdir(join(project, sessionId, "subagents"), { recursive: true });
 await fsPromises.mkdir(join(project, sessionId, "subagents", "team"), { recursive: true });
-await fsPromises.mkdir(cwd, { recursive: true });
 const timestamp = "2026-10-11T10:00:00.000Z";
 const user = {
   type: "user",
@@ -196,7 +198,10 @@ const measure = async (
   return {
     view,
     reads: Object.fromEntries(
-      [...reads].map(([path, count]) => [path.slice(project.length + 1), count]),
+      [...reads].map(([path, count]) => [
+        path.slice(project.length + 1).replaceAll("\\", "/"),
+        count,
+      ]),
     ),
     diskBytes,
     responseBytes: Buffer.byteLength(JSON.stringify(result)),
@@ -214,4 +219,4 @@ const childResult = await measure("child transcript", () =>
   ),
 );
 const todoResult = await measure("root todos", () => loadClaudeTodos(input));
-console.log(JSON.stringify([rootResult, childResult, todoResult]));
+await Bun.write(Bun.stdout, `${JSON.stringify([rootResult, childResult, todoResult])}\n`);

@@ -315,7 +315,7 @@ export const loadClaudeHistoryProjectionInput = async (
       includeSubagents,
     });
   } catch (cause) {
-    // The SDK reports a missing local transcript with this exact error (0.3.286).
+    // The SDK reports a missing local transcript with this exact error (0.3.295).
     if (cause instanceof Error && cause.message === `Session ${target.sessionId} not found`) {
       throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
     }

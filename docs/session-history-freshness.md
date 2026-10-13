@@ -45,7 +45,7 @@ A scoped fault makes loaded or refreshing histories stale before retention can c
 | Root todos | Root entries only. |
 | Child todos | Selected child entries. |
 
-The pinned SDK `0.3.286` public `importSessionToStore` API has an `includeSubagents` switch and no child-file selector. Transcript views import subagents once to preserve their existing correlation behavior. Child todo reads use this same import because the SDK must load the selected child file. Root todo reads set `includeSubagents` to `false`.
+The pinned SDK `0.3.295` public `importSessionToStore` API has an `includeSubagents` switch and no child-file selector. Transcript views import subagents once to preserve their existing correlation behavior. Child todo reads use this same import because the SDK must load the selected child file. Root todo reads set `includeSubagents` to `false`.
 
 Each import keeps a request-local `SessionStore`. Its `listSubkeys` method exposes imported subpaths, including physical directories under `subagents`. The SDK uses these keys to locate a child by its file name. Metadata checks and subagent completion checks read this store through the public SDK `sessionStore` option. They do not reopen transcript files. SDK source confirms that the store-backed child reader uses the same conversation-chain projector as the disk-backed reader. No request-local data survives the history load.
 
@@ -68,7 +68,7 @@ The fixture uses the production Query options, store, and store history loader w
 
 ### Claude SDK fixture
 
-The initial measurement fixture used the real pinned SDK with 701 assistant messages, one direct child, and one nested child in flat files under `subagents`. It counted transcript stream reads, `readFile` calls, and metadata file opens in an isolated process. Disk bytes count stream and `readFile` data; they exclude the bounded metadata probe bytes in the baseline. Response bytes are the serialized projected payload, not transport framing.
+The initial measurement fixture used SDK `0.3.286` with 701 assistant messages, one direct child, and one nested child in flat files under `subagents`. These historical measurements predate the repository update to SDK `0.3.295`. The fixture counted transcript stream reads, `readFile` calls, and metadata file opens in an isolated process. Disk bytes count stream and `readFile` data; they exclude the bounded metadata probe bytes in the baseline. Response bytes are the serialized projected payload, not transport framing.
 
 | View | Root reads before / after | Child reads before / after | Disk bytes before / after | Response bytes before / after | Local time before / after |
 |---|---:|---:|---:|---:|---:|
