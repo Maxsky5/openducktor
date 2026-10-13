@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   AgentSessionLiveSnapshotEnvelope,
   ExternalTaskSyncEvent,
@@ -217,8 +217,14 @@ describe("electron shell bridge", () => {
     expect(
       await bridge.editorClipboard?.readText("application/vnd.pierre.diffs-selections+json"),
     ).toBe("typed:application/vnd.pierre.diffs-selections+json");
-    expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://run-event", listener);
-    expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://runtime-changed", listener);
+    expect(electronApi.subscribe).toHaveBeenCalledWith(
+      "openducktor://run-event",
+      expect.any(Function),
+    );
+    expect(electronApi.subscribe).toHaveBeenCalledWith(
+      "openducktor://runtime-changed",
+      expect.any(Function),
+    );
     expect(electronApi.taskStream.subscribe).toHaveBeenCalledWith(
       { cursor: null },
       listener,
@@ -238,6 +244,32 @@ describe("electron shell bridge", () => {
     stopObservingLiveSessions();
     taskStreamSubscription.unsubscribe();
     expect(unsubscribeSpy).toHaveBeenCalledTimes(3);
+  });
+
+  test("reports rejected runtime event listeners without changing preload IPC", async () => {
+    const { electronApi } = createElectronApi();
+    const payload = { type: "runtime_impact_changed", runtimeKinds: ["codex"] } as const;
+    let dispatch!: () => void;
+    electronApi.subscribe = mock((...subscription) => {
+      if (subscription[0] === "openducktor://runtime-changed") {
+        dispatch = () => subscription[1]({ ...payload, runtimeKinds: ["codex"] });
+      }
+      return () => {};
+    });
+    setElectronApi(electronApi);
+    const failure = new Error("Runtime event failed.");
+    const listener = mock(() => Promise.reject(failure));
+    const report = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const stop = await createElectronShellBridge().subscribeRuntimeChanges(listener);
+      dispatch();
+      await flushTaskStream();
+      expect(listener).toHaveBeenCalledWith(payload);
+      expect(report).toHaveBeenCalledWith("Shell event listener failed", failure);
+      stop();
+    } finally {
+      report.mockRestore();
+    }
   });
 
   test("forwards task stream frames", async () => {
@@ -446,9 +478,9 @@ describe("electron shell bridge", () => {
     const bridge = createElectronShellBridge();
     await bridge.notifications.openSystemSettings();
     await bridge.openExternalUrl("https://openducktor.local/docs");
-    await expect(bridge.resolveLocalAttachmentPreviewSrc("brief.md")).resolves.toBe(
-      "file:///tmp/brief.md",
-    );
+    await expect(
+      bridge.resolveLocalAttachmentPreview("brief.md", new AbortController().signal),
+    ).resolves.toEqual({ kind: "url", src: "file:///tmp/brief.md" });
 
     expect(electronApi.notifications.openSystemSettings).toHaveBeenCalledTimes(1);
     expect(electronApi.openExternalUrl).toHaveBeenCalledWith("https://openducktor.local/docs");

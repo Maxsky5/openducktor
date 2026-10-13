@@ -1,3 +1,4 @@
+import { getHostStorage } from "@/lib/host-storage";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -143,7 +144,7 @@ type SelectionRead = { sessionId: string | null; error: Error | null };
 
 const readSelection = (storageKey: string): SelectionRead => {
   try {
-    return { sessionId: globalThis.localStorage.getItem(storageKey), error: null };
+    return { sessionId: getHostStorage().getItem(storageKey), error: null };
   } catch (cause) {
     return {
       sessionId: null,
@@ -157,8 +158,8 @@ const readSelection = (storageKey: string): SelectionRead => {
 
 const writeSelection = (storageKey: string, sessionId: string | null): void => {
   try {
-    if (sessionId === null) globalThis.localStorage.removeItem(storageKey);
-    else globalThis.localStorage.setItem(storageKey, sessionId);
+    if (sessionId === null) getHostStorage().removeItem(storageKey);
+    else getHostStorage().setItem(storageKey, sessionId);
   } catch (cause) {
     throw new Error(
       `Failed to save workspace session selection "${storageKey}": ${errorMessage(cause)}`,

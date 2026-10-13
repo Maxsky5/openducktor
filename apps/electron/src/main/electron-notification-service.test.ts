@@ -198,44 +198,55 @@ describe("Electron notification service", () => {
     expect(service.getCapability()).toMatchObject({ failureMessage: "native failure" });
   });
 
-  test("restores, shows, focuses, and routes the exact target on click", async () => {
-    FakeNativeNotification.supported = true;
-    FakeNativeNotification.instances = [];
-    const restore = mock(() => {});
-    const show = mock(() => {});
-    const focus = mock(() => {});
-    const send = mock(() => {});
-    const service = createElectronNotificationService({
-      Notification: FakeNativeNotification,
-      getPermission: () => "granted",
-      getWindows: () => [
-        {
-          isDestroyed: () => false,
-          isMinimized: () => true,
-          isVisible: () => false,
-          isFocused: () => false,
-          restore,
-          show,
-          focus,
-          webContents: { isDestroyed: () => false, send },
-        },
-      ],
-    });
+  test.each([false, true])(
+    "routes a notification only to its host, host changed=%s",
+    async (changed) => {
+      FakeNativeNotification.supported = true;
+      FakeNativeNotification.instances = [];
+      const restore = mock(() => {});
+      const show = mock(() => {});
+      const focus = mock(() => {});
+      const send = mock(() => {});
+      let url = "file:///app/index.html#/kanban";
+      const service = createElectronNotificationService({
+        Notification: FakeNativeNotification,
+        getPermission: () => "granted",
+        getWindows: () => [
+          {
+            isDestroyed: () => false,
+            isMinimized: () => true,
+            isVisible: () => false,
+            isFocused: () => false,
+            restore,
+            show,
+            focus,
+            webContents: { isDestroyed: () => false, getURL: () => url, send },
+          },
+        ],
+      });
 
-    const delivery = service.show(request);
-    const native = FakeNativeNotification.instances[0];
-    native?.emit("show");
-    await delivery;
-    native?.emit("close", { reason: "timedOut" });
-    native?.emit("click");
+      const delivery = service.show(request);
+      const native = FakeNativeNotification.instances[0];
+      native?.emit("show");
+      await delivery;
+      if (changed) service.dispose();
+      else url = "file:///app/index.html#/sessions";
+      native?.emit("close", { reason: "timedOut" });
+      native?.emit("click");
 
-    expect(restore).toHaveBeenCalledTimes(1);
-    expect(show).toHaveBeenCalledTimes(1);
-    expect(focus).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith(ELECTRON_NOTIFICATION_CLICKED_CHANNEL, {
-      navigationTarget: request.navigationTarget,
-    });
-  });
+      if (changed) {
+        expect(send).not.toHaveBeenCalled();
+        expect(focus).not.toHaveBeenCalled();
+        return;
+      }
+      expect(restore).toHaveBeenCalledTimes(1);
+      expect(show).toHaveBeenCalledTimes(1);
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith(ELECTRON_NOTIFICATION_CLICKED_CHANNEL, {
+        navigationTarget: request.navigationTarget,
+      });
+    },
+  );
 
   test("reports denied native notification permission", () => {
     const service = createElectronNotificationService({

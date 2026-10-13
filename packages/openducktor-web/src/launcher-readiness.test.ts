@@ -69,7 +69,7 @@ test.each(["waitForBackend", "waitForBackendEffect"])(
       expect(exitCode, stderr).toBe(0);
       expect(proxyRequests).toEqual(["http://proxy-check.invalid/"]);
       expect(requests).toEqual([
-        { path: "/health", method: "GET", token: null },
+        { path: "/health", method: "GET", token: "readiness-test-token" },
         { path: "/session", method: "POST", token: "readiness-test-token" },
       ]);
     } finally {

@@ -2,7 +2,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { markExecutable, runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
-import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
+import {
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+} from "@openducktor/remote-host/effect/web-errors";
 import { WEB_PACKAGE_MCP_ENTRYPOINT } from "../src/web-runtime-distribution";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));

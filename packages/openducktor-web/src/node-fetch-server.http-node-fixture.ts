@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { request as httpRequest, type ClientRequest, type IncomingMessage } from "node:http";
 import { test } from "node:test";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { startNodeFetchServer } from "./node-fetch-server";
+import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
 import { request } from "./node-http-test-client";
 
 const json = JSON.stringify({ content: "host read content\n".repeat(350) });

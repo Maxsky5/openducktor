@@ -6,6 +6,7 @@ import {
 } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { ThemePicker } from "@/components/layout/theme-picker";
+import { useTheme } from "@/components/layout/theme-provider";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
@@ -43,6 +44,7 @@ export function SettingsAppearanceSection({
   disabled,
   onUpdateAppearance,
 }: SettingsAppearanceSectionProps): ReactElement {
+  const { themePreference, setThemePreference } = useTheme();
   const themeLabelId = "appearance-theme-label";
   const themeDescriptionId = "appearance-theme-description";
   const labelId = "appearance-horizontal-scrollbars-label";
@@ -83,6 +85,8 @@ export function SettingsAppearanceSection({
 
         <div>
           <ThemePicker
+            value={themePreference}
+            onValueChange={setThemePreference}
             disabled={disabled}
             triggerAriaLabelledBy={themeLabelId}
             triggerAriaDescribedBy={themeDescriptionId}

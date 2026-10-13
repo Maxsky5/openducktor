@@ -11,12 +11,14 @@ import {
   MessageSquarePlus,
   MessageSquareText,
   Palette,
+  Radio,
   SlidersHorizontal,
   Workflow,
 } from "lucide-react";
 
 export type SettingsSectionId =
   | "general"
+  | "remote-access"
   | "git"
   | "runtimes"
   | "repositories"
@@ -40,6 +42,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
 }> = [
   { id: "general", label: "General", icon: SlidersHorizontal },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "remote-access", label: "Remote control", icon: Radio },
   { id: "git", label: "Git", icon: FolderGit2 },
   { id: "runtimes", label: "Agent Runtimes", icon: Cpu },
   { id: "repositories", label: "Repositories", icon: FolderGit2 },

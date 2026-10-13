@@ -77,6 +77,7 @@ export const createHostRuntimeStatusOwner = ({
   let observedHostInstanceId: string | null = null;
   // Each baseline read replaces the earlier one. Only the latest read can set the baseline.
   let baselineRead = 0;
+  let latestBaseline: Promise<void> | null = null;
   // Each stream failure or recovery starts a new epoch.
   let streamEpoch = 0;
 
@@ -118,25 +119,36 @@ export const createHostRuntimeStatusOwner = ({
     updateConnection({ hasBaseline: readError === null, readError, isRefreshing: false });
   };
 
-  const readBaseline = async (readSession: number): Promise<void> => {
-    if (readSession !== session) return;
-    baselineRead += 1;
-    const read = baselineRead;
-    const isLatest = () => readSession === session && read === baselineRead;
-    // A baseline must start after the current subscription or reconnect.
-    await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-    if (!isLatest()) return;
-    try {
-      const snapshot = await queryClient.fetchQuery({ ...options, staleTime: 0 });
-      // A canceled read can resolve with cached data. It is not the current baseline.
-      if (!isLatest()) return;
-      observedHostInstanceId = snapshot.hostInstanceId;
-      observeGenerations();
-      settleBaseline(null);
-    } catch (cause) {
-      if (!isLatest()) return;
-      settleBaseline(errorMessage(cause));
+  const waitForLatestBaseline = async (readSession: number): Promise<void> => {
+    let operation = latestBaseline;
+    while (operation !== null && readSession === session) {
+      await operation;
+      if (operation === latestBaseline) return;
+      operation = latestBaseline;
     }
+  };
+
+  const readBaseline = (readSession: number): Promise<void> => {
+    if (readSession !== session) return Promise.resolve();
+    const read = ++baselineRead;
+    latestBaseline = (async () => {
+      const isLatest = () => readSession === session && read === baselineRead;
+      // A baseline must start after the current subscription or reconnect.
+      await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+      if (!isLatest()) return;
+      try {
+        const snapshot = await queryClient.fetchQuery({ ...options, staleTime: 0 });
+        // A canceled read can resolve with cached data. It is not the current baseline.
+        if (!isLatest()) return;
+        observedHostInstanceId = snapshot.hostInstanceId;
+        observeGenerations();
+        settleBaseline(null);
+      } catch (cause) {
+        if (!isLatest()) return;
+        settleBaseline(errorMessage(cause));
+      }
+    })();
+    return latestBaseline;
   };
 
   const createListener =
@@ -147,7 +159,19 @@ export const createHostRuntimeStatusOwner = ({
         if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND) {
           changeStream(null, { hasBaseline: false });
           void readBaseline(listenerSession);
-          return;
+          return waitForLatestBaseline(listenerSession).then(() => {
+            if (listenerSession !== session || signal.aborted) return;
+            if (
+              !connection.hasBaseline ||
+              connection.streamError !== null ||
+              connection.readError !== null
+            )
+              throw new Error(
+                connection.readError ??
+                  connection.streamError ??
+                  "Runtime recovery did not establish current host state.",
+              );
+          });
         }
         changeStream(event.message ?? "Runtime updates are unavailable.", { hasBaseline: false });
         return;

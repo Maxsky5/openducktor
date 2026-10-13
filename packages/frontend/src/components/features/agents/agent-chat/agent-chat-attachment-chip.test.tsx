@@ -1,5 +1,7 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import {
   configureShellBridge,
   createDisabledAppUpdateBridge,
@@ -8,11 +10,13 @@ import {
 } from "@/lib/shell-bridge";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
+
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
 
 const configureAttachmentPreviewShellBridge = (
-  resolveLocalAttachmentPreviewSrc: ShellBridge["resolveLocalAttachmentPreviewSrc"],
+  resolveLocalAttachmentPreview: ShellBridge["resolveLocalAttachmentPreview"],
 ): void => {
   configureShellBridge({
     ...createUnavailableShellBridge(),
@@ -27,8 +31,8 @@ const configureAttachmentPreviewShellBridge = (
       canPreviewLocalAttachments: true,
     },
     openExternalUrl: async () => {},
-    resolveLocalAttachmentPreviewSrc,
-    resolveTaskAssetSrc: async () => "asset://task-preview",
+    resolveLocalAttachmentPreview,
+    resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
   });
 };
 
@@ -107,10 +111,10 @@ describe("AgentChatAttachmentChip", () => {
 
   test("surfaces inline thumbnail failures as explicit preview errors", async () => {
     configureAttachmentPreviewShellBridge(
-      mock(
-        async (path) =>
-          `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
-      ),
+      mock(async (path) => ({
+        kind: "url" as const,
+        src: `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
+      })),
     );
 
     render(
@@ -149,10 +153,10 @@ describe("AgentChatAttachmentChip", () => {
 
   test("renders transcript image previews from the resolved desktop asset url", async () => {
     configureAttachmentPreviewShellBridge(
-      mock(
-        async (path) =>
-          `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
-      ),
+      mock(async (path) => ({
+        kind: "url" as const,
+        src: `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
+      })),
     );
 
     render(

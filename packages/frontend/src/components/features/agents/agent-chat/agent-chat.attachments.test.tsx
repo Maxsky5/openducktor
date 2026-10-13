@@ -1,5 +1,7 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ReactNode } from "react";
 import { describe, expect, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { Activity, createRef } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
@@ -9,6 +11,8 @@ import {
   buildSessionTranscript,
   completeThreadModel,
 } from "./agent-chat-test-fixtures";
+
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
 
 const buildModel = () => ({
   chatSettings: createChatSettingsFixture(),

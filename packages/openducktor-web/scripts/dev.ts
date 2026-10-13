@@ -6,7 +6,7 @@ import {
   errorMessage,
   runWebBoundary,
   WebDependencyError,
-} from "../src/effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 
 type ManagedWebProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
 type ProcessKeepAliveDependencies = {

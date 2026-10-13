@@ -1,0 +1,29 @@
+{
+  "name": "@openducktor/remote-host",
+  "version": "1.0.0-beta.2",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test --preload ../../scripts/bun-test-preload.ts --timeout 1000"
+  },
+  "dependencies": {
+    "@openducktor/contracts": "workspace:*",
+    "@openducktor/host": "workspace:*",
+    "@openducktor/host-client": "workspace:*",
+    "effect": "4.0.2",
+    "mime-types": "^3.0.2",
+    "ws": "8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^3.0.1",
+    "@types/ws": "^8.18.2"
+  }
+}

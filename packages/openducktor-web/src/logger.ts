@@ -4,7 +4,6 @@ import {
   type OpenDucktorDailyLogWriter,
 } from "@openducktor/host";
 import { Effect } from "effect";
-import { errorMessage, WebResourceError } from "./effect/web-errors";
 
 type LogLevel = "INFO" | "ERROR";
 
@@ -26,28 +25,8 @@ type WebLoggerInput = {
   writer?: OpenDucktorDailyLogWriter;
 };
 
-export type WebLogger = {
-  error(message: string): Effect.Effect<void, unknown>;
-  info(message: string): Effect.Effect<void, unknown>;
-  success(message: string): Effect.Effect<void, unknown>;
-};
-
-export const writeWebLogEffect = (
-  logger: WebLogger,
-  level: keyof WebLogger,
-  message: string,
-): Effect.Effect<void, WebResourceError> =>
-  logger[level](message).pipe(
-    Effect.mapError(
-      (cause) =>
-        new WebResourceError({
-          resource: "persistent-log",
-          operation: `web.log-${level}`,
-          message: errorMessage(cause),
-          cause,
-        }),
-    ),
-  );
+export { writeWebLogEffect, type WebLogger } from "@openducktor/remote-host/logger";
+import type { WebLogger } from "@openducktor/remote-host/logger";
 
 const RESET = "\u001b[0m";
 const BOLD = "\u001b[1m";

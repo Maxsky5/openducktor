@@ -18,6 +18,7 @@ export type NodeServerSocket<Data> = {
 export type NodeWebSocketHandler<Data> = {
   perMessageDeflate: boolean;
   maxPayloadLength: number;
+  open?(socket: NodeServerSocket<Data>): void;
   message(socket: NodeServerSocket<Data>, data: string | Buffer): void;
   drain(socket: NodeServerSocket<Data>): void;
   close(socket: NodeServerSocket<Data>): void;
@@ -27,6 +28,8 @@ export type NodeFetchServer<Data> = {
   readonly port: number;
   stop(force: boolean): Promise<void>;
   timeout(request: Request, seconds: number): void;
+  /** Ends this HTTP response on abort without stopping the listener or host work. */
+  bindResponseLifetime(signal: AbortSignal): void;
   upgrade(options: { data: Data }): boolean;
 };
 
@@ -34,9 +37,15 @@ export type StartNodeFetchServerInput<Data> = {
   hostname: string;
   port: number;
   idleTimeoutSeconds?: number;
-  fetch(request: Request, server: NodeFetchServer<Data>): Response | Promise<Response> | undefined;
+  fetch(
+    request: Request,
+    server: NodeFetchServer<Data>,
+  ): Response | Promise<Response | undefined> | undefined;
   websocket?: NodeWebSocketHandler<Data>;
   onError(cause: unknown): void;
+  onListenerError?(cause: unknown): void;
+  /** Runs after bind and before request delivery. A thrown error closes the listener. */
+  onListening?(server: NodeFetchServer<Data>): void;
 };
 
 /** Binds the host and owns its sockets. A forced stop ends active connections. */
@@ -47,6 +56,8 @@ export const startNodeFetchServer = async <Data>({
   fetch,
   websocket,
   onError,
+  onListenerError,
+  onListening,
 }: StartNodeFetchServerInput<Data>): Promise<NodeFetchServer<Data>> => {
   const sockets = new Set<WebSocket>();
   const connections = new Set<Duplex>();
@@ -87,18 +98,27 @@ export const startNodeFetchServer = async <Data>({
     },
     stop,
     timeout: (_request, seconds) => outgoing?.setTimeout(seconds * 1000),
+    bindResponseLifetime: (signal) => {
+      if (!outgoing) return;
+      const close = () => outgoing.destroy();
+      signal.addEventListener("abort", close, { once: true });
+      outgoing.once("close", () => signal.removeEventListener("abort", close));
+      if (signal.aborted) close();
+    },
     upgrade: (options) => upgrade?.(options) ?? false,
   });
 
   server.on("request", (incoming, outgoing) => {
     const abort = new AbortController();
-    outgoing.on("close", () => {
-      if (!outgoing.writableEnded) abort.abort();
-    });
+    outgoing.on("close", () => abort.abort());
     void (async () => {
       const request = toRequest(incoming, hostname, abort.signal);
       const response = await fetch(request, makeRequestServer(outgoing, null));
       if (!response) throw new Error("HTTP request did not produce a response.");
+      if (abort.signal.aborted) {
+        await response.body?.cancel();
+        return;
+      }
       await writeResponse(request, outgoing, response);
     })().catch((cause: unknown) => {
       if (abort.signal.aborted || outgoing.destroyed) return;
@@ -113,7 +133,9 @@ export const startNodeFetchServer = async <Data>({
 
   server.on("upgrade", (incoming, socket, head) => {
     void (async () => {
-      const request = toRequest(incoming, hostname, new AbortController().signal);
+      const abort = new AbortController();
+      socket.once("close", () => abort.abort());
+      const request = toRequest(incoming, hostname, abort.signal);
       let upgraded = false;
       const requestServer = makeRequestServer(null, (options) => {
         if (!webSocketServer || !websocket) return false;
@@ -148,6 +170,7 @@ export const startNodeFetchServer = async <Data>({
               }
             },
           };
+          websocket.open?.(wrapped);
           nativeSocket.on("message", (data, binary) =>
             websocket.message(wrapped, toMessage(data, binary)),
           );
@@ -176,9 +199,18 @@ export const startNodeFetchServer = async <Data>({
     const failed = (cause: Error): void => reject(cause);
     server.once("error", failed);
     server.listen(port, hostname, () => {
-      server.on("error", onError);
+      server.on("error", onListenerError ?? onError);
       server.off("error", failed);
-      resolve();
+      try {
+        onListening?.(makeRequestServer(null, null));
+        resolve();
+      } catch (cause) {
+        void stop(true).then(
+          () => reject(cause),
+          (cleanup) =>
+            reject(new AggregateError([cause, cleanup], "Listener setup and cleanup failed.")),
+        );
+      }
     });
   });
   return makeRequestServer(null, null);

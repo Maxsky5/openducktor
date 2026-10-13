@@ -11,12 +11,14 @@ type TaskStreamTransport = {
     input: { cursor: TaskEventCursor | null },
     onFrame: (frame: TaskStreamFrame) => void,
     onTerminalFailure?: (cause: unknown) => void,
+    signal?: AbortSignal,
   ) => Promise<TaskStreamSubscription>;
 };
 
 type ChangeFrame = Extract<TaskStreamFrame, { type: "change" }>;
 
 type OwnedSubscription = {
+  abort: AbortController;
   subscription: TaskStreamSubscription | null;
   generation: number;
   pendingFrames: TaskStreamFrame[];
@@ -91,6 +93,7 @@ export const createTaskStreamController = ({
 
   const close = (owner: OwnedSubscription): Promise<void> => {
     if (owner.unsubscribePromise) return owner.unsubscribePromise;
+    owner.abort.abort();
     owner.unsubscribePromise = Promise.resolve()
       .then(async () => {
         if (owner.subscription) await owner.subscription.unsubscribe();
@@ -321,6 +324,7 @@ export const createTaskStreamController = ({
 
   const acquire = async (cursor: TaskEventCursor | null): Promise<void> => {
     const owner: OwnedSubscription = {
+      abort: new AbortController(),
       subscription: null,
       generation: ++subscriptionGeneration,
       pendingFrames: [],
@@ -338,6 +342,7 @@ export const createTaskStreamController = ({
               if (!recovered && !stopped) reportDegraded(error);
             }, reportDegraded);
           },
+          owner.abort.signal,
         ),
       );
     } catch (error) {
@@ -506,6 +511,7 @@ export const createTaskStreamController = ({
     stop: (): Promise<void> => {
       if (!stopPromise) {
         stopped = true;
+        acquiring?.abort.abort();
         stopPromise = (async () => {
           await startPromise?.catch(() => {});
           await recoveryPromise?.catch(() => {});

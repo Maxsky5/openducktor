@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
+import { runWebSyncBoundary, WebValidationError } from "@openducktor/remote-host/effect/web-errors";
 
 // Keep mount paths separate from unprefixed HTTP and WebSocket route namespaces.
 const BACKEND_ROUTE_NAMESPACES = new Set([

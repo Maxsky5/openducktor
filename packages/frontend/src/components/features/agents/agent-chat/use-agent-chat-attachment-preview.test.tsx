@@ -1,3 +1,4 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   configureShellBridge,
@@ -5,17 +6,22 @@ import {
   createUnavailableShellBridge,
   type ShellBridge,
 } from "@/lib/shell-bridge";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createHarness } from "@/test-utils/react-hook-harness";
 import {
   readAttachmentPreviewLoadFailureMessage,
   useAgentChatAttachmentPreview,
 } from "./use-agent-chat-attachment-preview";
 
+const createHookHarness = (
+  hook: typeof useAgentChatAttachmentPreview,
+  props: Parameters<typeof useAgentChatAttachmentPreview>[0],
+) => createHarness(hook, props, { wrapper: IsolatedQueryWrapper });
+
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
 
 const configureAttachmentPreviewShellBridge = (
-  resolveLocalAttachmentPreviewSrc: ShellBridge["resolveLocalAttachmentPreviewSrc"],
+  resolveLocalAttachmentPreview: ShellBridge["resolveLocalAttachmentPreview"],
 ): void => {
   configureShellBridge({
     ...createUnavailableShellBridge(),
@@ -30,8 +36,8 @@ const configureAttachmentPreviewShellBridge = (
       canPreviewLocalAttachments: true,
     },
     openExternalUrl: async () => {},
-    resolveLocalAttachmentPreviewSrc,
-    resolveTaskAssetSrc: async () => "asset://task-preview",
+    resolveLocalAttachmentPreview,
+    resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
   });
 };
 
@@ -138,10 +144,10 @@ describe("useAgentChatAttachmentPreview", () => {
 
   test("resolves transcript image previews through the desktop asset protocol", async () => {
     configureAttachmentPreviewShellBridge(
-      mock(
-        async (path) =>
-          `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
-      ),
+      mock(async (path) => ({
+        kind: "url" as const,
+        src: `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
+      })),
     );
 
     const harness = createHookHarness(useAgentChatAttachmentPreview, {
@@ -196,7 +202,10 @@ describe("useAgentChatAttachmentPreview", () => {
   });
 
   test("does not resolve local previews when the runtime marks history content unavailable", async () => {
-    const resolveLocalAttachmentPreviewUrl = mock(async () => "asset://localhost/unexpected");
+    const resolveLocalAttachmentPreviewUrl = mock(async () => ({
+      kind: "url" as const,
+      src: "asset://localhost/unexpected",
+    }));
     configureAttachmentPreviewShellBridge(resolveLocalAttachmentPreviewUrl);
 
     const harness = createHookHarness(useAgentChatAttachmentPreview, {

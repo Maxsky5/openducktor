@@ -1,6 +1,6 @@
 import type { ToolDiscoveryId } from "@openducktor/host";
 import { Effect } from "effect";
-import { runWebSyncBoundary, WebResourceError } from "./effect/web-errors";
+import { runWebSyncBoundary, WebResourceError } from "@openducktor/remote-host/effect/web-errors";
 
 export type WebProvidedToolPaths = Partial<Record<ToolDiscoveryId, string>>;
 

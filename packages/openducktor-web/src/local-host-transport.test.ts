@@ -1,10 +1,10 @@
-import { liveSessionStreamEventName } from "./host-event-stream-name";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType } from "zod";
 import { configureBrowserRuntimeConfig } from "./browser-config";
-import { WebDependencyError } from "./effect/web-errors";
+import { WebDependencyError } from "@openducktor/remote-host/effect/web-errors";
 import { createFetchFixture } from "./test-support";
 import type {
   RunEventListener,
@@ -1180,6 +1180,50 @@ describe("local host SSE subscriptions", () => {
     unsubscribeThrowing();
     unsubscribe();
   });
+
+  test.each(["runtime", "autopilot", "workspace"] as const)(
+    "reports rejected %s recovery without stopping other subscribers",
+    async (owner) => {
+      const transport = await loadLocalHostTransport();
+      const subscribe = {
+        runtime: transport.subscribeLocalHostRuntimeChanges,
+        autopilot: transport.subscribeLocalHostRunEvents,
+        workspace: transport.subscribeLocalHostWorkspaceSessionUpdates,
+      }[owner];
+      globalThis.fetch = createFetchFixture(
+        mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+      );
+      const failure = new Error("Required recovery read failed.");
+      const recovery = Promise.withResolvers<void>();
+      const report = spyOn(console, "error").mockImplementation(() => {});
+      let stopRecovering: (() => void) | undefined;
+      let stopOther: (() => void) | undefined;
+      try {
+        const subscription = subscribe(() => recovery.promise);
+        const eventSource = await waitForEventSourceInstance();
+        eventSource.connect();
+        stopRecovering = await subscription;
+        const other = mock(() => {});
+        stopOther = await subscribe(other);
+
+        eventSource.connect({ hostChanged: false, gaps: ["message"] });
+        expect(other).toHaveBeenCalledWith({
+          __openducktorBrowserLive: true,
+          kind: "reconnected",
+          missedEvents: true,
+        });
+        recovery.reject(failure);
+        await waitForCondition(() => report.mock.calls.length === 1);
+        expect(report).toHaveBeenCalledWith("Shell event listener failed", failure);
+        expect(eventSource.closed).toBe(false);
+      } finally {
+        recovery.resolve();
+        stopRecovering?.();
+        stopOther?.();
+        report.mockRestore();
+      }
+    },
+  );
 
   test("keeps initial task stream setup pending until its first frame", async () => {
     const { subscribeLocalHostTaskStream } = await loadLocalHostTransport();

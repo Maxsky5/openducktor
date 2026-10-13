@@ -2,6 +2,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { createContext, useContext, useEffect, useState } from "react";
 import type * as React from "react";
 import { trackOpenDialog } from "./open-dialogs";
+import { DialogEnabledContext } from "./dialog-enabled-context";
 
 const DialogOpenContext = createContext<boolean | null>(null);
 
@@ -14,7 +15,7 @@ export function DialogRoot({
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen ?? false);
   const [registration] = useState(() => Symbol("dialog-root"));
-  const isOpen = open ?? internalOpen;
+  const isOpen = useContext(DialogEnabledContext) && (open ?? internalOpen);
   useEffect(() => {
     if (!isOpen) return;
     return trackOpenDialog(registration);

@@ -119,8 +119,7 @@ export const assembleNodeEffectHostCommandRouter = (
     startupEnv,
     worktreeFiles,
   } = defaultPorts;
-  // Autopilot needs services that this function creates later, so the hooks bind it late.
-  let autopilot: AutopilotService | undefined;
+  let autopilot: AutopilotService | undefined; // Autopilot needs services that this function creates later, so the hooks bind it late.
   const notificationComposition = createNodeNotificationServices(
     withConfigCommit(baseSettingsConfig, (config) =>
       autopilot ? autopilot.configCommitted(config) : Effect.void,
@@ -492,6 +491,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
   return Object.assign(createEffectHostCommandRouter({ ...hostRouterLifecycle, handlers }), {
+    hostInstanceId,
     taskAssetReadService,
     taskEventStream,
     notificationStream: notificationService.stream,

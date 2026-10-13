@@ -29,6 +29,7 @@ import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
+export const ELECTRON_HOST_SELECT_CHANNEL = "openducktor:host-select";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
@@ -201,11 +202,13 @@ export type OpenDucktorElectronNotificationApi = {
 
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
+  selectHost(): Promise<void>;
   invoke(
     command: HostCommandName,
     args?: ElectronHostInvokeRequest["args"],
   ): Promise<ElectronHostInvokeWireResult>;
   subscribe(...subscription: ElectronHostEventSubscription): () => void;
+  remoteAccess: import("@openducktor/contracts").RemoteAccessBridge;
   appUpdates: OpenDucktorElectronAppUpdateApi;
   notifications: OpenDucktorElectronNotificationApi;
   openExternalUrl(url: string): Promise<void>;
@@ -223,3 +226,6 @@ export type OpenDucktorElectronApi = {
     readText(type?: EditorClipboardReadType): Promise<string>;
   };
 };
+
+export const ELECTRON_REMOTE_ACCESS_CHANNEL = "openducktor:remote-access";
+export const ELECTRON_REMOTE_ACCESS_STATE_CHANNEL = "openducktor:remote-access:state";

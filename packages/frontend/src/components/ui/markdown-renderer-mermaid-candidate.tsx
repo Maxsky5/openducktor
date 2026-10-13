@@ -13,7 +13,7 @@ export default function MarkdownRendererMermaidCandidate({
   components,
   linkPolicy,
   fallbackContent,
-  resolveTaskAssetSrc,
+  resolveTaskAssetSource,
   taskAssetContext,
   premiumCodeBlocks = false,
   fallback,
@@ -22,7 +22,7 @@ export default function MarkdownRendererMermaidCandidate({
   components: Components;
   linkPolicy?: MarkdownLinkPolicy | undefined;
   fallbackContent: ReactElement;
-  resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
+  resolveTaskAssetSource?: ShellBridge["resolveTaskAssetSource"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
   premiumCodeBlocks?: boolean;
   fallback?: ReactNode;
@@ -40,7 +40,7 @@ export default function MarkdownRendererMermaidCandidate({
       premiumCodeBlocks={premiumCodeBlocks}
       fallback={fallback}
       {...(taskAssetContext ? { taskAssetContext } : {})}
-      {...(resolveTaskAssetSrc ? { resolveTaskAssetSrc } : {})}
+      {...(resolveTaskAssetSource ? { resolveTaskAssetSource } : {})}
     />
   );
 }

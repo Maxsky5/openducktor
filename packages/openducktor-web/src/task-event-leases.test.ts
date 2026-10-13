@@ -5,7 +5,7 @@ import type {
   TaskEventStreamSubscribe,
 } from "@openducktor/contracts";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
-import { createTaskEventLeaseManager } from "./task-event-leases";
+import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 
 type Sink = (frame: TaskEventStreamFrame) => void | boolean;
 
@@ -45,6 +45,7 @@ const createFakeStream = () => {
           subscriptionId: "host-subscription",
           resume: () => {},
           replay: () => {},
+          replayBoundary: { epoch: "test-epoch", sequence: 0 },
           unsubscribe: () => {
             unsubscribeCalls += 1;
           },

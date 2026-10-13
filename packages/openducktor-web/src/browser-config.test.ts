@@ -5,7 +5,7 @@ import {
   getBrowserAuthToken,
   getBrowserBackendUrl,
 } from "./browser-config";
-import { portOfHttpOrigin } from "./http-origin";
+import { portOfHttpOrigin } from "@openducktor/remote-host/http-origin";
 
 const originValidationCaseSchema = z.object({
   name: z.string(),

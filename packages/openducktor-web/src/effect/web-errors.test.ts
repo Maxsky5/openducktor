@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Cause, Effect, Exit } from "effect";
-import { causeToWebBoundaryError, WebOperationError, WebValidationError } from "./web-errors";
+import {
+  causeToWebBoundaryError,
+  WebOperationError,
+  WebValidationError,
+} from "@openducktor/remote-host/effect/web-errors";
 
 describe("web Effect boundary errors", () => {
   test("preserves multiple typed failures on boundary crossing", () => {

@@ -107,3 +107,5 @@ export * from "./workspace-provider-setup-schemas";
 export * from "./workflow-launch-schemas";
 export * from "./session-launch-schemas";
 export * from "./workspace-session-launch-schemas";
+
+export * from "./remote-host-schemas";
