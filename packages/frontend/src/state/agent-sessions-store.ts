@@ -66,6 +66,7 @@ export type AgentSessionsStore = {
   ) => AgentSessionVisiblePendingInput;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
   applyLiveSessionEnvelope: (envelope: LiveSessionStateEnvelope) => void;
+  recordHistoryEnvelope: (envelope: AgentSessionLiveEnvelope) => void;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -87,6 +88,7 @@ export const createAgentSessionsStore = (
   const pendingTaskRemovals = new Map<string, Set<string>>();
   const retainedCollections = new Map<string, AgentSessionCollection>();
   const retainedHistoryVersions = new Map<string, Map<string, SessionHistoryVersion>>();
+  const projectedHistory = historyCoverage?.createProjection();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   if (workspaceRepoPath !== null) {
     retainedCollections.set(workspaceRepoPath, sessionCollection);
@@ -201,7 +203,7 @@ export const createAgentSessionsStore = (
     const versions = new Map<string, SessionHistoryVersion>();
     for (const session of listAgentSessions(sessionCollection)) {
       if (session.historyLoadState !== "loaded" || session.historyLoadFailure) continue;
-      const version = historyCoverage?.read(workspaceRepoPath, session);
+      const version = projectedHistory?.read(session);
       if (version) versions.set(agentSessionIdentityKey(session), version);
     }
     retainedHistoryVersions.set(workspaceRepoPath, versions);
@@ -269,6 +271,7 @@ export const createAgentSessionsStore = (
       return snapshot;
     },
     commitSessionCollection,
+    recordHistoryEnvelope: (envelope) => projectedHistory?.accept(envelope),
     applyLiveSessionEnvelope: (envelope) => {
       switch (envelope.type) {
         case "snapshot": {
@@ -286,6 +289,7 @@ export const createAgentSessionsStore = (
                   version &&
                   historyCoverage?.isCurrent(envelope.repoPath, session, version)
                 ) {
+                  projectedHistory?.restore(session, version);
                   collection = replaceAgentSession(collection, {
                     ...session,
                     historyLoadState: "loaded",
@@ -326,6 +330,16 @@ export const createAgentSessionsStore = (
         return null;
       }
 
+      if (
+        workspaceRepoPath &&
+        nextSession.historyLoadState !== current.historyLoadState &&
+        (nextSession.historyLoadState === "loading" ||
+          nextSession.historyLoadState === "refreshing")
+      ) {
+        // Pin the full read's starting position, never the rail's position at departure.
+        projectedHistory?.capture(workspaceRepoPath, nextSession);
+      }
+
       setSessionCollection((current) =>
         replaceAgentSessionByIdentity(current, identity, nextSession),
       );
@@ -333,6 +347,7 @@ export const createAgentSessionsStore = (
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       retainActiveCollection();
+      projectedHistory?.reset();
       if (nextWorkspaceRepoPath !== workspaceRepoPath) clearLiveNotices();
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = activateCollection(nextWorkspaceRepoPath);

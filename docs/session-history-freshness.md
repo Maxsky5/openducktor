@@ -11,11 +11,14 @@ The workspace rail observes every open workspace through the existing live chann
 ### Current history
 
 - A Query history response is current when its session exists in the live observation, the observation still covers the workspace, and its epoch and revision match those captured before the read.
-- A retained Agent Studio history is current when it was loaded without a failure before the workspace switch and its coverage version still matches when the selected live attachment delivers its snapshot.
+- A retained Agent Studio history is current when it was loaded without a failure before the workspace switch and its selected-stream coverage version still matches the rail when the selected live attachment delivers its snapshot.
+- The store captures coverage when a full history read starts. It advances that proof only for history-related envelopes handled by the selected stream. Both projections use the host publication sequence, so independent delivery and cloned envelopes have the same position.
+- A snapshot updates live metadata but cannot advance a transcript proof across an observation epoch. Workspace departure retains the recorded selected-stream position and does not copy the rail's current position.
 - Events from another root session do not make the selected root history stale.
 - Child events also change the history revision of their known ancestors because root transcripts contain child links and completion state.
 - A complete browser replay keeps the observation epoch. The transport uses the replay gap information from PR #1051 to decide whether to attach again.
 - A new selected-workspace attachment restores covered histories to loaded. The retained store checks their versions before the view can load them, including events received during attachment.
+- If the rail completes a gap repair after the selected attachment restores history, the coverage reset marks that active history stale. A new full read supplies its proof for the new epoch.
 
 ### History that is not current
 

@@ -88,12 +88,39 @@ describe("agent session history queries", () => {
     }
   });
 
-  test.each([false, true])(
-    "does not reuse a read completed after a live event with warm cache %s",
-    async (warm) => {
+  test.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])(
+    "does not reuse a raced read with warm cache %s and prior unsequenced fault %s",
+    async (warm, priorFault) => {
       const client = new QueryClient();
       const observation = sessionHistoryCoverage(client).observe("/repo");
       observation.accept(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
+      const transcript = (sequence: number) =>
+        ({
+          type: "transcript_event",
+          sequence,
+          event: {
+            type: "assistant_message",
+            sessionRef: snapshot.ref,
+            externalSessionId: snapshot.ref.externalSessionId,
+            timestamp: "2026-02-22T12:00:01.000Z",
+            messageId: `live-${sequence}`,
+            message: `Live ${sequence}`,
+          },
+        }) as const;
+      if (priorFault) {
+        observation.accept(transcript(1));
+        observation.accept({
+          type: "fault",
+          repoPath: "/repo",
+          ref: snapshot.ref,
+          message: "Read failed",
+        });
+      }
       const result = Promise.withResolvers<AgentSessionHistoryMessage[]>();
       const reader = mock(() => result.promise);
       const options = sessionHistoryQueryOptions(sessionRefFixture, reader, client);
@@ -105,10 +132,11 @@ describe("agent session history queries", () => {
           await client.invalidateQueries({ queryKey: options.queryKey, refetchType: "none" });
         }
         const pending = client.fetchQuery(options);
-        observation.accept({
-          type: "session_upsert",
-          session: { ...snapshot, activity: "running" },
-        });
+        observation.accept(
+          priorFault
+            ? transcript(2)
+            : { type: "session_upsert", session: { ...snapshot, activity: "running" } },
+        );
         result.resolve([{ ...historyMessageFixture }]);
         await pending;
         await client.fetchQuery(options);

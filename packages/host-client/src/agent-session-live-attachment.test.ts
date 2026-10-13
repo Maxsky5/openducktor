@@ -11,6 +11,7 @@ const snapshot = {
 
 const transcriptEvent = (messageId: string): AgentSessionLiveEnvelope => ({
   type: "transcript_event",
+  sequence: 2,
   event: {
     type: "assistant_message",
     externalSessionId: "child-thread",

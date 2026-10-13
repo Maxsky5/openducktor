@@ -89,6 +89,7 @@ type UseRepoSessionReadModelArgs = {
   repoEpochRef: MutableRefObject<number>;
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   applyLiveSessionEnvelope: AgentSessionsStore["applyLiveSessionEnvelope"];
+  recordHistoryEnvelope: AgentSessionsStore["recordHistoryEnvelope"];
   messageQueues: Pick<AgentMessageQueuesStore, "replaceRepository" | "apply" | "removeAccepted">;
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
@@ -145,6 +146,7 @@ export const useRepoSessionReadModel = ({
   repoEpochRef,
   commitSessionCollection,
   applyLiveSessionEnvelope,
+  recordHistoryEnvelope,
   messageQueues,
   liveSessionPort,
   transcriptEvents,
@@ -958,6 +960,7 @@ export const useRepoSessionReadModel = ({
       }
       try {
         applyEnvelope(envelope);
+        recordHistoryEnvelope(envelope);
       } catch (error: unknown) {
         reportEnvelopeFailure(envelope, error);
       }
@@ -989,6 +992,7 @@ export const useRepoSessionReadModel = ({
   }, [
     canObserveRepo,
     commitSessionCollection,
+    recordHistoryEnvelope,
     currentWorkspaceRepoPathRef,
     messageQueues,
     queryClient,

@@ -3,6 +3,8 @@ import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
 import type { SessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { markSessionHistoriesStale } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
 
 type UseOrchestratorSessionStateRefs = {
@@ -42,6 +44,18 @@ export const useOrchestratorSessionState = ({
   useEffect(() => {
     taskRef.current = tasks;
   }, [tasks]);
+
+  useEffect(
+    () =>
+      historyCoverage.subscribeResets((repoPath) => {
+        const currentRepoPath = currentWorkspaceRepoPathRef.current;
+        if (currentRepoPath && normalizeWorkingDirectory(currentRepoPath) === repoPath) {
+          // The rail can finish recovery after the selected attachment restored its collection.
+          sessionStore.setSessionCollection(markSessionHistoriesStale);
+        }
+      }),
+    [historyCoverage, sessionStore],
+  );
 
   useLayoutEffect(() => {
     if (currentWorkspaceRepoPathRef.current === workspaceRepoPath) {

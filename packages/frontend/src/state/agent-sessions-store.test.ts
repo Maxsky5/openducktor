@@ -78,7 +78,9 @@ describe("createAgentSessionsStore session snapshots", () => {
       };
       observation.accept(createLiveSnapshotEnvelope({ sessions: [root, child] }));
       const store = createAgentSessionsStore("/repo", coverage);
-      store.replaceSession(session);
+      store.replaceSession({ ...session, historyLoadState: "not_requested" });
+      store.updateSession(session, (current) => ({ ...current, historyLoadState: "loading" }));
+      store.updateSession(session, () => session);
       store.resetWorkspace("/other");
       if (change === "sibling")
         observation.accept({

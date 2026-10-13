@@ -175,6 +175,7 @@ const createState = (
     repoEpochRef: { current: 0 },
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
+    recordHistoryEnvelope: sessionStore.recordHistoryEnvelope,
     messageQueues,
     liveSessionPort,
     transcriptEvents,

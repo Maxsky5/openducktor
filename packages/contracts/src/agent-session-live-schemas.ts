@@ -159,9 +159,9 @@ export const agentSessionLiveScopeSchema = z
 export type AgentSessionLiveScope = z.infer<typeof agentSessionLiveScopeSchema>;
 
 /**
- * The host numbers live state changes in publication order. A snapshot with sequence N covers
+ * The host numbers live state and transcript changes in publication order. A snapshot with sequence N covers
  * every `snapshot`, `session_upsert`, and `session_removed` envelope and every
- * `task_session_records_updated` `liveSession` up to N.
+ * `task_session_records_updated` `liveSession` up to N. It does not cover transcript content.
  */
 const liveStateSequenceSchema = z.number().int().nonnegative();
 
@@ -221,6 +221,7 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("transcript_event"),
       event: agentSessionTranscriptEventSchema,
+      sequence: liveStateSequenceSchema.optional(),
       provenance: z.enum(["baseline", "live"]).optional(),
     })
     .strict(),

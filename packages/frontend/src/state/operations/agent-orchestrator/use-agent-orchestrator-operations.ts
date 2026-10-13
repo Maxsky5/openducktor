@@ -190,6 +190,7 @@ export function useAgentOrchestratorOperations({
     repoEpochRef,
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
+    recordHistoryEnvelope: sessionStore.recordHistoryEnvelope,
     messageQueues,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,

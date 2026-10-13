@@ -665,6 +665,10 @@ describe("use-agent-orchestrator-operations session state", () => {
     "child-fault",
     "peer-fault",
     "read-fault",
+    "rail-first-recovery",
+    "rail-late-recovery",
+    "applied-rail-first",
+    "applied-selected-first",
   ] as const;
   test.each([...retentionCoverageCases])(
     "returns to retained workspace history with %s coverage",
@@ -679,6 +683,12 @@ describe("use-agent-orchestrator-operations session state", () => {
         },
       ];
       let historyCalls = 0;
+      let hasLiveMessage = false;
+      const liveHistoryMessage: AgentSessionHistoryMessage = {
+        ...baselineHistory[0]!,
+        messageId: "live-message",
+        text: "Latest live message",
+      };
       const delayedRead = Promise.withResolvers<void>();
       const originalLoadSessionHistory = AgentRuntimeTestAdapter.prototype.loadSessionHistory;
       AgentRuntimeTestAdapter.prototype.loadSessionHistory = async () => {
@@ -687,7 +697,7 @@ describe("use-agent-orchestrator-operations session state", () => {
           await delayedRead.promise;
           return [{ ...baselineHistory[0]!, text: "Obsolete response" }];
         }
-        return baselineHistory;
+        return hasLiveMessage ? [...baselineHistory, liveHistoryMessage] : baselineHistory;
       };
 
       const snapshot = createAgentSessionLiveSnapshotFixture({ ref: { repoPath: "/tmp/repo-a" } });
@@ -763,6 +773,45 @@ describe("use-agent-orchestrator-operations session state", () => {
         );
 
         if (
+          continuity === "rail-first-recovery" ||
+          continuity === "applied-rail-first" ||
+          continuity === "applied-selected-first"
+        ) {
+          const event: AgentSessionLiveEnvelope = {
+            type: "transcript_event",
+            sequence: 2,
+            event: {
+              type: "assistant_message",
+              sessionRef: snapshot.ref,
+              externalSessionId: snapshot.ref.externalSessionId,
+              messageId: liveHistoryMessage.messageId,
+              message: liveHistoryMessage.text,
+              timestamp: "2026-02-22T08:00:02.000Z",
+            },
+          };
+          hasLiveMessage = true;
+          await harness.run(() => {
+            if (continuity === "rail-first-recovery") {
+              // The rail's recovery attach finished while the selected attach still holds events.
+              coverage.accept(
+                createLiveSnapshotEnvelope({
+                  repoPath: "/tmp/repo-a",
+                  sessions: snapshots,
+                  historyReplayGap: true,
+                }),
+              );
+              coverage.accept(event);
+            } else if (continuity === "applied-selected-first") {
+              liveStream.emit(structuredClone(event));
+              coverage.accept(event);
+            } else {
+              coverage.accept(event);
+              liveStream.emit(structuredClone(event));
+            }
+          });
+        }
+
+        if (
           continuity === "root-fault" ||
           continuity === "child-fault" ||
           continuity === "peer-fault" ||
@@ -826,21 +875,48 @@ describe("use-agent-orchestrator-operations session state", () => {
               ),
           ),
         );
-        const restoredSession = listHarnessSessions(restored).find(
+        let restoredSession = listHarnessSessions(restored).find(
           (entry) => entry.externalSessionId === "external-1",
         );
 
-        expect(restoredSession?.historyLoadState).toBe(
-          continuity === "covered" || continuity === "peer-fault" ? "loaded" : "stale",
-        );
+        if (continuity === "rail-late-recovery") {
+          expect(restoredSession?.historyLoadState).toBe("loaded");
+          await harness.run(() => {
+            coverage.accept(
+              createLiveSnapshotEnvelope({
+                repoPath: "/tmp/repo-a",
+                sessions: snapshots,
+                historyReplayGap: true,
+              }),
+            );
+          });
+          restoredSession = listHarnessSessions(harness.getLatest()).find(
+            (entry) => entry.externalSessionId === "external-1",
+          );
+        }
+
+        const reusesHistory =
+          continuity === "covered" ||
+          continuity === "peer-fault" ||
+          continuity === "applied-rail-first" ||
+          continuity === "applied-selected-first";
+
+        expect(restoredSession?.historyLoadState).toBe(reusesHistory ? "loaded" : "stale");
         const callsBeforeRepair = continuity === "read-fault" ? 2 : 1;
         expect(historyCalls).toBe(callsBeforeRepair);
         await harness.run(async () => {
           await harness.getLatest().operations.loadAgentSessionHistory(persistedSessionFixture);
         });
-        expect(historyCalls).toBe(
-          continuity === "covered" || continuity === "peer-fault" ? 1 : callsBeforeRepair + 1,
-        );
+        expect(historyCalls).toBe(reusesHistory ? 1 : callsBeforeRepair + 1);
+        if (hasLiveMessage) {
+          expect(
+            sessionMessagesToArray(
+              listHarnessSessions(harness.getLatest()).find(
+                (entry) => entry.externalSessionId === "external-1",
+              )!,
+            ).some((message) => message.content === "Latest live message"),
+          ).toBe(true);
+        }
       } finally {
         delayedRead.resolve();
         coverage.close();
