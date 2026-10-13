@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
 import { sessionHistoryCoverage } from "./agent-session-history-coverage";
 import { agentSessionHistoryQueryKeys, sessionHistoryQueryOptions } from "./agent-session-history";
@@ -87,6 +87,113 @@ describe("agent session history queries", () => {
       client.clear();
     }
   });
+
+  test.each([
+    ["session_upsert", "new-parent"],
+    ["session_upsert", undefined],
+    ["task_session_records_updated", "new-parent"],
+    ["task_session_records_updated", undefined],
+  ] as const)(
+    "refreshes both ancestor chains for %s with next parent %s",
+    async (type, nextParent) => {
+      const client = new QueryClient();
+      const coverage = sessionHistoryCoverage(client);
+      const observation = coverage.observe("/repo");
+      const session = (externalSessionId: string, parentExternalSessionId?: string) => ({
+        ...snapshot,
+        ref: {
+          repoPath: sessionRefFixture.repoPath,
+          runtimeKind: sessionRefFixture.runtimeKind,
+          workingDirectory: sessionRefFixture.workingDirectory,
+          externalSessionId,
+        },
+        parentExternalSessionId,
+      });
+      const ancestor = session("ancestor");
+      const oldParent = session("old-parent", "ancestor");
+      const newParent = session("new-parent", "ancestor");
+      const child = session("child", "old-parent");
+      const peer = session("peer");
+      const initial = createLiveSnapshotEnvelope({
+        sessions: [ancestor, oldParent, newParent, child, peer],
+      });
+      observation.accept(initial);
+      const projection = coverage.createProjection();
+      projection.accept(initial);
+      const histories = [oldParent, newParent, ancestor, peer].map((entry) => {
+        const reader = mock(async () => [historyMessageFixture]);
+        projection.capture("/repo", entry.ref);
+        return {
+          ref: entry.ref,
+          reader,
+          options: sessionHistoryQueryOptions(
+            { ...sessionRefFixture, ...entry.ref },
+            reader,
+            client,
+          ),
+        };
+      });
+      const reopen = () => Promise.all(histories.map(({ options }) => client.fetchQuery(options)));
+      try {
+        await reopen();
+        const updated = { ...child, parentExternalSessionId: nextParent };
+        const envelope: AgentSessionLiveEnvelope =
+          type === "session_upsert"
+            ? { type, sequence: 1, session: updated }
+            : {
+                type,
+                sequence: 1,
+                repoPath: "/repo",
+                taskId: "task-1",
+                agentSessions: [],
+                liveSession: updated,
+              };
+        observation.accept(envelope);
+        for (const { ref } of histories) {
+          const affected =
+            ref.externalSessionId === "old-parent" ||
+            ref.externalSessionId === "ancestor" ||
+            ref.externalSessionId === nextParent;
+          // A selected attachment that has not applied the update cannot retain these histories.
+          expect(coverage.isCurrent("/repo", ref, projection.read(ref))).toBe(!affected);
+        }
+        await reopen();
+        expect(histories.map(({ reader }) => reader.mock.calls.length)).toEqual([
+          2,
+          nextParent ? 2 : 1,
+          2,
+          1,
+        ]);
+        projection.accept(structuredClone(envelope));
+        for (const { ref } of histories) {
+          expect(coverage.isCurrent("/repo", ref, projection.read(ref))).toBe(true);
+        }
+        observation.accept({
+          type: "transcript_event",
+          sequence: 2,
+          event: {
+            type: "assistant_message",
+            sessionRef: child.ref,
+            externalSessionId: child.ref.externalSessionId,
+            timestamp: "2026-02-22T12:00:01.000Z",
+            messageId: "child-message",
+            message: "Child update",
+          },
+        });
+        await reopen();
+        // Later child updates follow the new lineage and leave the old parent and peer cached.
+        expect(histories.map(({ reader }) => reader.mock.calls.length)).toEqual([
+          2,
+          nextParent ? 3 : 1,
+          nextParent ? 3 : 2,
+          1,
+        ]);
+      } finally {
+        observation.close();
+        client.clear();
+      }
+    },
+  );
 
   test.each([
     [false, false],

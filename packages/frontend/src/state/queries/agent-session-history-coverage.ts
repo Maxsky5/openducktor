@@ -37,6 +37,7 @@ const applyHistoryEnvelope = (
   envelope: AgentSessionLiveEnvelope,
 ): AgentSessionIdentity[] => {
   let identity: AgentSessionIdentity | undefined;
+  let previousParent: AgentSessionIdentity | undefined;
   switch (envelope.type) {
     case "snapshot":
       sessions.clear();
@@ -46,28 +47,34 @@ const applyHistoryEnvelope = (
       identity = envelope.event.sessionRef;
       break;
     case "session_upsert":
-      if (rememberSession(sessions, envelope.session)) identity = envelope.session.ref;
+    case "task_session_records_updated": {
+      const session = envelope.type === "session_upsert" ? envelope.session : envelope.liveSession;
+      if (!session) break;
+      const parent = sessions.get(agentSessionIdentityKey(session.ref))?.parent;
+      if (rememberSession(sessions, session)) {
+        identity = session.ref;
+        previousParent = parent ?? undefined;
+      }
       break;
+    }
     case "session_removed":
       identity = envelope.ref;
       break;
     case "fault":
       identity = envelope.ref;
       break;
-    case "task_session_records_updated":
-      if (envelope.liveSession && rememberSession(sessions, envelope.liveSession)) {
-        identity = envelope.liveSession.ref;
-      }
-      break;
   }
   const changed: AgentSessionIdentity[] = [];
   const visited = new Set<string>();
-  while (identity) {
-    const key = agentSessionIdentityKey(identity);
-    if (visited.has(key)) break;
-    visited.add(key);
-    changed.push(identity);
-    identity = sessions.get(key)?.parent ?? undefined;
+  // Parent metadata changes affect the old root transcript as well as the new one.
+  for (let current of [identity, previousParent]) {
+    while (current) {
+      const key = agentSessionIdentityKey(current);
+      if (visited.has(key)) break;
+      visited.add(key);
+      changed.push(current);
+      current = sessions.get(key)?.parent ?? undefined;
+    }
   }
   if (envelope.type === "session_removed") sessions.delete(agentSessionIdentityKey(envelope.ref));
   return changed;
