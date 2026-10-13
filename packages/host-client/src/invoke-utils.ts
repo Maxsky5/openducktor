@@ -22,7 +22,6 @@ export type InvokeFn = <Result>(
 ) => Promise<Result>;
 
 export type OkResult = { ok: boolean };
-export type UpdatedAtResult = { updatedAt: string };
 
 export const voidResultSchema = z
   .union([z.undefined(), z.null()])
@@ -35,14 +34,4 @@ export const arrayResultSchema = <T>(schema: z.ZodType<T>, command: string) =>
 export const okResultSchema = (command: string) => {
   const error = `Expected { ok: boolean } payload from host command ${command}`;
   return z.object({ ok: z.boolean(error) }, error);
-};
-
-export const updatedAtResultSchema = (command: string) => {
-  const error = `Expected { updatedAt: string } payload from host command ${command}`;
-  return z.object(
-    {
-      updatedAt: z.string(error).refine((value) => value.trim().length > 0, error),
-    },
-    error,
-  );
 };
