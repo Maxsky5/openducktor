@@ -12,7 +12,7 @@ import {
 } from "@/state/use-inline-comment-draft-store";
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import type { AgentChatComposerModel } from "./agent-chat.types";
-import { AgentChatComposer } from "./agent-chat-composer";
+import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,

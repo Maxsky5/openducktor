@@ -10,6 +10,7 @@ import {
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
+import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { createAgentSessionsStore, toAgentSessionSummary } from "@/state/agent-sessions-store";
@@ -361,7 +362,11 @@ describe("task chat speed", () => {
     const Composer = () => {
       const { agentChatModel } = useAgentStudioOrchestrationController(args);
       if (label === null) expect(agentChatModel.composer.speed).toBeNull();
-      return createElement(AgentChatComposer, { model: agentChatModel.composer });
+      return createElement(
+        AgentChatSettingsProvider,
+        { value: agentChatModel.chatSettings },
+        createElement(AgentChatComposer, { model: agentChatModel.composer }),
+      );
     };
     const html = renderToStaticMarkup(
       createElement(TaskChatProviders, { runtime }, createElement(Composer)),

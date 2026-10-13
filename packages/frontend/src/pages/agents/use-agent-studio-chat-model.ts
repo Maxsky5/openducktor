@@ -100,7 +100,7 @@ type UseAgentStudioChatModelArgs = {
   selectedSession: AgentStudioSelectedSessionContext;
   sessionActions: AgentStudioChatSessionActionsContext;
   modelSelection: AgentStudioChatModelSelectionContext;
-  chatSettings: ChatSettings;
+  chatSettings: ChatSettings | null;
   runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioChatComposerContext;
 };

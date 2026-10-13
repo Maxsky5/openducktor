@@ -1,6 +1,6 @@
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,6 +40,12 @@ import * as sessionContent from "./workspace-session-content";
 // Every test here renders the full workspace session page, which can exceed 1000 ms on a loaded
 // CI runner. Each test sets a 5_000 ms budget for that render.
 
+// These page tests own navigation and archive behavior. Chat lifecycle has its own tests.
+let chatStub: ReturnType<typeof spyOn<typeof workspaceChat, "WorkspaceSessionChat">>;
+beforeEach(() => {
+  chatStub = spyOn(workspaceChat, "WorkspaceSessionChat").mockImplementation(() => <></>);
+});
+
 const testWorkspaceIds = new Set<string>();
 afterEach(() => {
   for (const workspaceId of testWorkspaceIds) {
@@ -47,6 +53,7 @@ afterEach(() => {
     pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set() });
   }
   testWorkspaceIds.clear();
+  chatStub.mockRestore();
   localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
 });
 

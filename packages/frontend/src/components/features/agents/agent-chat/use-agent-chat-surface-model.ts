@@ -27,7 +27,7 @@ export { invokeStopAgentSession };
 type UseAgentChatSurfaceModelArgs = {
   modelCatalog?: AgentModelCatalog | null;
   transcript: AgentChatTranscriptPresentation;
-  chatSettings: ChatSettings;
+  chatSettings: ChatSettings | null;
   sessionAuxiliaryError: string | null;
   interactionEnabled: boolean;
   runtimePresentation: AgentChatRuntimePresentation;

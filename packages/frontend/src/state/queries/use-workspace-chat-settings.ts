@@ -1,4 +1,4 @@
-import { type ChatSettings, DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
+import type { ChatSettings } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { readChatSettingsFromSnapshot, settingsSnapshotQueryOptions } from "./workspace";
@@ -23,11 +23,11 @@ export function useWorkspaceChatSettings({ hasWorkspace }: { hasWorkspace: boole
   }, [hasWorkspace, refetch]);
 
   return {
-    chatSettings: hasWorkspace ? (chatSettings ?? DEFAULT_CHAT_SETTINGS) : DEFAULT_CHAT_SETTINGS,
+    chatSettings: hasWorkspace ? (chatSettings ?? null) : null,
     chatSettingsError: hasWorkspace ? error : null,
     retryChatSettingsLoad,
   } satisfies {
-    chatSettings: ChatSettings;
+    chatSettings: ChatSettings | null;
     chatSettingsError: Error | null;
     retryChatSettingsLoad: () => void;
   };

@@ -8,6 +8,7 @@ import type {
   SettingsSnapshotSaveInput,
   WorkspaceRecord,
 } from "@openducktor/contracts";
+import { chatSettingsSchema } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import {
@@ -263,9 +264,15 @@ export function useRepoSettingsOperations({
       runtimeConfirmation?: string,
     ): Promise<SettingsSaveOutcome> => {
       const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(settingsSnapshotQueryKey);
+      const savedChat = chatSettingsSchema.parse(snapshot.chat);
       const saveResult = await host.workspaceSaveSettingsSnapshot(snapshot, runtimeConfirmation);
       // Nothing was written. The caller shows the changed impact for a new review.
       if (saveResult.type === "runtime_impact_changed") return saveResult;
+      // Publish only confirmed Chat settings. Older reads must not undo the saved mapping.
+      await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
+      queryClient.setQueryData<SettingsSnapshot>(settingsSnapshotQueryKey, (current) =>
+        current ? { ...current, chat: savedChat } : undefined,
+      );
       const { workspaces } = saveResult;
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);

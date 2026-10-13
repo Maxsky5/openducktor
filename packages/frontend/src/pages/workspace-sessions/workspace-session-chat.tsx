@@ -48,7 +48,7 @@ import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-ref
 type WorkspaceSessionChatProps = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
-  chatSettings: ChatSettings;
+  chatSettings: ChatSettings | null;
   reusablePrompts: ReusablePrompt[];
   onToolRefresh: () => void;
   isMounted: () => boolean;

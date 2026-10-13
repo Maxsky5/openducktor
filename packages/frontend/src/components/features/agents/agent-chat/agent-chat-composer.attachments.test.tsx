@@ -14,7 +14,7 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
-import { AgentChatComposer } from "./agent-chat-composer";
+import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import {
   type AgentChatDraftSessionIdentity,
   toAgentChatDraftStorageKey,

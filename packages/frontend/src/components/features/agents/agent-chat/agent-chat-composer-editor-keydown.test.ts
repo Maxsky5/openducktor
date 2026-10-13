@@ -26,6 +26,7 @@ import type {
 } from "./use-agent-chat-composer-editor-selection";
 
 type KeyDownTestSetupOverrides = {
+  primarySubmitMode?: AgentMessageSubmitMode;
   sourceDraft?: AgentChatComposerDraft;
   activeSelection?: ActiveTextSelection | null;
   referenceMenuState?: ReferenceMenuState | null;
@@ -170,6 +171,7 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
         sourceDraft,
         activeSelection: overrides.activeSelection ?? null,
         disabled: overrides.disabled ?? false,
+        primarySubmitMode: overrides.primarySubmitMode ?? "default",
         selection,
         selectComposerContents,
         isComposerContentFullySelected,
@@ -212,24 +214,30 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(setup.onSend).toHaveBeenCalledWith("default");
   });
 
-  test("steers on the platform shortcut before autocomplete selection", () => {
-    const setup = createKeyDownTestSetup({
-      ...steerModifier(),
-      slashMenuState: {
-        query: "sum",
-        textSegmentId: "segment-1",
-        rangeStart: 0,
-        rangeEnd: 4,
-      },
-      filteredSlashCommands: [slashCommand, slashCommandTwo],
-    });
+  test.each<AgentMessageSubmitMode>(["default", "steer"])(
+    "sends the alternate mode before autocomplete with primary %s",
+    (primarySubmitMode) => {
+      const setup = createKeyDownTestSetup({
+        primarySubmitMode,
+        ...steerModifier(),
+        slashMenuState: {
+          query: "sum",
+          textSegmentId: "segment-1",
+          rangeStart: 0,
+          rangeEnd: 4,
+        },
+        filteredSlashCommands: [slashCommand, slashCommandTwo],
+      });
 
-    expect(setup.handled()).toBe(true);
-    expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
-    expect(setup.onSend).toHaveBeenCalledTimes(1);
-    expect(setup.onSend).toHaveBeenCalledWith("steer");
-    expect(setup.selectSlashCommand).not.toHaveBeenCalled();
-  });
+      expect(setup.handled()).toBe(true);
+      expect(setup.event.preventDefault).toHaveBeenCalledTimes(1);
+      expect(setup.onSend).toHaveBeenCalledTimes(1);
+      expect(setup.onSend).toHaveBeenCalledWith(
+        primarySubmitMode === "steer" ? "default" : "steer",
+      );
+      expect(setup.selectSlashCommand).not.toHaveBeenCalled();
+    },
+  );
 
   test("captures a repeated or disabled steer shortcut without sending", () => {
     const repeated = createKeyDownTestSetup({ ...steerModifier(), repeat: true });
@@ -243,17 +251,24 @@ describe("agent-chat-composer-editor-keydown", () => {
     expect(disabled.onSend).not.toHaveBeenCalled();
   });
 
-  test("leaves enter to the input method editor while it composes text", () => {
-    const plain = createKeyDownTestSetup({ isComposing: true });
-    const steer = createKeyDownTestSetup({ ...steerModifier(), isComposing: true });
+  test.each<AgentMessageSubmitMode>(["default", "steer"])(
+    "leaves composing Enter to the input method editor with primary %s",
+    (primarySubmitMode) => {
+      const plain = createKeyDownTestSetup({ primarySubmitMode, isComposing: true });
+      const steer = createKeyDownTestSetup({
+        primarySubmitMode,
+        ...steerModifier(),
+        isComposing: true,
+      });
 
-    expect(plain.handled()).toBe(false);
-    expect(steer.handled()).toBe(false);
-    expect(plain.event.preventDefault).not.toHaveBeenCalled();
-    expect(steer.event.preventDefault).not.toHaveBeenCalled();
-    expect(plain.onSend).not.toHaveBeenCalled();
-    expect(steer.onSend).not.toHaveBeenCalled();
-  });
+      expect(plain.handled()).toBe(false);
+      expect(steer.handled()).toBe(false);
+      expect(plain.event.preventDefault).not.toHaveBeenCalled();
+      expect(steer.event.preventDefault).not.toHaveBeenCalled();
+      expect(plain.onSend).not.toHaveBeenCalled();
+      expect(steer.onSend).not.toHaveBeenCalled();
+    },
+  );
 
   test("prefers reference-menu file selection over send on enter", () => {
     const results = [

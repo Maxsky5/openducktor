@@ -47,6 +47,7 @@ const baseRepoConfigInput = {
 };
 
 const expectedDefaultChatSettings = {
+  steerMessagesByDefault: false,
   showThinkingMessages: false,
   expandFileDiffsByDefault: true,
   diffStyle: "split",
@@ -852,7 +853,7 @@ describe("config-schemas", () => {
     expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
   });
 
-  test("keeps chat settings scoped to chat display", () => {
+  test("parses global chat preferences", () => {
     const parsed = chatSettingsSchema.parse({ showThinkingMessages: true });
 
     expect(parsed).toEqual({
@@ -891,11 +892,12 @@ describe("config-schemas", () => {
     expect(parsedGlobalConfig.chat).toEqual(expectedDefaultChatSettings);
   });
 
-  test("roundtrips explicit chat display settings", () => {
+  test("roundtrips explicit chat send and display settings", () => {
     const parsedSnapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       chat: {
+        steerMessagesByDefault: true,
         showThinkingMessages: true,
         expandFileDiffsByDefault: false,
         diffStyle: "unified",
@@ -912,6 +914,7 @@ describe("config-schemas", () => {
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       chat: {
+        steerMessagesByDefault: true,
         showThinkingMessages: false,
         expandFileDiffsByDefault: false,
         diffStyle: "unified",
@@ -925,6 +928,7 @@ describe("config-schemas", () => {
     });
 
     expect(parsedSnapshot.chat).toEqual({
+      steerMessagesByDefault: true,
       showThinkingMessages: true,
       expandFileDiffsByDefault: false,
       diffStyle: "unified",
@@ -934,6 +938,7 @@ describe("config-schemas", () => {
       hunkSeparators: "metadata",
     });
     expect(parsedGlobalConfig.chat).toEqual({
+      steerMessagesByDefault: true,
       showThinkingMessages: false,
       expandFileDiffsByDefault: false,
       diffStyle: "unified",
@@ -964,8 +969,10 @@ describe("config-schemas", () => {
     }
   });
 
-  test("rejects invalid explicit chat diff display values", () => {
+  test("rejects invalid explicit chat settings", () => {
     const invalidCases: Array<[string, Record<string, JSONType>]> = [
+      ["steerMessagesByDefault", { steerMessagesByDefault: "true" }],
+      ["steerMessagesByDefault", { steerMessagesByDefault: null }],
       ["diffStyle", { diffStyle: "side-by-side" }],
       ["diffIndicators", { diffIndicators: "glyphs" }],
       ["diffHeight", { diffHeight: "auto" }],

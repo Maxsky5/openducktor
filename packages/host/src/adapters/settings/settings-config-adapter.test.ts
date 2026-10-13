@@ -26,6 +26,25 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
 };
 
 describe("settings config adapter initialization", () => {
+  test("saves global default steering and reads it after settings service restart", async () => {
+    await withTempConfig(async (configPath) => {
+      // An existing version 4 config has no preference until the user saves it.
+      await writeFile(
+        configPath,
+        JSON.stringify({ version: 4, chat: { showThinkingMessages: true } }),
+      );
+      const service = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const draft = await Effect.runPromise(service.getSettingsSnapshot());
+      expect(draft.chat.steerMessagesByDefault).toBe(false);
+      draft.chat.steerMessagesByDefault = true;
+      await Effect.runPromise(saveSettingsSnapshot(service, draft));
+      const restarted = createWorkspaceSettingsService(createSettingsConfigAdapter({ configPath }));
+      const loaded = await Effect.runPromise(restarted.getSettingsSnapshot());
+      expect(loaded.chat.steerMessagesByDefault).toBe(true);
+      expect(loaded.chat.showThinkingMessages).toBe(true);
+      expect(JSON.parse(await readFile(configPath, "utf8")).version).toBe(4);
+    });
+  });
   test("round trips OpenCode rules through Settings and resolves detached role snapshots", async () => {
     await withTempConfig(async (configPath) => {
       const adapter = createSettingsConfigAdapter({ configPath });

@@ -63,7 +63,7 @@ export function useAgentChatRenderedTranscript({
   scrollToBottomOnSendRef,
 }: UseAgentChatRenderedTranscriptArgs): UseAgentChatRenderedTranscriptResult {
   const { session, displayedSessionKey, shouldResetWindow, notice } = transcript;
-  const { showThinkingMessages } = useAgentChatSettings();
+  const showThinkingMessages = useAgentChatSettings()?.showThinkingMessages ?? false;
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
     useAgentChatTranscriptModel({

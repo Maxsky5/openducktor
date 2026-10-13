@@ -68,6 +68,7 @@ type HandleComposerEditorKeyDownArgs = {
   closeSlashMenu: () => void;
   closeReferenceMenu: () => void;
   closeSkillMenu: () => void;
+  primarySubmitMode?: AgentMessageSubmitMode;
   onSend: (mode: AgentMessageSubmitMode) => void;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
@@ -484,6 +485,7 @@ export const handleComposerEditorKeyDown = ({
   closeSlashMenu,
   closeReferenceMenu,
   closeSkillMenu,
+  primarySubmitMode = "default",
   onSend,
   clearComposerContents,
   insertNewlineAtSelectionTarget,
@@ -498,11 +500,11 @@ export const handleComposerEditorKeyDown = ({
     return false;
   }
 
-  // Steering sends the whole message, so it comes before autocomplete selection.
+  // The alternate shortcut sends the whole draft before autocomplete selection.
   if (isSteerShortcut(event)) {
     event.preventDefault();
     if (!disabled && !event.repeat) {
-      onSend("steer");
+      onSend(primarySubmitMode === "default" ? "steer" : "default");
     }
     return true;
   }
@@ -584,7 +586,7 @@ export const handleComposerEditorKeyDown = ({
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     if (!disabled) {
-      onSend("default");
+      onSend(primarySubmitMode);
     }
     return true;
   }

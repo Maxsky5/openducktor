@@ -16,6 +16,7 @@ import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
+import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
@@ -127,31 +128,35 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
     [branchKey, onSelectFile, record.id, workingDirectory, workspace.repoPath],
   );
   const settings = useQuery(settingsSnapshotQueryOptions());
-  if (settings.isPending)
-    return (
-      <p role="status" className="p-4">
-        Loading chat settings…
-      </p>
-    );
-  if (settings.isError)
-    return (
-      <div role="alert" className="p-4">
-        <p className="text-destructive">{errorMessage(settings.error)}</p>
-        <Button onClick={() => void settings.refetch()}>Retry settings</Button>
-      </div>
-    );
+  const { chatSettings, chatSettingsError, retryChatSettingsLoad } = useWorkspaceChatSettings({
+    hasWorkspace: true,
+  });
+  const settingsError = chatSettingsError ?? settings.error;
   return (
     <ChatFileLinkProvider owner={owner}>
-      <WorkspaceSessionChat
-        workspace={workspace}
-        record={record}
-        chatSettings={settings.data.chat}
-        reusablePrompts={settings.data.reusablePrompts}
-        onToolRefresh={onToolRefresh}
-        isMounted={isMounted}
-        visitKey={visitKey}
-        onActionsReady={onActionsReady}
-      />
+      <div className="flex h-full min-h-0 flex-col">
+        {settings.isPending ? (
+          <p role="status" className="p-4">
+            Loading chat settings...
+          </p>
+        ) : null}
+        {settingsError ? (
+          <div role="alert" className="p-4">
+            <p className="text-destructive">{errorMessage(settingsError)}</p>
+            <Button onClick={retryChatSettingsLoad}>Retry settings</Button>
+          </div>
+        ) : null}
+        <WorkspaceSessionChat
+          workspace={workspace}
+          record={record}
+          chatSettings={chatSettings}
+          reusablePrompts={settings.data?.reusablePrompts ?? []}
+          onToolRefresh={onToolRefresh}
+          isMounted={isMounted}
+          visitKey={visitKey}
+          onActionsReady={onActionsReady}
+        />
+      </div>
     </ChatFileLinkProvider>
   );
 });
