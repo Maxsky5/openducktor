@@ -66,10 +66,13 @@ describe("layoutHistoryGraph", () => {
     expect(current?.lane).toBe(0);
     expect(target?.lane).toBe(1);
     expect(lines(target?.passThrough)).toEqual([{ lane: 0, tone: "current" }]);
-    // The second child joins the lane that already waits for the base.
-    expect(lines(target?.outgoing)).toEqual([{ lane: 0, tone: "current" }]);
+    // Each side leaves its commit from below and keeps its lane down to the shared base.
+    expect(lines(target?.outgoing)).toEqual([{ lane: 1, tone: "target" }]);
     expect(base?.lane).toBe(0);
-    expect(lines(base?.incoming)).toEqual([{ lane: 0, tone: "current" }]);
+    expect(lines(base?.incoming)).toEqual([
+      { lane: 0, tone: "current" },
+      { lane: 1, tone: "target" },
+    ]);
     expect(base?.reachesLimit).toBe(false);
     expect(layout.laneCount).toBe(2);
   });
@@ -108,29 +111,39 @@ describe("layoutHistoryGraph", () => {
       DEDICATED,
     );
 
-    // The merged commits free lane 1 before the branch tip. The branch keeps its own lane.
+    // The branch tip starts right of the merged commits, and every line reaches the base.
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 1, 2, 2, 0]);
-    expect(lines(layout.rows[3]?.passThrough)).toEqual([{ lane: 0, tone: "target" }]);
-    expect(lines(layout.rows[4]?.outgoing)).toEqual([{ lane: 0, tone: "target" }]);
+    expect(lines(layout.rows[3]?.passThrough)).toEqual([
+      { lane: 0, tone: "target" },
+      { lane: 1, tone: "target" },
+    ]);
+    expect(lines(layout.rows[4]?.outgoing)).toEqual([{ lane: 2, tone: "current" }]);
+    expect(lines(layout.rows[5]?.incoming)).toEqual([
+      { lane: 0, tone: "target" },
+      { lane: 1, tone: "target" },
+      { lane: 2, tone: "current" },
+    ]);
     expect(layout.laneCount).toBe(3);
   });
 
-  test("lets a branch tip reuse the first free lane when asked", () => {
+  test.each([
+    ["dedicated", [0, 1, 0, 2, 0], 3],
+    ["firstFree", [0, 1, 0, 1, 0], 2],
+  ] as const)("starts a branch tip in a %s lane", (tipLane, expectedLanes, laneCount) => {
+    // The merged branch ends at m1, so lane 1 is free when the branch tip comes.
     const layout = layoutHistoryGraph(
       [
-        commit("main", ["base", "pr2"], "target"),
-        commit("pr2", ["pr1"], "target"),
-        commit("pr1", ["base"], "target"),
-        commit("c2", ["c1"], "current"),
+        commit("main", ["m1", "pr1"], "target"),
+        commit("pr1", ["m1"], "target"),
+        commit("m1", ["base"], "target"),
         commit("c1", ["base"], "current"),
         commit("base", [], "boundary"),
       ],
-      { tipLane: "firstFree" },
+      { tipLane },
     );
 
-    // A view of many branches stays narrow: the tip takes the lane that the merged commits freed.
-    expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 1, 1, 1, 0]);
-    expect(layout.laneCount).toBe(2);
+    expect(layout.rows.map((row) => row.lane)).toEqual([...expectedLanes]);
+    expect(layout.laneCount).toBe(laneCount);
   });
 
   test("keeps the main line in its lane when a branch tip waits for the same base", () => {
@@ -155,6 +168,7 @@ describe("layoutHistoryGraph", () => {
     ]);
     expect(lines(layout.rows[5]?.incoming)).toEqual([
       { lane: 0, tone: "target" },
+      { lane: 1, tone: "target" },
       { lane: 2, tone: "current" },
     ]);
     expect(layout.laneCount).toBe(3);
@@ -184,6 +198,25 @@ describe("layoutHistoryGraph", () => {
     expect(colorOf(after, "c2")).toBe(0);
     expect(colorOf(after, "main")).toBe(0);
     expect(colorOf(after, "pr2")).toBeGreaterThan(0);
+  });
+
+  test("leaves every commit from below toward its first parent", () => {
+    const layout = layoutHistoryGraph(
+      [
+        commit("main", ["m1", "pr1"], "target"),
+        commit("pr1", ["m1"], "target"),
+        commit("c1", ["base"], "current"),
+        commit("m1", ["base", "pr2"], "target"),
+        commit("pr2", ["base"], "target"),
+        commit("base", [], "boundary"),
+      ],
+      DEDICATED,
+    );
+
+    // Only a merge leaves its commit to the side. A first parent continues the commit's lane.
+    for (const row of layout.rows.filter((entry) => entry.outgoing.length > 0)) {
+      expect(row.outgoing[0]?.lane).toBe(row.lane);
+    }
   });
 
   test("keeps earlier rows unchanged when a later page adds rows", () => {

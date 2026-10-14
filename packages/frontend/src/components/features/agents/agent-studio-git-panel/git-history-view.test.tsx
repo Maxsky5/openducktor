@@ -360,45 +360,6 @@ describe("GitHistoryView", () => {
     queryClient.clear();
   });
 
-  test("says how many target commits the branch is missing", async () => {
-    renderHistory();
-
-    expect((await screen.findByTestId("agent-studio-git-history-relation")).textContent).toBe(
-      "feature is 1 commit behind origin/main. The missing commits show in the list.",
-    );
-  });
-
-  test("says that the branches match when both tips are the same commit", async () => {
-    historyPage.mockImplementation(async () => ({
-      outcome: "page",
-      comparison: {
-        currentTip: CURRENT,
-        targetTip: CURRENT,
-        boundaryOids: [CURRENT],
-        aheadBehind: { ahead: 0, behind: 0 },
-      },
-      commits: [commit("c2", ["c1"], "boundary")],
-      nextOffset: null,
-    }));
-    renderHistory();
-
-    expect((await screen.findByTestId("agent-studio-git-history-relation")).textContent).toBe(
-      "feature matches origin/main.",
-    );
-  });
-
-  test("shows no relation line when the branch is only ahead", async () => {
-    historyPage.mockImplementation(async () => ({
-      ...firstPage,
-      comparison: { ...firstPage.comparison, aheadBehind: { ahead: 2, behind: 0 } },
-      nextOffset: null,
-    }));
-    renderHistory();
-
-    await screen.findByText("Subject c2");
-    expect(screen.queryByTestId("agent-studio-git-history-relation")).toBeNull();
-  });
-
   test("reveals the full message, commit ID, and exact date", async () => {
     renderHistory();
 

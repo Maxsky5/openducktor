@@ -82,11 +82,11 @@ export function layoutHistoryGraph(
     commit.parentOids
       .filter((parent) => !outside.has(parent))
       .forEach((parent, index) => {
-        const existing = lanes.findIndex((open) => open?.oid === parent);
-        // A line joins a lane on its left that waits for the same parent. A first parent does not
-        // move right into a newer branch, so a left lane keeps its branch down to the parent.
-        const keepsLane = index === 0 && existing > lane && lanes[lane] == null;
-        if (existing !== -1 && !keepsLane) {
+        // A first parent continues the line in its own lane down to the parent row, so the line
+        // leaves the commit from below and meets the parent there, as a branch does. Another
+        // parent is a merge: it joins a lane that already waits for that parent.
+        const existing = index === 0 ? -1 : lanes.findIndex((open) => open?.oid === parent);
+        if (existing !== -1) {
           const open = lanes[existing];
           outgoing.push({
             lane: existing,
@@ -104,7 +104,7 @@ export function layoutHistoryGraph(
                 tone: membershipByOid.get(parent) ?? commit.membership,
                 color: mergedLineColor(parent),
               };
-        const target = index === 0 && lanes[lane] == null ? lane : firstFreeLane(lanes);
+        const target = index === 0 ? lane : firstFreeLane(lanes);
         lanes[target] = line;
         outgoing.push({ lane: target, tone: line.tone, color: line.color });
       });

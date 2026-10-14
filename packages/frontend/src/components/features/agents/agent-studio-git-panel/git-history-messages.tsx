@@ -1,4 +1,3 @@
-import type { GitHistoryComparison } from "@openducktor/contracts";
 import { History, LoaderCircle, RefreshCw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -129,58 +128,12 @@ export function HistoryFooterRow({ footer }: { footer: HistoryFooter }): ReactEl
   return null;
 }
 
+/** The loading state of History, in the layout of the loading states of the other tabs. */
 export function HistoryLoading({ label }: { label: string }): ReactElement {
-  return (
-    <p
-      role="status"
-      className="flex items-center justify-center gap-2 p-10 text-xs text-muted-foreground"
-    >
-      <LoaderCircle className="size-3.5 animate-spin" />
-      {label}
-    </p>
-  );
+  return <HistoryMessage title={label} tone="muted" />;
 }
 
-/** How the branch stands against the target, when the graph alone does not say it. */
-const relationText = (
-  comparison: GitHistoryComparison,
-  currentLabel: string,
-  targetLabel: string,
-): string | null => {
-  if (comparison.currentTip === comparison.targetTip) {
-    return `${currentLabel} matches ${targetLabel}.`;
-  }
-  const { behind } = comparison.aheadBehind;
-  if (behind === 0) return null;
-  return `${currentLabel} is ${behind} commit${behind === 1 ? "" : "s"} behind ${targetLabel}. The missing commits show in the list.`;
-};
-
-/**
- * One line above the commits for two cases: missing target commits, and two branches on the same
- * commit. Other comparisons show nothing, so the list keeps its space.
- */
-export function HistoryRelation({
-  comparison,
-  currentLabel,
-  targetLabel,
-}: {
-  comparison: GitHistoryComparison;
-  currentLabel: string;
-  targetLabel: string;
-}): ReactElement | null {
-  const text = relationText(comparison, currentLabel, targetLabel);
-  if (!text) return null;
-  return (
-    <p
-      className="shrink-0 truncate border-b border-border/60 px-3 py-1 text-[11px] text-muted-foreground"
-      title={text}
-      data-testid="agent-studio-git-history-relation"
-    >
-      {text}
-    </p>
-  );
-}
-
+/** A History state in the layout of the empty and loading states of the other tabs. */
 export function HistoryMessage({
   title,
   tone,
@@ -188,24 +141,28 @@ export function HistoryMessage({
 }: {
   title: string;
   tone: "muted" | "error";
-  children: ReactNode;
+  children?: ReactNode;
 }): ReactElement {
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
-      className="flex flex-col items-center justify-center gap-2 p-10 text-center"
+      className="flex flex-col items-center justify-center gap-3 p-10 text-center"
     >
-      <div className="flex size-10 items-center justify-center rounded-full bg-muted/60">
-        <History className="size-4 text-muted-foreground" />
+      <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
+        <History className="size-5 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium text-muted-foreground">{title}</p>
-      <div
-        className={cn(
-          "flex max-w-80 flex-col items-center text-xs",
-          tone === "error" ? "text-destructive" : "text-muted-foreground/80",
-        )}
-      >
-        {children}
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-muted-foreground">{title}</p>
+        {children ? (
+          <div
+            className={cn(
+              "mx-auto flex max-w-80 flex-col items-center text-xs",
+              tone === "error" ? "text-destructive" : "text-muted-foreground/70",
+            )}
+          >
+            {children}
+          </div>
+        ) : null}
       </div>
     </div>
   );
