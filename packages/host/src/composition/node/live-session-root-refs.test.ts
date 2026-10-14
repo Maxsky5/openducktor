@@ -25,6 +25,9 @@ test("reload roots recover workflow roles and repository scope from persisted ow
     const workflowSessions = (["spec", "planner", "build", "qa"] as const).map((role) =>
       createAgentSessionRecord({
         role,
+        runtimeKind: (
+          { spec: "opencode", planner: "codex", build: "claude", qa: "opencode" } as const
+        )[role],
         externalSessionId: `workflow-${role}`,
         workingDirectory: `${repoPath}/${role}`,
       }),
@@ -33,6 +36,25 @@ test("reload roots recover workflow roles and repository scope from persisted ow
       await Effect.runPromise(
         harness.store.upsertAgentSession({ repoPath, taskId: task.id, session }),
       );
+    const closed = await Effect.runPromise(
+      harness.store.createTask({
+        repoPath,
+        task: { title: "Closed history", issueType: "task", priority: 2, aiReviewEnabled: true },
+      }),
+    );
+    const historicalSession = createAgentSessionRecord({
+      externalSessionId: "closed-build",
+      workingDirectory: `${repoPath}/removed-worktree`,
+    });
+    await Effect.runPromise(
+      harness.store.upsertAgentSession({ repoPath, taskId: closed.id, session: historicalSession }),
+    );
+    await Effect.runPromise(
+      harness.store.transitionTask({ repoPath, taskId: closed.id, status: "closed" }),
+    );
+    const history = await Effect.runPromise(
+      harness.store.getTaskMetadata({ repoPath, taskId: closed.id }),
+    );
     const chat: WorkspaceSession = {
       id: "repository-chat",
       runtimeKind: "opencode",
@@ -48,13 +70,12 @@ test("reload roots recover workflow roles and repository scope from persisted ow
     };
     for (const session of [chat, { ...chat, id: "draft", externalSessionId: null }])
       await Effect.runPromise(store.create({ repoPath, workspaceId: config.workspaceId, session }));
-    const roots = await Effect.runPromise(
-      createLiveSessionRootRefsReader({
-        store,
-        taskStore: harness.store,
-        settings: { getRepoConfigByRepoPath: () => Effect.succeed(config) },
-      })(repoPath),
-    );
+    const readRoots = createLiveSessionRootRefsReader({
+      store,
+      taskStore: harness.store,
+      settings: { getRepoConfigByRepoPath: () => Effect.succeed(config) },
+    });
+    const roots = await Effect.runPromise(readRoots(repoPath));
     expect(roots).toEqual([
       {
         repoPath,
@@ -71,6 +92,19 @@ test("reload roots recover workflow roles and repository scope from persisted ow
         sessionScope: { kind: "workflow" as const, taskId: task.id, role: session.role },
       })),
     ]);
+    expect(
+      await Effect.runPromise(harness.store.getTaskMetadata({ repoPath, taskId: closed.id })),
+    ).toEqual(history);
+    await Effect.runPromise(
+      harness.store.transitionTask({ repoPath, taskId: closed.id, status: "open" }),
+    );
+    expect(await Effect.runPromise(readRoots(repoPath))).toContainEqual({
+      repoPath,
+      runtimeKind: historicalSession.runtimeKind,
+      externalSessionId: historicalSession.externalSessionId,
+      workingDirectory: historicalSession.workingDirectory,
+      sessionScope: { kind: "workflow", taskId: closed.id, role: historicalSession.role },
+    });
   } finally {
     await harness.cleanup();
   }
