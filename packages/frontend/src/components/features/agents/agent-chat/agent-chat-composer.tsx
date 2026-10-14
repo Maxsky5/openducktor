@@ -30,7 +30,7 @@ import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
 import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
-import { CHAT_ATTACHMENT_ACCEPT, validateComposerAttachments } from "./agent-chat-attachments";
+import { CHAT_ATTACHMENT_ACCEPT } from "./agent-chat-attachments";
 import {
   createComposerAutofocusState,
   resolveComposerAutofocus,
@@ -39,8 +39,6 @@ import {
   type AgentChatComposerDraft,
   appendAttachmentsToDraft,
   createEmptyComposerDraft,
-  draftHasMeaningfulContent,
-  draftHasSlashCommandSegment,
   removeAttachmentFromDraft,
 } from "./agent-chat-composer-draft";
 import {
@@ -56,11 +54,11 @@ import {
   COMPOSER_CARD_CLASS_NAME,
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
 } from "./agent-chat-composer-surface";
-import { steerShortcutLabel } from "@/lib/steer-shortcut";
 import { focusEditorEnd } from "./agent-chat-composer-selection";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
+import { useComposerPolicy } from "./agent-chat-composer-policy";
 
 const MemoizedAgentChatComposerEditor = memo(AgentChatComposerEditor);
 
@@ -107,8 +105,17 @@ export function AgentChatComposer({
   const modelRef = useRef(model);
   const settingsReadyRef = useRef(settingsReady);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-  const isSubmitting = composerIsSubmitting(model);
-  const isComposerInputDisabled = composerInputDisabledFor(model);
+  const {
+    isSubmitting,
+    isComposerInputDisabled,
+    placeholder,
+    attachmentErrors,
+    hasSlashAttachmentConflict,
+    steerDisabled,
+    defaultSendDisabled,
+    sendDisabled,
+    sendBlockedReason,
+  } = useComposerPolicy({ model, draft, primaryMode, settingsReady });
   const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
 
   const handleDraftChange = useCallback(
@@ -159,19 +166,6 @@ export function AgentChatComposer({
   }, [attachmentIntakeDisabled]);
 
   const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
-  const {
-    attachmentErrors,
-    hasSlashAttachmentConflict,
-    steerDisabled,
-    defaultSendDisabled,
-    sendDisabled,
-    sendBlockedReason,
-  } = useComposerSendRules({
-    model,
-    draft,
-    primaryMode,
-    settingsReady,
-  });
 
   useLayoutEffect(() => {
     draftRef.current = draft;
@@ -264,7 +258,7 @@ export function AgentChatComposer({
       attachmentErrors={attachmentErrors}
       attachmentIntakeDisabled={attachmentIntakeDisabled}
       composerAccentColor={composerAccentColor}
-      composerPlaceholder={composerPlaceholderFor(model, primaryMode, settingsReady)}
+      composerPlaceholder={placeholder}
       hasSlashAttachmentConflict={hasSlashAttachmentConflict}
       isComposerInputDisabled={isComposerInputDisabled}
       isSubmitting={isSubmitting}
@@ -303,13 +297,6 @@ type AgentChatComposerFormViewProps = {
   onRemoveAttachment: (attachmentId: string) => void;
   onSend: (mode: AgentMessageSubmitMode) => Promise<void>;
   submitAction: () => void;
-};
-
-const hasComposerSendContent = (
-  draft: AgentChatComposerDraft,
-  pendingSendItems: AgentChatComposerModel["pendingSendItems"],
-): boolean => {
-  return draftHasMeaningfulContent(draft) || (pendingSendItems?.count ?? 0) > 0;
 };
 
 // The selectors shrink and truncate their labels in a narrow pane.
@@ -871,156 +858,8 @@ function useAgentChatComposerFocus({
   return scheduleComposerFocus;
 }
 
-const composerPlaceholderFor = (
-  model: AgentChatComposerModel,
-  primaryMode: AgentMessageSubmitMode,
-  settingsReady: boolean,
-): string => {
-  const {
-    supportsFileSearch,
-    supportsSubagentReferences,
-    supportsSlashCommands,
-    supportsSkillReferences,
-    isReadOnly,
-    readOnlyReason,
-    isWaitingInput,
-    waitingInputPlaceholder,
-  } = model;
-  if (isWaitingInput) {
-    return waitingInputPlaceholder ?? "Resolve the pending request above to continue";
-  }
-  if (isReadOnly && readOnlyReason) return readOnlyReason;
-  if (!settingsReady) return "Load chat settings before sending";
-
-  let referenceHint: string | null = null;
-  if (supportsFileSearch && supportsSubagentReferences) {
-    referenceHint = "@ for files and subagents";
-  } else if (supportsSubagentReferences) {
-    referenceHint = "@ for subagents";
-  } else if (supportsFileSearch) {
-    referenceHint = "@ for files";
-  }
-  const hints = [
-    referenceHint,
-    supportsSlashCommands ? "/ for commands" : null,
-    supportsSkillReferences ? "$ for skills" : null,
-    ...queuePlaceholderParts(model, primaryMode),
-  ].filter((part): part is string => Boolean(part));
-  return hints.length > 0 ? hints.join("; ") : "Type a message";
-};
-
-const queuePlaceholderParts = (
-  { isSessionWorking, messageQueue, steerBlockedReason }: AgentChatComposerModel,
-  primaryMode: AgentMessageSubmitMode,
-): string[] => {
-  const queueKey = primaryMode === "default" ? "Enter" : steerShortcutLabel();
-  const steerKey = primaryMode === "steer" ? "Enter" : steerShortcutLabel();
-  if (isSessionWorking && steerBlockedReason) return [`${queueKey} to queue`];
-  const hasQueuedMessages = (messageQueue?.queue?.entries.length ?? 0) > 0;
-  if (!isSessionWorking && !hasQueuedMessages) return [];
-  const steerAction = isSessionWorking ? "steer" : "send now";
-  if (primaryMode === "steer") {
-    return [`${steerKey} to ${steerAction}`, `${queueKey} to queue`];
-  }
-  return [`${queueKey} to queue`, `${steerKey} to ${steerAction}`];
-};
-
-const composerInputDisabledFor = ({
-  isInteractionEnabled,
-  isReadOnly,
-  isModelSelectionPending,
-  isWaitingInput,
-  isResumingSession,
-}: AgentChatComposerModel): boolean => {
-  return (
-    !isInteractionEnabled ||
-    isReadOnly ||
-    isModelSelectionPending ||
-    isWaitingInput ||
-    isResumingSession
-  );
-};
-
 const composerSelectorDisabledFor = (
   model: AgentChatComposerModel,
   modelPickerDisabled: boolean,
 ): boolean =>
   model.isSelectionCatalogLoading || modelPickerDisabled || !model.selectedModelSelection;
-
-function useComposerSendRules({
-  model,
-  draft,
-  primaryMode,
-  settingsReady,
-}: {
-  model: AgentChatComposerModel;
-  draft: AgentChatComposerDraft;
-  primaryMode: AgentMessageSubmitMode;
-  settingsReady: boolean;
-}) {
-  const defaultAttachmentErrors = useMemo(() => {
-    return validateComposerAttachments(
-      draft.attachments ?? [],
-      model.selectedModelDescriptor?.attachmentSupport,
-    );
-  }, [draft.attachments, model.selectedModelDescriptor?.attachmentSupport]);
-  const steersTurn = steersRunningTurn(primaryMode, model.isSessionWorking);
-  const attachmentErrors = useMemo(
-    () =>
-      steersTurn
-        ? validateComposerAttachments(
-            draft.attachments ?? [],
-            model.runningTurnModel?.attachmentSupport,
-            "The model of the running turn",
-          )
-        : defaultAttachmentErrors,
-    [
-      draft.attachments,
-      model.runningTurnModel?.attachmentSupport,
-      steersTurn,
-      defaultAttachmentErrors,
-    ],
-  );
-  const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
-  const hasSlashAttachmentConflict =
-    (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
-
-  // A steer checks its attachments against the running turn model when it submits.
-  const steerDisabled =
-    composerIsSubmitting(model) ||
-    Boolean(model.isSavingModel) ||
-    isSendInputBlocked(model) ||
-    hasSlashAttachmentConflict ||
-    !hasComposerSendContent(draft, model.pendingSendItems);
-  const defaultSendDisabled = steerDisabled || hasBlockingAttachments;
-  const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
-  const sendBlockedReason = settingsReady
-    ? steerBlockedReason
-    : "Load chat settings before sending. Use Retry settings if the read failed.";
-  const sendDisabled =
-    !settingsReady ||
-    (steersTurn
-      ? steerDisabled || steerBlockedReason !== null || Object.keys(attachmentErrors).length > 0
-      : defaultSendDisabled);
-
-  return {
-    attachmentErrors,
-    hasSlashAttachmentConflict,
-    steerDisabled,
-    defaultSendDisabled,
-    sendDisabled,
-    sendBlockedReason,
-  };
-}
-
-// A speed change blocks only send, so the model and effort controls keep their state.
-const isSendInputBlocked = (model: AgentChatComposerModel): boolean =>
-  composerInputDisabledFor(model) || model.speed?.pending === true;
-
-const composerIsSubmitting = ({
-  isSending,
-  isSessionWorking,
-  isStarting,
-  isModelSelectionPending,
-}: AgentChatComposerModel): boolean =>
-  (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
