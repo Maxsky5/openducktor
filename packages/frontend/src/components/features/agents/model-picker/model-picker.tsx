@@ -66,6 +66,8 @@ type ModelPickerProps = {
   triggerClassName?: string;
   placeholder?: string;
   onOpenChange?: (open: boolean) => void;
+  popoverSide?: "top" | "bottom";
+  popoverAvoidCollisions?: boolean;
 };
 
 const activeViewFor = (
@@ -737,6 +739,8 @@ export function ModelPicker({
   triggerClassName,
   placeholder = "Select a model",
   onOpenChange,
+  popoverSide = "bottom",
+  popoverAvoidCollisions = true,
 }: ModelPickerProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -959,7 +963,9 @@ export function ModelPicker({
         </Tooltip>
         <PopoverContent
           portalContainer={portalContainer}
-          className="flex max-h-[var(--radix-popover-content-available-height)] w-[min(42rem,calc(100vw-2rem))] flex-col overflow-hidden p-0"
+          side={popoverSide}
+          avoidCollisions={popoverAvoidCollisions}
+          className="flex max-h-[var(--radix-popover-content-available-height)] w-[min(42rem,calc(100vw-2rem),var(--radix-popover-content-available-width))] flex-col overflow-hidden p-0"
           collisionPadding={8}
           onOpenAutoFocus={(event) => {
             event.preventDefault();

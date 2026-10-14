@@ -49,6 +49,7 @@ type ComboboxProps = {
   matchAllSearchTerms?: boolean;
   searchable?: boolean;
   popoverSide?: "top" | "bottom";
+  popoverAvoidCollisions?: boolean;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
   footer?: ReactNode;
@@ -235,6 +236,7 @@ export function Combobox({
   matchAllSearchTerms = false,
   searchable = true,
   popoverSide = "bottom",
+  popoverAvoidCollisions = true,
   onOpenChange,
   open: controlledOpen,
   footer,
@@ -358,9 +360,18 @@ export function Combobox({
         aria-labelledby={triggerAriaLabelledBy}
         portalContainer={portalContainer}
         side={popoverSide}
-        className={cn("w-[var(--radix-popover-trigger-width)] p-0", className)}
+        avoidCollisions={popoverAvoidCollisions}
+        className={cn(
+          "w-[var(--radix-popover-trigger-width)] p-0",
+          !popoverAvoidCollisions &&
+            "flex max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden",
+          className,
+        )}
       >
-        <Command shouldFilter={searchable && !matchAllSearchTerms}>
+        <Command
+          className={cn(!popoverAvoidCollisions && "min-h-0")}
+          shouldFilter={searchable && !matchAllSearchTerms}
+        >
           <CommandInput
             disabled={disabled}
             visuallyHidden={!searchable}
@@ -368,7 +379,7 @@ export function Combobox({
             value={searchQuery}
             onValueChange={searchable ? handleSearchQueryChange : () => {}}
           />
-          <CommandList ref={commandListRef}>
+          <CommandList ref={commandListRef} className={cn(!popoverAvoidCollisions && "min-h-0")}>
             <CommandEmpty>{emptyText}</CommandEmpty>
             {groupsToRender.map((group) => (
               <CommandGroup key={group.key} {...(group.label ? { heading: group.label } : {})}>

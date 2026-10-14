@@ -27,13 +27,17 @@ export function SpeedSelect({
   triggerClassName,
   compact = false,
   label,
+  popoverSide = "bottom",
+  popoverAvoidCollisions = true,
 }: {
   model: SpeedControlModel | null;
   className?: string;
   triggerClassName?: string;
   compact?: boolean;
   label?: string;
-}) {
+  popoverSide?: "top" | "bottom";
+  popoverAvoidCollisions?: boolean;
+}): ReactElement | null {
   const labelId = useId();
   const control = useSpeedError(model?.error);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,6 +66,8 @@ export function SpeedSelect({
               onAnimationEnd={(event) => event.currentTarget.classList.remove("is-shaking")}
             >
               <Combobox
+                popoverSide={popoverSide}
+                popoverAvoidCollisions={popoverAvoidCollisions}
                 value={choice}
                 options={options}
                 searchable={false}
@@ -86,7 +92,7 @@ export function SpeedSelect({
                   if (next !== choice) model.onChange(next);
                 }}
                 triggerClassName={cn("w-36", pending && "disabled:opacity-100", triggerClassName)}
-                className="w-max min-w-36 max-w-64"
+                className="w-max min-w-[min(9rem,var(--radix-popover-content-available-width))] max-w-[min(16rem,var(--radix-popover-content-available-width))]"
               />
             </span>
           </TooltipTrigger>
