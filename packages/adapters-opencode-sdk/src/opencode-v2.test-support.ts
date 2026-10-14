@@ -9,9 +9,6 @@ import type { AgentSessionScope, OpenCodeCreationSettings } from "@openducktor/c
 import { z, type JSONType } from "zod";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpenCodeRuntimeConnection } from "./types";
-import { OPENCODE_WORKFLOW_PLUGIN_ID } from "./opencode-workflow-plugin";
-
-export const workflowPluginResponse = () => Response.json({ output: { ready: true } });
 
 export const connection: OpenCodeRuntimeConnection = {
   runtimeId: "runtime-1",
@@ -93,8 +90,6 @@ export const createController = (
   const requests: NativeRequest[] = [];
   const client = nativeClient((request) => {
     requests.push(request);
-    if (request.url.pathname === `/api/rpc/${OPENCODE_WORKFLOW_PLUGIN_ID}/bind`)
-      return workflowPluginResponse();
     return handle(request);
   });
   const controller = new OpencodeSdkAdapter(

@@ -28,7 +28,6 @@ import {
   model,
   nativeClient,
   eventChannel,
-  workflowPluginResponse,
   type NativeRequest,
 } from "./opencode-v2.test-support";
 
@@ -64,8 +63,6 @@ const prepareFixture = (
       return noContent();
     }
     if (url.pathname === "/api/location") return Response.json(location);
-    if (url.pathname === "/api/rpc/openducktor-workflow-instructions/bind")
-      return workflowPluginResponse();
     if (url.pathname === "/api/session/active") return response({});
     if (url.pathname === "/api/session") return cursorPage([]);
     if (url.pathname.endsWith("/message")) return cursorPage([]);
@@ -251,6 +248,174 @@ describe("OpenCode V2 cleanup status", () => {
   );
 });
 describe("OpenCode V2 live observation", () => {
+  test("routes native background completion by admitted session instead of publisher directory", async () => {
+    const other = {
+      ...ref,
+      repoPath: "/other",
+      workingDirectory: "/other",
+      externalSessionId: "ses_other",
+    };
+    const fixture = prepareFixture(({ url, method }) => {
+      if (method === "GET" && url.pathname === "/api/session/ses_other")
+        return response(
+          session({ id: other.externalSessionId, location: { directory: "/other" } }),
+        );
+      if (url.pathname === `/api/session/${ref.externalSessionId}/message`)
+        return cursorPage([backgroundLaunch()]);
+      if (
+        url.pathname === "/api/location" &&
+        url.searchParams.get("location[directory]") === "/other"
+      )
+        return Response.json({
+          ...location,
+          directory: "/other",
+          project: { ...location.project, directory: "/other" },
+        });
+      return undefined;
+    });
+    const runtime = await fixture.prepare();
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    const observed = Promise.withResolvers<void>();
+    try {
+      for (const root of [ref, other]) {
+        const restored = await runtime.connection.readSessionSources(root.repoPath, [
+          { ...root, sessionScope: { kind: "repository" } },
+        ]);
+        expect(restored.failures).toEqual([]);
+      }
+      await runtime.startForwarding((signal) => {
+        signals.push(signal);
+        if (signal.type === "fault" || signal.type === "session_fault")
+          observed.reject(new Error(signal.message));
+        if (signal.type === "runtime_notice" && signal.message === "Completion observed")
+          observed.resolve();
+      });
+      // Native background jobs publish with their cached directory, not the parent's location.
+      fixture.channel.push({
+        id: "evt_background_completion",
+        type: "session.inbox.enqueued",
+        created: 10,
+        durable,
+        location: { directory: other.workingDirectory },
+        data: {
+          sessionID: ref.externalSessionId,
+          inboxID: "msg_background_completion",
+          item: {
+            type: "synthetic",
+            delivery: "steer",
+            payload: {
+              text: "Native child finished",
+              metadata: { source: "subagent", childID: "ses_child", state: "completed" },
+            },
+          },
+        },
+      });
+      fixture.channel.push({
+        id: "evt_background_delivered",
+        type: "session.inbox.delivered",
+        created: 11,
+        durable: { ...durable, seq: 2 },
+        data: { sessionID: ref.externalSessionId, inboxID: "msg_background_completion" },
+      });
+      fixture.channel.push({
+        id: "evt_other_started",
+        type: "session.execution.started",
+        created: 12,
+        location: { directory: ref.workingDirectory },
+        data: { sessionID: other.externalSessionId },
+      });
+      fixture.channel.push({
+        id: "evt_unadmitted_started",
+        type: "session.execution.started",
+        location: { directory: ref.workingDirectory },
+        data: { sessionID: "ses_unadmitted" },
+      });
+      fixture.channel.push({
+        id: "evt_completion_observed",
+        type: "tui.toast.show",
+        data: { message: "Completion observed", variant: "warning" },
+      });
+      await observed.promise;
+      expect(signals).toContainEqual(
+        expect.objectContaining({
+          type: "session_event",
+          externalSessionId: ref.externalSessionId,
+          event: expect.objectContaining({
+            type: "assistant_part",
+            part: expect.objectContaining({ kind: "subagent", status: "completed" }),
+          }),
+        }),
+      );
+      expect(signals).toContainEqual(
+        expect.objectContaining({
+          type: "session_event",
+          externalSessionId: other.externalSessionId,
+          event: expect.objectContaining({
+            type: "session_status",
+            status: { type: "busy", message: null },
+          }),
+        }),
+      );
+      expect(
+        signals.some(
+          (signal) =>
+            "externalSessionId" in signal && signal.externalSessionId === "ses_unadmitted",
+        ),
+      ).toBe(false);
+      for (const root of [ref, other])
+        expect(
+          await runtime.connection.updateSessionTitle({ ...root, title: "Still connected" }),
+        ).toMatchObject({ status: "renamed" });
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test.each(["session.created", "session.moved"] as const)(
+    "rejects an authoritative directory change in %s even without a publisher location",
+    async (type) => {
+      const fixture = prepareFixture();
+      const runtime = await fixture.prepare();
+      const failed = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
+      try {
+        await runtime.connection.readSessionSources(ref.repoPath, [
+          { ...ref, sessionScope: { kind: "repository" } },
+        ]);
+        await runtime.startForwarding((signal) => {
+          if (signal.type === "fault" || signal.type === "session_fault") failed.resolve(signal);
+          if (signal.type === "runtime_notice")
+            failed.reject(new Error("Directory change was accepted"));
+        });
+        fixture.channel.push(
+          type === "session.created"
+            ? sessionCreated(session({ location: { directory: "/moved" } }))
+            : {
+                id: "evt_moved",
+                type,
+                created: 10,
+                durable,
+                data: {
+                  sessionID: ref.externalSessionId,
+                  projectID: "project-2",
+                  location: { directory: "/moved" },
+                },
+              },
+        );
+        fixture.channel.push({
+          id: "evt_move_observed",
+          type: "tui.toast.show",
+          data: { message: "Directory change observed", variant: "warning" },
+        });
+        expect(await failed.promise).toMatchObject({
+          type: "fault",
+          runtimeOperationFailure: { ...ref, code: "identity_mismatch" },
+        });
+      } finally {
+        await runtime.release();
+      }
+    },
+  );
+
   test("forwards global command and directory skill updates without admitted conversations", async () => {
     const fixture = prepareFixture();
     const runtime = await fixture.prepare();
@@ -516,46 +681,175 @@ describe("OpenCode V2 live observation", () => {
     }
   });
 
-  test("admits a command child with the stored parent workflow prompt", async () => {
-    const inheritedPrompt = "Saved custom Planner instructions.";
-    const entries = new Map<string, string>([[ref.externalSessionId, inheritedPrompt]]);
-    const fixture = prepareFixture(({ url, method, body }) => {
+  test.each([
+    { role: "spec", allowed: "odt_set_spec", blocked: "odt_build_completed" },
+    { role: "planner", allowed: "odt_set_plan", blocked: "odt_qa_approved" },
+    { role: "build", allowed: "odt_build_completed", blocked: "odt_set_plan" },
+    { role: "qa", allowed: "odt_qa_approved", blocked: "odt_build_completed" },
+  ] as const)(
+    "admits $role children without copying parent workflow instructions",
+    async ({ role, allowed, blocked }) => {
+      const parentPrompt = "Saved custom workflow instructions.";
+      const entries = new Map<string, string>([[ref.externalSessionId, parentPrompt]]);
+      const nativeRule = { action: "shell", resource: "rm *", effect: "deny" as const };
+      const children = [
+        session({
+          id: "ses_child",
+          parentID: ref.externalSessionId,
+          agent: "native-reviewer",
+          permissions: [nativeRule],
+        }),
+        session({
+          id: "ses_nested",
+          parentID: "ses_child",
+          agent: "native-researcher",
+          permissions: [nativeRule],
+        }),
+      ];
+      const fixture = prepareFixture(({ url, method, body }) => {
+        const child = children.find((item) => url.pathname === `/api/session/${item.id}`);
+        if (child) {
+          if (method === "PATCH") {
+            Object.assign(child, body);
+            return noContent();
+          }
+          return response(child);
+        }
+        const instruction = url.pathname.match(
+          /^\/api\/experimental\/session\/([^/]+)\/instructions\/entries(?:\/openducktor.workflow)?$/,
+        );
+        if (instruction) {
+          const id = instruction[1]!;
+          if (method === "PUT") {
+            entries.set(id, z.string().parse(body.value));
+            return noContent();
+          }
+          const prompt = entries.get(id);
+          return response(
+            prompt === undefined ? [] : [{ key: "openducktor.workflow", value: prompt }],
+          );
+        }
+        return undefined;
+      });
+      const runtime = await fixture.prepare();
+      const admitted = new Map(children.map((child) => [child.id, Promise.withResolvers<void>()]));
+      const sources: Extract<OpencodeSessionRuntimeSignal, { type: "session_source" }>[] = [];
+      const sessionScope = { kind: "workflow" as const, taskId: "task-1", role };
+      try {
+        await runtime.connection.readSessionSources(ref.repoPath, [{ ...ref, sessionScope }]);
+        await runtime.startForwarding((signal) => {
+          if (signal.type === "session_source" && admitted.has(signal.source.externalSessionId)) {
+            sources.push(signal);
+            admitted.get(signal.source.externalSessionId)!.resolve();
+          }
+          if (signal.type === "fault" || signal.type === "session_fault")
+            for (const ready of admitted.values()) ready.reject(new Error(signal.message));
+        });
+        for (const child of children) {
+          fixture.channel.push(sessionCreated(child));
+          await admitted.get(child.id)!.promise;
+          expect(entries.has(child.id)).toBe(false);
+          expect(child.permissions).toContainEqual(nativeRule);
+          expect(child.permissions).toContainEqual({
+            action: allowed,
+            resource: "*",
+            effect: "allow",
+          });
+          expect(child.permissions).toContainEqual({
+            action: blocked,
+            resource: "*",
+            effect: "deny",
+          });
+          if (role !== "build")
+            expect(child.permissions).toContainEqual({
+              action: "edit",
+              resource: "*",
+              effect: "deny",
+            });
+          // Child reattachment also leaves instructions with the native child agent.
+          await runtime.connection.resumeSession({
+            ...ref,
+            externalSessionId: child.id,
+            sessionScope,
+            runtimePolicy: { kind: "opencode" },
+            systemPrompt: parentPrompt,
+          });
+          expect(entries.has(child.id)).toBe(false);
+        }
+        expect(entries.get(ref.externalSessionId)).toBe(parentPrompt);
+        expect(children.map((child) => child.agent)).toEqual([
+          "native-reviewer",
+          "native-researcher",
+        ]);
+        expect(
+          sources.map(({ source }) => ({
+            parent: source.parentExternalSessionId,
+            association: source.sessionAssociation,
+          })),
+        ).toEqual([
+          { parent: ref.externalSessionId, association: sessionScope },
+          { parent: "ses_child", association: sessionScope },
+        ]);
+      } finally {
+        await runtime.release();
+      }
+    },
+  );
+  test("keeps other workspaces observable and controllable after a child permission update fails", async () => {
+    const other = {
+      ...ref,
+      repoPath: "/other",
+      workingDirectory: "/other",
+      externalSessionId: "ses_other",
+    };
+    let attachingChild = false;
+    const fixture = prepareFixture((request) => {
+      const { url, method } = request;
+      if (attachingChild && method === "PATCH" && url.pathname === "/api/session/ses_child")
+        return Response.json({ message: "Permission update failed." }, { status: 500 });
       if (method === "GET" && url.pathname === "/api/session/ses_child")
         return response(session({ id: "ses_child", parentID: ref.externalSessionId }));
-      const instruction = url.pathname.match(
-        /^\/api\/experimental\/session\/([^/]+)\/instructions\/entries(?:\/openducktor.workflow)?$/,
-      );
-      if (instruction) {
-        const id = instruction[1]!;
-        if (method === "PUT") {
-          entries.set(id, z.string().parse(body.value));
-          return noContent();
-        }
-        const prompt = entries.get(id);
+      if (method === "GET" && url.pathname === "/api/session/ses_other")
         return response(
-          prompt === undefined ? [] : [{ key: "openducktor.workflow", value: prompt }],
+          session({ id: other.externalSessionId, location: { directory: "/other" } }),
         );
-      }
+      if (url.pathname.endsWith("/instructions/entries"))
+        return response(
+          url.pathname.includes("ses_saved")
+            ? [{ key: "openducktor.workflow", value: "Planner instructions." }]
+            : [],
+        );
+      if (
+        url.pathname === "/api/location" &&
+        url.searchParams.get("location[directory]") === "/other"
+      )
+        return Response.json({
+          ...location,
+          directory: "/other",
+          project: { ...location.project, directory: "/other" },
+        });
       return undefined;
     });
     const runtime = await fixture.prepare();
-    const admitted =
-      Promise.withResolvers<Extract<OpencodeSessionRuntimeSignal, { type: "session_source" }>>();
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    const failed = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
+    const observed = Promise.withResolvers<void>();
     try {
       await runtime.connection.readSessionSources(ref.repoPath, [
-        {
-          ...ref,
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" },
-        },
+        { ...ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" } },
       ]);
+      await runtime.connection.readSessionSources(other.repoPath, [
+        { ...other, sessionScope: { kind: "repository" } },
+      ]);
+      attachingChild = true;
       await runtime.startForwarding((signal) => {
-        if (signal.type === "session_source" && signal.source.externalSessionId === "ses_child")
-          admitted.resolve(signal);
-        if (signal.type === "fault" || signal.type === "session_fault")
-          admitted.reject(new Error(signal.message));
+        signals.push(signal);
+        if (signal.type === "fault" || signal.type === "session_fault") failed.resolve(signal);
+        if (signal.type === "session_event" && signal.externalSessionId === other.externalSessionId)
+          observed.resolve();
       });
       fixture.channel.push({
-        id: "evt_command_child",
+        id: "evt_child_created",
         type: "session.created",
         created: 5,
         durable: { aggregateID: "ses_child", seq: 1, version: 1 },
@@ -568,203 +862,44 @@ describe("OpenCode V2 live observation", () => {
           version: "2.0.24",
         },
       });
-      const { source } = await admitted.promise;
-      expect(entries.get("ses_child")).toBe(inheritedPrompt);
-      expect(source).toMatchObject({
-        parentExternalSessionId: ref.externalSessionId,
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      expect(await failed.promise).toMatchObject({
+        type: "session_fault",
+        externalSessionId: ref.externalSessionId,
+        runtimeOperationFailure: {
+          runtimeKind: "opencode",
+          repoPath: ref.repoPath,
+          workingDirectory: ref.workingDirectory,
+          code: "request_failed",
+          operation: "install child session controls",
+          externalSessionId: "ses_child",
+          nextAction:
+            "Check OpenCode's reported error and retry this action. Saved links and input are unchanged.",
+        },
       });
+      fixture.channel.push({
+        id: "evt_other_started",
+        type: "session.execution.started",
+        created: 6,
+        data: { sessionID: other.externalSessionId },
+      });
+      await observed.promise;
+      const resumed = await runtime.connection.resumeSession({
+        ...other,
+        runtimePolicy: { kind: "opencode" },
+        sessionScope: { kind: "repository" },
+      });
+      expect(resumed).toMatchObject({ externalSessionId: other.externalSessionId });
+      expect(signals.some((signal) => signal.type === "fault")).toBe(false);
+      expect(
+        signals.some(
+          (signal) =>
+            signal.type === "session_source" && signal.source.externalSessionId === "ses_child",
+        ),
+      ).toBe(false);
     } finally {
       await runtime.release();
     }
   });
-  for (const setupFailure of [
-    {
-      name: "the workflow plugin is unavailable",
-      response: ({ url }: NativeRequest) =>
-        url.pathname === "/api/rpc/openducktor-workflow-instructions/bind"
-          ? Response.json({ output: { ready: false } })
-          : undefined,
-      expected: {
-        code: "policy_failed",
-        operation: "establish child workflow controls",
-        externalSessionId: "ses_child",
-        nextAction:
-          "Restart the selected OpenCode runtime from Diagnostics, then retry the workflow action.",
-      },
-    },
-    {
-      name: "the parent instruction read returns an HTTP error",
-      response: ({ url, method }: NativeRequest) =>
-        method === "GET" &&
-        url.pathname === "/api/experimental/session/ses_saved/instructions/entries"
-          ? Response.json({ message: "Instruction read failed." }, { status: 500 })
-          : undefined,
-      expected: {
-        code: "request_failed",
-        operation: "read parent workflow instructions",
-        externalSessionId: ref.externalSessionId,
-        nextAction:
-          "Check OpenCode's reported error and retry this action. Saved links and input are unchanged.",
-      },
-    },
-    {
-      name: "the parent instruction read returns malformed JSON",
-      response: ({ url, method }: NativeRequest) =>
-        method === "GET" &&
-        url.pathname === "/api/experimental/session/ses_saved/instructions/entries"
-          ? new Response("{malformed", { headers: { "content-type": "application/json" } })
-          : undefined,
-      expected: {
-        code: "invalid_runtime_response",
-        operation: "read parent workflow instructions",
-        externalSessionId: ref.externalSessionId,
-        nextAction:
-          "Check OpenCode's reported error and retry this action. Saved links and input are unchanged.",
-      },
-    },
-    {
-      name: "the child instruction write returns an HTTP error",
-      response: ({ url, method }: NativeRequest) =>
-        method === "PUT" &&
-        url.pathname ===
-          "/api/experimental/session/ses_child/instructions/entries/openducktor.workflow"
-          ? Response.json({ message: "Instruction write failed." }, { status: 500 })
-          : undefined,
-      expected: {
-        code: "request_failed",
-        operation: "install child session controls",
-        externalSessionId: "ses_child",
-        nextAction:
-          "Check OpenCode's reported error and retry this action. Saved links and input are unchanged.",
-      },
-    },
-    {
-      name: "the child permission update returns an HTTP error",
-      response: ({ url, method }: NativeRequest) =>
-        method === "PATCH" && url.pathname === "/api/session/ses_child"
-          ? Response.json({ message: "Permission update failed." }, { status: 500 })
-          : undefined,
-      expected: {
-        code: "request_failed",
-        operation: "install child session controls",
-        externalSessionId: "ses_child",
-        nextAction:
-          "Check OpenCode's reported error and retry this action. Saved links and input are unchanged.",
-      },
-    },
-  ]) {
-    test(`keeps other workspaces observable and controllable after ${setupFailure.name}`, async () => {
-      const other = {
-        ...ref,
-        repoPath: "/other",
-        workingDirectory: "/other",
-        externalSessionId: "ses_other",
-      };
-      let attachingChild = false;
-      const fixture = prepareFixture((request) => {
-        const failure = attachingChild ? setupFailure.response(request) : undefined;
-        if (failure) return failure;
-        const { url, method } = request;
-        if (method === "GET" && url.pathname === "/api/session/ses_child")
-          return response(session({ id: "ses_child", parentID: ref.externalSessionId }));
-        if (method === "GET" && url.pathname === "/api/session/ses_other")
-          return response(
-            session({ id: other.externalSessionId, location: { directory: "/other" } }),
-          );
-        if (url.pathname.endsWith("/instructions/entries"))
-          return response(
-            url.pathname.includes("ses_saved")
-              ? [{ key: "openducktor.workflow", value: "Planner instructions." }]
-              : [],
-          );
-        if (
-          method === "PUT" &&
-          url.pathname ===
-            "/api/experimental/session/ses_child/instructions/entries/openducktor.workflow"
-        )
-          return noContent();
-        if (
-          url.pathname === "/api/location" &&
-          url.searchParams.get("location[directory]") === "/other"
-        )
-          return Response.json({
-            ...location,
-            directory: "/other",
-            project: { ...location.project, directory: "/other" },
-          });
-        return undefined;
-      });
-      const runtime = await fixture.prepare();
-      const signals: OpencodeSessionRuntimeSignal[] = [];
-      const failed = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
-      const observed = Promise.withResolvers<void>();
-      try {
-        await runtime.connection.readSessionSources(ref.repoPath, [
-          { ...ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "planner" } },
-        ]);
-        await runtime.connection.readSessionSources(other.repoPath, [
-          { ...other, sessionScope: { kind: "repository" } },
-        ]);
-        attachingChild = true;
-        await runtime.startForwarding((signal) => {
-          signals.push(signal);
-          if (signal.type === "fault" || signal.type === "session_fault") failed.resolve(signal);
-          if (
-            signal.type === "session_event" &&
-            signal.externalSessionId === other.externalSessionId
-          )
-            observed.resolve();
-        });
-        fixture.channel.push({
-          id: "evt_child_created",
-          type: "session.created",
-          created: 5,
-          durable: { aggregateID: "ses_child", seq: 1, version: 1 },
-          data: {
-            sessionID: "ses_child",
-            projectID: "project-1",
-            location: { directory: ref.workingDirectory },
-            parentID: ref.externalSessionId,
-            slug: "child",
-            version: "2.0.24",
-          },
-        });
-        expect(await failed.promise).toMatchObject({
-          type: "session_fault",
-          externalSessionId: ref.externalSessionId,
-          runtimeOperationFailure: {
-            runtimeKind: "opencode",
-            repoPath: ref.repoPath,
-            workingDirectory: ref.workingDirectory,
-            ...setupFailure.expected,
-          },
-        });
-        fixture.channel.push({
-          id: "evt_other_started",
-          type: "session.execution.started",
-          created: 6,
-          data: { sessionID: other.externalSessionId },
-        });
-        await observed.promise;
-        const resumed = await runtime.connection.resumeSession({
-          ...other,
-          runtimePolicy: { kind: "opencode" },
-          sessionScope: { kind: "repository" },
-        });
-        expect(resumed).toMatchObject({ externalSessionId: other.externalSessionId });
-        expect(signals.some((signal) => signal.type === "fault")).toBe(false);
-        expect(
-          signals.some(
-            (signal) =>
-              signal.type === "session_source" && signal.source.externalSessionId === "ses_child",
-          ),
-        ).toBe(false);
-      } finally {
-        await runtime.release();
-      }
-    });
-  }
 
   test("restores the stored workflow prompt and chronological instruction updates on reconnect", async () => {
     const fixture = prepareFixture(({ url }) => {
@@ -3266,9 +3401,13 @@ describe("OpenCode V2 live observation", () => {
           fixture.channel.push({
             id: "evt_wrong",
             created: 5,
-            type: "session.idle",
-            location: { directory: "/wrong" },
-            data: { sessionID: ref.externalSessionId },
+            type: "session.moved",
+            durable,
+            data: {
+              sessionID: ref.externalSessionId,
+              projectID: "project-2",
+              location: { directory: "/wrong" },
+            },
           });
         await released;
         expect(signals.filter((signal) => signal.type === "runtime_notice")).toHaveLength(1);

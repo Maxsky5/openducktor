@@ -19,6 +19,59 @@ const liveEvent = (repoPath: string, index: number) =>
     channel: "openducktor://agent-session-live-event",
     payload: { type: "fault", repoPath, message: `fault ${index}` },
   }) as const;
+
+test.each([
+  { label: "shutdown", shutdown: true },
+  { label: "unexpected loss", shutdown: false },
+])(
+  "closes notification streams during $label and reports only unexpected loss",
+  async ({ shutdown }) => {
+    const host = new BufferedHostEventStream();
+    const notifications = createNotificationStream();
+    const failures = mock<(cause: unknown) => void>(() => {});
+    const hostStop = mock(() => {});
+    const subscribe = host.subscribe.bind(host);
+    const hostSpy = spyOn(host, "subscribe").mockImplementation((listener) => {
+      const stop = subscribe(listener);
+      return () => {
+        hostStop();
+        stop();
+      };
+    });
+    let shutdownStarted = false;
+    const response = await Effect.runPromise(
+      createCombinedHostSseResponse(
+        new Request("http://localhost/events"),
+        host,
+        notifications,
+        {},
+        failures,
+        () => shutdownStarted,
+      ),
+    );
+    const reader = response.body!.getReader();
+    try {
+      await reader.read();
+      await reader.read();
+      expect(decode((await reader.read()).value)).toContain('"type":"attached"');
+      shutdownStarted = shutdown;
+      await Effect.runPromise(notifications.dispose());
+      if (shutdown) {
+        expect(await reader.read()).toEqual({ done: true, value: undefined });
+        expect(failures).not.toHaveBeenCalled();
+      } else {
+        await expect(reader.read()).rejects.toThrow("Notification host stopped");
+        expect(failures).toHaveBeenCalledTimes(1);
+      }
+      expect(hostStop).toHaveBeenCalledTimes(1);
+    } finally {
+      await reader.cancel().catch(() => {});
+      await Effect.runPromise(notifications.dispose());
+      hostSpy.mockRestore();
+    }
+  },
+);
+
 const resume = (
   host: BufferedHostEventStream,
   cursor: { hostEpoch: string; hostEventId: number },
@@ -32,6 +85,7 @@ const resume = (
       createNotificationStream(),
       {},
       () => {},
+      () => false,
     ),
   );
 
@@ -55,6 +109,7 @@ test("one response carries host and notification frames with independent resume 
       notifications,
       {},
       failures,
+      () => false,
     ),
   );
   const reader = response.body!.getReader();
@@ -89,6 +144,7 @@ test("one response carries host and notification frames with independent resume 
       notifications,
       {},
       failures,
+      () => false,
     ),
   );
   const replay = resumed.body!.getReader();
@@ -100,7 +156,14 @@ test("one response carries host and notification frames with independent resume 
   const query = new URL("http://localhost/events?notifications=1");
   query.searchParams.set("notificationCursor", JSON.stringify(initial.notificationCursor));
   const fromQuery = await Effect.runPromise(
-    createCombinedHostSseResponse(new Request(query), host, notifications, {}, failures),
+    createCombinedHostSseResponse(
+      new Request(query),
+      host,
+      notifications,
+      {},
+      failures,
+      () => false,
+    ),
   );
   const queryReplay = fromQuery.body!.getReader();
   await queryReplay.read();
@@ -166,6 +229,7 @@ test("a reconnect queues both full replay buffers and reports the evicted channe
       notifications,
       {},
       failures,
+      () => false,
     ),
   );
   const reader = response.body!.getReader();
@@ -221,6 +285,7 @@ test.each([
         notifications,
         {},
         () => {},
+        () => false,
       ),
     ),
   ).rejects.toThrow("Invalid combined event subscription");
@@ -260,6 +325,7 @@ test("a stalled combined response fails once and releases both live subscription
       notifications,
       {},
       failures,
+      () => false,
     ),
   );
   const reader = response.body!.getReader();

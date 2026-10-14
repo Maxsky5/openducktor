@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { pathToFileURL } from "node:url";
-import type { SessionInfo, SessionMessageInfo, SessionInboxUser } from "@opencode/client";
+import type { SessionMessageInfo, SessionInboxUser } from "@opencode/client";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
   AgentSessionMessageAcceptanceUnknownError,
@@ -11,7 +11,6 @@ import {
   compilePermissionRule,
   compileCreationSettings,
   forkNativePermissions,
-  ownedWorkflowRole,
 } from "./opencode-permissions";
 import {
   createController,
@@ -720,56 +719,109 @@ describe("OpenCode V2 controls and accepted input", () => {
     },
   );
 
-  test("creates mandatory native controls and the full workflow entry before accepting a turn", async () => {
-    let detail = session({ id: "ses_new" });
-    const { controller, requests } = createController(
-      ({ url, method, body }) => {
-        if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
-        if (url.pathname === "/api/session" && method === "POST") return response(detail);
-        if (url.pathname.includes("/instructions/entries/")) return noContent();
-        if (method === "PATCH") {
-          // SAFETY: The real SDK serializes this fixture's SessionInfo metadata and permission rules.
-          detail = {
-            ...detail,
-            metadata: body.metadata as SessionInfo["metadata"],
-            permissions: body.permissions as SessionInfo["permissions"],
-          };
-          return noContent();
-        }
-        if (url.pathname === "/api/session/ses_new") return response(detail);
-        throw new Error(`Unexpected startup ${method} ${url.pathname}`);
-      },
-      { defaults: [{ permission: "bash", pattern: "bun test*", action: "ask" }], role: [] },
-    );
-    const started = await controller.startSession({
-      repoPath: workflow.repoPath,
-      runtimeKind: workflow.runtimeKind,
-      runtimePolicy: workflow.runtimePolicy,
-      sessionScope: workflow.sessionScope,
-      workingDirectory: workflow.workingDirectory,
-      systemPrompt: workflow.systemPrompt,
-    });
-    expect(started.externalSessionId).toBe("ses_new");
-    const entry = requests.find((request) => request.method === "PUT");
-    expect(entry?.url.pathname).toEndWith("/instructions/entries/openducktor.workflow");
-    expect(entry?.body.value).toBe(workflow.systemPrompt);
-    expect(detail.permissions).toContainEqual({
-      action: "shell",
-      resource: "bun test*",
-      effect: "ask",
-    });
-    expect(detail.permissions).not.toContainEqual({
-      action: "subagent",
-      resource: "*",
-      effect: "deny",
-    });
-    expect(detail.permissions).toContainEqual({ action: "edit", resource: "*", effect: "deny" });
-    expect(detail.metadata?.["openducktor.permissions"]).toMatchObject({
-      version: 1,
-      legacyAmbiguous: false,
-    });
-  });
-  test("identifies current workflow controls after migration without trusting old fork ownership", async () => {
+  test.each(
+    (["start", "fork"] as const).flatMap((operation) =>
+      (["spec", "planner", "build", "qa", "repository"] as const).map((role) => ({
+        operation,
+        role,
+      })),
+    ),
+  )(
+    "installs $role prompts and native controls before $operation returns or sends input",
+    async ({ operation, role }) => {
+      const detail = session({ id: "ses_new" });
+      if (operation === "fork") detail.fork = { sessionID: ref.externalSessionId };
+      let installedPrompt: unknown;
+      const { controller, requests } = createController(
+        ({ url, method, body }) => {
+          if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
+          if (url.pathname === "/api/session/ses_saved") return response(current);
+          if (
+            method === "POST" &&
+            (url.pathname === "/api/session" || url.pathname.endsWith("/fork"))
+          )
+            return response(detail);
+          if (url.pathname.includes("/instructions/entries/")) {
+            installedPrompt = body.value;
+            return noContent();
+          }
+          if (method === "PATCH") {
+            Object.assign(detail, body);
+            return noContent();
+          }
+          if (url.pathname.endsWith("/prompt")) {
+            expect(installedPrompt).toBe(prompt);
+            expect(detail.permissions).toContainEqual({
+              action: "odt_*",
+              resource: "*",
+              effect: "deny",
+            });
+            return response({
+              id: "inbox_first",
+              sessionID: detail.id,
+              type: "user",
+              payload: { text: body.text },
+              delivery: "prompt",
+              time: { created: 8 },
+            });
+          }
+          if (url.pathname === "/api/session/ses_new") return response(detail);
+          throw new Error(`Unexpected startup ${method} ${url.pathname}`);
+        },
+        { defaults: [{ permission: "bash", pattern: "bun test*", action: "ask" }], role: [] },
+      );
+      const prompt =
+        role === "repository" ? "Custom workspace instructions." : workflow.systemPrompt;
+      const input = {
+        repoPath: repository.repoPath,
+        runtimeKind: repository.runtimeKind,
+        workingDirectory: repository.workingDirectory,
+        runtimePolicy: repository.runtimePolicy,
+        systemPrompt: prompt,
+        sessionScope:
+          role === "repository" ? repository.sessionScope : { ...workflow.sessionScope, role },
+      };
+      const started =
+        operation === "start"
+          ? await controller.startSession(input)
+          : await controller.forkSession({
+              ...input,
+              parentExternalSessionId: ref.externalSessionId,
+            });
+      expect(started.externalSessionId).toBe("ses_new");
+      expect(installedPrompt).toBe(prompt);
+      const entry = requests.find((request) => request.method === "PUT");
+      expect(entry?.url.pathname).toEndWith("/instructions/entries/openducktor.workflow");
+      expect(detail.permissions).toContainEqual({
+        action: "shell",
+        resource: "bun test*",
+        effect: "ask",
+      });
+      expect(detail.permissions).not.toContainEqual({
+        action: "subagent",
+        resource: "*",
+        effect: "deny",
+      });
+      if (role !== "build" && role !== "repository")
+        expect(detail.permissions).toContainEqual({
+          action: "edit",
+          resource: "*",
+          effect: "deny",
+        });
+      expect(detail.metadata?.["openducktor.permissions"]).toMatchObject({
+        version: 1,
+        legacyAmbiguous: false,
+      });
+      expect(
+        await controller.sendUserMessage({
+          ...input,
+          externalSessionId: detail.id,
+          parts: [{ kind: "text", text: "First input" }],
+        }),
+      ).toMatchObject({ type: "user_message", messageId: "inbox_first" });
+    },
+  );
+  test("keeps unproven fork ownership blocked after restoring workflow controls", async () => {
     const detail = session({
       permissions: [],
       metadata: {
@@ -798,16 +850,12 @@ describe("OpenCode V2 controls and accepted input", () => {
       return response(detail);
     });
     await controller.resumeSession(workflow);
-    expect(ownedWorkflowRole(detail)).toBe("spec");
     expect(() => forkNativePermissions(detail, ref)).toThrow("do not match their ownership marker");
     detail.metadata = {
       "openducktor.permissions": { version: 1, legacyAmbiguous: true, spans: [] },
     };
     await controller.resumeSession(workflow);
-    expect(ownedWorkflowRole(detail)).toBe("spec");
     expect(() => forkNativePermissions(detail, ref)).toThrow("Cannot prove");
-    detail.permissions = [];
-    expect(() => ownedWorkflowRole(detail)).toThrow("current mandatory workflow permissions");
   });
   test("rejects saved rules without a safe equivalent before creating a conversation", async () => {
     const { controller, requests } = createController(
@@ -908,7 +956,6 @@ describe("OpenCode V2 controls and accepted input", () => {
         effect: "allow",
       });
       expect(detail.metadata?.native).toBe("retained");
-      expect(ownedWorkflowRole(detail)).toBe("spec");
       const installed = structuredClone(detail);
       await controller.resumeSession(workflow);
       expect(detail.permissions).toEqual(installed.permissions);

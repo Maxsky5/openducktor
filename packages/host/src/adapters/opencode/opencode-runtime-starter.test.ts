@@ -314,17 +314,6 @@ const server = createServer(async (req, res) => {
     setImmediate(stop);
     return;
   }
-  if (req.url === "/api/rpc/openducktor-workflow-instructions/bind") {
-    let body = "";
-    for await (const chunk of req) body += chunk;
-    const connection = JSON.parse(body).input;
-    if (configCapturePath) writeFileSync(configCapturePath + ".bound", JSON.stringify({
-      runtimeId: connection.runtimeId, endpoint: connection.endpoint,
-      authenticated: connection.authentication.password === process.env.OPENCODE_PASSWORD,
-    }));
-    res.end(JSON.stringify({ output: { ready: true } }));
-    return;
-  }
   res.end(JSON.stringify({ version: "2.0.24", pid: process.pid, urls: [], paths: { tmp: process.cwd() } }));
 });
 server.listen(0, "127.0.0.1", () => { if (!silent) process.stdout.write(JSON.stringify({ url: "http://127.0.0.1:" + server.address().port }) + "\\n"); });
@@ -429,20 +418,9 @@ describe("createOpenCodeRuntimeStarter", () => {
         configContent: expect.any(String),
         odtNames: [],
       });
-      const config = JSON.parse(environment.configContent);
-      expect(config.logLevel).toBe("WARN");
-      expect(config.plugins).toEqual([
-        "native-plugin",
-        "-removed-native-plugin",
-        { package: expect.any(String) },
-      ]);
-      const connection = JSON.parse(await readFile(configCapturePath + ".bound", "utf8"));
-      expect(connection.runtimeId).toBe("runtime-1");
-      expect(handle.runtime.runtimeRoute).toEqual({
-        type: "local_http",
-        endpoint: connection.endpoint,
-      });
-      expect(connection.authenticated).toBe(true);
+      expect(environment.configContent).toBe(
+        '{ // Native JSONC.\n "logLevel":"WARN", "plugins":["native-plugin", "-removed-native-plugin"],\n}',
+      );
       expect(environment.configContent).not.toContain("authentication");
       // Compare resolved paths: Windows can report the short 8.3 name, macOS the /private path.
       expect(await realpath(cwd)).toBe(await realpath(launchDirectory));

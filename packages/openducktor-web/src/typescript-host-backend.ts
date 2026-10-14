@@ -560,6 +560,7 @@ const routeCorsRequest = ({
   requestTimeoutSource,
   sessionCookieSecure,
   shutdownStarted,
+  isHostShutdownStarted,
   beginShutdown,
   stop,
 }: {
@@ -579,6 +580,7 @@ const routeCorsRequest = ({
   requestTimeoutSource?: Request | undefined;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
+  isHostShutdownStarted: () => boolean;
   beginShutdown: () => void;
   stop: () => Promise<void>;
 }): Effect.Effect<Response, WebHostRequestError> =>
@@ -675,6 +677,7 @@ const routeCorsRequest = ({
             "Failed to enqueue a combined host event.",
             cause,
           ),
+        isHostShutdownStarted,
       );
     }
 
@@ -750,6 +753,7 @@ export const handleTypescriptHostBackendRequest = ({
   requestTimeoutSource,
   sessionCookieSecure,
   shutdownStarted,
+  isHostShutdownStarted,
   beginShutdown,
   stop,
 }: {
@@ -769,6 +773,7 @@ export const handleTypescriptHostBackendRequest = ({
   requestTimeoutSource?: Request | undefined;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
+  isHostShutdownStarted: () => boolean;
   beginShutdown: () => void;
   stop: () => Promise<void>;
 }): Effect.Effect<Response> =>
@@ -797,6 +802,7 @@ export const handleTypescriptHostBackendRequest = ({
       requestTimeoutSource,
       sessionCookieSecure,
       shutdownStarted,
+      isHostShutdownStarted,
       beginShutdown,
       stop,
     };
@@ -1032,6 +1038,7 @@ export const startTypescriptHostBackendEffect = ({
                   server,
                   sessionCookieSecure,
                   shutdownStarted,
+                  isHostShutdownStarted: () => shutdownStarted,
                   beginShutdown,
                   stop,
                 });

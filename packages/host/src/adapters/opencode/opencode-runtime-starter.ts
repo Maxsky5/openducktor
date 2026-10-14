@@ -16,7 +16,6 @@ import {
   acquireOpenCodeStandalone,
   type OpenCodeStandaloneOptions,
 } from "./opencode-standalone-process";
-import { acquireOpenCodeWorkflowPlugin } from "./opencode-workflow-plugin-lease";
 
 export type CreateOpenCodeRuntimeStarterInput = OpenCodeStandaloneOptions & {
   toolDiscovery: ToolDiscoveryPort;
@@ -49,11 +48,6 @@ export const createOpenCodeRuntimeStarter = (
         );
         delete processEnv.OPENCODE_SERVER_PASSWORD;
         delete processEnv.OPENCODE_SERVER_USERNAME;
-        const workflowPlugin = yield* acquireOpenCodeWorkflowPlugin({
-          env: processEnv,
-          ownCleanup: input.ownCleanup,
-        });
-        processEnv.OPENCODE_CONFIG_CONTENT = workflowPlugin.configContent;
         const owned = yield* acquireOpenCodeStandalone({
           ...options,
           executablePath: binary,
@@ -90,7 +84,6 @@ export const createOpenCodeRuntimeStarter = (
           operation: "opencodeRuntime.stop",
           releaseLiveState: liveSession.release,
           stopProcess: owned.stop.pipe(
-            Effect.andThen(workflowPlugin.release),
             Effect.tap(() => Effect.sync(() => options.onConnectionClosed(runtimeId))),
           ),
           onStart: () => {
@@ -119,7 +112,6 @@ export const createOpenCodeRuntimeStarter = (
             });
             const elapsedMs = (yield* Clock.currentTimeMillis) - startedAtMs;
             yield* Effect.gen(function* () {
-              yield* workflowPlugin.bind(connection);
               options.onConnectionReady(connection);
               const prepared = yield* options.prepareLiveSessionAdapter(
                 runtime,

@@ -27,7 +27,7 @@ import {
   type OpenCodeRequestDraft,
 } from "./opencode-client";
 import { OpencodeSdkAdapter, type OpenCodeSessionBinding } from "./opencode-sdk-adapter";
-import { installOpenCodePolicy, readWorkflowInstructions } from "./opencode-permissions";
+import { installOpenCodePolicy } from "./opencode-permissions";
 import {
   permissionDecision,
   projectApproval,
@@ -689,20 +689,11 @@ export const createPrepareOpencodeSessionRuntime =
               "identity_mismatch",
               "The native child parent changed.",
             );
-          const systemPrompt =
-            parent.scope.kind === "workflow"
-              ? await nativeRequest(parent.ref, "read parent workflow instructions", () =>
-                  readWorkflowInstructions(client, parent.ref),
-                )
-              : undefined;
           await nativeRequest(ref, "install child session controls", () =>
             installOpenCodePolicy({
-              connection: input.connection,
               client,
               detail,
-              identity: ref,
               scope: parent.scope,
-              systemPrompt,
             }),
           );
           if (!isCurrent()) return;
@@ -722,12 +713,17 @@ export const createPrepareOpencodeSessionRuntime =
       }
       const binding = controller.bindings.get(externalSessionId);
       if (!binding) return;
-      if (event.location && event.location.directory !== binding.ref.workingDirectory)
+      // The envelope location belongs to the publisher. Background jobs can retain another
+      // directory, so only native session location payloads can change the verified identity.
+      if (
+        (event.type === "session.created" || event.type === "session.moved") &&
+        event.data.location.directory !== binding.ref.workingDirectory
+      )
         throw operationError(
           binding.ref,
           "apply a native event",
           "identity_mismatch",
-          "The event location does not match the verified conversation.",
+          "The native conversation location does not match the verified conversation.",
         );
       if (options.logEvent) options.logEvent({ externalSessionId, relevant: true, event });
       const base = {
