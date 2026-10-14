@@ -26,12 +26,21 @@ const firstFreeLane = (lanes: (OpenLane | null)[]): number => {
 };
 
 /**
+ * Where a branch tip, a commit without a child row, starts its lane.
+ * - `dedicated`: a new lane right of every lane above it, so a branch never continues the column
+ *   of commits that another branch merged. A comparison of two branches uses it.
+ * - `firstFree`: the first free lane, so a graph of many branches stays narrow.
+ */
+export type TipLane = "dedicated" | "firstFree";
+
+/**
  * Places each commit in a lane. Rows come children first, so a lane waits for the next parent.
- * A commit without a child row is a branch tip. It opens a new lane right of every lane above it,
- * so a branch never continues the column of commits that another branch merged.
  * The layout of a row depends only on the rows above it, so later pages keep earlier lanes.
  */
-export function layoutHistoryGraph(commits: readonly GitHistoryCommit[]): GraphLayout {
+export function layoutHistoryGraph(
+  commits: readonly GitHistoryCommit[],
+  { tipLane }: { tipLane: TipLane },
+): GraphLayout {
   const membershipByOid = new Map(commits.map((commit) => [commit.oid, commit.membership]));
   const lanes: (OpenLane | null)[] = [];
   const rows: GraphRow[] = [];
@@ -44,8 +53,8 @@ export function layoutHistoryGraph(commits: readonly GitHistoryCommit[]): GraphL
       const edges = open.oid === commit.oid ? incoming : passThrough;
       edges.push({ lane: index, tone: open.tone });
     });
-    const lane = incoming[0]?.lane ?? laneCount;
-    // Lanes between the open lanes and a new tip lane stay free for later merges.
+    const lane = incoming[0]?.lane ?? (tipLane === "dedicated" ? laneCount : firstFreeLane(lanes));
+    // Lanes between the open lanes and a dedicated tip lane stay free for later merges.
     while (lanes.length < lane) lanes.push(null);
     for (const edge of incoming) lanes[edge.lane] = null;
 

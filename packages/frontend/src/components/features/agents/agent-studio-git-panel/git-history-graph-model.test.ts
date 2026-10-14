@@ -9,6 +9,7 @@ import {
 } from "./git-history-graph-model";
 
 const oid = (name: string) => name.padEnd(40, "0");
+const DEDICATED = { tipLane: "dedicated" } as const;
 
 const commit = (
   name: string,
@@ -30,11 +31,14 @@ const commit = (
 
 describe("layoutHistoryGraph", () => {
   test("keeps a linear branch in one lane and ends at the comparison limit", () => {
-    const layout = layoutHistoryGraph([
-      commit("c2", ["c1"], "current"),
-      commit("c1", ["base"], "current"),
-      commit("base", ["old"], "boundary", ["old"]),
-    ]);
+    const layout = layoutHistoryGraph(
+      [
+        commit("c2", ["c1"], "current"),
+        commit("c1", ["base"], "current"),
+        commit("base", ["old"], "boundary", ["old"]),
+      ],
+      DEDICATED,
+    );
 
     expect(layout.laneCount).toBe(1);
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 0, 0]);
@@ -45,11 +49,14 @@ describe("layoutHistoryGraph", () => {
   });
 
   test("draws both sides of the comparison and joins them at the shared base", () => {
-    const layout = layoutHistoryGraph([
-      commit("current", ["base"], "current"),
-      commit("target", ["base"], "target"),
-      commit("base", [], "boundary"),
-    ]);
+    const layout = layoutHistoryGraph(
+      [
+        commit("current", ["base"], "current"),
+        commit("target", ["base"], "target"),
+        commit("base", [], "boundary"),
+      ],
+      DEDICATED,
+    );
 
     const [current, target, base] = layout.rows;
     expect(current?.lane).toBe(0);
@@ -64,12 +71,15 @@ describe("layoutHistoryGraph", () => {
   });
 
   test("opens a lane for the second parent of a merge and colors it by that parent", () => {
-    const layout = layoutHistoryGraph([
-      commit("merge", ["feature", "main"], "current"),
-      commit("feature", ["base"], "current"),
-      commit("main", ["base"], "boundary"),
-      commit("base", [], "boundary"),
-    ]);
+    const layout = layoutHistoryGraph(
+      [
+        commit("merge", ["feature", "main"], "current"),
+        commit("feature", ["base"], "current"),
+        commit("main", ["base"], "boundary"),
+        commit("base", [], "boundary"),
+      ],
+      DEDICATED,
+    );
 
     const [merge, feature, main] = layout.rows;
     expect(merge?.outgoing).toEqual([
@@ -82,14 +92,17 @@ describe("layoutHistoryGraph", () => {
   });
 
   test("opens a new lane right of the merged commits for a branch tip below them", () => {
-    const layout = layoutHistoryGraph([
-      commit("main", ["base", "pr2"], "target"),
-      commit("pr2", ["pr1"], "target"),
-      commit("pr1", ["base"], "target"),
-      commit("c2", ["c1"], "current"),
-      commit("c1", ["base"], "current"),
-      commit("base", [], "boundary"),
-    ]);
+    const layout = layoutHistoryGraph(
+      [
+        commit("main", ["base", "pr2"], "target"),
+        commit("pr2", ["pr1"], "target"),
+        commit("pr1", ["base"], "target"),
+        commit("c2", ["c1"], "current"),
+        commit("c1", ["base"], "current"),
+        commit("base", [], "boundary"),
+      ],
+      DEDICATED,
+    );
 
     // The merged commits free lane 1 before the branch tip. The branch keeps its own lane.
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 1, 2, 2, 0]);
@@ -98,15 +111,36 @@ describe("layoutHistoryGraph", () => {
     expect(layout.laneCount).toBe(3);
   });
 
+  test("lets a branch tip reuse the first free lane when asked", () => {
+    const layout = layoutHistoryGraph(
+      [
+        commit("main", ["base", "pr2"], "target"),
+        commit("pr2", ["pr1"], "target"),
+        commit("pr1", ["base"], "target"),
+        commit("c2", ["c1"], "current"),
+        commit("c1", ["base"], "current"),
+        commit("base", [], "boundary"),
+      ],
+      { tipLane: "firstFree" },
+    );
+
+    // A view of many branches stays narrow: the tip takes the lane that the merged commits freed.
+    expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 1, 1, 1, 0]);
+    expect(layout.laneCount).toBe(2);
+  });
+
   test("keeps the main line in its lane when a branch tip waits for the same base", () => {
-    const layout = layoutHistoryGraph([
-      commit("main", ["m1", "pr1"], "target"),
-      commit("pr1", ["m1"], "target"),
-      commit("c1", ["base"], "current"),
-      commit("m1", ["base", "pr2"], "target"),
-      commit("pr2", ["base"], "target"),
-      commit("base", [], "boundary"),
-    ]);
+    const layout = layoutHistoryGraph(
+      [
+        commit("main", ["m1", "pr1"], "target"),
+        commit("pr1", ["m1"], "target"),
+        commit("c1", ["base"], "current"),
+        commit("m1", ["base", "pr2"], "target"),
+        commit("pr2", ["base"], "target"),
+        commit("base", [], "boundary"),
+      ],
+      DEDICATED,
+    );
 
     // The branch tip takes lane 2, and the second merge uses the free lane 1 again.
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 2, 0, 1, 0]);
@@ -126,8 +160,8 @@ describe("layoutHistoryGraph", () => {
     const firstPage = [commit("c3", ["c2"], "current"), commit("c2", ["c1"], "current")];
     const secondPage = [commit("c1", ["base"], "current"), commit("base", [], "boundary")];
 
-    const partial = layoutHistoryGraph(firstPage);
-    const complete = layoutHistoryGraph([...firstPage, ...secondPage]);
+    const partial = layoutHistoryGraph(firstPage, DEDICATED);
+    const complete = layoutHistoryGraph([...firstPage, ...secondPage], DEDICATED);
 
     expect(complete.rows.slice(0, 2)).toEqual(partial.rows);
     // A lane that waits for an unloaded parent continues to the bottom of the loaded rows.

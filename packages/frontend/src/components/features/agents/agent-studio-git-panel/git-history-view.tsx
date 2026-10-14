@@ -92,7 +92,8 @@ function GitHistoryComparisonView({
       history.data?.pages.flatMap((page) => (page.outcome === "page" ? page.commits : [])) ?? [],
     [history.data],
   );
-  const layout = useMemo(() => layoutHistoryGraph(commits), [commits]);
+  // The current branch keeps its own lane, apart from the commits that the target merged.
+  const layout = useMemo(() => layoutHistoryGraph(commits, { tipLane: "dedicated" }), [commits]);
   const currentLabel = checkout.detached ? "Detached HEAD" : (checkout.name ?? "Current branch");
   const { fetchNextPage } = history;
   // A page load during a refresh joins that refresh instead of cancelling it.
