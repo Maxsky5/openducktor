@@ -265,6 +265,7 @@ const handleTestRequest = (
     request,
     sessionCookieSecure: options.sessionCookieSecure ?? false,
     shutdownStarted: options.shutdownStarted ?? false,
+    isHostShutdownStarted: () => options.shutdownStarted ?? false,
     beginShutdown: options.beginShutdown ?? (() => {}),
     stop: options.stop ?? (async () => {}),
   };
@@ -311,6 +312,7 @@ describe("TypeScript web host backend", () => {
           server: requestServer,
           sessionCookieSecure: false,
           shutdownStarted: false,
+          isHostShutdownStarted: () => false,
           beginShutdown: () => {},
           stop: () => Promise.resolve(),
         }),
@@ -579,6 +581,7 @@ describe("TypeScript web host backend", () => {
           server: requestServer,
           sessionCookieSecure: false,
           shutdownStarted,
+          isHostShutdownStarted: () => shutdownStarted,
           beginShutdown: () => {
             shutdownStarted = true;
           },
@@ -690,6 +693,7 @@ describe("TypeScript web host backend", () => {
           }),
           sessionCookieSecure: configured.protocol === "https:",
           shutdownStarted: false,
+          isHostShutdownStarted: () => false,
           beginShutdown: () => {},
           stop: async () => {},
         }),
@@ -1648,6 +1652,7 @@ describe("TypeScript web host backend", () => {
             requestTimeouts: requestServer,
             sessionCookieSecure: false,
             shutdownStarted,
+            isHostShutdownStarted: () => shutdownStarted,
             beginShutdown: () => {
               shutdownStarted = true;
             },
@@ -1738,6 +1743,7 @@ describe("TypeScript web host backend", () => {
       server: fakeServer,
       sessionCookieSecure: false,
       shutdownStarted: false,
+      isHostShutdownStarted: () => false,
       beginShutdown: () => {},
       stop: () => Promise.resolve(),
     });

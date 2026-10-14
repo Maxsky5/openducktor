@@ -15,6 +15,7 @@ export const createCombinedHostSseResponse = (
   notifications: EffectNodeHostCommandRouter["notificationStream"],
   corsHeaders: HeadersInit,
   reportDeliveryFailure: (cause: unknown) => void,
+  isHostShutdownStarted: () => boolean,
 ): Effect.Effect<Response, WebHostRequestError> =>
   Effect.try({
     try: () => {
@@ -52,6 +53,11 @@ export const createCombinedHostSseResponse = (
             const fail = (cause: unknown) => {
               if (closed) return;
               stop();
+              // Host shutdown ends notifications before the HTTP server closes.
+              if (isHostShutdownStarted()) {
+                controller.close();
+                return;
+              }
               reportDeliveryFailure(cause);
               controller.error(cause);
             };
