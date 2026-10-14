@@ -19,7 +19,7 @@ export type GitRefreshComparison = {
 /** The reads come from the panel reads of the same render. */
 export type GitRefreshSteps = Pick<
   GitPanelReads,
-  "readLocal" | "readComparison" | "readInBackground"
+  "readLocal" | "readComparison" | "readInBackground" | "markStale"
 > & {
   /** Reads the checkout again and returns its key. */
   readBranch: () => Promise<string>;
@@ -123,10 +123,12 @@ export class GitRefreshCoordinator {
     const view = this.#view;
     const withFiles = files ?? view?.withFiles ?? readGitOnly;
     // File views read again even when the Git view cannot.
-    if (!view?.visible) return withFiles(mode, readNothing);
+    if (!view) return withFiles(mode, readNothing);
+    // A hidden or unready view reads when it shows, because its reads are marked stale.
+    if (!view.visible) return withFiles(mode, () => view.steps.markStale());
     if (mode === "hard") return this.#startManual(view, withFiles);
-    if (!view.ready) return withFiles(mode, readNothing);
-    // Another context ends this refresh. A return to its context reads by itself.
+    if (!view.ready) return withFiles(mode, () => view.steps.markStale());
+    // Another context ends this refresh, and the reads of this context become stale.
     const visit = this.#visit;
     return withFiles(mode, () => this.#refreshCheckout(view, mode, { manual: null, visit }));
   }
@@ -160,13 +162,14 @@ export class GitRefreshCoordinator {
 
   async #runManual(view: GitRefreshView, run: ManualRun): Promise<void> {
     let current: GitRefreshView | null = view;
+    // A Refresh that another context ends leaves the reads of its own context stale.
     if (current.prepare) {
       current = await this.#prepare(current, current.prepare, run);
-      if (!current) return;
+      if (!current) return view.steps.markStale();
     }
     if (!current.ready) {
       current = await this.#waitFor((next) => this.#nextStep(view, next, run));
-      if (!current) return;
+      if (!current) return view.steps.markStale();
     }
     // A return to its context joins a manual Refresh, so it runs in any visit.
     await this.#refreshCheckout(current, "hard", { manual: run, visit: null });
@@ -235,9 +238,9 @@ export class GitRefreshCoordinator {
         this.#move(run.manual, manualRefreshKey({ scopeKey: view.scopeKey, branchKey }));
       }
       current = await this.#follow(view, branchKey);
-      if (!current) return;
+      if (!current) return view.steps.markStale();
     }
-    if (!this.#isCurrent(current, run)) return;
+    if (!this.#isCurrent(current, run)) return current.steps.markStale();
     await this.#refreshGit(current, mode, run);
   }
 
@@ -270,7 +273,7 @@ export class GitRefreshCoordinator {
     }
     const reads = this.#isCurrent(view, run)
       ? this.#reads(steps, mode, readLocal)
-      : (earlyLocal?.() ?? Promise.resolve());
+      : Promise.all([earlyLocal?.(), steps.markStale()]).then(() => undefined);
     if (!checkFailure) return reads;
     // The failed check is the result. Each view keeps its own failed read until a retry.
     await Promise.allSettled([reads]);

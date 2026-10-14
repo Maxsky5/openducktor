@@ -3,6 +3,7 @@ import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   localChangesQueryOptions,
+  markGitWorkingDirectoryStale,
   refreshGitHistoryQueries,
   skippedLocalChangesQueryOptions,
   skippedWorktreeStatusQueryOptions,
@@ -38,6 +39,11 @@ export type GitPanelReads = {
   readComparison: (historyFailure: "reject" | "show") => Promise<void>;
   /** Reads every shown read again. Each view shows its own failure. */
   readInBackground: () => Promise<void>;
+  /**
+   * Marks the reads of the directory stale without reading. A refresh that cannot read the
+   * hidden or changed view uses it, so the next view of the directory reads again.
+   */
+  markStale: () => Promise<void>;
   /**
    * Shows the local changes that a Git change returned, and reads Branch changes again in the
    * background, because the index can change how they list a file.
@@ -147,6 +153,10 @@ export function useGitPanelReads({
       refreshGitHistoryQueries(queryClient, repoPath, historyDirectory, { throwOnError: false }),
     ]);
   }, [canRead, comparisonKey, comparisonReady, historyDirectory, localKey, queryClient, repoPath]);
+  const markStale = useCallback(async (): Promise<void> => {
+    if (repoPath === null || historyDirectory === null) return;
+    await markGitWorkingDirectoryStale(queryClient, repoPath, historyDirectory);
+  }, [historyDirectory, queryClient, repoPath]);
   const applyLocalChanges = useCallback(
     async (changes: GitLocalChanges): Promise<void> => {
       if (repoPath === null) return;
@@ -179,6 +189,7 @@ export function useGitPanelReads({
     readLocal,
     readComparison,
     readInBackground,
+    markStale,
     applyLocalChanges,
   };
 }

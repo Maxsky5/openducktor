@@ -49,6 +49,9 @@ const createSteps = (log: Log, branchKey: string, overrides: Partial<GitRefreshS
     readInBackground: mock(async () => {
       log.push("background");
     }),
+    markStale: mock(async () => {
+      log.push("stale");
+    }),
     ...overrides,
   };
   return steps;
@@ -235,6 +238,8 @@ describe("GitRefreshCoordinator", () => {
 
     expect(otherSession.steps.comparison?.fetch).not.toHaveBeenCalled();
     expect(otherSession.steps.readLocal).not.toHaveBeenCalled();
+    // The ended Refresh leaves its own context stale, so a return to it reads again.
+    expect(oldBranch.steps.markStale).toHaveBeenCalledTimes(1);
   });
 
   test("a checkout that cancels the branch read ends the Refresh without a report", async () => {
@@ -354,6 +359,7 @@ describe("GitRefreshCoordinator", () => {
     fetches.scheduled.resolve();
     await scheduled;
     expect(scheduledView.steps.readInBackground).not.toHaveBeenCalled();
+    expect(scheduledView.steps.markStale).toHaveBeenCalledTimes(1);
 
     const manualView = viewFor(fetches.manual.promise);
     coordinator.publish(manualView);
@@ -494,7 +500,7 @@ describe("GitRefreshCoordinator", () => {
     expect(view.steps.readComparison).not.toHaveBeenCalled();
   });
 
-  test("a hidden view reads no Git data, and its file views still read again", async () => {
+  test("a hidden view reads no Git data but marks it stale, and its file views read again", async () => {
     const log: Log = [];
     const view = createView(log, { visible: false });
     const { coordinator } = createCoordinator();
@@ -507,7 +513,19 @@ describe("GitRefreshCoordinator", () => {
     await coordinator.refresh("hard");
     await coordinator.refresh("soft", withFiles);
 
-    expect(log).toEqual(["files"]);
+    // The view reads when it shows again, because its Git reads are stale.
+    expect(log).toEqual(["stale", "files", "stale"]);
+  });
+
+  test("a view without a known branch reads nothing yet but marks its reads stale", async () => {
+    const log: Log = [];
+    const view = createView(log, { ready: false });
+    const { coordinator } = createCoordinator();
+    coordinator.publish(view);
+
+    await coordinator.refresh("soft");
+
+    expect(log).toEqual(["stale"]);
   });
 
   test("the file refresh wraps the Git reads", async () => {

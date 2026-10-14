@@ -144,25 +144,66 @@ export const gitComparisonTargetQueryOptions = (
     staleTime: 0,
   });
 
+/**
+ * The Git reads of one working directory: local changes, Branch changes, History, and the
+ * comparison check. With `branch`, also the checkout read of the directory.
+ */
+const gitWorkingDirectoryFilter = (
+  repoPath: string,
+  workingDir: string,
+  { branch }: { branch: boolean },
+) => ({
+  queryKey: gitQueryKeys.all,
+  predicate: (query: { queryKey: readonly unknown[] }) => {
+    const key = query.queryKey;
+    if (key[2] !== repoPath) return false;
+    if (key[1] === "comparison-target") return key[3] === workingDir;
+    if (key[1] === "local-changes" || key[1] === "history") return key[3] === workingDir;
+    if (key[1] === "worktree-status") return key[4] === workingDir;
+    if (!branch) return false;
+    if (key[1] === "worktree-branch") return key[3] === workingDir;
+    return key[1] === "current-branch" && workingDir === repoPath;
+  },
+});
+
 export const invalidateGitWorkingDirectoryQueries = async (
   queryClient: QueryClient,
   repoPath: string,
   workingDir: string,
 ): Promise<void> => {
-  const filter = {
-    queryKey: gitQueryKeys.all,
-    predicate: (query: { queryKey: readonly unknown[] }) => {
-      const key = query.queryKey;
-      if (key[2] !== repoPath) return false;
-      if (key[1] === "comparison-target") return key[3] === workingDir;
-      if (key[1] === "local-changes" || key[1] === "history") return key[3] === workingDir;
-      if (key[1] === "worktree-status") return key[4] === workingDir;
-      return false;
-    },
-  };
+  const filter = gitWorkingDirectoryFilter(repoPath, workingDir, { branch: false });
   // An old read must not make an invalidated branch snapshot fresh again.
   await queryClient.cancelQueries(filter);
   await queryClient.invalidateQueries({ ...filter, refetchType: "none" });
+};
+
+/**
+ * Marks the Git reads of a directory stale without reading. A view that shows the directory later
+ * reads again. A read that runs now started after the change, so it can finish.
+ */
+export const markGitWorkingDirectoryStale = (
+  queryClient: QueryClient,
+  repoPath: string,
+  workingDir: string,
+): Promise<void> =>
+  queryClient.invalidateQueries({
+    ...gitWorkingDirectoryFilter(repoPath, workingDir, { branch: false }),
+    refetchType: "none",
+  });
+
+/**
+ * An agent changed a directory, for example in a turn that the user did not watch. A view that
+ * shows the directory reads its checkout and Git data again now. Other views read when they show.
+ */
+export const refreshGitAfterAgentChange = async (
+  queryClient: QueryClient,
+  repoPath: string,
+  workingDir: string,
+): Promise<void> => {
+  const filter = gitWorkingDirectoryFilter(repoPath, workingDir, { branch: true });
+  // A hidden read that started before the change must not mark its old result fresh.
+  await queryClient.cancelQueries({ ...filter, type: "inactive" });
+  await queryClient.invalidateQueries({ ...filter, refetchType: "active" });
 };
 
 /** Branch changes: the comparison of the working content with the target. */

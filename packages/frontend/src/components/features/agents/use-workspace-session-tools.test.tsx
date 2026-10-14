@@ -1435,9 +1435,8 @@ test.each(
       expect(screen.getByTestId("agent-studio-git-refresh-button").hasAttribute("disabled")).toBe(
         false,
       );
-      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(
-        change === "branch" || stage === "settings" || stage === "branch",
-      );
+      // The stopped refresh left its reads stale, so the return checks the comparison again.
+      expect(reads.some((read) => read.startsWith("comparison:"))).toBe(true);
       if (change === "branch") expect(reads.some((read) => read.startsWith("fetch:"))).toBe(false);
     }
   } finally {

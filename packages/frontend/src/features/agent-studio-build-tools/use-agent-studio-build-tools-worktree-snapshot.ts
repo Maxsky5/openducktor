@@ -208,6 +208,7 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
       readLocal: reads.readLocal,
       readComparison: reads.readComparison,
       readInBackground: reads.readInBackground,
+      markStale: reads.markStale,
     },
   };
   const gitRefresh = useGitRefresh({

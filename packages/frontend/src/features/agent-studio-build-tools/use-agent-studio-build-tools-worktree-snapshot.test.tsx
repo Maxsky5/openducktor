@@ -22,7 +22,7 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { gitHistoryQueryOptions } from "@/state/queries/git";
+import { gitHistoryQueryOptions, refreshGitAfterAgentChange } from "@/state/queries/git";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 
@@ -590,6 +590,52 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       nextStatus.resolve();
       nextBranch.resolve({ name: "feature/task-24", detached: false });
       await harness.unmount();
+    }
+  });
+
+  test("a soft refresh while the Git tab is hidden reads when the tab shows again", async () => {
+    const harness = createHookHarness(createBaseArgs());
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.diffData.loadedScopesByScope.uncommitted);
+      await harness.update(createBaseArgs({ isGitTabActive: false }));
+      // A tool finished while another tab showed. The hidden view cannot read now.
+      await harness.run(async (snapshot) => {
+        await snapshot.refreshWorktree("soft");
+      });
+      const reads = readLocalChanges.mock.calls.length;
+
+      await harness.update(createBaseArgs());
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > reads);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("a return to a task that an unseen agent turn changed reads its Git data again", async () => {
+    const queryClient = createQueryClient();
+    const harness = createHookHarness(createBaseArgs(), { queryClient });
+    const otherTask = createSelectedView({
+      taskId: "task-99",
+      selectedTask: createTaskCardFixture({ id: "task-99" }),
+      loadedSession: null,
+      selectedSessionIdentity: null,
+    });
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.diffData.loadedScopesByScope.uncommitted);
+      await harness.update(createBaseArgs({ selectedView: otherTask }));
+      // The live session stream reports that the task agent ended a turn.
+      await harness.run(async () => {
+        await refreshGitAfterAgentChange(queryClient, "/repo", "/repo/.worktrees/task-24");
+      });
+      const reads = readLocalChanges.mock.calls.length;
+
+      await harness.update(createBaseArgs());
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > reads);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
     }
   });
 

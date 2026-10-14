@@ -257,6 +257,7 @@ function useWorkspaceGitRefresh({
         readLocal: reads.readLocal,
         readComparison: reads.readComparison,
         readInBackground: reads.readInBackground,
+        markStale: reads.markStale,
       },
       withFiles,
     },
