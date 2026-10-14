@@ -4221,7 +4221,7 @@ describe("OpenCode V2 live observation", () => {
       { part: { kind: "tool", status: "running", metadata: { title: "Opening file" } } },
     ]);
   });
-  test.each(["running", "streaming"] as const)(
+  test.each(["running", "streaming", "empty", "missing"] as const)(
     "keeps a foreground child link when history reports %s before live progress",
     async (snapshotStatus) => {
       const message: SessionMessageInfo = {
@@ -4251,19 +4251,20 @@ describe("OpenCode V2 live observation", () => {
           },
         ],
       };
-      const delayedHistory = Promise.withResolvers<Response>();
-      const historyStarted = Promise.withResolvers<void>();
+      if (snapshotStatus === "empty" || snapshotStatus === "missing") message.content = [];
+      const snapshots = snapshotStatus === "missing" ? [] : [message];
+      let delayedHistory = Promise.withResolvers<Response>();
+      let historyStarted = Promise.withResolvers<void>();
       let delayHistory = false;
       const fixture = prepareFixture(({ url }) => {
         if (!url.pathname.endsWith("/message")) return undefined;
-        if (!delayHistory) return cursorPage([message]);
+        if (!delayHistory) return cursorPage(snapshots);
         historyStarted.resolve();
         return delayedHistory.promise;
       });
       const runtime = await fixture.prepare();
       const observed = Promise.withResolvers<void>();
       const completed = Promise.withResolvers<void>();
-      const called = Promise.withResolvers<void>();
       try {
         await runtime.connection.readSessionSources(ref.repoPath, [
           { ...ref, sessionScope: { kind: "repository" } },
@@ -4271,14 +4272,6 @@ describe("OpenCode V2 live observation", () => {
         await runtime.startForwarding((signal) => {
           if (signal.type === "fault" || signal.type === "session_fault")
             observed.reject(new Error(signal.message));
-          if (
-            signal.type === "session_event" &&
-            signal.event.type === "assistant_part" &&
-            signal.event.part.kind === "subagent" &&
-            signal.event.part.status === "running" &&
-            signal.event.part.externalSessionId === undefined
-          )
-            called.resolve();
           if (
             signal.type === "session_event" &&
             signal.event.type === "assistant_part" &&
@@ -4295,12 +4288,44 @@ describe("OpenCode V2 live observation", () => {
             }
           }
         });
-        if (snapshotStatus === "streaming") {
+        delayHistory = true;
+        const runningRead = runtime.queries.loadSessionHistory(ref);
+        await historyStarted.promise;
+        if (snapshotStatus === "missing") {
+          fixture.channel.push({
+            id: "evt_foreground_step",
+            type: "session.step.started",
+            created: 2,
+            durable,
+            data: {
+              sessionID: ref.externalSessionId,
+              assistantMessageID: message.id,
+              agent: "build",
+              model,
+              started: 2,
+            },
+          });
+        }
+        if (snapshotStatus === "empty" || snapshotStatus === "missing") {
+          fixture.channel.push({
+            id: "evt_foreground_input",
+            type: "session.tool.input.started",
+            created: 3,
+            durable: { ...durable, seq: 2 },
+            data: {
+              sessionID: ref.externalSessionId,
+              assistantMessageID: message.id,
+              id: "call_foreground",
+              name: "subagent",
+            },
+          });
+        }
+        if (snapshotStatus !== "running") {
           fixture.channel.push({
             id: "evt_foreground_called",
             type: "session.tool.called",
             created: 4,
-            durable,
+            durable: { ...durable, seq: 3 },
             data: {
               sessionID: ref.externalSessionId,
               assistantMessageID: message.id,
@@ -4309,7 +4334,6 @@ describe("OpenCode V2 live observation", () => {
               executed: false,
             },
           });
-          await called.promise;
         }
         fixture.channel.push({
           id: "evt_foreground_progress",
@@ -4323,21 +4347,23 @@ describe("OpenCode V2 live observation", () => {
           },
         });
         await observed.promise;
-        const history = await runtime.queries.loadSessionHistory(ref);
+        delayedHistory.resolve(cursorPage(snapshots));
+        const history = await runningRead;
         expect(history[0]?.parts.find((part) => part.kind === "subagent")).toMatchObject({
           externalSessionId: "ses_child",
           status: "running",
           executionMode: "foreground",
         });
         expect(history[0]?.parts.filter((part) => part.kind === "tool")).toEqual([]);
-        delayHistory = true;
+        delayedHistory = Promise.withResolvers<Response>();
+        historyStarted = Promise.withResolvers<void>();
         const reading = runtime.queries.loadSessionHistory(ref);
         await historyStarted.promise;
         fixture.channel.push({
           id: "evt_foreground_success",
           type: "session.tool.success",
           created: 9,
-          durable: { ...durable, seq: 2, version: 2 },
+          durable: { ...durable, seq: 4, version: 2 },
           data: {
             sessionID: ref.externalSessionId,
             assistantMessageID: message.id,
@@ -4348,7 +4374,7 @@ describe("OpenCode V2 live observation", () => {
           },
         });
         await completed.promise;
-        delayedHistory.resolve(cursorPage([message]));
+        delayedHistory.resolve(cursorPage(snapshots));
         const staleHistory = await reading;
         expect(staleHistory[0]?.parts).toMatchObject([
           {
@@ -4359,11 +4385,59 @@ describe("OpenCode V2 live observation", () => {
           },
         ]);
       } finally {
-        delayedHistory.resolve(cursorPage([message]));
+        delayedHistory.resolve(cursorPage(snapshots));
         await runtime.release();
       }
     },
   );
+  test("does not restore a subagent from history captured before native reversion", async () => {
+    const launch = backgroundLaunch();
+    let snapshots = [launch];
+    let holdRead = false;
+    const readingStarted = Promise.withResolvers<void>();
+    const delayedHistory = Promise.withResolvers<Response>();
+    const retracted = Promise.withResolvers<void>();
+    const fixture = prepareFixture(({ url }) => {
+      if (!url.pathname.endsWith("/message")) return undefined;
+      if (!holdRead) return cursorPage(snapshots);
+      holdRead = false;
+      readingStarted.resolve();
+      return delayedHistory.promise;
+    });
+    const runtime = await fixture.prepare();
+    try {
+      await runtime.connection.readSessionSources(ref.repoPath, [
+        { ...ref, sessionScope: { kind: "repository" } },
+      ]);
+      await runtime.startForwarding((signal) => {
+        if (signal.type === "fault" || signal.type === "session_fault")
+          retracted.reject(new Error(signal.message));
+        if (
+          signal.type === "session_event" &&
+          signal.event.type === "transcript_retracted" &&
+          signal.event.messageIds.includes(launch.id)
+        )
+          retracted.resolve();
+      });
+      holdRead = true;
+      const reading = runtime.queries.loadSessionHistory(ref);
+      await readingStarted.promise;
+      snapshots = [];
+      fixture.channel.push({
+        id: "evt_revert_launch",
+        type: "session.revert.committed",
+        created: 8,
+        durable,
+        data: { sessionID: ref.externalSessionId, to: launch.id },
+      });
+      await retracted.promise;
+      delayedHistory.resolve(cursorPage([launch]));
+      expect(await reading).toEqual([]);
+    } finally {
+      delayedHistory.resolve(cursorPage([]));
+      await runtime.release();
+    }
+  });
   test("keeps background subagents running until structured native completion", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const message = backgroundLaunch();
@@ -4459,6 +4533,14 @@ describe("OpenCode V2 live observation", () => {
     expect(projector.projectHistory([snapshot])[0]?.parts[0]).not.toHaveProperty(
       "externalSessionId",
     );
+    const beforeTool = { ...snapshot, content: [] };
+    expect(projector.projectHistory([beforeTool])[0]?.parts).toMatchObject([
+      { kind: "subagent", status: "pending" },
+    ]);
+    projector.seed([beforeTool]);
+    expect(projector.snapshotEvents(ref.externalSessionId)).toMatchObject([
+      { type: "assistant_part", part: { kind: "subagent", status: "pending" } },
+    ]);
     const events = projector.apply({
       id: "evt_continue_input",
       created: 4,

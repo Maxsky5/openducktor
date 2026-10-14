@@ -25,28 +25,27 @@ const retainLiveToolState = (
   settledToolInputs: ReadonlySet<string>,
 ): SessionMessageInfo => {
   if (message.type !== "assistant" || live?.type !== "assistant") return message;
-  return {
-    ...message,
-    content: message.content.map((part) => {
-      if (
-        part.type !== "tool" ||
-        (part.state.status !== "running" && part.state.status !== "streaming")
-      )
-        return part;
-      const prior = live.content.find((item) => item.type === "tool" && item.id === part.id);
-      if (prior?.type !== "tool") return part;
-      if (part.state.status === "streaming") {
-        if (prior.state.status === "streaming" && !settledToolInputs.has(prior.id)) return part;
-        return prior;
-      }
-      if (prior.state.status === "streaming") return part;
-      if (prior.state.status === "completed" || prior.state.status === "error") return prior;
-      return {
-        ...part,
-        state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
-      };
-    }),
-  };
+  const liveTools = new Map(
+    live.content.filter((part) => part.type === "tool").map((part) => [part.id, part] as const),
+  );
+  const content = message.content.map((part) => {
+    if (part.type !== "tool") return part;
+    const prior = liveTools.get(part.id);
+    liveTools.delete(part.id);
+    if (!prior || (part.state.status !== "running" && part.state.status !== "streaming"))
+      return part;
+    if (part.state.status === "streaming") {
+      if (prior.state.status === "streaming" && !settledToolInputs.has(prior.id)) return part;
+      return prior;
+    }
+    if (prior.state.status === "streaming") return part;
+    if (prior.state.status === "completed" || prior.state.status === "error") return prior;
+    return {
+      ...part,
+      state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
+    };
+  });
+  return { ...message, content: [...content, ...liveTools.values()] };
 };
 
 const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
@@ -71,19 +70,37 @@ export class OpenCodeLiveMessageProjector {
   readonly inbox = new Map<string, SessionInboxInfo>();
   private readonly settledText = new Set<string>();
   private readonly settledInput = new Set<string>();
+  private readonly retractedMessageIds = new Set<string>();
   private projectionContext = messageProjectionContext(this.messages.values());
 
   projectHistory(messages: SessionMessageInfo[]) {
-    const retained = messages.map((message) =>
+    const nativeMessages = messages.filter((message) => !this.retractedMessageIds.has(message.id));
+    const settledInputs = new Set(this.settledInput);
+    for (const message of nativeMessages) {
+      if (message.type !== "assistant") continue;
+      for (const part of message.content)
+        if (
+          part.type === "tool" &&
+          part.state.status === "streaming" &&
+          part.state.input.length > 0
+        )
+          settledInputs.add(part.id);
+    }
+    const retained = nativeMessages.map((message) =>
       retainLiveToolState(message, this.messages.get(message.id), this.settledInput),
     );
+    const nativeIds = new Set(nativeMessages.map((message) => message.id));
+    for (const message of this.messages.values()) {
+      if (message.type !== "assistant" || nativeIds.has(message.id)) continue;
+      if (message.content.some((part) => part.type === "tool")) retained.push(message);
+    }
     const context = messageProjectionContext(retained);
     const completions = new Map(context.completions);
     for (const [callID, completion] of this.projectionContext.completions) {
       const native = completions.get(callID);
       if (!native || native.created < completion.created) completions.set(callID, completion);
     }
-    return projectMessages(retained, { ...context, completions });
+    return projectMessages(retained, { ...context, completions }, settledInputs);
   }
 
   /**
@@ -110,6 +127,7 @@ export class OpenCodeLiveMessageProjector {
     this.settledText.clear();
     this.settledInput.clear();
     for (const snapshot of messages) {
+      this.retractedMessageIds.delete(snapshot.id);
       const live = previous.get(snapshot.id);
       const message = retainLiveToolState(structuredClone(snapshot), live, settledInput);
       this.messages.set(message.id, message);
@@ -142,8 +160,15 @@ export class OpenCodeLiveMessageProjector {
         if (part.type === "tool") {
           const prior = liveParts.find((item) => item.type === "tool" && item.id === part.id);
           if (part.state.status === "streaming") {
-            if (part.state.input.length > 0 || settledInput.has(part.id))
-              this.settledInput.add(part.id);
+            const nativePart =
+              snapshot.type === "assistant"
+                ? snapshot.content.find((item) => item.type === "tool" && item.id === part.id)
+                : undefined;
+            const nativeSettled =
+              nativePart?.type === "tool" &&
+              nativePart.state.status === "streaming" &&
+              nativePart.state.input.length > 0;
+            if (nativeSettled || settledInput.has(part.id)) this.settledInput.add(part.id);
             else if (prior?.type === "tool" && prior.state.status === "streaming")
               part.state.input = prior.state.input;
           }
@@ -583,7 +608,10 @@ export class OpenCodeLiveMessageProjector {
             "The native reversion target is absent from the retained transcript. Reload this conversation.",
           );
         const removed = ids.slice(index);
-        for (const id of removed) this.messages.delete(id);
+        for (const id of removed) {
+          this.messages.delete(id);
+          this.retractedMessageIds.add(id);
+        }
         this.updateProjectionContext();
         return [{ ...base, type: "transcript_retracted", messageIds: removed }];
       }

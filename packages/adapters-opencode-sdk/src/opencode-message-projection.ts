@@ -261,10 +261,13 @@ const isVisibleNativeMessage = (message: SessionMessageInfo): boolean =>
 export const projectMessages = (
   messages: SessionMessageInfo[],
   { completions, durations } = messageProjectionContext(messages),
+  settledToolInputs?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage[] => {
   return messages
     .filter(isVisibleNativeMessage)
-    .map((message) => projectMessage(message, completions, durations.get(message.id)));
+    .map((message) =>
+      projectMessage(message, completions, durations.get(message.id), settledToolInputs),
+    );
 };
 
 const projectAssistantContent = (

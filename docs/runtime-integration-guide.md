@@ -380,7 +380,7 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 
 OpenCode V2 publishes the child `sessionID` through `session.tool.progress` while a foreground subagent runs. Native history does not store this live metadata.
 
-- History reads for an observed session must retain its live tool metadata, settled arguments, and terminal tool events, including when the native snapshot still reports input streaming. Do not treat partial input deltas as complete arguments. Keep this state in the runtime projector. Use native history alone for a session that has no live observation.
+- History reads for an observed session must retain its live tool metadata, settled arguments, and terminal tool events. This includes snapshots that still report input streaming or omit an observed tool or assistant message. Match tools and messages by their native IDs. Keep native retractions so an older response cannot restore a removed call. Do not treat partial input deltas as complete arguments. Keep this state in the runtime projector. Use native history alone for a session that has no live observation.
 - Project each native `subagent` call as one subagent part. Use `call:<nativeCallID>` as its correlation key, and preserve separate calls when a child session is continued.
 - Use the settled input `sessionID` to link a continued child before progress arrives.
 - Map a native `aborted` tool error to `cancelled`.
