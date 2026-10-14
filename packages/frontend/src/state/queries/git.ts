@@ -223,13 +223,26 @@ export const skippedWorktreeStatusQueryOptions = () =>
 
 type GitHistoryPageParam = NonNullable<GitHistoryPageRequest["page"]> | null;
 
-/** The History key without the checkout revision, so a new commit of the branch matches it. */
-const historyBranchLine = (key: readonly unknown[]): string => JSON.stringify(key.slice(0, -1));
+/**
+ * True when a History read continues the shown graph: the same directory and target, and the same
+ * branch or a detached HEAD on either side. A rebase detaches HEAD from its branch and attaches it
+ * again at the end, so its graph updates in place. Another branch starts without rows.
+ */
+const continuesHistory = (previous: readonly unknown[], next: readonly unknown[]): boolean => {
+  // The key ends with the branch name, the detached flag, and the revision.
+  const scope = (key: readonly unknown[]) => JSON.stringify(key.slice(0, -3));
+  const [previousName, previousDetached] = previous.slice(-3);
+  const [nextName, nextDetached] = next.slice(-3);
+  return (
+    scope(previous) === scope(next) &&
+    (previousDetached === true || nextDetached === true || previousName === nextName)
+  );
+};
 
 /**
  * Each page keeps the tips that the first page read, so rows stay in one graph. A new commit of
- * the same branch keeps the shown graph until its own graph loads, so the list updates in place.
- * Another branch, target, or directory starts without rows.
+ * the branch, or a rebase of it, keeps the shown graph until the new graph loads, so the list
+ * updates in place.
  */
 export const gitHistoryQueryOptions = (
   input: {
@@ -255,9 +268,7 @@ export const gitHistoryQueryOptions = (
   >({
     queryKey,
     placeholderData: (previous, previousQuery) =>
-      previousQuery && historyBranchLine(previousQuery.queryKey) === historyBranchLine(queryKey)
-        ? previous
-        : undefined,
+      previousQuery && continuesHistory(previousQuery.queryKey, queryKey) ? previous : undefined,
     queryFn: ({ pageParam }): Promise<GitHistoryPage> => {
       const request: GitHistoryPageRequest = {
         repoPath: input.repoPath,

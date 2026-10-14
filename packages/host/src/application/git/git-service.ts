@@ -84,25 +84,20 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           input.workingDir,
         );
         const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
-        if (
-          input.target.branch === "@{upstream}" &&
-          (currentBranch.detached || !currentBranch.name)
-        ) {
-          return {
-            kind: "unavailable" as const,
-            reason: "Branch comparison is unavailable on a detached HEAD.",
-          };
-        }
         const reference =
           input.target.branch === "@{upstream}"
             ? yield* gitPort.getTrackedUpstreamReference(workingDirectory)
             : input.target.remote
               ? `refs/remotes/${input.target.remote}/${input.target.branch}`
               : `refs/heads/${input.target.branch}`;
+        // A rebase keeps the upstream of the branch that it rewrites. Another detached HEAD has none.
         if (!reference) {
           return {
             kind: "unavailable" as const,
-            reason: `Branch ${currentBranch.name} has no tracked upstream. Choose a comparison branch or set an upstream.`,
+            reason:
+              currentBranch.detached || !currentBranch.name
+                ? "Branch comparison is unavailable on a detached HEAD."
+                : `Branch ${currentBranch.name} has no tracked upstream. Choose a comparison branch or set an upstream.`,
           };
         }
         if (!(yield* gitPort.referenceExists(workingDirectory, reference))) {

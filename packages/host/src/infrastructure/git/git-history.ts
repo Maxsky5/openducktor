@@ -13,6 +13,7 @@ import {
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
+import { readRebasingBranch } from "./git-upstream";
 
 export const GIT_HISTORY_PAGE_SIZE = 100;
 
@@ -113,19 +114,15 @@ const confirmUnbornHead = (runner: GitCommandRunner, workingDirectory: string) =
     }
   });
 
-const readBoundary = (
-  runner: GitCommandRunner,
-  workingDirectory: string,
-  currentTip: string,
-  targetTip: string,
-) =>
+/** The best common ancestors of every tip. More than two tips need an n-way merge base. */
+const readBoundary = (runner: GitCommandRunner, workingDirectory: string, tips: string[]) =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "merge-base",
       "--all",
+      ...(tips.length > 2 ? ["--octopus"] : []),
       "--end-of-options",
-      currentTip,
-      targetTip,
+      ...tips,
     ]);
     if (result.ok) return splitLines(result.stdout);
     // Exit 1 without output means that the commits share no ancestor.
@@ -138,24 +135,61 @@ const readBoundary = (
     );
   });
 
+/**
+ * The side of each commit in the range. A commit that a current tip reaches and the target does not
+ * is on the current side. Every other commit is on the target side, or is a boundary.
+ */
 const readSides = (
   runner: GitCommandRunner,
   workingDirectory: string,
-  currentTip: string,
+  currentTips: string[],
   targetTip: string,
+  excludedParents: string[],
 ) =>
   Effect.gen(function* () {
-    const output = yield* runGit(runner, workingDirectory, [
-      "rev-list",
-      "--left-right",
-      "--end-of-options",
-      `${currentTip}...${targetTip}`,
-    ]);
+    const excluded = excludedParents.map((oid) => `^${oid}`);
+    const [inRange, currentSide] = yield* Effect.all(
+      [
+        runGit(runner, workingDirectory, [
+          "rev-list",
+          "--end-of-options",
+          ...currentTips,
+          targetTip,
+          ...excluded,
+          "--",
+        ]),
+        runGit(runner, workingDirectory, [
+          "rev-list",
+          "--end-of-options",
+          ...currentTips,
+          `^${targetTip}`,
+          ...excluded,
+          "--",
+        ]),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const current = new Set(splitLines(currentSide));
     const sides = new Map<string, "current" | "target">();
-    for (const line of splitLines(output)) {
-      sides.set(line.slice(1), line.startsWith("<") ? "current" : "target");
-    }
+    for (const oid of splitLines(inRange)) sides.set(oid, current.has(oid) ? "current" : "target");
     return sides;
+  });
+
+/**
+ * The tip of the branch that a rebase in progress rewrites, when it differs from HEAD. History
+ * shows it with its old commits, as a Git tree does, so the rebase shows its progress.
+ */
+const readRebasingTip = (runner: GitCommandRunner, workingDirectory: string, currentTip: string) =>
+  Effect.gen(function* () {
+    const branch = yield* readRebasingBranch(runner, workingDirectory);
+    if (!branch) return undefined;
+    const tip = (yield* runGit(runner, workingDirectory, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `refs/heads/${branch}^{commit}`,
+    ])).trim();
+    return tip === currentTip ? undefined : tip;
   });
 
 /**
@@ -267,7 +301,12 @@ export const readHistoryPage = (
         }),
       );
     }
-    const boundaryOids = yield* readBoundary(runner, workingDirectory, currentTip, targetTip);
+    // A rebase detaches HEAD. The branch that it rewrites keeps its old commits until it ends.
+    const rebasingTip = input.currentBranch.detached
+      ? yield* readRebasingTip(runner, workingDirectory, currentTip)
+      : undefined;
+    const currentTips = rebasingTip ? [currentTip, rebasingTip] : [currentTip];
+    const boundaryOids = yield* readBoundary(runner, workingDirectory, [...currentTips, targetTip]);
     if (boundaryOids.length === 0) {
       const shallow = yield* runGit(runner, workingDirectory, [
         "rev-parse",
@@ -290,7 +329,7 @@ export const readHistoryPage = (
     const offset = page?.offset ?? 0;
     const [sides, refsByCommit, output] = yield* Effect.all(
       [
-        readSides(runner, workingDirectory, currentTip, targetTip),
+        readSides(runner, workingDirectory, currentTips, targetTip, excludedParents),
         readRefs(runner, workingDirectory),
         runGit(runner, workingDirectory, [
           "log",
@@ -300,7 +339,7 @@ export const readHistoryPage = (
           `--skip=${offset}`,
           `--max-count=${GIT_HISTORY_PAGE_SIZE + 1}`,
           "--end-of-options",
-          currentTip,
+          ...currentTips,
           targetTip,
           ...excludedParents.map((oid) => `^${oid}`),
           "--",
@@ -308,16 +347,22 @@ export const readHistoryPage = (
       ],
       { concurrency: "unbounded" },
     );
-    const commits = yield* parseLog(output, new Set(boundaryOids), sides, refsByCommit);
+    const boundary = new Set(boundaryOids);
+    const commits = yield* parseLog(output, boundary, sides, refsByCommit);
     let ahead = 0;
-    for (const side of sides.values()) if (side === "current") ahead += 1;
+    let behind = 0;
+    for (const [oid, side] of sides) {
+      if (boundary.has(oid)) continue;
+      if (side === "current") ahead += 1;
+      else behind += 1;
+    }
     return {
       outcome: "page",
       comparison: {
         currentTip,
         targetTip,
         boundaryOids,
-        aheadBehind: { ahead, behind: sides.size - ahead },
+        aheadBehind: { ahead, behind },
       },
       commits: commits.slice(0, GIT_HISTORY_PAGE_SIZE),
       nextOffset: commits.length > GIT_HISTORY_PAGE_SIZE ? offset + GIT_HISTORY_PAGE_SIZE : null,

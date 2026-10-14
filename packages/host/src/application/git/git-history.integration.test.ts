@@ -140,6 +140,45 @@ describe("branch history", () => {
     expect(page.commits.map((entry) => entry.oid)).toEqual([m2, f2, m1, f1, base]);
   });
 
+  test("follows a rebase that stops on a conflict, as a Git tree does", async () => {
+    const base = await commit("a.txt", "base");
+    git(["checkout", "-b", "feature"]);
+    const f1 = await commit("b.txt", "f1");
+    const f2 = await commit("a.txt", "f2 conflicts");
+    const f3 = await commit("c.txt", "f3");
+    git(["branch", "--set-upstream-to=main", "feature"]);
+    git(["checkout", "main"]);
+    const m1 = await commit("a.txt", "m1 conflicts");
+    git(["checkout", "feature"]);
+    expect(() => git(["rebase", "main"])).toThrow();
+    const replayed = git(["rev-parse", "HEAD"]);
+
+    // Tracked upstream keeps the upstream of the branch that the rebase rewrites.
+    await expect(
+      Effect.runPromise(
+        service.getComparisonTarget({ repoPath: repo, target: { branch: "@{upstream}" } }),
+      ),
+    ).resolves.toEqual({ kind: "available", reference: "refs/heads/main" });
+
+    const page = requirePage(await history("refs/heads/main"));
+    expect(page.comparison.currentTip).toBe(replayed);
+    expect(page.comparison.boundaryOids).toEqual([base]);
+    const byOid = new Map(page.commits.map((entry) => [entry.oid, entry]));
+    // The replayed commit on HEAD, the old commits of the branch, and the target all show.
+    expect([...byOid.keys()].sort()).toEqual([replayed, f1, f2, f3, m1, base].sort());
+    expect(byOid.get(replayed)).toMatchObject({ membership: "current", parentOids: [m1] });
+    expect(byOid.get(f3)).toMatchObject({
+      membership: "current",
+      refs: [{ name: "feature", kind: "local", isHead: false }],
+    });
+    expect(byOid.get(f1)?.membership).toBe("current");
+    expect(byOid.get(m1)?.membership).toBe("target");
+    expect(byOid.get(base)?.membership).toBe("boundary");
+    const order = page.commits.map((entry) => entry.oid);
+    expect(order.indexOf(replayed)).toBeLessThan(order.indexOf(m1));
+    expect(order.indexOf(f2)).toBeLessThan(order.indexOf(f1));
+  });
+
   test("lists the author email and the branches and tags of each commit", async () => {
     const base = await commit("base.txt", "shared base");
     git(["tag", "-a", "v1.0.0", "-m", "Release"]);

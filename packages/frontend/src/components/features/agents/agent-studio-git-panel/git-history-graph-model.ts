@@ -29,8 +29,8 @@ type OpenLane = { oid: string; tone: GitHistoryCommitMembership; color: number }
 const MAIN_LINE_COLOR = 0;
 
 /**
- * A merged line takes its color from the ID of its first commit. The ID never changes, so the line
- * keeps its color when new commits move the lanes.
+ * A merged line, or another tip, takes its color from a commit ID. The ID never changes, so the
+ * line keeps its color when new commits move the lanes.
  */
 const mergedLineColor = (oid: string): number => {
   let hash = 0;
@@ -57,7 +57,18 @@ export type TipLane = "dedicated" | "firstFree";
  */
 export function layoutHistoryGraph(
   commits: readonly GitHistoryCommit[],
-  { tipLane }: { tipLane: TipLane },
+  {
+    tipLane,
+    mainTips,
+  }: {
+    tipLane: TipLane;
+    /**
+     * Tips whose line takes the main color of its side, such as the compared branches. Another
+     * tip, such as a branch that a rebase rewrites, takes a stable color from its commit ID.
+     * Without this set, every tip takes the main color.
+     */
+    mainTips?: ReadonlySet<string>;
+  },
 ): GraphLayout {
   const membershipByOid = new Map(commits.map((commit) => [commit.oid, commit.membership]));
   const lanes: (OpenLane | null)[] = [];
@@ -72,7 +83,9 @@ export function layoutHistoryGraph(
       edges.push({ lane: index, tone: open.tone, color: open.color });
     });
     const lane = incoming[0]?.lane ?? (tipLane === "dedicated" ? laneCount : firstFreeLane(lanes));
-    const color = incoming[0]?.color ?? MAIN_LINE_COLOR;
+    const color =
+      incoming[0]?.color ??
+      (!mainTips || mainTips.has(commit.oid) ? MAIN_LINE_COLOR : mergedLineColor(commit.oid));
     // Lanes between the open lanes and a dedicated tip lane stay free for later merges.
     while (lanes.length < lane) lanes.push(null);
     for (const edge of incoming) lanes[edge.lane] = null;

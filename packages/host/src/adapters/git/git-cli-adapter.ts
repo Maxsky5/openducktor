@@ -6,7 +6,10 @@ import {
 } from "../../infrastructure/git/git-publication";
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
-import { resolveTrackedUpstreamReference } from "../../infrastructure/git/git-upstream";
+import {
+  readRebasingBranch,
+  resolveTrackedUpstreamReference,
+} from "../../infrastructure/git/git-upstream";
 import {
   HostOperationError,
   HostValidationError,
@@ -257,7 +260,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     getTrackedUpstreamReference(workingDir) {
       return Effect.gen(function* () {
         const branch = yield* getCurrentBranchUnchecked(runner, workingDir);
-        const reference = yield* resolveTrackedUpstreamReference(runner, workingDir, branch.name);
+        // A rebase detaches HEAD. The upstream of the branch that it rewrites still applies.
+        const name = branch.detached ? yield* readRebasingBranch(runner, workingDir) : branch.name;
+        const reference = yield* resolveTrackedUpstreamReference(runner, workingDir, name);
         return reference ?? null;
       });
     },

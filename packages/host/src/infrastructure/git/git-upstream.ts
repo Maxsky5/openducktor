@@ -294,6 +294,22 @@ const normalizeHeadName = (value: string | undefined): string | undefined => {
   }
   return trimmed.startsWith("refs/heads/") ? trimmed.slice("refs/heads/".length) : trimmed;
 };
+/**
+ * The branch that a rebase in progress rewrites, or undefined when no rebase runs. Git detaches
+ * HEAD during a rebase and records the branch in `head-name`.
+ */
+export const readRebasingBranch = (runner: GitCommandRunner, workingDirectory: string) =>
+  Effect.gen(function* () {
+    for (const directory of ["rebase-merge", "rebase-apply"]) {
+      const headName = yield* readGitPathContentsIfExists(
+        runner,
+        workingDirectory,
+        `${directory}/head-name`,
+      );
+      if (headName?.startsWith("refs/heads/")) return headName.slice("refs/heads/".length);
+    }
+    return undefined;
+  });
 export const loadRebaseConflictContext = (
   runner: GitCommandRunner,
   workingDirectory: string,

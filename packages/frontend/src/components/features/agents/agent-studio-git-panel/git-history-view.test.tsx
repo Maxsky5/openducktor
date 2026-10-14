@@ -334,6 +334,30 @@ describe("GitHistoryView", () => {
     queryClient.clear();
   });
 
+  test("keeps the rows while a rebase detaches HEAD from the branch", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (checkout: GitHistoryViewProps["checkout"]) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView {...props({ checkout })} />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree({ name: "feature", detached: false, revision: CURRENT }));
+    await screen.findByText("Subject c2");
+
+    historyPage.mockImplementation(() => new Promise<GitHistoryPage>(() => {}));
+    view.rerender(tree({ detached: true, revision: oid("r1") }));
+    // The graph follows the rebase in place instead of starting again.
+    expect(screen.queryByText("Loading History...")).toBeNull();
+    expect(screen.getByText("Subject c2")).toBeTruthy();
+    view.unmount();
+    queryClient.clear();
+  });
+
   test("starts without rows for another branch", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const queryClient = createQueryClient();

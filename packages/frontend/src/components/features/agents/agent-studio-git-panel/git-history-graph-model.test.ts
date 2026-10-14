@@ -219,6 +219,24 @@ describe("layoutHistoryGraph", () => {
     }
   });
 
+  test("gives a tip outside the compared branches its own stable color", () => {
+    // A rebase in progress: HEAD holds the replayed commit, and the branch keeps its old commit.
+    const commits = [
+      commit("replayed", ["main"], "current"),
+      commit("old", ["base"], "current"),
+      commit("main", ["base"], "target"),
+      commit("base", [], "boundary"),
+    ];
+    const mainTips = new Set([oid("replayed"), oid("main")]);
+    const layout = layoutHistoryGraph(commits, { tipLane: "dedicated", mainTips });
+    const again = layoutHistoryGraph(commits, { tipLane: "dedicated", mainTips });
+
+    const colorOf = (name: string) => layout.rows.find((row) => row.commit.subject === name)?.color;
+    expect(colorOf("replayed")).toBe(0);
+    expect(colorOf("old")).toBeGreaterThan(0);
+    expect(again.rows.map((row) => row.color)).toEqual(layout.rows.map((row) => row.color));
+  });
+
   test("keeps earlier rows unchanged when a later page adds rows", () => {
     const firstPage = [commit("c3", ["c2"], "current"), commit("c2", ["c1"], "current")];
     const secondPage = [commit("c1", ["base"], "current"), commit("base", [], "boundary")];

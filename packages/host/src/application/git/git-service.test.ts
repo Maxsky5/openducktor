@@ -138,8 +138,10 @@ const createFakeGitPort = ({
     listWorktrees() {
       return Effect.die(new Error("unexpected list worktrees"));
     },
-    getTrackedUpstreamReference() {
-      return Effect.succeed("refs/remotes/origin/main");
+    // Without a rebase in progress, a detached HEAD has no upstream, as in the Git adapter.
+    getTrackedUpstreamReference(workingDir) {
+      const branch = currentBranches[workingDir] ?? { detached: true };
+      return Effect.succeed(branch.detached ? null : "refs/remotes/origin/main");
     },
     referenceExists(workingDir, reference) {
       calls.push(`referenceExists:${workingDir}:${reference}`);

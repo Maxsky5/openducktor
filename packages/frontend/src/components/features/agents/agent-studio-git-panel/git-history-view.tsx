@@ -96,7 +96,16 @@ function GitHistoryComparisonView({
   const [readAt, setReadAt] = useState(history.dataUpdatedAt);
   if (history.dataUpdatedAt > readAt) setReadAt(history.dataUpdatedAt);
   // The current branch keeps its own lane, apart from the commits that the target merged.
-  const layout = useMemo(() => layoutHistoryGraph(commits, { tipLane: "dedicated" }), [commits]);
+  const comparison = firstPage?.outcome === "page" ? firstPage.comparison : null;
+  // The compared branches use the main colors. A branch that a rebase rewrites gets its own.
+  const layout = useMemo(
+    () =>
+      layoutHistoryGraph(commits, {
+        tipLane: "dedicated",
+        mainTips: new Set(comparison ? [comparison.currentTip, comparison.targetTip] : []),
+      }),
+    [commits, comparison],
+  );
   const currentLabel = checkout.detached ? "Detached HEAD" : (checkout.name ?? "Current branch");
   const { fetchNextPage } = history;
   // A page load during a refresh joins that refresh instead of cancelling it.
