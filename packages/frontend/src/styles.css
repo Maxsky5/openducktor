@@ -606,6 +606,13 @@ pre {
   animation: rise-in 0.3s ease-out;
 }
 
+/* A commit that a new History read added. */
+@keyframes history-row-enter {
+  from {
+    opacity: 0;
+  }
+}
+
 .onboarding-stage-content {
   view-transition-name: onboarding-stage-content;
 }

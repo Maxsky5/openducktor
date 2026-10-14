@@ -43,10 +43,14 @@ const LANE_COLORS = {
   boundary: ["text-slate-400 dark:text-slate-500"],
 } satisfies Record<GitHistoryCommitMembership, string[]>;
 
-/** The text color of a lane. Lines, nodes, and bands use it through `currentColor`. */
-export const laneColor = (tone: GitHistoryCommitMembership, lane: number): string => {
+/**
+ * The text color of a line. Lines, nodes, and bands use it through `currentColor`. Color 0 is the
+ * main line of a side, and merged lines use the other colors of that side.
+ */
+export const laneColor = (tone: GitHistoryCommitMembership, color: number): string => {
   const colors = LANE_COLORS[tone];
-  return colors[lane % colors.length] ?? colors[0] ?? "";
+  const index = color === 0 || colors.length === 1 ? 0 : 1 + ((color - 1) % (colors.length - 1));
+  return colors[index] ?? colors[0] ?? "";
 };
 
 /** The visible part of the graph. Rows show the same part, so lanes stay aligned. */
@@ -101,7 +105,7 @@ export function HistoryGraphCell({
   connectFromLeft?: boolean;
 }): ReactElement {
   const clipped = graph.viewWidth < graph.width;
-  const color = laneColor(row.commit.membership, row.lane);
+  const color = laneColor(row.commit.membership, row.color);
   const nodeX = laneX(row.lane);
   // A graph that fits has no sideways scroll, so an old offset does not apply.
   const offset = clipped ? `var(${GRAPH_OFFSET_PROPERTY}, 0px)` : "0px";
@@ -171,7 +175,7 @@ function HistoryGraph({ row, width }: { row: GraphRow; width: number }): ReactEl
     <path
       key={key}
       d={path}
-      className={laneColor(entry.tone, entry.lane)}
+      className={laneColor(entry.tone, entry.color)}
       stroke="currentColor"
       strokeWidth={2}
       strokeLinecap="round"
@@ -211,7 +215,7 @@ function HistoryGraph({ row, width }: { row: GraphRow; width: number }): ReactEl
         <g data-testid="agent-studio-git-history-limit">
           {edge(
             "limit",
-            { lane: row.lane, tone: row.commit.membership },
+            { lane: row.lane, tone: row.commit.membership, color: row.color },
             `M ${x} ${middle} V ${ROW_HEIGHT}`,
             true,
           )}
@@ -225,7 +229,7 @@ function HistoryGraph({ row, width }: { row: GraphRow; width: number }): ReactEl
 
 function CommitNode({ x, y, row }: { x: number; y: number; row: GraphRow }): ReactElement {
   const { commit } = row;
-  const color = laneColor(commit.membership, row.lane);
+  const color = laneColor(commit.membership, row.color);
   if (commit.membership === "boundary") {
     // The shared base ends the comparison, so it has an open marker.
     return (

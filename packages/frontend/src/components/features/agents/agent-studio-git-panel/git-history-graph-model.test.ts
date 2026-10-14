@@ -5,11 +5,15 @@ import {
   formatCompactCommitAge,
   formatExactCommitDate,
   formatRelativeCommitDate,
+  type GraphEdge,
   layoutHistoryGraph,
 } from "./git-history-graph-model";
 
 const oid = (name: string) => name.padEnd(40, "0");
 const DEDICATED = { tipLane: "dedicated" } as const;
+/** The lane and side of each edge. Color tests check colors on their own. */
+const lines = (edges: readonly GraphEdge[] | undefined) =>
+  edges?.map(({ lane, tone }) => ({ lane, tone }));
 
 const commit = (
   name: string,
@@ -42,9 +46,9 @@ describe("layoutHistoryGraph", () => {
 
     expect(layout.laneCount).toBe(1);
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 0, 0]);
-    expect(layout.rows[0]?.incoming).toEqual([]);
-    expect(layout.rows[1]?.incoming).toEqual([{ lane: 0, tone: "current" }]);
-    expect(layout.rows[2]?.outgoing).toEqual([]);
+    expect(lines(layout.rows[0]?.incoming)).toEqual([]);
+    expect(lines(layout.rows[1]?.incoming)).toEqual([{ lane: 0, tone: "current" }]);
+    expect(lines(layout.rows[2]?.outgoing)).toEqual([]);
     expect(layout.rows[2]?.reachesLimit).toBe(true);
   });
 
@@ -61,11 +65,11 @@ describe("layoutHistoryGraph", () => {
     const [current, target, base] = layout.rows;
     expect(current?.lane).toBe(0);
     expect(target?.lane).toBe(1);
-    expect(target?.passThrough).toEqual([{ lane: 0, tone: "current" }]);
+    expect(lines(target?.passThrough)).toEqual([{ lane: 0, tone: "current" }]);
     // The second child joins the lane that already waits for the base.
-    expect(target?.outgoing).toEqual([{ lane: 0, tone: "current" }]);
+    expect(lines(target?.outgoing)).toEqual([{ lane: 0, tone: "current" }]);
     expect(base?.lane).toBe(0);
-    expect(base?.incoming).toEqual([{ lane: 0, tone: "current" }]);
+    expect(lines(base?.incoming)).toEqual([{ lane: 0, tone: "current" }]);
     expect(base?.reachesLimit).toBe(false);
     expect(layout.laneCount).toBe(2);
   });
@@ -82,13 +86,13 @@ describe("layoutHistoryGraph", () => {
     );
 
     const [merge, feature, main] = layout.rows;
-    expect(merge?.outgoing).toEqual([
+    expect(lines(merge?.outgoing)).toEqual([
       { lane: 0, tone: "current" },
       { lane: 1, tone: "boundary" },
     ]);
-    expect(feature?.passThrough).toEqual([{ lane: 1, tone: "boundary" }]);
+    expect(lines(feature?.passThrough)).toEqual([{ lane: 1, tone: "boundary" }]);
     expect(main?.lane).toBe(1);
-    expect(main?.incoming).toEqual([{ lane: 1, tone: "boundary" }]);
+    expect(lines(main?.incoming)).toEqual([{ lane: 1, tone: "boundary" }]);
   });
 
   test("opens a new lane right of the merged commits for a branch tip below them", () => {
@@ -106,8 +110,8 @@ describe("layoutHistoryGraph", () => {
 
     // The merged commits free lane 1 before the branch tip. The branch keeps its own lane.
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 1, 2, 2, 0]);
-    expect(layout.rows[3]?.passThrough).toEqual([{ lane: 0, tone: "target" }]);
-    expect(layout.rows[4]?.outgoing).toEqual([{ lane: 0, tone: "target" }]);
+    expect(lines(layout.rows[3]?.passThrough)).toEqual([{ lane: 0, tone: "target" }]);
+    expect(lines(layout.rows[4]?.outgoing)).toEqual([{ lane: 0, tone: "target" }]);
     expect(layout.laneCount).toBe(3);
   });
 
@@ -145,15 +149,41 @@ describe("layoutHistoryGraph", () => {
     // The branch tip takes lane 2, and the second merge uses the free lane 1 again.
     expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 2, 0, 1, 0]);
     // The main line stays in lane 0, and the branch joins it at the shared base.
-    expect(layout.rows[3]?.outgoing).toEqual([
+    expect(lines(layout.rows[3]?.outgoing)).toEqual([
       { lane: 0, tone: "target" },
       { lane: 1, tone: "target" },
     ]);
-    expect(layout.rows[5]?.incoming).toEqual([
+    expect(lines(layout.rows[5]?.incoming)).toEqual([
       { lane: 0, tone: "target" },
       { lane: 2, tone: "current" },
     ]);
     expect(layout.laneCount).toBe(3);
+  });
+
+  test("keeps the color of every line when a new commit moves the lanes", () => {
+    const merged = [
+      commit("main", ["base", "pr2"], "target"),
+      commit("pr2", ["pr1"], "target"),
+      commit("pr1", ["base"], "target"),
+      commit("c1", ["base"], "current"),
+      commit("base", [], "boundary"),
+    ];
+    const before = layoutHistoryGraph(merged, DEDICATED);
+    // A new branch commit, newer than the target tip, moves the branch to lane 0.
+    const after = layoutHistoryGraph([commit("c2", ["c1"], "current"), ...merged], DEDICATED);
+
+    const colorOf = (layout: typeof before, name: string) =>
+      layout.rows.find((row) => row.commit.subject === name)?.color;
+    expect(after.rows.find((row) => row.commit.subject === "c1")?.lane).not.toBe(
+      before.rows.find((row) => row.commit.subject === "c1")?.lane,
+    );
+    for (const name of ["main", "pr2", "pr1", "c1"]) {
+      expect(colorOf(after, name)).toBe(colorOf(before, name));
+    }
+    // Both tips use the main color of their side, and the merged line uses another color.
+    expect(colorOf(after, "c2")).toBe(0);
+    expect(colorOf(after, "main")).toBe(0);
+    expect(colorOf(after, "pr2")).toBeGreaterThan(0);
   });
 
   test("keeps earlier rows unchanged when a later page adds rows", () => {
@@ -165,7 +195,7 @@ describe("layoutHistoryGraph", () => {
 
     expect(complete.rows.slice(0, 2)).toEqual(partial.rows);
     // A lane that waits for an unloaded parent continues to the bottom of the loaded rows.
-    expect(partial.rows[1]?.outgoing).toEqual([{ lane: 0, tone: "current" }]);
+    expect(lines(partial.rows[1]?.outgoing)).toEqual([{ lane: 0, tone: "current" }]);
   });
 });
 

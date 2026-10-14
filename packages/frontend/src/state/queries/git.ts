@@ -223,7 +223,14 @@ export const skippedWorktreeStatusQueryOptions = () =>
 
 type GitHistoryPageParam = NonNullable<GitHistoryPageRequest["page"]> | null;
 
-/** Each page keeps the tips that the first page read, so rows stay in one graph. */
+/** The History key without the checkout revision, so a new commit of the branch matches it. */
+const historyBranchLine = (key: readonly unknown[]): string => JSON.stringify(key.slice(0, -1));
+
+/**
+ * Each page keeps the tips that the first page read, so rows stay in one graph. A new commit of
+ * the same branch keeps the shown graph until its own graph loads, so the list updates in place.
+ * Another branch, target, or directory starts without rows.
+ */
 export const gitHistoryQueryOptions = (
   input: {
     repoPath: string;
@@ -232,20 +239,25 @@ export const gitHistoryQueryOptions = (
     targetReference: string;
   },
   hostClient: GitHistoryQueryHost = host,
-) =>
-  infiniteQueryOptions<
+) => {
+  const queryKey = gitQueryKeys.history(
+    input.repoPath,
+    input.workingDir,
+    input.checkout,
+    input.targetReference,
+  );
+  return infiniteQueryOptions<
     GitHistoryPage,
     Error,
     InfiniteData<GitHistoryPage, GitHistoryPageParam>,
     ReturnType<typeof gitQueryKeys.history>,
     GitHistoryPageParam
   >({
-    queryKey: gitQueryKeys.history(
-      input.repoPath,
-      input.workingDir,
-      input.checkout,
-      input.targetReference,
-    ),
+    queryKey,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && historyBranchLine(previousQuery.queryKey) === historyBranchLine(queryKey)
+        ? previous
+        : undefined,
     queryFn: ({ pageParam }): Promise<GitHistoryPage> => {
       const request: GitHistoryPageRequest = {
         repoPath: input.repoPath,
@@ -267,6 +279,7 @@ export const gitHistoryQueryOptions = (
         : null,
     staleTime: Number.POSITIVE_INFINITY,
   });
+};
 
 /**
  * Reads History again for a directory. A view that shows History reads at once.

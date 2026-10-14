@@ -1,11 +1,16 @@
 import type { GitHistoryCommit, GitHistoryCommitMembership } from "@openducktor/contracts";
 
-/** One lane line in a row. Its tone follows the side of the commit that opened the lane. */
-export type GraphEdge = { lane: number; tone: GitHistoryCommitMembership };
+/**
+ * One lane line in a row. Its tone follows the side of the commit that opened the lane, and its
+ * color follows the line of commits, so a new commit above it does not change either.
+ */
+export type GraphEdge = { lane: number; tone: GitHistoryCommitMembership; color: number };
 
 export type GraphRow = {
   commit: GitHistoryCommit;
   lane: number;
+  /** The color of the line that the commit sits on. */
+  color: number;
   /** Lanes that cross the row without touching its commit. */
   passThrough: GraphEdge[];
   /** Lanes from the rows above that end at this commit. */
@@ -18,7 +23,20 @@ export type GraphRow = {
 
 export type GraphLayout = { rows: GraphRow[]; laneCount: number };
 
-type OpenLane = { oid: string; tone: GitHistoryCommitMembership };
+type OpenLane = { oid: string; tone: GitHistoryCommitMembership; color: number };
+
+/** The color of a branch tip line: the main color of its side. */
+const MAIN_LINE_COLOR = 0;
+
+/**
+ * A merged line takes its color from the ID of its first commit. The ID never changes, so the line
+ * keeps its color when new commits move the lanes.
+ */
+const mergedLineColor = (oid: string): number => {
+  let hash = 0;
+  for (const char of oid.slice(0, 8)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return 1 + hash;
+};
 
 const firstFreeLane = (lanes: (OpenLane | null)[]): number => {
   const free = lanes.indexOf(null);
@@ -51,9 +69,10 @@ export function layoutHistoryGraph(
     lanes.forEach((open, index) => {
       if (!open) return;
       const edges = open.oid === commit.oid ? incoming : passThrough;
-      edges.push({ lane: index, tone: open.tone });
+      edges.push({ lane: index, tone: open.tone, color: open.color });
     });
     const lane = incoming[0]?.lane ?? (tipLane === "dedicated" ? laneCount : firstFreeLane(lanes));
+    const color = incoming[0]?.color ?? MAIN_LINE_COLOR;
     // Lanes between the open lanes and a dedicated tip lane stay free for later merges.
     while (lanes.length < lane) lanes.push(null);
     for (const edge of incoming) lanes[edge.lane] = null;
@@ -68,14 +87,26 @@ export function layoutHistoryGraph(
         // move right into a newer branch, so a left lane keeps its branch down to the parent.
         const keepsLane = index === 0 && existing > lane && lanes[lane] == null;
         if (existing !== -1 && !keepsLane) {
-          outgoing.push({ lane: existing, tone: lanes[existing]?.tone ?? commit.membership });
+          const open = lanes[existing];
+          outgoing.push({
+            lane: existing,
+            tone: open?.tone ?? commit.membership,
+            color: open?.color ?? color,
+          });
           return;
         }
+        // The first parent continues the line. Another parent starts a merged line.
+        const line: OpenLane =
+          index === 0
+            ? { oid: parent, tone: commit.membership, color }
+            : {
+                oid: parent,
+                tone: membershipByOid.get(parent) ?? commit.membership,
+                color: mergedLineColor(parent),
+              };
         const target = index === 0 && lanes[lane] == null ? lane : firstFreeLane(lanes);
-        const tone =
-          index === 0 ? commit.membership : (membershipByOid.get(parent) ?? commit.membership);
-        lanes[target] = { oid: parent, tone };
-        outgoing.push({ lane: target, tone });
+        lanes[target] = line;
+        outgoing.push({ lane: target, tone: line.tone, color: line.color });
       });
     while (lanes.length > 0 && lanes.at(-1) == null) lanes.pop();
 
@@ -84,6 +115,7 @@ export function layoutHistoryGraph(
     rows.push({
       commit,
       lane,
+      color,
       passThrough,
       incoming,
       outgoing,

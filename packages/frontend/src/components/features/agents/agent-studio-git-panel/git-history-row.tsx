@@ -20,6 +20,8 @@ import { type HistoryRefGroup, HistoryRefsCell, historyRefGroups } from "./git-h
 
 export type HistoryRowProps = {
   rows: GraphRow[];
+  /** Commits that the last read added. They fade in. */
+  entering: ReadonlySet<string>;
   graph: GraphView;
   comparison: GitHistoryComparison;
   targetLabel: string;
@@ -63,7 +65,12 @@ export function HistoryRowView({
 }: RowComponentProps<HistoryRowProps>): ReactElement {
   const row = rows[index];
   return (
-    <div style={style} {...ariaAttributes} className="flex min-w-0">
+    // A row that moves for a new commit slides to its new place.
+    <div
+      style={style}
+      {...ariaAttributes}
+      className="flex min-w-0 transition-transform duration-200 ease-out motion-reduce:transition-none"
+    >
       {row ? <HistoryCommitRow row={row} {...props} /> : <HistoryFooterRow footer={footer} />}
     </div>
   );
@@ -78,9 +85,10 @@ function HistoryCommitRow({
   columns,
   selectedOid,
   onSelect,
+  entering,
 }: Omit<HistoryRowProps, "rows" | "footer"> & { row: GraphRow }): ReactElement {
   const { commit } = row;
-  const color = laneColor(commit.membership, row.lane);
+  const color = laneColor(commit.membership, row.color);
   const { preview, exactDate } = commitText(commit);
   const refGroups = useMemo(
     () => historyRefGroups(commit, comparison, targetLabel),
@@ -91,7 +99,10 @@ function HistoryCommitRow({
   return (
     <button
       type="button"
-      className="group/history-row flex h-full w-full min-w-0 cursor-pointer items-center text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-muted"
+      className={cn(
+        "group/history-row flex h-full w-full min-w-0 cursor-pointer items-center text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-muted",
+        entering.has(commit.oid) && "motion-safe:animate-[history-row-enter_200ms_ease-out]",
+      )}
       aria-label={`${membershipLabel(commit.membership)} commit ${commit.subject} by ${commit.authorName}, ${exactDate}`}
       aria-haspopup="dialog"
       aria-expanded={isSelected}

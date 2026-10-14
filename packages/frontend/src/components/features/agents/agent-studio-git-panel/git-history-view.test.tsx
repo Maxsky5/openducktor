@@ -287,6 +287,79 @@ describe("GitHistoryView", () => {
     expect(historyPage).toHaveBeenCalledTimes(1);
   });
 
+  test("keeps the rows of the branch while a new commit loads, then adds it in place", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (revision: string) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView
+              {...props({ checkout: { name: "feature", detached: false, revision } })}
+            />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(CURRENT));
+    await screen.findByText("Subject c2");
+    const rowOf = (subject: string) =>
+      screen.getByText(subject).closest('[data-testid="agent-studio-git-history-row"]');
+    const shownRow = rowOf("Subject c2");
+
+    let resolve: (page: GitHistoryPage) => void = () => {};
+    historyPage.mockImplementation(
+      () => new Promise<GitHistoryPage>((settle) => (resolve = settle)),
+    );
+    const next = oid("c3");
+    view.rerender(tree(next));
+    // The shown graph stays while the graph of the new commit loads.
+    expect(screen.queryByText("Loading History...")).toBeNull();
+    expect(screen.getByText("Subject c2")).toBeTruthy();
+
+    await act(async () => {
+      resolve({
+        ...firstPage,
+        comparison: { ...firstPage.comparison, currentTip: next },
+        commits: [commit("c3", ["c2"], "current"), ...firstPage.commits],
+        nextOffset: null,
+      });
+    });
+    await screen.findByText("Subject c3");
+    // The row of an old commit keeps its element, and only the new commit fades in.
+    expect(rowOf("Subject c2")).toBe(shownRow);
+    expect(rowOf("Subject c3")?.className).toContain("history-row-enter");
+    expect(rowOf("Subject c2")?.className).not.toContain("history-row-enter");
+    view.unmount();
+    queryClient.clear();
+  });
+
+  test("starts without rows for another branch", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (name: string) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView
+              {...props({ checkout: { name, detached: false, revision: CURRENT } })}
+            />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree("feature"));
+    await screen.findByText("Subject c2");
+
+    historyPage.mockImplementation(() => new Promise<GitHistoryPage>(() => {}));
+    view.rerender(tree("other"));
+    // The graph of another branch must not show while the new branch loads.
+    expect(await screen.findByText("Loading History...")).toBeTruthy();
+    expect(screen.queryByText("Subject c2")).toBeNull();
+    view.unmount();
+    queryClient.clear();
+  });
+
   test("says how many target commits the branch is missing", async () => {
     renderHistory();
 

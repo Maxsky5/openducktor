@@ -79,7 +79,7 @@ export function HistoryCommitPopover({
         >
           <CommitDetails
             commit={row.commit}
-            color={laneColor(row.commit.membership, row.lane)}
+            color={laneColor(row.commit.membership, row.color)}
             refGroups={historyRefGroups(row.commit, comparison, targetLabel)}
             nowMs={nowMs}
             currentLabel={currentLabel}

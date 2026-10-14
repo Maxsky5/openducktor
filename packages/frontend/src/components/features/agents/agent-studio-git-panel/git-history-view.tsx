@@ -23,7 +23,7 @@ import {
 import { HistoryCommitPopover } from "./git-history-commit-details";
 import { GRAPH_OFFSET_PROPERTY, ROW_HEIGHT, useGraphView } from "./git-history-graph";
 import { HistoryColumnsHeader } from "./git-history-header";
-import { type GraphLayout, layoutHistoryGraph } from "./git-history-graph-model";
+import { type GraphLayout, type GraphRow, layoutHistoryGraph } from "./git-history-graph-model";
 import {
   type HistoryFooter,
   HistoryLoading,
@@ -33,7 +33,7 @@ import {
   historyFooter,
   RetainedHistoryMessage,
 } from "./git-history-messages";
-import { HistoryRowView } from "./git-history-row";
+import { type HistoryRowProps, HistoryRowView } from "./git-history-row";
 
 export type GitHistoryViewProps = {
   repoPath: string | null;
@@ -92,6 +92,10 @@ function GitHistoryComparisonView({
       history.data?.pages.flatMap((page) => (page.outcome === "page" ? page.commits : [])) ?? [],
     [history.data],
   );
+  // Ages count from the read, so rendering stays pure and the rows stay stable. The graph of the
+  // previous commit has no read time while the new graph loads, so the ages keep the last one.
+  const [readAt, setReadAt] = useState(history.dataUpdatedAt);
+  if (history.dataUpdatedAt > readAt) setReadAt(history.dataUpdatedAt);
   // The current branch keeps its own lane, apart from the commits that the target merged.
   const layout = useMemo(() => layoutHistoryGraph(commits, { tipLane: "dedicated" }), [commits]);
   const currentLabel = checkout.detached ? "Detached HEAD" : (checkout.name ?? "Current branch");
@@ -172,8 +176,7 @@ function GitHistoryComparisonView({
       currentLabel={currentLabel}
       targetLabel={targetLabel}
       footer={footer}
-      // Ages count from the read, so rendering stays pure and the rows stay stable.
-      nowMs={history.dataUpdatedAt}
+      nowMs={readAt}
       refreshFailure={refreshFailure}
     />
   );
@@ -191,6 +194,29 @@ function useObservedWidth(): [RefObject<HTMLDivElement | null>, number] {
     return () => observer.disconnect();
   }, []);
   return [ref, width];
+}
+
+/** A row keeps its element for its commit, so a new commit above it moves the row, not its content. */
+const historyRowKey = (index: number, { rows }: HistoryRowProps): string =>
+  rows[index]?.commit.oid ?? "footer";
+
+const NO_COMMITS: ReadonlySet<string> = new Set();
+
+/**
+ * The commits that the last read added. They fade in while the other rows slide to their place.
+ * The first rows of a list show at once.
+ */
+function useEnteringCommits(rows: GraphRow[]): ReadonlySet<string> {
+  const [shown, setShown] = useState({ rows, entering: NO_COMMITS });
+  if (shown.rows !== rows) {
+    const before = new Set(shown.rows.map((row) => row.commit.oid));
+    const added = rows.filter((row) => !before.has(row.commit.oid));
+    setShown({
+      rows,
+      entering: before.size === 0 ? NO_COMMITS : new Set(added.map((row) => row.commit.oid)),
+    });
+  }
+  return shown.entering;
 }
 
 function HistoryCommitList({
@@ -215,6 +241,7 @@ function HistoryCommitList({
   const order = useHistoryColumnsStore((state) => state.order);
   const hidden = useHistoryColumnsStore((state) => state.hidden);
   const columns = useMemo(() => visibleHistoryColumns({ order, hidden }), [hidden, order]);
+  const entering = useEnteringCommits(layout.rows);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
   const selectedButton = useRef<HTMLButtonElement | null>(null);
   const onSelect = useCallback((oid: string, button: HTMLButtonElement) => {
@@ -266,8 +293,10 @@ function HistoryCommitList({
         rowComponent={HistoryRowView}
         rowCount={layout.rows.length + (footer.kind === "end" ? 0 : 1)}
         rowHeight={ROW_HEIGHT}
+        rowKey={historyRowKey}
         rowProps={{
           rows: layout.rows,
+          entering,
           graph,
           comparison,
           targetLabel,
