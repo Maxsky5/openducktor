@@ -100,7 +100,8 @@ const getPushTooltip = ({
     return gitActionsLockReason ?? "Git actions are disabled.";
   }
   if (canPublishUntrackedBranch) {
-    return "Publish branch";
+    // A branch without a remote branch still pushes; its first push creates the remote branch.
+    return hasUpstreamAhead ? `Push branch (${pushAheadCount} ahead)` : "Push branch";
   }
   if (hasUpstreamBehind) {
     return `Push branch (${pushBehindCount} behind; confirmation may be required)`;

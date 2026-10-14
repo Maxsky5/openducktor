@@ -52,7 +52,8 @@ test("keeps exact comparison refs and actual upstream counts independent", async
       }),
     );
     expect(status.targetAheadBehind).toEqual({ ahead: 1, behind: 0 });
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
+    // The feature commit is on no remote, so the first push sends it.
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
     git("config", "branch.feature.remote", ".");
     git("config", "branch.feature.merge", "refs/heads/main");
     expect(await comparison({ branch: "@{upstream}" })).toEqual({
@@ -69,7 +70,7 @@ test("keeps exact comparison refs and actual upstream counts independent", async
     status = await Effect.runPromise(
       service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
     );
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
     expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
     // Git owns refspec mapping, including nonstandard tracking namespaces.
     git("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/custom/*");
@@ -140,6 +141,11 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
     expect(status.fileDiffs[0]?.file).toBe("base.txt");
     expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
     expect(summary.upstreamAheadBehind).toEqual(status.upstreamAheadBehind);
+    // A commit of the unpublished branch is on no remote, so the Push count shows it.
+    execFileSync("git", ["commit", "-am", "task change"], { cwd: worktree, stdio: "ignore" });
+    expect(
+      (await Effect.runPromise(service.getWorktreeStatusSummary(input))).upstreamAheadBehind,
+    ).toEqual({ outcome: "untracked", ahead: 1 });
     expect(
       await Effect.runPromise(
         service.getComparisonTarget({

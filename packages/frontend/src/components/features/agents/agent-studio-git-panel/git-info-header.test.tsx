@@ -217,6 +217,22 @@ describe("GitInfoHeader", () => {
     expect(button.getAttribute("aria-describedby")).toBe(error.id);
   });
 
+  test("counts the commits to push for a branch without a remote branch yet", () => {
+    rendered = renderGitInfoHeader(
+      createGitInfoHeaderProps({
+        upstreamStatus: "untracked",
+        upstreamAheadBehind: { ahead: 2, behind: 0 },
+        pushBranch: async () => {},
+      }),
+    );
+
+    const push = screen.getByTestId("agent-studio-git-push-button");
+    expect(push.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByTestId("agent-studio-git-ahead-count").textContent).toBe("2");
+    expect(screen.getByText("Push branch (2 ahead)").className).toContain("sr-only");
+    expect(screen.queryByText(/Publish/u)).toBeNull();
+  });
+
   test("labels the commit counts against the comparison target", async () => {
     const props = createGitInfoHeaderProps({ commitsAheadBehind: { ahead: 2, behind: 1 } });
     rendered = renderGitInfoHeader(props);

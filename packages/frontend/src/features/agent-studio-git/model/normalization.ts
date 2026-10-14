@@ -41,8 +41,9 @@ const toUpstreamState = (
   }
 
   if (upstreamAheadBehind.outcome === "untracked") {
+    // The first push sends the commits that no remote has, so Push shows their count.
     return {
-      upstreamAheadBehind: null,
+      upstreamAheadBehind: { ahead: upstreamAheadBehind.ahead, behind: 0 },
       upstreamStatus: "untracked",
       upstreamError: null,
       error: null,

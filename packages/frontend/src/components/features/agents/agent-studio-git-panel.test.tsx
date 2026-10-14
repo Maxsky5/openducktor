@@ -391,7 +391,7 @@ describe("AgentStudioGitPanel", () => {
 
     const root = getRoot(renderer);
     const detectButton = findByTestId(root, "agent-studio-git-detect-pr-button");
-    expect(detectButton.element.getAttribute("aria-label")).toBe("Detect PR");
+    expect(getNodeText(detectButton)).toContain("Detect PR");
 
     await act(async () => {
       detectButton.props.onClick();

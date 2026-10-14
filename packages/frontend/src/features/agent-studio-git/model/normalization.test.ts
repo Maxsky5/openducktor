@@ -73,8 +73,13 @@ describe("diff-normalization", () => {
 
   test.each([
     {
+      // An unpublished branch keeps the count of commits that its first push sends.
       upstream: { outcome: "untracked" as const, ahead: 3 },
-      expected: { upstreamAheadBehind: null, upstreamStatus: "untracked", upstreamError: null },
+      expected: {
+        upstreamAheadBehind: { ahead: 3, behind: 0 },
+        upstreamStatus: "untracked",
+        upstreamError: null,
+      },
     },
     {
       upstream: { outcome: "tracking" as const, ahead: 0, behind: 4 },

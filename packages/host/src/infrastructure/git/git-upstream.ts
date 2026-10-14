@@ -170,44 +170,78 @@ export const commitsAgainstTargetOrDefault = (
           : gitOperationError(String(cause), "git.parse-ahead-behind"),
     });
   });
+/**
+ * The commits that no remote has, so the first push of the branch sends them. An unborn branch
+ * has none.
+ */
+const countUnpublishedCommits = (
+  runner: GitCommandRunner,
+  workingDirectory: string,
+  headRevision: string | undefined,
+) =>
+  Effect.gen(function* () {
+    if (!headRevision) return 0;
+    // The revision is an object ID from a Git read, so it cannot read as an option.
+    const output = yield* runGit(runner, workingDirectory, [
+      "rev-list",
+      "--count",
+      headRevision,
+      "--not",
+      "--remotes",
+    ]);
+    const count = Number(output.trim());
+    if (!Number.isInteger(count)) {
+      return yield* gitOperationError(
+        `Git returned an invalid commit count: ${output.trim()}`,
+        "git.rev-list",
+      );
+    }
+    return count;
+  });
+
+/**
+ * The upstream counts of a branch. A branch without a remote branch yet is untracked, and its
+ * `ahead` count holds the commits that its first push sends.
+ */
 export const resolveUpstreamAheadBehind = (
   runner: GitCommandRunner,
   workingDirectory: string,
   upstreamTarget: string | undefined,
+  headRevision: string | undefined,
 ) =>
   Effect.gen(function* () {
-    if (!upstreamTarget) {
-      return { outcome: "untracked" as const, ahead: 0 };
-    }
-    const result = yield* Effect.gen(function* () {
-      const ref = yield* runGitAllowFailure(runner, workingDirectory, [
-        "show-ref",
-        "--verify",
-        "--quiet",
-        upstreamTarget,
-      ]);
-      // A new task branch can have tracking settings before its first push.
-      if (!ref.ok && ref.exitCode === 1 && upstreamTarget.startsWith("refs/remotes/")) {
-        return { outcome: "untracked" as const, ahead: 0 };
-      }
-      if (!ref.ok) {
-        return yield* gitOperationError(
-          `Cannot read upstream ${upstreamTarget}: ${combineOutput(ref.stdout, ref.stderr)}`,
-          "git.show-ref",
-        );
-      }
-      const counts = yield* commitsAgainstTargetOrDefault(runner, workingDirectory, upstreamTarget);
-      return { outcome: "tracking" as const, ahead: counts.ahead, behind: counts.behind };
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.succeed({
-          outcome: "error" as const,
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      ),
+    const untracked = Effect.map(
+      countUnpublishedCommits(runner, workingDirectory, headRevision),
+      (ahead) => ({ outcome: "untracked" as const, ahead }),
     );
-    return result;
-  });
+    if (!upstreamTarget) return yield* untracked;
+    const ref = yield* runGitAllowFailure(runner, workingDirectory, [
+      "show-ref",
+      "--verify",
+      "--quiet",
+      upstreamTarget,
+    ]);
+    // A new task branch can have tracking settings before its first push.
+    if (!ref.ok && ref.exitCode === 1 && upstreamTarget.startsWith("refs/remotes/")) {
+      return yield* untracked;
+    }
+    if (!ref.ok) {
+      return yield* gitOperationError(
+        `Cannot read upstream ${upstreamTarget}: ${combineOutput(ref.stdout, ref.stderr)}`,
+        "git.show-ref",
+      );
+    }
+    const counts = yield* commitsAgainstTargetOrDefault(runner, workingDirectory, upstreamTarget);
+    return { outcome: "tracking" as const, ahead: counts.ahead, behind: counts.behind };
+  }).pipe(
+    // The panel shows an upstream failure on its own, so the rest of the read still shows.
+    Effect.catch((error) =>
+      Effect.succeed({
+        outcome: "error" as const,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    ),
+  );
 const resolveGitPath = (runner: GitCommandRunner, workingDirectory: string, suffix: string) =>
   Effect.gen(function* () {
     const output = yield* runGit(runner, workingDirectory, [

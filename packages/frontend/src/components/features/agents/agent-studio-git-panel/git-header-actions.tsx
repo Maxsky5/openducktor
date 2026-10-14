@@ -40,7 +40,7 @@ function GitActionIconButton({
       type="button"
       size="icon"
       variant="ghost"
-      className="relative size-8 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+      className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
       onClick={onClick ?? undefined}
       disabled={disabled}
       data-testid={testId}
@@ -51,7 +51,7 @@ function GitActionIconButton({
       {badge ? (
         <span
           className={cn(
-            "pointer-events-none absolute top-0.5 right-0.5 text-[10px] leading-none font-bold tabular-nums",
+            "pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums",
             badge.toneClassName,
           )}
           data-testid={badge.testId}
@@ -72,7 +72,7 @@ function GitActionIconButton({
         <TooltipTrigger asChild>
           {wrapTrigger ? <span className="inline-flex">{button}</span> : button}
         </TooltipTrigger>
-        <TooltipContent side="bottom">
+        <TooltipContent side="top">
           <p>{tooltip}</p>
         </TooltipContent>
       </Tooltip>
@@ -119,20 +119,15 @@ function DetectPullRequestAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon"
-      className="size-8 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
+      size="sm"
+      className="text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
       onClick={() => void onDetect?.()}
       disabled={isDetecting || disabledReason !== null}
-      aria-label={isDetecting ? "Detecting PR" : "Detect PR"}
       aria-describedby={disabledReason ? DETECT_PR_ERROR_ID : undefined}
-      title={disabledReason ?? "Detect the pull request of this branch"}
       data-testid="agent-studio-git-detect-pr-button"
     >
-      {isDetecting ? (
-        <LoaderCircle className="size-3.5 animate-spin" />
-      ) : (
-        <Link2 className="size-3.5" />
-      )}
+      <Link2 data-icon="inline-start" />
+      {isDetecting ? "Detecting PR" : "Detect PR"}
     </Button>
   );
 }
@@ -158,11 +153,12 @@ function RefreshAction({
   return (
     <GitActionIconButton
       testId="agent-studio-git-refresh-button"
+      // Screen readers hear that a Refresh runs. The tooltip keeps its original text.
       srLabel={isRefreshing ? "Refreshing" : "Refresh"}
       icon={RefreshCw}
       onClick={onRefresh}
       disabled={!canRefresh}
-      tooltip={isRefreshing ? "Refreshing Git changes" : "Refresh and fetch the remote"}
+      tooltip={isRefreshing ? "Refreshing" : "Refresh changes"}
       isSpinning={isRefreshing}
     />
   );
@@ -186,7 +182,7 @@ export function GitActionRow({
   const { canPull, canPush, canRebase, isPushing, isRepositoryMode } = actionState;
   return (
     <div
-      className="flex items-center gap-0.5 border-y border-border/60 px-1.5 py-0.5"
+      className="flex items-center gap-0.5 border-y border-border px-1 py-1"
       data-testid="agent-studio-git-action-row"
     >
       <RefreshAction

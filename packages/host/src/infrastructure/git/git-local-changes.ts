@@ -151,7 +151,12 @@ export const loadLocalChanges = (
             : Effect.succeed([]),
           resolveTrackedUpstreamReference(runner, workingDirectory, currentBranch.name).pipe(
             Effect.flatMap((upstreamTarget) =>
-              resolveUpstreamAheadBehind(runner, workingDirectory, upstreamTarget),
+              resolveUpstreamAheadBehind(
+                runner,
+                workingDirectory,
+                upstreamTarget,
+                currentBranch.revision,
+              ),
             ),
           ),
           loadRebaseConflictContext(runner, workingDirectory, currentBranch, fileStatuses),
