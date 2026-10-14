@@ -28,7 +28,6 @@ const server = http.createServer((req, res) => {
   if (!authorized) { res.writeHead(401); res.end("{}"); return; }
   if (req.url === "/api/info") { res.end(JSON.stringify({ version: mode === "v1" ? "1.18.35" : "2.0.24", pid: process.pid, urls: [], paths: { tmp: ${JSON.stringify(directory)} } })); return; }
   if (req.url === "/api/event") { res.setHeader("content-type", "text/event-stream"); res.write('data: ' + JSON.stringify({ id: "connected", type: "server.connected", data: {} }) + '\\n\\n'); return; }
-  if (req.url === "/api/rpc/openducktor-workflow-instructions/bind" && req.method === "POST") { res.end(JSON.stringify({ output: { ready: true } })); return; }
   if (req.url === "/api/experimental/migration/v1") { res.end(JSON.stringify({ status: "completed" })); return; }
   if (req.url === "/api/session/external-session-1") { res.end(JSON.stringify({ data: { id: "external-session-1", location: { directory: "/repo/worktree" }, projectID: "project-1", cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, time: { created: 1, updated: 2 } } })); return; }
   if (req.url === "/api/session/external-session-1/interrupt" && req.method === "POST") { res.end(JSON.stringify({ interrupted: true })); return; }

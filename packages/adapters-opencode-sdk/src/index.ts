@@ -35,4 +35,3 @@ export const loadOpencodeModelCatalogFromConnection = (
 ) => readModelCatalog(createOpenCodeClient(connection), directory);
 
 export { createOpenCodeRuntimeProbes } from "./opencode-runtime-probes";
-export { bindOpenCodeWorkflowPlugin } from "./opencode-workflow-plugin";

@@ -6,19 +6,18 @@ Electron and the web runner bundle the shared frontend and host from workspace s
 
 | Package | Output | Builder |
 | --- | --- | --- |
-| Electron | Main process, preload, image worker, workflow plugin | Bun, Node target |
+| Electron | Main process, preload, image worker | Bun, Node target |
 | Electron | Renderer | Vite |
 | Electron | Standalone MCP sidecar | Bun, compiled executable |
-| Web runner | CLI, image worker, workflow plugin, shared chunks | Bun, Node target |
+| Web runner | CLI, image worker, shared chunks | Bun, Node target |
 | Web runner | Browser UI | Vite |
 | Web runner | MCP entrypoint | Bun, Node target |
 | MCP package | JavaScript entrypoint | Bun, Bun target |
 
 The Bun builds use `--minify --keep-names` to reduce output size and keep function and class names for errors and logs. See [Bun minification](https://bun.com/docs/bundler/minifier).
 
-The web CLI build shares code between the CLI and image worker through `--splitting`. Shared chunks stay beside the entrypoints in `dist`, so code that uses `import.meta.url` keeps the same directory. Publish the full `dist` directory, including those chunks, the image worker, MCP entrypoint, workflow plugin, browser assets, and SQLite migration files.
+The web CLI build shares code between the CLI and image worker through `--splitting`. Shared chunks stay beside the entrypoints in `dist`, so code that uses `import.meta.url` keeps the same directory. Publish the full `dist` directory, including those chunks, the image worker, MCP entrypoint, browser assets, and SQLite migration files.
 
-Each workflow plugin stays in one self-contained file because `opencode-workflow-plugin-lease.ts` copies only that file into the runtime's temporary directory. The web build checks that its copied plugin loads under Node without the adjacent chunks or workspace dependencies.
 
 Both Vite builds set `reportCompressedSize: false` to skip gzip work that only produces size reports. This option does not change the generated assets or package compression. See [Vite compressed size reports](https://vite.dev/config/build-options.html#build-reportcompressedsize).
 

@@ -106,7 +106,7 @@ The browser shell requires `VITE_ODT_BROWSER_BACKEND_URL` and `VITE_ODT_BROWSER_
 The published `@openducktor/web` package contains:
 
 - `dist/cli.js` for the launcher and TypeScript host.
-- Shared `dist/*.js` chunks, `dist/generated-image-worker.js`, `dist/opencode-workflow-plugin.js`, and `dist/openducktor-mcp.js`.
+- Shared `dist/*.js` chunks, `dist/generated-image-worker.js`, and `dist/openducktor-mcp.js`.
 - `dist/drizzle/**` for the SQLite task-store migration files.
 - `dist/web-shell/**` for the built browser UI.
 

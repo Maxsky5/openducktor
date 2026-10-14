@@ -51,6 +51,7 @@ import {
   compileCreationSettings,
   forkNativePermissions,
   installOpenCodePolicy,
+  installOpenCodeRootPolicy,
 } from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
@@ -222,8 +223,8 @@ export class OpencodeSdkAdapter {
     await nativeRequest(input, "install session controls", async () => {
       await this.hooks.ensureMcp(input);
       this.assertCurrent(input, generation);
-      await installOpenCodePolicy({
-        connection: this.connection,
+      const install = detail.parentID ? installOpenCodePolicy : installOpenCodeRootPolicy;
+      await install({
         client: this.client,
         detail,
         identity: input,
@@ -269,8 +270,7 @@ export class OpencodeSdkAdapter {
       };
       try {
         verifySession(detail, input);
-        await installOpenCodePolicy({
-          connection: this.connection,
+        await installOpenCodeRootPolicy({
           client: this.client,
           detail,
           identity: ref,
@@ -359,8 +359,7 @@ export class OpencodeSdkAdapter {
             "identity_mismatch",
             "The native fork did not return the requested source conversation.",
           );
-        await installOpenCodePolicy({
-          connection: this.connection,
+        await installOpenCodeRootPolicy({
           client: this.client,
           detail,
           identity: ref,

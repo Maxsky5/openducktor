@@ -41,7 +41,7 @@ The npm package must include:
 
 - `dist/cli.js` and its shared `dist/*.js` chunks
 - `dist/openducktor-mcp.js`
-- `dist/generated-image-worker.js` and the self-contained `dist/opencode-workflow-plugin.js`
+- `dist/generated-image-worker.js`
 - `dist/drizzle/**`
 - `dist/web-shell/**`
 

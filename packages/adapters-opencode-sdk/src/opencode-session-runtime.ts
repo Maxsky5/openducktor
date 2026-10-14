@@ -27,7 +27,7 @@ import {
   type OpenCodeRequestDraft,
 } from "./opencode-client";
 import { OpencodeSdkAdapter, type OpenCodeSessionBinding } from "./opencode-sdk-adapter";
-import { installOpenCodePolicy, readWorkflowInstructions } from "./opencode-permissions";
+import { installOpenCodePolicy } from "./opencode-permissions";
 import {
   permissionDecision,
   projectApproval,
@@ -689,20 +689,11 @@ export const createPrepareOpencodeSessionRuntime =
               "identity_mismatch",
               "The native child parent changed.",
             );
-          const systemPrompt =
-            parent.scope.kind === "workflow"
-              ? await nativeRequest(parent.ref, "read parent workflow instructions", () =>
-                  readWorkflowInstructions(client, parent.ref),
-                )
-              : undefined;
           await nativeRequest(ref, "install child session controls", () =>
             installOpenCodePolicy({
-              connection: input.connection,
               client,
               detail,
-              identity: ref,
               scope: parent.scope,
-              systemPrompt,
             }),
           );
           if (!isCurrent()) return;

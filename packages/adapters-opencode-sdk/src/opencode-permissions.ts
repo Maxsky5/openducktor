@@ -4,7 +4,6 @@ import { type OpenCodeClient, type PermissionRule, type SessionInfo } from "@ope
 import {
   type AgentSessionScope,
   type OpenCodeCreationSettings,
-  agentRoleSchema,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
 import { z } from "zod";
@@ -12,8 +11,6 @@ import { operationError, type OperationIdentity } from "./opencode-client";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { type OpencodePermissionRule } from "./workflow-tool-permissions";
 import { OPENCODE_WORKFLOW_INSTRUCTION_KEY } from "./opencode-session-transcript";
-import { OPENCODE_WORKFLOW_PLUGIN_RPC } from "./opencode-workflow-plugin";
-import type { OpenCodeRuntimeConnection } from "./types";
 
 const ownershipKey = "openducktor.permissions";
 const ruleSchema = z.strictObject({
@@ -100,33 +97,7 @@ const readOwnership = (detail: SessionInfo, identity: OperationIdentity): Owners
   return parsed.data;
 };
 
-export const ownedWorkflowRole = (detail: SessionInfo) => {
-  const identity = {
-    repoPath: detail.location.directory,
-    workingDirectory: detail.location.directory,
-    externalSessionId: detail.id,
-  };
-  const value = detail.metadata?.[ownershipKey];
-  if (value === undefined) return null;
-  const ownership = ownershipSchema.parse(value);
-  const span = ownership.spans.findLast((item) => item.layer === "mandatory");
-  if (!span || span.context === "repository") return null;
-  const permissions = detail.permissions ?? [];
-  if (
-    span.start + span.rules.length !== permissions.length ||
-    !nativeEqual(permissions.slice(span.start), span.rules.map(compilePermissionRule))
-  )
-    throw operationError(
-      identity,
-      "verify child workflow controls",
-      "policy_failed",
-      "The current mandatory workflow permissions do not match their ownership marker.",
-      "Reopen the parent workflow through its normal task action, then retry the command.",
-    );
-  return agentRoleSchema.parse(span.context);
-};
-
-export const readWorkflowInstructions = async (
+const readWorkflowInstructions = async (
   client: OpenCodeClient,
   identity: OperationIdentity & { externalSessionId: string },
 ): Promise<string> => {
@@ -229,39 +200,19 @@ export const compileCreationSettings = async (
 };
 
 export const installOpenCodePolicy = async (input: {
-  connection: OpenCodeRuntimeConnection;
   client: OpenCodeClient;
   detail: SessionInfo;
-  identity: OperationIdentity;
   scope: AgentSessionScope;
-  systemPrompt?: string | undefined;
   creationSettings?: OpenCodeCreationSettings;
   native?: PermissionRule[];
 }): Promise<void> => {
-  const { client, detail, identity, scope, systemPrompt, creationSettings } = input;
+  const { client, detail, scope, creationSettings } = input;
   const policy = resolveOpencodeSessionPolicy(
     scope,
     OPENCODE_RUNTIME_DESCRIPTOR,
     "install V2 session controls",
   );
   const mandatory = policy.permission;
-  if (scope.kind === "workflow") {
-    try {
-      z.object({ ready: z.literal(true) }).parse(
-        await client
-          .rpc(OPENCODE_WORKFLOW_PLUGIN_RPC)
-          .bind(input.connection, { location: { directory: identity.workingDirectory } }),
-      );
-    } catch (cause) {
-      throw operationError(
-        identity,
-        "establish child workflow controls",
-        "policy_failed",
-        `The owned OpenDucktor workflow instruction plugin is not ready: ${cause instanceof Error ? cause.message : String(cause)}`,
-        "Restart the selected OpenCode runtime from Diagnostics, then retry the workflow action.",
-      );
-    }
-  }
   let permissions = [...(input.native ?? detail.permissions ?? [])];
   let ownership: Ownership;
   if (creationSettings) {
@@ -323,6 +274,21 @@ export const installOpenCodePolicy = async (input: {
     });
     permissions.push(...mandatory.map(compilePermissionRule));
   }
+  await client.session.update({
+    sessionID: detail.id,
+    permissions,
+    metadata: { ...detail.metadata, [ownershipKey]: z.json().parse(ownership) },
+  });
+};
+
+/** Root creation, fork, and reattachment install prompts before input admission. */
+export const installOpenCodeRootPolicy = async (
+  input: Parameters<typeof installOpenCodePolicy>[0] & {
+    identity: OperationIdentity;
+    systemPrompt?: string | undefined;
+  },
+): Promise<void> => {
+  const { client, detail, identity, scope, systemPrompt } = input;
   if (scope.kind === "workflow") {
     if (systemPrompt !== undefined) {
       if (!systemPrompt.trim())
@@ -348,9 +314,5 @@ export const installOpenCodePolicy = async (input: {
       value: systemPrompt,
     });
   }
-  await client.session.update({
-    sessionID: detail.id,
-    permissions,
-    metadata: { ...detail.metadata, [ownershipKey]: z.json().parse(ownership) },
-  });
+  await installOpenCodePolicy(input);
 };
