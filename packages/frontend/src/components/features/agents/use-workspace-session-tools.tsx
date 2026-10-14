@@ -233,12 +233,7 @@ function useWorkspaceGitRefresh({
   reads: GitPanelReads;
 }) {
   const queryClient = useQueryClient();
-  const scopeKey = JSON.stringify([
-    sessionKey,
-    repoPath,
-    workingDirectory,
-    targetChoice ?? "default",
-  ]);
+  const scopeKey = JSON.stringify([sessionKey, repoPath, workingDirectory, targetChoice ?? null]);
   const withFiles = useMemo(
     () =>
       withFileQueries(

@@ -141,26 +141,6 @@ const createRecordingGitService = () => {
         };
       });
     },
-    getWorktreeStatusSummary(input) {
-      return Effect.sync(() => {
-        calls.push({ method: "getWorktreeStatusSummary", input });
-        return {
-          currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-          targetAheadBehind: { ahead: 2, behind: 1 },
-          upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-          snapshot: {
-            effectiveWorkingDir: "/repo",
-            targetBranch: "origin/main",
-            diffScope: "target",
-            observedAtMs: 1,
-            hashVersion: 1,
-            statusHash: "0000000000000001",
-            diffHash: "0000000000000002",
-          },
-        };
-      });
-    },
     switchBranch(input) {
       return Effect.tryPromise({
         try: async () => {
@@ -194,20 +174,6 @@ const createRecordingGitService = () => {
         try: async () => {
           calls.push({ method: "removeWorktree", input });
           return { ok: true };
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
-    },
-    resetWorktreeSelection(input) {
-      return Effect.tryPromise({
-        try: async () => {
-          calls.push({ method: "resetWorktreeSelection", input });
-          return { affectedPaths: ["src/main.ts"] };
         },
         catch: (cause) =>
           new HostOperationError({
@@ -371,15 +337,6 @@ describe("createGitCommandHandlers", () => {
       fileDiffs: [{ file: "src/main.ts" }],
     });
     await expect(
-      router.invoke("git_get_worktree_status_summary", {
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-      }),
-    ).resolves.toMatchObject({
-      currentBranch: { name: "feature/electron" },
-      fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-    });
-    await expect(
       router.invoke("git_commits_ahead_behind", {
         repoPath: "/repo",
         targetBranch: "origin/main",
@@ -407,22 +364,6 @@ describe("createGitCommandHandlers", () => {
         force: true,
       }),
     ).resolves.toEqual({ ok: true });
-    await expect(
-      router.invoke("git_reset_worktree_selection", {
-        repoPath: "/repo",
-        workingDir: "/worktree",
-        targetBranch: "origin/main",
-        snapshot: {
-          hashVersion: 1,
-          statusHash: "0000000000000001",
-          diffHash: "0000000000000002",
-        },
-        selection: {
-          kind: "file",
-          filePath: "src/main.ts",
-        },
-      }),
-    ).resolves.toEqual({ affectedPaths: ["src/main.ts"] });
     await expect(
       router.invoke("git_fetch_remote", {
         repoPath: "/repo",
@@ -506,10 +447,6 @@ describe("createGitCommandHandlers", () => {
         input: { repoPath: "/repo", targetBranch: "origin/main", diffScope: "target" },
       },
       {
-        method: "getWorktreeStatusSummary",
-        input: { repoPath: "/repo", targetBranch: "origin/main", diffScope: "target" },
-      },
-      {
         method: "commitsAheadBehind",
         input: { repoPath: "/repo", targetBranch: "origin/main" },
       },
@@ -536,23 +473,6 @@ describe("createGitCommandHandlers", () => {
           repoPath: "/repo",
           worktreePath: "/worktrees/electron",
           force: true,
-        },
-      },
-      {
-        method: "resetWorktreeSelection",
-        input: {
-          repoPath: "/repo",
-          workingDir: "/worktree",
-          targetBranch: "origin/main",
-          snapshot: {
-            hashVersion: 1,
-            statusHash: "0000000000000001",
-            diffHash: "0000000000000002",
-          },
-          selection: {
-            kind: "file",
-            filePath: "src/main.ts",
-          },
         },
       },
       {

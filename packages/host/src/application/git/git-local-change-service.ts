@@ -1,6 +1,8 @@
 import {
+  type GitChangeGroup,
   type GitCurrentBranch,
   type GitReadContext,
+  type GitResetSnapshot,
   gitChangeSelectionResultSchema,
   gitCommitAllResultSchema,
   gitHistoryPageSchema,
@@ -98,6 +100,38 @@ const readLocalChanges = (
     });
   });
 
+/**
+ * Reads the local changes before a write and proves that the user reviewed them: the checkout is
+ * the expected one, and each reviewed group still has the snapshot that the panel showed.
+ */
+const readReviewedChanges = (
+  gitPort: GitPort,
+  input: { repoPath: string; workingDir?: string | undefined; expectedBranch: GitCurrentBranch },
+  reviewed: { group: GitChangeGroup; snapshot: GitResetSnapshot }[],
+) =>
+  Effect.gen(function* () {
+    const workingDirectory = yield* resolveGitWorkingDirectory(
+      gitPort,
+      input.repoPath,
+      input.workingDir,
+    );
+    const changes = yield* gitPort.getLocalChanges(workingDirectory);
+    if (!sameCheckout(input.expectedBranch, changes.currentBranch)) {
+      return yield* Effect.fail(checkoutChangedError());
+    }
+    yield* Effect.try({
+      try: () =>
+        validateLocalSnapshotsMatch(
+          reviewed.map(({ snapshot }) => snapshot),
+          reviewed.map(({ group }) =>
+            hashLocalGroupSnapshot(changes.currentBranch, changes[group]),
+          ),
+        ),
+      catch: toValidationError,
+    });
+    return { workingDirectory, changes };
+  });
+
 /** Staged and unstaged groups, their writes, the staged commit, and branch History. */
 export const createGitLocalChangeMethods = (
   gitPort: GitPort,
@@ -114,26 +148,10 @@ export const createGitLocalChangeMethods = (
   },
   changeSelection(input) {
     return Effect.gen(function* () {
-      const workingDirectory = yield* resolveGitWorkingDirectory(
-        gitPort,
-        input.repoPath,
-        input.workingDir,
-      );
-      const changes = yield* gitPort.getLocalChanges(workingDirectory);
-      if (!sameCheckout(input.expectedBranch, changes.currentBranch)) {
-        return yield* Effect.fail(checkoutChangedError());
-      }
-      yield* Effect.try({
-        try: () =>
-          validateLocalSnapshotsMatch(
-            [input.snapshots.unstaged, input.snapshots.staged],
-            [
-              hashLocalGroupSnapshot(changes.currentBranch, changes.unstaged),
-              hashLocalGroupSnapshot(changes.currentBranch, changes.staged),
-            ],
-          ),
-        catch: toValidationError,
-      });
+      const { workingDirectory, changes } = yield* readReviewedChanges(gitPort, input, [
+        { group: "unstaged", snapshot: input.snapshots.unstaged },
+        { group: "staged", snapshot: input.snapshots.staged },
+      ]);
       const result = yield* gitPort.changeSelection(workingDirectory, changes, {
         action: input.action,
         group: input.group,
@@ -149,24 +167,10 @@ export const createGitLocalChangeMethods = (
   },
   commitStaged(input) {
     return Effect.gen(function* () {
-      const workingDirectory = yield* resolveGitWorkingDirectory(
-        gitPort,
-        input.repoPath,
-        input.workingDir,
-      );
-      const changes = yield* gitPort.getLocalChanges(workingDirectory);
-      if (!sameCheckout(input.expectedBranch, changes.currentBranch)) {
-        return yield* Effect.fail(checkoutChangedError());
-      }
       // A commit must not record staged content that the user did not review.
-      yield* Effect.try({
-        try: () =>
-          validateLocalSnapshotsMatch(
-            [input.stagedSnapshot],
-            [hashLocalGroupSnapshot(changes.currentBranch, changes.staged)],
-          ),
-        catch: toValidationError,
-      });
+      const { workingDirectory } = yield* readReviewedChanges(gitPort, input, [
+        { group: "staged", snapshot: input.stagedSnapshot },
+      ]);
       const result = yield* gitPort.commitStaged(workingDirectory, input.message);
       return yield* Effect.try({
         try: () => gitCommitAllResultSchema.parse(result),

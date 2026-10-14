@@ -528,72 +528,6 @@ describe("createGitCliAdapter", () => {
       "branch -D --end-of-options feature/task",
     ]);
   });
-  test("resets a tracked file selection with git restore", async () => {
-    const calls: string[] = [];
-    const git = createGitCliAdapter({
-      runner: (_workingDirectory, args) => {
-        const command = args.join(" ");
-        calls.push(command);
-        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
-      },
-    });
-    await expect(
-      Effect.runPromise(
-        git.resetWorktreeSelection(
-          "/repo",
-          [
-            {
-              file: "src/main.ts",
-              type: "modified",
-              additions: 1,
-              deletions: 1,
-              diff: "@@ -1 +1 @@\n-old\n+new\n",
-            },
-          ],
-          { kind: "file", filePath: " src/main.ts " },
-        ),
-      ),
-    ).resolves.toEqual({ affectedPaths: ["src/main.ts"] });
-    expect(calls).toEqual([
-      "ls-files --error-unmatch -- src/main.ts",
-      "restore --source=HEAD --staged --worktree -- src/main.ts",
-    ]);
-  });
-  test("resets an untracked file selection with git clean", async () => {
-    const calls: string[] = [];
-    const git = createGitCliAdapter({
-      runner: (_workingDirectory, args) => {
-        const command = args.join(" ");
-        calls.push(command);
-        if (command === "ls-files --error-unmatch -- src/new.ts") {
-          return Effect.succeed({
-            ok: false,
-            stdout: "",
-            stderr: "error: pathspec 'src/new.ts' did not match any file(s) known to git\n",
-          });
-        }
-        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
-      },
-    });
-    await expect(
-      Effect.runPromise(
-        git.resetWorktreeSelection(
-          "/repo",
-          [
-            {
-              file: "src/new.ts",
-              type: "added",
-              additions: 1,
-              deletions: 0,
-              diff: "@@ -0,0 +1 @@\n+new\n",
-            },
-          ],
-          { kind: "file", filePath: "src/new.ts" },
-        ),
-      ),
-    ).resolves.toEqual({ affectedPaths: ["src/new.ts"] });
-    expect(calls).toEqual(["ls-files --error-unmatch -- src/new.ts", "clean -f -- src/new.ts"]);
-  });
   test("restores a whole worktree without deleting ignored files", async () => {
     const calls: Array<{ workingDirectory: string; args: string[] }> = [];
     const git = createGitCliAdapter({
@@ -673,66 +607,6 @@ describe("createGitCliAdapter", () => {
     await expect(
       Effect.runPromise(git.isRegisteredWorktree("/repo", "/worktrees/missing")),
     ).resolves.toBe(false);
-  });
-  test("resets a hunk selection with reverse patch application", async () => {
-    const calls: Array<{
-      command: string;
-      stdin?: string;
-    }> = [];
-    const diff = [
-      "diff --git a/src/main.ts b/src/main.ts",
-      "index 123..456 100644",
-      "--- a/src/main.ts",
-      "+++ b/src/main.ts",
-      "@@ -1 +1 @@",
-      "-old",
-      "+new",
-      "",
-    ].join("\n");
-    const git = createGitCliAdapter({
-      runner: (_workingDirectory, args, options) => {
-        const command = args.join(" ");
-        const call: (typeof calls)[number] = { command };
-        if (options?.stdin !== undefined) {
-          call.stdin = options.stdin;
-        }
-        calls.push(call);
-        return Effect.succeed({
-          ok: true,
-          stdout:
-            {
-              "diff --cached -- src/main.ts": "",
-              "diff -- src/main.ts": diff,
-            }[command] ?? "",
-          stderr: "",
-        });
-      },
-    });
-    await expect(
-      Effect.runPromise(
-        git.resetWorktreeSelection(
-          "/repo",
-          [
-            {
-              file: "src/main.ts",
-              type: "modified",
-              additions: 1,
-              deletions: 1,
-              diff,
-            },
-          ],
-          { kind: "hunk", filePath: "src/main.ts", hunkIndex: 0 },
-        ),
-      ),
-    ).resolves.toEqual({ affectedPaths: ["src/main.ts"] });
-    expect(calls.map((call) => call.command)).toEqual([
-      "apply --reverse --check -",
-      "diff --cached -- src/main.ts",
-      "diff -- src/main.ts",
-      "apply --reverse -",
-    ]);
-    expect(calls[0]?.stdin).toContain("@@ -1 +1 @@");
-    expect(calls[3]?.stdin).toContain("@@ -1 +1 @@");
   });
   test("fetches the current branch upstream remote and compare target remote once each", async () => {
     const calls: string[] = [];

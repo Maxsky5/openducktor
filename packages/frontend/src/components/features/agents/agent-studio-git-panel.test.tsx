@@ -2022,6 +2022,17 @@ describe("AgentStudioGitPanel", () => {
     expect(screen.getByTestId("agent-studio-git-commit-hint").textContent).toBe(
       `Nothing is staged. ${modifier}+Enter stages and commits all 1 changed file.`,
     );
+    // The tooltip of the disabled button tells how to commit.
+    fireEvent.pointerMove(screen.getByTestId("agent-studio-git-commit-submit-button"), {
+      pointerType: "mouse",
+    });
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(
+          `Nothing is staged. Stage files, or press ${modifier}+Enter to commit all changes.`,
+        ).length,
+      ).toBeGreaterThan(0),
+    );
 
     await act(async () => {
       fireEvent.keyDown(input, { key: "Enter" });

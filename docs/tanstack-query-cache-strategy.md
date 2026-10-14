@@ -91,8 +91,8 @@ A confirmed deleted task keeps an empty list while a view observes it. Later rea
 | Directory listing | 1 sec |
 | Branches | 60 sec |
 | Current branch | 60 sec |
-| Worktree status | 0 |
-| Local changes | 0 |
+| Worktree status | 0, Infinity in session Git panels |
+| Local changes | 0, Infinity in session Git panels |
 | Git History pages | Infinity, invalidated by refresh and Git actions |
 
 History uses one infinite query for each directory, checkout, and target reference. Each later page sends the branch tips of the first page, so a moved tip fails the page instead of mixing two graphs. Refresh and Git actions invalidate History for the directory.

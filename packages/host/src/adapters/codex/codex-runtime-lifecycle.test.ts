@@ -19,8 +19,6 @@ import {
   PROCESS_WAIT_MS,
 } from "./codex-runtime-starter.test-support";
 
-/** Process trees can take longer to exit while the full suite runs in parallel. */
-
 describe("Codex runtime lifecycle", () => {
   test.each([
     { line: JSON.stringify({ id: 999, result: {} }), message: "unexpected id 999" },

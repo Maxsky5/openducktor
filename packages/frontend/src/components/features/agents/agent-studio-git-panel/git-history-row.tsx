@@ -158,7 +158,7 @@ function HistoryCell({
             name={commit.authorName}
             email={commit.authorEmail}
             className={cn("size-4 bg-current", color)}
-            initialsClassName="text-[7px] text-white"
+            initialsClassName="text-[7px] text-background"
           />
           <span className="min-w-0 truncate">{commit.authorName}</span>
         </span>

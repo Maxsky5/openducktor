@@ -527,54 +527,12 @@ export const gitWorktreeStatusSchema = z.object({
 });
 export type GitWorktreeStatus = z.infer<typeof gitWorktreeStatusSchema>;
 
-export const gitWorktreeStatusSummarySchema = z.object({
-  currentBranch: gitCurrentBranchSchema,
-  fileStatusCounts: gitFileStatusCountsSchema,
-  targetAheadBehind: commitsAheadBehindSchema,
-  upstreamAheadBehind: gitUpstreamAheadBehindSchema,
-  gitConflict: z.preprocess(
-    (value) => (value === null ? undefined : value),
-    gitConflictSchema.optional(),
-  ),
-  snapshot: gitWorktreeStatusSnapshotSchema,
-});
-export type GitWorktreeStatusSummary = z.infer<typeof gitWorktreeStatusSummarySchema>;
-
 export const gitResetSnapshotSchema = z.object({
   hashVersion: z.number().int().positive(),
   statusHash: z.string().regex(/^[0-9a-f]{16}$/),
   diffHash: z.string().regex(/^[0-9a-f]{16}$/),
 });
 export type GitResetSnapshot = z.infer<typeof gitResetSnapshotSchema>;
-
-export const gitResetWorktreeSelectionSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("file"),
-    filePath: z.string(),
-  }),
-  z.object({
-    kind: z.literal("hunk"),
-    filePath: z.string(),
-    hunkIndex: z.number().int().nonnegative(),
-  }),
-]);
-export type GitResetWorktreeSelection = z.infer<typeof gitResetWorktreeSelectionSchema>;
-
-export const gitResetWorktreeSelectionRequestSchema = z.object({
-  repoPath: z.string(),
-  workingDir: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
-  targetBranch: z.string().trim().min(1),
-  snapshot: gitResetSnapshotSchema,
-  selection: gitResetWorktreeSelectionSchema,
-});
-export type GitResetWorktreeSelectionRequest = z.infer<
-  typeof gitResetWorktreeSelectionRequestSchema
->;
-
-export const gitResetWorktreeSelectionResultSchema = z.object({
-  affectedPaths: z.array(z.string()).min(1),
-});
-export type GitResetWorktreeSelectionResult = z.infer<typeof gitResetWorktreeSelectionResultSchema>;
 
 const optionalWorkingDirSchema = z.preprocess(
   (value) => (value === null ? undefined : value),
@@ -622,8 +580,13 @@ export type GitLocalChanges = z.infer<typeof gitLocalChangesSchema>;
 export const gitChangeActionSchema = z.enum(["stage", "unstage", "discard"]);
 export type GitChangeAction = z.infer<typeof gitChangeActionSchema>;
 
-export const gitChangeSelectionSchema = z.union([
-  gitResetWorktreeSelectionSchema,
+export const gitChangeSelectionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("file"), filePath: z.string() }),
+  z.object({
+    kind: z.literal("hunk"),
+    filePath: z.string(),
+    hunkIndex: z.number().int().nonnegative(),
+  }),
   z.object({ kind: z.literal("all") }),
 ]);
 export type GitChangeSelection = z.infer<typeof gitChangeSelectionSchema>;
@@ -661,7 +624,8 @@ export type GitChangeSelectionRequest = z.infer<typeof gitChangeSelectionRequest
  * The paths that a change wrote, and the local changes that Git shows after it. The panel shows
  * them at once, so it needs no second read before the next change.
  */
-export const gitChangeSelectionResultSchema = gitResetWorktreeSelectionResultSchema.extend({
+export const gitChangeSelectionResultSchema = z.object({
+  affectedPaths: z.array(z.string()).min(1),
   localChanges: gitLocalChangesSchema,
 });
 export type GitChangeSelectionResult = z.infer<typeof gitChangeSelectionResultSchema>;

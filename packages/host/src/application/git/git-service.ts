@@ -11,9 +11,7 @@ import {
   gitPushBranchResultSchema,
   gitRebaseAbortResultSchema,
   gitRebaseBranchResultSchema,
-  gitResetWorktreeSelectionResultSchema,
   gitWorktreeStatusSchema,
-  gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
@@ -34,9 +32,7 @@ import { createGitLocalChangeMethods, requireCheckout } from "./git-local-change
 import {
   createWorktreeSnapshot,
   hashWorktreeDiffPayload,
-  hashWorktreeDiffSummaryPayload,
   hashWorktreeStatusPayload,
-  validateResetSnapshotMatches,
 } from "./git-worktree-snapshot";
 import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
@@ -198,59 +194,6 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         });
       });
     },
-    getWorktreeStatusSummary(input) {
-      return Effect.gen(function* () {
-        const { repoPath, targetBranch, diffScope, workingDir } = input;
-        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-        const summaryData = yield* gitPort.getWorktreeStatusSummaryData(
-          workingDirectory,
-          targetBranch,
-          diffScope,
-          input.readContext,
-        );
-        const observedAtMs = yield* Clock.currentTimeMillis;
-        const snapshot = createWorktreeSnapshot(
-          workingDirectory,
-          targetBranch,
-          diffScope,
-          hashWorktreeStatusPayload(
-            summaryData.currentBranch,
-            summaryData.fileStatuses,
-            summaryData.targetAheadBehind,
-            summaryData.upstreamAheadBehind,
-          ),
-          hashWorktreeDiffSummaryPayload(
-            diffScope,
-            summaryData.targetAheadBehind,
-            summaryData.fileStatusCounts,
-          ),
-          observedAtMs,
-        );
-        const summaryInput = {
-          currentBranch: summaryData.currentBranch,
-          fileStatusCounts: summaryData.fileStatusCounts,
-          targetAheadBehind: summaryData.targetAheadBehind,
-          upstreamAheadBehind: summaryData.upstreamAheadBehind,
-          snapshot,
-        };
-        return yield* Effect.try({
-          try: () =>
-            gitWorktreeStatusSummarySchema.parse(
-              summaryData.gitConflict
-                ? {
-                    ...summaryInput,
-                    gitConflict: { ...summaryData.gitConflict, workingDir: workingDirectory },
-                  }
-                : summaryInput,
-            ),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-      });
-    },
     commitsAheadBehind(input) {
       return Effect.gen(function* () {
         const { repoPath, targetBranch, workingDir } = input;
@@ -346,42 +289,6 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           },
         );
         return { ok: true };
-      });
-    },
-    resetWorktreeSelection(input) {
-      return Effect.gen(function* () {
-        const request = input;
-        const workingDirectory = yield* resolveGitWorkingDirectory(
-          gitPort,
-          request.repoPath,
-          request.workingDir,
-        );
-        const statusData = yield* gitPort.getWorktreeStatusData(
-          workingDirectory,
-          request.targetBranch,
-          "uncommitted",
-        );
-        yield* Effect.try({
-          try: () => validateResetSnapshotMatches(request.snapshot, statusData),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-        const result = yield* gitPort.resetWorktreeSelection(
-          workingDirectory,
-          statusData.fileDiffs,
-          request.selection,
-        );
-        return yield* Effect.try({
-          try: () => gitResetWorktreeSelectionResultSchema.parse(result),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
       });
     },
     fetchRemote(input) {

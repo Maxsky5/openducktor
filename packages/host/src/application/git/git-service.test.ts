@@ -11,7 +11,6 @@ import type {
   GitPushBranchResult,
   GitRebaseAbortResult,
   GitRebaseBranchResult,
-  GitResetWorktreeSelectionResult,
   GlobalConfig,
 } from "@openducktor/contracts";
 import { globalConfigSchema } from "@openducktor/contracts";
@@ -26,7 +25,6 @@ import type {
   GitPushBranchOptions,
   GitRemote,
   GitWorktreeStatusData,
-  GitWorktreeStatusSummaryData,
 } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
@@ -44,7 +42,6 @@ type FakeGitPortInput = {
   statuses?: Record<string, FileStatus[]>;
   diffs?: Record<string, GitFileDiff[]>;
   worktreeStatuses?: Record<string, GitWorktreeStatusData>;
-  worktreeStatusSummaries?: Record<string, GitWorktreeStatusSummaryData>;
   switchedBranches?: Record<string, GitCurrentBranch>;
   aheadBehind?: Record<string, CommitsAheadBehind>;
   fetchResults?: Record<string, GitFetchRemoteResult>;
@@ -54,7 +51,6 @@ type FakeGitPortInput = {
   rebaseBranchResults?: Record<string, GitRebaseBranchResult>;
   rebaseAbortResults?: Record<string, GitRebaseAbortResult>;
   conflictAbortResults?: Record<string, GitConflictAbortResult>;
-  resetWorktreeSelectionResults?: Record<string, GitResetWorktreeSelectionResult>;
   calls?: string[];
   removeWorktreeErrors?: Record<string, Error>;
   ancestorResults?: Record<string, boolean>;
@@ -70,7 +66,6 @@ const createFakeGitPort = ({
   statuses = {},
   diffs = {},
   worktreeStatuses = {},
-  worktreeStatusSummaries = {},
   switchedBranches = {},
   aheadBehind = {},
   fetchResults = {},
@@ -80,7 +75,6 @@ const createFakeGitPort = ({
   rebaseBranchResults = {},
   rebaseAbortResults = {},
   conflictAbortResults = {},
-  resetWorktreeSelectionResults = {},
   calls = [],
   removeWorktreeErrors = {},
   ancestorResults = {},
@@ -263,26 +257,8 @@ const createFakeGitPort = ({
           }),
       });
     },
-    getWorktreeStatusSummaryData(workingDir, targetBranch, diffScope) {
-      return Effect.tryPromise({
-        try: async () => {
-          return (
-            worktreeStatusSummaries[`${workingDir}|${targetBranch}|${diffScope}`] ?? {
-              currentBranch: { detached: true },
-              fileStatuses: [],
-              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-              targetAheadBehind: { ahead: 0, behind: 0 },
-              upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
-            }
-          );
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
+    getWorktreeStatusSummaryData() {
+      return Effect.die(new Error("unexpected worktree status summary"));
     },
     switchBranch(workingDir, branch, create) {
       return Effect.tryPromise({
@@ -383,20 +359,6 @@ const createFakeGitPort = ({
       return Effect.tryPromise({
         try: async () => {
           throw new Error("unexpected merge branch");
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "test.effect",
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause: cause,
-          }),
-      });
-    },
-    resetWorktreeSelection(workingDir, _fileDiffs, selection) {
-      return Effect.tryPromise({
-        try: async () => {
-          const key = `${workingDir}|${selection.kind}|${selection.filePath}`;
-          return resetWorktreeSelectionResults[key] ?? { affectedPaths: [selection.filePath] };
         },
         catch: (cause) =>
           new HostOperationError({
@@ -1390,119 +1352,6 @@ describe("createGitService", () => {
     expect(error).toMatchObject({ dependency: "worktreeFiles" });
     expect(calls).toEqual([]);
   });
-  test("resets a worktree selection after validating the current snapshot", async () => {
-    const statusData: GitWorktreeStatusData = {
-      currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-      fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-      fileDiffs: [
-        {
-          file: "src/main.ts",
-          type: "modified",
-          additions: 1,
-          deletions: 1,
-          diff: "@@ -1 +1 @@\n-old\n+new\n",
-        },
-      ],
-      targetAheadBehind: { ahead: 2, behind: 1 },
-      upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-    };
-    const service = createGitService(
-      createFakeGitPort({
-        canonicalPaths: {
-          "/repo": "/canonical/repo",
-          "/worktree": "/canonical/worktree",
-        },
-        gitRepositories: ["/canonical/repo", "/canonical/worktree"],
-        sharedCommonDirectories: ["/canonical/repo|/canonical/worktree"],
-        worktreeStatuses: {
-          "/canonical/worktree|origin/main|uncommitted": statusData,
-        },
-        resetWorktreeSelectionResults: {
-          "/canonical/worktree|hunk|src/main.ts": {
-            affectedPaths: ["src/main.ts"],
-          },
-        },
-      }),
-    );
-    const current = await Effect.runPromise(
-      service.getWorktreeStatus({
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        diffScope: "uncommitted",
-        workingDir: "/worktree",
-      }),
-    );
-    await expect(
-      Effect.runPromise(
-        service.resetWorktreeSelection({
-          repoPath: "/repo",
-          targetBranch: "origin/main",
-          workingDir: "/worktree",
-          snapshot: {
-            hashVersion: current.snapshot.hashVersion,
-            statusHash: current.snapshot.statusHash,
-            diffHash: current.snapshot.diffHash,
-          },
-          selection: {
-            kind: "hunk",
-            filePath: "src/main.ts",
-            hunkIndex: 0,
-          },
-        }),
-      ),
-    ).resolves.toEqual({
-      affectedPaths: ["src/main.ts"],
-    });
-  });
-  test.each(["content", "version"])("rejects a stale %s before mutating git", async (change) => {
-    const data: GitWorktreeStatusData = {
-      currentBranch: { name: "main", detached: false },
-      fileStatuses: [{ path: "file.ts", status: "modified", staged: false }],
-      fileDiffs: [
-        { file: "file.ts", type: "modified", additions: 1, deletions: 1, diff: "-old\n+new\n" },
-      ],
-      targetAheadBehind: { ahead: 0, behind: 0 },
-      upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
-    };
-    let resetCalls = 0;
-    const port = createFakeGitPort({
-      canonicalPaths: { "/repo": "/canonical/repo" },
-      gitRepositories: ["/canonical/repo"],
-      worktreeStatuses: { "/canonical/repo|origin/main|uncommitted": data },
-    });
-    const service = createGitService({
-      ...port,
-      resetWorktreeSelection: () =>
-        Effect.sync(() => {
-          resetCalls += 1;
-          return { affectedPaths: ["file.ts"] };
-        }),
-    });
-    const current = await Effect.runPromise(
-      service.getWorktreeStatus({
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        diffScope: "uncommitted",
-      }),
-    );
-    if (change === "content") {
-      data.fileDiffs[0] = { ...data.fileDiffs[0]!, diff: "-old\n+NEW\n" };
-    }
-    await expect(
-      Effect.runPromise(
-        service.resetWorktreeSelection({
-          repoPath: "/repo",
-          targetBranch: "origin/main",
-          snapshot: {
-            ...current.snapshot,
-            hashVersion: change === "version" ? 2 : current.snapshot.hashVersion,
-          },
-          selection: { kind: "file", filePath: "file.ts" },
-        }),
-      ),
-    ).rejects.toThrow("Displayed diff is stale. Refresh and try again.");
-    expect(resetCalls).toBe(0);
-  });
   test("returns file diffs from an authorized worktree", async () => {
     const service = createGitService(
       createFakeGitPort({
@@ -1600,31 +1449,5 @@ describe("createGitService", () => {
     });
     expect(status.snapshot.statusHash).toMatch(/^[0-9a-f]{16}$/);
     expect(status.snapshot.diffHash).toMatch(/^[0-9a-f]{16}$/);
-  });
-  test("returns worktree status summaries with validated diff scope", async () => {
-    const service = createGitService(
-      createFakeGitPort({
-        canonicalPaths: { "/repo": "/canonical/repo" },
-        gitRepositories: ["/canonical/repo"],
-        worktreeStatusSummaries: {
-          "/canonical/repo|origin/main|uncommitted": {
-            currentBranch: { name: "feature/electron", detached: false, revision: "abc123" },
-            fileStatuses: [{ path: "src/main.ts", status: "modified", staged: false }],
-            fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-            targetAheadBehind: { ahead: 2, behind: 1 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-          },
-        },
-      }),
-    );
-    const summary = await Effect.runPromise(
-      service.getWorktreeStatusSummary({
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        diffScope: "uncommitted",
-      }),
-    );
-    expect(summary.fileStatusCounts).toEqual({ total: 1, staged: 0, unstaged: 1 });
-    expect(summary.snapshot.diffScope).toBe("uncommitted");
   });
 });

@@ -10,6 +10,7 @@ import type {
   GitConflictAbortResult,
   GitConflictOperation,
   GitChangeSelectionRequest,
+  GitChangeSelectionResult,
   GitCurrentBranch,
   GitDiffScope,
   GitFetchRemoteResult,
@@ -21,8 +22,6 @@ import type {
   GitPushBranchResult,
   GitRebaseAbortResult,
   GitRebaseBranchResult,
-  GitResetWorktreeSelection,
-  GitResetWorktreeSelectionResult,
   GitUpstreamAheadBehind,
   GitWorktreeSummary,
 } from "@openducktor/contracts";
@@ -225,7 +224,7 @@ export type GitPort = {
     workingDir: string,
     changes: GitLocalChangesData,
     input: GitChangeInput,
-  ): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError>;
+  ): Effect.Effect<Pick<GitChangeSelectionResult, "affectedPaths">, GitPortError>;
   getHistoryPage(
     workingDir: string,
     input: GitHistoryPageInput,
@@ -284,11 +283,6 @@ export type GitPort = {
     branch: string,
     create: boolean,
   ): Effect.Effect<GitCurrentBranch, GitPortError>;
-  resetWorktreeSelection(
-    workingDir: string,
-    fileDiffs: GitFileDiff[],
-    selection: GitResetWorktreeSelection,
-  ): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError>;
   restoreWorktreeToReference(
     workingDirectory: string,
     reference: string,

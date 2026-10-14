@@ -5,10 +5,8 @@ import {
   gitHistoryPageRequestSchema,
   gitLocalChangesRequestSchema,
   gitReadContextSchema,
-  type GitResetWorktreeSelectionRequest,
   gitConflictOperationSchema,
   gitDiffScopeSchema,
-  gitResetWorktreeSelectionRequestSchema,
   gitTargetBranchSchema,
 } from "@openducktor/contracts";
 import type {
@@ -295,7 +293,3 @@ export const parseGitWorktreeStatusInput = (input: HostCommandArgs): GitWorktree
   }
   return result;
 };
-
-export const parseGitResetWorktreeSelectionInput = (
-  input: HostCommandArgs,
-): GitResetWorktreeSelectionRequest => gitResetWorktreeSelectionRequestSchema.parse(input);

@@ -117,6 +117,8 @@ type FileDiffEntryProps = {
   rowActions: GitFileRowActions | null;
   /** The file action that runs now, or null. */
   runningAction: GitChangeIntent["action"] | null;
+  /** True while a change runs and the diff is open. Chunk numbers can move until it ends. */
+  isChangeRunning: boolean;
 };
 
 function FileDiffEntryLabel({ row }: { row: FileRow }): ReactElement {
@@ -460,6 +462,8 @@ function FileDiffEntryHeader({
   );
 }
 
+const CHANGE_RUNNING_REASON = "Wait for the current change to finish.";
+
 const hunkActionsFor = (
   rowActions: GitFileRowActions,
   filePath: string,
@@ -493,6 +497,7 @@ function FileDiffEntryBody({
   shouldRender,
   isExpanded,
   rowActions,
+  isChangeRunning,
   bodyRef,
 }: {
   diff: GitFileDiff;
@@ -506,6 +511,7 @@ function FileDiffEntryBody({
   shouldRender: boolean;
   isExpanded: boolean;
   rowActions: GitFileRowActions | null;
+  isChangeRunning: boolean;
   bodyRef: RefCallback<HTMLDivElement>;
 }): ReactElement | null {
   const {
@@ -575,7 +581,9 @@ function FileDiffEntryBody({
             lineAnnotations={lineAnnotations}
             renderAnnotation={renderAnnotation}
             hunkActions={hunkActions}
-            hunkActionsDisabledReason={rowActions?.disabledReason ?? null}
+            hunkActionsDisabledReason={
+              rowActions?.disabledReason ?? (isChangeRunning ? CHANGE_RUNNING_REASON : null)
+            }
           />
         </div>
       ) : (
@@ -602,6 +610,7 @@ function FileDiffEntry({
   diffStyle,
   rowActions,
   runningAction,
+  isChangeRunning,
 }: FileDiffEntryProps): ReactElement {
   const { diff } = row;
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
@@ -655,6 +664,7 @@ function FileDiffEntry({
         shouldRender={shouldRenderDiffBody}
         isExpanded={isExpanded}
         rowActions={rowActions}
+        isChangeRunning={isChangeRunning}
         bodyRef={bodyRef}
       />
     </div>
@@ -674,6 +684,7 @@ export const FileDiffEntryWithMemo = memo(
     previous.diffStyle === next.diffStyle &&
     previous.rowActions === next.rowActions &&
     previous.runningAction === next.runningAction &&
+    previous.isChangeRunning === next.isChangeRunning &&
     previous.onToggle === next.onToggle &&
     previous.onViewFile === next.onViewFile &&
     previous.fileComments === next.fileComments &&

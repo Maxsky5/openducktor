@@ -81,14 +81,7 @@ export function useGitPanelReads({
   const comparisonOptions = useMemo(
     () =>
       repoPath !== null && comparisonReference !== null
-        ? worktreeStatusQueryOptions(
-            repoPath,
-            comparisonReference,
-            "target",
-            workingDir,
-            undefined,
-            cacheKey,
-          )
+        ? worktreeStatusQueryOptions(repoPath, comparisonReference, workingDir, cacheKey)
         : skippedWorktreeStatusQueryOptions(),
     [cacheKey, comparisonReference, repoPath, workingDir],
   );

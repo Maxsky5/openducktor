@@ -59,6 +59,7 @@ export const CommitComposer = memo(function CommitComposer({
     hasConflicts,
     stagedFileCount,
     changedFileCount,
+    modifier,
   };
   const reasons = {
     staged: commitBlockedReason("staged", input),
@@ -133,7 +134,7 @@ export const CommitComposer = memo(function CommitComposer({
         </Tooltip>
       </div>
       <p id={hintId} className="sr-only" data-testid="agent-studio-git-commit-hint">
-        {composerHint(input, modifier)}
+        {composerHint(input)}
       </p>
       <span role="status" className="sr-only" data-testid="agent-studio-git-commit-status">
         {committingMode ? PENDING_STATUS[committingMode] : ""}
@@ -159,13 +160,19 @@ type CommitInput = {
   hasConflicts: boolean;
   stagedFileCount: number;
   changedFileCount: number;
+  /** The key that commits all changes with Enter: ⌘ or Ctrl. */
+  modifier: string;
 };
 
 /** Why a commit of `mode` cannot start now, or null when it can. */
 function commitBlockedReason(mode: GitCommitMode, input: CommitInput): string | null {
   if (input.blockedReason) return input.blockedReason;
   if (!input.canCommit) return "Wait for the current commit to finish.";
-  if (mode === "staged" && input.stagedFileCount === 0) return "Nothing is staged.";
+  if (mode === "staged" && input.stagedFileCount === 0) {
+    return input.changedFileCount > 0
+      ? `Nothing is staged. Stage files, or press ${input.modifier}+Enter to commit all changes.`
+      : "Nothing is staged.";
+  }
   if (mode === "all" && input.hasConflicts) return "Resolve the conflicted files first.";
   if (mode === "all" && input.changedFileCount === 0) return "No changes to commit.";
   if (input.message.trim().length === 0) return "Write a commit message.";
@@ -173,10 +180,10 @@ function commitBlockedReason(mode: GitCommitMode, input: CommitInput): string | 
 }
 
 /** The screen reader description of the field. */
-function composerHint(input: CommitInput, modifier: string): string {
+function composerHint(input: CommitInput): string {
   if (input.blockedReason) return input.blockedReason;
   if (input.hasConflicts) return "Resolve the conflicted files before you commit.";
-  const all = `${modifier}+Enter stages and commits all ${plural(input.changedFileCount, "changed file")}.`;
+  const all = `${input.modifier}+Enter stages and commits all ${plural(input.changedFileCount, "changed file")}.`;
   if (input.stagedFileCount > 0) {
     return `Enter commits ${plural(input.stagedFileCount, "staged file")}. ${all}`;
   }

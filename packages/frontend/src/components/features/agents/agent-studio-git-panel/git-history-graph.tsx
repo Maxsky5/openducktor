@@ -24,17 +24,22 @@ const BAND_INSET = AVATAR_RADIUS + 3;
 
 /**
  * Lane colors of each side. Branch commits use cool colors and missing target commits use warm
- * colors, so every lane keeps its side when the graph has many lanes.
+ * colors, so every lane keeps its side when the graph has many lanes. The dark theme uses lighter
+ * shades, so thin lines stay visible on a dark surface.
  */
 const LANE_COLORS = {
   current: [
-    "text-blue-500",
-    "text-violet-500",
-    "text-pink-500",
-    "text-teal-500",
-    "text-indigo-500",
+    "text-blue-500 dark:text-blue-400",
+    "text-violet-500 dark:text-violet-400",
+    "text-pink-500 dark:text-pink-400",
+    "text-teal-500 dark:text-teal-400",
+    "text-indigo-500 dark:text-indigo-400",
   ],
-  target: ["text-amber-500", "text-orange-500", "text-rose-500"],
+  target: [
+    "text-amber-500 dark:text-amber-400",
+    "text-orange-500 dark:text-orange-400",
+    "text-rose-500 dark:text-rose-400",
+  ],
   boundary: ["text-slate-400 dark:text-slate-500"],
 } satisfies Record<GitHistoryCommitMembership, string[]>;
 
@@ -274,7 +279,8 @@ function NodeAvatar({ row, left }: { row: GraphRow; left: number }): ReactElemen
         "pointer-events-none absolute top-1/2 size-[18px] -translate-y-1/2",
         isTarget ? "bg-card opacity-75 grayscale-[35%]" : "bg-transparent",
       )}
-      initialsClassName={cn("text-[8px]", isTarget ? "text-current" : "text-white")}
+      // The page color keeps the initials readable on the light and the dark lane shades.
+      initialsClassName={cn("text-[8px]", isTarget ? "text-current" : "text-background")}
       style={{ left: left - AVATAR_RADIUS + 1 }}
     />
   );

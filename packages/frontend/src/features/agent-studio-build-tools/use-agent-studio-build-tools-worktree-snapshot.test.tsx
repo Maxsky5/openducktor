@@ -407,16 +407,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
               ? { kind: "available", reference: "refs/heads/release" }
               : nextComparison.promise,
           gitGetWorktreeStatus: readStatus,
-          gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
-            const full = taskStatus(target, scope);
-            return {
-              currentBranch: full.currentBranch,
-              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-              targetAheadBehind: full.targetAheadBehind,
-              upstreamAheadBehind: full.upstreamAheadBehind,
-              snapshot: full.snapshot,
-            };
-          },
         },
       }),
     );
@@ -545,16 +535,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           }),
           gitGetWorktreeStatus: readStatus,
           gitGetLocalChanges: readLocal,
-          gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
-            const full = taskStatus(target, scope);
-            return {
-              currentBranch: full.currentBranch,
-              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-              targetAheadBehind: full.targetAheadBehind,
-              upstreamAheadBehind: full.upstreamAheadBehind,
-              snapshot: full.snapshot,
-            };
-          },
         },
       }),
     );
@@ -1418,16 +1398,6 @@ function createGitBridge({ client = {} }: Parameters<typeof createShellBridgeFix
       }),
       gitGetWorktreeStatus: readStatus,
       gitGetLocalChanges: readLocalChanges,
-      gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
-        const full = taskStatus(target, scope);
-        return {
-          currentBranch: full.currentBranch,
-          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-          targetAheadBehind: full.targetAheadBehind,
-          upstreamAheadBehind: full.upstreamAheadBehind,
-          snapshot: full.snapshot,
-        };
-      },
       ...client,
     },
   });

@@ -194,7 +194,11 @@ function LocalGroupPanes({
     if (!bounds || bounds.height === 0) return;
     setShare(clamp((clientY - bounds.top) / bounds.height));
   };
-  const flex = (open: boolean, part: number) => (open ? `${bothOpen ? part : 1} 1 0%` : "0 0 auto");
+  // A closed group keeps its header height. An open group grows to its share, or to all space.
+  const flex = (open: boolean, part: number): string => {
+    if (!open) return "0 0 auto";
+    return `${bothOpen ? part : 1} 1 0%`;
+  };
   return (
     <div ref={container} className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-col" style={{ flex: flex(unstagedOpen, share) }}>

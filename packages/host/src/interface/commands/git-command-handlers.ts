@@ -14,7 +14,6 @@ import {
   parseGitPushBranchInput,
   parseGitRebaseBranchInput,
   parseGitRemoveWorktreeInput,
-  parseGitResetWorktreeSelectionInput,
   parseGitScopeInput,
   parseGitSwitchBranchInput,
   parseGitWorktreeStatusInput,
@@ -41,14 +40,10 @@ export const createGitCommandHandlers = (gitService: GitService) =>
     git_get_status: (args) => gitService.getStatus(parseGitScopeInput(args)),
     git_get_worktree_status: (args) =>
       gitService.getWorktreeStatus(parseGitWorktreeStatusInput(args)),
-    git_get_worktree_status_summary: (args) =>
-      gitService.getWorktreeStatusSummary(parseGitWorktreeStatusInput(args)),
     git_pull_branch: (args) => gitService.pullBranch(parseGitScopeInput(args)),
     git_push_branch: (args) => gitService.pushBranch(parseGitPushBranchInput(args)),
     git_rebase_abort: (args) => gitService.rebaseAbort(parseGitScopeInput(args)),
     git_rebase_branch: (args) => gitService.rebaseBranch(parseGitRebaseBranchInput(args)),
     git_remove_worktree: (args) => gitService.removeWorktree(parseGitRemoveWorktreeInput(args)),
-    git_reset_worktree_selection: (args) =>
-      gitService.resetWorktreeSelection(parseGitResetWorktreeSelectionInput(args)),
     git_switch_branch: (args) => gitService.switchBranch(parseGitSwitchBranchInput(args)),
   }) satisfies HostCommandHandlerDefinitions;

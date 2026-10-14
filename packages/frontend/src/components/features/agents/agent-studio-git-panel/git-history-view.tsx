@@ -29,6 +29,7 @@ import {
   HistoryLoading,
   HistoryMessage,
   HistoryRefreshFailure,
+  HistoryRelation,
   historyFooter,
   RetainedHistoryMessage,
 } from "./git-history-messages";
@@ -251,6 +252,11 @@ function HistoryCommitList({
       data-testid="agent-studio-git-history"
     >
       {refreshFailure}
+      <HistoryRelation
+        comparison={comparison}
+        currentLabel={currentLabel}
+        targetLabel={targetLabel}
+      />
       <HistoryColumnsHeader columns={columns} graphWidth={graph.viewWidth} />
       <List
         aria-label={`Commits of ${currentLabel} compared with ${targetLabel}`}

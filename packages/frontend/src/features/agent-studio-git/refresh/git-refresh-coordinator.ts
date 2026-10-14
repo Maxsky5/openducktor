@@ -1,6 +1,7 @@
 import { CancelledError } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import type { GitDiffRefreshMode } from "../contracts";
+import type { GitPanelReads } from "../reads/use-git-panel-reads";
 import { startEarlyRead } from "./early-read";
 
 export const SCHEDULED_FETCH_COOLDOWN_MS = 5 * 60 * 1000;
@@ -15,17 +16,15 @@ export type GitRefreshComparison = {
 };
 
 /** The steps of one render. Each step uses the query keys of that render. */
-export type GitRefreshSteps = {
+/** The reads come from the panel reads of the same render. */
+export type GitRefreshSteps = Pick<
+  GitPanelReads,
+  "readLocal" | "readComparison" | "readInBackground"
+> & {
   /** Reads the checkout again and returns its key. */
   readBranch: () => Promise<string>;
   /** Null when no comparison target is known. */
   comparison: GitRefreshComparison | null;
-  /** Rejects when the read fails. */
-  readLocal: () => Promise<void>;
-  /** Reads Branch changes and the shown History. Rejects when Branch changes fail to read. */
-  readComparison: (historyFailure: "reject" | "show") => Promise<void>;
-  /** Reads every shown read. Each view shows its own failure. */
-  readInBackground: () => Promise<void>;
 };
 
 /** The Git context that one render shows. */

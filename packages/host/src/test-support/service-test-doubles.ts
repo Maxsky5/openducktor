@@ -106,7 +106,6 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   rebaseBranch: unexpectedEffectCall("Git port", "rebaseBranch"),
   referenceExists: unexpectedEffectCall("Git port", "referenceExists"),
   removeWorktree: unexpectedEffectCall("Git port", "removeWorktree"),
-  resetWorktreeSelection: unexpectedEffectCall("Git port", "resetWorktreeSelection"),
   restoreWorktreeToReference: unexpectedEffectCall("Git port", "restoreWorktreeToReference"),
   shareGitCommonDirectory: unexpectedEffectCall("Git port", "shareGitCommonDirectory"),
   suggestedSquashCommitMessage: unexpectedEffectCall("Git port", "suggestedSquashCommitMessage"),

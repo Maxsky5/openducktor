@@ -4,7 +4,6 @@ import type {
   GitComparisonTarget,
   GitTargetBranch,
   GitWorktreeStatus,
-  GitWorktreeStatusSummary,
   WorkspaceFileTree,
   WorkspaceFileTreeRefreshInput,
   WorkspaceFileTreeRefreshResult,
@@ -85,17 +84,6 @@ function worktreeStatus(
       statusHash: "0123456789abcdef",
       diffHash: "fedcba9876543210",
     },
-  };
-}
-
-function worktreeSummary(targetBranch: string): GitWorktreeStatusSummary {
-  const status = worktreeStatus(targetBranch);
-  return {
-    currentBranch: status.currentBranch,
-    fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-    targetAheadBehind: status.targetAheadBehind,
-    upstreamAheadBehind: status.upstreamAheadBehind,
-    snapshot: status.snapshot,
   };
 }
 
@@ -193,7 +181,6 @@ test("opens the file preview of a changed file from its Git row menu", async () 
             },
           ],
         }),
-        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
         gitGetBranches: async () => [],
       }),
     }),
@@ -228,7 +215,6 @@ test("reuses checked Git data when workspace sessions share a directory and comp
       client: withLocalChanges({
         gitGetComparisonTarget: comparison,
         gitGetWorktreeStatus: status,
-        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
         gitGetBranches: async () => [],
       }),
     }),
@@ -281,8 +267,6 @@ test("reads HEAD status while the comparison target is pending", async () => {
           statusTargets.push(targetBranch);
           return worktreeStatus(targetBranch);
         },
-        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -324,7 +308,6 @@ test.each(["available", "unavailable"] as const)(
             reads.push(`${diffScope}:${targetBranch}`);
             return worktreeStatus(targetBranch, diffScope);
           },
-          gitGetWorktreeStatusSummary: async (_repo, targetBranch) => worktreeSummary(targetBranch),
           gitGetBranches: async () => [],
         }),
       }),
@@ -385,8 +368,6 @@ test.each([
           statusTargets.push(targetBranch);
           return worktreeStatus(targetBranch);
         },
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -458,8 +439,6 @@ test.each(["available", "unavailable", "error"] as const)(
         client: withLocalChanges({
           gitGetComparisonTarget: comparison,
           gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-          gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-            worktreeSummary(targetBranch),
           gitGetBranches: async () => [],
           filesystemRefreshTree: async (input) => {
             treeReads.push(input);
@@ -521,8 +500,6 @@ test.each(["repository settings", "comparison"] as const)(
             statusTargets.push(targetBranch);
             return worktreeStatus(targetBranch);
           },
-          gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-            worktreeSummary(targetBranch),
           gitGetBranches: async () => [],
         }),
       }),
@@ -579,8 +556,6 @@ test.each(["recovers", "fails"] as const)(
             statusTargets.push(targetBranch);
             return worktreeStatus(targetBranch);
           },
-          gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-            worktreeSummary(targetBranch),
           gitGetBranches: async () => [],
         }),
       }),
@@ -668,8 +643,6 @@ test("rechecks a root chat target when its branch changes", async () => {
           statusTargets.push(targetBranch);
           return worktreeStatus(targetBranch);
         },
-        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -717,7 +690,6 @@ function createHeldFetchHost() {
       reads.push(`status:${diffScope}`);
       return worktreeStatus(targetBranch, diffScope);
     },
-    gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) => worktreeSummary(targetBranch),
     gitGetHistoryPage: async () => {
       reads.push("history");
       return { outcome: "no_commits" };
@@ -852,8 +824,6 @@ test("manual refresh retains data when branch and comparison identity stay uncha
             ],
           };
         },
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -935,8 +905,6 @@ test("manual refresh waits for the fetch after a new branch and keeps its failur
           throw new Error("Remote authentication failed");
         },
         gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -998,8 +966,6 @@ test("a branch refresh ends without a fetch when another session in the director
           return { outcome: "skipped_no_remote", output: "" };
         },
         gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1060,8 +1026,6 @@ test("a failed branch read stays with its own session after another session open
       client: withLocalChanges({
         gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
         gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1120,8 +1084,6 @@ test("a target change in one session starts its own Refresh and hides the old fa
       client: withLocalChanges({
         gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
         gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1188,8 +1150,6 @@ test.each([
         client: withLocalChanges({
           gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
           gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-          gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-            worktreeSummary(targetBranch),
           gitGetBranches: async () => [],
         }),
       }),
@@ -1246,8 +1206,6 @@ test("manual refresh waits for the fetch after recovered settings and keeps its 
           throw new Error("Remote authentication failed");
         },
         gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1314,8 +1272,6 @@ test("manual refresh reads a new branch before refreshing its comparison", async
           return { outcome: "skipped_no_remote", output: "" };
         },
         gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath, targetBranch) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1400,10 +1356,6 @@ test.each(
         gitGetWorktreeStatus: async (_repo, target, _scope, directory) => {
           reads.push(`status:${directory}`);
           return worktreeStatus(target);
-        },
-        gitGetWorktreeStatusSummary: async (_repo, target, directory) => {
-          reads.push(`summary:${directory}`);
-          return worktreeSummary(target);
         },
         gitGetBranches: async () => [],
       }),
@@ -1521,8 +1473,6 @@ test("manual refresh fetches a missing comparison target before checking it agai
           statusTargets.push(targetBranch);
           return worktreeStatus(targetBranch);
         },
-        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1568,8 +1518,6 @@ test("a missing target fetch failure tells the user what failed", async () => {
           statusTargets.push(targetBranch);
           return worktreeStatus(targetBranch);
         },
-        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1623,8 +1571,6 @@ test("returning to the app rechecks the target and file tree", async () => {
         gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
         gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
           worktreeStatus(targetBranch),
-        gitGetWorktreeStatusSummary: async (_repoPath: string, targetBranch: string) =>
-          worktreeSummary(targetBranch),
         gitGetBranches: async () => [],
       }),
     }),
@@ -1669,12 +1615,6 @@ test("refresh recovers local Git and file reads when the comparison target disap
       return worktreeStatus(targetBranch, diffScope);
     },
   );
-  const gitGetWorktreeStatusSummary = mock(async (_repoPath: string, targetBranch: string) => {
-    if (!targetAvailable && targetBranch !== "HEAD") {
-      throw new Error("Git summary used the removed target");
-    }
-    return worktreeSummary(targetBranch);
-  });
   const filesystemRefreshTree = mock(
     async (input: WorkspaceFileTreeRefreshInput): Promise<WorkspaceFileTreeRefreshResult> => {
       fileTreeTargets.push(input.targetBranch);
@@ -1698,7 +1638,6 @@ test("refresh recovers local Git and file reads when the comparison target disap
         gitGetComparisonTarget: comparison,
         gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
         gitGetWorktreeStatus,
-        gitGetWorktreeStatusSummary,
         filesystemRefreshTree,
         gitGetBranches: async () => [],
       }),
@@ -1804,7 +1743,6 @@ test.each(
         client: withLocalChanges({
           gitGetComparisonTarget: comparison,
           gitGetWorktreeStatus: readStatus,
-          gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
           [{
             commit: "gitCommitAll",
             push: "gitPushBranch",
@@ -1919,7 +1857,6 @@ test("retains a force-push confirmation when the rejected push finishes with too
           ...worktreeStatus(target),
           upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
         }),
-        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
         gitPushBranch: push,
       }),
     }),
@@ -1986,7 +1923,6 @@ test("invalidates a completed hidden commit without reading Git until tools reop
       client: withLocalChanges({
         gitGetComparisonTarget: comparison,
         gitGetWorktreeStatus: readStatus,
-        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
         gitCommitStaged: commit,
       }),
     }),
@@ -2065,7 +2001,6 @@ test("a confirmed commit keeps its result when the panel update reads fail", asy
           if (readsFail) throw new Error("Branch read denied");
           return stagedStatus(target, scope);
         },
-        gitGetWorktreeStatusSummary: async (_repo, target) => worktreeSummary(target),
         gitGetHistoryPage: async () => ({ outcome: "no_commits" }),
         gitGetBranches: async () => [],
         gitCommitStaged: async () => {

@@ -54,7 +54,6 @@ export const gitQueryKeys = {
   worktreeStatus: (
     repoPath: string,
     targetBranch: string,
-    diffScope: "target" | "uncommitted",
     workingDir: string | null,
     branchKey = "",
   ) =>
@@ -63,7 +62,6 @@ export const gitQueryKeys = {
       "worktree-status",
       repoPath,
       targetBranch,
-      diffScope,
       workingDir ?? repoPath,
       branchKey,
     ] as const,
@@ -158,7 +156,7 @@ export const invalidateGitWorkingDirectoryQueries = async (
       if (key[2] !== repoPath) return false;
       if (key[1] === "comparison-target") return key[3] === workingDir;
       if (key[1] === "local-changes" || key[1] === "history") return key[3] === workingDir;
-      if (key[1] === "worktree-status") return key[5] === workingDir;
+      if (key[1] === "worktree-status") return key[4] === workingDir;
       return false;
     },
   };
@@ -167,22 +165,22 @@ export const invalidateGitWorkingDirectoryQueries = async (
   await queryClient.invalidateQueries({ ...filter, refetchType: "none" });
 };
 
+/** Branch changes: the comparison of the working content with the target. */
 export const worktreeStatusQueryOptions = (
   repoPath: string,
   targetBranch: string,
-  diffScope: "target" | "uncommitted",
   workingDir: string | null,
-  hostClient: GitWorktreeStatusQueryHost = host,
   branchKey = "",
+  hostClient: GitWorktreeStatusQueryHost = host,
 ) =>
   // A plain key type lets a view swap these options for the skipped options.
   queryOptions<GitWorktreeStatus, Error, GitWorktreeStatus, QueryKey>({
-    queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir, branchKey),
+    queryKey: gitQueryKeys.worktreeStatus(repoPath, targetBranch, workingDir, branchKey),
     queryFn: ({ client }): Promise<GitWorktreeStatus> => {
       const args: Parameters<GitWorktreeStatusQueryHost["gitGetWorktreeStatus"]> = [
         repoPath,
         targetBranch,
-        diffScope,
+        "target",
         workingDir ?? undefined,
       ];
       const readContext = workspaceReadContext(client, workingDir ?? repoPath);

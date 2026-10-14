@@ -57,8 +57,8 @@ test("Git invalidation keeps other worktrees fresh", async () => {
     { branch: "main" },
     "",
   );
-  const rootStatus = gitQueryKeys.worktreeStatus("/repo", "@{upstream}", "uncommitted", "/repo");
-  const worktreeStatus = gitQueryKeys.worktreeStatus("/repo", "main", "uncommitted", "/worktree");
+  const rootStatus = gitQueryKeys.worktreeStatus("/repo", "@{upstream}", "/repo");
+  const worktreeStatus = gitQueryKeys.worktreeStatus("/repo", "main", "/worktree");
   for (const key of [rootTarget, worktreeTarget, rootStatus, worktreeStatus]) {
     client.setQueryData(key, {});
   }
@@ -84,20 +84,8 @@ test.each(["/repo", "/worktree"])(
             ...worktreeBranchQueryOptions("/repo", directory, host),
             staleTime: 0,
           });
-    const statusKey = gitQueryKeys.worktreeStatus(
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      directory,
-      "feature",
-    );
-    const otherKey = gitQueryKeys.worktreeStatus(
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      "/other",
-      "feature",
-    );
+    const statusKey = gitQueryKeys.worktreeStatus("/repo", "HEAD", directory, "feature");
+    const otherKey = gitQueryKeys.worktreeStatus("/repo", "HEAD", "/other", "feature");
     const pending = Promise.withResolvers<string>();
     try {
       await readBranch();
@@ -145,7 +133,7 @@ test("Git actions invalidate root status cached without an explicit working dire
   const host = { gitGetWorktreeStatus: async () => status() };
   const read = () =>
     client.fetchQuery({
-      ...worktreeStatusQueryOptions("/repo", "HEAD", "uncommitted", null, host, "feature"),
+      ...worktreeStatusQueryOptions("/repo", "HEAD", null, "feature", host),
       staleTime: Infinity,
     });
   try {

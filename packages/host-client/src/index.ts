@@ -343,8 +343,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     gitGetDiff: gitClient.gitGetDiff.bind(gitClient),
     gitCommitsAheadBehind: gitClient.gitCommitsAheadBehind.bind(gitClient),
     gitGetWorktreeStatus: gitClient.gitGetWorktreeStatus.bind(gitClient),
-    gitGetWorktreeStatusSummary: gitClient.gitGetWorktreeStatusSummary.bind(gitClient),
-    gitResetWorktreeSelection: gitClient.gitResetWorktreeSelection.bind(gitClient),
   } satisfies HostClientApi;
   for (const methodName of Object.keys(hostClient)) {
     Object.defineProperty(hostClient, methodName, { enumerable: false });

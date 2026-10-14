@@ -31,10 +31,7 @@ import {
   type GitRebaseAbortResult,
   type GitRebaseBranchRequest,
   type GitRebaseBranchResult,
-  type GitResetWorktreeSelectionRequest,
-  type GitResetWorktreeSelectionResult,
   type GitWorktreeStatus,
-  type GitWorktreeStatusSummary,
   type GitWorktreeSummary,
   gitBranchSchema,
   gitChangeSelectionRequestSchema,
@@ -52,10 +49,7 @@ import {
   gitPushBranchResultSchema,
   gitRebaseAbortResultSchema,
   gitRebaseBranchResultSchema,
-  gitResetWorktreeSelectionRequestSchema,
-  gitResetWorktreeSelectionResultSchema,
   gitWorktreeStatusSchema,
-  gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -250,24 +244,6 @@ const gitGetWorktreeStatus = async (
   return invokeFn("git_get_worktree_status", args, gitWorktreeStatusSchema);
 };
 
-const gitGetWorktreeStatusSummary = async (
-  invokeFn: InvokeFn,
-  repoPath: string,
-  targetBranch: string,
-  diffScope?: "target" | "uncommitted",
-  workingDir?: string,
-  readContext?: GitReadContext,
-): Promise<GitWorktreeStatusSummary> => {
-  const args: WorktreeStatusReadArgs = {
-    repoPath,
-    targetBranch,
-    diffScope: gitDiffScopeSchema.parse(diffScope ?? "target"),
-    workingDir: workingDir ?? null,
-  };
-  if (readContext) args.readContext = readContext;
-  return invokeFn("git_get_worktree_status_summary", args, gitWorktreeStatusSummarySchema);
-};
-
 type CommitAllArgs = {
   repoPath: string;
   workingDir: string | null;
@@ -346,24 +322,6 @@ const gitGetHistoryPage = async (
     "git_get_history_page",
     { ...parsed, workingDir: parsed.workingDir ?? null },
     gitHistoryPageSchema,
-  );
-};
-
-const gitResetWorktreeSelection = async (
-  invokeFn: InvokeFn,
-  request: GitResetWorktreeSelectionRequest,
-): Promise<GitResetWorktreeSelectionResult> => {
-  const parsedRequest = gitResetWorktreeSelectionRequestSchema.parse(request);
-  return invokeFn(
-    "git_reset_worktree_selection",
-    {
-      repoPath: parsedRequest.repoPath,
-      workingDir: parsedRequest.workingDir ?? null,
-      targetBranch: parsedRequest.targetBranch,
-      snapshot: parsedRequest.snapshot,
-      selection: parsedRequest.selection,
-    },
-    gitResetWorktreeSelectionResultSchema,
   );
 };
 
@@ -537,23 +495,6 @@ export class HostGitClient {
     );
   }
 
-  async gitGetWorktreeStatusSummary(
-    repoPath: string,
-    targetBranch: string,
-    diffScope?: "target" | "uncommitted",
-    workingDir?: string,
-    readContext?: GitReadContext,
-  ): Promise<GitWorktreeStatusSummary> {
-    return gitGetWorktreeStatusSummary(
-      this.invokeFn,
-      repoPath,
-      targetBranch,
-      diffScope,
-      workingDir,
-      readContext,
-    );
-  }
-
   async gitCommitAll(
     repoPath: string,
     message: string,
@@ -581,12 +522,6 @@ export class HostGitClient {
 
   async gitGetHistoryPage(request: GitHistoryPageRequest): Promise<GitHistoryPage> {
     return gitGetHistoryPage(this.invokeFn, request);
-  }
-
-  async gitResetWorktreeSelection(
-    request: GitResetWorktreeSelectionRequest,
-  ): Promise<GitResetWorktreeSelectionResult> {
-    return gitResetWorktreeSelection(this.invokeFn, request);
   }
 
   async gitRebaseBranch(

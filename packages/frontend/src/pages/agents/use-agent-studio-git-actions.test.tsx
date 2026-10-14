@@ -684,6 +684,126 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  describe("chunk changes", () => {
+    const MOVED_CHUNK = "This file changed after you chose the chunk. Review the chunk again.";
+    const fileDiff = (file: string, diff: string) => ({
+      file,
+      type: "modified" as const,
+      additions: 1,
+      deletions: 0,
+      diff,
+    });
+    /** Local changes whose unstaged group shows `diffs`, read at `observedAtMs`. */
+    const withUnstagedDiffs = (
+      diffs: ReturnType<typeof fileDiff>[],
+      observedAtMs = 1,
+    ): GitLocalChanges => {
+      const changes =
+        observedAtMs === 1 ? createLocalChanges() : createChangeResult(observedAtMs).localChanges;
+      changes.unstaged.fileDiffs = diffs;
+      return changes;
+    };
+    const chunkIntent = (action: "stage" | "discard", filePath: string, hunkIndex: number) =>
+      createIntent(action, "unstaged", { kind: "hunk", filePath, hunkIndex });
+
+    test("stops a queued chunk change after an earlier change moved the chunks of its file", async () => {
+      const first = createDeferred<GitChangeResult>();
+      gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+      const harness = createHookHarness(
+        createBaseArgs({ localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown")]) }),
+      );
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 0));
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 1));
+        });
+        const moved = withUnstagedDiffs([fileDiff("src/main.ts", "@@ moved")], 5);
+        await harness.run(() =>
+          first.resolve({ affectedPaths: ["src/main.ts"], localChanges: moved }),
+        );
+        await harness.waitFor((state) => !state.isChanging && state.changeError !== null);
+
+        // Chunk 1 of the new diff is another chunk, so the second change does not run.
+        expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+        expect(harness.getLatest().changeError).toBe(MOVED_CHUNK);
+        expect(harness.getLatest().pendingChanges).toEqual([
+          chunkIntent("stage", "src/main.ts", 0),
+        ]);
+      } finally {
+        first.resolve(createChangeResult());
+        await harness.unmount();
+      }
+    });
+
+    test("runs a queued chunk change of a file that the earlier change did not move", async () => {
+      const first = createDeferred<GitChangeResult>();
+      gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+      const other = fileDiff("src/other.ts", "@@ other");
+      const harness = createHookHarness(
+        createBaseArgs({
+          localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown"), other]),
+        }),
+      );
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 0));
+          state.changeSelection(chunkIntent("stage", "src/other.ts", 0));
+        });
+        const result = withUnstagedDiffs([fileDiff("src/main.ts", "@@ moved"), other], 5);
+        await harness.run(() =>
+          first.resolve({ affectedPaths: ["src/main.ts"], localChanges: result }),
+        );
+        await harness.waitFor(() => gitChangeSelectionMock.mock.calls.length === 2);
+        await harness.waitFor((state) => !state.isChanging);
+
+        expect(gitChangeSelectionMock.mock.calls[1]?.[0].selection).toEqual({
+          kind: "hunk",
+          filePath: "src/other.ts",
+          hunkIndex: 0,
+        });
+        expect(harness.getLatest().changeError).toBeNull();
+      } finally {
+        first.resolve(createChangeResult());
+        await harness.unmount();
+      }
+    });
+
+    test("does not open a chunk Discard after an earlier change moved the chunks", async () => {
+      const first = createDeferred<GitChangeResult>();
+      gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+      const harness = createHookHarness(
+        createBaseArgs({ localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown")]) }),
+      );
+      let discard: Promise<void> | undefined;
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 0));
+          discard = Promise.resolve(
+            state.changeSelection(chunkIntent("discard", "src/main.ts", 1)),
+          );
+        });
+        const moved = withUnstagedDiffs([fileDiff("src/main.ts", "@@ moved")], 5);
+        await harness.run(async () => {
+          first.resolve({ affectedPaths: ["src/main.ts"], localChanges: moved });
+          await discard;
+        });
+
+        expect(harness.getLatest().pendingDiscard).toBeNull();
+        expect(harness.getLatest().changeError).toBe(MOVED_CHUNK);
+        expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+      } finally {
+        first.resolve(createChangeResult());
+        await harness.unmount();
+      }
+    });
+  });
+
   test("keeps a change pending until the panel shows its Git result", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);

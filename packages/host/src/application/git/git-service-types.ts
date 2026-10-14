@@ -19,10 +19,7 @@ import type {
   GitPushBranchResult,
   GitRebaseAbortResult,
   GitRebaseBranchResult,
-  GitResetWorktreeSelectionRequest,
-  GitResetWorktreeSelectionResult,
   GitWorktreeStatus,
-  GitWorktreeStatusSummary,
   GitWorktreeSummary,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
@@ -69,9 +66,6 @@ export type GitService = {
   getWorktreeStatus(
     input: GitWorktreeStatusInput,
   ): Effect.Effect<GitWorktreeStatus, GitServiceError>;
-  getWorktreeStatusSummary(
-    input: GitWorktreeStatusInput,
-  ): Effect.Effect<GitWorktreeStatusSummary, GitServiceError>;
   getLocalChanges(input: GitLocalChangesRequest): Effect.Effect<GitLocalChanges, GitServiceError>;
   changeSelection(
     input: GitChangeSelectionRequest,
@@ -86,9 +80,6 @@ export type GitService = {
     GitServiceError
   >;
   switchBranch(input: GitSwitchBranchInput): Effect.Effect<GitCurrentBranch, GitServiceError>;
-  resetWorktreeSelection(
-    input: GitResetWorktreeSelectionRequest,
-  ): Effect.Effect<GitResetWorktreeSelectionResult, GitServiceError>;
   commitsAheadBehind(
     input: GitAheadBehindInput,
   ): Effect.Effect<CommitsAheadBehind, GitServiceError>;

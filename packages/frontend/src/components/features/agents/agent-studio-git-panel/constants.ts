@@ -19,7 +19,6 @@ export const FILE_STATUS_COLOR = new Map<string, string>([
 /** The internal views of the Git panel, in display order. */
 export type GitPanelTab = DiffScope | "history";
 
-/** A short count or state shown next to each tab label. */
 /** The file count of each list tab, or null when its tab shows no count. */
 export type GitPanelTabCounts = {
   uncommitted: number | null;

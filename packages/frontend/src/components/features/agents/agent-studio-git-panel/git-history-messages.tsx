@@ -1,3 +1,4 @@
+import type { GitHistoryComparison } from "@openducktor/contracts";
 import { History, LoaderCircle, RefreshCw } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,46 @@ export function HistoryLoading({ label }: { label: string }): ReactElement {
     >
       <LoaderCircle className="size-3.5 animate-spin" />
       {label}
+    </p>
+  );
+}
+
+/** How the branch stands against the target, when the graph alone does not say it. */
+const relationText = (
+  comparison: GitHistoryComparison,
+  currentLabel: string,
+  targetLabel: string,
+): string | null => {
+  if (comparison.currentTip === comparison.targetTip) {
+    return `${currentLabel} matches ${targetLabel}.`;
+  }
+  const { behind } = comparison.aheadBehind;
+  if (behind === 0) return null;
+  return `${currentLabel} is ${behind} commit${behind === 1 ? "" : "s"} behind ${targetLabel}. The missing commits show in the list.`;
+};
+
+/**
+ * One line above the commits for two cases: missing target commits, and two branches on the same
+ * commit. Other comparisons show nothing, so the list keeps its space.
+ */
+export function HistoryRelation({
+  comparison,
+  currentLabel,
+  targetLabel,
+}: {
+  comparison: GitHistoryComparison;
+  currentLabel: string;
+  targetLabel: string;
+}): ReactElement | null {
+  const text = relationText(comparison, currentLabel, targetLabel);
+  if (!text) return null;
+  return (
+    <p
+      className="shrink-0 truncate border-b border-border/60 px-3 py-1 text-[11px] text-muted-foreground"
+      title={text}
+      data-testid="agent-studio-git-history-relation"
+    >
+      {text}
     </p>
   );
 }

@@ -193,9 +193,10 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     scopeKey: JSON.stringify([
       viewKey,
       directory,
+      // The repository root compares with the upstream, so no chosen target applies there.
       gitPanelContextMode === "repository"
-        ? "upstream"
-        : (selectedView.selectedTask?.targetBranch ?? "default"),
+        ? null
+        : (selectedView.selectedTask?.targetBranch ?? null),
     ]),
     branchKey: JSON.stringify(currentBranch),
     visible: isEnabled,

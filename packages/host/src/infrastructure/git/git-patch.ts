@@ -163,26 +163,6 @@ export const combinePatchHunk = (header: string, hunk: ParsedHunk): string => {
   return `${textHeader}${hunk.text}`;
 };
 
-const rangesOverlap = (
-  leftStart: number,
-  leftCount: number,
-  rightStart: number,
-  rightCount: number,
-): boolean => {
-  const leftEnd = leftStart + Math.max(leftCount, 1) - 1;
-  const rightEnd = rightStart + Math.max(rightCount, 1) - 1;
-  return !(leftEnd < rightStart || rightEnd < leftStart);
-};
-
-const hunkSpecsOverlap = (left: HunkSpec, right: HunkSpec): boolean =>
-  rangesOverlap(left.oldStart, left.oldCount, right.oldStart, right.oldCount) ||
-  rangesOverlap(left.newStart, left.newCount, right.newStart, right.newCount);
-
-const hunkBody = (text: string): string => {
-  const index = text.indexOf("\n");
-  return index >= 0 ? text.slice(index + 1) : text;
-};
-
 const hunkSpecsEqual = (left: HunkSpec, right: HunkSpec): boolean =>
   left.oldStart === right.oldStart &&
   left.oldCount === right.oldCount &&
@@ -206,26 +186,4 @@ export const hunksMatch = (reviewed: ParsedHunk, applied: ParsedHunk): boolean =
     reviewedLines.length === appliedLines.length &&
     reviewedLines.every((line, index) => line === appliedLines[index])
   );
-};
-
-export const findMatchingCachedHunk = (
-  cachedPatch: ParsedPatch,
-  selectedHunk: ParsedHunk,
-): ParsedHunk | undefined => {
-  const exactMatch = cachedPatch.hunks.find(
-    (candidate) =>
-      hunkSpecsEqual(candidate.spec, selectedHunk.spec) &&
-      hunkBody(candidate.text) === hunkBody(selectedHunk.text),
-  );
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  if (cachedPatch.hunks.some((candidate) => hunkSpecsOverlap(candidate.spec, selectedHunk.spec))) {
-    throw invalidPatch(
-      "Cannot reset a hunk that mixes staged and unstaged changes. Unstage it or reset the whole file instead.",
-    );
-  }
-
-  return undefined;
 };

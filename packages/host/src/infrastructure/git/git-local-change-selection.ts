@@ -1,9 +1,5 @@
 import path from "node:path";
-import type {
-  GitFileDiff,
-  GitChangeGroup,
-  GitResetWorktreeSelectionResult,
-} from "@openducktor/contracts";
+import type { GitFileDiff, GitChangeGroup, GitChangeSelectionResult } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type {
@@ -394,7 +390,7 @@ export const changeLocalSelection = (
   workingDirectory: string,
   changes: GitLocalChangesData,
   input: GitChangeInput,
-): Effect.Effect<GitResetWorktreeSelectionResult, GitPortError> =>
+): Effect.Effect<Pick<GitChangeSelectionResult, "affectedPaths">, GitPortError> =>
   Effect.gen(function* () {
     const { selection } = input;
     let affectedPaths: string[];

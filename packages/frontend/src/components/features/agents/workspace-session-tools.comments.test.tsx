@@ -136,16 +136,6 @@ for (const contextMode of ["repository", "worktree"] as const) {
             // Local changes use the uncommitted status fixture, so `read` records both scopes.
             gitGetLocalChanges: async (repo) =>
               toLocalChanges(await read(repo, "HEAD", "uncommitted")),
-            gitGetWorktreeStatusSummary: async (_repo, _target, scope = "uncommitted") => {
-              const full = status(scope);
-              return {
-                currentBranch: full.currentBranch,
-                fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-                targetAheadBehind: full.targetAheadBehind,
-                upstreamAheadBehind: full.upstreamAheadBehind,
-                snapshot: full.snapshot,
-              };
-            },
           },
         }),
       );

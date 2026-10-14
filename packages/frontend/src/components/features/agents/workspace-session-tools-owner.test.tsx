@@ -161,13 +161,6 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
         }),
         gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => status(target, scope),
         gitGetLocalChanges: async () => toLocalChanges(status("HEAD", "uncommitted")),
-        gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => ({
-          currentBranch: status(target, scope).currentBranch,
-          fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-          targetAheadBehind: status(target, scope).targetAheadBehind,
-          upstreamAheadBehind: status(target, scope).upstreamAheadBehind,
-          snapshot: status(target, scope).snapshot,
-        }),
         gitGetBranches: async () => [],
         gitRebaseBranch: rebase,
       },
@@ -269,16 +262,6 @@ test.each(["directory", "branch"] as const)(
           gitGetWorktreeStatus: async (_repoPath, _target, _scope, workingDir) =>
             status(workingDir),
           gitGetLocalChanges: async (_repoPath, workingDir) => toLocalChanges(status(workingDir)),
-          gitGetWorktreeStatusSummary: async (_repoPath, _target, _scope, workingDir) => {
-            const full = status(workingDir);
-            return {
-              currentBranch: full.currentBranch,
-              fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-              targetAheadBehind: full.targetAheadBehind,
-              upstreamAheadBehind: full.upstreamAheadBehind,
-              snapshot: full.snapshot,
-            };
-          },
           gitGetBranches: async () => [],
           gitPullBranch: pull,
         },

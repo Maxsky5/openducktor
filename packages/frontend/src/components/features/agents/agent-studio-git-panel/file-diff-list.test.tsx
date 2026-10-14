@@ -3,7 +3,11 @@ import type { GitFileDiff, GitChangeGroup } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { DiffScope, GitChangeIntent } from "@/features/agent-studio-git";
+import {
+  type DiffScope,
+  type GitChangeIntent,
+  gitChangeIntentKey,
+} from "@/features/agent-studio-git";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
   type InlineCommentDraft,
@@ -105,6 +109,7 @@ function FileDiffListHarness({
   commentsByFile,
   rowActions = null,
   onViewFile = null,
+  changingKey = null,
 }: {
   file?: string;
   type?: GitFileDiff["type"];
@@ -115,6 +120,7 @@ function FileDiffListHarness({
   commentsByFile?: ReadonlyMap<string, InlineCommentDraft[]>;
   rowActions?: GitFileRowActions | null;
   onViewFile?: ((filePath: string) => void) | null;
+  changingKey?: string | null;
 } = {}): ReactElement {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
@@ -122,6 +128,7 @@ function FileDiffListHarness({
     <TooltipProvider>
       <FileDiffListWithHeader
         {...LIST_VIEW_PROPS}
+        changingKey={changingKey}
         fileDiffs={[{ file, type, additions: 2, deletions: 1, diff }]}
         diffScope={diffScope}
         listKey={diffScope}
@@ -750,6 +757,27 @@ describe("FileDiffList", () => {
         selection: { kind: "hunk", filePath: "root.ts", hunkIndex: 1 },
       })),
     );
+  });
+
+  test("turns off the chunk actions while a change runs", async () => {
+    const { actions } = createRowActions("unstaged");
+    const running = gitChangeIntentKey({
+      action: "stage",
+      group: "unstaged",
+      selection: { kind: "file", filePath: "other.ts" },
+    });
+    const { rerender } = render(
+      <FileDiffListHarness file="root.ts" rowActions={actions} changingKey={running} />,
+    );
+    fireEvent.click(fileToggle("root.ts"));
+    await waitFor(() =>
+      expect(viewerMock.mock.lastCall?.[0].hunkActionsDisabledReason).toBe(
+        "Wait for the current change to finish.",
+      ),
+    );
+
+    rerender(<FileDiffListHarness file="root.ts" rowActions={actions} changingKey={null} />);
+    expect(viewerMock.mock.lastCall?.[0].hunkActionsDisabledReason).toBeNull();
   });
 
   test("names why a new file has no chunk actions", () => {

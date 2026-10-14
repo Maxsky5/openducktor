@@ -1,4 +1,8 @@
-import type { GitChangeSelectionRequest, GitLocalChanges } from "@openducktor/contracts";
+import type {
+  GitChangeGroup,
+  GitChangeSelectionRequest,
+  GitLocalChanges,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -43,6 +47,7 @@ type UseAgentStudioGitChangeActionsArgs = {
 };
 
 const UNAVAILABLE_REASON = "The changes are unavailable. Refresh and try again.";
+const MOVED_CHUNK_REASON = "This file changed after you chose the chunk. Review the chunk again.";
 const EMPTY_QUEUE: Promise<void> = Promise.resolve();
 
 /** The newer of two reads of the same directory. A read of another directory replaces it. */
@@ -54,6 +59,12 @@ const newerChanges = (
   if (current.snapshot.effectiveWorkingDir !== next.snapshot.effectiveWorkingDir) return next;
   return next.snapshot.observedAtMs >= current.snapshot.observedAtMs ? next : current;
 };
+
+const fileDiffText = (
+  changes: GitLocalChanges | null,
+  group: GitChangeGroup,
+  filePath: string,
+): string | undefined => changes?.[group].fileDiffs.find((diff) => diff.file === filePath)?.diff;
 
 /** True until the shown local changes include the Git result of the change. */
 const isShownAsPending = (entry: QueuedChange, shown: GitLocalChanges | null): boolean =>
@@ -85,9 +96,12 @@ export function useAgentStudioGitChangeActions({
   const queue = useRef<Promise<void>>(EMPTY_QUEUE);
   const nextId = useRef(0);
   const latest = useRef<GitLocalChanges | null>(localChanges);
+  /** The local changes that the panel shows, so a click reads the diff that the user saw. */
+  const shown = useRef<GitLocalChanges | null>(localChanges);
   /** A failed change or another directory ends every change that waits behind it. */
   const generation = useRef(0);
   useLayoutEffect(() => {
+    shown.current = localChanges;
     latest.current = newerChanges(latest.current, localChanges);
   }, [localChanges]);
   /** Ends the changes that wait in the queue, so none of them runs. */
@@ -123,6 +137,16 @@ export function useAgentStudioGitChangeActions({
     },
     [repoPath, workingDir],
   );
+
+  /**
+   * A chunk number points into the diff that the user saw. An earlier change of the same file can
+   * put another chunk at that number, so the chunk change stops when the diff is not the same.
+   */
+  const chunkMoved = useCallback((intent: GitChangeIntent, reviewedDiff: string | undefined) => {
+    const { selection } = intent;
+    if (selection.kind !== "hunk") return false;
+    return fileDiffText(latest.current, intent.group, selection.filePath) !== reviewedDiff;
+  }, []);
 
   /** Runs `task` after every earlier change, unless a failure or another directory ended it. */
   const enqueue = useCallback((task: () => Promise<void>): Promise<void> => {
@@ -184,7 +208,7 @@ export function useAgentStudioGitChangeActions({
   );
 
   const stageOrUnstage = useCallback(
-    (intent: GitChangeIntent): void => {
+    (intent: GitChangeIntent, reviewedDiff: string | undefined): void => {
       const id = nextId.current++;
       setChangeError(null);
       // A shown result needs no row of its own any more.
@@ -193,6 +217,11 @@ export function useAgentStudioGitChangeActions({
         { id, intent },
       ]);
       void enqueue(async () => {
+        if (chunkMoved(intent, reviewedDiff)) {
+          setChangeError(MOVED_CHUNK_REASON);
+          setQueued((entries) => entries.filter((entry) => entry.id !== id));
+          return;
+        }
         const request = buildRequest(intent);
         if (!request) {
           setChangeError(UNAVAILABLE_REASON);
@@ -207,7 +236,7 @@ export function useAgentStudioGitChangeActions({
         );
       });
     },
-    [buildRequest, endQueuedChanges, enqueue, setChangeError, write],
+    [buildRequest, chunkMoved, endQueuedChanges, enqueue, setChangeError, write],
   );
 
   /** Stage and Unstage run at once. Discard asks for confirmation after the earlier changes. */
@@ -218,13 +247,21 @@ export function useAgentStudioGitChangeActions({
         return;
       }
       const { selection } = intent;
+      const reviewedDiff =
+        selection.kind === "hunk"
+          ? fileDiffText(shown.current, intent.group, selection.filePath)
+          : undefined;
       if (intent.action !== "discard" || selection.kind === "all") {
-        stageOrUnstage(intent);
+        stageOrUnstage(intent, reviewedDiff);
         return;
       }
       setChangeError(null);
       // The dialog keeps the content that Git shows after the earlier changes.
       await enqueue(async () => {
+        if (chunkMoved(intent, reviewedDiff)) {
+          setChangeError(MOVED_CHUNK_REASON);
+          return;
+        }
         const request = buildRequest(intent);
         if (!request) {
           setChangeError(UNAVAILABLE_REASON);
@@ -242,7 +279,15 @@ export function useAgentStudioGitChangeActions({
         });
       });
     },
-    [buildRequest, changeDisabledReason, enqueue, scopeKey, setChangeError, stageOrUnstage],
+    [
+      buildRequest,
+      changeDisabledReason,
+      chunkMoved,
+      enqueue,
+      scopeKey,
+      setChangeError,
+      stageOrUnstage,
+    ],
   );
 
   const confirmDiscard = useCallback(async (): Promise<void> => {

@@ -118,7 +118,7 @@ function CommitDetails({
           name={commit.authorName}
           email={commit.authorEmail}
           className={cn("size-8 bg-current", color)}
-          initialsClassName="text-[11px] text-white"
+          initialsClassName="text-[11px] text-background"
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium text-foreground">{commit.authorName}</span>

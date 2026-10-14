@@ -22,13 +22,11 @@ import {
   gitPullBranchResultSchema,
   gitRebaseBranchRequestSchema,
   gitRebaseBranchResultSchema,
-  gitResetWorktreeSelectionRequestSchema,
-  gitResetWorktreeSelectionResultSchema,
+  gitChangeSelectionRequestSchema,
   gitChangeSelectionResultSchema,
   gitUpstreamAheadBehindSchema,
   gitWorktreeStatusSchema,
   gitWorktreeStatusSnapshotSchema,
-  gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
   isOpencodeExposedOdtToolAlias,
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
@@ -735,81 +733,53 @@ describe("runtime schemas", () => {
     ).toThrow();
   });
 
-  test("git reset worktree selection schemas parse file and hunk requests", () => {
-    const fileReset = gitResetWorktreeSelectionRequestSchema.parse({
+  test("git change selection schema parses file and hunk requests", () => {
+    const snapshot = {
+      hashVersion: 2,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    };
+    const request = {
       repoPath: "/repo",
       workingDir: null,
-      targetBranch: "origin/main",
-      snapshot: {
-        hashVersion: 1,
-        statusHash: "0123456789abcdef",
-        diffHash: "fedcba9876543210",
-      },
-      selection: {
-        kind: "file",
-        filePath: "src/main.ts",
-      },
+      expectedBranch: { name: "feature", detached: false },
+      snapshots: { unstaged: snapshot, staged: snapshot },
+      action: "discard",
+      group: "unstaged",
+    };
+
+    const fileChange = gitChangeSelectionRequestSchema.parse({
+      ...request,
+      selection: { kind: "file", filePath: "src/main.ts" },
     });
-    const hunkReset = gitResetWorktreeSelectionRequestSchema.parse({
-      repoPath: "/repo",
-      targetBranch: "origin/main",
-      snapshot: {
-        hashVersion: 1,
-        statusHash: "0123456789abcdef",
-        diffHash: "fedcba9876543210",
-      },
-      selection: {
-        kind: "hunk",
-        filePath: "src/main.ts",
-        hunkIndex: 2,
-      },
-    });
-    const result = gitResetWorktreeSelectionResultSchema.parse({
-      affectedPaths: ["src/main.ts"],
+    const hunkChange = gitChangeSelectionRequestSchema.parse({
+      ...request,
+      selection: { kind: "hunk", filePath: "src/main.ts", hunkIndex: 2 },
     });
 
-    expect(fileReset.workingDir).toBeUndefined();
-    expect(fileReset.selection.kind).toBe("file");
-    expect(hunkReset.selection.kind).toBe("hunk");
-    expect(result.affectedPaths).toEqual(["src/main.ts"]);
-  });
-
-  test("git reset worktree selection schemas reject malformed snapshot and selection payloads", () => {
+    expect(fileChange.workingDir).toBeUndefined();
+    expect(fileChange.selection).toEqual({ kind: "file", filePath: "src/main.ts" });
+    expect(hunkChange.selection).toEqual({ kind: "hunk", filePath: "src/main.ts", hunkIndex: 2 });
     expect(() =>
-      gitResetWorktreeSelectionRequestSchema.parse({
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        snapshot: {
-          hashVersion: 0,
-          statusHash: "0123456789abcdef",
-          diffHash: "fedcba9876543210",
-        },
-        selection: {
-          kind: "file",
-          filePath: "src/main.ts",
-          hunkIndex: 1,
-        },
+      gitChangeSelectionRequestSchema.parse({
+        ...request,
+        snapshots: { unstaged: { ...snapshot, hashVersion: 0 }, staged: snapshot },
+        selection: { kind: "file", filePath: "src/main.ts" },
       }),
     ).toThrow();
-
     expect(() =>
-      gitResetWorktreeSelectionRequestSchema.parse({
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        snapshot: {
-          hashVersion: 1,
-          statusHash: "stale",
-          diffHash: "fedcba9876543210",
-        },
-        selection: {
-          kind: "hunk",
-          filePath: "src/main.ts",
-          hunkIndex: -1,
-        },
+      gitChangeSelectionRequestSchema.parse({
+        ...request,
+        snapshots: { unstaged: { ...snapshot, statusHash: "stale" }, staged: snapshot },
+        selection: { kind: "file", filePath: "src/main.ts" },
       }),
     ).toThrow();
-
-    expect(() => gitResetWorktreeSelectionResultSchema.parse({ affectedPaths: [] })).toThrow();
+    expect(() =>
+      gitChangeSelectionRequestSchema.parse({
+        ...request,
+        selection: { kind: "hunk", filePath: "src/main.ts", hunkIndex: -1 },
+      }),
+    ).toThrow();
   });
 
   test("git change selection results carry the local changes after the write", () => {
@@ -842,6 +812,9 @@ describe("runtime schemas", () => {
     expect(result.localChanges.staged.snapshot).toEqual(snapshot);
     expect(() =>
       gitChangeSelectionResultSchema.parse({ affectedPaths: ["src/main.ts"] }),
+    ).toThrow();
+    expect(() =>
+      gitChangeSelectionResultSchema.parse({ affectedPaths: [], localChanges }),
     ).toThrow();
   });
 
@@ -890,29 +863,6 @@ describe("runtime schemas", () => {
     expect(status.snapshot.diffScope).toBe("target");
     expect(status.upstreamAheadBehind.outcome).toBe("tracking");
     expect(status.targetAheadBehind.behind).toBe(3);
-  });
-
-  test("git worktree status summary schema parses lightweight polling payload", () => {
-    const summary = gitWorktreeStatusSummarySchema.parse({
-      currentBranch: { name: "feature/task-1", detached: false },
-      fileStatusCounts: { total: 3, staged: 1, unstaged: 2 },
-      targetAheadBehind: { ahead: 1, behind: 3 },
-      upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
-      snapshot: {
-        effectiveWorkingDir: "/repo",
-        targetBranch: "origin/main",
-        diffScope: "target",
-        observedAtMs: 1731000000000,
-        hashVersion: 1,
-        statusHash: "0123456789abcdef",
-        diffHash: "fedcba9876543210",
-      },
-    });
-
-    expect(summary.fileStatusCounts.total).toBe(3);
-    expect(summary.fileStatusCounts.staged).toBe(1);
-    expect(summary.fileStatusCounts.unstaged).toBe(2);
-    expect(summary.snapshot.diffScope).toBe("target");
   });
 
   test("git worktree status snapshot schema rejects malformed hash metadata", () => {

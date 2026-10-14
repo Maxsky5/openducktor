@@ -4,13 +4,12 @@ import type {
   FileStatus,
   GitCurrentBranch,
   GitDiffScope,
-  GitFileStatusCounts,
   GitResetSnapshot,
   GitUpstreamAheadBehind,
   GitWorktreeStatusSnapshot,
 } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
-import type { GitLocalChangeGroupData, GitWorktreeStatusData } from "../../ports/git-port";
+import type { GitLocalChangeGroupData } from "../../ports/git-port";
 
 const gitWorktreeHashVersion = 1;
 /** Local group snapshots hash full object IDs and the checkout revision. */
@@ -139,21 +138,6 @@ export const hashWorktreeDiffPayload = (fileDiffs: GitFileDiff[]): string => {
   return hasher.finishHex();
 };
 
-export const hashWorktreeDiffSummaryPayload = (
-  diffScope: GitDiffScope,
-  targetAheadBehind: CommitsAheadBehind,
-  fileStatusCounts: GitFileStatusCounts,
-): string => {
-  const hasher = new WorktreeSnapshotHasher();
-  hasher.updateString(diffScope);
-  hasher.updateU32(targetAheadBehind.ahead);
-  hasher.updateU32(targetAheadBehind.behind);
-  hasher.updateU32(fileStatusCounts.total);
-  hasher.updateU32(fileStatusCounts.staged);
-  hasher.updateU32(fileStatusCounts.unstaged);
-  return hasher.finishHex();
-};
-
 export const createWorktreeSnapshot = (
   effectiveWorkingDir: string,
   targetBranch: string,
@@ -170,28 +154,6 @@ export const createWorktreeSnapshot = (
   statusHash,
   diffHash,
 });
-
-const staleDiffMessage = "Displayed diff is stale. Refresh and try again.";
-
-export const validateResetSnapshotMatches = (
-  snapshot: GitResetSnapshot,
-  statusData: GitWorktreeStatusData,
-): void => {
-  if (snapshot.hashVersion !== gitWorktreeHashVersion) {
-    throw new HostValidationError({ message: staleDiffMessage });
-  }
-
-  const statusHash = hashWorktreeStatusPayload(
-    statusData.currentBranch,
-    statusData.fileStatuses,
-    statusData.targetAheadBehind,
-    statusData.upstreamAheadBehind,
-  );
-  const diffHash = hashWorktreeDiffPayload(statusData.fileDiffs);
-  if (snapshot.statusHash !== statusHash || snapshot.diffHash !== diffHash) {
-    throw new HostValidationError({ message: staleDiffMessage });
-  }
-};
 
 /** A snapshot of one local group. Diffs with full object IDs cover binary and untracked content. */
 export const hashLocalGroupSnapshot = (

@@ -37,10 +37,7 @@ import {
   suggestedSquashCommitMessage,
   switchBranch,
 } from "../../infrastructure/git/git-merge";
-import {
-  resetWorktreeSelection,
-  restoreWorktreeToReference,
-} from "../../infrastructure/git/git-reset";
+import { restoreWorktreeToReference } from "../../infrastructure/git/git-reset";
 import {
   getCurrentBranchUnchecked,
   getStatusUnchecked,
@@ -411,9 +408,6 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     switchBranch(workingDirectory, branch, create) {
       return switchBranch(runner, workingDirectory, branch, create);
-    },
-    resetWorktreeSelection(workingDirectory, fileDiffs, selection) {
-      return resetWorktreeSelection(runner, workingDirectory, fileDiffs, selection);
     },
     restoreWorktreeToReference(workingDirectory, reference) {
       return restoreWorktreeToReference(runner, workingDirectory, reference);

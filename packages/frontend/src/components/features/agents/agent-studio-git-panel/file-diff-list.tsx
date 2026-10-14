@@ -318,6 +318,7 @@ function FileListRowView({
   } else {
     const { diff } = row;
     const editor = editorStateByFile.get(diff.file);
+    const isExpanded = expandedFiles.has(diff.file);
     content = (
       <FileDiffEntryWithMemo
         row={row}
@@ -333,7 +334,7 @@ function FileListRowView({
         viewState={{
           isConflicted: conflictedFiles.has(diff.file),
           reserveConflictSlot,
-          isExpanded: expandedFiles.has(diff.file),
+          isExpanded,
         }}
         onToggle={onToggleFile}
         onViewFile={onViewFile}
@@ -342,6 +343,8 @@ function FileListRowView({
         runningAction={
           rowActions ? runningFileAction(rowActions.group, diff.file, changingKey) : null
         }
+        // Only an open diff shows chunk actions, so a closed row does not draw again.
+        isChangeRunning={rowActions !== null && changingKey !== null && isExpanded}
       />
     );
   }
