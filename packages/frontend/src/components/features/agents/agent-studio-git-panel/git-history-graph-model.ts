@@ -27,13 +27,15 @@ const firstFreeLane = (lanes: (OpenLane | null)[]): number => {
 
 /**
  * Places each commit in a lane. Rows come children first, so a lane waits for the next parent.
+ * A commit without a child row is a branch tip. It opens a new lane right of every lane above it,
+ * so a branch never continues the column of commits that another branch merged.
  * The layout of a row depends only on the rows above it, so later pages keep earlier lanes.
  */
 export function layoutHistoryGraph(commits: readonly GitHistoryCommit[]): GraphLayout {
   const membershipByOid = new Map(commits.map((commit) => [commit.oid, commit.membership]));
   const lanes: (OpenLane | null)[] = [];
   const rows: GraphRow[] = [];
-  let laneCount = 1;
+  let laneCount = 0;
   for (const commit of commits) {
     const passThrough: GraphEdge[] = [];
     const incoming: GraphEdge[] = [];
@@ -42,7 +44,9 @@ export function layoutHistoryGraph(commits: readonly GitHistoryCommit[]): GraphL
       const edges = open.oid === commit.oid ? incoming : passThrough;
       edges.push({ lane: index, tone: open.tone });
     });
-    const lane = incoming[0]?.lane ?? firstFreeLane(lanes);
+    const lane = incoming[0]?.lane ?? laneCount;
+    // Lanes between the open lanes and a new tip lane stay free for later merges.
+    while (lanes.length < lane) lanes.push(null);
     for (const edge of incoming) lanes[edge.lane] = null;
 
     const outside = new Set(commit.outsideParentOids);
@@ -51,7 +55,10 @@ export function layoutHistoryGraph(commits: readonly GitHistoryCommit[]): GraphL
       .filter((parent) => !outside.has(parent))
       .forEach((parent, index) => {
         const existing = lanes.findIndex((open) => open?.oid === parent);
-        if (existing !== -1) {
+        // A line joins a lane on its left that waits for the same parent. A first parent does not
+        // move right into a newer branch, so a left lane keeps its branch down to the parent.
+        const keepsLane = index === 0 && existing > lane && lanes[lane] == null;
+        if (existing !== -1 && !keepsLane) {
           outgoing.push({ lane: existing, tone: lanes[existing]?.tone ?? commit.membership });
           return;
         }
@@ -74,7 +81,7 @@ export function layoutHistoryGraph(commits: readonly GitHistoryCommit[]): GraphL
       reachesLimit: outside.size > 0,
     });
   }
-  return { rows, laneCount };
+  return { rows, laneCount: Math.max(laneCount, 1) };
 }
 
 const relativeFormat = new Intl.RelativeTimeFormat("en", { numeric: "auto" });

@@ -81,6 +81,47 @@ describe("layoutHistoryGraph", () => {
     expect(main?.incoming).toEqual([{ lane: 1, tone: "boundary" }]);
   });
 
+  test("opens a new lane right of the merged commits for a branch tip below them", () => {
+    const layout = layoutHistoryGraph([
+      commit("main", ["base", "pr2"], "target"),
+      commit("pr2", ["pr1"], "target"),
+      commit("pr1", ["base"], "target"),
+      commit("c2", ["c1"], "current"),
+      commit("c1", ["base"], "current"),
+      commit("base", [], "boundary"),
+    ]);
+
+    // The merged commits free lane 1 before the branch tip. The branch keeps its own lane.
+    expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 1, 2, 2, 0]);
+    expect(layout.rows[3]?.passThrough).toEqual([{ lane: 0, tone: "target" }]);
+    expect(layout.rows[4]?.outgoing).toEqual([{ lane: 0, tone: "target" }]);
+    expect(layout.laneCount).toBe(3);
+  });
+
+  test("keeps the main line in its lane when a branch tip waits for the same base", () => {
+    const layout = layoutHistoryGraph([
+      commit("main", ["m1", "pr1"], "target"),
+      commit("pr1", ["m1"], "target"),
+      commit("c1", ["base"], "current"),
+      commit("m1", ["base", "pr2"], "target"),
+      commit("pr2", ["base"], "target"),
+      commit("base", [], "boundary"),
+    ]);
+
+    // The branch tip takes lane 2, and the second merge uses the free lane 1 again.
+    expect(layout.rows.map((row) => row.lane)).toEqual([0, 1, 2, 0, 1, 0]);
+    // The main line stays in lane 0, and the branch joins it at the shared base.
+    expect(layout.rows[3]?.outgoing).toEqual([
+      { lane: 0, tone: "target" },
+      { lane: 1, tone: "target" },
+    ]);
+    expect(layout.rows[5]?.incoming).toEqual([
+      { lane: 0, tone: "target" },
+      { lane: 2, tone: "current" },
+    ]);
+    expect(layout.laneCount).toBe(3);
+  });
+
   test("keeps earlier rows unchanged when a later page adds rows", () => {
     const firstPage = [commit("c3", ["c2"], "current"), commit("c2", ["c1"], "current")];
     const secondPage = [commit("c1", ["base"], "current"), commit("base", [], "boundary")];
