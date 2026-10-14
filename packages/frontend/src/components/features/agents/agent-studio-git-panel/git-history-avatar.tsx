@@ -76,10 +76,11 @@ function requestAvatarUrl(email: string): void {
 /** The photo address to show for an email, or null while it is unknown or after it failed. */
 function useAvatarUrl(email: string): string | null {
   const key = normalizedEmail(email);
-  const url = useSyncExternalStore(subscribe, () => avatarUrls.get(key) ?? null);
-  const failed = useSyncExternalStore(subscribe, () => (url ? failedUrls.has(url) : false));
   useEffect(() => requestAvatarUrl(key), [key]);
-  return url && !failed ? url : null;
+  return useSyncExternalStore(subscribe, () => {
+    const url = avatarUrls.get(key) ?? null;
+    return url && !failedUrls.has(url) ? url : null;
+  });
 }
 
 /** The author photo, or the initials when no photo exists or it does not load. */

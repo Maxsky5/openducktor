@@ -22,6 +22,20 @@ export type HistoryRefGroup = {
 
 const remoteBranchName = (fullName: string): string => fullName.slice(fullName.indexOf("/") + 1);
 
+const emptyGroup = (name: string, kind: HistoryRefGroup["kind"]): HistoryRefGroup => ({
+  name,
+  kind,
+  fullNames: [],
+  local: false,
+  remote: false,
+  isHead: false,
+  isTarget: false,
+});
+
+/** A branch and a tag can share a name, so the key keeps them apart. */
+const groupKey = (group: Pick<HistoryRefGroup, "kind" | "name">): string =>
+  `${group.kind}:${group.name}`;
+
 const groupRank = (group: HistoryRefGroup): number => {
   if (group.isHead) return 0;
   if (group.isTarget) return 1;
@@ -41,18 +55,10 @@ export function historyRefGroups(
 ): HistoryRefGroup[] {
   const groups = new Map<string, HistoryRefGroup>();
   for (const ref of commit.refs) {
-    const isTag = ref.kind === "tag";
     const name = ref.kind === "remote" ? remoteBranchName(ref.name) : ref.name;
-    const key = `${isTag ? "tag" : "branch"}:${name}`;
-    const group = groups.get(key) ?? {
-      name,
-      kind: isTag ? "tag" : "branch",
-      fullNames: [],
-      local: false,
-      remote: false,
-      isHead: false,
-      isTarget: false,
-    };
+    const kind = ref.kind === "tag" ? "tag" : "branch";
+    const key = groupKey({ kind, name });
+    const group = groups.get(key) ?? emptyGroup(name, kind);
     group.fullNames.push(ref.name);
     group.local ||= ref.kind === "local";
     group.remote ||= ref.kind === "remote";
@@ -62,26 +68,10 @@ export function historyRefGroups(
   }
   const result = [...groups.values()];
   if (commit.oid === comparison.currentTip && !result.some((group) => group.isHead)) {
-    result.push({
-      name: "HEAD",
-      kind: "head",
-      fullNames: ["HEAD"],
-      local: true,
-      remote: false,
-      isHead: true,
-      isTarget: false,
-    });
+    result.push({ ...emptyGroup("HEAD", "head"), fullNames: ["HEAD"], isHead: true });
   }
   if (commit.oid === comparison.targetTip && !result.some((group) => group.isTarget)) {
-    result.push({
-      name: targetLabel,
-      kind: "branch",
-      fullNames: [targetLabel],
-      local: false,
-      remote: false,
-      isHead: false,
-      isTarget: true,
-    });
+    result.push({ ...emptyGroup(targetLabel, "branch"), fullNames: [targetLabel], isTarget: true });
   }
   return result.sort((left, right) => groupRank(left) - groupRank(right));
 }
@@ -96,9 +86,9 @@ const groupIcon = (group: HistoryRefGroup): LucideIcon => {
 };
 
 const groupDescription = (group: HistoryRefGroup): string => {
-  const roles = [group.isHead ? "checked out" : null, group.isTarget ? "target" : null].filter(
-    Boolean,
-  );
+  const roles: string[] = [];
+  if (group.isHead) roles.push("checked out");
+  if (group.isTarget) roles.push("target");
   const names = group.fullNames.join(", ");
   return roles.length > 0 ? `${names} (${roles.join(", ")})` : names;
 };
@@ -149,7 +139,7 @@ export function HistoryRefsCell({
                 const Icon = groupIcon(group);
                 return (
                   <span
-                    key={`${group.kind}:${group.name}`}
+                    key={groupKey(group)}
                     className={cn(
                       "flex size-4 items-center justify-center rounded-full border border-card bg-muted text-muted-foreground",
                       index > 0 && "-ml-2",
@@ -176,7 +166,7 @@ export function HistoryRefsCell({
           {groups.map((group) => {
             const Icon = groupIcon(group);
             return (
-              <li key={`${group.kind}:${group.name}`} className="flex min-w-0 items-center gap-1.5">
+              <li key={groupKey(group)} className="flex min-w-0 items-center gap-1.5">
                 <Icon className="size-3 shrink-0" aria-hidden="true" />
                 <span className="min-w-0 truncate">{groupDescription(group)}</span>
               </li>

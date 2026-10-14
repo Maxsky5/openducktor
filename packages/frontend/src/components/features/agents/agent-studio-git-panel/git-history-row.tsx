@@ -129,57 +129,57 @@ function HistoryCell({
 }): ReactElement {
   const { row, graph, color, refGroups, nowMs, exactDate } = input;
   const { commit } = row;
-  if (id === "graph") {
-    return <HistoryGraphCell row={row} graph={graph} connectFromLeft={labelsOnLeft} />;
-  }
-  if (id === "message") return <MessageCell commit={commit} />;
   const width = historyColumnWidth(id, graph.viewWidth) ?? undefined;
   const fixed = "flex h-full shrink-0 items-center overflow-hidden";
-  if (id === "refs") {
-    return (
-      <span className={cn(fixed, "px-1.5")} style={{ width }}>
-        <HistoryRefsCell groups={refGroups} color={color} />
-      </span>
-    );
+  switch (id) {
+    case "graph":
+      return <HistoryGraphCell row={row} graph={graph} connectFromLeft={labelsOnLeft} />;
+    case "message":
+      return <MessageCell commit={commit} />;
+    case "refs":
+      return (
+        <span className={cn(fixed, "px-1.5")} style={{ width }}>
+          <HistoryRefsCell groups={refGroups} color={color} />
+        </span>
+      );
+    case "author":
+      return (
+        <span
+          className={cn(fixed, "gap-1.5 px-2 text-[11px] text-muted-foreground")}
+          style={{ width }}
+          data-testid="agent-studio-git-history-author"
+        >
+          <AuthorAvatar
+            name={commit.authorName}
+            email={commit.authorEmail}
+            className={cn("size-4 bg-current", color)}
+            initialsClassName="text-[7px] text-white"
+          />
+          <span className="min-w-0 truncate">{commit.authorName}</span>
+        </span>
+      );
+    case "sha":
+      return (
+        <code
+          className={cn(fixed, "px-2 font-mono text-[11px] text-muted-foreground")}
+          style={{ width }}
+          title={commit.oid}
+        >
+          {commit.oid.slice(0, SHORT_OID_LENGTH)}
+        </code>
+      );
+    case "date":
+      return (
+        <time
+          className={cn(fixed, "justify-end px-2.5 text-[11px] text-muted-foreground tabular-nums")}
+          style={{ width }}
+          dateTime={commit.authorDate}
+          title={`${commit.authorName}, ${exactDate}`}
+        >
+          {formatCompactCommitAge(commit.authorDate, nowMs)}
+        </time>
+      );
   }
-  if (id === "author") {
-    return (
-      <span
-        className={cn(fixed, "gap-1.5 px-2 text-[11px] text-muted-foreground")}
-        style={{ width }}
-        data-testid="agent-studio-git-history-author"
-      >
-        <AuthorAvatar
-          name={commit.authorName}
-          email={commit.authorEmail}
-          className={cn("size-4 bg-current", color)}
-          initialsClassName="text-[7px] text-white"
-        />
-        <span className="min-w-0 truncate">{commit.authorName}</span>
-      </span>
-    );
-  }
-  if (id === "sha") {
-    return (
-      <code
-        className={cn(fixed, "px-2 font-mono text-[11px] text-muted-foreground")}
-        style={{ width }}
-        title={commit.oid}
-      >
-        {commit.oid.slice(0, SHORT_OID_LENGTH)}
-      </code>
-    );
-  }
-  return (
-    <time
-      className={cn(fixed, "justify-end px-2.5 text-[11px] text-muted-foreground tabular-nums")}
-      style={{ width }}
-      dateTime={commit.authorDate}
-      title={`${commit.authorName}, ${exactDate}`}
-    >
-      {formatCompactCommitAge(commit.authorDate, nowMs)}
-    </time>
-  );
 }
 
 /** The subject, then the body as one muted line. */

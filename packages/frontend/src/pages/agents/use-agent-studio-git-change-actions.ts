@@ -90,10 +90,14 @@ export function useAgentStudioGitChangeActions({
   useLayoutEffect(() => {
     latest.current = newerChanges(latest.current, localChanges);
   }, [localChanges]);
-  useLayoutEffect(() => {
+  /** Ends the changes that wait in the queue, so none of them runs. */
+  const endQueuedChanges = useCallback((): void => {
     generation.current += 1;
     setQueued([]);
-  }, [scopeKey]);
+  }, []);
+  useLayoutEffect(() => {
+    endQueuedChanges();
+  }, [endQueuedChanges, scopeKey]);
 
   const changeDisabledReason = useMemo((): string | null => {
     if (!repoPath) return "Cannot change files because no repository is selected.";
@@ -160,10 +164,7 @@ export function useAgentStudioGitChangeActions({
         }
         if (isCurrentContext()) setChangeError(failure);
         // Later changes of this directory assumed this result, so they leave the queue.
-        if (generation.current === writtenIn) {
-          generation.current += 1;
-          setQueued([]);
-        }
+        if (generation.current === writtenIn) endQueuedChanges();
         return null;
       } finally {
         setChangingKey(null);
@@ -172,6 +173,7 @@ export function useAgentStudioGitChangeActions({
     [
       applyLocalChanges,
       clearActionErrors,
+      endQueuedChanges,
       isCurrentContext,
       queryClient,
       refreshDiffData,
@@ -193,8 +195,7 @@ export function useAgentStudioGitChangeActions({
         const request = buildRequest(intent);
         if (!request) {
           setChangeError(UNAVAILABLE_REASON);
-          generation.current += 1;
-          setQueued([]);
+          endQueuedChanges();
           return;
         }
         const changes = await write(request);
@@ -205,7 +206,7 @@ export function useAgentStudioGitChangeActions({
         );
       });
     },
-    [buildRequest, enqueue, setChangeError, write],
+    [buildRequest, endQueuedChanges, enqueue, setChangeError, write],
   );
 
   /** Stage and Unstage run at once. Discard asks for confirmation after the earlier changes. */

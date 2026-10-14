@@ -189,10 +189,11 @@ const countUnpublishedCommits = (
       "--not",
       "--remotes",
     ]);
-    const count = Number(output.trim());
+    const text = output.trim();
+    const count = Number(text);
     if (!Number.isInteger(count)) {
       return yield* gitOperationError(
-        `Git returned an invalid commit count: ${output.trim()}`,
+        `Git returned an invalid commit count: ${text}`,
         "git.rev-list",
       );
     }

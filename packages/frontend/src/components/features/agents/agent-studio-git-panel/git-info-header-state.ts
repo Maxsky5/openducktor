@@ -75,7 +75,7 @@ const getPullTooltip = ({
 };
 
 const getPushTooltip = ({
-  canPublishUntrackedBranch,
+  hasNoRemoteBranch,
   gitActionsLockReason,
   hasUpstreamAhead,
   hasUpstreamBehind,
@@ -84,7 +84,7 @@ const getPushTooltip = ({
   pushAheadCount,
   pushBehindCount,
 }: {
-  canPublishUntrackedBranch: boolean;
+  hasNoRemoteBranch: boolean;
   gitActionsLockReason: string | null | undefined;
   hasUpstreamAhead: boolean;
   hasUpstreamBehind: boolean;
@@ -99,7 +99,7 @@ const getPushTooltip = ({
   if (isGitActionsLocked) {
     return gitActionsLockReason ?? "Git actions are disabled.";
   }
-  if (canPublishUntrackedBranch) {
+  if (hasNoRemoteBranch) {
     // A branch without a remote branch still pushes; its first push creates the remote branch.
     return hasUpstreamAhead ? `Push branch (${pushAheadCount} ahead)` : "Push branch";
   }
@@ -151,8 +151,8 @@ export const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
   const hasUncommittedFiles = props.uncommittedFileCount > 0;
   const hasUpstreamAhead = pushAheadCount != null && pushAheadCount > 0;
   const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
-  const canPublishUntrackedBranch = props.upstreamStatus === "untracked";
-  const hasPushAction = canPublishUntrackedBranch || hasUpstreamAhead || hasUpstreamBehind;
+  const hasNoRemoteBranch = props.upstreamStatus === "untracked";
+  const hasPushAction = hasNoRemoteBranch || hasUpstreamAhead || hasUpstreamBehind;
   const isCommitting = Boolean(props.isCommitting);
   const isGitActionsLocked = Boolean(props.isGitActionsLocked);
   const isPushing = Boolean(props.isPushing);
@@ -206,7 +206,7 @@ export const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
     pushAheadCount,
     pushBehindCount,
     pushTooltip: getPushTooltip({
-      canPublishUntrackedBranch,
+      hasNoRemoteBranch,
       gitActionsLockReason: props.gitActionsLockReason,
       hasUpstreamAhead,
       hasUpstreamBehind,
