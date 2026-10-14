@@ -22,14 +22,24 @@ import {
 const retainLiveToolState = (
   message: SessionMessageInfo,
   live: SessionMessageInfo | undefined,
+  settledToolInputs: ReadonlySet<string>,
 ): SessionMessageInfo => {
   if (message.type !== "assistant" || live?.type !== "assistant") return message;
   return {
     ...message,
     content: message.content.map((part) => {
-      if (part.type !== "tool" || part.state.status !== "running") return part;
+      if (
+        part.type !== "tool" ||
+        (part.state.status !== "running" && part.state.status !== "streaming")
+      )
+        return part;
       const prior = live.content.find((item) => item.type === "tool" && item.id === part.id);
-      if (prior?.type !== "tool" || prior.state.status === "streaming") return part;
+      if (prior?.type !== "tool") return part;
+      if (part.state.status === "streaming") {
+        if (prior.state.status === "streaming" && !settledToolInputs.has(prior.id)) return part;
+        return prior;
+      }
+      if (prior.state.status === "streaming") return part;
       if (prior.state.status === "completed" || prior.state.status === "error") return prior;
       return {
         ...part,
@@ -65,7 +75,7 @@ export class OpenCodeLiveMessageProjector {
 
   projectHistory(messages: SessionMessageInfo[]) {
     const retained = messages.map((message) =>
-      retainLiveToolState(message, this.messages.get(message.id)),
+      retainLiveToolState(message, this.messages.get(message.id), this.settledInput),
     );
     const context = messageProjectionContext(retained);
     const completions = new Map(context.completions);
@@ -101,7 +111,7 @@ export class OpenCodeLiveMessageProjector {
     this.settledInput.clear();
     for (const snapshot of messages) {
       const live = previous.get(snapshot.id);
-      const message = retainLiveToolState(structuredClone(snapshot), live);
+      const message = retainLiveToolState(structuredClone(snapshot), live, settledInput);
       this.messages.set(message.id, message);
       if (message.type !== "assistant") continue;
       let textOrdinal = 0;

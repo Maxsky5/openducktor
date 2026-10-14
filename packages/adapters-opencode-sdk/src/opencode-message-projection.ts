@@ -378,7 +378,7 @@ const projectAssistantContent = (
     ...part,
     kind: "subagent",
     partId: `${content.id}:subagent`,
-    correlationKey: content.id,
+    correlationKey: `call:${content.id}`,
     status,
     executionMode:
       input?.background === true || (tool.status === "completed" && metadata?.status === "running")

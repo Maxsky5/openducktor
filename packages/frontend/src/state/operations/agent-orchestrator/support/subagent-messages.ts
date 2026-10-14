@@ -118,6 +118,14 @@ const isPartScopedSubagentKey = (correlationKey: string): boolean =>
 const isSessionScopedSubagentKey = (correlationKey: string): boolean =>
   correlationKey.startsWith("session:");
 
+const areDistinctSubagentCalls = (
+  left: Pick<SubagentMeta, "correlationKey">,
+  right: Pick<SubagentMeta, "correlationKey">,
+): boolean =>
+  left.correlationKey.startsWith("call:") &&
+  right.correlationKey.startsWith("call:") &&
+  left.correlationKey !== right.correlationKey;
+
 /**
  * Lookup tables for the current subagent rows. Without them the merge scans the
  * whole current transcript for every loaded subagent row, which is quadratic and
@@ -217,7 +225,9 @@ const resolveSubagentMessageUpdateTarget = (
   const sessionMessage = incoming.externalSessionId
     ? findLastSubagentMessage(
         owner,
-        (message) => message.meta.externalSessionId === incoming.externalSessionId,
+        (message) =>
+          message.meta.externalSessionId === incoming.externalSessionId &&
+          !areDistinctSubagentCalls(message.meta, incoming),
       )
     : undefined;
   const partScopedRowMatches =
@@ -415,6 +425,7 @@ const matchesLoadedSubagent = (
   if (candidate.id === loadedMessage.id) {
     return false;
   }
+  if (areDistinctSubagentCalls(loadedMessage.meta, candidate.meta)) return false;
 
   const loadedSessionId = loadedMessage.meta.externalSessionId;
   if (loadedSessionId) {
@@ -510,6 +521,8 @@ const resolvePreferredLoadedCorrelationKey = (
   existingMeta: SubagentMeta,
   incomingMeta: SubagentMeta,
 ): string => {
+  if (existingMeta.correlationKey.startsWith("call:")) return existingMeta.correlationKey;
+  if (incomingMeta.correlationKey.startsWith("call:")) return incomingMeta.correlationKey;
   if (
     existingMeta.correlationKey !== incomingMeta.correlationKey &&
     incomingMeta.externalSessionId &&
@@ -577,6 +590,7 @@ const shouldIgnoreIncomingHistorySubagent = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
+  if (areDistinctSubagentCalls(existingMessage.meta, incomingMessage.meta)) return false;
   return Boolean(
     existingMessage.meta.externalSessionId &&
     !incomingMessage.meta.externalSessionId &&
@@ -589,6 +603,7 @@ const canMergeHistorySubagentMessage = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
+  if (areDistinctSubagentCalls(existingMessage.meta, incomingMessage.meta)) return false;
   if (matchesLoadedSubagentMessage(existingMessage, incomingMessage)) {
     return true;
   }

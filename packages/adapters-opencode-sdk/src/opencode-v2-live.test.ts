@@ -4221,114 +4221,149 @@ describe("OpenCode V2 live observation", () => {
       { part: { kind: "tool", status: "running", metadata: { title: "Opening file" } } },
     ]);
   });
-  test("keeps a running foreground child link when history omits live tool progress", async () => {
-    const message: SessionMessageInfo = {
-      id: "msg_foreground",
-      type: "assistant",
-      time: { created: 2 },
-      agent: "build",
-      model,
-      content: [
-        {
-          type: "tool",
-          id: "call_foreground",
-          name: "subagent",
-          time: { created: 3, ran: 4 },
-          state: {
-            status: "running",
-            input: { agent: "general", description: "Check source", prompt: "Check source" },
-            metadata: {},
+  test.each(["running", "streaming"] as const)(
+    "keeps a foreground child link when history reports %s before live progress",
+    async (snapshotStatus) => {
+      const message: SessionMessageInfo = {
+        id: "msg_foreground",
+        type: "assistant",
+        time: { created: 2 },
+        agent: "build",
+        model,
+        content: [
+          {
+            type: "tool",
+            id: "call_foreground",
+            name: "subagent",
+            time: snapshotStatus === "streaming" ? { created: 3 } : { created: 3, ran: 4 },
+            state:
+              snapshotStatus === "streaming"
+                ? { status: "streaming", input: "" }
+                : {
+                    status: "running",
+                    input: {
+                      agent: "general",
+                      description: "Check source",
+                      prompt: "Check source",
+                    },
+                    metadata: {},
+                  },
           },
-        },
-      ],
-    };
-    const delayedHistory = Promise.withResolvers<Response>();
-    const historyStarted = Promise.withResolvers<void>();
-    let delayHistory = false;
-    const fixture = prepareFixture(({ url }) => {
-      if (!url.pathname.endsWith("/message")) return undefined;
-      if (!delayHistory) return cursorPage([message]);
-      historyStarted.resolve();
-      return delayedHistory.promise;
-    });
-    const runtime = await fixture.prepare();
-    const observed = Promise.withResolvers<void>();
-    const completed = Promise.withResolvers<void>();
-    try {
-      await runtime.connection.readSessionSources(ref.repoPath, [
-        { ...ref, sessionScope: { kind: "repository" } },
-      ]);
-      await runtime.startForwarding((signal) => {
-        if (signal.type === "fault" || signal.type === "session_fault")
-          observed.reject(new Error(signal.message));
-        if (
-          signal.type === "session_event" &&
-          signal.event.type === "assistant_part" &&
-          signal.event.part.kind === "subagent" &&
-          signal.event.part.externalSessionId === "ses_child"
-        ) {
-          if (signal.event.part.status === "completed") completed.resolve();
-          else {
-            expect(signal.event.part).toMatchObject({
-              status: "running",
-              executionMode: "foreground",
-            });
-            observed.resolve();
+        ],
+      };
+      const delayedHistory = Promise.withResolvers<Response>();
+      const historyStarted = Promise.withResolvers<void>();
+      let delayHistory = false;
+      const fixture = prepareFixture(({ url }) => {
+        if (!url.pathname.endsWith("/message")) return undefined;
+        if (!delayHistory) return cursorPage([message]);
+        historyStarted.resolve();
+        return delayedHistory.promise;
+      });
+      const runtime = await fixture.prepare();
+      const observed = Promise.withResolvers<void>();
+      const completed = Promise.withResolvers<void>();
+      const called = Promise.withResolvers<void>();
+      try {
+        await runtime.connection.readSessionSources(ref.repoPath, [
+          { ...ref, sessionScope: { kind: "repository" } },
+        ]);
+        await runtime.startForwarding((signal) => {
+          if (signal.type === "fault" || signal.type === "session_fault")
+            observed.reject(new Error(signal.message));
+          if (
+            signal.type === "session_event" &&
+            signal.event.type === "assistant_part" &&
+            signal.event.part.kind === "subagent" &&
+            signal.event.part.status === "running" &&
+            signal.event.part.externalSessionId === undefined
+          )
+            called.resolve();
+          if (
+            signal.type === "session_event" &&
+            signal.event.type === "assistant_part" &&
+            signal.event.part.kind === "subagent" &&
+            signal.event.part.externalSessionId === "ses_child"
+          ) {
+            if (signal.event.part.status === "completed") completed.resolve();
+            else {
+              expect(signal.event.part).toMatchObject({
+                status: "running",
+                executionMode: "foreground",
+              });
+              observed.resolve();
+            }
           }
+        });
+        if (snapshotStatus === "streaming") {
+          fixture.channel.push({
+            id: "evt_foreground_called",
+            type: "session.tool.called",
+            created: 4,
+            durable,
+            data: {
+              sessionID: ref.externalSessionId,
+              assistantMessageID: message.id,
+              id: "call_foreground",
+              input: { agent: "general", description: "Check source", prompt: "Check source" },
+              executed: false,
+            },
+          });
+          await called.promise;
         }
-      });
-      fixture.channel.push({
-        id: "evt_foreground_progress",
-        type: "session.tool.progress",
-        created: 5,
-        data: {
-          sessionID: ref.externalSessionId,
-          assistantMessageID: message.id,
-          id: "call_foreground",
-          metadata: { sessionID: "ses_child", status: "running" },
-        },
-      });
-      await observed.promise;
-      const history = await runtime.queries.loadSessionHistory(ref);
-      expect(history[0]?.parts.find((part) => part.kind === "subagent")).toMatchObject({
-        externalSessionId: "ses_child",
-        status: "running",
-        executionMode: "foreground",
-      });
-      expect(history[0]?.parts.filter((part) => part.kind === "tool")).toEqual([]);
-      delayHistory = true;
-      const reading = runtime.queries.loadSessionHistory(ref);
-      await historyStarted.promise;
-      fixture.channel.push({
-        id: "evt_foreground_success",
-        type: "session.tool.success",
-        created: 9,
-        durable: { ...durable, version: 2 },
-        data: {
-          sessionID: ref.externalSessionId,
-          assistantMessageID: message.id,
-          id: "call_foreground",
-          content: [{ type: "text", text: "Review complete" }],
-          executed: false,
-          metadata: { sessionID: "ses_child", status: "completed" },
-        },
-      });
-      await completed.promise;
-      delayedHistory.resolve(cursorPage([message]));
-      const staleHistory = await reading;
-      expect(staleHistory[0]?.parts).toMatchObject([
-        {
-          kind: "subagent",
+        fixture.channel.push({
+          id: "evt_foreground_progress",
+          type: "session.tool.progress",
+          created: 5,
+          data: {
+            sessionID: ref.externalSessionId,
+            assistantMessageID: message.id,
+            id: "call_foreground",
+            metadata: { sessionID: "ses_child", status: "running" },
+          },
+        });
+        await observed.promise;
+        const history = await runtime.queries.loadSessionHistory(ref);
+        expect(history[0]?.parts.find((part) => part.kind === "subagent")).toMatchObject({
           externalSessionId: "ses_child",
-          status: "completed",
-          endedAtMs: 9,
-        },
-      ]);
-    } finally {
-      delayedHistory.resolve(cursorPage([message]));
-      await runtime.release();
-    }
-  });
+          status: "running",
+          executionMode: "foreground",
+        });
+        expect(history[0]?.parts.filter((part) => part.kind === "tool")).toEqual([]);
+        delayHistory = true;
+        const reading = runtime.queries.loadSessionHistory(ref);
+        await historyStarted.promise;
+        fixture.channel.push({
+          id: "evt_foreground_success",
+          type: "session.tool.success",
+          created: 9,
+          durable: { ...durable, seq: 2, version: 2 },
+          data: {
+            sessionID: ref.externalSessionId,
+            assistantMessageID: message.id,
+            id: "call_foreground",
+            content: [{ type: "text", text: "Review complete" }],
+            executed: false,
+            metadata: { sessionID: "ses_child", status: "completed" },
+          },
+        });
+        await completed.promise;
+        delayedHistory.resolve(cursorPage([message]));
+        const staleHistory = await reading;
+        expect(staleHistory[0]?.parts).toMatchObject([
+          {
+            kind: "subagent",
+            externalSessionId: "ses_child",
+            status: "completed",
+            endedAtMs: 9,
+          },
+        ]);
+      } finally {
+        delayedHistory.resolve(cursorPage([message]));
+        await runtime.release();
+      }
+    },
+  );
   test("keeps background subagents running until structured native completion", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const message = backgroundLaunch();
@@ -4393,24 +4428,37 @@ describe("OpenCode V2 live observation", () => {
   });
   test("links a continued child from settled arguments before live progress arrives", () => {
     const projector = new OpenCodeLiveMessageProjector();
-    projector.seed([
-      {
-        id: "msg_continuation",
-        type: "assistant",
-        time: { created: 2 },
-        agent: "build",
-        model,
-        content: [
-          {
-            type: "tool",
-            id: "call_continue",
-            name: "subagent",
-            time: { created: 3 },
-            state: { status: "streaming", input: "" },
-          },
-        ],
+    const snapshot: SessionMessageInfo = {
+      id: "msg_continuation",
+      type: "assistant",
+      time: { created: 2 },
+      agent: "build",
+      model,
+      content: [
+        {
+          type: "tool",
+          id: "call_continue",
+          name: "subagent",
+          time: { created: 3 },
+          state: { status: "streaming", input: "" },
+        },
+      ],
+    };
+    projector.seed([snapshot]);
+    projector.apply({
+      id: "evt_continue_partial",
+      type: "session.tool.input.delta",
+      created: 3,
+      data: {
+        sessionID: ref.externalSessionId,
+        assistantMessageID: snapshot.id,
+        id: "call_continue",
+        delta: '{"sessionID":"ses_child"',
       },
-    ]);
+    });
+    expect(projector.projectHistory([snapshot])[0]?.parts[0]).not.toHaveProperty(
+      "externalSessionId",
+    );
     const events = projector.apply({
       id: "evt_continue_input",
       created: 4,
@@ -4442,6 +4490,12 @@ describe("OpenCode V2 live observation", () => {
       },
     ]);
     expect(events).toHaveLength(1);
+    expect(projector.projectHistory([snapshot])[0]?.parts[0]).toMatchObject({
+      kind: "subagent",
+      status: "pending",
+      externalSessionId: "ses_child",
+      prompt: "Check changes",
+    });
   });
   test("keeps the child link and cancelled state for an interrupted foreground tool", () => {
     const history = projectMessage({
@@ -4574,9 +4628,9 @@ describe("OpenCode V2 live observation", () => {
     expect(
       history.filter((message) => message.role === "assistant").map((message) => message.parts[0]),
     ).toMatchObject([
-      { status: "error", endedAtMs: 5 },
-      { status: "completed", endedAtMs: 12 },
-      { status: "cancelled", endedAtMs: 18 },
+      { correlationKey: "call:call_first", status: "error", endedAtMs: 5 },
+      { correlationKey: "call:call_second", status: "completed", endedAtMs: 12 },
+      { correlationKey: "call:call_third", status: "cancelled", endedAtMs: 18 },
     ]);
   });
 });
