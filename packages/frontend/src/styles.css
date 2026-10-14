@@ -613,6 +613,13 @@ pre {
   }
 }
 
+/* A commit that a new History read removed. */
+@keyframes history-row-leave {
+  to {
+    opacity: 0;
+  }
+}
+
 .onboarding-stage-content {
   view-transition-name: onboarding-stage-content;
 }

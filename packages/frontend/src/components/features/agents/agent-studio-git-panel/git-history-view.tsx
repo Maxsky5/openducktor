@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,7 +24,7 @@ import {
 import { HistoryCommitPopover } from "./git-history-commit-details";
 import { GRAPH_OFFSET_PROPERTY, ROW_HEIGHT, useGraphView } from "./git-history-graph";
 import { HistoryColumnsHeader } from "./git-history-header";
-import { type GraphLayout, type GraphRow, layoutHistoryGraph } from "./git-history-graph-model";
+import { type GraphLayout, layoutHistoryGraph } from "./git-history-graph-model";
 import {
   type HistoryFooter,
   HistoryLoading,
@@ -245,22 +246,65 @@ const historyRowKey = (index: number, { rows }: HistoryRowProps): string =>
   rows[index]?.commit.oid ?? "footer";
 
 const NO_COMMITS: ReadonlySet<string> = new Set();
+/** How long a removed commit fades out before the other rows close the gap. */
+const LEAVE_MS = 200;
+
+type RowTransitions = {
+  /** The layout of the last read. It shows after the removed commits fade out. */
+  received: GraphLayout;
+  shown: GraphLayout;
+  /** Commits that the shown layout added. They fade in. */
+  entering: ReadonlySet<string>;
+  /** Commits that the received layout removed. They fade out. */
+  leaving: ReadonlySet<string>;
+};
+
+/** The commits of `layout` that `oids` does not hold. */
+const commitsMissingFrom = (
+  layout: GraphLayout,
+  oids: ReadonlySet<string>,
+): ReadonlySet<string> => {
+  const missing = layout.rows.filter((row) => !oids.has(row.commit.oid));
+  return missing.length === 0 ? NO_COMMITS : new Set(missing.map((row) => row.commit.oid));
+};
+
+const commitOids = (layout: GraphLayout): ReadonlySet<string> =>
+  new Set(layout.rows.map((row) => row.commit.oid));
+
+const showLayout = (before: GraphLayout, next: GraphLayout): RowTransitions => ({
+  received: next,
+  shown: next,
+  entering: before.rows.length === 0 ? NO_COMMITS : commitsMissingFrom(next, commitOids(before)),
+  leaving: NO_COMMITS,
+});
 
 /**
- * The commits that the last read added. They fade in while the other rows slide to their place.
- * The first rows of a list show at once.
+ * Animates the commits that a read adds or removes. Removed commits fade out first. Then the new
+ * rows show: the other rows slide to their place, and added commits fade in. The first rows of a
+ * list show at once, and a reduced motion setting skips the fade-out.
  */
-function useEnteringCommits(rows: GraphRow[]): ReadonlySet<string> {
-  const [shown, setShown] = useState({ rows, entering: NO_COMMITS });
-  if (shown.rows !== rows) {
-    const before = new Set(shown.rows.map((row) => row.commit.oid));
-    const added = rows.filter((row) => !before.has(row.commit.oid));
-    setShown({
-      rows,
-      entering: before.size === 0 ? NO_COMMITS : new Set(added.map((row) => row.commit.oid)),
-    });
+function useRowTransitions(layout: GraphLayout): RowTransitions {
+  const [state, setState] = useState<RowTransitions>(() => ({
+    received: layout,
+    shown: layout,
+    entering: NO_COMMITS,
+    leaving: NO_COMMITS,
+  }));
+  if (state.received !== layout) {
+    const leaving = commitsMissingFrom(state.shown, commitOids(layout));
+    const instant =
+      leaving.size === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setState(instant ? showLayout(state.shown, layout) : { ...state, received: layout, leaving });
   }
-  return shown.entering;
+  useEffect(() => {
+    if (state.shown === state.received) return;
+    const timer = setTimeout(
+      () => setState((current) => showLayout(current.shown, current.received)),
+      LEAVE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [state.received, state.shown]);
+  return state;
 }
 
 function HistoryCommitList({
@@ -281,11 +325,11 @@ function HistoryCommitList({
   refreshFailure: ReactNode;
 }): ReactElement {
   const [measure, rowWidth] = useObservedWidth();
-  const { graph, scroller } = useGraphView(layout.laneCount, rowWidth);
+  const { shown, entering, leaving } = useRowTransitions(layout);
+  const { graph, scroller } = useGraphView(shown.laneCount, rowWidth);
   const order = useHistoryColumnsStore((state) => state.order);
   const hidden = useHistoryColumnsStore((state) => state.hidden);
   const columns = useMemo(() => visibleHistoryColumns({ order, hidden }), [hidden, order]);
-  const entering = useEnteringCommits(layout.rows);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
   const selectedButton = useRef<HTMLButtonElement | null>(null);
   const onSelect = useCallback((oid: string, button: HTMLButtonElement) => {
@@ -294,9 +338,11 @@ function HistoryCommitList({
   }, []);
   const closeDetails = useCallback(() => setSelectedOid(null), []);
   const selectedRow = selectedOid
-    ? (layout.rows.find((row) => row.commit.oid === selectedOid) ?? null)
+    ? (shown.rows.find((row) => row.commit.oid === selectedOid) ?? null)
     : null;
-  const rowsLength = layout.rows.length;
+  // A commit that leaves the list takes its selection with it, so its card cannot open again.
+  if (selectedOid !== null && (!selectedRow || leaving.has(selectedOid))) setSelectedOid(null);
+  const rowsLength = shown.rows.length;
   const onRowsRendered = useCallback(
     ({ stopIndex }: { stopIndex: number }) => {
       if (stopIndex >= rowsLength - 10 && footer.kind === "more") footer.load();
@@ -330,12 +376,13 @@ function HistoryCommitList({
         className="h-0 min-h-0 flex-1 overflow-x-hidden"
         defaultHeight={400}
         rowComponent={HistoryRowView}
-        rowCount={layout.rows.length + (footer.kind === "end" ? 0 : 1)}
+        rowCount={shown.rows.length + (footer.kind === "end" ? 0 : 1)}
         rowHeight={ROW_HEIGHT}
         rowKey={historyRowKey}
         rowProps={{
-          rows: layout.rows,
+          rows: shown.rows,
           entering,
+          leaving,
           graph,
           comparison,
           targetLabel,

@@ -22,6 +22,8 @@ export type HistoryRowProps = {
   rows: GraphRow[];
   /** Commits that the last read added. They fade in. */
   entering: ReadonlySet<string>;
+  /** Commits that the last read removed. They fade out before the list closes the gap. */
+  leaving: ReadonlySet<string>;
   graph: GraphView;
   comparison: GitHistoryComparison;
   targetLabel: string;
@@ -86,6 +88,7 @@ function HistoryCommitRow({
   selectedOid,
   onSelect,
   entering,
+  leaving,
 }: Omit<HistoryRowProps, "rows" | "footer"> & { row: GraphRow }): ReactElement {
   const { commit } = row;
   const color = laneColor(commit.membership, row.color);
@@ -102,6 +105,8 @@ function HistoryCommitRow({
       className={cn(
         "group/history-row flex h-full w-full min-w-0 cursor-pointer items-center text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-muted",
         entering.has(commit.oid) && "motion-safe:animate-[history-row-enter_200ms_ease-out]",
+        leaving.has(commit.oid) &&
+          "pointer-events-none motion-safe:animate-[history-row-leave_200ms_ease-in_forwards]",
       )}
       aria-label={`${membershipLabel(commit.membership)} commit ${commit.subject} by ${commit.authorName}, ${exactDate}`}
       aria-haspopup="dialog"

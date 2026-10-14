@@ -71,6 +71,12 @@ const historyPage = mock(
   async (_request: GitHistoryPageRequest): Promise<GitHistoryPage> => firstPage,
 );
 
+/** A removed commit fades out for 200 ms before the list closes the gap. */
+const waitForFadeOut = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
+
 const props = (overrides: Partial<GitHistoryViewProps> = {}): GitHistoryViewProps => ({
   contextKey: "task-1",
   pending: false,
@@ -378,6 +384,85 @@ describe("GitHistoryView", () => {
     await screen.findByText("Subject c3");
     // The list never left, so the old row keeps its element.
     expect(rowOf("Subject c2")).toBe(shownRow);
+    view.unmount();
+    queryClient.clear();
+  });
+
+  test("fades out a commit that a reset removed, then closes the gap", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (revision: string) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView
+              {...props({ checkout: { name: "feature", detached: false, revision } })}
+            />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(CURRENT));
+    await screen.findByText("Subject c2");
+    const rowOf = (subject: string) =>
+      screen.queryByText(subject)?.closest('[data-testid="agent-studio-git-history-row"]');
+    const targetRow = rowOf("Subject t1");
+
+    // A reset moves the branch back to c1, so c2 leaves History.
+    const reset = oid("c1");
+    historyPage.mockImplementation(async () => ({
+      ...firstPage,
+      comparison: { ...firstPage.comparison, currentTip: reset },
+      commits: [firstPage.commits[1] ?? commit("t1", ["b0"], "target")],
+      nextOffset: null,
+    }));
+    view.rerender(tree(reset));
+    await waitFor(() => expect(rowOf("Subject c2")?.className).toContain("history-row-leave"));
+    await waitForFadeOut();
+    expect(rowOf("Subject c2")).toBeUndefined();
+    // The other row keeps its element and slides into the gap.
+    expect(rowOf("Subject t1")).toBe(targetRow);
+    view.unmount();
+    queryClient.clear();
+  });
+
+  test("clears the selection of a commit that leaves, so its card does not open again", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (revision: string) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView
+              {...props({ checkout: { name: "feature", detached: false, revision } })}
+            />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree(CURRENT));
+    const details = () => screen.queryByTestId("agent-studio-git-history-details");
+    fireEvent.click(await screen.findByText("Subject c2"));
+    await screen.findByTestId("agent-studio-git-history-details");
+
+    const reset = oid("c1");
+    historyPage.mockImplementation(async () => ({
+      ...firstPage,
+      comparison: { ...firstPage.comparison, currentTip: reset },
+      commits: [firstPage.commits[1] ?? commit("t1", ["b0"], "target")],
+      nextOffset: null,
+    }));
+    view.rerender(tree(reset));
+    // The new graph arrives, the card closes, and the commit fades out.
+    await waitForFadeOut();
+    expect(details()).toBeNull();
+    expect(screen.queryByText("Subject c2")).toBeNull();
+
+    // The commit comes back, for example through the reflog. Its card stays closed.
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    view.rerender(tree(CURRENT));
+    await screen.findByText("Subject c2");
+    expect(details()).toBeNull();
     view.unmount();
     queryClient.clear();
   });
