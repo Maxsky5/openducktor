@@ -86,7 +86,7 @@ type HookArgsOverrides = {
   selectedSessionActions?: Partial<AgentStudioSelectedSessionContextInput["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
   selectedSessionContextUsage?: HookArgs["modelSelection"]["selectedSessionContextUsage"];
-  chatSettings?: Partial<HookArgs["chatSettings"]>;
+  chatSettings?: Partial<NonNullable<HookArgs["chatSettings"]>> | null;
   composer?: Partial<HookArgs["composer"]>;
 };
 
@@ -307,7 +307,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     },
     ...overrides.modelSelection,
   };
-  const chatSettings = createChatSettingsFixture(overrides.chatSettings);
+  const chatSettings =
+    overrides.chatSettings === null ? null : createChatSettingsFixture(overrides.chatSettings);
   const composer = {
     workspaceId: "workspace-repo",
     draftScope: {
@@ -629,7 +630,7 @@ describe("useAgentStudioPageModels", () => {
     expect(state.agentChatModel.composer.draftScope.persistence).not.toBeNull();
     expect(state.agentChatModel.thread.isInteractionEnabled).toBe(true);
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
-    expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
+    expect(state.agentChatModel.chatSettings?.showThinkingMessages).toBe(false);
 
     await state.agentChatModel.composer.onSend(createComposerDraft("message"), "default");
     state.agentChatModel.composer.onStopSession();
@@ -733,7 +734,11 @@ describe("useAgentStudioPageModels", () => {
     expect(composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
 
     const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, { model: { ...composer, isSessionWorking: true } }),
+      createElement(
+        AgentChatSettingsProvider,
+        { value: harness.getLatest().agentChatModel.chatSettings },
+        createElement(AgentChatComposer, { model: { ...composer, isSessionWorking: true } }),
+      ),
     );
     expect(html).toContain("--odt-border-ray-color:var(--odt-runtime-accent-codex)");
 
@@ -1499,7 +1504,7 @@ describe("useAgentStudioPageModels", () => {
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(nextState.agentChatModel.chatSettings.showThinkingMessages).toBe(true);
+    expect(nextState.agentChatModel.chatSettings?.showThinkingMessages).toBe(true);
 
     await harness.unmount();
   });
@@ -1531,7 +1536,7 @@ describe("useAgentStudioPageModels", () => {
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(nextState.agentChatModel.chatSettings.expandFileDiffsByDefault).toBe(false);
+    expect(nextState.agentChatModel.chatSettings?.expandFileDiffsByDefault).toBe(false);
 
     await harness.unmount();
   });

@@ -899,6 +899,7 @@ describe("use-repo-settings-operations", () => {
       savedResult([createWorkspaceRecord()]),
     );
     const explicitChatSettings = {
+      steerMessagesByDefault: true,
       showThinkingMessages: true,
       expandFileDiffsByDefault: false,
       diffStyle: "unified" as const,
@@ -1109,48 +1110,142 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
-  test("keeps the committed save and runtime results when the settings reload fails", async () => {
-    const workspaces = [createWorkspaceRecord()];
-    const workspaceSaveSettingsSnapshot = mock(async (): Promise<SettingsSnapshotSaveResult> => ({
-      type: "saved",
-      workspaces,
-      runtimeApplications: [
-        { kind: "opencode", effect: "replace", outcome: "failed", message: "missing binary" },
-      ],
-    }));
-    const workspaceGetSettingsSnapshot = mock(async () => {
-      throw new Error("settings read failed");
-    });
-    const applyWorkspaceRecords = mock(() => {});
+  test.each([false, true])(
+    "keeps confirmed Chat settings after refresh failure with cached snapshot %s",
+    async (hasSnapshot) => {
+      const workspaces = [createWorkspaceRecord()];
+      const workspaceSaveSettingsSnapshot = mock(async (): Promise<SettingsSnapshotSaveResult> => ({
+        type: "saved",
+        workspaces,
+        runtimeApplications: [
+          { kind: "opencode", effect: "replace", outcome: "failed", message: "missing binary" },
+        ],
+      }));
+      const workspaceGetSettingsSnapshot = mock(async () => {
+        throw new Error("settings read failed");
+      });
+      const applyWorkspaceRecords = mock(() => {});
+      const original = {
+        workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+        workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      };
+      host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+      const harness = createHookHarness({
+        activeWorkspace: createWorkspaceRecord(),
+        applyWorkspaceRecords,
+        applyWorkspaceRecord: mock(() => {}),
+      });
+
+      try {
+        await harness.mount();
+        const initial = createSettingsSnapshot();
+        const saved = { ...initial, chat: { ...initial.chat, steerMessagesByDefault: true } };
+        const queryClient = harness.getQueryClient();
+        const key = workspaceQueryKeys.settingsSnapshot();
+        if (hasSnapshot) queryClient.setQueryData(key, initial);
+        const outcome = await harness.getLatest().saveSettingsSnapshot(saved);
+
+        expect(outcome).toMatchObject({
+          type: "saved",
+          refreshError: "settings read failed",
+          runtimeApplications: [{ kind: "opencode", outcome: "failed" }],
+        });
+        expect(applyWorkspaceRecords).toHaveBeenCalledWith(workspaces);
+        expect(
+          harness.getQueryClient().getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()),
+        ).toEqual(workspaces);
+        expect(queryClient.getQueryData<SettingsSnapshot>(key)).toEqual(
+          hasSnapshot ? saved : undefined,
+        );
+        expect(queryClient.getQueryState(key)?.error?.message).toBe("settings read failed");
+      } finally {
+        await harness.unmount();
+        host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+        host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      }
+    },
+  );
+
+  test("publishes confirmed Chat settings before refresh and cancels an older read", async () => {
+    const initial = createSettingsSnapshot();
+    const saved = { ...initial, chat: { ...initial.chat, steerMessagesByDefault: true } };
+    const oldRead = createDeferred<SettingsSnapshot>();
+    const refresh = createDeferred<SettingsSnapshot>();
+    const refreshStarted = createDeferred<void>();
     const original = {
-      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+      get: host.workspaceGetSettingsSnapshot,
+      save: host.workspaceSaveSettingsSnapshot,
     };
-    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    let reads = 0;
+    host.workspaceGetSettingsSnapshot = () => {
+      if (++reads === 1) return oldRead.promise;
+      refreshStarted.resolve();
+      return refresh.promise;
+    };
+    host.workspaceSaveSettingsSnapshot = async () => savedResult([]);
     const harness = createHookHarness({
       activeWorkspace: createWorkspaceRecord(),
-      applyWorkspaceRecords,
-      applyWorkspaceRecord: mock(() => {}),
+      applyWorkspaceRecords: () => {},
+      applyWorkspaceRecord: () => {},
     });
-
+    let unsubscribe = () => {};
     try {
       await harness.mount();
-      const outcome = await harness.getLatest().saveSettingsSnapshot(createSettingsSnapshot());
-
-      expect(outcome).toMatchObject({
-        type: "saved",
-        refreshError: "settings read failed",
-        runtimeApplications: [{ kind: "opencode", outcome: "failed" }],
+      const client = harness.getQueryClient();
+      const key = workspaceQueryKeys.settingsSnapshot();
+      client.setQueryData(key, initial);
+      const observer = new QueryObserver(client, settingsSnapshotQueryOptions());
+      let observed = initial;
+      unsubscribe = observer.subscribe((result) => {
+        if (result.data) observed = result.data;
       });
-      expect(applyWorkspaceRecords).toHaveBeenCalledWith(workspaces);
-      expect(
-        harness.getQueryClient().getQueryData<WorkspaceRecord[]>(workspaceQueryKeys.list()),
-      ).toEqual(workspaces);
+      const pendingRead = client
+        .fetchQuery({ ...settingsSnapshotQueryOptions(), staleTime: 0 })
+        .catch(() => undefined);
+      const save = harness.getLatest().saveSettingsSnapshot(saved);
+      await refreshStarted.promise;
+      expect(observed.chat.steerMessagesByDefault).toBe(true);
+      expect(observed.workspaces).toEqual(initial.workspaces);
+      oldRead.resolve(initial);
+      await pendingRead;
+      expect(client.getQueryData<SettingsSnapshot>(key)?.chat.steerMessagesByDefault).toBe(true);
+      refresh.resolve(saved);
+      await save;
+    } finally {
+      oldRead.resolve(initial);
+      refresh.resolve(saved);
+      unsubscribe();
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original.get;
+      host.workspaceSaveSettingsSnapshot = original.save;
+    }
+  });
+
+  test("does not publish Chat settings when runtime impact changes without a write", async () => {
+    const initial = createSettingsSnapshot();
+    const saved = { ...initial, chat: { ...initial.chat, steerMessagesByDefault: true } };
+    const original = host.workspaceSaveSettingsSnapshot;
+    host.workspaceSaveSettingsSnapshot = async () => ({
+      type: "runtime_impact_changed",
+      impact: { confirmation: "changed", kinds: [], workspaces: [] },
+    });
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: () => {},
+      applyWorkspaceRecord: () => {},
+    });
+    try {
+      await harness.mount();
+      const client = harness.getQueryClient();
+      const key = workspaceQueryKeys.settingsSnapshot();
+      client.setQueryData(key, initial);
+      const result = await harness.getLatest().saveSettingsSnapshot(saved);
+      expect(result.type).toBe("runtime_impact_changed");
+      expect(client.getQueryData<SettingsSnapshot>(key)).toBe(initial);
     } finally {
       await harness.unmount();
-      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+      host.workspaceSaveSettingsSnapshot = original;
     }
   });
 
@@ -1452,7 +1547,7 @@ describe("use-repo-settings-operations", () => {
     });
     const run = await startSettingsSave({
       previousSnapshot: snapshot,
-      normalizedSnapshot: snapshot,
+      normalizedSnapshot: { ...snapshot, chat: { ...snapshot.chat, steerMessagesByDefault: true } },
       saveError: new Error("host save failed"),
     });
 

@@ -163,7 +163,7 @@ type BuildAgentStudioPageModelsArgsInput = {
   selectedSession: AgentStudioSelectedSessionContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
-  chatSettings: ChatSettings;
+  chatSettings: ChatSettings | null;
   runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioOrchestrationComposerContext;
 };

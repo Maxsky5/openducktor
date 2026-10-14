@@ -375,6 +375,7 @@ type AgentChatComposerEditorProps = {
   disabled: boolean;
   editorRef: React.RefObject<HTMLDivElement | null>;
   onEditorInput: () => void;
+  primaryMode?: AgentMessageSubmitMode;
   onSend: (mode: AgentMessageSubmitMode) => void;
   catalog: AgentChatComposerEditorCatalog;
 };
@@ -445,6 +446,7 @@ export function AgentChatComposerEditor({
   disabled,
   editorRef,
   onEditorInput,
+  primaryMode = "default",
   onSend,
   catalog,
 }: AgentChatComposerEditorProps): ReactElement {
@@ -505,6 +507,7 @@ export function AgentChatComposerEditor({
     editorRef,
     disabled,
     onEditorInput,
+    primaryMode,
     onSend,
     supportsSlashCommands,
     supportsFileSearch,

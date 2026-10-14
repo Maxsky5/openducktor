@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { DEFAULT_CHAT_SETTINGS, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
 import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
-import { AgentChatComposer } from "./agent-chat-composer";
+import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
 const readComposerCard = (html: string): Element => {
@@ -315,35 +315,44 @@ describe("AgentChatComposer", () => {
   });
 
   // The reference keys stay, so the composer still teaches them while the agent works.
-  test.each<[string, Partial<AgentChatComposerModel>, string]>([
-    [
-      "a working session",
-      // A send waits in the queue, so it does not show the preparing state.
-      { isSessionWorking: true, isSending: true },
-      `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to steer`,
-    ],
-    [
-      "a working session that cannot steer",
-      { isSessionWorking: true, steerBlockedReason: "OpenCode 1.0.0 cannot steer running work." },
-      "@ for files; / for commands; Enter to queue",
-    ],
-    [
-      "an idle session with queued messages",
-      { messageQueue: queuedFollowUp },
-      `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to send now`,
-    ],
-    ["an idle session without queued messages", {}, "@ for files; / for commands"],
-  ])("names the queue keys in the placeholder for %s", (_name, overrides, placeholder) => {
-    const html = renderToStaticMarkup(
-      createElement(AgentChatComposer, { model: { ...buildModel(), ...overrides } }),
-    );
+  for (const steerMessagesByDefault of [false, true]) {
+    test.each<[string, Partial<AgentChatComposerModel>, string]>([
+      [
+        "a working session",
+        { isSessionWorking: true, isSending: true },
+        steerMessagesByDefault
+          ? `@ for files; / for commands; Enter to steer; ${steerShortcutLabel()} to queue`
+          : `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to steer`,
+      ],
+      [
+        "a working session that cannot steer",
+        { isSessionWorking: true, steerBlockedReason: "OpenCode 1.0.0 cannot steer running work." },
+        steerMessagesByDefault
+          ? `@ for files; / for commands; ${steerShortcutLabel()} to queue`
+          : "@ for files; / for commands; Enter to queue",
+      ],
+      [
+        "an idle session with queued messages",
+        { messageQueue: queuedFollowUp },
+        steerMessagesByDefault
+          ? `@ for files; / for commands; Enter to send now; ${steerShortcutLabel()} to queue`
+          : `@ for files; / for commands; Enter to queue; ${steerShortcutLabel()} to send now`,
+      ],
+      ["an idle session without queued messages", {}, "@ for files; / for commands"],
+    ])("names the queue keys in the placeholder for %s", (_name, overrides, placeholder) => {
+      const html = renderToStaticMarkup(
+        createElement(AgentChatComposer, {
+          settings: { ...DEFAULT_CHAT_SETTINGS, steerMessagesByDefault },
+          model: { ...buildModel(), ...overrides },
+        }),
+      );
 
-    const card = readComposerCard(html);
-    expect(card.querySelector('[aria-label="Message composer"]')?.textContent).toBe(placeholder);
-    // The send button stays the same. Only the placeholder names the queue keys.
-    expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
-    expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
-  });
+      const card = readComposerCard(html);
+      expect(card.querySelector('[aria-label="Message composer"]')?.textContent).toBe(placeholder);
+      expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
+      expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
+    });
+  }
 
   test("disables send when input is blank", () => {
     const html = renderToStaticMarkup(

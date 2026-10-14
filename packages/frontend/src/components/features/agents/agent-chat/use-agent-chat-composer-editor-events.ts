@@ -134,6 +134,7 @@ type UseAgentChatComposerEditorEventsArgs = {
   onDraftChange: (draft: AgentChatComposerDraft) => void;
   onEditorInput: () => void;
   onAddFiles: (files: File[]) => void;
+  primaryMode?: AgentMessageSubmitMode;
   onSend: (mode: AgentMessageSubmitMode) => void;
   latestDraftRef: MutableRefObject<AgentChatComposerDraft>;
   selection: Pick<
@@ -183,6 +184,7 @@ export const useAgentChatComposerEditorEvents = ({
   onDraftChange,
   onEditorInput,
   onAddFiles,
+  primaryMode = "default",
   onSend,
   latestDraftRef,
   selection,
@@ -467,6 +469,7 @@ export const useAgentChatComposerEditorEvents = ({
         closeSlashMenu,
         closeReferenceMenu,
         closeSkillMenu,
+        primaryMode,
         onSend,
         clearComposerContents,
         insertNewlineAtSelectionTarget,
@@ -496,6 +499,7 @@ export const useAgentChatComposerEditorEvents = ({
       moveActiveReferenceIndex,
       moveActiveSlashIndex,
       moveActiveSkillIndex,
+      primaryMode,
       onSend,
       selectFileSearchResult,
       selectSlashCommand,

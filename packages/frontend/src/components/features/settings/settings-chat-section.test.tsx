@@ -49,6 +49,14 @@ afterEach(() => {
 });
 
 describe("settings chat section", () => {
+  test("edits default steering in the draft and retains the other chat preferences", () => {
+    const chat = createChatSettings({ showThinkingMessages: true });
+    const { getLatestChat } = renderSettingsChatSectionWithUpdates(chat);
+    expectSwitchChecked("Steer messages by default", false);
+    fireEvent.click(screen.getByRole("switch", { name: "Steer messages by default" }));
+    expect(getLatestChat()).toEqual({ ...chat, steerMessagesByDefault: true });
+    expect(chat.steerMessagesByDefault).toBe(false);
+  });
   test("renders chat settings with thinking messages hidden by default", () => {
     const chatSettings = createChatSettings();
 
@@ -109,7 +117,7 @@ describe("settings chat section", () => {
     renderSettingsChatSection(chatSettings, true);
 
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(2);
+    expect(switches).toHaveLength(3);
     expect(switches.every((control) => control.hasAttribute("disabled"))).toBe(true);
   });
 

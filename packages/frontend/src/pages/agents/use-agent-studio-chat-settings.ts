@@ -43,7 +43,7 @@ export function useAgentStudioChatSettings(args: { workspaceRepoPath: string | n
     chatSettingsLoadError,
     retryChatSettingsLoad,
   } satisfies {
-    chatSettings: ChatSettings;
+    chatSettings: ChatSettings | null;
     reusablePrompts: ReusablePrompt[];
     chatSettingsLoadError: Error | null;
     retryChatSettingsLoad: () => void;

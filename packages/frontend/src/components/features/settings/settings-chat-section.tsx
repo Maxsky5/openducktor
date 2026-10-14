@@ -11,8 +11,9 @@ import {
   type ChatLineOverflow,
   type ChatSettings,
 } from "@openducktor/contracts";
-import type { ReactElement } from "react";
+import { type ReactElement, useId } from "react";
 import { Switch } from "@/components/ui/switch";
+import { isApplePlatform } from "@/lib/steer-shortcut";
 import {
   type SettingsSegmentedOption,
   SettingsSegmentedOptionRow,
@@ -75,18 +76,22 @@ function ChatSettingSwitchRow({
   ariaLabel,
   onCheckedChange,
 }: ChatSettingSwitchRowProps): ReactElement {
+  const descriptionId = useId();
   return (
     <div className="rounded-md border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p id={descriptionId} className="text-xs text-muted-foreground">
+            {description}
+          </p>
         </div>
         <Switch
           checked={checked}
           onCheckedChange={onCheckedChange}
           disabled={disabled}
           aria-label={ariaLabel}
+          aria-describedby={descriptionId}
         />
       </div>
     </div>
@@ -103,9 +108,20 @@ export function SettingsChatSection({
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-foreground">Chat Settings</h3>
         <p className="text-xs text-muted-foreground">
-          Configure display settings for Chats and Workflows.
+          Configure messages and display settings for Chats and Workflows.
         </p>
       </div>
+
+      <ChatSettingSwitchRow
+        title="Steer messages by default"
+        description={`After you save, Enter and Send steer messages. ${isApplePlatform() ? "Cmd+Enter" : "Ctrl+Enter"} uses ordinary delivery, which queues messages while the session works or already has queued messages.`}
+        checked={chat.steerMessagesByDefault}
+        disabled={disabled}
+        ariaLabel="Steer messages by default"
+        onCheckedChange={(checked) =>
+          onUpdateChat((current) => ({ ...current, steerMessagesByDefault: checked }))
+        }
+      />
 
       <ChatSettingSwitchRow
         title="Show Thinking Messages"

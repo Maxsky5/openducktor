@@ -1,3 +1,4 @@
+import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
 import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
 import {
@@ -94,7 +95,7 @@ const FileEditCardHeader = ({
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
 }: AgentChatFileEditCardProps): ReactElement {
-  const chatSettings = useAgentChatSettings();
+  const chatSettings = useAgentChatSettings() ?? DEFAULT_CHAT_SETTINGS;
   const { expandFileDiffsByDefault } = chatSettings;
   const hasContent = data.kind !== "path";
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);

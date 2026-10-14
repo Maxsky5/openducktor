@@ -52,6 +52,7 @@ const DEFAULT_SOFT_GUARDRAILS = {
 } as const;
 
 export const DEFAULT_CHAT_SETTINGS = {
+  steerMessagesByDefault: false,
   showThinkingMessages: false,
   expandFileDiffsByDefault: true,
   diffStyle: "split",
@@ -619,6 +620,7 @@ export const workspaceRepoSettingsInputSchema = workspaceRepoConfigInputSchema.e
 export type WorkspaceRepoSettingsInput = z.output<typeof workspaceRepoSettingsInputSchema>;
 
 export const chatSettingsSchema = z.object({
+  steerMessagesByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.steerMessagesByDefault),
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
   expandFileDiffsByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault),
   diffStyle: z.enum(CHAT_DIFF_STYLE_VALUES).default(DEFAULT_CHAT_SETTINGS.diffStyle),

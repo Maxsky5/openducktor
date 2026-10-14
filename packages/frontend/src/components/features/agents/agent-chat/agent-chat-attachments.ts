@@ -289,6 +289,7 @@ export const runningTurnAttachmentBlockedReason = (
 export const validateComposerAttachments = (
   attachments: AgentChatComposerAttachment[],
   support: AgentModelAttachmentSupport | null | undefined,
+  modelLabel = "The selected model",
 ): Record<string, string> => {
   let totalFileBytes = 0;
   return attachments.reduce<Record<string, string>>((acc, attachment) => {
@@ -297,7 +298,7 @@ export const validateComposerAttachments = (
       acc[attachment.id] = "Attachments must total 32 MiB or less.";
       return acc;
     }
-    const error = readAttachmentValidationError(attachment, support);
+    const error = readAttachmentValidationError(attachment, support, modelLabel);
     if (error) {
       acc[attachment.id] = error;
     }

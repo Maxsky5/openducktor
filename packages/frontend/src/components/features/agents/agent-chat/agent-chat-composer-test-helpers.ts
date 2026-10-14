@@ -1,5 +1,8 @@
 import { fireEvent } from "@testing-library/react";
-import { createRef } from "react";
+import { createElement, createRef, type ComponentProps } from "react";
+import { type ChatSettings, DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
+import { AgentChatComposer as Composer } from "./agent-chat-composer";
+import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
 
 export const buildModel = () => ({
@@ -137,3 +140,14 @@ const getLastTextSegment = (container: HTMLElement): HTMLElement => {
 
   return editable;
 };
+
+export function AgentChatComposer({
+  settings = DEFAULT_CHAT_SETTINGS,
+  ...props
+}: ComponentProps<typeof Composer> & { settings?: ChatSettings | null }) {
+  return createElement(
+    AgentChatSettingsProvider,
+    { value: settings },
+    createElement(Composer, props),
+  );
+}

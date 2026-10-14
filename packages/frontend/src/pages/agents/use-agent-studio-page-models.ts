@@ -28,7 +28,7 @@ type UseAgentStudioPageModelsArgs = {
   selectedSession: AgentStudioSelectedSessionContext;
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioChatModelSelectionContext;
-  chatSettings: ChatSettings;
+  chatSettings: ChatSettings | null;
   runtimeDefinitions: RuntimeDescriptor[];
   composer: AgentStudioChatComposerContext;
 };

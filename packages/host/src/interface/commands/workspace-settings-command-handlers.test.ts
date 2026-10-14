@@ -302,6 +302,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             general: { openAgentStudioTabOnBackgroundSessionStart: true },
             appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
             chat: {
+              steerMessagesByDefault: false,
               showThinkingMessages: false,
               expandFileDiffsByDefault: false,
               diffStyle: "split",
@@ -332,6 +333,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             general: { openAgentStudioTabOnBackgroundSessionStart: true },
             appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
             chat: {
+              steerMessagesByDefault: false,
               showThinkingMessages: false,
               expandFileDiffsByDefault: false,
               diffStyle: "split",
@@ -363,6 +365,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" },
           chat: {
+            steerMessagesByDefault: false,
             showThinkingMessages: false,
             expandFileDiffsByDefault: false,
             diffStyle: "split",
@@ -731,6 +734,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           general: { openAgentStudioTabOnBackgroundSessionStart: true },
           appearance: { horizontalScrollbarVisibility: "auto" },
           chat: {
+            steerMessagesByDefault: false,
             showThinkingMessages: false,
             expandFileDiffsByDefault: false,
             diffStyle: "split",

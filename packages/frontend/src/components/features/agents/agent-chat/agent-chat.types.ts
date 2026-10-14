@@ -256,7 +256,7 @@ export type AgentChatComposerModel = {
 };
 
 export type AgentChatSurfaceModel = {
-  chatSettings: ChatSettings;
+  chatSettings: ChatSettings | null;
   thread: AgentChatThreadModel;
   composer?: AgentChatComposerModel;
 };

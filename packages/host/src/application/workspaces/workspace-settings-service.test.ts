@@ -1392,6 +1392,7 @@ describe("createWorkspaceSettingsService", () => {
       throw new Error("expected repo workspace snapshot");
     }
     const explicitChatSettings = {
+      steerMessagesByDefault: true,
       showThinkingMessages: true,
       expandFileDiffsByDefault: false,
       diffStyle: "unified" as const,
