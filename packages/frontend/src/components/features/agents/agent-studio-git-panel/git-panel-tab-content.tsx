@@ -30,6 +30,8 @@ export function AgentStudioGitTabContent({
   if (view.activeTab === "history") {
     return (
       <GitHistoryView
+        contextKey={JSON.stringify([view.contextKey, model.targetBranchSelectionValue ?? null])}
+        pending={model.comparisonPending ?? false}
         repoPath={model.repoPath ?? null}
         workingDir={model.repoPath ? (model.worktreePath ?? model.repoPath) : null}
         checkout={model.checkout ?? null}

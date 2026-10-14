@@ -35,39 +35,80 @@ import {
 import { type HistoryRowProps, HistoryRowView } from "./git-history-row";
 
 export type GitHistoryViewProps = {
+  /**
+   * The Git context and the chosen target. While the panel checks the same target again, such as
+   * after a commit, History keeps the graph that it shows.
+   */
+  contextKey: string;
+  /** True while the panel reads the branch or checks the comparison again. */
+  pending: boolean;
   repoPath: string | null;
   workingDir: string | null;
   checkout: GitCurrentBranch | null;
-  /** The resolved comparison ref, or null while the comparison is unavailable. */
+  /** The resolved comparison ref, or null while the comparison is unavailable or pending. */
   targetReference: string | null;
   targetLabel: string;
   comparisonUnavailableReason: string | null;
 };
 
+type HistoryInputs = {
+  repoPath: string;
+  workingDir: string;
+  checkout: GitCurrentBranch;
+  targetReference: string;
+};
+
+const readyInputs = ({
+  repoPath,
+  workingDir,
+  checkout,
+  targetReference,
+}: GitHistoryViewProps): HistoryInputs | null =>
+  repoPath && workingDir && checkout && targetReference
+    ? { repoPath, workingDir, checkout, targetReference }
+    : null;
+
+const sameInputs = (left: HistoryInputs, right: HistoryInputs): boolean =>
+  left.repoPath === right.repoPath &&
+  left.workingDir === right.workingDir &&
+  left.targetReference === right.targetReference &&
+  left.checkout.name === right.checkout.name &&
+  left.checkout.detached === right.checkout.detached &&
+  left.checkout.revision === right.checkout.revision;
+
+/** The last ready inputs of a Git context and target. Another context starts without them. */
+function useShownInputs(contextKey: string, ready: HistoryInputs | null): HistoryInputs | null {
+  const [shown, setShown] = useState<{ contextKey: string; inputs: HistoryInputs } | null>(null);
+  if (ready && (shown?.contextKey !== contextKey || !sameInputs(shown.inputs, ready))) {
+    setShown({ contextKey, inputs: ready });
+  }
+  return shown?.contextKey === contextKey ? shown.inputs : null;
+}
+
 export const GitHistoryView = memo(function GitHistoryView(
   props: GitHistoryViewProps,
 ): ReactElement {
-  const { repoPath, workingDir, checkout, targetReference } = props;
-  if (props.comparisonUnavailableReason || !targetReference) {
+  const ready = readyInputs(props);
+  const shown = useShownInputs(props.contextKey, ready);
+  // A failed or missing comparison shows at once. A pending check keeps the shown graph.
+  if (!props.pending && !ready && props.comparisonUnavailableReason) {
     return (
       <HistoryMessage title="History is unavailable" tone="muted">
-        {props.comparisonUnavailableReason ??
-          "Choose a target branch to compare History. Use Refresh to fetch it again."}
+        {props.comparisonUnavailableReason}
       </HistoryMessage>
     );
   }
-  if (!repoPath || !workingDir || !checkout) {
-    return <HistoryLoading label="Reading the current branch..." />;
+  if (!props.pending && !props.targetReference) {
+    return (
+      <HistoryMessage title="History is unavailable" tone="muted">
+        Choose a target branch to compare History. Use Refresh to fetch it again.
+      </HistoryMessage>
+    );
   }
-  return (
-    <GitHistoryComparisonView
-      {...props}
-      repoPath={repoPath}
-      workingDir={workingDir}
-      checkout={checkout}
-      targetReference={targetReference}
-    />
-  );
+  const inputs = ready ?? (props.pending ? shown : null);
+  // The loader shows only while History has no graph to show.
+  if (!inputs) return <HistoryLoading label="Loading History..." />;
+  return <GitHistoryComparisonView {...inputs} targetLabel={props.targetLabel} />;
 });
 
 function GitHistoryComparisonView({
@@ -76,12 +117,7 @@ function GitHistoryComparisonView({
   checkout,
   targetReference,
   targetLabel,
-}: GitHistoryViewProps & {
-  repoPath: string;
-  workingDir: string;
-  checkout: GitCurrentBranch;
-  targetReference: string;
-}): ReactElement {
+}: HistoryInputs & { targetLabel: string }): ReactElement {
   const history = useInfiniteQuery(
     gitHistoryQueryOptions({ repoPath, workingDir, checkout, targetReference }),
   );

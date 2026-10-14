@@ -72,6 +72,8 @@ const historyPage = mock(
 );
 
 const props = (overrides: Partial<GitHistoryViewProps> = {}): GitHistoryViewProps => ({
+  contextKey: "task-1",
+  pending: false,
   repoPath: "/repo",
   workingDir: "/repo",
   checkout: { name: "feature", detached: false, revision: CURRENT },
@@ -330,6 +332,82 @@ describe("GitHistoryView", () => {
     expect(rowOf("Subject c2")).toBe(shownRow);
     expect(rowOf("Subject c3")?.className).toContain("history-row-enter");
     expect(rowOf("Subject c2")?.className).not.toContain("history-row-enter");
+    view.unmount();
+    queryClient.clear();
+  });
+
+  test("keeps the graph while the panel checks the same target again after a commit", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (overrides: Partial<GitHistoryViewProps>) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView {...props(overrides)} />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree({}));
+    await screen.findByText("Subject c2");
+    const rowOf = (subject: string) =>
+      screen.getByText(subject).closest('[data-testid="agent-studio-git-history-row"]');
+    const shownRow = rowOf("Subject c2");
+
+    // The commit gives the branch a new revision, and the panel checks the target again.
+    const next = oid("c3");
+    const checkout = { name: "feature", detached: false, revision: next };
+    view.rerender(
+      tree({
+        checkout,
+        pending: true,
+        targetReference: null,
+        comparisonUnavailableReason: "Checking comparison origin/main...",
+      }),
+    );
+    expect(screen.queryByText("Loading History...")).toBeNull();
+    expect(rowOf("Subject c2")).toBe(shownRow);
+
+    historyPage.mockImplementation(async () => ({
+      ...firstPage,
+      comparison: { ...firstPage.comparison, currentTip: next },
+      commits: [commit("c3", ["c2"], "current"), ...firstPage.commits],
+      nextOffset: null,
+    }));
+    view.rerender(tree({ checkout }));
+    await screen.findByText("Subject c3");
+    // The list never left, so the old row keeps its element.
+    expect(rowOf("Subject c2")).toBe(shownRow);
+    view.unmount();
+    queryClient.clear();
+  });
+
+  test("shows the loader for a pending check of another target", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    const queryClient = createQueryClient();
+    const tree = (overrides: Partial<GitHistoryViewProps>) => (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div style={{ height: 600 }}>
+            <GitHistoryView {...props(overrides)} />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const view = render(tree({}));
+    await screen.findByText("Subject c2");
+
+    view.rerender(
+      tree({
+        contextKey: "task-1:release",
+        pending: true,
+        targetReference: null,
+        comparisonUnavailableReason: "Checking comparison origin/release...",
+      }),
+    );
+    // The graph of the old target must not show while the new target loads.
+    expect(screen.getByText("Loading History...")).toBeTruthy();
+    expect(screen.queryByText("Subject c2")).toBeNull();
     view.unmount();
     queryClient.clear();
   });
