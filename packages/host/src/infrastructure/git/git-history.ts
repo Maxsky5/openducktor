@@ -241,8 +241,10 @@ const parseLog = (
   });
 
 /**
- * Lists commits unique to either tip, then their best common ancestors, in topological order.
- * Older shared history stays out because the parents of each common ancestor are excluded.
+ * Lists commits unique to either tip, then their best common ancestors, newest author date first.
+ * Every parent comes after its children, so the graph can draw each row from the rows above it.
+ * The order uses the author date, because each row shows it. Older shared history stays out
+ * because the parents of each common ancestor are excluded.
  */
 export const readHistoryPage = (
   runner: GitCommandRunner,
@@ -292,7 +294,7 @@ export const readHistoryPage = (
         readRefs(runner, workingDirectory),
         runGit(runner, workingDirectory, [
           "log",
-          "--topo-order",
+          "--author-date-order",
           "--no-show-signature",
           `--format=${LOG_FORMAT}`,
           `--skip=${offset}`,

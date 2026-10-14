@@ -29,6 +29,18 @@ const commit = async (file: string, message: string) => {
   return git(["rev-parse", "HEAD"]);
 };
 
+/** A commit with its own author and commit times, so a test can tell the two orders apart. */
+const commitAt = async (file: string, message: string, authorDate: string, commitDate: string) => {
+  await writeFile(path.join(repo, file), `${message}\n`);
+  git(["add", file]);
+  execFileSync("git", ["commit", "-m", message], {
+    cwd: repo,
+    env: { ...process.env, GIT_AUTHOR_DATE: authorDate, GIT_COMMITTER_DATE: commitDate },
+    stdio: "ignore",
+  });
+  return git(["rev-parse", "HEAD"]);
+};
+
 const history = async (
   targetReference: string,
   page?: GitHistoryPageRequest["page"],
@@ -110,6 +122,22 @@ describe("branch history", () => {
     const order = page.commits.map((entry) => entry.oid);
     expect(order.indexOf(merge)).toBeLessThan(order.indexOf(featureA));
     expect(order.indexOf(mainN)).toBeLessThan(order.indexOf(mainM));
+  });
+
+  test("sorts the commits of both branches by author date, newest first", async () => {
+    const base = await commitAt("base.txt", "base", "2026-01-01T10:00:00Z", "2026-01-01T10:00:00Z");
+    git(["checkout", "-b", "feature"]);
+    const f1 = await commitAt("f.txt", "f1", "2026-01-02T10:00:00Z", "2026-01-02T10:00:00Z");
+    const f2 = await commitAt("f.txt", "f2", "2026-01-04T10:00:00Z", "2026-01-03T10:00:00Z");
+    git(["checkout", "main"]);
+    const m1 = await commitAt("m.txt", "m1", "2026-01-03T10:00:00Z", "2026-01-04T10:00:00Z");
+    const m2 = await commitAt("m.txt", "m2", "2026-01-05T10:00:00Z", "2026-01-05T10:00:00Z");
+    git(["checkout", "feature"]);
+
+    const page = requirePage(await history("refs/heads/main"));
+
+    // The branches mix by the date that each row shows, and every parent stays below its child.
+    expect(page.commits.map((entry) => entry.oid)).toEqual([m2, f2, m1, f1, base]);
   });
 
   test("lists the author email and the branches and tags of each commit", async () => {
