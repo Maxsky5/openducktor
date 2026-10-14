@@ -40,6 +40,8 @@ export const updateClaudeSessionModel = (
           workingDirectory: input.workingDirectory,
           externalSessionId: input.externalSessionId,
           sessionScope: input.sessionScope,
+          workStartGuard: input.workStartGuard,
+          onWorkIssued: input.onWorkIssued,
           runtimePolicy: { kind: "claude" },
           systemPrompt: "",
         },
@@ -67,10 +69,12 @@ export const updateClaudeSessionModel = (
       // applies the new model when it starts.
       if (!canStartUserTurn(session)) {
         assertClaudeSessionModelUpdateSupported(session, model ?? undefined);
+        input.onWorkAccepted?.();
         return;
       }
       // Cold attachment inherits native settings; local model metadata is not yet known.
-      await applyClaudeSessionModel(session, model, cold);
+      await applyClaudeSessionModel(session, model, cold, input.workStartGuard, input.onWorkIssued);
+      input.onWorkAccepted?.();
       session.summary = { ...session.summary };
     });
   });

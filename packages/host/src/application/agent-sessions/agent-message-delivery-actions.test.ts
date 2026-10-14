@@ -172,7 +172,7 @@ describe("agent message delivery: queue actions and steering", () => {
     harness.upsertSession({ activity: "running" });
     harness.service.observeChanges([{ type: "session_removed", ref }]);
     const removedResume = await failureOf(harness.manage({ kind: "resume" }));
-    expect(removedResume?.message).toContain("not running in its runtime");
+    expect(removedResume).toBeNull();
 
     harness.upsertSession({ activity: "idle" });
     await harness.manage({ kind: "resume" });
@@ -188,6 +188,7 @@ describe("agent message delivery: queue actions and steering", () => {
     await harness.submit("second");
     harness.stop();
 
+    harness.upsertSession({ activity: "running" });
     const result = await harness.manage({ kind: "steer", submissionId: "submission-second" });
 
     expect(result.acceptedMessage).toMatchObject({ message: "second" });
@@ -234,6 +235,7 @@ describe("agent message delivery: queue actions and steering", () => {
     harness.outcomes.push("busy");
     await harness.submit("first");
 
+    harness.upsertSession({ activity: "running" });
     const result = await harness.submit("now", "steer");
 
     expect(result).toMatchObject({ kind: "accepted", acceptedMessage: { message: "now" } });
@@ -248,14 +250,16 @@ describe("agent message delivery: queue actions and steering", () => {
     });
     harness.outcomes.push("busy");
 
+    harness.upsertSession({ activity: "running" });
     const failure = await failureOf(harness.submit("now", "steer"));
 
     expect(failure).toMatchObject({ message: "Update Codex to 0.106.0 or later." });
-    expect(harness.sentTexts()).toEqual(["now:new_turn"]);
+    expect(harness.sentTexts()).toEqual([]);
     expect(harness.service.listQueues("/repo")).toEqual([]);
 
     const slashHarness = createHarness();
     slashHarness.outcomes.push("busy");
+    slashHarness.upsertSession({ activity: "running" });
     const slashFailure = await failureOf(
       slashHarness.submitParts("submission-slash", [slashCommand], "steer"),
     );
@@ -277,6 +281,7 @@ describe("agent message delivery: queue actions and steering", () => {
     await harness.submitParts("submission-command", [slashCommand]);
     harness.outcomes.push("busy");
 
+    harness.upsertSession({ activity: "running" });
     const failure = await failureOf(
       harness.manage({ kind: "steer", submissionId: "submission-command" }),
     );
@@ -294,6 +299,7 @@ describe("agent message delivery: queue actions and steering", () => {
     await harness.submit("first");
     harness.outcomes.push(new HostOperationError({ operation: "test", message: "Turn ended." }));
 
+    harness.upsertSession({ activity: "running" });
     const failure = await failureOf(harness.submit("now", "steer"));
     harness.idle();
     await harness.runBackground();
@@ -312,13 +318,14 @@ describe("agent message delivery: queue actions and steering", () => {
     await harness.submit("first");
     harness.outcomes.push(acceptedThenFailed("now", "steer"));
 
+    harness.upsertSession({ activity: "running" });
     await failureOf(harness.submit("now", "steer"));
 
     expect(harness.pause()).toContain("The agent received the message, but a later update failed");
     expect(harness.sentTexts()).toEqual(["first:new_turn", "now:steer"]);
   });
 
-  test("delivers after a turn that completes while Steer now falls back to a refused new turn", async () => {
+  test("retains a refused idle new turn until an explicit queue Resume", async () => {
     const harness = createHarness({
       available: false,
       reason: "Update Codex to 0.106.0 or later.",
@@ -337,7 +344,11 @@ describe("agent message delivery: queue actions and steering", () => {
     );
     await harness.runBackground();
 
-    expect(failure?.message).toBe("Update Codex to 0.106.0 or later.");
+    expect(failure).not.toBeNull();
+    expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
+    expect(harness.queueTexts()).toEqual(["first:queued"]);
+    await harness.manage({ kind: "resume" });
+    await harness.runBackground();
     expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn", "first:new_turn"]);
     expect(harness.queueTexts()).toEqual([]);
   });
@@ -395,7 +406,11 @@ describe("agent message delivery: unknown acceptance", () => {
     expect(
       await failureOf(harness.manage({ kind: "remove", submissionId: "submission-first" })),
     ).toBeInstanceOf(Error);
-    expect(await harness.submit("first")).toMatchObject({ kind: "queued" });
+    expect(await harness.submit("first")).toMatchObject({
+      kind: "acknowledged",
+      outcome: "uncertain",
+      submissionId: "submission-first",
+    });
     expect(harness.calls).toHaveLength(1);
   });
 
@@ -457,6 +472,7 @@ describe("agent message delivery: unknown acceptance", () => {
       const harness = createHarness();
       harness.outcomes.push("busy");
       await harness.submit("first");
+      if (delivery === "steer") harness.upsertSession({ activity: "running" });
       const entriesAtAcceptance: string[][] = [];
       harness.setOnSend(() => {
         harness.setOnSend(() => {});

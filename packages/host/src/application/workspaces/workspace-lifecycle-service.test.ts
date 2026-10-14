@@ -131,6 +131,7 @@ const createService = ({
   getWorkspaceCatalog = () => Effect.succeed(catalog()),
   closeWorkspace = () => Effect.succeed(catalog()),
   reopenWorkspace = () => Effect.succeed(catalog()),
+  onWorkspaceReopened = () => {},
   beginWorkspaceRemoval = (input: {
     workspaceId: string;
     expectedRepoPath: string;
@@ -162,6 +163,7 @@ const createService = ({
   getWorkspaceCatalog?: () => Effect.Effect<WorkspaceCatalog, never>;
   closeWorkspace?: () => Effect.Effect<WorkspaceCatalog, never>;
   reopenWorkspace?: () => Effect.Effect<WorkspaceCatalog, never>;
+  onWorkspaceReopened?: (repoPath: string) => void;
   beginWorkspaceRemoval?: (input: {
     workspaceId: string;
     expectedRepoPath: string;
@@ -191,6 +193,7 @@ const createService = ({
     removeWorkspaceCredentials,
   };
   return createWorkspaceLifecycleService({
+    onWorkspaceReopened,
     activity,
     admission,
     gitPort: createGitPortTestDouble({
@@ -562,10 +565,12 @@ describe("workspace lifecycle service", () => {
     const expected = catalog();
     const reopenWorkspace = mock(() => Effect.succeed(catalog()));
     const reserveWorkspace = mock(() => Effect.void);
+    const onWorkspaceReopened = mock(() => {});
     const service = createService({
       admission: { ...createAdmissionDouble(), reserveWorkspace },
       getWorkspaceCatalog: () => Effect.succeed(expected),
       reopenWorkspace,
+      onWorkspaceReopened,
     });
 
     const result = await Effect.runPromise(
@@ -575,6 +580,7 @@ describe("workspace lifecycle service", () => {
     expect(result).toEqual(expected);
     expect(reserveWorkspace).not.toHaveBeenCalled();
     expect(reopenWorkspace).not.toHaveBeenCalled();
+    expect(onWorkspaceReopened).not.toHaveBeenCalled();
   });
 
   test("removeWorkspace writes the removal record before deleting data", async () => {
@@ -1262,12 +1268,23 @@ describe("workspace lifecycle service", () => {
 
   test("reopens a workspace through settings and clears its admission block", async () => {
     const expected = catalog();
-    const reopenWorkspace = mock(() => Effect.succeed(expected));
-    const unblockWorkspace = mock(() => {});
+    const calls: string[] = [];
+    const reopenWorkspace = mock(() =>
+      Effect.sync(() => {
+        calls.push("save");
+        return expected;
+      }),
+    );
+    const unblockWorkspace = mock(() => void calls.push("unblock"));
     const service = createService({
-      admission: { ...createAdmissionDouble(), unblockWorkspace },
+      admission: {
+        ...createAdmissionDouble(),
+        unblockWorkspace,
+        releaseReservation: () => void calls.push("release"),
+      },
       getRepoConfig: () => Effect.succeed(repoConfig({ closed: true })),
       reopenWorkspace,
+      onWorkspaceReopened: (repoPath) => void calls.push(`observe:${repoPath}`),
     });
 
     await expect(
@@ -1277,6 +1294,7 @@ describe("workspace lifecycle service", () => {
     ).resolves.toEqual(expected);
     expect(reopenWorkspace).toHaveBeenCalledWith("ws", "/repos/ws");
     expect(unblockWorkspace).toHaveBeenCalledWith("ws");
+    expect(calls).toEqual(["save", "unblock", "release", "observe:/repos/ws"]);
   });
 
   test("reserves the workspace before the activity check and releases after close", async () => {

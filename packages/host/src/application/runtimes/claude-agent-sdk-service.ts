@@ -111,11 +111,20 @@ export type ClaudeAgentSdkService = {
   sendUserMessage(
     input: SendAgentUserMessageInput,
     runtimeId: string,
-    options?: Pick<AgentSessionSendOptions, "onSent">,
+    options?: Pick<AgentSessionSendOptions, "onSent" | "assertCurrent">,
   ): Effect.Effect<AcceptedAgentUserMessage, ClaudeAgentSdkServiceError>;
   prepareApprovalReply(
     input: ReplyApprovalInput,
   ): Effect.Effect<ClaudePendingInputResolution, ClaudeAgentSdkServiceError>;
+  resolvePendingApproval(
+    input: import("@openducktor/contracts").AgentSessionLiveRef & { requestId: string },
+  ): Effect.Effect<
+    {
+      owner: import("@openducktor/contracts").AgentSessionLiveRef;
+      root: import("@openducktor/contracts").AgentSessionLiveRef;
+    },
+    ClaudeAgentSdkServiceError
+  >;
   prepareQuestionReply(
     input: ReplyQuestionInput,
   ): Effect.Effect<ClaudePendingInputResolution, ClaudeAgentSdkServiceError>;

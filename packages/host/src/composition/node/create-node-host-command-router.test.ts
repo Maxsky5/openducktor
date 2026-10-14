@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   type HostEventEnvelope,
   hostRuntimeSnapshotSchema,
   mcpBridgeDiscoveryFileSchema,
+  repoConfigSchema,
 } from "@openducktor/contracts";
-import { Cause, Effect } from "effect";
+import { Cause, Deferred, Effect } from "effect";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostOperationError } from "../../effect/host-errors";
@@ -17,6 +18,7 @@ import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { RuntimeStartInput, RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
+import { createDefaultGlobalConfig } from "../../config/global-config";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
@@ -183,6 +185,144 @@ const createRouter = (input: {
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
+  test("only restores sessions for an added or reopened workspace", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "openducktor-workspace-selection-"));
+    const repoPath = path.join(root, "selected");
+    const previousRepoPath = path.join(root, "previous");
+    const addedRepoPath = path.join(root, "added");
+    const closedRepoPath = path.join(root, "closed");
+    await Promise.all(
+      [repoPath, previousRepoPath, addedRepoPath, closedRepoPath].map((repo) => mkdir(repo)),
+    );
+    const restore = Deferred.makeUnsafe<void>();
+    const restored: string[] = [];
+    let configReads = 0;
+    const observations = new Map(
+      [addedRepoPath, closedRepoPath].map((repo) => [repo, Deferred.makeUnsafe<void>()]),
+    );
+    let config = createDefaultGlobalConfig();
+    config.workspaces = {
+      previous: repoConfigSchema.parse({
+        workspaceId: "previous",
+        workspaceName: "Previous",
+        repoPath: previousRepoPath,
+        agentStudioState: { openTaskIds: [] },
+      }),
+      selected: repoConfigSchema.parse({
+        workspaceId: "selected",
+        workspaceName: "Selected",
+        repoPath,
+        agentStudioState: { openTaskIds: [] },
+      }),
+      closed: repoConfigSchema.parse({
+        workspaceId: "closed",
+        workspaceName: "Closed",
+        repoPath: closedRepoPath,
+        closed: true,
+      }),
+    };
+    config.activeWorkspace = "previous";
+    const { logger } = createLogger();
+    const router = await Effect.runPromise(
+      createNodeEffectHostCommandRouter({
+        configDirScope: "test",
+        lifecycleLogger: logger,
+        eventBus: {
+          ...createEventBus(),
+          publish: (envelope) => {
+            if (
+              envelope.channel === "openducktor://agent-session-live-event" &&
+              envelope.payload.type === "snapshot"
+            ) {
+              const observed = observations.get(envelope.payload.repoPath);
+              if (observed) Effect.runSync(Deferred.succeed(observed, undefined));
+            }
+          },
+        },
+        mcpBridgeDiscoveryMode: "production",
+        mcpHostBridge: createMcpHostBridge(),
+        onBackgroundFailure: () => Effect.void,
+        processEnv: { ...process.env },
+        runtimeDistribution: createRuntimeDistribution(),
+        runtimeHealth,
+        runtimeStarter: unusedRuntimeStarter,
+        settingsConfig: {
+          ...createFixedRuntimeSettingsConfig("opencode", "opencode"),
+          readConfig: () =>
+            Effect.sync(() => {
+              configReads += 1;
+              return structuredClone(config);
+            }),
+          writeConfig: (next) =>
+            Effect.sync(() => {
+              config = structuredClone(next);
+            }),
+        },
+        taskEventPublicationReporter: { report: () => Effect.void },
+        taskStore: createTaskStoreTestDouble({
+          listTasks: ({ repoPath: restoredRepoPath }) => {
+            restored.push(restoredRepoPath);
+            return Deferred.await(restore).pipe(Effect.as([]));
+          },
+        }),
+        terminalPty,
+      }),
+    );
+    configReads = 0;
+    const selected = Effect.runPromiseExit(
+      router.invoke("workspace_select", { workspaceId: "selected" }),
+    );
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        selected,
+        new Promise<"blocked">((resolve) => {
+          deadline = setTimeout(() => resolve("blocked"), 500);
+        }),
+      ]);
+      expect(result).not.toBe("blocked");
+      expect(result).toMatchObject({
+        _tag: "Success",
+        value: { workspaceId: "selected", repoPath },
+      });
+      expect(config.activeWorkspace).toBe("selected");
+      await Effect.runPromise(router.invoke("set_theme", { theme: "dark" }));
+      await Effect.runPromise(
+        router.invoke("workspace_reorder", { workspaceOrder: ["selected", "previous"] }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(configReads).toBe(3);
+      expect(restored).toEqual([]);
+      await Effect.runPromise(Deferred.succeed(restore, undefined));
+      await Effect.runPromise(
+        router.invoke("workspace_add", {
+          workspaceId: "added",
+          workspaceName: "Added",
+          repoPath: addedRepoPath,
+        }),
+      );
+      await Effect.runPromise(
+        Deferred.await(observations.get(addedRepoPath)!).pipe(Effect.timeout("1 second")),
+      );
+      await Effect.runPromise(
+        router.invoke("workspace_reopen", {
+          workspaceId: "closed",
+          expectedRepoPath: closedRepoPath,
+        }),
+      );
+      await Effect.runPromise(
+        Deferred.await(observations.get(closedRepoPath)!).pipe(Effect.timeout("1 second")),
+      );
+    } finally {
+      clearTimeout(deadline);
+      await Effect.runPromise(Deferred.succeed(restore, undefined));
+      await selected;
+      await Effect.runPromise(router.dispose());
+      await rm(root, { recursive: true, force: true });
+    }
+    expect(restored).toEqual([addedRepoPath, closedRepoPath]);
+  });
+
   test("tool catalog requests reach the runtime readiness check", async () => {
     const { logger } = createLogger();
     const router = await createRouter({ logger });

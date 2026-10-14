@@ -13,6 +13,7 @@ import {
 } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveRef,
+  type AgentSessionAuthorizedRoot,
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
@@ -87,8 +88,9 @@ export const createCodexLiveSessionAdapterPreparer = ({
               Effect.runPromise(resolveMcpServerConfig(repoPath)),
             transportFactory: (runtimeId) => createCodexRuntimeTransport(codexAppServer, runtimeId),
             subscribeEvents: (runtimeId, listener) => eventHub.subscribe(runtimeId, listener),
-            respondServerRequest: (runtimeId, requestId, result, error) => {
+            respondServerRequest: (runtimeId, requestId, result, error, onIssued) => {
               const response: CodexAppServerRespondInput = { runtimeId, requestId };
+              if (onIssued) response.onIssued = onIssued;
               if (result !== undefined) {
                 response.result = result;
               }
@@ -129,14 +131,18 @@ export const createCodexLiveSessionAdapterPreparer = ({
 
       const refreshProjection = (
         transcriptEvents: CodexLiveSessionMutation["transcriptEvents"] = [],
+        admittedRoot?: AgentSessionAuthorizedRoot,
       ) =>
-        projection.applyMutation({
-          runtimeId: runtime.runtimeId,
-          snapshotMode: "full",
-          snapshots: controller.listLiveSessionSnapshots(runtime.runtimeId),
-          transcriptEvents,
-          catalogInvalidated: false,
-        });
+        projection.applyMutation(
+          {
+            runtimeId: runtime.runtimeId,
+            snapshotMode: "full",
+            snapshots: controller.listLiveSessionSnapshots(runtime.runtimeId),
+            transcriptEvents,
+            catalogInvalidated: false,
+          },
+          admittedRoot,
+        );
 
       const reportProjectionFailure = (ref: AgentSessionLiveRef, failure: HostError) =>
         projection.applyMutation({
@@ -151,7 +157,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
 
       const { runSummary, runTitleUpdate } = createCodexControlRunner({
         runtimeId: runtime.runtimeId,
-        refreshProjection,
+        refreshProjection: (admittedRoot) => refreshProjection([], admittedRoot),
         reportProjectionFailure,
       });
 
@@ -285,12 +291,22 @@ export const createCodexLiveSessionAdapterPreparer = ({
             catch: sessionError("codex-live-session.load-diff", input.externalSessionId),
           });
         },
-        replyApproval: (input) => {
+        resolvePendingApproval: (input) =>
+          Effect.try({
+            try: () =>
+              controller.resolvePendingApproval({ ...input, runtimeId: runtime.runtimeId }),
+            catch: sessionError(
+              "codex-live-session.resolve-pending-approval",
+              input.externalSessionId,
+            ),
+          }),
+        replyApproval: (input, options) => {
           const request: Parameters<typeof controller.replyLiveApproval>[0] = {
             runtimeId: runtime.runtimeId,
             externalSessionId: input.externalSessionId,
             requestId: input.requestId,
             outcome: input.outcome,
+            onIssued: options?.onIssued,
           };
           if (input.message !== undefined) {
             request.message = input.message;
@@ -359,8 +375,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (model !== undefined) {
                 request.model = model;
               }
-              return runSummary("codex-live-session.start-session", () =>
-                controller.startSession(request),
+              return runSummary(
+                "codex-live-session.start-session",
+                () => controller.startSession(request),
+                input,
               );
             }),
           ),
@@ -415,8 +433,10 @@ export const createCodexLiveSessionAdapterPreparer = ({
               if (runtimeHistoryAnchor !== undefined) {
                 request.runtimeHistoryAnchor = runtimeHistoryAnchor;
               }
-              return runSummary("codex-live-session.fork-session", () =>
-                controller.forkSession(request),
+              return runSummary(
+                "codex-live-session.fork-session",
+                () => controller.forkSession(request),
+                input,
               );
             }),
           ),
@@ -443,7 +463,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         updateSessionModel: (input) =>
           Effect.tryPromise({
             try: async () => {
-              const policy = await Effect.runPromise(resolveRuntimePolicy({ kind: "repository" }));
+              const policy = await Effect.runPromise(resolveRuntimePolicy(input.sessionScope));
               return controller.updateSessionModel(input, {
                 repoPath: input.repoPath,
                 runtimeKind: "codex",

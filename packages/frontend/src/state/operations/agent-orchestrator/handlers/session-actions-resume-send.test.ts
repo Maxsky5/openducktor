@@ -1,11 +1,6 @@
 import { expect, test } from "bun:test";
+import { HostInvokeError } from "@openducktor/host-client";
 import { AgentRuntimeTestAdapter } from "../../../../test-support/agent-runtime-test-adapter";
-import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
-import { replaceAgentSession } from "@/state/agent-session-collection";
-import {
-  applyAgentSessionLiveDelta,
-  buildAgentSessionLiveCollection,
-} from "../session-read-model/agent-session-live-projection";
 import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { acceptedSubmitResult } from "./session-actions-send.test-support";
 import {
@@ -16,192 +11,63 @@ import {
 } from "./session-actions.test-helpers";
 
 test.each(["opencode", "codex", "claude"] as const)(
-  "resumes a stopped %s repository session before sending",
+  "a stopped %s session sends one host intent without local reattachment",
   async (runtimeKind) => {
-    for (const waitingInput of [false, true]) {
-      const session = buildSession({
-        runtimeKind,
-        sessionAssociation: { kind: "repository" },
-        executionEpisodeId: "episode-1",
-        historyLoadState: "loaded",
-        pendingQuestions: waitingInput ? [{ requestId: "question-1", questions: [] }] : [],
-      });
-      const sessionsRef = createSessionsRef([session]);
-      const calls: string[] = [];
-      const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-      adapter.stopSession = async () => {
-        calls.push("stop");
-      };
-      adapter.resumeSession = async (input) => {
-        calls.push("resume");
-        expect(input).toEqual({
-          repoPath: "/tmp/repo",
-          runtimeKind,
-          workingDirectory: session.workingDirectory,
-          externalSessionId: session.externalSessionId,
-          sessionScope: { kind: "repository" },
-          resumeMode: "reattach",
-        });
-        return { ...session, status: "idle" };
-      };
-      adapter.submitUserMessage = async (input) => {
-        calls.push("send");
-        return acceptedSubmitResult(input);
-      };
-      const actions = createSessionActions({ adapter, sessionsRef, taskRef: { current: [] } });
-      await actions.stopAgentSession(session);
-      const snapshot: AgentSessionLiveSnapshot = {
-        ref: {
-          repoPath: "/tmp/repo",
-          runtimeKind,
-          workingDirectory: session.workingDirectory,
-          externalSessionId: session.externalSessionId,
-        },
-        executionEpisodeId: "episode-1",
-        activity: "idle",
-        title: "Chat",
-        startedAt: session.startedAt,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        contextUsage: null,
-      };
-      sessionsRef.current = applyAgentSessionLiveDelta({
-        current: sessionsRef.current,
-        envelope: { type: "session_upsert", session: snapshot },
-      });
-      sessionsRef.current = buildAgentSessionLiveCollection({
-        current: sessionsRef.current,
-        snapshots: [snapshot],
-      });
-      expect(getSession(sessionsRef).status).toBe("stopped");
-      await actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]);
-      expect(calls).toEqual(["stop", "resume", "send"]);
-      expect(getSession(sessionsRef).status).toBe("running");
-    }
-  },
-);
-
-test.each(["opencode", "codex", "claude"] as const)(
-  "resumes a stopped %s workflow session before sending",
-  async (runtimeKind) => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
     const session = buildSession({
       runtimeKind,
       status: "stopped",
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
     });
     const sessionsRef = createSessionsRef([session]);
-    const calls: string[] = [];
-    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    adapter.resumeSession = async (input) => {
-      calls.push("resume");
-      expect(input).toEqual({
-        repoPath: "/tmp/repo",
-        runtimeKind,
-        workingDirectory: session.workingDirectory,
-        externalSessionId: session.externalSessionId,
-        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        resumeMode: "reattach",
-      });
-      return { ...session, status: "idle" };
-    };
-    adapter.submitUserMessage = async (input) => {
-      calls.push("send");
-      return acceptedSubmitResult(input);
-    };
-
-    const actions = createSessionActions({ adapter, sessionsRef });
-    await actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]);
-
-    expect(calls).toEqual(["resume", "send"]);
-    expect(getSession(sessionsRef).status).toBe("running");
-  },
-);
-
-test("does not send or erase the stopped state when resume fails", async () => {
-  const session = buildSession({ status: "stopped", sessionAssociation: { kind: "repository" } });
-  const sessionsRef = createSessionsRef([session]);
-  const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-  adapter.resumeSession = async () => {
-    throw new Error("Resume failed");
-  };
-  let sends = 0;
-  adapter.submitUserMessage = async (input) => {
-    sends++;
-    return acceptedSubmitResult(input);
-  };
-  const actions = createSessionActions({ adapter, sessionsRef });
-  await expect(
-    actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]),
-  ).rejects.toThrow("Resume failed");
-  expect(sends).toBe(0);
-  expect(getSession(sessionsRef).status).toBe("stopped");
-});
-
-test("does not overwrite a newer question that arrives during resume", async () => {
-  const session = buildSession({
-    status: "stopped",
-    executionEpisodeId: "old",
-    sessionAssociation: { kind: "repository" },
-  });
-  const sessionsRef = createSessionsRef([session]);
-  const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-  adapter.resumeSession = async () => {
-    sessionsRef.current = replaceAgentSession(sessionsRef.current, {
-      ...getSession(sessionsRef),
-      status: "running",
-      executionEpisodeId: "new",
-      pendingQuestions: [{ requestId: "question-2", questions: [] }],
-    });
-    return { ...session, status: "idle" };
-  };
-  let sends = 0;
-  adapter.submitUserMessage = async (input) => {
-    sends++;
-    return acceptedSubmitResult(input);
-  };
-  const actions = createSessionActions({ adapter, sessionsRef });
-  await expect(
-    actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]),
-  ).rejects.toThrow("Answer or reject the blocking request first");
-  expect(sends).toBe(0);
-  expect(getSession(sessionsRef)).toMatchObject({
-    status: "running",
-    executionEpisodeId: "new",
-    pendingQuestions: [{ requestId: "question-2", questions: [] }],
-  });
-});
-
-test.each(["workspace-change", "wrong-session", "still-stopped"] as const)(
-  "does not send after a resume with %s",
-  async (outcome) => {
-    const session = buildSession({ status: "stopped", sessionAssociation: { kind: "repository" } });
-    const sessionsRef = createSessionsRef([session]);
-    const repoEpochRef = { current: 1 };
-    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
-    adapter.resumeSession = async () => {
-      if (outcome === "workspace-change") repoEpochRef.current++;
-      return {
-        ...session,
-        externalSessionId:
-          outcome === "wrong-session" ? "other-session" : session.externalSessionId,
-        status: outcome === "still-stopped" ? "stopped" : "idle",
-      };
-    };
     let sends = 0;
+    adapter.resumeSession = async () => {
+      throw new Error("The host owns reattachment.");
+    };
     adapter.submitUserMessage = async (input) => {
-      sends++;
+      sends += 1;
+      expect(input).not.toHaveProperty("model");
+      expect(input).not.toHaveProperty("systemPrompt");
+      expect(input).toMatchObject({
+        externalSessionId: session.externalSessionId,
+        runtimeKind,
+        sessionScope: session.sessionAssociation,
+      });
       return acceptedSubmitResult(input);
     };
-    const actions = createSessionActions({ adapter, sessionsRef, repoEpochRef });
-    const errors = {
-      "workspace-change": "Workspace changed while resuming the session.",
-      "wrong-session": "The runtime resumed a different session",
-      "still-stopped": "is still stopped after resume",
-    };
-    await expect(
-      actions.sendAgentMessage(session, [{ kind: "text", text: "Continue" }]),
-    ).rejects.toThrow(errors[outcome]);
-    expect(sends).toBe(0);
-    expect(getSession(sessionsRef).status).toBe("stopped");
+    const actions = createSessionActions({ adapter, sessionsRef });
+    expect(
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Continue" }]),
+    ).toMatchObject({ outcome: "accepted" });
+    expect(sends).toBe(1);
   },
 );
+
+test("a lost host response stays uncertain and never becomes an unsent draft", async () => {
+  const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+  const sessionsRef = createSessionsRef([buildSession({ status: "stopped" })]);
+  adapter.submitUserMessage = async () => {
+    throw new Error("Connection ended after dispatch.");
+  };
+  const actions = createSessionActions({ adapter, sessionsRef });
+  const receipt = await actions.sendAgentMessage(getSession(sessionsRef), [
+    { kind: "text", text: "Continue" },
+  ]);
+  const submissionId = receipt?.outcome === "uncertain" ? receipt.submissionId : undefined;
+  expect(submissionId).toEqual(expect.any(String));
+  expect(receipt?.outcome).toBe("uncertain");
+  expect(getSession(sessionsRef)?.pendingSubmissionId).toBe(submissionId);
+});
+
+test("a confirmed host refusal keeps the draft eligible for correction", async () => {
+  const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+  const sessionsRef = createSessionsRef([buildSession({ status: "stopped" })]);
+  adapter.submitUserMessage = async () => {
+    throw new HostInvokeError("Review the selected model.", { kind: "workflow_intent_rejected" });
+  };
+  const actions = createSessionActions({ adapter, sessionsRef });
+  await expect(
+    actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Continue" }]),
+  ).rejects.toThrow("Review the selected model.");
+  expect(getSession(sessionsRef)?.pendingSubmissionId).toBeUndefined();
+});

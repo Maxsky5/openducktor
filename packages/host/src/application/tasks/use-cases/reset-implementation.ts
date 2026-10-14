@@ -36,6 +36,7 @@ export const createTaskImplementationResetUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionLifecycleCoordinator: coordinator,
+  completionState,
 }: TaskServiceUseCaseInput) => ({
   resetImplementation(input: Parameters<TaskService["resetImplementation"]>[0]) {
     return Effect.gen(function* () {
@@ -49,22 +50,18 @@ export const createTaskImplementationResetUseCase = ({
       const currentTasks = yield* taskStore.listTasks({ repoPath });
       const current = currentTasks.find((task) => task.id === taskId);
       if (!current) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Task not found: ${taskId}`,
-            details: { repoPath, taskId },
-          }),
-        );
+        return yield* new HostValidationError({
+          field: "taskId",
+          message: `Task not found: ${taskId}`,
+          details: { repoPath, taskId },
+        });
       }
       if (!canResetImplementationFromStatus(current.status)) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: ${current.status}).`,
-            details: { repoPath, taskId, status: current.status },
-          }),
-        );
+        return yield* new HostValidationError({
+          field: "taskId",
+          message: `Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: ${current.status}).`,
+          details: { repoPath, taskId, status: current.status },
+        });
       }
       const currentSessions = (yield* taskStore.getTaskMetadata({ repoPath, taskId }))
         .agentSessions;
@@ -165,12 +162,17 @@ export const createTaskImplementationResetUseCase = ({
           pullRequest: null,
         });
         cleanupProgress.completedSteps.push("Cleared pull request metadata.");
-        yield* storeDependencies.setDirectMerge({
-          repoPath: effectiveRepoPath,
-          taskId,
-          directMerge: null,
-        });
-        cleanupProgress.completedSteps.push("Cleared direct merge metadata.");
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* storeDependencies.setDirectMerge({
+              repoPath: effectiveRepoPath,
+              taskId,
+              directMerge: null,
+            });
+            cleanupProgress.completedSteps.push("Cleared direct merge metadata.");
+            yield* completionState.discard(effectiveRepoPath, taskId);
+          }),
+        );
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,

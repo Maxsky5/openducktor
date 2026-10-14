@@ -1,3 +1,4 @@
+import type { AgentWorkStartGuard } from "@openducktor/core";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AcceptedAgentUserMessage,
@@ -71,6 +72,8 @@ export const applyClaudeSessionModel = async (
   session: ClaudeSession,
   model: AgentModelSelection | null | undefined,
   force = false,
+  workStartGuard?: AgentWorkStartGuard,
+  onWorkIssued?: () => void,
 ): Promise<void> => {
   assertClaudeSessionAcceptingMessages(session);
   const nextModel = model ?? undefined;
@@ -86,13 +89,19 @@ export const applyClaudeSessionModel = async (
   const settingsChanged = changed.effort || changed.speed;
   try {
     if (modelChanged) {
-      await session.query.setModel(nextModel?.modelId);
+      workStartGuard?.assertCurrent();
+      const changing = session.query.setModel(nextModel?.modelId);
+      onWorkIssued?.();
+      await changing;
       assertClaudeSessionAcceptingMessages(session);
     }
     if (settingsChanged) {
-      await session.query.applyFlagSettings(
+      workStartGuard?.assertCurrent();
+      const changing = session.query.applyFlagSettings(
         toClaudeFlagSettings(nextModel, session.externalSessionId, changed),
       );
+      onWorkIssued?.();
+      await changing;
       assertClaudeSessionAcceptingMessages(session);
     }
   } catch (cause) {
@@ -249,6 +258,7 @@ export const sendClaudeUserMessage = async (input: {
   randomId: () => string;
   session: ClaudeSession;
   onSent?: (() => void) | undefined;
+  assertCurrent?: (() => void) | undefined;
 }): Promise<AcceptedAgentUserMessage> => {
   const { emit, messageInput, now, randomId, session } = input;
   const isManualCompaction =
@@ -281,16 +291,37 @@ export const sendClaudeUserMessage = async (input: {
     if (messageInput.delivery === "new_turn") {
       throw new AgentSessionTurnActiveError(session.externalSessionId);
     }
-    return steerClaudeUserMessage({ acceptedMessage, sdkMessage, session });
+    return steerClaudeUserMessage({
+      acceptedMessage,
+      sdkMessage,
+      session,
+      onSent: input.onSent,
+      assertCurrent: input.assertCurrent,
+    });
   }
+  if (messageInput.delivery === "steer")
+    throw new AgentSessionMessageRefusedError(
+      new Error(
+        "The running turn ended before steering. Send a new turn with current host context.",
+      ),
+    );
   const previousModel = session.model;
   let modelApplied = false;
   if (messageInput.model !== undefined) {
-    await applyClaudeSessionModel(session, messageInput.model);
+    await applyClaudeSessionModel(
+      session,
+      messageInput.model,
+      false,
+      messageInput.workStartGuard,
+      messageInput.onWorkIssued,
+    );
+    messageInput.onWorkAccepted?.();
     modelApplied = true;
     assertClaudeSessionAcceptingMessages(session);
   }
   const previousActivity = session.activity;
+  const previousTurnSystemPrompt = session.turnSystemPrompt;
+  if (messageInput.systemPrompt !== undefined) session.turnSystemPrompt = messageInput.systemPrompt;
   const previousSdkState = session.sdkState;
   const previousPendingUserTurnCount = session.pendingUserTurnCount;
   if (isManualCompaction) {
@@ -304,6 +335,8 @@ export const sendClaudeUserMessage = async (input: {
   session.activity = "running";
   const admission = waitForUserMessageAdmission(session, messageId);
   try {
+    input.assertCurrent?.();
+    messageInput.workStartGuard?.assertCurrent();
     pushClaudeSdkUserMessage(session, sdkMessage);
     if (isManualCompaction) {
       beginClaudeManualCompaction({
@@ -320,6 +353,7 @@ export const sendClaudeUserMessage = async (input: {
       throw cause;
     }
     session.pendingUserTurnCount = previousPendingUserTurnCount;
+    session.turnSystemPrompt = previousTurnSystemPrompt;
     session.activity = previousActivity;
     if (previousSdkState === undefined) {
       delete session.sdkState;
@@ -370,13 +404,17 @@ const steerClaudeUserMessage = async (input: {
   acceptedMessage: ClaudeAcceptedUserMessage;
   sdkMessage: SDKUserMessage;
   session: ClaudeSession;
+  onSent?: (() => void) | undefined;
+  assertCurrent?: (() => void) | undefined;
 }): Promise<AcceptedAgentUserMessage> => {
   const { acceptedMessage, sdkMessage, session } = input;
   sdkMessage.priority = "now";
   sdkMessage.origin = { kind: "human" };
   const admission = waitForUserMessageAdmission(session, acceptedMessage.messageId);
   try {
+    input.assertCurrent?.();
     session.queue.push(sdkMessage);
+    input.onSent?.();
   } catch (error) {
     admission.dispose();
     throw error;
@@ -394,3 +432,10 @@ const steerClaudeUserMessage = async (input: {
     session.unreadSteeredUserMessages.has(acceptedMessage.messageId) ? "queued" : "read",
   );
 };
+
+export const withClaudeModelCallbacks = (
+  input: import("@openducktor/core").SendAgentUserMessageInput,
+  options:
+    | import("../../ports/agent-session-live-adapter-port").AgentSessionSendOptions
+    | undefined,
+) => ({ ...input, onWorkIssued: options?.onModelIssued, onWorkAccepted: options?.onModelAccepted });

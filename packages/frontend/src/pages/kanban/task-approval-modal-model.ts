@@ -80,6 +80,7 @@ export const buildTaskApprovalModalModel = ({
       stage: "complete_direct_merge",
       targetBranch: approvalContext?.targetBranch ?? null,
       publishTarget: approvalContext?.publishTarget ?? null,
+      publicationPreview: approvalContext?.publicationPreview ?? null,
       onSkipDirectMergeCompletion: reset,
       onCompleteDirectMerge: completeDirectMerge,
     } satisfies TaskApprovalCompletionModalModel;

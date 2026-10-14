@@ -97,6 +97,14 @@ export const createTaskReviewUseCases = ({
             latest.current.status,
             "closed",
           );
+          const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+          if (metadata.directMerge !== undefined) {
+            return yield* new HostValidationError({
+              field: "taskId",
+              message: `Cannot approve task ${taskId} while a direct merge is pending. Use task_direct_merge_complete to complete the direct merge workflow.`,
+              details: { repoPath, taskId },
+            });
+          }
           yield* runTaskRuntimeCleanup({
             progress: createTaskCleanupProgressState(),
             repoPath,

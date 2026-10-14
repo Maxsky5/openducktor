@@ -319,17 +319,26 @@ export function useAgentStudioGitConflictController({
       assertCurrent();
       if (!receipt) return;
       clearActionErrors();
-      if (receipt.outcome === "accepted" && receipt.postAcceptanceFailure) {
+      if (
+        (receipt.outcome === "accepted" || receipt.outcome === "acknowledged") &&
+        receipt.postAcceptanceFailure
+      ) {
         setRebaseError(
           `The agent accepted the message, but a later host step failed: ${receipt.postAcceptanceFailure}`,
         );
         toast.error(`Message accepted by ${conflictRecipientLabel}; host step failed`, {
           description: receipt.postAcceptanceFailure,
         });
+      } else if (receipt.outcome === "uncertain") {
+        setRebaseError(
+          "Delivery of the conflict resolution request is uncertain. Inspect the original session before sending it again.",
+        );
+        toast.error("Conflict resolution request has no confirmed result");
       } else {
         toast.success(
           receipt.outcome === "queued" ||
-            (receipt.acceptedMessage.type === "user_message" &&
+            (receipt.outcome === "accepted" &&
+              receipt.acceptedMessage.type === "user_message" &&
               receipt.acceptedMessage.state === "queued")
             ? `Queued git conflict resolution request for ${conflictRecipientLabel}`
             : `Sent git conflict resolution request to ${conflictRecipientLabel}`,

@@ -1,3 +1,4 @@
+import { resolveOpenCodePendingApproval } from "./opencode-pending-approval-owner";
 import { assertApprovalAllowed } from "./opencode-approval-authorization";
 import { OpenCodeSessionRefIndex } from "./opencode-live-session-ref-index";
 import type {
@@ -63,8 +64,7 @@ export const createOpenCodeLiveSessionState = ({
     nextOccurrenceId,
   });
 
-  const requireSession = (ref: AgentSessionLiveRef): OpenCodeLiveSession =>
-    requireOpenCodeLiveSession(sessionsByRef, runtime.runtimeId, ref);
+  const requireSession = requireOpenCodeLiveSession.bind(null, sessionsByRef, runtime.runtimeId);
 
   const commitSnapshot = (session: OpenCodeLiveSession): AgentSessionLiveAdapterChange[] => {
     const key = refKey(session.snapshot.ref);
@@ -394,6 +394,10 @@ export const createOpenCodeLiveSessionState = ({
   };
 
   return {
+    resolvePendingApproval: (input: AgentSessionLiveRef & { requestId: string }) =>
+      resolveOpenCodePendingApproval(input, requirePendingRoute, requireSession, (id) =>
+        refsByExternalSessionId.find(id),
+      ),
     listSnapshots: (): AgentSessionLiveSnapshot[] =>
       [...sessionsByRef.values()].map(({ snapshot }) =>
         parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.clone-snapshot"),

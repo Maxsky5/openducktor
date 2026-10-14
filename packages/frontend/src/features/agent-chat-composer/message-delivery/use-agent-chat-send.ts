@@ -52,9 +52,11 @@ export type AgentChatSendTarget = {
   readonly activityKey: string;
   /** False while the chat cannot take a message, for example while its model saves. */
   readonly canSend: () => boolean;
+  /** Captures the selected recipient before attachment staging starts. */
+  readonly capture: () => () => boolean;
   /**
    * Returns the session that takes the message, or launches a new session with it. It can
-   * prepare the model of the session. Null drops the send and keeps the draft.
+   * capture the selected recipient. Null drops the send and keeps the draft.
    */
   readonly resolve: (parts: AgentUserMessagePart[]) => Promise<AgentChatResolvedTarget | null>;
   /** Turns a failure into the composer result. Without it, the composer gets the failure. */
@@ -176,6 +178,7 @@ export function useAgentChatSend({
       ) {
         return false;
       }
+      const isCurrentRecipient = target.capture();
       const activity = target.activity.begin(target.activityKey);
       try {
         const parts = await resolveAgentChatSendDraftParts({
@@ -187,11 +190,21 @@ export function useAgentChatSend({
             : selectedModelDescriptor,
           supportsAttachments,
         });
-        if (!parts) return false;
+        if (!parts || !isCurrentRecipient()) return false;
         const resolved = await target.resolve(parts);
         if (!resolved) return false;
         if (resolved.kind === "launched") return resolved.result;
-        await sendAgentMessage(resolved.identity, parts, { ...resolved.sendOptions, mode });
+        await sendAgentMessage(resolved.identity, parts, {
+          ...resolved.sendOptions,
+          mode,
+          assertCanSubmit: (session) => {
+            if (!isCurrentRecipient())
+              throw new Error(
+                "The original chat is no longer selected. Reopen it to send your draft.",
+              );
+            resolved.sendOptions?.assertCanSubmit?.(session);
+          },
+        });
         return true;
       } catch (cause) {
         const error = cause instanceof Error ? cause : new Error(String(cause));

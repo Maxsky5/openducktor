@@ -1342,6 +1342,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
           loadContextUsage: async () => {
             throw new Error("context endpoint unavailable");
           },
+          resolvePendingApproval: () =>
+            Effect.die(new Error("unexpected pending approval resolution")),
           replyApproval: async (reply) => {
             approvalAttempts += 1;
             if (approvalAttempts === 1) {
@@ -1563,6 +1565,7 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
             : ({ type: "missing", ref: candidate } as const),
         ),
       loadContext: () => Effect.succeed(null),
+      resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
       replyApproval: () => Effect.void,
       replyQuestion: () => Effect.void,
       releaseRuntime: () => Effect.succeed([otherRef]),

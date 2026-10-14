@@ -401,6 +401,46 @@ describe("OpenCode V2 conversation identity and history", () => {
       { limit: "100", cursor: "page-2" },
     ]);
   });
+  test.each([false, true])(
+    "history binds a steered user to its native execution model, prior execution ended=%j",
+    async (ended) => {
+      const messages: SessionMessageInfo[] = [
+        { id: "original", type: "user", text: "Start", time: { created: 1 } },
+        {
+          id: "native-step",
+          type: "assistant",
+          model,
+          agent: "build",
+          time: { created: 2 },
+          content: [],
+        },
+        ...(ended
+          ? [
+              {
+                id: "boundary",
+                type: "idle" as const,
+                outcome: "succeeded" as const,
+                time: { created: 3 },
+              },
+            ]
+          : []),
+        { id: "latest", type: "user", text: "Additional input", time: { created: 4 } },
+      ];
+      const { controller } = createController(({ url }) => {
+        if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
+        if (url.pathname === "/api/session/ses_saved") return response(current);
+        if (url.pathname.endsWith("/instructions/entries")) return response([]);
+        if (url.pathname.endsWith("/message")) return cursorPage(messages);
+        throw new Error(`Unexpected history request ${url.pathname}`);
+      });
+      const history = await controller.loadSessionHistory(ref);
+      const latest = history.find((message) => message.messageId === "latest");
+      if (!latest || latest.role !== "user") throw new Error("Missing native user input");
+      expect(latest.model).toEqual(
+        ended ? undefined : { providerId: model.providerID, modelId: model.id, profileId: "build" },
+      );
+    },
+  );
   for (const migration of [
     { status: "required" },
     { status: "running", progress: { label: "Messages", numerator: 2, denominator: 5 } },

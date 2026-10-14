@@ -16,6 +16,7 @@ export const createWorkspaceSessionStart = (
   dependencies: WorkspaceSessionServiceDependencies,
   onStarted: (session: AgentSessionControlSummary) => Effect.Effect<void, HostError> = () =>
     Effect.void,
+  workStartGuard?: import("@openducktor/core").AgentWorkStartGuard,
 ) => {
   const { store, settings, live, runtime, git, operationGate } = dependencies;
   const { recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
@@ -38,7 +39,8 @@ export const createWorkspaceSessionStart = (
         return yield* Effect.uninterruptible(
           Effect.gen(function* () {
             const startTitle = runtimeTitle(session);
-            const startInput: AgentSessionControlStartInput = {
+            const startInput: AgentSessionControlStartInput &
+              import("@openducktor/core").AgentWorkStartOptions = {
               repoPath: ref.repoPath,
               runtimeKind: session.runtimeKind,
               workingDirectory: session.executionTarget.workingDirectory,
@@ -48,6 +50,7 @@ export const createWorkspaceSessionStart = (
                   : { kind: "repository", title: startTitle },
               systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
             };
+            if (workStartGuard) startInput.workStartGuard = workStartGuard;
             if (session.selectedModel !== null) startInput.model = session.selectedModel;
             const runtimeSession = yield* live.startSession(startInput);
             const saved = yield* Effect.exit(

@@ -127,6 +127,12 @@ export const agentSessionControlResumeInputSchema = agentSessionLiveRefSchema
   .strict();
 export type AgentSessionControlResumeInput = z.infer<typeof agentSessionControlResumeInputSchema>;
 
+/** Public intent. The host prepares native context and model settings. */
+export const agentSessionResumeIntentSchema = agentSessionLiveRefSchema
+  .extend({ sessionScope: agentSessionScopeSchema, resumeMode: agentSessionResumeModeSchema })
+  .strict();
+export type AgentSessionResumeIntent = z.infer<typeof agentSessionResumeIntentSchema>;
+
 export const agentSessionControlForkInputSchema = z
   .object({
     ...agentSessionControlWorkingDirectoryFields,

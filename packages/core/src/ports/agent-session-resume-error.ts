@@ -21,16 +21,19 @@ export type InterruptedTurnResumeFailureReason =
 export class InterruptedTurnResumeError extends Error {
   readonly reason: InterruptedTurnResumeFailureReason;
   readonly resumeCause: unknown;
+  readonly nativeOutcome: "accepted" | "uncertain" | "refused" | "not_issued" | undefined;
 
   constructor(detail: {
     reason: InterruptedTurnResumeFailureReason;
     message: string;
     cause?: unknown;
+    nativeOutcome?: "accepted" | "uncertain" | "refused" | "not_issued";
   }) {
     super(detail.message);
     this.name = "InterruptedTurnResumeError";
     this.reason = detail.reason;
     this.resumeCause = detail.cause;
+    this.nativeOutcome = detail.nativeOutcome;
   }
 }
 
@@ -38,4 +41,5 @@ export const interruptedTurnResumeError = (detail: {
   reason: InterruptedTurnResumeFailureReason;
   message: string;
   cause?: unknown;
+  nativeOutcome?: "accepted" | "uncertain" | "refused" | "not_issued";
 }): InterruptedTurnResumeError => new InterruptedTurnResumeError(detail);

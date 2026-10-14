@@ -1,7 +1,8 @@
+import { taskStatusSchema } from "@openducktor/contracts";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { canonicalTargetBranch, checkoutTargetBranch } from "@/lib/target-branch";
+import { canonicalTargetBranch } from "@/lib/target-branch";
 import { host } from "@/state/operations/shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "@/state/operations/tasks/task-chat-draft-cleanup";
 import {
@@ -9,8 +10,6 @@ import {
   loadTaskApprovalContextFromQuery,
 } from "@/state/queries/task-approval";
 import type { TaskApprovalFlowReadyState } from "./task-approval-flow-state";
-
-const DIRECT_MERGE_PUSH_FAILURE_MESSAGE = "Git push failed with no output.";
 
 type SubmitDirectMergeApprovalArgs = {
   approval: TaskApprovalFlowReadyState;
@@ -72,6 +71,11 @@ export async function submitDirectMergeApproval({
     taskIds: [approval.taskId],
     mutation: async () =>
       host.taskDirectMerge(repoPath, approval.taskId, {
+        expected: {
+          taskStatus: taskStatusSchema.parse(approvalContext.taskStatus),
+          sourceBranch: approvalContext.sourceBranch,
+          targetBranch: approvalContext.targetBranch,
+        },
         mergeMethod: approval.mergeMethod,
         squashCommitMessage:
           approval.mergeMethod === "squash"
@@ -141,19 +145,18 @@ export async function completeDirectMergeApproval({
     workspaceId,
     taskIds: [approval.taskId],
     mutation: async () => {
+      let publicationConsent: Parameters<typeof host.taskDirectMergeComplete>[2];
       if (publishTarget) {
-        if (!publishTarget.remote) {
-          throw new Error("The configured target branch does not have a publish remote.");
-        }
-        const pushResult = await host.gitPushBranch(repoPath, checkoutTargetBranch(publishTarget), {
-          remote: publishTarget.remote,
-        });
-        if (pushResult.outcome !== "pushed") {
-          throw new Error(pushResult.output.trim() || DIRECT_MERGE_PUSH_FAILURE_MESSAGE);
-        }
+        if (!approvalContext.directMerge || !approvalContext.publicationPreview)
+          throw new Error(
+            "Publication context is missing. Refresh approval context before choosing Publish and complete.",
+          );
+        publicationConsent = {
+          expectedMerge: approvalContext.directMerge,
+          expectedPublication: approvalContext.publicationPreview,
+        };
       }
-
-      await host.taskDirectMergeComplete(repoPath, approval.taskId);
+      await host.taskDirectMergeComplete(repoPath, approval.taskId, publicationConsent);
     },
   });
   await refreshTasks();

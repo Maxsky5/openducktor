@@ -1,3 +1,5 @@
+import { buildAgentSystemPrompt, mergePromptOverrides } from "@openducktor/core";
+import { commandPreparationFixture } from "./command-preparation-fixture";
 import { noMessageQueues } from "../../../test-support/message-queue-observer-test-double";
 import { createTaskSessionOperations } from "../task-session-operations";
 import { createWorktreeActionRunner } from "../../actions/worktree-action-runner";
@@ -395,6 +397,42 @@ export const createLaunchHarness = async (
   });
   // The first instruction uses the same workflow send policy as a composer message.
   const commands = createAgentSessionCommandService({
+    turnPreparation: {
+      ...commandPreparationFixture,
+      context: (target) =>
+        Effect.succeed(
+          buildAgentSystemPrompt({
+            role: target.sessionScope.kind === "workflow" ? target.sessionScope.role : "build",
+            task: {
+              taskId: task.id,
+              title: task.title,
+              issueType: task.issueType,
+              status: task.status,
+              qaRequired: task.aiReviewEnabled,
+              description: task.description,
+            },
+            overrides: mergePromptOverrides({
+              globalOverrides: settings.globalPromptOverrides,
+              repoOverrides: config.promptOverrides,
+            }),
+          }),
+        ),
+    },
+    readSessionRootRefs: (repoPath) =>
+      tasks.agentSessionsList({ repoPath, taskId: "task" }).pipe(
+        Effect.map((records) =>
+          records.map((record) => ({
+            repoPath,
+            ...record,
+            sessionScope: { kind: "workflow" as const, taskId: "task", role: record.role },
+          })),
+        ),
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({ operation: "test.read-roots", message: cause.message }),
+        ),
+      ),
+    approvalPolicy: { reply: runtime.replyApproval },
     canonicalizeRepoPath: git.canonicalizePath,
     runtime,
     tasks,

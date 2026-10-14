@@ -2352,6 +2352,11 @@ describe("HostClient", () => {
   });
 
   test("taskDirectMerge sends structured squash input", async () => {
+    const expected = {
+      taskStatus: "human_review" as const,
+      sourceBranch: "odt/task-1",
+      targetBranch: { remote: "origin", branch: "main" },
+    };
     const { client, calls } = createClient((command) => {
       if (command === "task_direct_merge") {
         return {
@@ -2363,6 +2368,7 @@ describe("HostClient", () => {
     });
 
     await client.taskDirectMerge("/repo", "task-1", {
+      expected,
       mergeMethod: "squash",
       squashCommitMessage: "feat: add Microsoft login",
     });
@@ -2374,6 +2380,7 @@ describe("HostClient", () => {
           repoPath: "/repo",
           taskId: "task-1",
           input: {
+            expected,
             mergeMethod: "squash",
             squashCommitMessage: "feat: add Microsoft login",
           },

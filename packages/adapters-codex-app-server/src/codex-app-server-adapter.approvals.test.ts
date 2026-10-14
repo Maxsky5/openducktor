@@ -168,6 +168,7 @@ describe("CodexAppServerAdapter approvals", () => {
       0,
       { decision: "accept" },
       undefined,
+      expect.any(Function),
     );
   });
 
@@ -316,6 +317,7 @@ describe("CodexAppServerAdapter approvals", () => {
       "permission-request-1",
       { permissions: { network: { enabled: true } }, scope: "turn" },
       undefined,
+      expect.any(Function),
     );
     unsubscribe();
   });

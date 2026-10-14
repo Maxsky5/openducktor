@@ -10,6 +10,7 @@ import { workspaceTextFileWriteFailureSchema } from "./filesystem-schemas";
 import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
 import { taskAssetFailureSchema } from "./task-asset-schemas";
 import { terminalFailureSchema } from "./terminal-schemas";
+import { sessionOperationObservationSchema } from "./workflow-operation-schemas";
 
 export const agentSessionResumeFailureReasonSchema = z.enum([
   "unsupported",
@@ -33,6 +34,7 @@ export const agentSessionResumeFailureSchema = z
     operation: z.string().trim().min(1),
     message: z.string().trim().min(1),
     nextAction: z.string().trim().min(1),
+    nativeOutcome: z.enum(["not_issued", "refused", "accepted", "uncertain"]).optional(),
     cause: z.string().trim().min(1).optional(),
   })
   .strict();
@@ -40,6 +42,11 @@ export const agentSessionResumeFailureSchema = z
 export type AgentSessionResumeFailure = z.infer<typeof agentSessionResumeFailureSchema>;
 
 export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("session_operation"),
+    observation: sessionOperationObservationSchema,
+  }),
+  z.strictObject({ kind: z.literal("workflow_intent_rejected") }),
   z.strictObject({
     kind: z.literal("runtime_operation"),
     runtimeOperationFailure: runtimeOperationFailureSchema,

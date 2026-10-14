@@ -263,11 +263,26 @@ export const projectMessages = (
   { completions, durations } = messageProjectionContext(messages),
   settledToolInputs?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage[] => {
-  return messages
-    .filter(isVisibleNativeMessage)
-    .map((message) =>
-      projectMessage(message, completions, durations.get(message.id), settledToolInputs),
+  let latestUserId: string | undefined;
+  let runningModel: AgentTranscriptModelSelection | undefined;
+  // Steered input joins the current execution. A native idle record ends that evidence.
+  for (const message of messages.toReversed()) {
+    if (message.type === "idle") break;
+    if (message.type === "user" && !latestUserId) latestUserId = message.id;
+    if (message.type === "assistant" && !runningModel)
+      runningModel = { ...modelSelection(message.model), profileId: message.agent };
+  }
+  return messages.filter(isVisibleNativeMessage).map((message) => {
+    const projected = projectMessage(
+      message,
+      completions,
+      durations.get(message.id),
+      settledToolInputs,
     );
+    return projected.role === "user" && projected.messageId === latestUserId && runningModel
+      ? { ...projected, model: runningModel }
+      : projected;
+  });
 };
 
 const projectAssistantContent = (

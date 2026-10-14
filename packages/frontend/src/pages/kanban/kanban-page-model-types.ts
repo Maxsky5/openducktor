@@ -73,6 +73,7 @@ export type TaskApprovalCompletionModalModel = TaskApprovalModalBase & {
   stage: "complete_direct_merge";
   targetBranch: GitTargetBranch | null;
   publishTarget: GitTargetBranch | null;
+  publicationPreview: import("@openducktor/contracts").GitPublicationPreview | null;
   onSkipDirectMergeCompletion: () => void;
   onCompleteDirectMerge: () => void;
 };

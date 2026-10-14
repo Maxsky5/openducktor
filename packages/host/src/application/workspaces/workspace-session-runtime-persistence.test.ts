@@ -41,8 +41,6 @@ describe("Workspace Session persistence through the shared command module", () =
         resumeMode: "reattach",
         ...h.ref,
         sessionScope: scope,
-        systemPrompt: "New catalog instructions.",
-        model: { providerId: "other", modelId: "other-model" },
       }),
     );
     // Like the message queue, a send captures the stored settings before dispatch.
@@ -128,10 +126,13 @@ describe("Workspace Session persistence through the shared command module", () =
       failure = cause;
     }
     expect(hostInvokeFailureSchema.parse(hostInvokeFailureFromError(failure))).toMatchObject({
-      kind: "agent_session_message_accepted",
-      sessionRef: h.ref,
-      acceptedMessage: { messageId: "user-1", message: "First accepted prompt" },
-      stage: "record_message",
+      kind: "session_operation",
+      observation: {
+        ref: h.ref,
+        nativeOutcome: "accepted",
+        acceptedInput: { messageId: "user-1", message: "First accepted prompt" },
+        failure: { stage: "submission" },
+      },
     });
     expect(h.inputs).toHaveLength(1);
     expect((await h.get()).generatedTitle).toBeNull();
@@ -492,14 +493,26 @@ describe("Workspace Session persistence through the shared command module", () =
 
   test("keeps the saved model when a queued message ran with an older model", async () => {
     const h = await setup();
-    const model = { runtimeKind: "opencode" as const, providerId: "provider", modelId: "older" };
+    const captured = await Effect.runPromise(
+      h.live.prepareUserMessage({
+        ...h.ref,
+        sessionScope: { kind: "repository" },
+        parts: [{ kind: "text", text: "Queued prompt" }],
+      }),
+    );
+    const newerModel = { ...h.record.selectedModel!, modelId: "newer" };
+    await Effect.runPromise(h.store.setSelectedModel({ ...h.storeRef, selectedModel: newerModel }));
 
     await Effect.runPromise(
-      h.persistence.recordAcceptedMessage(h.ref, { ...h.accepted(), model }, { saveModel: false }),
+      h.live.sendUserMessage({ ...captured, modelCaptured: true, delivery: "new_turn" }),
     );
 
-    expect((await h.get()).selectedModel).toEqual(h.record.selectedModel);
+    expect(h.inputs.at(-1)?.model).toEqual(captured.model);
+    expect((await h.get()).selectedModel).toEqual(newerModel);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
+    await h.send("Next prompt");
+    expect(h.inputs.at(-1)?.model).toEqual(newerModel);
+    expect((await h.get()).selectedModel).toEqual(newerModel);
   });
 
   test("keeps the complete accepted-message update after publication fails", async () => {
@@ -525,11 +538,6 @@ describe("Workspace Session persistence through the shared command module", () =
     const h = await setup();
     const saving = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
-    const queued = Promise.withResolvers<void>();
-    let requests = 0;
-    h.state.onGateRequest = () => {
-      if (++requests === 2) queued.resolve();
-    };
     h.state.failModelSave = true;
     h.state.beforeModelSave = Effect.promise(async () => {
       saving.resolve();
@@ -552,7 +560,7 @@ describe("Workspace Session persistence through the shared command module", () =
         model: secondModel,
       }),
     );
-    await queued.promise;
+    await Effect.runPromise(Effect.yieldNow);
     expect(h.models).toEqual([firstModel]);
     finish.resolve();
     expect((await first)._tag).toBe("Failure");
@@ -711,7 +719,7 @@ describe("Workspace Session persistence through the shared command module", () =
     const firstRun = Effect.runPromiseExit(first === "command" ? command() : archive());
     await entered.promise;
     const secondRun = Effect.runPromiseExit(first === "command" ? archive() : command());
-    await queued.promise;
+    await Effect.runPromise(Effect.yieldNow);
     expect(h.inputs).toEqual([]);
     expect(archiveReads).toBe(0);
     finish.resolve();
@@ -787,7 +795,7 @@ describe("Workspace Session persistence through the shared command module", () =
     };
     await expect(
       Effect.runPromise(h.live.resumeSession({ ...resume, workingDirectory: "/wrong" })),
-    ).rejects.toThrow("does not match");
+    ).rejects.toThrow("no verified saved owner");
     h.state.registered = false;
     await expect(Effect.runPromise(h.live.resumeSession(resume))).rejects.toThrow(
       "not a registered worktree",

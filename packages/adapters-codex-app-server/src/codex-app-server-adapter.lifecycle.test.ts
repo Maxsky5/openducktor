@@ -1,12 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
-import { resolveCodexEffectivePolicy } from "@openducktor/contracts";
+import {
+  codexAppServerRequestParamsSchemas,
+  resolveCodexEffectivePolicy,
+} from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, AgentRuntimeQueryError, type AgentRole } from "@openducktor/core";
 import {
   codexSessionRef,
   codexSessionRuntimeRef,
+  codexStartSessionInput,
   codexTurnFixture,
   codexUserMessageInput,
   createHarness,
+  createDeferred,
   createRuntimeStreamSubscription,
   defaultCodexEffectivePolicy,
   defaultCodexRuntimeConfig,
@@ -63,6 +68,48 @@ class UnreachableRuntimeTransport extends RecordingTransport {
 }
 
 describe("CodexAppServerAdapter lifecycle", () => {
+  for (const sessionScope of [
+    { kind: "repository" },
+    { kind: "workflow", taskId: "task-1", role: "build" },
+  ] as const) {
+    test(`does not create a ${sessionScope.kind} thread after cancellation during preparation`, async () => {
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      const cancellation = new Error("Launch canceled");
+      let canceled = false;
+      const { adapter, transports } = createHarness({
+        resolveManagedMcpServer: async (repoPath) => {
+          entered.resolve();
+          await release.promise;
+          return testManagedMcpServer(repoPath);
+        },
+      });
+      const starting = adapter
+        .startSession(
+          codexStartSessionInput({
+            sessionScope,
+            workStartGuard: {
+              assertCurrent: () => {
+                if (canceled) throw cancellation;
+              },
+            },
+          }),
+        )
+        .then(
+          () => undefined,
+          (cause: unknown) => cause,
+        );
+      await entered.promise;
+      canceled = true;
+      release.resolve();
+      const failure = await starting;
+      expect(
+        transports.get("runtime-live")?.calls.filter((call) => call.method === "thread/start"),
+      ).toEqual([]);
+      expect(failure).toBe(cancellation);
+    });
+  }
+
   test("prepares one host-owned event subscription per runtime", async () => {
     const subscribeEvents = mock(async () => () => undefined);
     const { adapter } = createHarness({ subscribeEvents });
@@ -289,7 +336,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       excludeTurns: true,
       model: "gpt-5",
     });
-    expect(transports.get("runtime-live")?.calls[3]).toEqual({
+    expect(transports.get("runtime-live")?.calls[3]).toMatchObject({
       method: "thread/name/set",
       params: {
         threadId: "thread/fork-runtime-live",
@@ -366,6 +413,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         externalSessionId: "thread/start-runtime-live",
         sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
         runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+        systemPrompt: "Current task description and workflow rules.",
         parts: [{ kind: "text", text: "Hello Codex" }],
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
@@ -377,7 +425,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       "thread/name/set",
       "turn/start",
     ]);
-    expect(transports.get("runtime-live")?.calls[3]).toEqual({
+    expect(transports.get("runtime-live")?.calls[3]).toMatchObject({
       method: "turn/start",
       params: {
         ...expectedTurnPolicy("/repo"),
@@ -388,6 +436,14 @@ describe("CodexAppServerAdapter lifecycle", () => {
         effort: "medium",
       },
     });
+    const currentTurn = codexAppServerRequestParamsSchemas["turn/start"].parse(
+      transports.get("runtime-live")?.calls[3]?.params,
+    );
+    expect(
+      Object.values(currentTurn.additionalContext ?? {})
+        .map((entry) => entry.value)
+        .join("\n"),
+    ).toContain("Current task description and workflow rules.");
   });
 
   test("applies Codex role overrides to thread/start and turn/start", async () => {
@@ -429,7 +485,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       historyMode: "paginated",
       model: "gpt-5",
     });
-    expect(transports.get("runtime-live")?.calls[3]?.params).toEqual({
+    expect(transports.get("runtime-live")?.calls[3]?.params).toMatchObject({
       approvalPolicy: "untrusted",
       approvalsReviewer: "auto_review",
       sandboxPolicy: codexSandboxPolicy(runtimePolicy.policy, "/repo"),
@@ -638,7 +694,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       }),
     );
 
-    expect(transports.get("runtime-live")?.calls[3]).toEqual({
+    expect(transports.get("runtime-live")?.calls[3]).toMatchObject({
       method: "turn/start",
       params: {
         ...expectedTurnPolicy("/repo"),

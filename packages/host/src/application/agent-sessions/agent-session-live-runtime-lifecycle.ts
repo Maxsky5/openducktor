@@ -1,5 +1,6 @@
 import {
   type AgentSessionLiveRef,
+  type AgentSessionAuthorizedRoot,
   type AgentSessionLiveSnapshot,
   agentSessionLiveSnapshotSchema,
 } from "@openducktor/contracts";
@@ -33,6 +34,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   refreshSnapshots,
   observedRepoPaths,
   onDetach,
+  admitRoot,
 }: {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
@@ -50,6 +52,10 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   ) => Effect.Effect<void, HostError>;
   /** Repositories whose live state a renderer has observed. */
   readonly observedRepoPaths: () => ReadonlyArray<string>;
+  readonly admitRoot: (
+    binding: AgentSessionLiveRegistration,
+    root: AgentSessionAuthorizedRoot,
+  ) => void;
   readonly onDetach: (binding: AgentSessionLiveRegistration) => void;
 }): LiveRuntimeLifecycle => {
   const detachedBindings = new WeakSet<AgentSessionLiveRegistration>();
@@ -162,7 +168,10 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
           Effect.gen(function* () {
             const result = yield* mutation;
             // Cleanup can drain native events. A detached lease cannot publish them.
-            if (activeRegistrations.has(registration)) yield* publishChanges(result.changes);
+            if (activeRegistrations.has(registration)) {
+              if (result.admittedRoot) admitRoot(registration, result.admittedRoot);
+              yield* publishChanges(result.changes);
+            }
             return result.value;
           }),
         ),

@@ -117,6 +117,7 @@ export type AgentChatMessageMeta =
       reason: "session_error";
       title: string;
       attentionId?: string;
+      unresolvedSubmissionId?: string;
       usageLimit?: AgentSessionUsageLimit;
     }
   | {
@@ -157,6 +158,12 @@ export type AgentMessageSendOptions = {
 /** `queued` means that the host keeps the message until the running turn ends. */
 export type AgentMessageSendReceipt =
   | {
+      outcome: "acknowledged";
+      recipient: AgentSessionIdentity;
+      submissionId: string;
+      postAcceptanceFailure: string | null;
+    }
+  | {
       outcome: "accepted";
       recipient: AgentSessionIdentity;
       acceptedMessage: import("@openducktor/core").AcceptedAgentInput;
@@ -165,6 +172,11 @@ export type AgentMessageSendReceipt =
   | {
       outcome: "queued";
       recipient: AgentSessionIdentity;
+    }
+  | {
+      outcome: "uncertain";
+      recipient: AgentSessionIdentity;
+      submissionId: string;
     };
 export type AcceptedAgentMessageSendReceipt = Extract<
   AgentMessageSendReceipt,
@@ -246,6 +258,8 @@ export type AgentSessionState = {
   selectedModel: AgentModelSelection | null;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;
+  pendingSubmissionId?: string | undefined;
+  hostOperations?: import("@openducktor/contracts").SessionOperationObservation[] | undefined;
   stopRequestedAt?: string | null;
 };
 

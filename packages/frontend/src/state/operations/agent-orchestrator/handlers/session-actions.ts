@@ -7,7 +7,6 @@ import type { SessionTurnState } from "../support/session-turn-state";
 import type { PendingInputActionDependencies } from "./pending-input-actions";
 import { createPendingInputActions } from "./pending-input-actions";
 import { createContinueInterruptedTurn } from "./continue-interrupted-turn";
-import { createPrepareSessionSend } from "./prepare-session-send";
 import { createManageAgentMessageQueue } from "./message-queue-actions";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
@@ -34,30 +33,18 @@ type SessionActionsDependencies = {
 
 export const createAgentSessionActions = ({
   workspaceRepoPath,
-  workspaceId,
   adapter,
   messageQueues,
   readSessionSnapshot,
-  taskRef,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   sessionTurnState,
   updateSession,
   closeBackgroundQuestions,
-  loadRepoPromptOverrides,
   liveSessionHost,
   refreshTaskData,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
-  const prepareSessionSend = createPrepareSessionSend({
-    workspaceRepoPath,
-    workspaceId,
-    repoEpochRef,
-    currentWorkspaceRepoPathRef,
-    taskRef,
-    loadRepoPromptOverrides,
-  });
-
   const sendAgentMessage = createSendAgentMessage({
     workspaceRepoPath,
     repoEpochRef,
@@ -66,7 +53,6 @@ export const createAgentSessionActions = ({
     messageQueues,
     readSessionSnapshot,
     updateSession,
-    prepareSessionSend,
     turnMetadata: sessionTurnState.metadata,
     clearSessionTurnState: sessionTurnState.clearSession,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
@@ -101,7 +87,6 @@ export const createAgentSessionActions = ({
     workspaceRepoPath,
     adapter,
     readSessionSnapshot,
-    prepareSessionSend,
   });
 
   const pendingInputActions = createPendingInputActions({

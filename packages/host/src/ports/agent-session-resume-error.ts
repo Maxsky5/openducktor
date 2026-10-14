@@ -25,6 +25,7 @@ export type AgentSessionResumeErrorInput = {
   readonly message: string;
   readonly cause?: unknown;
   readonly nextAction?: string;
+  nativeOutcome?: "accepted" | "uncertain" | "refused" | "not_issued";
 };
 
 export type AgentSessionResumeNextActionOverrides = Partial<
@@ -36,6 +37,7 @@ export class AgentSessionResumeError extends HostOperationError {
   readonly sessionRef: AgentSessionLiveRef;
   readonly resumeOperation: string;
   readonly nextAction: string;
+  readonly nativeOutcome: "accepted" | "uncertain" | "refused" | "not_issued" | undefined;
 
   constructor(input: AgentSessionResumeErrorInput) {
     super({
@@ -47,6 +49,7 @@ export class AgentSessionResumeError extends HostOperationError {
     this.sessionRef = input.sessionRef;
     this.resumeOperation = input.operation;
     this.nextAction = input.nextAction ?? agentSessionResumeNextActions[input.reason];
+    this.nativeOutcome = input.nativeOutcome;
   }
 }
 
@@ -69,13 +72,14 @@ export const toAgentSessionResumeError = (
   if (cause instanceof InterruptedTurnResumeError) {
     // SAFETY: the core reasons are a subset of the wire reasons, so the cast cannot widen.
     const reason = cause.reason as AgentSessionResumeFailureReason;
-    const input = {
+    const input: AgentSessionResumeErrorInput = {
       reason,
       sessionRef,
       operation,
       message: cause.message,
       cause: cause.resumeCause ?? cause,
     };
+    if (cause.nativeOutcome) input.nativeOutcome = cause.nativeOutcome;
     const nextAction = nextActionOverrides[reason];
     return new AgentSessionResumeError(nextAction === undefined ? input : { ...input, nextAction });
   }

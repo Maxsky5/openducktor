@@ -35,6 +35,7 @@ export type PreparedTaskSession = {
 };
 export type TaskSessionProgress = {
   checkCanceled: () => Effect.Effect<void, HostError>;
+  workStartGuard?: import("@openducktor/core").AgentWorkStartGuard | undefined;
   created: (session: AgentSessionControlSummary) => Effect.Effect<void, HostError>;
   saved: () => void;
   stop: RuntimeControl["stopSession"];
@@ -145,6 +146,7 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
             repoPath,
             runtimeKind: parent.runtimeKind,
             workingDirectory: parent.workingDirectory,
+            workStartGuard: progress.workStartGuard ?? input.workStartGuard,
           };
           // An interruption must not lose the forked identity, so cleanup can stop the session.
           return yield* Effect.uninterruptible(
@@ -169,8 +171,9 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
               if (stored._tag === "Success") return stored.success;
               if (stored.failure instanceof TaskSessionOwnershipCommittedError)
                 return yield* Effect.fail(stored.failure);
+              const ref = toControlSessionRef(repoPath, summary);
               const cleaned = yield* Effect.result(
-                progress.stop(toControlSessionRef(repoPath, summary)),
+                progress.stop(ref).pipe(Effect.andThen(runtime.releaseSession(ref))),
               );
               if (cleaned._tag === "Failure")
                 return yield* new HostOperationError({

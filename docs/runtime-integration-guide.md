@@ -383,7 +383,7 @@ The host owns the message queue. A runtime is eligible when its adapter can refu
 | Mode | Adapter rule |
 |---|---|
 | `new_turn` | Start a turn. Throw `AgentSessionTurnActiveError` while native work runs. |
-| `steer` | Add the message to the running turn, or start a turn when the session is idle. Keep the model and settings of the running turn. |
+| `steer` | Add the message to the running turn. Refuse when no eligible turn runs. Keep that turn's model and settings. |
 
 - Return the accepted message only after the runtime admits it.
 - Throw `AgentSessionMessageRefusedError` when the runtime refuses the message.
@@ -392,6 +392,7 @@ The host owns the message queue. A runtime is eligible when its adapter can refu
 - Set `turnOutcome` on the `session_idle` event that ends a turn. Leave it empty on an idle status that ends no turn, because only a `completed` outcome sends the next queued message.
 - Map the adapter errors at the runtime boundary with `toAgentSessionSendError`.
 - Never send a slash command as a steer.
+- The host chooses `new_turn` for an idle session or unavailable steering before dispatch. An issued steer cannot become a new-turn retry.
 
 | Runtime | New turn | Steer | Admission | Turn outcome |
 |---|---|---|---|---|

@@ -1,195 +1,149 @@
-import type { DirectMergeRecord } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
+import { canonicalTargetBranch, directMergeConflict } from "../../../domain/task";
 import {
-  canonicalTargetBranch,
-  directMergeConflict,
-  ensureCleanTaskWorktree,
-} from "../../../domain/task";
-import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
-import { loadOpenApprovalContext } from "../support/approval-readiness";
+  HostOperationError,
+  causeToHostBoundaryError,
+  errorMessage,
+  toHostOperationError,
+} from "../../../effect/host-errors";
+import type { GitMergeBranchRequest } from "../../../ports/git-port";
+import { prepareDirectMerge } from "../support/approval-readiness";
+import { enrichTask } from "../support/task-workflow-helpers";
+import { closeMergedTask } from "../support/close-merged-task";
 import {
-  requireDependencies,
-  requireDirectMergeDependencies,
-} from "../support/required-task-dependencies";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
-import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
-import { cleanupDirectMergeTaskState } from "../support/task-worktree-cleanup";
-import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
+  TaskMutationProgressFailure,
+  createTaskMutationProgressFailure,
+} from "../task-mutation-progress-failure";
 import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
 
-export const createTaskDirectMergeUseCase = ({
-  gitPort,
-  taskStore,
-  taskActivityGuard,
-  settingsConfig,
-  taskSessionLifecycleCoordinator,
-  taskWorktreeService,
-  terminalService,
-  worktreeFiles,
-  workspaceSettingsService,
-}: TaskServiceUseCaseInput) => ({
+export const createTaskDirectMergeUseCase = (services: TaskServiceUseCaseInput) => ({
   directMerge(input: Parameters<TaskService["directMerge"]>[0]) {
     return Effect.gen(function* () {
-      const { repoPath, taskId } = input;
-      const mergeInput = input.input;
-      const dependencies = yield* requireDependencies(() =>
-        requireDirectMergeDependencies({
-          gitPort,
-          settingsConfig,
-          taskWorktreeService,
-          terminalService,
-          worktreeFiles,
-          workspaceSettingsService,
-        }),
-      );
-      const repoConfig =
-        yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
-      const effectiveRepoPath = repoConfig.repoPath;
-      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(effectiveRepoPath);
-      yield* taskSessionLifecycleCoordinator.acquireLifecycle(
-        canonicalRepoPath,
-        [taskId],
-        "direct merge",
-      );
-      const { current, currentTasks } = yield* taskListWithCurrent(
-        taskStore,
-        effectiveRepoPath,
-        taskId,
-      );
-      const metadata = yield* taskStore.getTaskMetadata({ repoPath: effectiveRepoPath, taskId });
-      if (metadata.directMerge !== undefined) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `A local direct merge is already recorded for task ${taskId}. Finish the direct merge workflow before trying again.`,
-            details: { repoPath: effectiveRepoPath, taskId },
-          }),
-        );
-      }
-
-      if (metadata.agentSessions.length > 0) {
-        if (!taskActivityGuard) {
-          return yield* Effect.fail(
-            new HostDependencyError({
-              dependency: "taskActivityGuard",
-              operation: "direct merge",
-              message: "Task activity guard is required to check sessions before direct merge.",
-            }),
-          );
-        }
-        const { liveSessionCount } = yield* taskActivityGuard.countLiveSessions({
-          repoPath: canonicalRepoPath,
-          taskSessions: [{ taskId, sessions: metadata.agentSessions }],
-        });
-        if (liveSessionCount > 0) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Stop all running sessions for task ${taskId} before direct merge.`,
-              details: { repoPath: effectiveRepoPath, taskId },
-            }),
-          );
-        }
-      }
-
-      const approval = yield* loadOpenApprovalContext(
-        dependencies,
-        taskId,
-        current,
-        metadata,
-        repoConfig,
-      );
-      yield* Effect.try({
-        try: () => ensureCleanTaskWorktree(approval),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
-      const mergeRequest: Parameters<typeof dependencies.gitPort.mergeBranch>[1] = {
-        sourceBranch: approval.sourceBranch,
-        targetBranch: canonicalTargetBranch(approval.targetBranch),
-        method: mergeInput.mergeMethod,
-      };
-      if (approval.workingDirectory !== undefined) {
-        mergeRequest.sourceWorkingDirectory = approval.workingDirectory;
-      }
-      if (mergeInput.squashCommitMessage !== undefined) {
-        mergeRequest.squashCommitMessage = mergeInput.squashCommitMessage;
-      }
-      const mergeResult = yield* dependencies.gitPort.mergeBranch(effectiveRepoPath, mergeRequest);
-      if (mergeResult.outcome === "conflicts") {
-        return {
-          outcome: "conflicts" as const,
-          conflict: directMergeConflict(
-            effectiveRepoPath,
-            approval,
-            mergeInput.mergeMethod,
-            mergeResult.conflictedFiles,
-            mergeResult.output,
-          ),
-        };
-      }
-
-      const directMerge: DirectMergeRecord = {
-        method: mergeInput.mergeMethod,
-        sourceBranch: approval.sourceBranch,
-        targetBranch: approval.targetBranch,
-        mergedAt: new Date().toISOString(),
-      };
-      yield* taskStore.setDirectMerge({
-        repoPath: effectiveRepoPath,
-        taskId,
-        directMerge,
-      });
-
-      const postRecord = yield* Effect.result(
+      const { taskStore, completionState } = services;
+      const { taskId, input: mergeInput } = input;
+      const { dependencies, effectiveRepoPath, current, currentTasks, approval, state } =
+        yield* prepareDirectMerge(services, input);
+      return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          if (approval.publishTarget !== undefined) {
-            if (current.status === "ai_review") {
-              yield* validateTaskTransitionEffect(
-                current,
-                currentTasks,
-                current.status,
-                "human_review",
-              );
-              const task = yield* taskStore.transitionTask({
-                repoPath: effectiveRepoPath,
-                taskId,
-                status: "human_review",
+          if (!state.merge) {
+            const request: GitMergeBranchRequest = {
+              sourceBranch: approval.sourceBranch,
+              targetBranch: canonicalTargetBranch(approval.targetBranch),
+              method: mergeInput.mergeMethod,
+              sourceWorkingDirectory: approval.workingDirectory,
+              onWorkIssued: () => {
+                state.mergeUncertain = true;
+              },
+              onApplied: (oid) => {
+                state.appliedTargetOid = oid;
+              },
+            };
+            if (mergeInput.squashCommitMessage !== undefined)
+              request.squashCommitMessage = mergeInput.squashCommitMessage;
+            const result = yield* Effect.exit(
+              restore(dependencies.gitPort.mergeBranch(effectiveRepoPath, request)),
+            );
+            if (result._tag === "Failure") {
+              if (!state.mergeUncertain)
+                return yield* Effect.fail(causeToHostBoundaryError(result.cause));
+              state.observation.failure = {
+                stage: "merge",
+                code: "merge_result_unknown",
+                message: "Git returned no conclusive merge result.",
+                nextAction:
+                  "Inspect the original target branch and Git state. Do not apply another merge while its result is uncertain.",
+              };
+              yield* completionState.publish(state);
+              return yield* new HostOperationError({
+                operation: "task.direct-merge",
+                message: state.observation.failure.nextAction,
+                cause: result.cause,
               });
-              const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
-              return { outcome: "completed" as const, task: enrichTask(task, nextTasks) };
             }
-
-            return { outcome: "completed" as const, task: enrichTask(current, currentTasks) };
+            delete state.mergeUncertain;
+            if (result.value.outcome === "conflicts")
+              return {
+                outcome: "conflicts" as const,
+                conflict: directMergeConflict(
+                  effectiveRepoPath,
+                  approval,
+                  mergeInput.mergeMethod,
+                  result.value.conflictedFiles,
+                  result.value.output,
+                ),
+              };
+            state.merge = {
+              method: mergeInput.mergeMethod,
+              sourceBranch: approval.sourceBranch,
+              targetBranch: approval.targetBranch,
+              mergedAt: new Date().toISOString(),
+            };
           }
-
-          yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
-          yield* cleanupDirectMergeTaskState(
-            dependencies,
-            taskStore,
-            effectiveRepoPath,
-            taskId,
-            directMerge,
+          const directMerge = state.merge;
+          let stage = "record_merge";
+          const completed = yield* Effect.exit(
+            Effect.gen(function* () {
+              state.observation.phase = "settled";
+              yield* taskStore.setDirectMerge({ repoPath: effectiveRepoPath, taskId, directMerge });
+              delete state.observation.failure;
+              stage = "publish";
+              yield* completionState.publish(state);
+              if (!approval.publishTarget) {
+                const task = yield* closeMergedTask(
+                  { ...dependencies, taskStore, completionState },
+                  { repoPath: effectiveRepoPath, taskId },
+                  directMerge,
+                  currentTasks,
+                  state,
+                  "direct-merge",
+                );
+                return { outcome: "completed" as const, task };
+              }
+              // A recorded remote merge waits for a separate explicit publication intent.
+              stage = "review_task";
+              const task =
+                current.status === "ai_review"
+                  ? yield* taskStore.transitionTask({
+                      repoPath: effectiveRepoPath,
+                      taskId,
+                      status: "human_review",
+                    })
+                  : current;
+              return {
+                outcome: "completed" as const,
+                task: enrichTask(
+                  task,
+                  currentTasks.map((entry) => (entry.id === taskId ? task : entry)),
+                ),
+              };
+            }),
           );
-          const task = yield* taskStore.transitionTask({
-            repoPath: effectiveRepoPath,
-            taskId,
-            status: "closed",
-          });
-          const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
-
-          return { outcome: "completed" as const, task: enrichTask(task, nextTasks) };
+          if (completed._tag === "Success") return completed.value;
+          const cause = Cause.squash(completed.cause);
+          if (cause instanceof TaskMutationProgressFailure) return yield* cause;
+          let failure = toHostOperationError(cause, "task.direct-merge.complete");
+          state.observation.failure = {
+            stage,
+            code:
+              stage === "record_merge"
+                ? "merge_applied_record_failed"
+                : "merge_applied_completion_failed",
+            message: failure.message,
+            nextAction:
+              stage === "record_merge"
+                ? "The merge already applied. Review its original target and retry record persistence. Do not apply another merge."
+                : "The merge is recorded. Inspect the remaining step before continuing. Do not apply another merge.",
+          };
+          const published = yield* Effect.result(completionState.publish(state));
+          if (published._tag === "Failure")
+            failure = new HostOperationError({
+              operation: "task.direct-merge.complete",
+              message: `${failure.message}\nCompletion observation could not be published: ${errorMessage(published.failure)}. Reconnect to read the retained result.`,
+              cause: published.failure,
+            });
+          return yield* createTaskMutationProgressFailure("direct-merge", taskId, failure);
         }),
       );
-      if (postRecord._tag === "Failure") {
-        return yield* Effect.fail(
-          createTaskMutationProgressFailure("direct-merge", taskId, postRecord.failure),
-        );
-      }
-      return postRecord.success;
     }).pipe(Effect.scoped);
   },
 });

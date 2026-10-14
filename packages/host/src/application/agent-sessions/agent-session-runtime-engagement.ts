@@ -53,9 +53,9 @@ export const createRuntimeSessionEngagement = () => {
     /** Records each session that an approval or question reply serves. */
     trackReplies: (adapter: AgentSessionLiveAdapterPort): AgentSessionLiveAdapterPort => ({
       ...adapter,
-      replyApproval: (input) =>
+      replyApproval: (input, options) =>
         adapter
-          .replyApproval(input)
+          .replyApproval(input, options)
           .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
       replyQuestion: (input) =>
         adapter

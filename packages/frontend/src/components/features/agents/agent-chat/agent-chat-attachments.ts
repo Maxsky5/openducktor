@@ -1,5 +1,7 @@
+import { ATTACHMENT_EXTENSION_MIME, readAttachmentValidationError } from "@openducktor/core";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import type {
+  AttachmentToCheck,
   AgentAttachmentKind,
   AgentAttachmentReference,
   AgentModelAttachmentSupport,
@@ -11,6 +13,8 @@ import {
   type AgentChatComposerAttachment,
   createComposerAttachment,
 } from "./agent-chat-composer-draft";
+
+export type { AttachmentToCheck } from "@openducktor/core";
 
 const ATTACHMENT_EXTENSION_KIND = new Map<string, AgentAttachmentKind>([
   [".avif", "image"],
@@ -41,37 +45,6 @@ const ATTACHMENT_EXTENSION_KIND = new Map<string, AgentAttachmentKind>([
   [".mkv", "video"],
   [".avi", "video"],
   [".pdf", "pdf"],
-]);
-
-const ATTACHMENT_EXTENSION_MIME = new Map<string, string>([
-  [".avif", "image/avif"],
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".gif", "image/gif"],
-  [".heic", "image/heic"],
-  [".heif", "image/heif"],
-  [".tif", "image/tiff"],
-  [".tiff", "image/tiff"],
-  [".webp", "image/webp"],
-  [".svg", "image/svg+xml"],
-  [".bmp", "image/bmp"],
-  [".mp3", "audio/mpeg"],
-  [".wav", "audio/wav"],
-  [".m4a", "audio/mp4"],
-  [".aac", "audio/aac"],
-  [".ogg", "audio/ogg"],
-  [".oga", "audio/ogg"],
-  [".opus", "audio/ogg"],
-  [".flac", "audio/flac"],
-  [".mp4", "video/mp4"],
-  [".m4v", "video/x-m4v"],
-  [".mov", "video/quicktime"],
-  [".webm", "video/webm"],
-  [".ogv", "video/ogg"],
-  [".mkv", "video/x-matroska"],
-  [".avi", "video/x-msvideo"],
-  [".pdf", "application/pdf"],
 ]);
 
 const ATTACHMENT_MIME_EXTENSION = new Map<string, string>();
@@ -222,45 +195,6 @@ export const buildComposerAttachmentFromPath = (
 
 export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean => {
   return kind === "image" || kind === "video";
-};
-
-/** The attachment fields that a model support check reads. */
-export type AttachmentToCheck = {
-  readonly kind: AgentAttachmentKind;
-  readonly name: string;
-  readonly mime?: string | undefined;
-};
-
-const readAttachmentValidationError = (
-  attachment: AttachmentToCheck,
-  support: AgentModelAttachmentSupport | null | undefined,
-  modelLabel = "The selected model",
-): string | null => {
-  if (!support) {
-    return `${modelLabel} does not expose attachment capability data.`;
-  }
-
-  if (!support[attachment.kind]) {
-    return `${modelLabel} does not support ${attachment.kind} attachments.`;
-  }
-
-  const supportedMimeTypes = support.mimeTypes?.[attachment.kind];
-  if (!supportedMimeTypes || supportedMimeTypes.length === 0) {
-    return null;
-  }
-
-  const mime = attachment.mime?.trim().toLowerCase();
-  if (mime && supportedMimeTypes.includes(mime)) {
-    return null;
-  }
-
-  const extension = readFileExtension(attachment.name);
-  const inferredMime = ATTACHMENT_EXTENSION_MIME.get(extension);
-  if (inferredMime && supportedMimeTypes.includes(inferredMime)) {
-    return null;
-  }
-
-  return `${modelLabel} supports ${attachment.kind} attachments only as ${supportedMimeTypes.join(", ")}.`;
 };
 
 /**

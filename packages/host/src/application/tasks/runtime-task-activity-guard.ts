@@ -1,7 +1,12 @@
-import { type AgentSessionRecord } from "@openducktor/contracts";
+import {
+  type AgentSessionLiveRef,
+  type AgentSessionLiveSnapshot,
+  type AgentSessionRecord,
+} from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
+import { resolveOwnedSessionRoot } from "../agent-sessions/session-owner-resolution";
 import { Effect } from "effect";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -15,6 +20,12 @@ export type CreateRuntimeTaskActivityGuardInput = {
   runtimeRegistry: RuntimeRegistryPort;
   sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
   settingsConfig: Pick<SettingsConfigPort, "pathExists">;
+  readSessionRootRefs: (
+    repoPath: string,
+  ) => Effect.Effect<
+    import("@openducktor/contracts").AgentSessionAuthorizedRoot[],
+    import("../../effect/host-errors").HostError
+  >;
 };
 
 type LiveSession = {
@@ -26,7 +37,6 @@ type LiveSession = {
 
 const collectLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,
-  settingsConfig: Pick<SettingsConfigPort, "pathExists">,
   sessions: AgentSessionRecord[],
 ) =>
   Effect.gen(function* () {
@@ -34,9 +44,6 @@ const collectLiveSessions = (
     for (const session of sessions) {
       const externalSessionId = session.externalSessionId.trim();
       if (!externalSessionId) {
-        continue;
-      }
-      if (!(yield* settingsConfig.pathExists(session.workingDirectory))) {
         continue;
       }
       const probe = yield* runtimeRegistry.probeSessionStatus({
@@ -71,17 +78,12 @@ const collectLiveSessions = (
 
 const collectTaskLiveSessions = (
   runtimeRegistry: RuntimeRegistryPort,
-  settingsConfig: Pick<SettingsConfigPort, "pathExists">,
   input: TaskActivityGuardTaskSessions & { operation: string; failureContext: string },
 ) =>
   Effect.gen(function* () {
     const liveSessions: LiveSession[] = [];
     for (const task of input.taskSessions) {
-      const taskLiveSessions = yield* collectLiveSessions(
-        runtimeRegistry,
-        settingsConfig,
-        task.sessions,
-      ).pipe(
+      const taskLiveSessions = yield* collectLiveSessions(runtimeRegistry, task.sessions).pipe(
         Effect.mapError(
           (error) =>
             new HostOperationError({
@@ -163,63 +165,149 @@ const stopLiveSessionRecords = (
     return stoppedSessionCount;
   });
 
-const releaseTaskSessions = (
-  sessionService: Pick<AgentSessionLiveStateService, "list" | "releaseSession">,
-  input: TaskActivityGuardTaskSessions,
-) =>
-  Effect.gen(function* () {
-    const taskSessions = input.taskSessions.flatMap((task) => task.sessions);
-    const snapshots = yield* sessionService.list({ repoPath: input.repoPath });
-    for (const snapshot of snapshots) {
-      const isTaskSession = taskSessions.some((session) =>
-        hasSameAgentSessionIdentity(session, snapshot.ref),
-      );
-      if (isTaskSession) {
-        yield* sessionService.releaseSession(snapshot.ref);
-      }
-    }
-  }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new HostOperationError({
-          operation: "runtimeTaskActivityGuard.releaseSessions",
-          message: `Failed releasing task session state: ${cause instanceof Error ? cause.message : String(cause)}`,
-          cause,
-        }),
-    ),
+const childrenFirst = (
+  liveSessions: LiveSession[],
+  snapshots: AgentSessionLiveSnapshot[],
+  repoPath: string,
+) => {
+  const live = new Map(
+    liveSessions.map((session) => [agentSessionRefKey({ repoPath, ...session }), session]),
   );
+  const children = new Map<string, AgentSessionLiveRef[]>();
+  for (const snapshot of snapshots) {
+    if (!snapshot.parentExternalSessionId) continue;
+    const parentKey = agentSessionRefKey({
+      ...snapshot.ref,
+      externalSessionId: snapshot.parentExternalSessionId,
+    });
+    const siblings = children.get(parentKey) ?? [];
+    siblings.push(snapshot.ref);
+    children.set(parentKey, siblings);
+  }
+  const visited = new Set<string>();
+  const ordered: LiveSession[] = [];
+  const visit = (ref: AgentSessionLiveRef) => {
+    const key = agentSessionRefKey(ref);
+    if (visited.has(key)) return;
+    visited.add(key);
+    for (const child of children.get(key) ?? []) visit(child);
+    const session = live.get(key);
+    if (session) ordered.push(session);
+  };
+  for (const session of liveSessions) visit({ repoPath, ...session });
+  return ordered;
+};
 
 export const createRuntimeTaskActivityGuard = ({
   runtimeRegistry,
   sessionService,
-  settingsConfig,
-}: CreateRuntimeTaskActivityGuardInput): TaskActivityGuardPort => ({
-  countLiveSessions(input) {
-    return Effect.gen(function* () {
-      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, settingsConfig, {
+  readSessionRootRefs,
+}: CreateRuntimeTaskActivityGuardInput): TaskActivityGuardPort => {
+  const collectOwnedSessions = (input: TaskActivityGuardTaskSessions, operation: string) =>
+    Effect.gen(function* () {
+      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, {
         ...input,
-        operation: "runtimeTaskActivityGuard.countLiveSessions",
-        failureContext: "counting live task sessions",
+        operation,
+        failureContext: "checking task sessions",
       });
-      return { liveSessionCount: liveSessions.length };
-    });
-  },
-  cleanupTaskSessions(input) {
-    return Effect.gen(function* () {
-      const liveSessions = yield* collectTaskLiveSessions(runtimeRegistry, settingsConfig, {
-        ...input,
-        operation: "runtimeTaskActivityGuard.cleanupTaskSessions",
-        failureContext: "cleaning up task sessions",
-      });
-      const stoppedSessionCount = yield* stopLiveSessionRecords(
-        runtimeRegistry,
-        sessionService,
-        input.repoPath,
-        "runtimeTaskActivityGuard.cleanupTaskSessions",
-        liveSessions,
+      const roots = yield* readSessionRootRefs(input.repoPath);
+      const sessions = yield* sessionService.list({ repoPath: input.repoPath });
+      const affected = new Set(
+        input.taskSessions.flatMap((task) =>
+          task.sessions.map((session) =>
+            agentSessionRefKey({ repoPath: input.repoPath, ...session }),
+          ),
+        ),
       );
-      yield* releaseTaskSessions(sessionService, input);
-      return { stoppedSessionCount } satisfies TaskActivityCleanupResult;
-    });
-  },
-});
+      const probed = new Set(affected);
+      const ownedSnapshots: AgentSessionLiveSnapshot[] = [];
+      for (const session of sessions) {
+        if (
+          !input.taskSessions.some((task) =>
+            task.sessions.some(
+              (record) =>
+                record.runtimeKind === session.ref.runtimeKind &&
+                record.workingDirectory === session.ref.workingDirectory,
+            ),
+          )
+        )
+          continue;
+        const root = yield* resolveOwnedSessionRoot({ ref: session.ref, roots, sessions });
+        if (!affected.has(agentSessionRefKey(root))) continue;
+        ownedSnapshots.push(session);
+        if (session.statusUnavailableReason)
+          return yield* new HostOperationError({
+            operation,
+            message: `Cannot establish safe activity for linked session ${session.ref.externalSessionId}: ${session.statusUnavailableReason}`,
+          });
+        const key = agentSessionRefKey(session.ref);
+        if (probed.has(key)) continue;
+        probed.add(key);
+        const probe = yield* runtimeRegistry.probeSessionStatus({
+          runtimeKind: session.ref.runtimeKind,
+          externalSessionId: session.ref.externalSessionId,
+          workingDirectory: session.ref.workingDirectory,
+        });
+        if (!probe.supported)
+          return yield* new HostOperationError({
+            operation,
+            message: `The runtime cannot check linked child session ${session.ref.externalSessionId}. Stop its owned session tree before completion.`,
+          });
+        if (probe.hasLiveSession) {
+          liveSessions.push({
+            ...session.ref,
+            role: root.sessionScope.kind === "workflow" ? root.sessionScope.role : "repository",
+          });
+        }
+      }
+      return { liveSessions, ownedSnapshots };
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostOperationError({
+            operation,
+            message: cause.message,
+            cause,
+          }),
+      ),
+    );
+  return {
+    countLiveSessions(input) {
+      return collectOwnedSessions(input, "runtimeTaskActivityGuard.countLiveSessions").pipe(
+        Effect.map(({ liveSessions }) => ({ liveSessionCount: liveSessions.length })),
+      );
+    },
+    cleanupTaskSessions(input) {
+      return Effect.gen(function* () {
+        const operation = "runtimeTaskActivityGuard.cleanupTaskSessions";
+        const { liveSessions, ownedSnapshots } = yield* collectOwnedSessions(input, operation);
+        const stoppedSessionCount = yield* stopLiveSessionRecords(
+          runtimeRegistry,
+          sessionService,
+          input.repoPath,
+          operation,
+          childrenFirst(liveSessions, ownedSnapshots, input.repoPath),
+        );
+        const stopped = new Set(
+          liveSessions.map((session) =>
+            agentSessionRefKey({ repoPath: input.repoPath, ...session }),
+          ),
+        );
+        for (const snapshot of ownedSnapshots) {
+          if (!stopped.has(agentSessionRefKey(snapshot.ref)))
+            yield* sessionService.releaseSession(snapshot.ref).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation,
+                    message: `Failed releasing task session state: ${cause.message}`,
+                    cause,
+                  }),
+              ),
+            );
+        }
+        return { stoppedSessionCount } satisfies TaskActivityCleanupResult;
+      });
+    },
+  };
+};

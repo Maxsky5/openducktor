@@ -59,6 +59,7 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
       };
   return createProductionElectronHostCommandRouter({
     isPackaged: false,
+    eventBus: createHostEventBus({ report: () => {} }),
     onBackgroundFailure: () => Effect.void,
     ...defaultEnvironment,
     runtimeDistribution: testRuntimeDistribution,
@@ -189,6 +190,7 @@ const createGit = (): GitPort => ({
   listRemotes: () =>
     Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
   listBranches: () => Effect.succeed([{ name: "main", isCurrent: true, isRemote: false }]),
+  isMergeIncluded: () => Effect.succeed(true),
   getCurrentBranch: () => Effect.succeed({ name: "main", detached: false, revision: "abc123" }),
   getStatus: () => Effect.succeed([{ path: "src/main.ts", status: "modified", staged: false }]),
   getDiff: () =>
@@ -2240,6 +2242,8 @@ describe("createElectronHostCommandRouter", () => {
       filesystem: createFilesystem(),
       git: {
         ...createGit(),
+        getCurrentBranch: () =>
+          Effect.succeed({ name: "odt/task-1", detached: false, revision: "abc123" }),
         getWorktreeStatusSummaryData: () =>
           Effect.succeed({
             currentBranch: {
@@ -2316,7 +2320,14 @@ describe("createElectronHostCommandRouter", () => {
       await directMergeStartRouter.invoke("task_direct_merge", {
         repoPath: "/repo",
         taskId: "task-1",
-        input: { mergeMethod: "merge_commit" },
+        input: {
+          mergeMethod: "merge_commit",
+          expected: {
+            taskStatus: "ai_review",
+            sourceBranch: "odt/task-1",
+            targetBranch: { remote: "origin", branch: "main" },
+          },
+        },
       }),
     ).toMatchObject({
       outcome: "completed",

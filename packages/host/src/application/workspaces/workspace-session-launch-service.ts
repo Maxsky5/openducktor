@@ -48,11 +48,14 @@ export const createWorkspaceSessionLaunchService = (
           return yield* invalid("Workspace and repository do not match.");
         yield* attempt.checkCanceled();
         const parts = yield* deps.resolveParts(request.parts);
-        const start = createWorkspaceSessionStart(deps, (summary) =>
-          Effect.gen(function* () {
-            yield* attempt.checkCanceled();
-            yield* attempt.createdSession(scope.repoPath, summary, { hold: true });
-          }),
+        const start = createWorkspaceSessionStart(
+          deps,
+          (summary) =>
+            Effect.gen(function* () {
+              yield* attempt.checkCanceled();
+              yield* attempt.createdSession(scope.repoPath, summary, { hold: true });
+            }),
+          { assertCurrent: attempt.assertCurrent },
         );
         yield* attempt.checkCanceled();
         const started = yield* start(request);
@@ -81,8 +84,10 @@ export const createWorkspaceSessionLaunchService = (
               status: "idle",
             };
           else {
-            const resume: AgentSessionControlResumeInput = {
+            const resume: AgentSessionControlResumeInput &
+              import("@openducktor/core").AgentWorkStartOptions = {
               ...ref,
+              workStartGuard: { assertCurrent: attempt.assertCurrent },
               sessionScope,
               resumeMode: "reattach",
             };

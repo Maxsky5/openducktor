@@ -1,5 +1,7 @@
 import { resolveRuntimeSteeringAvailability } from "@openducktor/core";
-import { Effect, Exit, FiberSet, Scope } from "effect";
+import { agentMessageSubmitInputSchema } from "@openducktor/contracts";
+import { createHash } from "node:crypto";
+import { Effect, Exit, Fiber, FiberSet, Scope } from "effect";
 import {
   type AgentMessageDeliveryDependencies,
   createAgentMessageDeliveryService,
@@ -22,7 +24,15 @@ export const createNodeMessageDelivery = ({
   runtimeRegistry,
   runtimeDefinitions,
   ...dependencies
-}: Pick<AgentMessageDeliveryDependencies, "canonicalizeRepoPath" | "prepare" | "send"> & {
+}: Pick<
+  AgentMessageDeliveryDependencies,
+  | "canonicalizeRepoPath"
+  | "prepare"
+  | "send"
+  | "runOperation"
+  | "prepareQueueResume"
+  | "commitQueueResume"
+> & {
   readonly eventBus: HostEventBusPort | undefined;
   readonly onBackgroundFailure: (
     failure: HostOperationErrorAggregate,
@@ -33,8 +43,45 @@ export const createNodeMessageDelivery = ({
   // Owns background deliveries. Closing the scope interrupts them and waits.
   const deliveriesScope = Scope.makeUnsafe();
   const deliveries = Effect.runSync(Scope.provide(FiberSet.make<void>(), deliveriesScope));
+  let closing = false;
+  const supervise = <A, E>(work: Effect.Effect<A, E>) =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        if (closing)
+          return yield* new HostOperationError({
+            operation: "message-delivery.admit",
+            message: "The host is shutting down. Reopen the application before submitting work.",
+          });
+        const worker = yield* Effect.forkIn(work, deliveriesScope, { uninterruptible: false });
+        return yield* restore(Fiber.join(worker));
+      }),
+    );
+  const runBackground = (
+    effect: Effect.Effect<void, import("../../effect/host-errors").HostError>,
+  ) => {
+    Effect.runSync(
+      FiberSet.run(
+        deliveries,
+        effect.pipe(
+          Effect.catchCause((cause) =>
+            onBackgroundFailure(
+              new HostOperationError({
+                operation: "agent-message-delivery.deliver",
+                message: `Queued message delivery stopped unexpectedly: ${causeMessage(cause)}`,
+                cause,
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
   const service = createAgentMessageDeliveryService({
     ...dependencies,
+    submissionFingerprint: (input) =>
+      createHash("sha256")
+        .update(JSON.stringify(agentMessageSubmitInputSchema.parse(input)))
+        .digest("hex"),
     steeringAvailability: (kind) =>
       Effect.all([
         resolveRuntimeDescriptor(runtimeDefinitions, kind),
@@ -45,29 +92,19 @@ export const createNodeMessageDelivery = ({
         ),
       ),
     publish: createLiveSessionPublisher(eventBus),
-    runInBackground: (effect) => {
-      Effect.runSync(
-        FiberSet.run(
-          deliveries,
-          effect.pipe(
-            Effect.catchCause((cause) =>
-              onBackgroundFailure(
-                new HostOperationError({
-                  operation: "agent-message-delivery.deliver",
-                  message: `Queued message delivery stopped unexpectedly: ${causeMessage(cause)}`,
-                  cause,
-                }),
-              ),
-            ),
-          ),
-        ),
-      );
-    },
+    runInBackground: runBackground,
     now: () => new Date().toISOString(),
   });
   return {
     ...service,
+    runBackground,
+    submit: (input: Parameters<typeof service.submit>[0]) => supervise(service.submit(input)),
+    manage: (input: Parameters<typeof service.manage>[0]) => supervise(service.manage(input)),
     /** Stops background deliveries before the runtimes that they send to stop. */
-    shutdown: () => Scope.close(deliveriesScope, Exit.void),
+    shutdown: () =>
+      Effect.suspend(() => {
+        closing = true;
+        return Scope.close(deliveriesScope, Exit.void);
+      }),
   };
 };

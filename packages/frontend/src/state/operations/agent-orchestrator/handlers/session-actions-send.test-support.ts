@@ -8,8 +8,8 @@ import { serializeAgentUserMessagePartsToText } from "@openducktor/core";
 export const acceptedUserMessage = (
   input: Pick<
     Parameters<AgentEnginePort["submitUserMessage"]>[0],
-    "externalSessionId" | "model" | "parts"
-  >,
+    "externalSessionId" | "parts"
+  > & { model?: import("@openducktor/core").AgentModelSelection },
   messageId = "accepted-user-message",
 ): AcceptedAgentUserMessage => {
   // SAFETY: Both types use the same message parts; only optional field syntax differs.
@@ -33,8 +33,8 @@ export const acceptedUserMessage = (
 export const acceptedSubmitResult = (
   input: Pick<
     Parameters<AgentEnginePort["submitUserMessage"]>[0],
-    "externalSessionId" | "model" | "parts"
-  >,
+    "externalSessionId" | "parts"
+  > & { model?: import("@openducktor/core").AgentModelSelection },
   messageId?: string,
 ): Awaited<ReturnType<AgentEnginePort["submitUserMessage"]>> => ({
   kind: "accepted",

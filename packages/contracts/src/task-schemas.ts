@@ -195,7 +195,12 @@ export const taskCardSchema = z.object({
 });
 export type TaskCard = z.infer<typeof taskCardSchema>;
 
-export const taskDirectMergeInputSchema = z.object({
+export const taskDirectMergeInputSchema = z.strictObject({
+  expected: z.strictObject({
+    taskStatus: taskStatusSchema,
+    sourceBranch: z.string().min(1),
+    targetBranch: gitTargetBranchSchema,
+  }),
   mergeMethod: gitMergeMethodSchema,
   squashCommitMessage: z.preprocess(
     (value) => (value === null ? undefined : value),

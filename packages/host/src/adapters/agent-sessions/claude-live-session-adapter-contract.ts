@@ -51,6 +51,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "forkSession"
     | "loadSessionContextUsage"
     | "prepareApprovalReply"
+    | "resolvePendingApproval"
     | "prepareQuestionReply"
     | "releaseSession"
     | "resumeSession"

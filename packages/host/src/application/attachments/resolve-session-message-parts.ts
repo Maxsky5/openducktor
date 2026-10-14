@@ -1,7 +1,11 @@
 import type { AgentSessionUserMessagePart } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { hasMeaningfulAgentUserMessageParts } from "@openducktor/core";
-import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostValidationError,
+  toHostOperationError,
+  type HostError,
+} from "../../effect/host-errors";
 import type { LocalAttachmentService } from "./local-attachment-service";
 
 /** Resolve staged files before a launch changes task state or creates a session. */
@@ -29,7 +33,7 @@ export const resolveSessionMessageParts = (
     return yield* resolveSessionAttachments(parts, attachments);
   });
 
-export const resolveSessionAttachments = (
+const resolveSessionAttachments = (
   parts: AgentSessionUserMessagePart[],
   attachments: Pick<LocalAttachmentService, "resolve">,
 ) =>
@@ -40,3 +44,17 @@ export const resolveSessionAttachments = (
       return { ...part, attachment: { ...part.attachment, path } };
     }),
   ).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session-message.attachments")));
+
+export const resolvePreparedSessionAttachments = <
+  A extends { parts: AgentSessionUserMessagePart[] },
+>(
+  prepared: Effect.Effect<A, HostError>,
+  attachments: Pick<LocalAttachmentService, "resolve">,
+) =>
+  prepared.pipe(
+    Effect.flatMap((content) =>
+      resolveSessionAttachments(content.parts, attachments).pipe(
+        Effect.map((parts) => ({ ...content, parts })),
+      ),
+    ),
+  );

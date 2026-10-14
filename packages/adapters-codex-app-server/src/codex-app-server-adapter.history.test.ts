@@ -134,6 +134,57 @@ const historyErrorTransport = (
 };
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("native history keeps the running turn model after a next-turn model change", async () => {
+    const base = new RecordingTransport("runtime-live", false);
+    const active = codexTurnFixture({
+      id: "active-turn",
+      status: "inProgress",
+      items: [
+        codexUserMessageItemFixture({
+          id: "active-input",
+          content: [{ type: "text", text: "Continue", text_elements: [] }],
+        }),
+        codexAgentMessageItemFixture({ id: "active-reply", text: "Working" }),
+      ],
+    });
+    const thread = { id: "thread-idle", status: { type: "idle" as const }, turns: [active] };
+    const adapter = createAdapterWithTransport({
+      request: async (request) => {
+        if (request.method === "turn/start") return { turn: active };
+        if (request.method === "thread/read") return paginatedThreadReadResponse(thread);
+        if (request.method === "thread/turns/list") return paginatedTurnsListResponse(thread);
+        return base.request(request);
+      },
+    });
+    const ref = codexSessionRuntimeRef("thread-idle");
+    const running = { providerId: "openai", modelId: "gpt-5", variant: "medium" };
+    try {
+      await adapter.resumeSession(ref);
+      await adapter.sendUserMessage(
+        codexUserMessageInput({
+          ...ref,
+          model: running,
+          parts: [{ kind: "text", text: "Continue" }],
+        }),
+      );
+      await adapter.updateSessionModel({
+        ...codexSessionRef("thread-idle"),
+        model: { ...running, variant: "high" },
+      });
+      const history = await adapter.loadSessionHistory(ref);
+      expect(history.find((message) => message.messageId === "active-input")).toMatchObject({
+        role: "user",
+        model: running,
+      });
+      expect(history.find((message) => message.messageId === "active-reply")).toMatchObject({
+        role: "assistant",
+        model: running,
+      });
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+
   test("keeps an answered blocking question when history reloads", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const respondServerRequest = mock(async () => undefined);

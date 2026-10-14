@@ -18,6 +18,12 @@ const createCompletionModel = (
 ): TaskApprovalCompletionModalModel => ({
   open: true,
   stage: "complete_direct_merge",
+  publicationPreview: {
+    sourceOid: "a".repeat(40),
+    remote: "origin",
+    targetRef: "refs/heads/beta",
+    destinations: [{ identity: "destination", label: "/reviewed.git" }],
+  },
   taskId: "TASK-1",
   targetBranch: { remote: "origin", branch: "beta" },
   publishTarget: { remote: "origin", branch: "beta" },

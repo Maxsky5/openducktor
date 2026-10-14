@@ -8,7 +8,7 @@ import type {
   AgentGeneratedImageBatchInput,
   AgentSessionAssociation,
   AgentSessionControlForkInput,
-  AgentSessionControlResumeInput,
+  AgentSessionResumeIntent,
   AgentMessageQueueManageInput,
   AgentMessageQueueManageResult,
   AgentMessageSubmitInput,
@@ -126,12 +126,27 @@ export const toAgentRuntimePolicyBinding = (input: {
   return input;
 };
 
-export type PolicyBoundSessionControlRef = PolicyBoundSessionRef & {
-  sessionScope: AgentSessionScope;
+export type AgentWorkStartGuard = { assertCurrent(): void };
+export type AgentWorkStartOptions = {
+  workStartGuard?: AgentWorkStartGuard | undefined;
+  onWorkIssued?: (() => void) | undefined;
+  onWorkAccepted?: (() => void) | undefined;
 };
+export const assertAgentWorkStartCurrent = (input: AgentWorkStartOptions & { repoPath: string }) =>
+  input.workStartGuard?.assertCurrent();
+export const markAgentWorkIssued = (input: AgentWorkStartOptions & { repoPath: string }) =>
+  input.onWorkIssued?.();
+export const markAgentWorkAccepted = (input: AgentWorkStartOptions & { repoPath: string }) =>
+  input.onWorkAccepted?.();
+
+export type PolicyBoundSessionControlRef = PolicyBoundSessionRef &
+  AgentWorkStartOptions & {
+    sessionScope: AgentSessionScope;
+  };
 
 export type StartAgentSessionInput = RuntimeWorkingDirectoryRef &
-  AgentRuntimePolicyBinding & {
+  AgentRuntimePolicyBinding &
+  AgentWorkStartOptions & {
     sessionScope: AgentSessionScope;
     systemPrompt: string;
     model?: AgentModelSelection;
@@ -164,14 +179,16 @@ export type AcceptedAgentInput =
   | AcceptedAgentUserMessage
   | Extract<import("@openducktor/contracts").AcceptedAgentInput, { type: "command_accepted" }>;
 
-export type UpdateAgentSessionModelInput = SessionRef & {
-  model: AgentSessionModelSettings | null;
-};
+export type UpdateAgentSessionModelInput = SessionRef &
+  AgentWorkStartOptions & {
+    model: AgentSessionModelSettings | null;
+  };
 
-export type UpdateControlledAgentSessionModelInput = SessionRef & {
-  sessionScope: AgentSessionScope;
-  model: AgentSessionModelSettings | null;
-};
+export type UpdateControlledAgentSessionModelInput = SessionRef &
+  AgentWorkStartOptions & {
+    sessionScope: AgentSessionScope;
+    model: AgentSessionModelSettings | null;
+  };
 
 export type LoadAgentSessionHistoryInput =
   import("@openducktor/contracts").AgentRuntimeLoadSessionHistoryInput;
@@ -291,9 +308,9 @@ export interface AgentSessionLivePort {
 /** Runtime-neutral session controls owned by the host application boundary. */
 export interface AgentSessionControlPort {
   startSession(input: AgentSessionControlStartInput): Promise<AgentSessionControlSummary>;
-  resumeSession(input: AgentSessionControlResumeInput): Promise<AgentSessionControlSummary>;
+  resumeSession(input: AgentSessionResumeIntent): Promise<AgentSessionControlSummary>;
   continueInterruptedTurn(
-    input: Omit<AgentSessionControlResumeInput, "resumeMode">,
+    input: Omit<AgentSessionResumeIntent, "resumeMode">,
   ): Promise<AgentSessionControlSummary>;
   releaseSession(input: SessionRef): Promise<void>;
   forkSession(input: AgentSessionControlForkInput): Promise<AgentSessionControlSummary>;

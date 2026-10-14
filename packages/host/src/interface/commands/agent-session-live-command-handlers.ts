@@ -7,7 +7,7 @@ import {
   agentRepositorySessionStartInputSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
-  agentSessionControlResumeInputSchema,
+  agentSessionResumeIntentSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionLiveAttachInputSchema,
@@ -26,12 +26,12 @@ import { Effect } from "effect";
 import type { AgentMessageDeliveryService } from "../../application/agent-sessions/agent-message-delivery-service";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
 import type { TaskServiceError } from "../../application/tasks/task-service";
-import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
-import { resolveSessionAttachments } from "../../application/attachments/resolve-session-message-parts";
 import type { z } from "zod";
 import type { HostCommandArgs } from "./command-inputs";
+import { WorkflowIntentRejectedError } from "../../ports/workflow-intent-rejected-error";
+import { SessionOperationError } from "../../ports/session-operation-error";
 
 const parseCommandInput = <Output>(
   schema: z.ZodType<Output>,
@@ -49,7 +49,6 @@ const parseCommandInput = <Output>(
       }),
   });
 
-type LocalAttachmentResolver = Pick<LocalAttachmentService, "resolve">;
 type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSession"> & {
   startSession: (
     input: AgentRepositorySessionStartInput,
@@ -62,7 +61,6 @@ type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSessi
 export const createAgentSessionLiveCommandHandlers = (
   service: AgentSessionCommandService,
   messageDelivery: Pick<AgentMessageDeliveryService, "submit" | "manage">,
-  attachmentResolver: LocalAttachmentResolver,
 ) =>
   ({
     agent_session_control_fork: (args) =>
@@ -78,36 +76,22 @@ export const createAgentSessionLiveCommandHandlers = (
         "agent_session_control_release",
       ).pipe(Effect.flatMap(service.releaseSession)),
     agent_session_control_resume: (args) =>
-      parseCommandInput(
-        agentSessionControlResumeInputSchema,
-        args,
-        "agent_session_control_resume",
-      ).pipe(Effect.flatMap(service.resumeSession)),
+      parseCommandInput(agentSessionResumeIntentSchema, args, "agent_session_control_resume").pipe(
+        Effect.flatMap(service.resumeSession),
+      ),
     agent_session_message_submit: (args) =>
       parseCommandInput(agentMessageSubmitInputSchema, args, "agent_session_message_submit").pipe(
-        Effect.flatMap((input) =>
-          resolveSessionAttachments(input.parts, attachmentResolver).pipe(
-            Effect.map((parts) => ({ ...input, parts })),
-          ),
-        ),
         Effect.flatMap(messageDelivery.submit),
+        Effect.mapError((error) =>
+          error instanceof SessionOperationError ? error : new WorkflowIntentRejectedError(error),
+        ),
       ),
     agent_session_message_queue_manage: (args) =>
       parseCommandInput(
         agentMessageQueueManageInputSchema,
         args,
         "agent_session_message_queue_manage",
-      ).pipe(
-        Effect.flatMap((input) => {
-          const { action } = input;
-          return action.kind === "save_edit"
-            ? resolveSessionAttachments(action.parts, attachmentResolver).pipe(
-                Effect.map((parts) => ({ ...input, action: { ...action, parts } })),
-              )
-            : Effect.succeed(input);
-        }),
-        Effect.flatMap(messageDelivery.manage),
-      ),
+      ).pipe(Effect.flatMap(messageDelivery.manage)),
     agent_session_control_start: (args) =>
       parseCommandInput(
         agentRepositorySessionStartInputSchema,

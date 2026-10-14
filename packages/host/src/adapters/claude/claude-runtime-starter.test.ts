@@ -115,6 +115,7 @@ const createLiveSessionDependencies = ({
     listSnapshots: () => Effect.succeed([]),
     readSnapshot: () => Effect.die("unused"),
     loadContext: () => Effect.die("unused"),
+    resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
     replyApproval: () => Effect.die("unused"),
     replyQuestion: () => Effect.die("unused"),
     releaseRuntime: () => Effect.succeed([]),

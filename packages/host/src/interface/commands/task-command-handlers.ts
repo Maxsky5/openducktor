@@ -9,6 +9,7 @@ import {
   parseCreateTaskInput,
   parseDeleteTaskInput,
   parseDirectMergeInput,
+  parseDirectMergeCompleteInput,
   parseListAgentSessionsForTasksInput,
   parseMarkdownDocumentInput,
   parseOptionalNoteInput,
@@ -54,7 +55,7 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
       taskService.detectPullRequest(parseTaskIdInput(args, "task_pull_request_detect input")),
     task_direct_merge: (args) => taskService.directMerge(parseDirectMergeInput(args)),
     task_direct_merge_complete: (args) =>
-      taskService.completeDirectMerge(parseTaskIdInput(args, "task_direct_merge_complete input")),
+      taskService.completeDirectMerge(parseDirectMergeCompleteInput(args)),
     task_pull_request_link_merged: (args) =>
       taskService.linkMergedPullRequest(parsePullRequestLinkMergedInput(args)),
     task_pull_request_unlink: (args) =>

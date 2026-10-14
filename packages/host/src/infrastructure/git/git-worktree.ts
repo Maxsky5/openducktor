@@ -2,6 +2,7 @@ import type { GitWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { type CanonicalPathPlatform, canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { isAncestor } from "./git-merge";
 import {
   combineOutput,
   type GitCommandRunner,
@@ -291,13 +292,68 @@ export const deleteLocalBranch = (
   repoPath: string,
   branch: string,
   force: boolean,
+  onDeleting?: (branch: { name: string; oid: string }) => void,
 ) =>
   Effect.gen(function* () {
     const targetBranch = yield* requireNonEmptyEffect(branch, "branch");
+    if (onDeleting) {
+      if (
+        (yield* listWorktrees(runner, repoPath)).some(
+          (worktree) => worktree.branch === targetBranch,
+        )
+      )
+        return yield* gitValidationError(
+          `Cannot delete branch ${targetBranch} while a worktree uses it. Stop its sessions and remove that worktree before completing the task.`,
+          "sourceBranch",
+        );
+      const oid = (yield* runGit(runner, repoPath, [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        `refs/heads/${targetBranch}`,
+      ])).trim();
+      if (!force) {
+        if (!(yield* isAncestor(runner, repoPath, oid, "HEAD")))
+          return yield* gitValidationError(
+            `Branch ${targetBranch} is not fully merged. Inspect its latest changes before completing the task.`,
+            "sourceBranch",
+          );
+      }
+      onDeleting({ name: targetBranch, oid });
+      // Compare and delete the captured tip. Keep its tracking settings for recovery.
+      yield* runGit(runner, repoPath, ["update-ref", "-d", `refs/heads/${targetBranch}`, oid]);
+      return;
+    }
     yield* runGit(runner, repoPath, [
       "branch",
       force ? "-D" : "-d",
       "--end-of-options",
       targetBranch,
     ]);
+  });
+
+/** Restore only the deleted branch, without overwriting a concurrent ref change. */
+export const restoreDeletedBranch = (
+  runner: GitCommandRunner,
+  repoPath: string,
+  branch: { name: string; oid: string },
+) =>
+  Effect.gen(function* () {
+    const name = yield* requireNonEmptyEffect(branch.name, "branch");
+    const oid = yield* requireNonEmptyEffect(branch.oid, "revision");
+    const ref = `refs/heads/${name}`;
+    if (yield* referenceExists(runner, repoPath, ref)) {
+      const current = (yield* runGit(runner, repoPath, [
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        ref,
+      ])).trim();
+      if (current === oid) return;
+      return yield* gitValidationError(
+        `The source branch ${name} changed during cleanup. Restore its recorded revision ${oid} before completing the task.`,
+        "sourceBranch",
+      );
+    }
+    yield* runGit(runner, repoPath, ["update-ref", ref, oid, ""]);
   });

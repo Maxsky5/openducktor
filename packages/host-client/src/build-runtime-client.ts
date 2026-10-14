@@ -1,4 +1,8 @@
 import {
+  taskDirectMergeCompleteIntentSchema,
+  type TaskDirectMergeCompleteIntent,
+} from "@openducktor/contracts";
+import {
   type HostRuntimeSnapshot,
   hostRuntimeSnapshotSchema,
   type RuntimeLifecycleImpact,
@@ -168,8 +172,13 @@ const taskDirectMergeComplete = async (
   invokeFn: InvokeFn,
   repoPath: string,
   taskId: string,
+  publicationConsent?: TaskDirectMergeCompleteIntent["publicationConsent"],
 ): Promise<TaskCard> => {
-  return invokeFn("task_direct_merge_complete", { repoPath, taskId }, taskCardSchema);
+  return invokeFn(
+    "task_direct_merge_complete",
+    taskDirectMergeCompleteIntentSchema.parse({ repoPath, taskId, publicationConsent }),
+    taskCardSchema,
+  );
 };
 
 const taskPullRequestUpsert = async (
@@ -327,8 +336,12 @@ export class HostAgentClient {
     return taskDirectMerge(this.invokeFn, repoPath, taskId, input);
   }
 
-  async taskDirectMergeComplete(repoPath: string, taskId: string): Promise<TaskCard> {
-    return taskDirectMergeComplete(this.invokeFn, repoPath, taskId);
+  async taskDirectMergeComplete(
+    repoPath: string,
+    taskId: string,
+    publicationConsent?: TaskDirectMergeCompleteIntent["publicationConsent"],
+  ): Promise<TaskCard> {
+    return taskDirectMergeComplete(this.invokeFn, repoPath, taskId, publicationConsent);
   }
 
   async taskPullRequestUpsert(repoPath: string, taskId: string, title: string, body: string) {

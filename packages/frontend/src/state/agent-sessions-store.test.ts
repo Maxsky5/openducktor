@@ -47,6 +47,32 @@ describe("toAgentSessionSummary", () => {
 });
 
 describe("createAgentSessionsStore session snapshots", () => {
+  test("does not inspect an unchanged transcript when another session updates", () => {
+    const store = createAgentSessionsStore("/repo");
+    let messageReads = 0;
+    const dormant = createAgentSessionFixture({ externalSessionId: "dormant" });
+    const messages = Array.from({ length: 10_000 }, (_, index) => ({
+      get id() {
+        messageReads += 1;
+        return `message-${index}`;
+      },
+      role: "assistant" as const,
+      content: "Previous response",
+      timestamp: "2026-10-15T00:00:00Z",
+    }));
+    dormant.messages = createSessionMessagesState(dormant.externalSessionId, messages);
+    const active = createAgentSessionFixture({ externalSessionId: "active" });
+    replaceStoreSessions(store, [dormant, active]);
+    const retained = store.getSessionSnapshot(dormant);
+    messageReads = 0;
+
+    store.updateSession(active, (current) => ({ ...current, status: "running" }));
+
+    expect(messageReads).toBe(0);
+    expect(store.getSessionSnapshot(dormant)).toBe(retained);
+    expect(store.getSessionSnapshot(active)?.status).toBe("running");
+  });
+
   test.each(["sibling", "child", "closed", "refreshing", "attaching"] as const)(
     "retains covered workspace history after %s",
     (change) => {
@@ -874,3 +900,58 @@ test("lists the task owners of workflow sessions in active and retained workspac
   expect(store.listSessionTaskIds("/a")).toEqual(["task-1"]);
   expect(store.listSessionTaskIds("/b")).toEqual([]);
 });
+
+test.each(["idle", "running"] as const)(
+  "a late conclusive refusal settles only its optimistic input and keeps native %s activity",
+  (activity) => {
+    const store = createAgentSessionsStore("/repo");
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      workingDirectory: "/repo/tree",
+      runtimeKind: "codex",
+      status: "running",
+      pendingSubmissionId: "submission-1",
+      pendingUserMessageStartedAt: 100,
+    });
+    replaceStoreSessions(store, [session]);
+    const ref = {
+      repoPath: "/repo",
+      workingDirectory: session.workingDirectory,
+      runtimeKind: session.runtimeKind,
+      externalSessionId: session.externalSessionId,
+    };
+    const snapshot: AgentSessionLiveSnapshot = {
+      ref,
+      activity,
+      title: "Chat",
+      startedAt: session.startedAt,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    };
+    store.applyLiveSessionEnvelope(
+      createLiveSnapshotEnvelope({
+        sessions: [snapshot],
+        sessionOperations: [
+          {
+            ref,
+            kind: "submission",
+            pending: false,
+            nativeOutcome: "not_issued",
+            submissionId: "submission-1",
+            failure: {
+              stage: "model",
+              code: "invalid_model",
+              message: "Select a model.",
+              nextAction: "Refresh the catalog.",
+            },
+          },
+        ],
+      }),
+    );
+    store.replaceSession(session);
+    expect(store.getSessionSnapshot(session)).toMatchObject({ status: activity });
+    expect(store.getSessionSnapshot(session)?.pendingSubmissionId).toBeUndefined();
+    expect(store.getSessionSnapshot(session)?.pendingUserMessageStartedAt).toBeUndefined();
+  },
+);

@@ -1,3 +1,4 @@
+import { assertAgentWorkStartCurrent, type AgentWorkStartOptions } from "@openducktor/core";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -110,7 +111,8 @@ export class OpencodeSdkAdapter {
   generation(sessionID: string) {
     return this.generations.get(sessionID) ?? 0;
   }
-  private assertCurrent(ref: SessionRef, generation: number) {
+  private assertCurrent(ref: SessionRef & AgentWorkStartOptions, generation: number) {
+    assertAgentWorkStartCurrent(ref);
     if (this.closed || this.generation(ref.externalSessionId) !== generation)
       throw operationError(
         ref,
@@ -266,6 +268,7 @@ export class OpencodeSdkAdapter {
         request.model = nativeModelSelection(input.model);
         if (input.model.profileId) request.agent = input.model.profileId;
       }
+      assertAgentWorkStartCurrent(input);
       const detail = await this.client.session.create(request);
       const sessionID = newSessionIdSchema.parse(detail).id;
       const ref: SessionRef = {
@@ -312,6 +315,7 @@ export class OpencodeSdkAdapter {
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
     const binding = await this.bind(input);
+    input.onWorkAccepted?.();
     const active = await nativeRequest(input, "read session activity", () =>
       this.client.session.active(),
     );
@@ -346,6 +350,7 @@ export class OpencodeSdkAdapter {
         sessionID: source.id,
       };
       if (input.runtimeHistoryAnchor) request.before = input.runtimeHistoryAnchor;
+      assertAgentWorkStartCurrent(input);
       const detail = await this.client.session.fork(request);
       const sessionID = newSessionIdSchema.parse(detail).id;
       if (sessionID === source.id)
@@ -546,19 +551,27 @@ export class OpencodeSdkAdapter {
   }
 
   async updateNativeModel(
-    ref: SessionRef,
+    ref: SessionRef & AgentWorkStartOptions,
     model: NonNullable<UpdateAgentSessionModelInput["model"]>,
   ): Promise<void> {
     const request: Parameters<OpenCodeClient["session"]["switchModel"]>[0] = {
       sessionID: ref.externalSessionId,
       model: nativeModelSelection(model),
     };
-    await this.client.session.switchModel(request);
-    if (model.profileId)
-      await this.client.session.switchAgent({
+    assertAgentWorkStartCurrent(ref);
+    const updating = this.client.session.switchModel(request);
+    ref.onWorkIssued?.();
+    await updating;
+    if (model.profileId) {
+      assertAgentWorkStartCurrent(ref);
+      const selecting = this.client.session.switchAgent({
         sessionID: ref.externalSessionId,
         agent: model.profileId,
       });
+      ref.onWorkIssued?.();
+      await selecting;
+    }
+    ref.onWorkAccepted?.();
   }
 
   async updateSessionModel(input: UpdateAgentSessionModelInput): Promise<void> {
@@ -574,6 +587,7 @@ export class OpencodeSdkAdapter {
     await nativeRequest(input, "change the selected model", () =>
       this.updateNativeModel(input, input.model!),
     );
+    input.onWorkAccepted?.();
   }
 
   async updateSessionTitle(

@@ -447,6 +447,20 @@ export class CodexRuntimeSessionEvents {
     this.clearTurnScopedMap(this.modelByTurnKey, externalSessionId);
   }
 
+  readRunningTurnModel(
+    runtimeId: string,
+    threadId: string,
+    turnId: string,
+  ): AgentModelSelection | undefined {
+    const active = this.deps.activeTurnsBySessionId.get(threadId);
+    return active &&
+      active.session.runtimeId === runtimeId &&
+      active.turnId === turnId &&
+      !active.isTurnSettled()
+      ? { ...active.model }
+      : undefined;
+  }
+
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void {
     if (activeTurn.turnId && activeTurn.turnId !== turnId) {
       return;

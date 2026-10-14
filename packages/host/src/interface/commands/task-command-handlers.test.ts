@@ -675,7 +675,14 @@ describe("createTaskCommandHandlers", () => {
         handlers.task_direct_merge?.({
           repoPath: "/repo",
           taskId: "task-1",
-          input: { mergeMethod: "merge_commit" },
+          input: {
+            mergeMethod: "merge_commit",
+            expected: {
+              taskStatus: "human_review",
+              sourceBranch: "odt/task-1",
+              targetBranch: { branch: "main" },
+            },
+          },
         }),
       ),
     ).resolves.toBeDefined();
@@ -857,7 +864,18 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "task_direct_merge",
-        input: { repoPath: "/repo", taskId: "task-1", input: { mergeMethod: "merge_commit" } },
+        input: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          input: {
+            mergeMethod: "merge_commit",
+            expected: {
+              taskStatus: "human_review",
+              sourceBranch: "odt/task-1",
+              targetBranch: { branch: "main" },
+            },
+          },
+        },
       },
       {
         command: "task_direct_merge_complete",
@@ -958,4 +976,37 @@ describe("createTaskCommandHandlers", () => {
       },
     ]);
   });
+});
+
+test("passes reviewed publication consent through the completion command boundary", async () => {
+  const intent = {
+    repoPath: "/repo",
+    taskId: "task-1",
+    publicationConsent: {
+      expectedMerge: {
+        method: "merge_commit" as const,
+        sourceBranch: "odt/task-1",
+        targetBranch: { remote: "origin", branch: "main" },
+        mergedAt: "2026-10-13T12:00:00Z",
+      },
+      expectedPublication: {
+        sourceOid: "a".repeat(40),
+        remote: "origin",
+        targetRef: "refs/heads/main",
+        destinations: [{ identity: "bound", label: "/reviewed.git" }],
+      },
+    },
+  };
+  const calls: unknown[] = [];
+  const handlers = createTaskCommandHandlers(
+    createTaskServiceTestDouble({
+      completeDirectMerge: (input) =>
+        Effect.sync(() => {
+          calls.push(input);
+          return taskFixture;
+        }),
+    }),
+  );
+  await Effect.runPromise(handlers.task_direct_merge_complete(intent));
+  expect(calls).toEqual([intent]);
 });

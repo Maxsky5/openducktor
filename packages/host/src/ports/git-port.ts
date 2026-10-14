@@ -83,7 +83,26 @@ export type GitPushBranchOptions = {
   setUpstream?: boolean;
   forceWithLease?: boolean;
 };
+export type BoundGitPublication = {
+  repoPath: string;
+  sourceRef: string;
+  sourceOid: string;
+  targetRef: string;
+  remote: string;
+  endpoints: Array<{ identity: string; label: string; url: string }>;
+};
+export type GitPublicationProgress = {
+  sourceOid: string;
+  targetRef: string;
+  destinations: Array<{
+    identity: string;
+    outcome: "not_issued" | "refused" | "confirmed" | "uncertain";
+  }>;
+};
+export type RemoteBranchObservation = { destinationIdentity: string; oid: string | null };
 export type GitMergeBranchRequest = {
+  onWorkIssued?: () => void;
+  onApplied?: (targetOid: string) => void;
   sourceBranch: string;
   targetBranch: string;
   sourceWorkingDirectory?: string;
@@ -108,6 +127,15 @@ export type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
 export type GitPort = {
+  readPublicationTarget(input: {
+    repoPath: string;
+    sourceRef: string;
+    remote: string;
+    targetRef: string;
+  }): Effect.Effect<BoundGitPublication, GitPortError>;
+  inspectPublication(
+    target: BoundGitPublication,
+  ): Effect.Effect<RemoteBranchObservation[], GitPortError>;
   releaseReadCaptures(): Effect.Effect<void>;
   canonicalizePath(path: string): Effect.Effect<string, HostOperationErrorAggregate>;
   isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
@@ -188,6 +216,11 @@ export type GitPort = {
     repoPath: string,
     branch: string,
     force: boolean,
+    onDeleting?: (branch: { name: string; oid: string }) => void,
+  ): Effect.Effect<void, GitPortError>;
+  restoreDeletedBranch(
+    repoPath: string,
+    branch: { name: string; oid: string },
   ): Effect.Effect<void, GitPortError>;
   isAncestor(
     workingDir: string,
@@ -199,6 +232,12 @@ export type GitPort = {
     sourceBranch: string,
     targetBranch: string,
   ): Effect.Effect<string | undefined, GitPortError>;
+  isMergeIncluded(
+    repoPath: string,
+    sourceBranch: string,
+    targetOid: string,
+    appliedTargetOid?: string,
+  ): Effect.Effect<boolean, GitPortError>;
   mergeBranch(
     workingDir: string,
     request: GitMergeBranchRequest,
@@ -232,6 +271,11 @@ export type GitPort = {
     branch: string,
     options?: GitPushBranchOptions,
   ): Effect.Effect<GitPushBranchResult, GitPortError>;
+  /** An empty destination list updates only the local tracking ref. */
+  pushBoundPublication(
+    workingDir: string,
+    input: { target: BoundGitPublication; destinationIdentities: string[] },
+  ): Effect.Effect<GitPublicationProgress, GitPortError>;
   rebaseBranch(
     workingDir: string,
     targetBranch: string,

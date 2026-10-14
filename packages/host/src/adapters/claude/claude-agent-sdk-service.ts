@@ -1,3 +1,4 @@
+import { resolveClaudePendingApprovalOwner } from "./claude-pending-approval-owner";
 import { updateClaudeSessionModel } from "./claude-session-model-update";
 import {
   resumeRetainedClaudeSession,
@@ -56,7 +57,7 @@ import {
   createClaudeAgentSdkSession,
   type CreateClaudeAgentSdkSessionInput,
 } from "./claude-agent-sdk-session-factory";
-import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
+import { sendClaudeUserMessage, withClaudeModelCallbacks } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
   continuedClaudeSessionLaunch,
@@ -84,9 +85,6 @@ import type {
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
 import { fromPromise, fromSync, unsupported } from "./claude-agent-sdk-utils";
-
-type SessionScope = AgentSessionScope;
-type SendInput = SendAgentUserMessageInput;
 
 const defaultClaudeAgentSdkServiceDependencies: ClaudeContextUsageDependencies = {
   loadDetachedSessionContextUsage: (input) =>
@@ -177,9 +175,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           ).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
-                if (existing) {
-                  this.sessionStore.close(existing);
-                }
+                if (existing) this.sessionStore.close(existing);
               }),
             ),
             Effect.mapError((cause) =>
@@ -318,7 +314,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   sendUserMessage(
     input: SendAgentUserMessageInput,
     runtimeId: string,
-    options?: Pick<AgentSessionSendOptions, "onSent">,
+    options?: AgentSessionSendOptions,
   ) {
     return Effect.gen({ self: this }, function* () {
       const scope = yield* requireClaudeSessionScope(
@@ -331,15 +327,22 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       );
       return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
         sendClaudeUserMessage({
-          messageInput: input,
+          messageInput: withClaudeModelCallbacks(input, options),
           session,
           now: this.now,
           randomId: this.randomId,
           emit: this.emit.bind(this),
           onSent: options?.onSent,
+          assertCurrent: options?.assertCurrent,
         }),
       );
     });
+  }
+
+  resolvePendingApproval(input: Parameters<ClaudeAgentSdkService["resolvePendingApproval"]>[0]) {
+    return fromPromise("claudeRuntime.resolvePendingApproval", async () =>
+      resolveClaudePendingApprovalOwner(this.sessionStore, input),
+    );
   }
 
   prepareApprovalReply(input: ReplyApprovalInput) {
@@ -458,7 +461,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  private requireSessionForSend(input: SendInput, runtimeId: string, scope: SessionScope) {
+  private requireSessionForSend(
+    input: SendAgentUserMessageInput,
+    runtimeId: string,
+    scope: AgentSessionScope,
+  ) {
     const existing = this.sessionStore.get(input.externalSessionId);
     if (existing) {
       return fromPromise("claudeRuntime.sendUserMessage", async () => {

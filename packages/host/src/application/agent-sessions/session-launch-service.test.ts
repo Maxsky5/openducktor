@@ -362,7 +362,9 @@ test("the first instruction waits for native admission", async () => {
   const h = fixture();
   const result = await Effect.runPromise(h.service.launch({ key: "a", sessionId: "a-1" }));
   expect(result.status).toBe("completed");
-  expect(h.sendOptions).toEqual([{ onSent: expect.any(Function) }]);
+  expect(h.sendOptions).toMatchObject([
+    { onSent: expect.any(Function), assertCurrent: expect.any(Function) },
+  ]);
 });
 
 test("a failed launch shows its failure in the saved session for a caller that left", async () => {

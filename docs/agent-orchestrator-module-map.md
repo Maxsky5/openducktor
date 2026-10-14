@@ -85,7 +85,7 @@ One command module owns session control. Task and workspace policy adapters supp
 - Report a failure after message acceptance without sending the message again.
 - Keep task start and workspace start as explicit durable operations. Generic native start or fork does not prove durable ownership.
 
-`AgentSessionMessageAcceptedError` retains a validated native message, its exact session reference, and the failed host stage. All runtime control adapters preserve acceptance across later live updates. The shared live module also preserves acceptance when the runtime detaches before the send returns. The shared command uses the same error for a failed metadata save. The router sends its `agent_session_message_accepted` failure through the existing host error contract. A rejection or invalid native response does not prove acceptance.
+`AgentSessionMessageAcceptedError` retains a validated native message, its exact session reference, and the failed host stage. All runtime control adapters preserve acceptance across later live updates. The shared live module also preserves acceptance when the runtime detaches before the send returns. The shared command uses the same error for a failed metadata save. The command owner reports these effects in the `session_operation` failure contract. A rejection or invalid native response does not prove acceptance.
 
 `WorkspaceSessionStorePort.recordAcceptedMessage` validates and saves the generated title, monotonic `lastActivityAt`, and optional accepted model in one existing SQLite transaction. The workspace persistence policy publishes the returned record after commit. A publication failure cannot undo the save. Model-settings changes retain the stored `profileId`, including after compensation.
 
@@ -224,19 +224,19 @@ File: `support/session-runtime-ref.ts`.
 
 Use a route reference for host control and history. It contains `externalSessionId`, `repoPath`, `runtimeKind`, and `workingDirectory`.
 
-Use a context reference for send and reply. It adds task ID, role, optional model, and optional purpose. Do not add prompts, runtime IDs, or native request IDs to generic live observation.
+Send and reply use the complete reference and a session scope assertion. The host derives native context, task role, and model settings. Do not add prompts, runtime IDs, or native request IDs to generic live observation.
 
 ## Prepare an existing session
 
-File: `handlers/prepare-session-send.ts`.
+Files: `packages/host/src/application/agent-sessions/session-turn-preparation.ts` and `agent-session-command-service.ts`.
 
-Before a send to an idle or stopped session, build transient system prompt context. It does not start a runtime. The host rejects the send when the kind is not ready. This step does not attach observation, read a snapshot, resume a session, or classify pending input.
+The host prepares current context, validates the saved model, and reattaches the same owned session before sending. Viewing a session starts no preparation.
 
 ## Pending input
 
-Files: `session-read-model/agent-session-live-projection.ts`, `session-read-model/pending-approval-policy.ts`, and `handlers/pending-input-actions.ts`.
+Files: `session-read-model/agent-session-live-projection.ts`, `handlers/pending-input-actions.ts`, and `packages/host/src/application/agent-sessions/host-approval-policy.ts`.
 
-Owns pending-input projection, child-to-parent attention links, read-only approval policy, and opaque reply handles.
+The frontend owns pending-input projection, child attention, and opaque reply handles. The host owns read-only approval policy.
 
 Keep native IDs in the host adapter. Keep pending payloads in live state. Do not persist them or add frontend overlay maps.
 
@@ -392,13 +392,13 @@ Rules:
 - Validate runtime, provider, and model against the target catalog before a model update.
 - Apply live model restrictions only when a native session identity exists. `model-selection-policy.ts` supplies the same profile and variant rules to visible options and selection actions. A saved workspace draft still uses startup model options.
 - The shared host command updates the native model, saves the durable choice, then publishes metadata. If the save fails, restore the previous native model before releasing the owner permit. A publication failure after a successful save must not roll back the native model.
-- `model-selection-preferences.ts` owns runtime and model fallback order.
-- Task and workspace composers use `model-selection-preferences.ts` to derive saved model choices and `use-session-model-preparation.ts` before Send. A saved model that the catalog no longer offers changes only when the user sends. Viewing a session never sends a model update, because a model update can resume an idle session.
+- Core model-selection services own pure runtime, profile, variant, speed, and saved-choice rules. Client presentation and host enforcement use these rules.
+- Task and workspace composers present saved choices. The host prepares and repairs eligible choices within Send. Viewing a session never sends a model update, because a model update can resume an idle session.
 - A saved-choice repair preserves a valid saved profile and a supported saved speed. Standard speed stays Standard. An obsolete profile needs an explicit visible replacement that the live model permits, because the host preserves an omitted profile. If no permitted replacement exists, preparation stops before a model update or message submission.
 - For an existing session whose runtime supports profiles, an explicit `profiles: []` has no replacement for a saved profile. Preparation blocks Send. Omitted profile metadata keeps the existing normalization rule.
-- The shared sender tracks Send activity while the task or workspace target prepares the model through the shared host command. Existing sessions can queue further sends, while manual model changes remain guarded. Preparation returns a guard for the captured session identity and catalog target. The sender checks that guard before transport. A changed target or failed repair cancels submission and retains the draft through its original persistence adapter.
+- The shared sender tracks Send activity and checks the captured recipient before transport. The host prepares the model and delivers the message.
 - An existing chat waits for its first usable model catalog before Send. A background refresh with a usable catalog does not block Send. A loading session and an unavailable model have separate error reasons.
-- Task and workspace targets check the current loaded session against the shared send policy before a saved-model repair and again before transport. A blocker that arrives during attachment staging must stop the repair because a model write can resume an idle session.
+- Task and workspace targets check the loaded session before attachment staging and before transport. The host checks current blocking input before work-starting preparation and again before dispatch.
 - A retained workspace pane owns its lifetime above React Activity. Hiding the pane does not invalidate its unchanged model target. Removing the pane or changing its recipient, workspace, or catalog target still cancels a pending send.
 
 Build-tool worktree reads belong to `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts`. Their key is repository, task ID, and task version. Git refresh belongs to `use-agent-studio-build-worktree-refresh.ts`. Transcript display state does not control either read.
@@ -413,9 +413,9 @@ The host owns complete workflow execution.
 
 The shared send handler checks a typed accepted-message failure before ordinary send recovery. It upserts the native message once and adds a scoped failure notice. It completes the send action without restoring the accepted draft or resetting running state and pending input. Both task and workspace actions use this handler. Runtime-service conversion checks the exact session reference and preserves accepted model fields.
 
-The sender returns `AgentMessageSendReceipt`. Its `outcome` is `accepted` after native acceptance, with any later host failure, or `queued` when the host queue keeps the message until the running turn ends. Its optional `assertCanSubmit` guard checks the captured recipient and shared session send policy before preparation and immediately before transport. Guards and receipts stay in the frontend. A task post-start workflow carries the receipt so conflict assistance does not treat startup as delivery or retry an accepted message.
+The sender returns `AgentMessageSendReceipt` for accepted, acknowledged, queued, or uncertain input. Its optional `assertCanSubmit` guard checks the captured recipient before transport. A task post-start workflow carries the receipt so conflict assistance does not treat startup as delivery or retry an accepted message.
 
-Before sending to a stopped repository or workflow session, the shared send handler resumes the same native session. It rejects an unbound session because that session has no repository or workflow scope. It checks repository continuity and retains newer live activity and pending input. For a workflow session, the host verifies that the task owns the session before it resumes it. A failed resume sends no message.
+Before sending to a stopped repository or workflow session, the host verifies ownership and reattaches that same native session. A failed reattachment sends no message.
 
 Rules:
 
@@ -503,8 +503,8 @@ Rules:
 
 1. Read task IDs from the task store.
 2. Read task and workspace session records through their shared Query keys.
-3. Attach to the generic host-event channel, then request a repository live snapshot. On the first attachment of the repository, the host reads exact root references from both durable record kinds.
-4. On that first attachment, each runtime adapter reads only registered roots and verified descendants. Apply durable records before and after the live projection, then commit once.
+3. Attach to the generic host-event channel, then request a repository live snapshot. Host observation already follows admitted workspaces and does not depend on this client attachment.
+4. Runtime adapters read exact saved roots and verified descendants. Apply durable records before and after the live projection, then commit once.
 5. Derive rows, activity, pending input, current context usage, and counters from that commit.
 6. Apply ordered changes on the same channel. After a browser reconnect, apply the replayed changes. Attach again only after a replay gap or a host change.
 7. Load history or missing context only for the selected session.
@@ -524,7 +524,7 @@ Startup is complete when task records and the first host snapshot have produced 
 | Context loads apart from history | `history/use-selected-session-context-load.test.tsx`, adapter context tests |
 | Browser reconnect uses one SSE channel | `local-host-transport.test.ts` |
 | Selected transcript display state | `transcript/session-transcript-state.test.ts`, `agent-chat-thread-state.test.ts`, selected view tests |
-| Existing idle send prepares prompt context | `handlers/prepare-session-send.test.ts`, `handlers/session-actions-send.test.ts` |
+| Host prepares current turn context | `session-turn-preparation.test.ts`, `session-operation-owner.test.ts` |
 | Runtime status follows events by revision | `state/host-runtime/host-runtime-status-owner.test.ts` |
 | Replies use normalized refs | `handlers/session-actions-pending-input.test.ts` |
 | Read-only history and replies | Read-only transcript hook tests |

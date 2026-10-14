@@ -124,6 +124,8 @@ const createOpenCodeRuntimeStarter = (input: OpenCodeRuntimeStarterTestInput) =>
           listSnapshots: () => Effect.succeed([]),
           readSnapshot: (ref) => Effect.succeed({ type: "missing", ref }),
           loadContext: () => Effect.succeed(null),
+          resolvePendingApproval: () =>
+            Effect.die(new Error("unexpected pending approval resolution")),
           replyApproval: () => Effect.void,
           replyQuestion: () => Effect.void,
           releaseRuntime: () => Effect.succeed([]),
@@ -353,6 +355,7 @@ const createLiveAdapter = (runtime: RuntimeInstanceSummary): AgentSessionLiveAda
   listSnapshots: () => Effect.succeed([]),
   readSnapshot: (ref) => Effect.succeed({ type: "missing", ref }),
   loadContext: () => Effect.succeed(null),
+  resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
   replyApproval: () => Effect.void,
   replyQuestion: () => Effect.void,
   releaseRuntime: () => Effect.succeed([]),

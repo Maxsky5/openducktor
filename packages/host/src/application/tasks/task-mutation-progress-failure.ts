@@ -12,6 +12,7 @@ export class TaskMutationProgressFailure extends Data.TaggedError("TaskMutationP
     | "create-task"
     | "delete-task"
     | "direct-merge"
+    | "complete-direct-merge"
     | "link-merged-pull-request"
     | "reset-implementation"
     | "reset-task"

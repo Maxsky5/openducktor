@@ -13,8 +13,13 @@ import {
 import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset-error";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import { HostValidationError, readRuntimeOperationFailure } from "../../effect/host-errors";
+import { SessionOperationError } from "../../ports/session-operation-error";
+import { WorkflowIntentRejectedError } from "../../ports/workflow-intent-rejected-error";
 
 export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | undefined => {
+  if (cause instanceof SessionOperationError)
+    return { kind: "session_operation", observation: cause.observation };
+  if (cause instanceof WorkflowIntentRejectedError) return { kind: "workflow_intent_rejected" };
   if (cause instanceof AgentSessionCommandAcceptedError) return cause.failure;
   if (cause instanceof RuntimeQueryError) {
     return { kind: "runtime_query", runtimeQueryFailure: cause.failure };
@@ -30,6 +35,7 @@ export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | 
       message: cause.message,
       nextAction: cause.nextAction,
     };
+    if (cause.nativeOutcome) agentSessionResumeFailure.nativeOutcome = cause.nativeOutcome;
     if (cause.cause instanceof Error) {
       agentSessionResumeFailure.cause = cause.cause.message;
     }

@@ -1,4 +1,9 @@
 import { Buffer } from "node:buffer";
+import {
+  readPublicationTarget,
+  inspectPublication,
+  pushBoundPublication,
+} from "../../infrastructure/git/git-publication";
 import { realpath } from "node:fs/promises";
 import { Effect } from "effect";
 import { resolveTrackedUpstreamReference } from "../../infrastructure/git/git-upstream";
@@ -24,6 +29,7 @@ import {
 import { buildFileDiffs, loadDiffPayload } from "../../infrastructure/git/git-diff";
 import {
   isAncestor,
+  isMergeIncluded,
   mergeBranch,
   suggestedSquashCommitMessage,
   switchBranch,
@@ -56,6 +62,7 @@ import {
   isRegisteredWorktree,
   listWorktrees,
   removeWorktree,
+  restoreDeletedBranch,
 } from "../../infrastructure/git/git-worktree";
 import {
   buildWorktreeStatusData,
@@ -370,14 +377,20 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     removeWorktree(repoPath, worktreePath, force) {
       return removeWorktree(runner, repoPath, worktreePath, force);
     },
-    deleteLocalBranch(repoPath, branch, force) {
-      return deleteLocalBranch(runner, repoPath, branch, force);
+    deleteLocalBranch(repoPath, branch, force, onDeleting) {
+      return deleteLocalBranch(runner, repoPath, branch, force, onDeleting);
+    },
+    restoreDeletedBranch(repoPath, branch) {
+      return restoreDeletedBranch(runner, repoPath, branch);
     },
     isAncestor(workingDirectory, ancestor, descendant) {
       return isAncestor(runner, workingDirectory, ancestor, descendant);
     },
     suggestedSquashCommitMessage(workingDirectory, sourceBranch, targetBranch) {
       return suggestedSquashCommitMessage(runner, workingDirectory, sourceBranch, targetBranch);
+    },
+    isMergeIncluded(repoPath, sourceBranch, targetOid, appliedTargetOid) {
+      return isMergeIncluded(runner, repoPath, sourceBranch, targetOid, appliedTargetOid);
     },
     mergeBranch(workingDirectory, request) {
       return mergeBranch(runner, workingDirectory, request);
@@ -429,8 +442,17 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     commitAll(workingDirectory, message) {
       return commitAll(runner, workingDirectory, message);
     },
+    readPublicationTarget(input) {
+      return readPublicationTarget(runner, input);
+    },
+    inspectPublication(target) {
+      return inspectPublication(runner, target);
+    },
     pushBranch(workingDirectory, branch, options) {
       return pushBranch(runner, workingDirectory, branch, options);
+    },
+    pushBoundPublication(workingDirectory, input) {
+      return pushBoundPublication(runner, workingDirectory, input);
     },
     rebaseBranch(workingDirectory, targetBranch) {
       return rebaseBranch(runner, workingDirectory, targetBranch);

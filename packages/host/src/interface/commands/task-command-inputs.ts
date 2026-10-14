@@ -1,3 +1,4 @@
+import { taskDirectMergeCompleteIntentSchema } from "@openducktor/contracts";
 import {
   planSubtaskInputSchema,
   pullRequestSchema,
@@ -367,4 +368,14 @@ export const parseOptionalNoteInput = (
     result.note = note;
   }
   return result;
+};
+
+export const parseDirectMergeCompleteInput = (input: HostCommandArgs) => {
+  const result = taskDirectMergeCompleteIntentSchema.safeParse(input);
+  if (!result.success)
+    throw new HostValidationError({
+      field: "publicationConsent",
+      message: `Invalid completion intent: ${result.error.message}`,
+    });
+  return result.data;
 };

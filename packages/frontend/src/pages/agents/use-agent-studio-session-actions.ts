@@ -60,7 +60,6 @@ type UseAgentStudioSessionActionsArgs = {
   supportsAttachments: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
-  prepareSelectedSessionModelForSend: () => Promise<() => void>;
   assertCanPrepareSession: Parameters<
     typeof useAgentStudioSendTarget
   >[0]["assertCanPrepareSession"];
@@ -124,7 +123,6 @@ export function useAgentStudioSessionActions({
   supportsAttachments,
   sessionsForTask,
   selectedTask,
-  prepareSelectedSessionModelForSend,
   assertCanPrepareSession,
   agentStudioReady,
   isActiveTaskReady,
@@ -201,7 +199,6 @@ export function useAgentStudioSessionActions({
       selectedSession.runtimeData.isLoadingModelCatalog &&
       selectedSession.runtimeData.modelCatalog === null,
     assertCanPrepareSession,
-    prepareSelectedSessionModelForSend,
     agentStudioReady,
     canStartNewSession,
     isStarting,

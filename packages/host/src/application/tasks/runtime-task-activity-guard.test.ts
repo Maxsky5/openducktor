@@ -8,14 +8,29 @@ import { createRuntimeTaskActivityGuard as createEffectRuntimeTaskActivityGuard 
 const createRuntimeTaskActivityGuard = (
   input: Omit<
     Parameters<typeof createEffectRuntimeTaskActivityGuard>[0],
-    "sessionService" | "settingsConfig"
+    "sessionService" | "settingsConfig" | "readSessionRootRefs"
   > & {
     sessionService?: Pick<AgentSessionLiveStateService, "list" | "releaseSession">;
     pathExists?: (path: string) => boolean;
+    readSessionRootRefs?: Parameters<
+      typeof createEffectRuntimeTaskActivityGuard
+    >[0]["readSessionRootRefs"];
   },
 ) =>
   createEffectRuntimeTaskActivityGuard({
     ...input,
+    readSessionRootRefs:
+      input.readSessionRootRefs ??
+      (() =>
+        Effect.succeed([
+          {
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "external-build-session",
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          },
+        ])),
     settingsConfig: {
       pathExists: (path) => Effect.succeed(input.pathExists?.(path) ?? true),
     },
@@ -101,6 +116,117 @@ const snapshot = (): AgentSessionLiveSnapshot => ({
   contextUsage: null,
 });
 describe("createRuntimeTaskActivityGuard", () => {
+  test.each([
+    { rootLive: false, childLive: true },
+    { rootLive: true, childLive: false },
+    { rootLive: true, childLive: true },
+  ])("cleans owned descendants before parents: %j", async ({ rootLive, childLive }) => {
+    const root = snapshot();
+    const child: AgentSessionLiveSnapshot = {
+      ...root,
+      ref: { ...root.ref, externalSessionId: "child" },
+      parentExternalSessionId: root.ref.externalSessionId,
+    };
+    const grandchild: AgentSessionLiveSnapshot = {
+      ...root,
+      ref: { ...root.ref, externalSessionId: "grandchild" },
+      parentExternalSessionId: "child",
+    };
+    const otherTask = { ...root, ref: { ...root.ref, externalSessionId: "other-task" } };
+    const otherChild = {
+      ...otherTask,
+      ref: { ...root.ref, externalSessionId: "other-child" },
+      parentExternalSessionId: "other-task",
+    };
+    const workspace = { ...root, ref: { ...root.ref, externalSessionId: "workspace" } };
+    const snapshots = [root, grandchild, child, otherTask, otherChild, workspace];
+    const stopCalls: string[] = [];
+    const released: string[] = [];
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({
+        liveSessions: new Set([
+          "grandchild",
+          "other-task",
+          "other-child",
+          "workspace",
+          ...(rootLive ? [root.ref.externalSessionId] : []),
+          ...(childLive ? ["child"] : []),
+        ]),
+        stopCalls,
+      }),
+      readSessionRootRefs: () =>
+        Effect.succeed([
+          { ...root.ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+          { ...otherTask.ref, sessionScope: { kind: "workflow", taskId: "task-2", role: "build" } },
+          { ...workspace.ref, sessionScope: { kind: "repository" } },
+        ]),
+      sessionService: {
+        list: () => Effect.succeed(snapshots),
+        releaseSession: (ref) =>
+          Effect.sync(() => {
+            released.push(ref.externalSessionId);
+          }),
+      },
+    });
+    expect(
+      await Effect.runPromise(
+        guard.cleanupTaskSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).toEqual({ stoppedSessionCount: 1 + Number(rootLive) + Number(childLive) });
+    expect(stopCalls).toEqual([
+      "grandchild",
+      ...(childLive ? ["child"] : []),
+      ...(rootLive ? [root.ref.externalSessionId] : []),
+    ]);
+    expect(released.sort()).toEqual(["child", "external-build-session", "grandchild"]);
+  });
+
+  test.each(["probe", "stop"] as const)("blocks cleanup on a child %s failure", async (failure) => {
+    const root = snapshot();
+    const child = {
+      ...root,
+      ref: { ...root.ref, externalSessionId: "child" },
+      parentExternalSessionId: root.ref.externalSessionId,
+    };
+    const stopCalls: string[] = [];
+    const released: string[] = [];
+    const runtimeRegistry = registry({
+      liveSessions: new Set([root.ref.externalSessionId, "child"]),
+      stopCalls,
+      stopError: failure === "stop" ? "child stop failed" : null,
+      stopErrorSessionId: "child",
+    });
+    const probe = runtimeRegistry.probeSessionStatus;
+    runtimeRegistry.probeSessionStatus = (ref) =>
+      failure === "probe" && ref.externalSessionId === "child"
+        ? Effect.fail(
+            new HostOperationError({ operation: "test.probe", message: "child probe failed" }),
+          )
+        : probe(ref);
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry,
+      sessionService: {
+        list: () => Effect.succeed([root, child]),
+        releaseSession: (ref) =>
+          Effect.sync(() => {
+            released.push(ref.externalSessionId);
+          }),
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        guard.cleanupTaskSessions({
+          repoPath: "/repo",
+          taskSessions: [{ taskId: "task-1", sessions: [session()] }],
+        }),
+      ),
+    ).rejects.toThrow(`child ${failure} failed`);
+    expect(stopCalls).toEqual([]);
+    expect(released).toEqual([]);
+  });
   test("counts live sessions across tasks without stopping them", async () => {
     const probeCalls: unknown[] = [];
     const stopCalls: string[] = [];
@@ -280,7 +406,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     ).resolves.toEqual({ stoppedSessionCount: 0 });
     expect(releaseCalls).toEqual(["external-build-session"]);
   });
-  test("releases a missing-worktree session without probing it", async () => {
+  test("probes a retained session even when its worktree is missing", async () => {
     const probeCalls: unknown[] = [];
     const releaseCalls: string[] = [];
     const guard = createRuntimeTaskActivityGuard({
@@ -303,7 +429,7 @@ describe("createRuntimeTaskActivityGuard", () => {
         }),
       ),
     ).resolves.toEqual({ stoppedSessionCount: 0 });
-    expect(probeCalls).toEqual([]);
+    expect(probeCalls).toHaveLength(1);
     expect(releaseCalls).toEqual(["external-build-session"]);
   });
   test("surfaces stop failures as actionable errors instead of proceeding with cleanup", async () => {
@@ -347,6 +473,14 @@ describe("createRuntimeTaskActivityGuard", () => {
             releaseCalls.push(ref.externalSessionId);
           }),
       },
+      readSessionRootRefs: () =>
+        Effect.succeed([
+          {
+            ...buildSnapshot.ref,
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          },
+          { ...qaSnapshot.ref, sessionScope: { kind: "workflow", taskId: "task-1", role: "qa" } },
+        ]),
     });
 
     const error = await Effect.runPromise(

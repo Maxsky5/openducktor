@@ -1,3 +1,6 @@
+import { createLiveContinuation } from "./live-session-continuation";
+import { createLiveWorkflowObservations } from "./live-workflow-observations";
+import { createStartedSessionRoots } from "./started-session-roots";
 import { createWorkflowLaunchHold } from "./workflow-launch-hold";
 import {
   type AgentSessionLiveEnvelope,
@@ -6,7 +9,6 @@ import {
   agentSessionContextUsageSchema,
   agentSessionLiveLoadDiffResultSchema,
   agentSessionLiveReadResultSchema,
-  agentSessionLiveSnapshotSchema,
   isAgentSessionLiveStateEnvelope,
   type RuntimeKind,
 } from "@openducktor/contracts";
@@ -20,7 +22,6 @@ import type {
   AgentSessionRuntimeAdapterPort,
   AgentSessionLiveAdapterScope,
 } from "../../ports/agent-session-live-adapter-port";
-import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import {
   createAgentSessionLiveEnvelopePublisher,
@@ -31,22 +32,15 @@ import { createLiveChangePublisher } from "./agent-session-live-change-publisher
 import { createRuntimeSessionEngagement } from "./agent-session-runtime-engagement";
 import { createLiveStateCoordinator } from "./live-state-coordinator";
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
-import { parseAdapterOutput } from "./agent-session-live-validation";
+import { parseAdapterOutput, readAdapterSnapshots } from "./agent-session-live-validation";
 import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
-import {
-  continuationSessionRef,
-  toContinuationResolutionError,
-} from "./agent-session-continuation-errors";
 
 export type {
   AgentSessionLiveEnvelopePublisher,
   AgentSessionLiveFaultLogger,
 } from "./agent-session-live-envelope";
 
-export type {
-  AgentSessionLiveStateService,
-  CreateAgentSessionLiveStateServiceInput,
-} from "./agent-session-live-state-service.types";
+export type { AgentSessionLiveStateService, CreateAgentSessionLiveStateServiceInput };
 import type {
   AgentSessionLiveStateService,
   CreateAgentSessionLiveStateServiceInput,
@@ -60,6 +54,7 @@ export const createAgentSessionLiveStateService = ({
   faultLog,
   publish,
   observeNotificationInput,
+  observeApprovalInput,
   coordinator = createLiveStateCoordinator(),
   persistence,
   messageQueues,
@@ -75,6 +70,7 @@ export const createAgentSessionLiveStateService = ({
         ? withProcessStartAdmission(input.repoPath, admitted)
         : admitted;
     };
+  const startedRoots = createStartedSessionRoots();
   const observedRepoPaths = new Set<string>();
   // Native events keep a restored repository current, so attachments do not read it again.
   const restoredRepoPaths = new Set<string>();
@@ -82,30 +78,31 @@ export const createAgentSessionLiveStateService = ({
   // Runtime reads can wait on the network, so they need a gate that does not block live events.
   const refreshGate = createLiveStateCoordinator();
   // Transient admission guard that spans the probe and the native continuation for one session.
-  const continuationsInFlight = new Set<string>();
   const workflowLaunchHold = createWorkflowLaunchHold();
-  const launchFailures = new Map<string, NonNullable<AgentSessionLiveSnapshot["launchFailure"]>>();
-  const projectSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot => {
-    const projected = workflowLaunchHold.project(snapshot);
-    const launchFailure = launchFailures.get(agentSessionRefKey(snapshot.ref));
-    return launchFailure ? { ...projected, launchFailure } : projected;
-  };
+  const observations = createLiveWorkflowObservations();
+  const projectSnapshot = (snapshot: AgentSessionLiveSnapshot) =>
+    observations.project(workflowLaunchHold.project(snapshot));
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const engagement = createRuntimeSessionEngagement();
   // One publication position lets independent live consumers compare the history they applied.
   let liveStateSequence = 0;
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
-    (envelope) =>
+    (envelope) => (
+      observeApprovalInput?.(envelope),
       publish(
         isAgentSessionLiveStateEnvelope(envelope) || envelope.type === "transcript_event"
           ? { ...envelope, sequence: ++liveStateSequence }
           : envelope,
-      ),
+      )
+    ),
     faultLog,
     persistence,
   );
   const publishEnvelope = (draft: AgentSessionLiveEnvelopeDraft) => {
-    const envelope = withMessageQueues(messageQueues, draft);
+    const envelope = withMessageQueues(
+      messageQueues,
+      draft.type === "snapshot" ? { ...draft, ...observations.snapshot(draft.repoPath) } : draft,
+    );
     return publishEnvelopeResult(envelope).pipe(
       // After a refresh or a runtime release, a snapshot is the only report of each session.
       Effect.ensuring(
@@ -126,17 +123,6 @@ export const createAgentSessionLiveStateService = ({
     observeNotificationInput,
     messageQueues,
   });
-
-  const readAdapterSnapshots = (
-    adapters: ReadonlyArray<AgentSessionLiveAdapterPort>,
-    include: (snapshot: AgentSessionLiveSnapshot) => boolean,
-  ) =>
-    Effect.gen(function* () {
-      const snapshots = yield* Effect.forEach(adapters, (adapter) => adapter.listSnapshots());
-      return yield* Effect.forEach(snapshots.flat().filter(include), (snapshot) =>
-        parseAdapterOutput(agentSessionLiveSnapshotSchema, snapshot, "agent-session-live.list"),
-      );
-    });
 
   const listSnapshots = (repoPath: string) =>
     Effect.gen(function* () {
@@ -165,7 +151,10 @@ export const createAgentSessionLiveStateService = ({
     adapters: ReadonlyArray<AgentSessionLiveAdapterPort>,
   ): Effect.Effect<void, HostError> =>
     Effect.gen(function* () {
-      const roots = readSessionRootRefs ? yield* readSessionRootRefs(repoPath) : [];
+      const roots = startedRoots.merge(
+        readSessionRootRefs ? yield* readSessionRootRefs(repoPath) : [],
+        repoPath,
+      );
       yield* Effect.forEach(
         adapters,
         (adapter) =>
@@ -184,6 +173,7 @@ export const createAgentSessionLiveStateService = ({
       restoredRepoPaths.add(repoPath);
     });
   const lifecycle = createAgentSessionLiveRuntimeLifecycle({
+    admitRoot: startedRoots.accept,
     adapterRegistry,
     coordinator,
     publishChanges,
@@ -211,7 +201,10 @@ export const createAgentSessionLiveStateService = ({
           )
         : Effect.void,
     observedRepoPaths: () => [...observedRepoPaths],
-    onDetach: workflowLaunchHold.releaseRuntime,
+    onDetach: (binding) => {
+      workflowLaunchHold.releaseRuntime(binding);
+      startedRoots.releaseRuntime(binding);
+    },
   });
 
   const readSession: AgentSessionLiveStateService["read"] = (input) =>
@@ -257,6 +250,41 @@ export const createAgentSessionLiveStateService = ({
     runtimeAdmission.admit(scope.runtimeKind, runControl(scope, control, isCommitted));
 
   const service: AgentSessionLiveStateService = {
+    readStartedRoots: startedRoots.read,
+    resolvePendingApproval: (input) =>
+      adapterRegistry
+        .resolveForScope(input)
+        .pipe(
+          Effect.flatMap((adapter) =>
+            adapter
+              .resolvePendingApproval(input)
+              .pipe(Effect.map((result) => ({ ...result, runtimeId: adapter.binding.runtimeId }))),
+          ),
+        ),
+    reportApprovalPolicyFailure: (ref, message) =>
+      coordinator.run(
+        Effect.gen(function* () {
+          observations.approvalFailure(
+            ref,
+            message,
+            new Date(yield* Clock.currentTimeMillis).toISOString(),
+          );
+          const observed = yield* readSession(ref);
+          if (observed.type === "live")
+            yield* publishChanges([{ type: "session_upsert", snapshot: observed.session }]);
+        }),
+      ),
+    publishOperation: (envelope) =>
+      coordinator.run(
+        Effect.gen(function* () {
+          observations.accept(envelope);
+          yield* publishEnvelope(envelope);
+        }),
+      ),
+    retainOperation: (observation) =>
+      coordinator.run(
+        Effect.sync(() => observations.accept({ type: "session_operation_updated", observation })),
+      ),
     reportLaunchFailure: (ref, message) =>
       coordinator.run(
         Effect.gen(function* () {
@@ -268,7 +296,7 @@ export const createAgentSessionLiveStateService = ({
             message,
             timestamp: new Date(yield* Clock.currentTimeMillis).toISOString(),
           };
-          launchFailures.set(agentSessionRefKey(ref), failure);
+          observations.launchFailure(ref, failure);
           // A launch failure is host state, not a runtime event, so it must not end the turn.
           yield* publishChanges([{ type: "session_upsert", snapshot: observed.session }]);
           return failure.messageId;
@@ -323,6 +351,7 @@ export const createAgentSessionLiveStateService = ({
               repoPath: input.repoPath,
               sessions: [...snapshots],
               messageQueues: messageQueues.listQueues(input.repoPath),
+              ...observations.snapshot(input.repoPath),
               sequence: liveStateSequence,
             })),
           ),
@@ -393,11 +422,16 @@ export const createAgentSessionLiveStateService = ({
           ),
         ),
       ),
-    replyApproval: withStartAdmission((input) =>
-      adapterRegistry
-        .resolveForScope(input)
-        .pipe(Effect.flatMap((adapter) => engagement.trackReplies(adapter).replyApproval(input))),
-    ),
+    replyApproval: (input, options) =>
+      withStartAdmission((input: Parameters<AgentSessionLiveStateService["replyApproval"]>[0]) =>
+        adapterRegistry
+          .resolveForScope(input)
+          .pipe(
+            Effect.flatMap((adapter) =>
+              engagement.trackReplies(adapter).replyApproval(input, options),
+            ),
+          ),
+      )(input),
     replyQuestion: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)
@@ -409,47 +443,8 @@ export const createAgentSessionLiveStateService = ({
     resumeSession: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.resumeSession(input)),
     ),
-    continueInterruptedTurn: withStartAdmission((input) =>
-      Effect.gen(function* () {
-        const adapter = yield* adapterRegistry.resolveControlForScope(input).pipe(
-          Effect.map(engagement.trackControls),
-          Effect.mapError((cause) => toContinuationResolutionError(cause, input)),
-        );
-        const continuationKey = [
-          adapter.binding.runtimeId,
-          input.externalSessionId,
-          input.workingDirectory,
-        ].join("\u0000");
-        if (continuationsInFlight.has(continuationKey)) {
-          return yield* Effect.fail(
-            new AgentSessionResumeError({
-              reason: "continuation_in_progress",
-              sessionRef: continuationSessionRef(input),
-              operation: "agent-session.continue-interrupted-turn",
-              message: `Session '${input.externalSessionId}' already has a continuation in progress. Wait for it to settle, then retry Resume.`,
-            }),
-          );
-        }
-        continuationsInFlight.add(continuationKey);
-        const summary = yield* adapter
-          .continueInterruptedTurn(input)
-          .pipe(Effect.ensuring(Effect.sync(() => continuationsInFlight.delete(continuationKey))));
-        yield* lifecycle.requireAttached(adapter.binding).pipe(
-          Effect.mapError(
-            (cause) =>
-              new AgentSessionResumeError({
-                reason: "runtime_unavailable",
-                sessionRef: continuationSessionRef(input),
-                operation: "agent-session.continue-interrupted-turn",
-                message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
-                nextAction:
-                  "Inspect the runtime and this session. Retry Resume only if the turn is still unfinished.",
-                cause,
-              }),
-          ),
-        );
-        return summary;
-      }),
+    continueInterruptedTurn: withStartAdmission(
+      createLiveContinuation(adapterRegistry, engagement, lifecycle.requireAttached),
     ),
     forkSession: withStartAdmission((input) =>
       runControl(input, (adapter) => adapter.forkSession(input)),
@@ -461,7 +456,7 @@ export const createAgentSessionLiveStateService = ({
             yield* adapterRegistry.resolveControlForScope(input),
           );
           const acceptedMessage = yield* adapter.sendUserMessage(input, options);
-          launchFailures.delete(agentSessionRefKey(input));
+          observations.clearLaunchFailure(input);
           yield* lifecycle
             .requireAttached(adapter.binding)
             .pipe(Effect.mapError(messageAcceptedFailure(input, acceptedMessage, "live_update")));
@@ -483,6 +478,7 @@ export const createAgentSessionLiveStateService = ({
     releaseSession: (input) =>
       runControl(input, (adapter) => adapter.releaseSession(input)).pipe(
         Effect.andThen(service.holdWorkflowLaunch(input, false)),
+        Effect.tap(() => Effect.sync(() => startedRoots.releaseSession(input))),
       ),
     registerRuntimeAdapter: lifecycle.registerRuntimeAdapter,
     releaseRuntime: lifecycle.releaseRuntime,

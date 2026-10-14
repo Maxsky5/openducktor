@@ -35,6 +35,7 @@ export type GitCommandRunner = (
   options?: {
     allowFailure?: boolean;
     stdin?: string;
+    onStarted?: (() => void) | undefined;
   },
 ) => Effect.Effect<
   GitCommandResult & {
@@ -86,6 +87,7 @@ const runSpawnedGit = (
   options: {
     allowFailure?: boolean;
     stdin: string;
+    onStarted?: (() => void) | undefined;
   },
   env: NodeJS.ProcessEnv,
   command: string,
@@ -111,6 +113,7 @@ const runSpawnedGit = (
         windowsHide: launch.windowsHide,
         windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
+      if (child.pid !== undefined) options.onStarted?.();
     } catch (cause) {
       resume(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory })));
       return;
@@ -208,13 +211,14 @@ export const createDefaultGitRunner = (
       const platform = launchOptions.platform ?? process.platform;
       const commandEnv = createGitEnvironment(readEnv(), platform);
       const command = yield* resolveCommand();
-      if (options?.stdin !== undefined) {
+      if (options?.stdin !== undefined || options?.onStarted !== undefined) {
         return yield* runSpawnedGit(
           workingDirectory,
           args,
           {
             allowFailure: options.allowFailure === true,
-            stdin: options.stdin,
+            stdin: options.stdin ?? "",
+            onStarted: options.onStarted,
           },
           commandEnv,
           command,

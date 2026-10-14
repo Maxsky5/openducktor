@@ -28,6 +28,48 @@ const textRequest = (h: Awaited<ReturnType<typeof createPersistenceHarness>>) =>
   parts: [{ kind: "text" as const, text: "First" }],
 });
 
+test.each(
+  (["opencode", "codex", "claude"] as const).flatMap((kind) => [
+    { kind, draft: true },
+    { kind, draft: false },
+  ]),
+)("shutdown before native work preserves the workspace session: %j", async ({ kind, draft }) => {
+  const h = await createPersistenceHarness(database, kind, draft);
+  if (!draft) {
+    await Effect.runPromise(h.live.releaseSession(h.ref));
+    h.releases.length = 0;
+  }
+  const entered = await Effect.runPromise(Deferred.make<void>());
+  const release = await Effect.runPromise(Deferred.make<void>());
+  const settled = await Effect.runPromise(Deferred.make<void>());
+  h.state.beforeNativeWork = Deferred.succeed(entered, undefined).pipe(
+    Effect.andThen(Deferred.await(release)),
+  );
+  h.state.afterNativeWork = Deferred.succeed(settled, undefined).pipe(Effect.asVoid);
+  const service = h.launchService();
+  const launch = Effect.runFork(service.launch(textRequest(h)));
+  try {
+    await Effect.runPromise(Deferred.await(entered));
+    const shutdown = Effect.runFork(service.shutdown());
+    await Effect.runPromise(yieldToFibers);
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await Effect.runPromise(Deferred.await(settled));
+    await Effect.runPromise(Fiber.join(shutdown));
+    const outcome = await Effect.runPromise(Fiber.join(launch));
+    expect(outcome.status).toBe("canceled");
+    expect(outcome.session).toBeUndefined();
+    expect(outcome.acceptedMessage).toBeUndefined();
+    expect(h.starts).toEqual([]);
+    expect(h.inputs).toEqual([]);
+    expect(h.stops).toEqual([]);
+    expect(h.releases).toEqual([]);
+    expect((await h.get()).externalSessionId).toBe(draft ? null : h.ref.externalSessionId);
+  } finally {
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    await Effect.runPromise(Fiber.join(launch));
+  }
+});
+
 test("shutdown during the native start leaves the workspace draft unbound", async () => {
   const h = await createPersistenceHarness(database, "codex", true);
   const entered = await Effect.runPromise(Deferred.make<void>());
@@ -104,6 +146,7 @@ test("shutdown during the starting hold stops the created session without a send
 
 test("a failed resume of a saved workspace session fails without a new session", async () => {
   const h = await createPersistenceHarness(database, "codex", false);
+  await Effect.runPromise(h.live.releaseSession(h.ref));
   h.state.beforeControl = Effect.fail(
     new HostOperationError({ operation: "resume", message: "Native resume refused" }),
   );

@@ -32,16 +32,12 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDeferred,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import { useAgentStudioSendTarget } from "../session-actions/use-agent-studio-send-target";
-import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
-import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
-import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { useAgentStudioChatComposer } from "./use-agent-studio-chat-composer";
 
 enableReactActEnvironment();
@@ -897,15 +893,7 @@ describe("useAgentStudioChatComposer", () => {
       expect(harness.getLatest().selectedModelSelection).toEqual(repairedSelection);
       expect(updateAgentSessionModel).not.toHaveBeenCalled();
 
-      await harness.run(async (state) => {
-        const assertCurrent = await state.prepareSelectedSessionModelForSend();
-        assertCurrent();
-      });
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
-      expect(updateAgentSessionModel).toHaveBeenCalledWith(
-        toAgentSessionIdentity(staleSession),
-        repairedSelection,
-      );
+      expect(updateAgentSessionModel).not.toHaveBeenCalled();
 
       await harness.update(
         createBaseProps({
@@ -913,12 +901,8 @@ describe("useAgentStudioChatComposer", () => {
           loadedSession: repairedSession,
         }),
       );
-      await harness.run(async (state) => {
-        const assertCurrent = await state.prepareSelectedSessionModelForSend();
-        assertCurrent();
-      });
 
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -1680,9 +1664,6 @@ describe("useAgentStudioChatComposer", () => {
       await harness.mount();
 
       expect(harness.getLatest().selectedModelSelection).toBeNull();
-      await harness.run(async (state) => {
-        await expect(state.prepareSelectedSessionModelForSend()).rejects.toThrow("No valid model");
-      });
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
@@ -1724,18 +1705,7 @@ describe("useAgentStudioChatComposer", () => {
       });
       expect(updateAgentSessionModel).not.toHaveBeenCalled();
 
-      await harness.run(async (state) => {
-        const assertCurrent = await state.prepareSelectedSessionModelForSend();
-        assertCurrent();
-      });
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
-      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(loadedSession), {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-        profileId: "spec-agent",
-      });
+      expect(updateAgentSessionModel).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -2471,186 +2441,4 @@ describe("useAgentStudioChatComposer", () => {
       await harness.unmount();
     }
   });
-});
-
-test.each([
-  "profile",
-  "repair",
-  "failed",
-  "empty",
-  "empty profiles",
-  "profiles omitted",
-  "unsupported profiles",
-  "unavailable",
-  "session not loaded",
-  "session switch",
-  "workspace switch",
-  "before acceptance",
-] as const)("task saved-model send: %s", async (scenario) => {
-  const unchanged = scenario === "profiles omitted" || scenario === "unsupported profiles";
-  const validSavedModel = scenario === "profile" || scenario === "empty profiles" || unchanged;
-  const succeeds = scenario === "profile" || scenario === "repair" || unchanged;
-  const runtimeKind = scenario === "unsupported profiles" ? "codex" : "opencode";
-  const loadedSession = createLoadedSession({
-    runtimeKind,
-    selectedModel: {
-      runtimeKind,
-      providerId: validSavedModel ? "openai" : "missing",
-      modelId: validSavedModel ? "gpt-5" : "missing-model",
-      variant: "high",
-      profileId: "removed",
-    },
-  });
-  const repair = createDeferred<void>();
-  const acceptance = createDeferred<void>();
-  const update = mock<HookArgs["updateAgentSessionModel"]>(async () => repair.promise);
-  const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(
-    async (_identity, _parts, options) => {
-      if (scenario === "before acceptance") await acceptance.promise;
-      options?.assertCanSubmit?.(loadedSession);
-      return null;
-    },
-  );
-  let catalog: AgentModelCatalog | null = CATALOG;
-  if (scenario === "empty") catalog = EMPTY_CATALOG;
-  if (scenario === "unavailable") catalog = null;
-  if (scenario === "empty profiles") catalog = CATALOG_WITHOUT_PROFILES;
-  if (scenario === "profiles omitted") {
-    catalog = { ...CATALOG };
-    delete catalog.profiles;
-  }
-  if (scenario === "unsupported profiles")
-    catalog = { ...CATALOG_WITHOUT_PROFILES, runtime: CODEX_RUNTIME_DESCRIPTOR };
-  const args = createBaseProps({
-    loadedSession,
-    repoSettings: createRepoSettings({
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "build-agent",
-    }),
-    updateAgentSessionModel: update,
-    sessionRuntimeData: createSessionRuntimeData({
-      modelCatalog: catalog,
-    }),
-  });
-  if (scenario === "session not loaded")
-    args.selectedSession = { ...args.selectedSession, loadedSession: null };
-  const RuntimeWrapper = createRuntimeWrapper({
-    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-  });
-  const harness = createSharedHookHarness(
-    (props: HookArgs) => {
-      const composer = useAgentStudioChatComposer(props);
-      const target = useAgentStudioSendTarget({
-        workspaceId: props.workspaceRepoPath,
-        taskId: "task-1",
-        role: props.role,
-        selectedSessionIdentity: props.selectedSession.identity,
-        isSessionModelCatalogLoading: false,
-        assertCanPrepareSession: () => {},
-        prepareSelectedSessionModelForSend: composer.prepareSelectedSessionModelForSend,
-        agentStudioReady: true,
-        canStartNewSession: false,
-        isStarting: false,
-        startSession: async () => {
-          throw new Error("Unexpected startup");
-        },
-      });
-      const action = useAgentChatSendForTarget(target, {
-        identity: props.selectedSession.identity,
-        modelCatalog: props.selectedSession.runtimeData.modelCatalog,
-        selectedModelDescriptor: composer.selectedModelDescriptor,
-        draftRules: { reusablePrompts: [], supportsAttachments: false },
-        sendAgentMessage: send,
-      });
-      return { ...composer, ...action };
-    },
-    args,
-    {
-      wrapper: ({ children }) =>
-        createElement(RuntimeWrapper, {}, createElement(AgentChatSendProviders, {}, children)),
-    },
-  );
-  let pending!: Promise<unknown>;
-  let failure: unknown;
-  try {
-    await harness.mount();
-    expect(update).not.toHaveBeenCalled();
-    await harness.run((state) => {
-      pending = state
-        .onSend({ segments: [createTextSegment("Task draft")] }, "default")
-        .catch((cause: unknown) => {
-          failure = cause;
-          return false;
-        });
-    });
-    if (unchanged) {
-      await pending;
-      expect(await pending).toBe(true);
-      expect(update).not.toHaveBeenCalled();
-      expect(send).toHaveBeenCalledTimes(1);
-      expect(send.mock.calls[0]?.[0]).toEqual(toAgentSessionIdentity(loadedSession));
-    } else if (
-      scenario === "empty" ||
-      scenario === "unavailable" ||
-      scenario === "session not loaded" ||
-      scenario === "empty profiles"
-    ) {
-      await pending;
-      expect(failure).toBeInstanceOf(Error);
-      let message = "No valid model";
-      if (scenario === "session not loaded") message = "session is still loading";
-      if (scenario === "unavailable") message = "catalog is unavailable";
-      if (scenario === "empty profiles")
-        message = "saved Runtime Profile is unavailable or cannot change";
-      expect(failure instanceof Error && failure.message).toContain(message);
-      expect(update).not.toHaveBeenCalled();
-    } else {
-      await harness.waitFor(() => update.mock.calls.length === 1);
-      expect(send).not.toHaveBeenCalled();
-      expect(update.mock.calls[0]?.[0]).toEqual(toAgentSessionIdentity(loadedSession));
-      expect(update.mock.calls[0]?.[1]).toEqual({
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "high",
-        profileId: scenario === "profile" ? "spec-agent" : "build-agent",
-      });
-      if (scenario === "session switch")
-        await harness.update({
-          ...args,
-          selectedSession: {
-            ...args.selectedSession,
-            identity: { ...toAgentSessionIdentity(loadedSession), workingDirectory: "/repo/other" },
-            loadedSession: { ...loadedSession, workingDirectory: "/repo/other" },
-          },
-        });
-      if (scenario === "workspace switch")
-        await harness.update({ ...args, workspaceRepoPath: "/other-repo" });
-      await harness.run(() => {
-        if (scenario === "failed")
-          repair.reject(new Error("Model repair failed. Select another model."));
-        else repair.resolve();
-      });
-      if (scenario === "before acceptance") {
-        await harness.waitFor(() => send.mock.calls.length === 1);
-        await harness.update({ ...args, workspaceRepoPath: "/other-repo" });
-        acceptance.resolve();
-      }
-      await pending;
-      if (succeeds) {
-        expect(await pending).toBe(true);
-        expect(send.mock.calls[0]?.[0]).toEqual(toAgentSessionIdentity(loadedSession));
-      } else expect(await pending).toBe(false);
-    }
-    if (!succeeds && scenario !== "before acceptance") expect(send).not.toHaveBeenCalled();
-    if (scenario === "before acceptance")
-      expect(failure instanceof Error && failure.message).toContain("model target changed");
-  } finally {
-    repair.resolve();
-    acceptance.resolve();
-    await harness.unmount();
-  }
 });

@@ -112,6 +112,7 @@ export const cleanupMergedTaskState = (
   taskId: string,
   sourceBranch: string,
   targetBranch: string,
+  onDeleting?: (branch: { name: string; oid: string }) => void,
 ) =>
   Effect.gen(function* () {
     yield* runTaskRuntimeCleanup({
@@ -158,7 +159,7 @@ export const cleanupMergedTaskState = (
       sourceBranch,
       targetBranch,
     ));
-    yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete);
+    yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete, onDeleting);
   });
 export const cleanupDirectMergeTaskState = (
   dependencies: {
@@ -172,6 +173,7 @@ export const cleanupDirectMergeTaskState = (
   repoPath: string,
   taskId: string,
   directMerge: DirectMergeRecord,
+  onDeleting?: (branch: { name: string; oid: string }) => void,
 ) =>
   cleanupMergedTaskState(
     dependencies,
@@ -180,6 +182,7 @@ export const cleanupDirectMergeTaskState = (
     taskId,
     directMerge.sourceBranch.trim(),
     checkoutBranch(directMerge.targetBranch),
+    onDeleting,
   );
 export const effectiveTargetBranchForTask = (
   workspaceSettingsService: WorkspaceSettingsService,

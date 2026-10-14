@@ -1,3 +1,6 @@
+import { messageSteeringBlock } from "./agent-message-steering";
+import { omittedQueueSessions } from "./omitted-queue-sessions";
+import { createSubmissionReservations } from "./submission-reservations";
 import type {
   AcceptedAgentInput,
   AcceptedAgentUserMessage,
@@ -11,13 +14,13 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
   AgentUserMessageDelivery,
+  AgentMessageTarget,
   RuntimeKind,
 } from "@openducktor/contracts";
 import {
   type AgentDeliveryAvailability,
   agentSessionRefKey,
   agentSessionScopesEqual,
-  steeringPartsBlockedReason,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { type HostError, HostValidationError } from "../../effect/host-errors";
@@ -44,18 +47,31 @@ import {
   sessionChanges,
 } from "./agent-message-session-conditions";
 import { createQueueRegistry } from "./agent-message-queue-registry";
-import { type SendOutcome, sendOutcome } from "./agent-message-send-outcome";
+import {
+  type SendOutcome,
+  sendOutcome,
+  reconcileAcceptedOutcome,
+} from "./agent-message-send-outcome";
 import type { AgentSessionSendContent } from "./agent-session-operation-policy";
 
 export type AgentMessageDeliveryDependencies = {
+  readonly submissionFingerprint: (input: AgentMessageSubmitInput) => string;
   readonly canonicalizeRepoPath: (repoPath: string) => Effect.Effect<string, HostError>;
   /** Checks the destination and returns the message with the stored session settings. */
   readonly prepare: (
     content: AgentSessionSendContent,
+    options?: { steering: boolean },
   ) => Effect.Effect<AgentSessionSendContent, HostError>;
+  readonly runOperation: <A, E>(
+    target: AgentMessageTarget,
+    effect: Effect.Effect<A, E>,
+    submissionId?: string,
+  ) => Effect.Effect<A, E | HostError>;
+  readonly commitQueueResume: <A>(commit: () => A) => Effect.Effect<A, HostError>;
+  readonly prepareQueueResume: (content: AgentSessionSendContent) => Effect.Effect<void, HostError>;
   /** Sends one message to the runtime with the model that it captured at submission. */
   readonly send: (
-    input: AgentSessionControlSendInput,
+    input: AgentSessionControlSendInput & { modelCaptured?: true },
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
   /** Tells if the runtime of this kind can steer running work. */
   readonly steeringAvailability: (
@@ -94,9 +110,10 @@ export const createAgentMessageDeliveryService = (
   });
   const { publish, enqueue, forgetIfUnused, queueFor } = registry;
   const conditions = createSessionConditions();
+  const reserveSubmission = createSubmissionReservations(dependencies.submissionFingerprint);
 
   const send = (content: AgentSessionSendContent, delivery: AgentUserMessageDelivery) =>
-    dependencies.send({ ...content, delivery });
+    dependencies.send({ ...content, modelCaptured: true, delivery });
 
   /**
    * Marks a new turn as in flight from this call until the send ends. The mark changes at once,
@@ -116,24 +133,8 @@ export const createAgentMessageDeliveryService = (
     );
   };
 
-  /** Tells why steering cannot take the message, or returns null when it can. */
-  const steeringBlock = (
-    content: AgentSessionSendContent,
-  ): Effect.Effect<HostValidationError | null, HostError> => {
-    const partsReason = steeringPartsBlockedReason(content.parts);
-    if (partsReason) {
-      return Effect.succeed(new HostValidationError({ field: "parts", message: partsReason }));
-    }
-    return dependencies
-      .steeringAvailability(content.runtimeKind)
-      .pipe(
-        Effect.map((steering) =>
-          steering.available
-            ? null
-            : new HostValidationError({ field: "mode", message: steering.reason }),
-        ),
-      );
-  };
+  const steeringBlock = (content: AgentSessionSendContent) =>
+    messageSteeringBlock(content, dependencies.steeringAvailability);
 
   /**
    * Steers running work. When steering cannot take the message, an idle session still takes it
@@ -144,9 +145,9 @@ export const createAgentMessageDeliveryService = (
   const steer = (content: AgentSessionSendContent): Effect.Effect<SteerOutcome> =>
     Effect.gen(function* () {
       const blocked = yield* steeringBlock(content);
-      if (!blocked) return yield* sendOutcome(send(content, "steer"));
-      const outcome = yield* sendOutcome(send(content, "new_turn"));
-      return outcome.kind === "busy" ? ({ kind: "blocked", error: blocked } as const) : outcome;
+      const working = conditions.isWorking(agentSessionRefKey(content));
+      if (working && blocked) return { kind: "blocked", error: blocked } as const;
+      return yield* sendOutcome(send(content, working ? "steer" : "new_turn"));
     }).pipe(Effect.catch((error) => Effect.succeed({ kind: "refused", error } as const)));
 
   /** Finds the queue when the drain runs, so a queue that ended meanwhile gets no delivery. */
@@ -172,10 +173,7 @@ export const createAgentMessageDeliveryService = (
     if (queue.completedTurns !== completedTurnsBefore) scheduleDrain(queue.key);
   };
 
-  /**
-   * Pauses a queue that has messages or a new-turn send in flight, because a refused send then
-   * joins the queue. The first cause stays, because it explains the pause.
-   */
+  /** Pauses queued messages and in-flight sends. The first cause stays. */
   const pauseQueue = (queue: MessageQueue, pause: QueuePause): void => {
     if (queue.pause !== null) return;
     if (queue.entries.length === 0 && !queue.sendingNewTurn) return;
@@ -202,7 +200,7 @@ export const createAgentMessageDeliveryService = (
       return;
     }
     if (outcome.kind === "unknown") {
-      markAcceptanceUnknown(entry, outcome.error.messageId);
+      markAcceptanceUnknown(entry, outcome.messageId);
       queue.pause ??= { cause: "acceptance_unknown" };
       return;
     }
@@ -231,23 +229,19 @@ export const createAgentMessageDeliveryService = (
       const completedTurns = queue.completedTurns;
       const sent = sendNewTurn(queue, head.content);
       publish(queue);
-      const outcome = yield* sent;
+      const outcome = reconcileAcceptedOutcome(yield* sent);
       if (outcome.kind === "accepted") removeEntry(queue, head);
-      // The turn still runs. The next completed turn delivers the entry.
       else if (outcome.kind === "busy") head.state = "queued";
       else failEntry(queue, head, outcome);
       publish(queue);
       settle(queue, completedTurns);
     });
 
-  /**
-   * Keeps a message whose delivery has no conclusive result at the front of its queue. The
-   * user can see it, but nobody can send it again.
-   */
+  /** Retains an uncertain message at the front of its queue and blocks repeat delivery. */
   const queueUnknownMessage = (
     queue: MessageQueue,
     content: SubmittedContent,
-    messageId: string,
+    messageId?: string,
   ): AgentMessageSubmitResult => {
     markAcceptanceUnknown(enqueue(queue, content, "first"), messageId);
     queue.pause ??= { cause: "acceptance_unknown" };
@@ -263,7 +257,7 @@ export const createAgentMessageDeliveryService = (
         return { kind: "queued", queue: publish(queue) } satisfies AgentMessageSubmitResult;
       }
       const completedTurns = queue.completedTurns;
-      const outcome = yield* sendNewTurn(queue, content);
+      const outcome = reconcileAcceptedOutcome(yield* sendNewTurn(queue, content));
       switch (outcome.kind) {
         case "accepted":
           // A message that the agent received ends a pause that has no messages left.
@@ -278,7 +272,7 @@ export const createAgentMessageDeliveryService = (
           return { kind: "queued", queue: queued } as const;
         }
         case "unknown":
-          return queueUnknownMessage(queue, content, outcome.error.messageId);
+          return queueUnknownMessage(queue, content, outcome.messageId);
         case "accepted_then_failed":
           // The host state is unsure, so later messages wait for Resume.
           pauseQueue(queue, { cause: "accepted_then_failed", detail: outcome.error.message });
@@ -300,12 +294,13 @@ export const createAgentMessageDeliveryService = (
    */
   const submitSteer = (content: SubmittedContent) =>
     Effect.gen(function* () {
-      const outcome = yield* steer(content);
+      const sent = yield* steer(content);
+      const outcome = sent.kind === "blocked" ? sent : reconcileAcceptedOutcome(sent);
       switch (outcome.kind) {
         case "accepted":
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "unknown":
-          return queueUnknownMessage(queueFor(content), content, outcome.error.messageId);
+          return queueUnknownMessage(queueFor(content), content, outcome.messageId);
         case "accepted_then_failed":
           pause(content, { cause: "accepted_then_failed", detail: outcome.error.message });
           break;
@@ -336,7 +331,8 @@ export const createAgentMessageDeliveryService = (
       });
       publish(queue);
       const completedTurns = queue.completedTurns;
-      const outcome = yield* steer(entry.content);
+      const sent = yield* steer(entry.content);
+      const outcome = sent.kind === "blocked" ? sent : reconcileAcceptedOutcome(sent);
       // A live user message can show the entry during the steer and end its queue. Nothing then
       // waits, and a newer queue of the session has no part in this steer.
       if (registry.find(queue.key) !== queue) {
@@ -367,13 +363,27 @@ export const createAgentMessageDeliveryService = (
         // A pause stays while its cause remains. Running work does not block Resume.
         const blocker = queue.entries.some((entry) => entry.state === "acceptance_unknown")
           ? ACCEPTANCE_UNKNOWN_REASON
-          : conditions.resumeBlocker(queue.key);
+          : conditions.isBlockedOnInput(queue.key)
+            ? conditions.resumeBlocker(queue.key)
+            : null;
         if (blocker) return yield* actionError(blocker);
-        queue.pause = null;
-        return publishAndRelease(queue);
+        const head = queue.entries[0];
+        if (head) yield* dependencies.prepareQueueResume({ ...head.content, modelCaptured: true });
+        return yield* dependencies.commitQueueResume(() => {
+          queue.pause = null;
+          return publishAndRelease(queue);
+        });
       }
       const { queue: owner, entry } = yield* findEntry(queue, action.submissionId);
       if (action.kind === "steer") return yield* steerEntry(owner, entry);
+      if (action.kind === "save_edit") {
+        const prepared = yield* dependencies.prepare({
+          ...entry.content,
+          parts: action.parts,
+          modelCaptured: true,
+        });
+        action = { ...action, parts: prepared.parts };
+      }
       const releasesQueue = yield* changeEntry(owner, entry, action, registry.nextEditId);
       return releasesQueue ? publishAndRelease(owner) : { queue: publish(owner) };
     });
@@ -413,53 +423,57 @@ export const createAgentMessageDeliveryService = (
     publish(queue);
   };
 
-  /**
-   * A repository snapshot lists every live session of the repository. A queue whose session it
-   * leaves out lost that session, like a removed session.
-   */
-  const omittedQueueSessions = (envelope: AgentSessionLiveEnvelope): AgentSessionLiveEnvelope[] => {
-    if (envelope.type !== "snapshot") return [];
-    const live = new Set(envelope.sessions.map((session) => agentSessionRefKey(session.ref)));
-    return registry
-      .list(envelope.repoPath)
-      .filter(({ target }) => !live.has(agentSessionRefKey(target)))
-      .map(({ target: { repoPath, runtimeKind, workingDirectory, externalSessionId } }) => ({
-        type: "session_removed",
-        ref: { repoPath, runtimeKind, workingDirectory, externalSessionId },
-      }));
-  };
-
   return {
     submit: (input) =>
-      Effect.gen(function* () {
-        const repoPath = yield* dependencies.canonicalizeRepoPath(input.repoPath);
-        // The prepared message carries the stored destination, which keys its queue.
-        const prepared = yield* dependencies.prepare({ ...contentOf(input), repoPath });
-        const content = { ...prepared, submissionId: input.submissionId };
-        // Pending input refuses the message, so the composer keeps the draft.
-        if (conditions.isBlockedOnInput(agentSessionRefKey(content))) {
-          return yield* blockedOnInputError();
-        }
-        return yield* input.mode === "default" ? submitDefault(content) : submitSteer(content);
-      }),
+      reserveSubmission(
+        input,
+        dependencies.runOperation(
+          input,
+          Effect.gen(function* () {
+            const repoPath = yield* dependencies.canonicalizeRepoPath(input.repoPath);
+            if (conditions.isBlockedOnInput(agentSessionRefKey({ ...input, repoPath })))
+              return yield* blockedOnInputError();
+            const steering =
+              input.mode === "steer" &&
+              conditions.isWorking(agentSessionRefKey({ ...input, repoPath }));
+            // The prepared message carries the stored destination, which keys its queue.
+            const prepared = yield* dependencies.prepare(
+              { ...contentOf(input), repoPath },
+              { steering },
+            );
+            delete prepared.systemPrompt;
+            delete prepared.resolvedQuestionRequestIds;
+            const content = { ...prepared, submissionId: input.submissionId };
+            // Pending input refuses the message, so the composer keeps the draft.
+            if (conditions.isBlockedOnInput(agentSessionRefKey(content))) {
+              return yield* blockedOnInputError();
+            }
+            return yield* input.mode === "default" ? submitDefault(content) : submitSteer(content);
+          }),
+          input.submissionId,
+        ),
+      ),
     manage: (input) =>
-      Effect.gen(function* () {
-        const repoPath = yield* dependencies.canonicalizeRepoPath(input.repoPath);
-        const queue = registry.findFor({ ...input, repoPath });
-        // The queue key names only the runtime session, so the action must also name its owner.
-        if (queue && !agentSessionScopesEqual(queue.target.sessionScope, input.sessionScope)) {
-          return yield* actionError(
-            "This queue belongs to another chat. Reload the chat and try again.",
-          );
-        }
-        return yield* applyAction(queue, input.action);
-      }),
+      dependencies.runOperation(
+        input,
+        Effect.gen(function* () {
+          const repoPath = yield* dependencies.canonicalizeRepoPath(input.repoPath);
+          const queue = registry.findFor({ ...input, repoPath });
+          // The queue key names only the runtime session, so the action must also name its owner.
+          if (queue && !agentSessionScopesEqual(queue.target.sessionScope, input.sessionScope)) {
+            return yield* actionError(
+              "This queue belongs to another chat. Reload the chat and try again.",
+            );
+          }
+          return yield* applyAction(queue, input.action);
+        }),
+      ),
     listQueues: registry.list,
     observeChanges: (envelopes) => {
       const completed = new Set<MessageQueue>();
       const changes = envelopes.flatMap((envelope) => [
         ...sessionChanges(envelope),
-        ...omittedQueueSessions(envelope),
+        ...omittedQueueSessions(envelope, registry.list),
       ]);
       for (const envelope of changes) {
         const signal = conditions.observe(envelope);

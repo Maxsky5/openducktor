@@ -151,11 +151,16 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
   const outcomes: SendResult[] = [];
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const background: Effect.Effect<void>[] = [];
+  let observedState: Parameters<typeof sessionState>[0] = { activity: "idle" };
   let onSend: (() => void) | null = null;
   const service = createAgentMessageDeliveryService({
+    submissionFingerprint: JSON.stringify,
     // A configured path can name the repository through a link, like `/repo-link`.
     canonicalizeRepoPath: (repoPath) =>
       Effect.succeed(repoPath === "/repo-link" ? "/repo" : repoPath.replace(/\/$/, "")),
+    runOperation: (_target, effect) => effect,
+    commitQueueResume: (commit) => Effect.sync(commit),
+    prepareQueueResume: () => Effect.void,
     prepare: (content) => Effect.succeed({ ...content, model }),
     send: (input) =>
       Effect.suspend(() => {
@@ -183,7 +188,6 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
         submissionId,
         mode,
         parts,
-        model: { runtimeKind: "codex", providerId: "openai", modelId: "ignored" },
       }),
     );
   const userMessage = (messageId: string, submissionId?: string) => {
@@ -221,9 +225,15 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
       onSend = callback;
     },
     stop: (stopRef: typeof ref = ref) => Effect.runSync(service.pauseForStop(stopRef)),
-    idle: () => service.observeChanges([turnEnd("completed")]),
-    upsertSession: (state: Parameters<typeof sessionState>[0]) =>
-      service.observeChanges([{ type: "session_upsert", session: sessionState(state) }]),
+    idle: () =>
+      service.observeChanges([
+        { type: "session_upsert", session: sessionState({ ...observedState, activity: "idle" }) },
+        turnEnd("completed"),
+      ]),
+    upsertSession: (state: Parameters<typeof sessionState>[0]) => {
+      observedState = state;
+      service.observeChanges([{ type: "session_upsert", session: sessionState(state) }]);
+    },
     queueTexts: () =>
       service
         .listQueues("/repo")

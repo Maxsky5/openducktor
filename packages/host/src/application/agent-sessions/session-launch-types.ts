@@ -33,6 +33,8 @@ export type SessionLaunchContext<Request, Result extends SessionLaunchResult> = 
   setResultFields: (fields: SessionLaunchResultFields<Result>) => void;
   skip: (reason: string) => void;
   checkCanceled: () => Effect.Effect<void, HostError>;
+  /** Native dispatch checks this after asynchronous preparation. */
+  assertCurrent: () => void;
   /** Stops the session in launch cleanup, so settlement does not stop it again. */
   stopSession: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   /**

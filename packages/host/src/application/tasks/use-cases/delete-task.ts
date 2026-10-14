@@ -32,6 +32,7 @@ export const createTaskDeleteUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionLifecycleCoordinator,
+  completionState,
 }: TaskServiceUseCaseInput): Pick<TaskServiceWithMutationProgress, "deleteTask"> => ({
   deleteTask(input) {
     return Effect.gen(function* () {
@@ -140,7 +141,7 @@ export const createTaskDeleteUseCase = ({
         });
         recordStoppedAgentSessionCount(cleanupProgress, stoppedSessionCount);
       }
-
+      let durableDeleteCommitted = false;
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           branchNames,
@@ -155,34 +156,44 @@ export const createTaskDeleteUseCase = ({
           worktreeFiles,
           worktreePaths,
         });
-        yield* taskStore.deleteTask({
-          repoPath: effectiveRepoPath,
-          taskId,
-          deleteSubtasks,
-        });
-
+        const deletion = yield* Effect.result(
+          taskStore.deleteTask({
+            repoPath: effectiveRepoPath,
+            taskId,
+            deleteSubtasks,
+          }),
+        );
+        durableDeleteCommitted =
+          deletion._tag === "Success" ||
+          (deletion.failure instanceof TaskAssetError &&
+            deletion.failure.durableState === "committed_cleanup_pending");
+        if (!durableDeleteCommitted && deletion._tag === "Failure")
+          return yield* Effect.fail(deletion.failure);
+        const discarded = yield* Effect.forEach(targetTaskIds, (id) =>
+          Effect.result(completionState.discard(effectiveRepoPath, id)),
+        );
+        if (deletion._tag === "Failure") return yield* Effect.fail(deletion.failure);
+        for (const result of discarded)
+          if (result._tag === "Failure") return yield* Effect.fail(result.failure);
         return {
           ok: true,
           changes: { taskIds: targetTaskIds, removedTaskIds: targetTaskIds },
         };
       }).pipe(
-        Effect.catch((error) => {
-          const failure = appendTaskCleanupProgress(error, {
-            operation: "task_delete",
-            removedWorktrees: cleanupProgress.removedWorktrees,
-            deletedBranches: cleanupProgress.deletedBranches,
-            completedSteps: cleanupProgress.completedSteps,
-          });
-          const result =
-            error instanceof TaskAssetError && error.durableState === "committed_cleanup_pending"
-              ? new TaskMutationProgressFailure({
-                  operation: "delete-task",
-                  changes: { taskIds: targetTaskIds, removedTaskIds: targetTaskIds },
-                  failure,
-                })
-              : failure;
-          return Effect.fail(result);
-        }),
+        Effect.mapError((error) =>
+          durableDeleteCommitted
+            ? new TaskMutationProgressFailure({
+                operation: "delete-task",
+                changes: { taskIds: targetTaskIds, removedTaskIds: targetTaskIds },
+                failure: error,
+              })
+            : appendTaskCleanupProgress(error, {
+                operation: "task_delete",
+                removedWorktrees: cleanupProgress.removedWorktrees,
+                deletedBranches: cleanupProgress.deletedBranches,
+                completedSteps: cleanupProgress.completedSteps,
+              }),
+        ),
       );
     }).pipe(Effect.scoped);
   },

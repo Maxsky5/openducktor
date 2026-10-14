@@ -17,8 +17,6 @@ import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createTestRuntimeAdmissionGate } from "../../test-support/runtime-admission-test-gate";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
-import { HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import { createEffectHostCommandRouter } from "../router/host-command-router";
 import { createAgentSessionLiveCommandHandlers } from "./agent-session-live-command-handlers";
@@ -57,14 +55,12 @@ const emptyQueue = ({
 });
 
 const createHarness = async (
-  resolveAttachment?: LocalAttachmentService["resolve"],
   startWorkflowSession: Parameters<
     typeof createAgentSessionLiveCommandHandlers
   >[0]["startWorkflowSession"] = () => Effect.die(new Error("unexpected workflow session start")),
 ) => {
   const envelopes: AgentSessionLiveEnvelope[] = [];
   const snapshots: AgentSessionLiveSnapshot[] = [];
-  const attachmentResolutions: string[] = [];
   const forks: unknown[] = [];
   const resumes: unknown[] = [];
   const sends: AgentSessionControlSendInput[] = [];
@@ -108,6 +104,7 @@ const createHarness = async (
           },
         ];
       }),
+    resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
     replyApproval: () => Effect.void,
     replyQuestion: () => Effect.void,
     releaseRuntime: () => Effect.succeed(snapshots.map(({ ref }) => ref)),
@@ -171,17 +168,7 @@ const createHarness = async (
     publish: (envelope) => envelopes.push(envelope),
   });
   await Effect.runPromise(service.registerRuntimeAdapter(adapter));
-  const attachmentResolver: Pick<LocalAttachmentService, "resolve"> = {
-    resolve:
-      resolveAttachment ??
-      ((input) =>
-        Effect.sync(() => {
-          attachmentResolutions.push(input.path);
-          return { path: `/staged/${input.path}` };
-        })),
-  };
   return {
-    attachmentResolutions,
     envelopes,
     diffLoads,
     forks,
@@ -204,7 +191,6 @@ const createHarness = async (
               return { queue: emptyQueue(input) };
             }),
         },
-        attachmentResolver,
       ),
     }),
     queueActions,
@@ -221,7 +207,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     { model: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" } },
   ])("rejects invalid workflow starts before calling the service: %j", async (invalid) => {
     const inputs: unknown[] = [];
-    const { router } = await createHarness(undefined, (input) => {
+    const { router } = await createHarness((input) => {
       inputs.push(input);
       return Effect.die(new Error("unexpected workflow start"));
     });
@@ -242,7 +228,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
 
   test("routes one strict host-owned workflow start command", async () => {
     const inputs: unknown[] = [];
-    const { router } = await createHarness(undefined, (input) =>
+    const { router } = await createHarness((input) =>
       Effect.sync(() => {
         inputs.push(input);
         return controlSummary(
@@ -366,8 +352,8 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     expect(starts).toEqual([]);
   });
 
-  test("resolves attachment paths before submitting a message", async () => {
-    const { attachmentResolutions, router, submits } = await createHarness();
+  test("passes attachment intent to the host delivery owner", async () => {
+    const { router, submits } = await createHarness();
     const input = {
       submissionId: "submission-1",
       mode: "default" as const,
@@ -392,65 +378,11 @@ describe("createAgentSessionLiveCommandHandlers", () => {
 
     await Effect.runPromise(router.invoke("agent_session_message_submit", input));
 
-    expect(attachmentResolutions).toEqual(["brief.pdf"]);
-    expect(submits).toEqual([
-      {
-        ...input,
-        parts: [
-          {
-            kind: "attachment",
-            attachment: {
-              id: "attachment-1",
-              path: "/staged/brief.pdf",
-              name: "brief.pdf",
-              kind: "pdf",
-              mime: "application/pdf",
-            },
-          },
-        ],
-      },
-    ]);
+    expect(submits).toEqual([input]);
   });
 
-  test("does not submit a message when attachment resolution fails", async () => {
-    const { router, submits } = await createHarness(() =>
-      Effect.fail(
-        new HostValidationError({
-          field: "path",
-          message: "Attachment path is not a staged local attachment.",
-        }),
-      ),
-    );
-
-    await expect(
-      Effect.runPromise(
-        router.invoke("agent_session_message_submit", {
-          submissionId: "submission-1",
-          mode: "default",
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "session-1",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          parts: [
-            {
-              kind: "attachment",
-              attachment: {
-                id: "attachment-1",
-                path: "/etc/passwd",
-                name: "passwd",
-                kind: "pdf",
-              },
-            },
-          ],
-        }),
-      ),
-    ).rejects.toThrow("Attachment path is not a staged local attachment.");
-    expect(submits).toEqual([]);
-  });
-
-  test("resolves attachment paths of an edited queued message", async () => {
-    const { attachmentResolutions, router, queueActions } = await createHarness();
+  test("passes edited attachment intent and edit identity to the queue owner", async () => {
+    const { router, queueActions } = await createHarness();
     const target = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -483,7 +415,6 @@ describe("createAgentSessionLiveCommandHandlers", () => {
       }),
     );
 
-    expect(attachmentResolutions).toEqual(["brief.pdf"]);
     expect(queueActions).toEqual([
       {
         ...target,
@@ -491,7 +422,7 @@ describe("createAgentSessionLiveCommandHandlers", () => {
           kind: "save_edit",
           submissionId: "submission-1",
           editId: "edit-1",
-          parts: [{ kind: "attachment", attachment: { ...attachment, path: "/staged/brief.pdf" } }],
+          parts: [{ kind: "attachment", attachment: { ...attachment, path: "brief.pdf" } }],
         },
       },
       { ...target, action: { kind: "remove", submissionId: "submission-1" } },

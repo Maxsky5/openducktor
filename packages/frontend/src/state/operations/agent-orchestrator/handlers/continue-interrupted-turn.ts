@@ -1,6 +1,5 @@
 import type { AgentEnginePort } from "@openducktor/core";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { PrepareSessionSend } from "./prepare-session-send";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { type ReadSessionSnapshot, requireWorkspaceRepoPath } from "../support/session-invariants";
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 
@@ -8,10 +7,6 @@ export type ContinueInterruptedTurnDependencies = {
   workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "continueInterruptedTurn">;
   readSessionSnapshot: ReadSessionSnapshot;
-  prepareSessionSend: (
-    session: AgentSessionState,
-    options: { prepareWorkflowContext: boolean },
-  ) => ReturnType<PrepareSessionSend>;
 };
 
 /**
@@ -24,7 +19,6 @@ export const createContinueInterruptedTurn = ({
   workspaceRepoPath,
   adapter,
   readSessionSnapshot,
-  prepareSessionSend,
 }: ContinueInterruptedTurnDependencies) => {
   return async (identity: AgentSessionIdentity): Promise<void> => {
     const session = readSessionSnapshot(identity);
@@ -38,18 +32,9 @@ export const createContinueInterruptedTurn = ({
       session,
       "resume",
     );
-    // Restore the workflow prompt, so a session resumed after a restart continues with
-    // the task and role instructions that the original launch sent.
-    const prepared = await prepareSessionSend(session, { prepareWorkflowContext: true });
     const continuationInput: Parameters<typeof adapter.continueInterruptedTurn>[0] = {
       ...sessionRef,
     };
-    if (session.selectedModel) {
-      continuationInput.model = session.selectedModel;
-    }
-    if (prepared.systemPrompt !== undefined) {
-      continuationInput.systemPrompt = prepared.systemPrompt;
-    }
     // Keep the host failure intact: the chat reads its typed reason and next action.
     await adapter.continueInterruptedTurn(continuationInput);
   };

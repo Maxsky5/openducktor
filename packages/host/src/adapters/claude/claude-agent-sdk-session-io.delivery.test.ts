@@ -326,18 +326,14 @@ describe("Claude session I/O message delivery", () => {
     expect(await sending).toBeInstanceOf(AgentSessionMessageAcceptanceUnknownError);
   });
 
-  test("starts a new turn when a steered message reaches an idle session", async () => {
+  test("refuses an issued steer whose running turn ended before dispatch", async () => {
     const { pushed, queue } = recordingQueue();
     const session = createClaudeSession({ activity: "idle", queue, sdkState: "idle" });
-
-    const accepted = await send(session, messageInput({ delivery: "steer" }));
-
-    expect(pushed).toEqual([expect.objectContaining({ uuid: SENT_MESSAGE_ID })]);
-    expect(pushed[0]?.priority).toBeUndefined();
-    expect(accepted.state).toBe("read");
-    expect(session.activeSdkUserTurnCount).toBe(1);
-    expect(session.pendingUserTurnCount).toBe(1);
-    expect(session.unreadSteeredUserMessages.size).toBe(0);
+    expect(await failureOf(send(session, messageInput({ delivery: "steer" })))).toBeInstanceOf(
+      AgentSessionMessageRefusedError,
+    );
+    expect(pushed).toEqual([]);
+    expect(session.activeSdkUserTurnCount).toBe(0);
   });
 
   test("keeps a stopped session stopped when the push fails", async () => {

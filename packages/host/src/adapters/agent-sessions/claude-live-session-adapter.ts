@@ -1,4 +1,7 @@
-import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
+import {
+  createClaudePendingApprovalResolver,
+  preAdmissionNextActionOverrides,
+} from "./claude-pending-approval-resolution";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
@@ -13,19 +16,15 @@ import {
 } from "@openducktor/contracts";
 import {
   AgentSessionResumeError,
-  type AgentSessionResumeNextActionOverrides,
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
 import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
-import { InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import { requireRuntimeWorkingDirectory } from "../../application/runtimes/runtime-working-directory";
 import {
   type HostError,
   type HostOperationErrorAggregate,
-  HostOperationError,
-  HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
@@ -60,6 +59,7 @@ import { createClaudeLiveSessionState } from "./claude-live-session-state";
 import {
   parseClaudeLiveSessionOutput,
   requireClaudeHostServiceRuntime,
+  createClaudeRequiredSession,
   toClaudeLiveSessionRef,
 } from "./claude-live-session-runtime-guards";
 
@@ -71,11 +71,6 @@ export type {
   CreateClaudeLiveSessionAdapterPreparerInput,
   PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
-
-const preAdmissionNextActionOverrides = (cause: unknown): AgentSessionResumeNextActionOverrides =>
-  cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
-    ? { continuation_failed: "Send a new message to continue." }
-    : {};
 
 export const createClaudeLiveSessionAdapterPreparer =
   ({
@@ -147,32 +142,13 @@ export const createClaudeLiveSessionAdapterPreparer =
             externalSessionId,
           });
 
-      const requireSessionContext = (externalSessionId: string) =>
-        Effect.try({
-          try: () => {
-            const session = sessionStore.get(externalSessionId);
-            if (!session) {
-              throw new HostValidationError({
-                field: "externalSessionId",
-                message: `Unknown Claude session '${externalSessionId}'.`,
-                details: { externalSessionId, runtimeId: runtime.runtimeId },
-              });
-            }
-            return session;
-          },
-          catch: (cause) =>
-            cause instanceof HostValidationError
-              ? cause
-              : toHostOperationError(cause, "claude-live-session.require-session", {
-                  runtimeId: runtime.runtimeId,
-                  externalSessionId,
-                }),
-        });
+      const requireSessionContext = createClaudeRequiredSession(sessionStore, runtime.runtimeId);
 
       const resolvePendingInput = (
         operation: string,
         externalSessionId: string,
         prepare: Effect.Effect<ClaudePendingInputResolution, HostError>,
+        options?: import("../../ports/agent-session-live-adapter-port").ApprovalReplyOptions,
       ): Effect.Effect<void, HostError> =>
         eventCoordinator.runControlMutation(
           prepare.pipe(
@@ -195,7 +171,10 @@ export const createClaudeLiveSessionAdapterPreparer =
                     Effect.tapError(() => Effect.sync(rollback)),
                     Effect.flatMap((complete) =>
                       Effect.try({
-                        try: complete,
+                        try: () => {
+                          options?.onIssued?.();
+                          complete();
+                        },
                         catch: (cause) =>
                           toHostOperationError(cause, `${operation}.complete`, {
                             runtimeId: runtime.runtimeId,
@@ -212,14 +191,8 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const { runSummary, runTitleUpdate } = createClaudeControlRunner({
         runControlMutation: eventCoordinator.runControlMutation,
-        retainSummary: (operation, repoPath, summary, options) =>
-          commit(`${operation}.retain-summary`, () => ({
-            value: summary,
-            changes:
-              operation === "claude-live-session.import"
-                ? baselineLiveSessionChanges(state.applyControlSummary(repoPath, summary, options))
-                : state.applyControlSummary(repoPath, summary, options),
-          })),
+        commit,
+        applyControlSummary: state.applyControlSummary,
         reportProjectionFailure: createClaudeProjectionFailureReporter({ commit }),
       });
 
@@ -274,13 +247,14 @@ export const createClaudeLiveSessionAdapterPreparer =
                 ),
             ),
           ),
-        replyApproval: (input) =>
+        replyApproval: (input, options) =>
           requireClaudePolicy(input.runtimeKind, "reply-approval").pipe(
             Effect.flatMap(() =>
               resolvePendingInput(
                 "claude-live-session.reply-approval",
                 input.externalSessionId,
                 service.prepareApprovalReply(toClaudeReplyApprovalInput(input)),
+                options,
               ),
             ),
           ),
@@ -321,11 +295,24 @@ export const createClaudeLiveSessionAdapterPreparer =
                 ),
               );
           }),
+        resolvePendingApproval: createClaudePendingApprovalResolver(service, state),
         startSession: (input) =>
           requireSessionWorkingDirectory(input, "start-session").pipe(
             Effect.flatMap(() =>
-              runSummary("claude-live-session.start-session", input.repoPath, () =>
-                service.startSession(toClaudeStartInput(input), runtime.runtimeId),
+              runSummary(
+                "claude-live-session.start-session",
+                input.repoPath,
+                () =>
+                  service.startSession(
+                    {
+                      ...toClaudeStartInput(input),
+                      workStartGuard: input.workStartGuard,
+                      onWorkIssued: input.onWorkIssued,
+                      onWorkAccepted: input.onWorkAccepted,
+                    },
+                    runtime.runtimeId,
+                  ),
+                { sessionScope: input.sessionScope },
               ),
             ),
           ),
@@ -335,7 +322,16 @@ export const createClaudeLiveSessionAdapterPreparer =
               runSummary(
                 "claude-live-session.resume-session",
                 input.repoPath,
-                () => service.resumeSession(toClaudeResumeInput(input), runtime.runtimeId),
+                () =>
+                  service.resumeSession(
+                    {
+                      ...toClaudeResumeInput(input),
+                      workStartGuard: input.workStartGuard,
+                      onWorkIssued: input.onWorkIssued,
+                      onWorkAccepted: input.onWorkAccepted,
+                    },
+                    runtime.runtimeId,
+                  ),
                 { keepActivity: true },
               ),
             ),
@@ -349,7 +345,12 @@ export const createClaudeLiveSessionAdapterPreparer =
               Effect.flatMap(() =>
                 runSummary(operation, input.repoPath, () =>
                   service.continueInterruptedTurn(
-                    toClaudeContinueInput(input),
+                    {
+                      ...toClaudeContinueInput(input),
+                      workStartGuard: input.workStartGuard,
+                      onWorkIssued: input.onWorkIssued,
+                      onWorkAccepted: input.onWorkAccepted,
+                    },
                     runtime.runtimeId,
                     () => {
                       continuationAdmitted = true;
@@ -361,6 +362,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 continuationAdmitted
                   ? new AgentSessionResumeError({
                       reason: "continuation_failed",
+                      nativeOutcome: "accepted",
                       sessionRef,
                       operation,
                       message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
@@ -380,8 +382,20 @@ export const createClaudeLiveSessionAdapterPreparer =
         forkSession: (input) =>
           requireSessionWorkingDirectory(input, "fork-session").pipe(
             Effect.flatMap(() =>
-              runSummary("claude-live-session.fork-session", input.repoPath, () =>
-                service.forkSession(toClaudeForkInput(input), runtime.runtimeId),
+              runSummary(
+                "claude-live-session.fork-session",
+                input.repoPath,
+                () =>
+                  service.forkSession(
+                    {
+                      ...toClaudeForkInput(input),
+                      workStartGuard: input.workStartGuard,
+                      onWorkIssued: input.onWorkIssued,
+                      onWorkAccepted: input.onWorkAccepted,
+                    },
+                    runtime.runtimeId,
+                  ),
+                { sessionScope: input.sessionScope },
               ),
             ),
           ),

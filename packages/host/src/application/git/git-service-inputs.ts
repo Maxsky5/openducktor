@@ -148,17 +148,15 @@ const requireGlobalConfig = (
   return Effect.succeed(payload);
 };
 export const findRepoConfigByPath = (
-  settingsConfig: Pick<SettingsConfigPort, "canonicalizePath" | "readConfig">,
+  settingsConfig: Pick<SettingsConfigPort, "readConfig">,
   canonicalRepoPath: string,
 ) =>
   Effect.gen(function* () {
     const config = yield* requireGlobalConfig(yield* settingsConfig.readConfig());
-    for (const repoConfig of Object.values(config.workspaces)) {
-      const configuredRepoPath = yield* settingsConfig.canonicalizePath(repoConfig.repoPath);
-      if (configuredRepoPath === canonicalRepoPath) {
-        return repoConfig;
-      }
-    }
+    const repoConfig = Object.values(config.workspaces).find(
+      (workspace) => workspace.repoPath === canonicalRepoPath,
+    );
+    if (repoConfig) return repoConfig;
     return yield* Effect.fail(
       new HostValidationError({
         message: `Repository is not registered in OpenDucktor settings: ${canonicalRepoPath}`,

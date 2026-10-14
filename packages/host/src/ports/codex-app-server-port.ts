@@ -36,6 +36,7 @@ export type {
 
 export type CodexAppServerRequestInput = { runtimeId: string } & CodexAppServerClientRequest;
 export type CodexAppServerRespondInput = {
+  onIssued?: (() => void) | undefined;
   runtimeId: string;
   requestId: CodexAppServerRequestId;
   result?: CodexAppServerRespondResult;

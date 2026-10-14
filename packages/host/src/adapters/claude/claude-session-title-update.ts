@@ -65,6 +65,7 @@ export const resumeRetainedClaudeSession = async (input: {
     externalSessionId: input.session.externalSessionId,
     runtimeId: input.runtimeId,
   });
+  input.request.onWorkAccepted?.();
   await reconcileClaudeSessionTitle({
     session: input.session,
     title: agentSessionTitle(input.scope),

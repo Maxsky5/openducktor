@@ -275,6 +275,27 @@ export const repositoryGitProviderContextSchema = z
   .nullable();
 export type RepositoryGitProviderContext = z.infer<typeof repositoryGitProviderContextSchema>;
 
+export const gitPublicationPreviewSchema = z.strictObject({
+  sourceOid: z.string().regex(/^[a-f0-9]{40,64}$/),
+  remote: z.string().min(1),
+  targetRef: z.string().startsWith("refs/heads/"),
+  destinations: z
+    .array(z.strictObject({ identity: z.string().min(1), label: z.string().min(1) }))
+    .min(1),
+});
+export type GitPublicationPreview = z.infer<typeof gitPublicationPreviewSchema>;
+export const taskDirectMergeCompleteIntentSchema = z.strictObject({
+  repoPath: z.string().trim().min(1),
+  taskId: z.string().trim().min(1),
+  publicationConsent: z
+    .strictObject({
+      expectedMerge: directMergeRecordSchema,
+      expectedPublication: gitPublicationPreviewSchema,
+    })
+    .optional(),
+});
+export type TaskDirectMergeCompleteIntent = z.infer<typeof taskDirectMergeCompleteIntentSchema>;
+
 export const taskApprovalContextSchema = z.object({
   taskId: z.string(),
   taskStatus: z.string(),
@@ -289,6 +310,7 @@ export const taskApprovalContextSchema = z.object({
     gitTargetBranchSchema.optional(),
   ),
   defaultMergeMethod: gitMergeMethodSchema,
+  publicationPreview: gitPublicationPreviewSchema.optional(),
   hasUncommittedChanges: z.boolean().default(false),
   uncommittedFileCount: z.number().int().nonnegative().default(0),
   pullRequest: z.preprocess(

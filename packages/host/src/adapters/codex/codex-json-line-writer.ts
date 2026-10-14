@@ -24,10 +24,13 @@ export type CodexTransportNotifyMessage = {
 export const writeJsonLine = (
   stdin: Writable,
   payload: CodexTransportResponseMessage | CodexTransportNotifyMessage,
+  onIssued?: () => void,
 ): Effect.Effect<void, HostOperationErrorAggregate> =>
   Effect.callback((resume) => {
     let active = true;
-    stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
+    const line = `${JSON.stringify(payload)}\n`;
+    onIssued?.();
+    stdin.write(line, (error) => {
       if (!active) {
         return;
       }

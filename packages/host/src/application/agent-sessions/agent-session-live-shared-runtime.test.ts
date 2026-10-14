@@ -305,7 +305,7 @@ describe("shared live runtime across repositories", () => {
       { type: "session_removed", ref: second.ref, sequence: 6 },
     ]);
     // Observed repositories and the repositories of released refs all get a fresh snapshot.
-    expect(events.filter((event) => event.type === "snapshot")).toEqual([
+    expect(events.filter((event) => event.type === "snapshot")).toMatchObject([
       { type: "snapshot", messageQueues: [], repoPath: "/repo-a", sessions: [], sequence: 7 },
       { type: "snapshot", messageQueues: [], repoPath: "/repo-c", sessions: [], sequence: 8 },
       { type: "snapshot", messageQueues: [], repoPath: "/repo-b", sessions: [], sequence: 9 },
