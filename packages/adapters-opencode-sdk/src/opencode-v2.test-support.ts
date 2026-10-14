@@ -8,6 +8,7 @@ import {
 import type { AgentSessionScope, OpenCodeCreationSettings } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { OpencodeSdkAdapter } from "./opencode-sdk-adapter";
+import { projectMessages } from "./opencode-message-projection";
 import type { OpenCodeRuntimeConnection } from "./types";
 
 export const connection: OpenCodeRuntimeConnection = {
@@ -102,6 +103,7 @@ export const createController = (
       readDirectory: async (_directory, read) => read(),
       ensureMcp: async () => {},
       admitted: () => {},
+      projectHistory: (_sessionID, messages) => projectMessages(messages),
     },
   );
   return { controller, requests, client };

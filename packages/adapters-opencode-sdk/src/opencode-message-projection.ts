@@ -255,10 +255,13 @@ export const messageProjectionContext = (
 
 const isVisibleNativeMessage = (message: SessionMessageInfo): boolean =>
   message.type !== "agent-switched" &&
-  !(message.type === "idle" && message.outcome === "succeeded");
+  !(message.type === "idle" && message.outcome === "succeeded") &&
+  !(message.type === "synthetic" && message.metadata?.source === "subagent");
 
-export const projectMessages = (messages: SessionMessageInfo[]): AgentSessionHistoryMessage[] => {
-  const { completions, durations } = messageProjectionContext(messages);
+export const projectMessages = (
+  messages: SessionMessageInfo[],
+  { completions, durations } = messageProjectionContext(messages),
+): AgentSessionHistoryMessage[] => {
   return messages
     .filter(isVisibleNativeMessage)
     .map((message) => projectMessage(message, completions, durations.get(message.id)));
@@ -361,15 +364,14 @@ const projectAssistantContent = (
   if (content.time.completed !== undefined) tool.endedAtMs = content.time.completed;
   const metadata = "metadata" in state ? state.metadata : undefined;
   if (content.name !== "subagent") return [tool];
-  const input =
-    state.status === "streaming"
-      ? undefined
-      : z.record(z.string(), z.json()).safeParse(state.input).data;
-  const childID = z.string().safeParse(metadata?.sessionID).data;
+  const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
+  const childID = z.string().safeParse(metadata?.sessionID ?? input?.sessionID).data;
   const completion = completions?.get(content.id);
   const status =
-    tool.status === "error"
-      ? "error"
+    state.status === "error"
+      ? state.error.type === "aborted"
+        ? "cancelled"
+        : "error"
       : (completion?.state ??
         (tool.status === "completed" && metadata?.status === "running" ? "running" : tool.status));
   const subagent: Extract<AgentTranscriptStreamPart, { kind: "subagent" }> = {
@@ -398,7 +400,7 @@ const projectAssistantContent = (
   if (completion) subagent.endedAtMs = completion.created;
   else if (status !== "running" && tool.endedAtMs !== undefined)
     subagent.endedAtMs = tool.endedAtMs;
-  return [tool, subagent];
+  return [subagent];
 };
 
 /** History and live events use the same native content order and part IDs. */

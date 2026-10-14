@@ -16,7 +16,28 @@ import {
   messageEvents,
   messageProjectionContext,
   projectInboxUser,
+  projectMessages,
 } from "./opencode-message-projection";
+
+const retainLiveToolState = (
+  message: SessionMessageInfo,
+  live: SessionMessageInfo | undefined,
+): SessionMessageInfo => {
+  if (message.type !== "assistant" || live?.type !== "assistant") return message;
+  return {
+    ...message,
+    content: message.content.map((part) => {
+      if (part.type !== "tool" || part.state.status !== "running") return part;
+      const prior = live.content.find((item) => item.type === "tool" && item.id === part.id);
+      if (prior?.type !== "tool" || prior.state.status === "streaming") return part;
+      if (prior.state.status === "completed" || prior.state.status === "error") return prior;
+      return {
+        ...part,
+        state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
+      };
+    }),
+  };
+};
 
 const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
   ToolContent,
@@ -42,6 +63,19 @@ export class OpenCodeLiveMessageProjector {
   private readonly settledInput = new Set<string>();
   private projectionContext = messageProjectionContext(this.messages.values());
 
+  projectHistory(messages: SessionMessageInfo[]) {
+    const retained = messages.map((message) =>
+      retainLiveToolState(message, this.messages.get(message.id)),
+    );
+    const context = messageProjectionContext(retained);
+    const completions = new Map(context.completions);
+    for (const [callID, completion] of this.projectionContext.completions) {
+      const native = completions.get(callID);
+      if (!native || native.created < completion.created) completions.set(callID, completion);
+    }
+    return projectMessages(retained, { ...context, completions });
+  }
+
   /**
    * Returns the user message of an input that the event stream already showed, queued or
    * delivered, or null when the stream did not show it.
@@ -66,8 +100,8 @@ export class OpenCodeLiveMessageProjector {
     this.settledText.clear();
     this.settledInput.clear();
     for (const snapshot of messages) {
-      const message = structuredClone(snapshot);
-      const live = previous.get(message.id);
+      const live = previous.get(snapshot.id);
+      const message = retainLiveToolState(structuredClone(snapshot), live);
       this.messages.set(message.id, message);
       if (message.type !== "assistant") continue;
       let textOrdinal = 0;
@@ -103,12 +137,6 @@ export class OpenCodeLiveMessageProjector {
             else if (prior?.type === "tool" && prior.state.status === "streaming")
               part.state.input = prior.state.input;
           }
-          if (
-            part.state.status === "running" &&
-            prior?.type === "tool" &&
-            prior.state.status === "running"
-          )
-            part.state.metadata = { ...part.state.metadata, ...prior.state.metadata };
         }
       }
     }

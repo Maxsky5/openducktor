@@ -7,6 +7,7 @@ import {
   type OpenCodeClient,
   type SessionInfo,
   type ModelRef,
+  type SessionMessageInfo,
 } from "@opencode/client";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -35,6 +36,7 @@ import {
   type LoadAgentSessionDiffInput,
   type LoadAgentFileStatusInput,
   type AgentSessionTitleUpdateResult,
+  type AgentSessionHistoryMessage,
   type ContinueInterruptedAgentTurnInput,
   type AgentModelSelection,
 } from "@openducktor/core";
@@ -55,7 +57,7 @@ import {
 } from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
-import { iso, projectInboxUser, projectMessages } from "./opencode-message-projection";
+import { iso, projectInboxUser } from "./opencode-message-projection";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMessageId } from "./opencode-message-id";
@@ -74,6 +76,10 @@ export type OpenCodeControlHooks = {
   readDirectory: ReadOpencodeDirectory;
   ensureMcp: (ref: { repoPath: string; workingDirectory: string }) => Promise<void>;
   admitted: (binding: OpenCodeSessionBinding) => void;
+  projectHistory: (
+    sessionID: string,
+    messages: SessionMessageInfo[],
+  ) => AgentSessionHistoryMessage[];
 };
 
 const nativeModelSelection = (model: AgentModelSelection): ModelRef => {
@@ -622,7 +628,10 @@ export class OpencodeSdkAdapter {
   async loadSessionHistory(input: LoadAgentSessionHistoryInput) {
     const detail = await this.readNativeSession(input, "read history");
     return nativeRequest(input, "read history", async () => {
-      const history = projectMessages(await readOpenCodeTranscript(this.client, detail));
+      const history = this.hooks.projectHistory(
+        detail.id,
+        await readOpenCodeTranscript(this.client, detail),
+      );
       if (detail.fork)
         history.unshift({
           role: "system",

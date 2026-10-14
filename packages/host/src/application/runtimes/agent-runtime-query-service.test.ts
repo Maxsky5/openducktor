@@ -462,6 +462,9 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
           Effect.runPromise(h.worktreeReads.runWorktreeRead(directory, Effect.promise(read))),
         ensureMcp: async () => {},
         admitted: () => {},
+        projectHistory: () => {
+          throw new Error("History must use the prepared runtime");
+        },
       },
     );
     controller.client.event.subscribe = ({ signal } = {}) => ({

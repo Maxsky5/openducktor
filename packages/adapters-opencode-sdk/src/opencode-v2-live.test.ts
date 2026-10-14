@@ -3104,19 +3104,7 @@ describe("OpenCode V2 live observation", () => {
             signal.event.type === "session_policy_notice" &&
             signal.event.messageId === "msg_result",
         ),
-      ).toEqual([
-        {
-          type: "session_event",
-          externalSessionId: ref.externalSessionId,
-          event: {
-            type: "session_policy_notice",
-            externalSessionId: ref.externalSessionId,
-            messageId: "msg_result",
-            message: "Native child result",
-            timestamp: new Date(10).toISOString(),
-          },
-        },
-      ]);
+      ).toEqual([]);
       expect(
         signals
           .filter(
@@ -3682,8 +3670,7 @@ describe("OpenCode V2 live observation", () => {
                   data: { ...data, id: "call_next", text: '{"agent":"research"}' },
                 },
               ];
-      const partIds =
-        kind === "tool.input" ? ["call_next", "call_next:subagent"] : [`msg_native:${kind}:1`];
+      const partIds = kind === "tool.input" ? ["call_next:subagent"] : [`msg_native:${kind}:1`];
       for (const [index, update] of updates.entries()) {
         const events = projector.apply(update);
         expect(events.map((event) => event.type)).toEqual(partIds.map(() => "assistant_part"));
@@ -3694,14 +3681,14 @@ describe("OpenCode V2 live observation", () => {
           timestamp: new Date(2).toISOString(),
           part:
             kind === "tool.input"
-              ? { status: "pending", inputStreaming: index < 2 }
+              ? { kind: "subagent", status: "pending" }
               : {
                   text: index === 0 ? "" : `Next ${kind}.`,
                   completed: kind === "reasoning" && index === 2,
                 },
         });
         if (kind === "tool.input" && index === 2)
-          expect(events[0]).toMatchObject({ part: { input: { agent: "research" } } });
+          expect(events[0]).toMatchObject({ part: { agent: "research" } });
       }
       const restored = projector.snapshotEvents(ref.externalSessionId);
       expect(restored.map((event) => event.type === "assistant_part" && event.part.partId)).toEqual(
@@ -4234,17 +4221,125 @@ describe("OpenCode V2 live observation", () => {
       { part: { kind: "tool", status: "running", metadata: { title: "Opening file" } } },
     ]);
   });
+  test("keeps a running foreground child link when history omits live tool progress", async () => {
+    const message: SessionMessageInfo = {
+      id: "msg_foreground",
+      type: "assistant",
+      time: { created: 2 },
+      agent: "build",
+      model,
+      content: [
+        {
+          type: "tool",
+          id: "call_foreground",
+          name: "subagent",
+          time: { created: 3, ran: 4 },
+          state: {
+            status: "running",
+            input: { agent: "general", description: "Check source", prompt: "Check source" },
+            metadata: {},
+          },
+        },
+      ],
+    };
+    const delayedHistory = Promise.withResolvers<Response>();
+    const historyStarted = Promise.withResolvers<void>();
+    let delayHistory = false;
+    const fixture = prepareFixture(({ url }) => {
+      if (!url.pathname.endsWith("/message")) return undefined;
+      if (!delayHistory) return cursorPage([message]);
+      historyStarted.resolve();
+      return delayedHistory.promise;
+    });
+    const runtime = await fixture.prepare();
+    const observed = Promise.withResolvers<void>();
+    const completed = Promise.withResolvers<void>();
+    try {
+      await runtime.connection.readSessionSources(ref.repoPath, [
+        { ...ref, sessionScope: { kind: "repository" } },
+      ]);
+      await runtime.startForwarding((signal) => {
+        if (signal.type === "fault" || signal.type === "session_fault")
+          observed.reject(new Error(signal.message));
+        if (
+          signal.type === "session_event" &&
+          signal.event.type === "assistant_part" &&
+          signal.event.part.kind === "subagent" &&
+          signal.event.part.externalSessionId === "ses_child"
+        ) {
+          if (signal.event.part.status === "completed") completed.resolve();
+          else {
+            expect(signal.event.part).toMatchObject({
+              status: "running",
+              executionMode: "foreground",
+            });
+            observed.resolve();
+          }
+        }
+      });
+      fixture.channel.push({
+        id: "evt_foreground_progress",
+        type: "session.tool.progress",
+        created: 5,
+        data: {
+          sessionID: ref.externalSessionId,
+          assistantMessageID: message.id,
+          id: "call_foreground",
+          metadata: { sessionID: "ses_child", status: "running" },
+        },
+      });
+      await observed.promise;
+      const history = await runtime.queries.loadSessionHistory(ref);
+      expect(history[0]?.parts.find((part) => part.kind === "subagent")).toMatchObject({
+        externalSessionId: "ses_child",
+        status: "running",
+        executionMode: "foreground",
+      });
+      expect(history[0]?.parts.filter((part) => part.kind === "tool")).toEqual([]);
+      delayHistory = true;
+      const reading = runtime.queries.loadSessionHistory(ref);
+      await historyStarted.promise;
+      fixture.channel.push({
+        id: "evt_foreground_success",
+        type: "session.tool.success",
+        created: 9,
+        durable: { ...durable, version: 2 },
+        data: {
+          sessionID: ref.externalSessionId,
+          assistantMessageID: message.id,
+          id: "call_foreground",
+          content: [{ type: "text", text: "Review complete" }],
+          executed: false,
+          metadata: { sessionID: "ses_child", status: "completed" },
+        },
+      });
+      await completed.promise;
+      delayedHistory.resolve(cursorPage([message]));
+      const staleHistory = await reading;
+      expect(staleHistory[0]?.parts).toMatchObject([
+        {
+          kind: "subagent",
+          externalSessionId: "ses_child",
+          status: "completed",
+          endedAtMs: 9,
+        },
+      ]);
+    } finally {
+      delayedHistory.resolve(cursorPage([message]));
+      await runtime.release();
+    }
+  });
   test("keeps background subagents running until structured native completion", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const message = backgroundLaunch();
     projector.seed([message]);
-    expect(projectMessage(message).parts[1]).toMatchObject({
+    expect(projectMessage(message).parts[0]).toMatchObject({
       kind: "subagent",
       status: "running",
       executionMode: "background",
       externalSessionId: "ses_child",
     });
-    expect(projectMessage(message).parts[1]).not.toHaveProperty("endedAtMs");
+    expect(projectMessage(message).parts[0]).not.toHaveProperty("endedAtMs");
     expect(
       projector.apply({
         id: "evt_child_complete",
@@ -4279,28 +4374,106 @@ describe("OpenCode V2 live observation", () => {
       data: { sessionID: ref.externalSessionId, inboxID: "msg_child_complete" },
     };
     const events = projector.apply(delivery);
-    expect(events).toContainEqual({
-      type: "session_policy_notice",
-      externalSessionId: ref.externalSessionId,
-      timestamp: new Date(10).toISOString(),
-      messageId: "msg_child_complete",
-      message: "Native child result",
-    });
+    expect(events.some((event) => event.type === "session_policy_notice")).toBe(false);
     const completed = events.find((event) => event.type === "assistant_part");
     expect(completed).toMatchObject({
       part: { partId: "call_child:subagent", status: "completed", endedAtMs: 10 },
     });
-    expect(projectMessages([...projector.messages.values()])[0]?.parts[1]).toMatchObject({
+    expect(projectMessages([...projector.messages.values()])[0]?.parts[0]).toMatchObject({
       status: "completed",
       endedAtMs: 10,
     });
-    expect(projectMessages([...projector.messages.values()])[1]).toMatchObject({
-      messageId: "msg_child_complete",
-      role: "system",
-      text: "Native child result",
+    expect(projectMessages([...projector.messages.values()])).toHaveLength(1);
+    expect(projector.projectHistory([message])[0]?.parts[0]).toMatchObject({
+      status: "completed",
+      endedAtMs: 10,
     });
     expect(projector.apply(delivery)).toEqual([]);
     expect(projector.messages).toHaveProperty("size", 2);
+  });
+  test("links a continued child from settled arguments before live progress arrives", () => {
+    const projector = new OpenCodeLiveMessageProjector();
+    projector.seed([
+      {
+        id: "msg_continuation",
+        type: "assistant",
+        time: { created: 2 },
+        agent: "build",
+        model,
+        content: [
+          {
+            type: "tool",
+            id: "call_continue",
+            name: "subagent",
+            time: { created: 3 },
+            state: { status: "streaming", input: "" },
+          },
+        ],
+      },
+    ]);
+    const events = projector.apply({
+      id: "evt_continue_input",
+      created: 4,
+      type: "session.tool.input.ended",
+      durable,
+      data: {
+        sessionID: ref.externalSessionId,
+        assistantMessageID: "msg_continuation",
+        id: "call_continue",
+        text: JSON.stringify({
+          sessionID: "ses_child",
+          agent: "general",
+          description: "Continue review",
+          prompt: "Check changes",
+        }),
+      },
+    });
+    expect(events).toMatchObject([
+      {
+        part: {
+          kind: "subagent",
+          status: "pending",
+          externalSessionId: "ses_child",
+          agent: "general",
+          description: "Continue review",
+          prompt: "Check changes",
+          executionMode: "foreground",
+        },
+      },
+    ]);
+    expect(events).toHaveLength(1);
+  });
+  test("keeps the child link and cancelled state for an interrupted foreground tool", () => {
+    const history = projectMessage({
+      id: "msg_cancelled",
+      type: "assistant",
+      time: { created: 2 },
+      agent: "build",
+      model,
+      content: [
+        {
+          type: "tool",
+          id: "call_cancelled",
+          name: "subagent",
+          time: { created: 3, ran: 4, completed: 9 },
+          state: {
+            status: "error",
+            input: { agent: "general", prompt: "Check changes" },
+            error: { type: "aborted", message: "Interrupted by user" },
+            metadata: { sessionID: "ses_child", status: "running" },
+          },
+        },
+      ],
+    });
+    expect(history.parts).toMatchObject([
+      {
+        kind: "subagent",
+        status: "cancelled",
+        externalSessionId: "ses_child",
+        endedAtMs: 9,
+      },
+    ]);
+    expect(history.parts).toHaveLength(1);
   });
   test("rebuilds child completion state after reversion and reseeding", () => {
     const projector = new OpenCodeLiveMessageProjector();
@@ -4399,7 +4572,7 @@ describe("OpenCode V2 live observation", () => {
       completion("cancelled", 18, "cancelled"),
     ]);
     expect(
-      history.filter((message) => message.role === "assistant").map((message) => message.parts[1]),
+      history.filter((message) => message.role === "assistant").map((message) => message.parts[0]),
     ).toMatchObject([
       { status: "error", endedAtMs: 5 },
       { status: "completed", endedAtMs: 12 },
