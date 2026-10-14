@@ -248,6 +248,174 @@ describe("OpenCode V2 cleanup status", () => {
   );
 });
 describe("OpenCode V2 live observation", () => {
+  test("routes native background completion by admitted session instead of publisher directory", async () => {
+    const other = {
+      ...ref,
+      repoPath: "/other",
+      workingDirectory: "/other",
+      externalSessionId: "ses_other",
+    };
+    const fixture = prepareFixture(({ url, method }) => {
+      if (method === "GET" && url.pathname === "/api/session/ses_other")
+        return response(
+          session({ id: other.externalSessionId, location: { directory: "/other" } }),
+        );
+      if (url.pathname === `/api/session/${ref.externalSessionId}/message`)
+        return cursorPage([backgroundLaunch()]);
+      if (
+        url.pathname === "/api/location" &&
+        url.searchParams.get("location[directory]") === "/other"
+      )
+        return Response.json({
+          ...location,
+          directory: "/other",
+          project: { ...location.project, directory: "/other" },
+        });
+      return undefined;
+    });
+    const runtime = await fixture.prepare();
+    const signals: OpencodeSessionRuntimeSignal[] = [];
+    const observed = Promise.withResolvers<void>();
+    try {
+      for (const root of [ref, other]) {
+        const restored = await runtime.connection.readSessionSources(root.repoPath, [
+          { ...root, sessionScope: { kind: "repository" } },
+        ]);
+        expect(restored.failures).toEqual([]);
+      }
+      await runtime.startForwarding((signal) => {
+        signals.push(signal);
+        if (signal.type === "fault" || signal.type === "session_fault")
+          observed.reject(new Error(signal.message));
+        if (signal.type === "runtime_notice" && signal.message === "Completion observed")
+          observed.resolve();
+      });
+      // Native background jobs publish with their cached directory, not the parent's location.
+      fixture.channel.push({
+        id: "evt_background_completion",
+        type: "session.inbox.enqueued",
+        created: 10,
+        durable,
+        location: { directory: other.workingDirectory },
+        data: {
+          sessionID: ref.externalSessionId,
+          inboxID: "msg_background_completion",
+          item: {
+            type: "synthetic",
+            delivery: "steer",
+            payload: {
+              text: "Native child finished",
+              metadata: { source: "subagent", childID: "ses_child", state: "completed" },
+            },
+          },
+        },
+      });
+      fixture.channel.push({
+        id: "evt_background_delivered",
+        type: "session.inbox.delivered",
+        created: 11,
+        durable: { ...durable, seq: 2 },
+        data: { sessionID: ref.externalSessionId, inboxID: "msg_background_completion" },
+      });
+      fixture.channel.push({
+        id: "evt_other_started",
+        type: "session.execution.started",
+        created: 12,
+        location: { directory: ref.workingDirectory },
+        data: { sessionID: other.externalSessionId },
+      });
+      fixture.channel.push({
+        id: "evt_unadmitted_started",
+        type: "session.execution.started",
+        location: { directory: ref.workingDirectory },
+        data: { sessionID: "ses_unadmitted" },
+      });
+      fixture.channel.push({
+        id: "evt_completion_observed",
+        type: "tui.toast.show",
+        data: { message: "Completion observed", variant: "warning" },
+      });
+      await observed.promise;
+      expect(signals).toContainEqual(
+        expect.objectContaining({
+          type: "session_event",
+          externalSessionId: ref.externalSessionId,
+          event: expect.objectContaining({
+            type: "assistant_part",
+            part: expect.objectContaining({ kind: "subagent", status: "completed" }),
+          }),
+        }),
+      );
+      expect(signals).toContainEqual(
+        expect.objectContaining({
+          type: "session_event",
+          externalSessionId: other.externalSessionId,
+          event: expect.objectContaining({
+            type: "session_status",
+            status: { type: "busy", message: null },
+          }),
+        }),
+      );
+      expect(
+        signals.some(
+          (signal) =>
+            "externalSessionId" in signal && signal.externalSessionId === "ses_unadmitted",
+        ),
+      ).toBe(false);
+      for (const root of [ref, other])
+        expect(
+          await runtime.connection.updateSessionTitle({ ...root, title: "Still connected" }),
+        ).toMatchObject({ status: "renamed" });
+    } finally {
+      await runtime.release();
+    }
+  });
+
+  test.each(["session.created", "session.moved"] as const)(
+    "rejects an authoritative directory change in %s even without a publisher location",
+    async (type) => {
+      const fixture = prepareFixture();
+      const runtime = await fixture.prepare();
+      const failed = Promise.withResolvers<OpencodeSessionRuntimeSignal>();
+      try {
+        await runtime.connection.readSessionSources(ref.repoPath, [
+          { ...ref, sessionScope: { kind: "repository" } },
+        ]);
+        await runtime.startForwarding((signal) => {
+          if (signal.type === "fault" || signal.type === "session_fault") failed.resolve(signal);
+          if (signal.type === "runtime_notice")
+            failed.reject(new Error("Directory change was accepted"));
+        });
+        fixture.channel.push(
+          type === "session.created"
+            ? sessionCreated(session({ location: { directory: "/moved" } }))
+            : {
+                id: "evt_moved",
+                type,
+                created: 10,
+                durable,
+                data: {
+                  sessionID: ref.externalSessionId,
+                  projectID: "project-2",
+                  location: { directory: "/moved" },
+                },
+              },
+        );
+        fixture.channel.push({
+          id: "evt_move_observed",
+          type: "tui.toast.show",
+          data: { message: "Directory change observed", variant: "warning" },
+        });
+        expect(await failed.promise).toMatchObject({
+          type: "fault",
+          runtimeOperationFailure: { ...ref, code: "identity_mismatch" },
+        });
+      } finally {
+        await runtime.release();
+      }
+    },
+  );
+
   test("forwards global command and directory skill updates without admitted conversations", async () => {
     const fixture = prepareFixture();
     const runtime = await fixture.prepare();
@@ -3233,9 +3401,13 @@ describe("OpenCode V2 live observation", () => {
           fixture.channel.push({
             id: "evt_wrong",
             created: 5,
-            type: "session.idle",
-            location: { directory: "/wrong" },
-            data: { sessionID: ref.externalSessionId },
+            type: "session.moved",
+            durable,
+            data: {
+              sessionID: ref.externalSessionId,
+              projectID: "project-2",
+              location: { directory: "/wrong" },
+            },
           });
         await released;
         expect(signals.filter((signal) => signal.type === "runtime_notice")).toHaveLength(1);

@@ -262,6 +262,8 @@ OpenCode root creation and fork setup write the configured workflow role prompt 
 
 Native OpenCode subagents, nested subagents, and custom command children use their native agent configuration and instructions. OpenDucktor does not copy a parent workflow prompt into them or require an OpenDucktor instruction entry before they run. The parent agent chooses which instructions to include in each delegation prompt. Native children inherit session permissions and metadata at creation. OpenDucktor keeps the parent's task and role association and applies its mandatory permission controls when it attaches a child. A child setup failure reports a fault for the registered parent and keeps other sessions active.
 
+Route native OpenCode session events by their admitted session ID. The event envelope's `location` comes from the publisher's context. A background completion can carry another directory. Verify session identity from native session reads and the `location` payload of `session.created` and `session.moved`. A changed session directory fails observation; a different publisher directory does not change the session association.
+
 OpenCode supports custom slash commands in every session, typed `$` skill references, subagent references, and current context usage from the last measured assistant message. Native todos and direct interrupted-turn continuation remain unavailable. Profile names remain visible. OpenDucktor uses theme colors instead of native profile colors.
 
 The workflow tool list covers only `odt_*` operations. Native tools keep their configured permissions. In OpenCode V2, call advertised native tools such as `shell` and `subagent` directly. Call only tools from the Code Mode catalog through `execute`.
