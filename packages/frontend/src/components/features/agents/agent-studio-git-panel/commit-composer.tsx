@@ -5,7 +5,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { GitCommitMode } from "@/features/agent-studio-git";
 import { isApplePlatform } from "@/lib/steer-shortcut";
 import { cn } from "@/lib/utils";
-import { clearSubmittedCommitMessage, useGitPanelContextView } from "./git-panel-view-store";
+import {
+  clearSubmittedCommitMessage,
+  useGitPanelViewField,
+  useGitPanelViewUpdate,
+} from "./git-panel-view-store";
 
 export type CommitComposerProps = {
   /** The Git context that owns the draft. */
@@ -42,9 +46,10 @@ export const CommitComposer = memo(function CommitComposer({
   commitError,
   commit,
 }: CommitComposerProps): ReactElement {
-  const { view, updateView } = useGitPanelContextView(contextKey);
+  // The composer reads only its draft, so other view changes do not render it.
+  const message = useGitPanelViewField(contextKey, "commitMessage");
+  const updateView = useGitPanelViewUpdate(contextKey);
   const hintId = `${useId()}-hint`;
-  const message = view.commitMessage;
   const isCommitting = committingMode !== null;
   const modifier = isApplePlatform() ? "⌘" : "Ctrl";
   const input: CommitInput = {
@@ -92,7 +97,10 @@ export const CommitComposer = memo(function CommitComposer({
           className="h-full min-w-0 flex-1 px-2.5 text-xs"
           data-testid="agent-studio-git-commit-message-input"
           onKeyDown={onKeyDown}
-          onChange={(event) => updateView({ commitMessage: event.currentTarget.value })}
+          onChange={(event) => {
+            const commitMessage = event.currentTarget.value;
+            updateView(() => ({ commitMessage }));
+          }}
         />
         <Tooltip>
           <TooltipTrigger asChild>

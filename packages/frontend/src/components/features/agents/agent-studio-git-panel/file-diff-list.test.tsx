@@ -11,7 +11,7 @@ import {
 } from "@/state/use-inline-comment-draft-store";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
-import { FileDiffList } from "./file-diff-list";
+import { FileDiffListWithHeader } from "./file-diff-list";
 import {
   COMMENTABLE_PATCH,
   installMeasuredRows,
@@ -46,6 +46,7 @@ const LIST_VIEW_PROPS = {
   listLabel: "Changed files",
   onViewFile: null,
   rowActions: null,
+  changingKey: null,
 } as const;
 
 const commentableFileDiff = (file: string): GitFileDiff => ({
@@ -64,7 +65,6 @@ function createRowActions(
   const actions: GitFileRowActions = {
     group,
     disabledReason: null,
-    changingKey: null,
     onChange,
     ...overrides,
   };
@@ -120,7 +120,7 @@ function FileDiffListHarness({
 
   return (
     <TooltipProvider>
-      <FileDiffList
+      <FileDiffListWithHeader
         {...LIST_VIEW_PROPS}
         fileDiffs={[{ file, type, additions: 2, deletions: 1, diff }]}
         diffScope={diffScope}
@@ -166,7 +166,7 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
       >
         Switch scope
       </button>
-      <FileDiffList
+      <FileDiffListWithHeader
         {...LIST_VIEW_PROPS}
         fileDiffs={[commentableFileDiff("src/example.ts")]}
         diffScope={diffScope}
@@ -207,7 +207,7 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
       >
         Switch owner
       </button>
-      <FileDiffList
+      <FileDiffListWithHeader
         {...LIST_VIEW_PROPS}
         fileDiffs={[commentableFileDiff("src/example.ts")]}
         diffScope="uncommitted"
@@ -251,7 +251,7 @@ function LargeFileDiffListHarness(): ReactElement {
         Shorten list
       </button>
       <div className="h-[400px]">
-        <FileDiffList
+        <FileDiffListWithHeader
           {...LIST_VIEW_PROPS}
           fileDiffs={fileDiffs}
           diffScope="uncommitted"
@@ -321,7 +321,7 @@ function ResizingFileDiffListHarness({ fileCount = 20 } = {}): ReactElement {
         Switch task files
       </button>
       <div className="h-[400px]">
-        <FileDiffList
+        <FileDiffListWithHeader
           {...LIST_VIEW_PROPS}
           fileDiffs={fileDiffs}
           diffScope="uncommitted"

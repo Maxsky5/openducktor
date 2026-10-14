@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
 import { worktreeBranchQueryOptions } from "@/state/queries/git";
 import { useSessionComparison } from "../agent-studio-git/use-session-comparison";
-import { buildComparisonView } from "../agent-studio-git/session-comparison-view";
+import { useComparisonView } from "../agent-studio-git/session-comparison-view";
 import { hostClient } from "@/lib/host-client";
 import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
 import {
@@ -150,7 +150,7 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     cacheKey: comparison.cacheKey,
     enabled: !worktree.shouldBlockDiffLoading,
   });
-  const comparisonView = buildComparisonView(reads, comparison, {
+  const comparisonView = useComparisonView(reads, comparison, {
     repoPath,
     worktreePath: worktree.path,
     label: taskComparisonLabel(gitPanelContextMode, comparison.target, taskTargetBranchState),
@@ -370,9 +370,12 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
   };
 }
 
+/** One object for the upstream target, so the comparison inputs stay stable across renders. */
+const UPSTREAM_TARGET: GitTargetBranch = { branch: UPSTREAM_TARGET_BRANCH };
+
 function taskComparisonTarget(input: TaskComparisonInput) {
   if (input.contextMode === "repository") {
-    return { target: { branch: UPSTREAM_TARGET_BRANCH }, targetError: null, needsDefault: false };
+    return { target: UPSTREAM_TARGET, targetError: null, needsDefault: false };
   }
   if (input.savedTarget || input.repoSettings !== null) {
     return {

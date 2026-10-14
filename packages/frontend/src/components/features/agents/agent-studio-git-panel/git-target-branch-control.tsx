@@ -20,28 +20,54 @@ type EditorState = { context: string } & (
     }
 );
 
-export type GitTargetBranchControlProps = {
+export type GitTargetBranchSelectorProps = {
   branch: string;
   control: Pick<
     AgentStudioGitPanelModel,
     "targetBranchHelpText" | "targetBranchesPending" | "targetBranchesError" | "retryTargetBranches"
   >;
-  canEditTargetBranch: boolean;
   targetBranchLabel: string;
   targetBranchOptions: NonNullable<AgentStudioGitPanelModel["targetBranchOptions"]>;
   targetBranchSelectionValue: string;
   onUpdateTargetBranch: AgentStudioGitPanelModel["onUpdateTargetBranch"];
 };
 
-export function GitTargetBranchControl({
+function TargetChipContent({ label, labelId }: { label: string; labelId?: string }): ReactElement {
+  return (
+    <>
+      <Target className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span id={labelId} className="sr-only">
+        Target branch:
+      </span>
+      <span className="min-w-0 truncate" data-testid="agent-studio-git-target-branch">
+        {label}
+      </span>
+    </>
+  );
+}
+
+/** The target branch when the panel cannot change it. */
+export function GitTargetBranchChip({ label }: { label: string }): ReactElement {
+  return (
+    <span
+      className={cn(BRANCH_CHIP_CLASS_NAME, "cursor-default")}
+      title={`Compare with: ${label}`}
+      data-testid="agent-studio-git-target-branch-display-row"
+    >
+      <TargetChipContent label={label} />
+    </span>
+  );
+}
+
+/** The target branch as a chip that opens the branch list to choose another target. */
+export function GitTargetBranchSelector({
   branch,
   control,
-  canEditTargetBranch,
   targetBranchLabel,
   targetBranchOptions,
   targetBranchSelectionValue,
   onUpdateTargetBranch,
-}: GitTargetBranchControlProps): ReactElement {
+}: GitTargetBranchSelectorProps): ReactElement {
   const labelId = useId();
   const context = JSON.stringify([branch, targetBranchSelectionValue]);
   const [editor, setEditor] = useState<EditorState>({
@@ -57,7 +83,7 @@ export function GitTargetBranchControl({
   useLayoutEffect(() => {
     if (saving.current?.context !== context) saving.current = null;
   }, [context]);
-  const isEditing = canEditTargetBranch && editor.context === context && editor.mode === "editing";
+  const isEditing = editor.context === context && editor.mode === "editing";
   const isSaving = isEditing ? editor.isSaving : false;
   const value = isEditing ? editor.draft : targetBranchSelectionValue;
   const disableOptions =
@@ -69,7 +95,7 @@ export function GitTargetBranchControl({
       disabled: disableOptions || option.disabled === true,
     }));
   const setOpen = (open: boolean): void => {
-    if (!canEditTargetBranch || saving.current?.context === context) {
+    if (saving.current?.context === context) {
       return;
     }
 
@@ -118,28 +144,6 @@ export function GitTargetBranchControl({
     );
   };
 
-  const chipContent = (
-    <>
-      <Target className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span id={labelId} className="sr-only">
-        Target branch:
-      </span>
-      <span className="min-w-0 truncate" data-testid="agent-studio-git-target-branch">
-        {targetBranchLabel}
-      </span>
-    </>
-  );
-  if (!canEditTargetBranch) {
-    return (
-      <span
-        className={cn(BRANCH_CHIP_CLASS_NAME, "cursor-default")}
-        title={`Compare with: ${targetBranchLabel}`}
-        data-testid="agent-studio-git-target-branch-display-row"
-      >
-        {chipContent}
-      </span>
-    );
-  }
   return (
     <BranchSelector
       value={value}
@@ -160,7 +164,7 @@ export function GitTargetBranchControl({
           disabled={isSaving}
           data-testid="agent-studio-git-target-branch-edit"
         >
-          {chipContent}
+          <TargetChipContent label={targetBranchLabel} labelId={labelId} />
           {isSaving ? (
             <LoaderCircle className="size-3 shrink-0 animate-spin" aria-hidden="true" />
           ) : (
@@ -188,7 +192,7 @@ function GitTargetBranchEditorHelp({
   select,
   cancel,
 }: {
-  control: GitTargetBranchControlProps["control"];
+  control: GitTargetBranchSelectorProps["control"];
   editor: Extract<EditorState, { mode: "editing" }> | null;
   select: (value: string) => void;
   cancel: () => void;

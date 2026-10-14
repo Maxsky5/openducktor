@@ -19,7 +19,7 @@ import {
 } from "@/state/use-inline-comment-draft-store";
 import { FileDiffList } from "./file-diff-list";
 import { FileListHeader } from "./file-list-header";
-import { searchFiles } from "./file-list-search";
+import { type FileSearchMatch, searchFiles } from "./file-list-search";
 import type { FileListViewMode } from "./file-list-view-preference";
 import { GROUP_TOGGLE, type GitFileRowActions, listFileKey } from "./git-file-row-actions";
 import { type LocalCommentGroup, placeLocalComments } from "./git-local-comment-placement";
@@ -101,7 +101,7 @@ export const GitLocalChangesView = memo(function GitLocalChangesView({
     () => new Set(localChanges.conflicted.fileStatuses.map((status) => status.path)),
     [localChanges.conflicted.fileStatuses],
   );
-  const header = useLocalHeaderCounts(sections, search.query);
+  const header = useLocalSearch(sections, search.query);
   const collapsed = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
   const sectionOf = (group: LocalCommentGroup): GroupSection | undefined =>
     sections.find((section) => section.group === group);
@@ -112,6 +112,7 @@ export const GitLocalChangesView = memo(function GitLocalChangesView({
     section ? (
       <LocalGroupSection
         section={section}
+        matches={header.matchesByGroup.get(section.group) ?? NO_MATCHES}
         subjectKey={subjectKey}
         collapsed={section.group !== "conflicted" && collapsed.has(section.group)}
         onToggleGroup={onToggleGroup}
@@ -120,9 +121,7 @@ export const GitLocalChangesView = memo(function GitLocalChangesView({
         commentPlaceholder={commentPlaceholder}
         conflictedFiles={section.group === "conflicted" ? conflictedFiles : NO_FILES}
         diffStyle={diffStyle}
-        setDiffStyle={setDiffStyle}
         viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
         listState={listStates[section.group]}
         expandedFiles={expandedFiles}
         onToggleFile={onToggleFile}
@@ -240,31 +239,53 @@ function LocalGroupPanes({
   );
 }
 
-function useLocalHeaderCounts(sections: GroupSection[], query: string) {
-  return useMemo(() => {
+const NO_MATCHES: FileSearchMatch[] = [];
+
+/**
+ * One search of every group. The shared toolbar counts its results, and each group list shows
+ * its own matches, so no list searches again.
+ */
+function useLocalSearch(sections: GroupSection[], query: string) {
+  const fileCount = useMemo(() => {
     const paths = new Set<string>();
+    for (const { fileDiffs } of sections) for (const diff of fileDiffs) paths.add(diff.file);
+    return paths.size;
+  }, [sections]);
+  const search = useMemo(() => {
+    const matchesByGroup = new Map<LocalCommentGroup, FileSearchMatch[]>();
     const matchedPaths = new Set<string>();
     let additions = 0;
     let deletions = 0;
-    for (const { fileDiffs } of sections) {
-      for (const diff of fileDiffs) paths.add(diff.file);
-      for (const { diff } of searchFiles(fileDiffs, query)) {
+    for (const { group, fileDiffs } of sections) {
+      const matches = searchFiles(fileDiffs, query);
+      matchesByGroup.set(group, matches);
+      for (const { diff } of matches) {
         matchedPaths.add(diff.file);
         additions += diff.additions;
         deletions += diff.deletions;
       }
     }
-    return { fileCount: paths.size, matchCount: matchedPaths.size, additions, deletions };
+    return { matchesByGroup, matchCount: matchedPaths.size, additions, deletions };
   }, [query, sections]);
+  return { fileCount, ...search };
 }
 
 type LocalGroupSectionProps = Omit<
   GitLocalChangesViewProps,
-  "collapsedGroups" | "expandedFiles" | "search" | "listStates" | "subjectKey" | "localChanges"
+  | "collapsedGroups"
+  | "expandedFiles"
+  | "search"
+  | "listStates"
+  | "subjectKey"
+  | "localChanges"
+  | "setDiffStyle"
+  | "onViewModeChange"
 > & {
   subjectKey: string;
   listState: FileListState;
   section: GroupSection;
+  /** The files of the group that the search shows. */
+  matches: FileSearchMatch[];
   collapsed: boolean;
   commentsByFile: ReadonlyMap<string, InlineCommentDraft[]>;
   conflictedFiles: ReadonlySet<string>;
@@ -281,9 +302,8 @@ function LocalGroupSection({
   commentPlaceholder,
   conflictedFiles,
   diffStyle,
-  setDiffStyle,
   viewMode,
-  onViewModeChange,
+  matches,
   listState,
   expandedFiles,
   onToggleFile,
@@ -295,15 +315,11 @@ function LocalGroupSection({
 }: LocalGroupSectionProps): ReactElement {
   const { group, fileDiffs } = section;
   const changeGroup = group === "conflicted" ? null : group;
+  // The running change stays out of this object, so its start and end do not draw every row.
   const rowActions = useMemo<GitFileRowActions | null>(() => {
     if (!changeGroup || !onChange) return null;
-    return {
-      group: changeGroup,
-      disabledReason: changeDisabledReason,
-      changingKey,
-      onChange,
-    };
-  }, [changeDisabledReason, changeGroup, changingKey, onChange]);
+    return { group: changeGroup, disabledReason: changeDisabledReason, onChange };
+  }, [changeDisabledReason, changeGroup, onChange]);
   const groupExpandedFiles = useMemo(() => {
     const files = new Set<string>();
     for (const diff of fileDiffs) {
@@ -340,7 +356,12 @@ function LocalGroupSection({
           onToggle={() => changeGroup && onToggleGroup(changeGroup)}
         />
         {changeGroup && rowActions && hasFiles ? (
-          <GroupAction group={changeGroup} count={fileDiffs.length} rowActions={rowActions} />
+          <GroupAction
+            group={changeGroup}
+            count={fileDiffs.length}
+            rowActions={rowActions}
+            changingKey={changingKey}
+          />
         ) : null}
       </div>
       {isOpen ? (
@@ -356,16 +377,15 @@ function LocalGroupSection({
               commentsByFile={commentsByFile}
               conflictedFiles={conflictedFiles}
               diffStyle={diffStyle}
-              setDiffStyle={setDiffStyle}
               viewMode={viewMode}
-              onViewModeChange={onViewModeChange}
-              showHeader={false}
+              matches={matches}
               listState={listState}
               expandedFiles={groupExpandedFiles}
               onToggleFile={toggleFile}
               onViewFile={onViewFile}
               preloadLimit={preloadLimit}
               rowActions={rowActions}
+              changingKey={changingKey}
             />
           ) : (
             <p
@@ -438,14 +458,16 @@ function GroupAction({
   group,
   count,
   rowActions,
+  changingKey,
 }: {
   group: GitChangeGroup;
   count: number;
   rowActions: GitFileRowActions;
+  changingKey: string | null;
 }): ReactElement {
   const { action, label: toggleLabel, icon: Icon } = GROUP_TOGGLE[group];
   const intent: GitChangeIntent = { action, group, selection: { kind: "all" } };
-  const isPending = rowActions.changingKey === gitChangeIntentKey(intent);
+  const isPending = changingKey === gitChangeIntentKey(intent);
   const files = `${count} ${group} file${count === 1 ? "" : "s"}`;
   const label = `${toggleLabel} all`;
   return (

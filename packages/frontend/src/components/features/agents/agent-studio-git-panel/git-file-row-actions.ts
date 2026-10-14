@@ -1,13 +1,12 @@
 import type { GitFileDiff, GitChangeGroup } from "@openducktor/contracts";
 import { type LucideIcon, Minus, Plus } from "lucide-react";
-import type { GitChangeIntent } from "@/features/agent-studio-git";
+import { type GitChangeIntent, gitChangeIntentKey } from "@/features/agent-studio-git";
 
 /** Write actions of one local group. Branch changes and conflicts have none. */
 export type GitFileRowActions = {
   group: GitChangeGroup;
   /** Why the actions cannot run now, or null when they can. */
   disabledReason: string | null;
-  changingKey: string | null;
   onChange: (intent: GitChangeIntent) => void;
 };
 
@@ -54,6 +53,22 @@ export const fileIntent = (
   action: GitChangeIntent["action"],
   filePath: string,
 ): GitChangeIntent => ({ action, group: actions.group, selection: { kind: "file", filePath } });
+
+/**
+ * The file action of `filePath` that runs now, or null. A row compares this one value, so a change
+ * of another file does not draw the row again.
+ */
+export function runningFileAction(
+  group: GitChangeGroup,
+  filePath: string,
+  changingKey: string | null,
+): GitChangeIntent["action"] | null {
+  if (changingKey === null) return null;
+  for (const action of [GROUP_TOGGLE[group].action, "discard"] as const) {
+    if (gitChangeIntentKey(fileIntent({ group }, action, filePath)) === changingKey) return action;
+  }
+  return null;
+}
 
 export const discardFileLabel = (group: GitChangeGroup): string =>
   group === "staged" ? "Discard staged changes" : "Discard unstaged changes";

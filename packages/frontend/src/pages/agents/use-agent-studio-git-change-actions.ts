@@ -93,7 +93,8 @@ export function useAgentStudioGitChangeActions({
   /** Ends the changes that wait in the queue, so none of them runs. */
   const endQueuedChanges = useCallback((): void => {
     generation.current += 1;
-    setQueued([]);
+    // An empty queue keeps its state, so a new directory adds no render.
+    setQueued((entries) => (entries.length === 0 ? entries : []));
   }, []);
   useLayoutEffect(() => {
     endQueuedChanges();

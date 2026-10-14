@@ -5,6 +5,7 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -19,7 +20,8 @@ import {
   useHistoryColumnsStore,
   visibleHistoryColumns,
 } from "./git-history-columns";
-import { ROW_HEIGHT, useGraphView } from "./git-history-graph";
+import { HistoryCommitPopover } from "./git-history-commit-details";
+import { GRAPH_OFFSET_PROPERTY, ROW_HEIGHT, useGraphView } from "./git-history-graph";
 import { HistoryColumnsHeader } from "./git-history-header";
 import { type GraphLayout, layoutHistoryGraph } from "./git-history-graph-model";
 import {
@@ -91,6 +93,29 @@ function GitHistoryComparisonView({
   );
   const layout = useMemo(() => layoutHistoryGraph(commits), [commits]);
   const currentLabel = checkout.detached ? "Detached HEAD" : (checkout.name ?? "Current branch");
+  const { fetchNextPage } = history;
+  // A page load during a refresh joins that refresh instead of cancelling it.
+  const loadNext = useCallback(() => void fetchNextPage({ cancelRefetch: false }), [fetchNextPage]);
+  // A stable footer keeps the rows of the list from rendering again for an unrelated change.
+  const footer = useMemo(
+    () =>
+      historyFooter({
+        isFetchingNextPage: history.isFetchingNextPage,
+        isFetchNextPageError: history.isFetchNextPageError,
+        isRefetchError: history.isRefetchError,
+        hasNextPage: history.hasNextPage,
+        error: history.error,
+        loadNext,
+      }),
+    [
+      history.error,
+      history.hasNextPage,
+      history.isFetchNextPageError,
+      history.isFetchingNextPage,
+      history.isRefetchError,
+      loadNext,
+    ],
+  );
 
   if (history.isPending) return <HistoryLoading label="Loading History..." />;
   if (history.isError && !firstPage) {
@@ -138,15 +163,6 @@ function GitHistoryComparisonView({
     );
   }
 
-  const footer = historyFooter({
-    isFetchingNextPage: history.isFetchingNextPage,
-    isFetchNextPageError: history.isFetchNextPageError,
-    isRefetchError: history.isRefetchError,
-    hasNextPage: history.hasNextPage,
-    error: history.error,
-    // A page load during a refresh joins that refresh instead of cancelling it.
-    loadNext: () => void history.fetchNextPage({ cancelRefetch: false }),
-  });
   return (
     <HistoryCommitList
       comparison={firstPage.comparison}
@@ -154,6 +170,8 @@ function GitHistoryComparisonView({
       currentLabel={currentLabel}
       targetLabel={targetLabel}
       footer={footer}
+      // Ages count from the read, so rendering stays pure and the rows stay stable.
+      nowMs={history.dataUpdatedAt}
       refreshFailure={refreshFailure}
     />
   );
@@ -179,6 +197,7 @@ function HistoryCommitList({
   currentLabel,
   targetLabel,
   footer,
+  nowMs,
   refreshFailure,
 }: {
   comparison: GitHistoryComparison;
@@ -186,13 +205,45 @@ function HistoryCommitList({
   currentLabel: string;
   targetLabel: string;
   footer: HistoryFooter;
+  nowMs: number;
   refreshFailure: ReactNode;
 }): ReactElement {
   const [measure, rowWidth] = useObservedWidth();
-  const { setOffset, scroller, ...graph } = useGraphView(layout.laneCount, rowWidth);
+  const { graph, scroller } = useGraphView(layout.laneCount, rowWidth);
   const order = useHistoryColumnsStore((state) => state.order);
   const hidden = useHistoryColumnsStore((state) => state.hidden);
   const columns = useMemo(() => visibleHistoryColumns({ order, hidden }), [hidden, order]);
+  const [selectedOid, setSelectedOid] = useState<string | null>(null);
+  const selectedButton = useRef<HTMLButtonElement | null>(null);
+  const onSelect = useCallback((oid: string, button: HTMLButtonElement) => {
+    selectedButton.current = button;
+    setSelectedOid((current) => (current === oid ? null : oid));
+  }, []);
+  const closeDetails = useCallback(() => setSelectedOid(null), []);
+  const selectedRow = selectedOid
+    ? (layout.rows.find((row) => row.commit.oid === selectedOid) ?? null)
+    : null;
+  const rowsLength = layout.rows.length;
+  const onRowsRendered = useCallback(
+    ({ stopIndex }: { stopIndex: number }) => {
+      if (stopIndex >= rowsLength - 10 && footer.kind === "more") footer.load();
+    },
+    [footer, rowsLength],
+  );
+  // The rows read the sideways scroll from CSS, so a scroll does not render them again.
+  const showGraphOffset = useCallback(
+    (scrollLeft: number) =>
+      measure.current?.style.setProperty(GRAPH_OFFSET_PROPERTY, `${scrollLeft}px`),
+    [measure],
+  );
+  const attachScroller = useCallback(
+    (element: HTMLDivElement | null) => {
+      scroller.current = element;
+      // A new scroller starts at its own position, not at the offset of an old one.
+      if (element) showGraphOffset(element.scrollLeft);
+    },
+    [scroller, showGraphOffset],
+  );
   return (
     <div
       ref={measure}
@@ -212,20 +263,30 @@ function HistoryCommitList({
           rows: layout.rows,
           graph,
           comparison,
-          currentLabel,
           targetLabel,
           footer,
-          nowMs: Date.now(),
+          nowMs,
           columns,
+          selectedOid,
+          onSelect,
         }}
         overscanCount={8}
-        onRowsRendered={({ stopIndex }) => {
-          if (stopIndex >= layout.rows.length - 10 && footer.kind === "more") footer.load();
-        }}
+        onRowsRendered={onRowsRendered}
+        // An open card follows its row, so a scroll closes it before its row leaves the view.
+        onScroll={selectedOid ? closeDetails : undefined}
+      />
+      <HistoryCommitPopover
+        row={selectedRow}
+        anchor={selectedButton}
+        comparison={comparison}
+        currentLabel={currentLabel}
+        targetLabel={targetLabel}
+        nowMs={nowMs}
+        onClose={closeDetails}
       />
       {columns.includes("graph") && graph.viewWidth < graph.width ? (
         <div
-          ref={scroller}
+          ref={attachScroller}
           role="region"
           aria-label="Commit graph lanes"
           tabIndex={0}
@@ -234,7 +295,7 @@ function HistoryCommitList({
             width: graph.viewWidth,
             marginLeft: historyColumnLeft(columns, "graph", graph.viewWidth, rowWidth),
           }}
-          onScroll={(event) => setOffset(event.currentTarget.scrollLeft)}
+          onScroll={(event) => showGraphOffset(event.currentTarget.scrollLeft)}
           data-testid="agent-studio-git-history-graph-scroll"
         >
           <div className="h-px" style={{ width: graph.width }} />

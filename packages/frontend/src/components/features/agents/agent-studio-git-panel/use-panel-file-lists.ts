@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { GitFileDiff } from "@openducktor/contracts";
 import type { AgentStudioGitPanelModel } from "./types";
 import { useFileListSearch, useFileListState } from "./use-file-list-state";
@@ -35,5 +36,10 @@ export function usePanelFileLists(model: AgentStudioGitPanelModel) {
     fileDiffs: model.scopeStatesByScope.target.fileDiffs,
     search,
   });
-  return { search, local: { unstaged, staged, conflicted }, target };
+  // Stable lists keep the memoized views from drawing again when the panel renders.
+  const localLists = useMemo(
+    () => ({ unstaged, staged, conflicted }),
+    [conflicted, staged, unstaged],
+  );
+  return useMemo(() => ({ search, local: localLists, target }), [localLists, search, target]);
 }

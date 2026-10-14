@@ -248,16 +248,20 @@ export class GitRefreshCoordinator {
     run: RefreshRun,
   ): Promise<void> {
     const { steps } = view;
-    // A slow fetch must not delay local changes, which do not depend on the remote.
-    const localRead = mode === "hard" ? startEarlyRead(steps.readLocal()) : null;
+    // Local changes read at once, so a Refresh shows them while the fetch and the check run.
+    const earlyLocal = mode === "scheduled" ? null : startEarlyRead(steps.readLocal());
+    // Local changes hold the upstream counts, so a fetch makes them read again.
+    const fetches = mode === "hard" && steps.comparison !== null;
+    const readLocal = (): Promise<void> =>
+      fetches || !earlyLocal ? steps.readLocal() : earlyLocal();
     let checkFailure: { error: unknown } | null = null;
     if (steps.comparison) {
       try {
         await this.#fetch(steps.comparison, mode);
         // A fetch can outlive its view. Only the shown view checks its target again.
         if (this.#isCurrent(view, run) && (await steps.comparison.check())) {
-          // The new target starts its own reads.
-          await localRead?.();
+          // The new target starts its own reads. Local changes keep their keys, so they read here.
+          await (mode === "scheduled" ? steps.readInBackground() : readLocal());
           return;
         }
       } catch (error) {
@@ -266,8 +270,8 @@ export class GitRefreshCoordinator {
       }
     }
     const reads = this.#isCurrent(view, run)
-      ? this.#reads(steps, mode, localRead)
-      : (localRead?.() ?? Promise.resolve());
+      ? this.#reads(steps, mode, readLocal)
+      : (earlyLocal?.() ?? Promise.resolve());
     if (!checkFailure) return reads;
     // The failed check is the result. Each view keeps its own failed read until a retry.
     await Promise.allSettled([reads]);
@@ -277,15 +281,12 @@ export class GitRefreshCoordinator {
   #reads(
     steps: GitRefreshSteps,
     mode: GitDiffRefreshMode,
-    localRead: (() => Promise<void>) | null,
+    readLocal: () => Promise<void>,
   ): Promise<void> {
     if (mode === "scheduled") return steps.readInBackground();
     // A manual Refresh reports a failed History read. Other refreshes leave it to History.
     const historyFailure = mode === "hard" ? "reject" : "show";
-    return Promise.all([
-      localRead ? localRead() : steps.readLocal(),
-      steps.readComparison(historyFailure),
-    ]).then(() => undefined);
+    return Promise.all([readLocal(), steps.readComparison(historyFailure)]).then(() => undefined);
   }
 
   /** A manual fetch always runs. A scheduled fetch waits for its cooldown. */

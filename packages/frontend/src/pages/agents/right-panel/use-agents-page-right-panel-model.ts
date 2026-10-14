@@ -1,5 +1,9 @@
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
-import type { RepositoryGitProviderContext, SystemOpenInToolId } from "@openducktor/contracts";
+import type {
+  GitTargetBranch,
+  RepositoryGitProviderContext,
+  SystemOpenInToolId,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import type {
@@ -226,6 +230,15 @@ export function useAgentsPageRightPanelModel({
   const queryClient = useQueryClient();
   // A tool view is active while its tab is selected in the shown right panel.
   const { activeKind } = panel;
+  const selectedTaskId = selectedView.selectedTask?.id ?? null;
+  const applyTaskTarget = useCallback(
+    async (target: GitTargetBranch) => {
+      if (!setTaskTargetBranch || !selectedTaskId)
+        throw new Error("The task target is unavailable. Select the task again.");
+      await setTaskTargetBranch(selectedTaskId, target);
+    },
+    [selectedTaskId, setTaskTargetBranch],
+  );
   const taskTargetControl = useSessionComparisonControl({
     repoPath: activeWorkspace?.repoPath ?? "__no_repo__",
     target: buildTools.buildToolsSnapshot.comparison?.target ?? null,
@@ -233,11 +246,7 @@ export function useAgentsPageRightPanelModel({
       buildTools.buildToolsSnapshot.gitPanelContextMode === "worktree" &&
       !!setTaskTargetBranch &&
       !!selectedView.selectedTask,
-    applyTarget: async (target) => {
-      if (!setTaskTargetBranch || !selectedView.selectedTask)
-        throw new Error("The task target is unavailable. Select the task again.");
-      await setTaskTargetBranch(selectedView.selectedTask.id, target);
-    },
+    applyTarget: applyTaskTarget,
   });
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { buildToolsSnapshot, gitActions } = buildTools;

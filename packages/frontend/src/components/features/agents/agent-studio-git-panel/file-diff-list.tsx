@@ -24,7 +24,7 @@ import { buildFileTree, buildListRows, type FileListRow, flattenFileTree } from 
 import { type FileSearchMatch, searchFiles } from "./file-list-search";
 import type { FileListViewMode } from "./file-list-view-preference";
 import { rowKeyAttributes, useFileListScrollAnchor } from "./use-file-list-scroll-anchor";
-import type { GitFileRowActions } from "./git-file-row-actions";
+import { type GitFileRowActions, runningFileAction } from "./git-file-row-actions";
 import type { FileListState } from "./use-file-list-state";
 import {
   EMPTY_FILE_DIFF_ANNOTATION_STATE,
@@ -43,19 +43,18 @@ export const FileDiffList = memo(function FileDiffList({
   commentsByFile,
   conflictedFiles,
   diffStyle,
-  setDiffStyle,
   viewMode,
-  onViewModeChange,
-  showHeader = true,
+  matches,
   listState,
   expandedFiles,
   onToggleFile,
   onViewFile,
   preloadLimit,
   rowActions,
+  changingKey,
 }: FileDiffListProps): ReactElement {
   const { query } = listState;
-  const { matches, rows, totals } = useFileListRows({ fileDiffs, viewMode, listState });
+  const rows = useFileListRows({ matches, viewMode, listState });
   // Preload the files that the list shows, in their order. A search or a closed directory hides the others.
   const shownFileDiffs = useMemo(
     () => rows.flatMap((row) => (row.kind === "file" ? [row.diff] : [])),
@@ -95,6 +94,7 @@ export const FileDiffList = memo(function FileDiffList({
     onViewFile,
     onToggleDirectory: listState.toggleDirectory,
     rowActions,
+    changingKey,
     inlineCommentsByFile,
     reserveConflictSlot,
     editorStateByFile,
@@ -104,22 +104,7 @@ export const FileDiffList = memo(function FileDiffList({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
-      {showHeader ? (
-        <FileListHeader
-          fileCount={fileDiffs.length}
-          matchCount={query === "" ? null : matches.length}
-          totalAdditions={totals.additions}
-          totalDeletions={totals.deletions}
-          viewMode={viewMode}
-          onViewModeChange={onViewModeChange}
-          diffStyle={diffStyle}
-          onDiffStyleChange={setDiffStyle}
-          searchText={listState.searchText}
-          onSearchTextChange={listState.setSearchText}
-        />
-      ) : null}
-
+    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-1 flex-col overflow-hidden">
       <DiffPreloadQueue
         fileDiffs={shownFileDiffs}
         expandedFiles={expandedFiles}
@@ -188,17 +173,17 @@ type FileDiffListProps = {
   commentsByFile?: ReadonlyMap<string, InlineCommentDraft[]> | undefined;
   conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
-  setDiffStyle: (style: PierreDiffStyle) => void;
   viewMode: FileListViewMode;
-  onViewModeChange: (viewMode: FileListViewMode) => void;
-  /** The parent shows one shared toolbar for grouped lists. */
-  showHeader?: boolean;
+  /** The files that the search shows. The parent searches once for its toolbar and this list. */
+  matches: FileSearchMatch[];
   listState: FileListState;
   expandedFiles: ReadonlySet<string>;
   onToggleFile: (filePath: string) => void;
   onViewFile: ((filePath: string) => void) | null;
   preloadLimit: number;
   rowActions: GitFileRowActions | null;
+  /** The key of the change that runs now, or null. Its row shows the change as busy. */
+  changingKey: string | null;
 };
 
 type FileEditorState = { diffText: string; state: FileDiffAnnotationState };
@@ -265,6 +250,7 @@ type FileListRowProps = Pick<
   | "onToggleFile"
   | "onViewFile"
   | "rowActions"
+  | "changingKey"
 > & {
   rows: readonly FileListRow[];
   onToggleDirectory: FileListState["toggleDirectory"];
@@ -292,6 +278,7 @@ function FileListRowView({
   onViewFile,
   onToggleDirectory,
   rowActions,
+  changingKey,
   inlineCommentsByFile,
   reserveConflictSlot,
   editorStateByFile,
@@ -352,6 +339,9 @@ function FileListRowView({
         onViewFile={onViewFile}
         diffStyle={diffStyle}
         rowActions={rowActions}
+        runningAction={
+          rowActions ? runningFileAction(rowActions.group, diff.file, changingKey) : null
+        }
       />
     );
   }
@@ -376,34 +366,59 @@ const listRowKey = (index: number, { rows }: FileListRowProps): string => {
   return row.key;
 };
 
-type FileListRows = {
-  matches: FileSearchMatch[];
-  rows: readonly FileListRow[];
-  totals: { additions: number; deletions: number };
-};
-
 function useFileListRows({
-  fileDiffs,
+  matches,
   viewMode,
-  listState: { query, closedDirectories },
-}: Pick<FileDiffListProps, "fileDiffs" | "viewMode" | "listState">): FileListRows {
-  const matches = useMemo(() => searchFiles(fileDiffs, query), [fileDiffs, query]);
+  listState: { closedDirectories },
+}: Pick<FileDiffListProps, "matches" | "viewMode" | "listState">): readonly FileListRow[] {
   const tree = useMemo(
     () => (viewMode === "tree" ? buildFileTree(matches) : null),
     [matches, viewMode],
   );
-  const rows = useMemo<readonly FileListRow[]>(
+  return useMemo<readonly FileListRow[]>(
     () => (tree ? flattenFileTree(tree, closedDirectories) : buildListRows(matches)),
     [closedDirectories, matches, tree],
   );
-  const totals = useMemo(() => {
+}
+
+/**
+ * A file list with its own toolbar: search, line counts, view mode, and diff style. A grouped
+ * list, such as the local changes, shows one shared toolbar and uses `FileDiffList` directly.
+ */
+export const FileDiffListWithHeader = memo(function FileDiffListWithHeader({
+  setDiffStyle,
+  onViewModeChange,
+  ...props
+}: Omit<FileDiffListProps, "matches"> & {
+  setDiffStyle: (style: PierreDiffStyle) => void;
+  onViewModeChange: (viewMode: FileListViewMode) => void;
+}): ReactElement {
+  const { fileDiffs, listState } = props;
+  const search = useMemo(() => {
+    const matches = searchFiles(fileDiffs, listState.query);
     let additions = 0;
     let deletions = 0;
     for (const { diff } of matches) {
       additions += diff.additions;
       deletions += diff.deletions;
     }
-    return { additions, deletions };
-  }, [matches]);
-  return { matches, rows, totals };
-}
+    return { matches, additions, deletions };
+  }, [fileDiffs, listState.query]);
+  return (
+    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
+      <FileListHeader
+        fileCount={fileDiffs.length}
+        matchCount={listState.query === "" ? null : search.matches.length}
+        totalAdditions={search.additions}
+        totalDeletions={search.deletions}
+        viewMode={props.viewMode}
+        onViewModeChange={onViewModeChange}
+        diffStyle={props.diffStyle}
+        onDiffStyleChange={setDiffStyle}
+        searchText={listState.searchText}
+        onSearchTextChange={listState.setSearchText}
+      />
+      <FileDiffList {...props} matches={search.matches} />
+    </div>
+  );
+});

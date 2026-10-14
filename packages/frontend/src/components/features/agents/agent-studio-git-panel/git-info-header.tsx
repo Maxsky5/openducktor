@@ -2,12 +2,12 @@ import { ArrowDown, ArrowRight, ArrowUp, GitBranch } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { BRANCH_CHIP_CLASS_NAME } from "@/components/features/repository/branch-chip-classnames";
-import type { GitPanelTab, GitPanelTabBadges } from "./constants";
+import type { GitPanelTab } from "./constants";
 import { GitActionRow } from "./git-header-actions";
 import { HeaderNotice, headerNotices } from "./git-header-notices";
 import { getGitInfoHeaderState } from "./git-info-header-state";
 import { GitPanelTabs } from "./git-panel-tabs";
-import { GitTargetBranchControl } from "./git-target-branch-control";
+import { GitTargetBranchChip, GitTargetBranchSelector } from "./git-target-branch-control";
 import type { AgentStudioGitPanelModel } from "./types";
 
 export type GitInfoHeaderProps = Pick<
@@ -47,7 +47,10 @@ export type GitInfoHeaderProps = Pick<
 > & {
   activeTab: GitPanelTab;
   onTabChange: (tab: GitPanelTab) => void;
-  tabBadges: GitPanelTabBadges;
+  /** The file count of the Uncommitted changes tab, or null for none. */
+  uncommittedTabCount: number | null;
+  /** The file count of the Branch changes tab, or null for none. */
+  targetTabCount: number | null;
   isRefreshing: boolean;
   refreshError: string | null;
   uncommittedFileCount: number;
@@ -79,21 +82,23 @@ export const GitInfoHeader = memo(function GitInfoHeader(props: GitInfoHeaderPro
         <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
         {/* The target is often short, so it keeps its name, and the current branch shortens. */}
         <div className="flex min-w-0 max-w-[45%] shrink-0 items-center">
-          <GitTargetBranchControl
-            key={String(view.canEditTargetBranch)}
-            branch={state.currentBranchLabel}
-            control={{
-              targetBranchHelpText: props.targetBranchHelpText,
-              targetBranchesPending: props.targetBranchesPending,
-              targetBranchesError: props.targetBranchesError,
-              retryTargetBranches: props.retryTargetBranches,
-            }}
-            canEditTargetBranch={view.canEditTargetBranch}
-            targetBranchLabel={state.targetBranchLabel}
-            targetBranchOptions={view.targetBranchOptions}
-            targetBranchSelectionValue={view.targetBranchSelectionValue}
-            onUpdateTargetBranch={props.onUpdateTargetBranch}
-          />
+          {view.canEditTargetBranch ? (
+            <GitTargetBranchSelector
+              branch={state.currentBranchLabel}
+              control={{
+                targetBranchHelpText: props.targetBranchHelpText,
+                targetBranchesPending: props.targetBranchesPending,
+                targetBranchesError: props.targetBranchesError,
+                retryTargetBranches: props.retryTargetBranches,
+              }}
+              targetBranchLabel={state.targetBranchLabel}
+              targetBranchOptions={view.targetBranchOptions}
+              targetBranchSelectionValue={view.targetBranchSelectionValue}
+              onUpdateTargetBranch={props.onUpdateTargetBranch}
+            />
+          ) : (
+            <GitTargetBranchChip label={state.targetBranchLabel} />
+          )}
         </div>
         {view.comparison && (view.comparison.ahead > 0 || view.comparison.behind > 0) ? (
           <ComparisonCounts comparison={view.comparison} targetLabel={state.targetBranchLabel} />
@@ -119,7 +124,8 @@ export const GitInfoHeader = memo(function GitInfoHeader(props: GitInfoHeaderPro
       <GitPanelTabs
         activeTab={props.activeTab}
         onTabChange={props.onTabChange}
-        badges={props.tabBadges}
+        uncommittedCount={props.uncommittedTabCount}
+        targetCount={props.targetTabCount}
         panelId={props.diffPanelId}
       />
     </div>

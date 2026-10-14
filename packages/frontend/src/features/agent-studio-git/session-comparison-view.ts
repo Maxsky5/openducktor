@@ -1,4 +1,5 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
+import { useMemo } from "react";
 import {
   canonicalTargetBranch,
   targetBranchFromSelection,
@@ -21,9 +22,44 @@ type ComparisonViewInput = {
  * Builds the panel data of one comparison. Branch changes and History show only after the checked
  * comparison and both scopes load. A comparison failure keeps local changes and their snapshots.
  */
-export function buildComparisonView(
+export function useComparisonView(
   reads: GitPanelReads,
   comparison: ReturnType<typeof useSessionComparison>,
+  input: ComparisonViewInput,
+): DiffDataState {
+  const { scopeStatesByScope, loadedScopesByScope, isLoading } = reads;
+  const { target, resolvedTarget, isPending, unavailableReason } = comparison;
+  const { repoPath, worktreePath, label, checkout } = input;
+  // A stable view keeps the memoized Git panel from drawing again for an unrelated render.
+  return useMemo(
+    () =>
+      buildComparisonView(
+        { scopeStatesByScope, loadedScopesByScope, isLoading },
+        { target, resolvedTarget, isPending, unavailableReason },
+        { repoPath, worktreePath, label, checkout },
+      ),
+    [
+      checkout,
+      isLoading,
+      isPending,
+      label,
+      loadedScopesByScope,
+      repoPath,
+      resolvedTarget,
+      scopeStatesByScope,
+      target,
+      unavailableReason,
+      worktreePath,
+    ],
+  );
+}
+
+function buildComparisonView(
+  reads: Pick<GitPanelReads, "scopeStatesByScope" | "loadedScopesByScope" | "isLoading">,
+  comparison: Pick<
+    ReturnType<typeof useSessionComparison>,
+    "target" | "resolvedTarget" | "isPending" | "unavailableReason"
+  >,
   { repoPath, worktreePath, label, checkout }: ComparisonViewInput,
 ): DiffDataState {
   const { scopeStatesByScope, loadedScopesByScope } = reads;

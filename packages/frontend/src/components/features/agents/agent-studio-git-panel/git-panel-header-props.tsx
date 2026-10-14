@@ -1,13 +1,18 @@
-import type { ComponentProps, ReactElement } from "react";
-import type { GitPanelTabBadges } from "./constants";
+import type { ComboboxOption } from "@/components/ui/combobox";
+import type { ComponentProps } from "react";
+import type { GitPanelTabCounts } from "./constants";
 import type { GitInfoHeader } from "./git-info-header";
 import type { AgentStudioGitPanelModel, GitPanelView } from "./types";
+
+const NO_TARGET_OPTIONS: ComboboxOption[] = [];
 
 export function getGitInfoHeaderProps(
   model: AgentStudioGitPanelModel,
   view: GitPanelView,
+  onRefresh: () => void,
 ): ComponentProps<typeof GitInfoHeader> {
   const local = model.scopeStatesByScope.uncommitted;
+  const counts = tabCounts(model);
   const props: ComponentProps<typeof GitInfoHeader> = {
     contextMode: model.contextMode ?? "worktree",
     comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
@@ -19,7 +24,8 @@ export function getGitInfoHeaderProps(
     targetBranch: model.targetBranch,
     activeTab: view.activeTab,
     onTabChange: view.onTabChange,
-    tabBadges: tabBadges(model),
+    uncommittedTabCount: counts.uncommitted,
+    targetTabCount: counts.target,
     uncommittedFileCount: local.uncommittedFileCount,
     commitsAheadBehind: model.commitsAheadBehind,
     upstreamAheadBehind: local.upstreamAheadBehind ?? null,
@@ -48,10 +54,9 @@ export function getGitInfoHeaderProps(
     targetBranchesPending: model.targetBranchesPending,
     targetBranchesError: model.targetBranchesError,
     retryTargetBranches: model.retryTargetBranches,
-    targetBranchOptions: model.targetBranchOptions ?? [],
+    targetBranchOptions: model.targetBranchOptions ?? NO_TARGET_OPTIONS,
     targetBranchSelectionValue: model.targetBranchSelectionValue ?? "",
-    // The panel shows refresh failures. Keep a read failure out of the app error boundary.
-    onRefresh: () => void model.refresh().catch(() => {}),
+    onRefresh,
   };
   if (model.onUpdateTargetBranch) {
     props.onUpdateTargetBranch = model.onUpdateTargetBranch;
@@ -62,37 +67,18 @@ export function getGitInfoHeaderProps(
   return props;
 }
 
-function CountBadge({ value, label }: { value: number; label: string }): ReactElement {
-  return (
-    <span
-      className="rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground"
-      aria-label={label}
-    >
-      {value}
-    </span>
-  );
-}
-
-function tabBadges(model: AgentStudioGitPanelModel): GitPanelTabBadges {
-  const badges: GitPanelTabBadges = {};
+/** The counts stay numbers, so the memoized header compares them by value. */
+function tabCounts(model: AgentStudioGitPanelModel): GitPanelTabCounts {
   const local = model.scopeStatesByScope.uncommitted;
-  if (model.loadedScopesByScope.uncommitted && local.uncommittedFileCount > 0) {
-    badges.uncommitted = (
-      <CountBadge
-        value={local.uncommittedFileCount}
-        label={`${local.uncommittedFileCount} files`}
-      />
-    );
-  }
   const target = model.scopeStatesByScope.target;
-  if (
-    model.comparisonReference &&
-    model.loadedScopesByScope.target &&
-    target.fileDiffs.length > 0
-  ) {
-    badges.target = (
-      <CountBadge value={target.fileDiffs.length} label={`${target.fileDiffs.length} files`} />
-    );
-  }
-  return badges;
+  return {
+    uncommitted:
+      model.loadedScopesByScope.uncommitted && local.uncommittedFileCount > 0
+        ? local.uncommittedFileCount
+        : null,
+    target:
+      model.comparisonReference && model.loadedScopesByScope.target && target.fileDiffs.length > 0
+        ? target.fileDiffs.length
+        : null,
+  };
 }

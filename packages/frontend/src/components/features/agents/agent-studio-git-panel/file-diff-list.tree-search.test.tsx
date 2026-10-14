@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
-import { FileDiffList } from "./file-diff-list";
+import { FileDiffListWithHeader } from "./file-diff-list";
 import {
   fakeRowHeight,
   installMeasuredRows,
@@ -65,7 +65,7 @@ function NavigableFileDiffListHarness({
   return (
     <TooltipProvider>
       <div className="h-[400px]">
-        <FileDiffList
+        <FileDiffListWithHeader
           fileDiffs={fileDiffs}
           diffScope="uncommitted"
           listKey="unstaged"
@@ -82,6 +82,7 @@ function NavigableFileDiffListHarness({
           onViewFile={null}
           preloadLimit={preloadLimit}
           rowActions={null}
+          changingKey={null}
         />
       </div>
     </TooltipProvider>

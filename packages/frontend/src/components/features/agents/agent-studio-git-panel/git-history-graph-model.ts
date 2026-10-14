@@ -96,9 +96,12 @@ export function formatRelativeCommitDate(authorDate: string, nowMs: number): str
   return relativeFormat.format(0, "minute");
 }
 
+const EXACT_DATE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$/u;
+const WHITESPACE = /\s+/u;
+
 /** Keeps the author's own clock time and offset, for example `2026-10-13 14:05:22 +02:00`. */
 export function formatExactCommitDate(authorDate: string): string {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$/u.exec(authorDate);
+  const match = EXACT_DATE.exec(authorDate);
   if (!match) return authorDate;
   const offset = match[3] === "Z" ? "+00:00" : match[3];
   return `${match[1]} ${match[2]} ${offset}`;
@@ -124,7 +127,7 @@ export function formatCompactCommitAge(authorDate: string, nowMs: number): strin
 
 /** Up to two initials of an author, for example `MR` for Maxime Ribera. */
 export function authorInitials(authorName: string): string {
-  const words = authorName.trim().split(/\s+/u).filter(Boolean);
+  const words = authorName.trim().split(WHITESPACE).filter(Boolean);
   const first = words[0] ?? "";
   const last = words.length > 1 ? (words.at(-1) ?? "") : "";
   return (last ? `${first.charAt(0)}${last.charAt(0)}` : first.slice(0, 2)).toUpperCase();

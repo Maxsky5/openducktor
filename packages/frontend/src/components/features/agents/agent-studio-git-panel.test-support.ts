@@ -227,7 +227,7 @@ export const baseModel = ({
 const showFirstTab = (model: AgentStudioGitPanelModel, tab: DiffScope): void => {
   const contextKey = gitPanelContextKey(model);
   const { views, update } = useGitPanelViewStore.getState();
-  if (!views[contextKey]) update(contextKey, { selectedTab: tab });
+  if (!views[contextKey]) update(contextKey, () => ({ selectedTab: tab }));
 };
 
 export const flush = async (): Promise<void> => {

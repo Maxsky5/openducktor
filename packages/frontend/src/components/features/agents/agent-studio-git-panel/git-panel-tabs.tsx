@@ -1,12 +1,15 @@
 import type { ReactElement } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { GIT_PANEL_TABS, type GitPanelTab, type GitPanelTabBadges } from "./constants";
+import { GIT_PANEL_TABS, type GitPanelTab } from "./constants";
 
 export type GitPanelTabsProps = {
   activeTab: GitPanelTab;
   onTabChange: (tab: GitPanelTab) => void;
-  badges: GitPanelTabBadges;
+  /** The file count of the Uncommitted changes tab, or null for none. */
+  uncommittedCount: number | null;
+  /** The file count of the Branch changes tab, or null for none. */
+  targetCount: number | null;
   panelId?: string | undefined;
 };
 
@@ -17,7 +20,8 @@ export type GitPanelTabsProps = {
 export function GitPanelTabs({
   activeTab,
   onTabChange,
-  badges,
+  uncommittedCount,
+  targetCount,
   panelId,
 }: GitPanelTabsProps): ReactElement {
   return (
@@ -49,11 +53,33 @@ export function GitPanelTabs({
               data-testid={option.testId}
             >
               {option.label}
-              {badges[option.tab] ?? null}
+              <CountBadge count={tabCount(option.tab, uncommittedCount, targetCount)} />
             </TabsTrigger>
           );
         })}
       </TabsList>
     </Tabs>
+  );
+}
+
+const tabCount = (
+  tab: GitPanelTab,
+  uncommittedCount: number | null,
+  targetCount: number | null,
+): number | null => {
+  if (tab === "uncommitted") return uncommittedCount;
+  if (tab === "target") return targetCount;
+  return null;
+};
+
+function CountBadge({ count }: { count: number | null }): ReactElement | null {
+  if (count === null) return null;
+  return (
+    <span
+      className="rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground"
+      aria-label={`${count} files`}
+    >
+      {count}
+    </span>
   );
 }

@@ -1120,7 +1120,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
-  test("a hard refresh reads local changes during the fetch and the comparison after it", async () => {
+  test("a hard refresh reads local changes during the fetch and again with the comparison after it", async () => {
     const reads: string[] = [];
     const fetchGate = createDeferred<void>();
     let holdFetch = false;
@@ -1177,7 +1177,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         fetchGate.resolve();
         await refresh;
       });
-      expect(reads.slice(2).toSorted()).toEqual(["history", "status:target"]);
+      // The fetch moves the upstream branch, so local changes read again for its counts.
+      expect(reads.slice(2).toSorted()).toEqual(["history", "local", "status:target"]);
     } finally {
       fetchGate.resolve();
       await refresh?.catch(() => undefined);
@@ -1186,7 +1187,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
-  test("a hard refresh keeps a local read failure from before the fetch ends", async () => {
+  test("a hard refresh reports a local read failure after the fetch ends", async () => {
     const fetchGate = createDeferred<void>();
     let holdFetch = false;
     let localFails = false;
@@ -1238,7 +1239,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         await refresh;
       });
       expect(harness.getLatest().manualRefresh.refreshError).toBe("Early local read denied");
-      expect(localReads).toBe(readsBefore + 1);
+      // The read after the fetch gives the result. It fails again here.
+      expect(localReads).toBe(readsBefore + 2);
     } finally {
       fetchGate.resolve();
       await refresh;

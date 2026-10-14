@@ -734,7 +734,7 @@ function createHeldFetchHost() {
   };
 }
 
-test("manual refresh reads local changes during the fetch and the comparison after it", async () => {
+test("manual refresh reads local changes during the fetch and again with the comparison after it", async () => {
   const host = createHeldFetchHost();
   configureShellBridge(createShellBridgeFixture({ client: host.client }));
   const queryClient = createToolsQueryClient();
@@ -761,8 +761,9 @@ test("manual refresh reads local changes during the fetch and the comparison aft
     });
     expect(host.reads.toSorted()).toEqual(["fetch", "local"]);
     await act(async () => host.release());
+    // The fetch moves the remote branches, so the upstream counts of local changes read again.
     await waitFor(() =>
-      expect(host.reads.slice(2).toSorted()).toEqual(["history", "status:target"]),
+      expect(host.reads.slice(2).toSorted()).toEqual(["history", "local", "status:target"]),
     );
   } finally {
     host.release();
@@ -2105,7 +2106,7 @@ test("a confirmed commit keeps its result when the panel update reads fail", asy
   }
 });
 
-test("manual refresh keeps a local read failure from before the fetch ends", async () => {
+test("manual refresh reports a local read failure that the read after the fetch repeats", async () => {
   const host = createHeldFetchHost();
   let localFails = false;
   host.client.gitGetLocalChanges = async () => {
@@ -2139,7 +2140,8 @@ test("manual refresh keeps a local read failure from before the fetch ends", asy
 
     const refreshError = await screen.findByTestId("agent-studio-git-refresh-error");
     expect(refreshError.textContent).toContain("Early local read denied");
-    expect(host.reads.filter((read) => read === "local")).toHaveLength(1);
+    // The read before the fetch and the read after it both ran.
+    expect(host.reads.filter((read) => read === "local")).toHaveLength(2);
   } finally {
     host.release();
     view.unmount();

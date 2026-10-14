@@ -1,5 +1,5 @@
 import type { GitHistoryCommitMembership } from "@openducktor/contracts";
-import { type ReactElement, type RefObject, useCallback, useRef, useState } from "react";
+import { type ReactElement, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { AuthorAvatar } from "./git-history-avatar";
 import type { GraphEdge, GraphRow } from "./git-history-graph-model";
@@ -48,22 +48,20 @@ export const laneColor = (tone: GitHistoryCommitMembership, lane: number): strin
 export type GraphView = {
   width: number;
   viewWidth: number;
-  offset: number;
   scrollBy: (delta: number) => void;
 };
+
+/**
+ * The sideways scroll of the graph, in pixels. The History root sets it on each scroll, so rows
+ * follow the scroll in CSS and do not render again.
+ */
+export const GRAPH_OFFSET_PROPERTY = "--history-graph-offset";
 
 /**
  * A graph wider than its share of the row scrolls sideways. Every row moves together, so the
  * lanes keep their edges, and the commit text keeps its space.
  */
-export function useGraphView(
-  laneCount: number,
-  rowWidth: number,
-): GraphView & {
-  setOffset: (offset: number) => void;
-  scroller: RefObject<HTMLDivElement | null>;
-} {
-  const [offset, setOffset] = useState(0);
+export function useGraphView(laneCount: number, rowWidth: number) {
   const scroller = useRef<HTMLDivElement | null>(null);
   const width = GRAPH_PADDING * 2 + laneCount * LANE_WIDTH;
   const columnWidth = Math.max(width, MIN_COLUMN_WIDTH);
@@ -73,14 +71,12 @@ export function useGraphView(
       ? Math.min(columnWidth, Math.max(MIN_GRAPH_VIEW_WIDTH, Math.floor(rowWidth * GRAPH_SHARE)))
       : columnWidth;
   const scrollBy = useCallback((delta: number) => scroller.current?.scrollBy({ left: delta }), []);
-  return {
-    width,
-    viewWidth,
-    offset: Math.max(0, Math.min(offset, width - viewWidth)),
-    scrollBy,
-    setOffset,
-    scroller,
-  };
+  // A stable view keeps the rows of the list from rendering again for an unrelated change.
+  const graph = useMemo<GraphView>(
+    () => ({ width, viewWidth, scrollBy }),
+    [scrollBy, viewWidth, width],
+  );
+  return { graph, scroller };
 }
 
 export const laneX = (lane: number) => GRAPH_PADDING + lane * LANE_WIDTH + LANE_WIDTH / 2;
@@ -101,7 +97,9 @@ export function HistoryGraphCell({
 }): ReactElement {
   const clipped = graph.viewWidth < graph.width;
   const color = laneColor(row.commit.membership, row.lane);
-  const nodeX = laneX(row.lane) - graph.offset;
+  const nodeX = laneX(row.lane);
+  // A graph that fits has no sideways scroll, so an old offset does not apply.
+  const offset = clipped ? `var(${GRAPH_OFFSET_PROPERTY}, 0px)` : "0px";
   return (
     <>
       <span
@@ -119,18 +117,24 @@ export function HistoryGraphCell({
             "group-hover/history-row:opacity-25 group-data-[state=open]/history-row:opacity-35 dark:group-hover/history-row:opacity-30",
             color,
           )}
-          style={{ left: Math.max(0, nodeX - BAND_INSET) }}
+          style={{ left: `max(0px, calc(${nodeX - BAND_INSET}px - ${offset}))` }}
         />
         {connectFromLeft ? (
           // A line from the Branch / Tag column to the node ties the label to its commit.
           <span
             aria-hidden="true"
             className={cn("absolute top-1/2 left-0 h-0.5 -translate-y-1/2 bg-current", color)}
-            style={{ width: Math.max(0, nodeX - AVATAR_RADIUS) }}
+            style={{ width: `max(0px, calc(${nodeX - AVATAR_RADIUS}px - ${offset}))` }}
           />
         ) : null}
-        <HistoryGraph row={row} width={graph.width} offset={graph.offset} />
-        {showsAuthor(row) ? <NodeAvatar row={row} left={nodeX} /> : null}
+        <span
+          className="absolute inset-y-0 left-0"
+          style={{ width: graph.width, transform: `translateX(calc(-1 * ${offset}))` }}
+          data-testid="agent-studio-git-history-graph-lanes"
+        >
+          <HistoryGraph row={row} width={graph.width} />
+          {showsAuthor(row) ? <NodeAvatar row={row} left={nodeX} /> : null}
+        </span>
       </span>
       <span
         aria-hidden="true"
@@ -155,15 +159,7 @@ const turnIn = (from: number, x: number, middle: number): string => {
   return `M ${from} 0 V ${middle - radius} Q ${from} ${middle} ${from + direction * radius} ${middle} H ${x}`;
 };
 
-function HistoryGraph({
-  row,
-  width,
-  offset,
-}: {
-  row: GraphRow;
-  width: number;
-  offset: number;
-}): ReactElement {
+function HistoryGraph({ row, width }: { row: GraphRow; width: number }): ReactElement {
   const middle = ROW_HEIGHT / 2;
   const x = laneX(row.lane);
   const edge = (key: string, entry: GraphEdge, path: string, dashed = false) => (
@@ -184,7 +180,6 @@ function HistoryGraph({
       height={ROW_HEIGHT}
       viewBox={`0 0 ${width} ${ROW_HEIGHT}`}
       className="block overflow-visible"
-      style={{ transform: `translateX(${-offset}px)` }}
       aria-hidden="true"
       data-testid="agent-studio-git-history-graph"
     >

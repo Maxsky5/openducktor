@@ -3,7 +3,7 @@ import {
   useSessionComparison,
   useSessionComparisonControl,
 } from "@/features/agent-studio-git/use-session-comparison";
-import { buildComparisonView } from "@/features/agent-studio-git/session-comparison-view";
+import { useComparisonView } from "@/features/agent-studio-git/session-comparison-view";
 import {
   type GitPanelReads,
   useGitPanelReads,
@@ -119,7 +119,7 @@ export function useWorkspaceSessionTools({
     cacheKey: comparison.cacheKey,
     enabled: isVisible && workingDirectory !== null && branchReady,
   });
-  const diffData = buildComparisonView(reads, comparison, {
+  const diffData = useComparisonView(reads, comparison, {
     repoPath: readsRepoPath,
     worktreePath: workingDirectory,
     label: target ? canonicalTargetBranch(target) : "Default target pending",

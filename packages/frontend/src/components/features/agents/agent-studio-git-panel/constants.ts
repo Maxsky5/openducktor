@@ -1,5 +1,4 @@
 import { FilePlus, FileText, FileX, FolderGit2 } from "lucide-react";
-import type { ReactNode } from "react";
 import type { DiffScope } from "@/features/agent-studio-git";
 import type { FileListViewMode } from "./file-list-view-preference";
 
@@ -21,10 +20,10 @@ export const FILE_STATUS_COLOR = new Map<string, string>([
 export type GitPanelTab = DiffScope | "history";
 
 /** A short count or state shown next to each tab label. */
-export type GitPanelTabBadges = {
-  uncommitted?: ReactNode;
-  target?: ReactNode;
-  history?: ReactNode;
+/** The file count of each list tab, or null when its tab shows no count. */
+export type GitPanelTabCounts = {
+  uncommitted: number | null;
+  target: number | null;
 };
 
 export const GIT_PANEL_TABS: Array<{ tab: GitPanelTab; label: string; testId: string }> = [

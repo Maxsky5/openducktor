@@ -35,7 +35,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { type DiffScope, gitChangeIntentKey } from "@/features/agent-studio-git";
+import type { DiffScope, GitChangeIntent } from "@/features/agent-studio-git";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -115,6 +115,8 @@ type FileDiffEntryProps = {
   diffStyle: PierreDiffStyle;
   /** Stage, unstage, and discard controls. Review-only lists have none. */
   rowActions: GitFileRowActions | null;
+  /** The file action that runs now, or null. */
+  runningAction: GitChangeIntent["action"] | null;
 };
 
 function FileDiffEntryLabel({ row }: { row: FileRow }): ReactElement {
@@ -273,19 +275,19 @@ function GroupToggleMenuItem({
 function FileRowActionBar({
   filePath,
   rowActions,
+  runningAction,
   discardUnavailable,
   onOpenMenu,
 }: {
   filePath: string;
   rowActions: GitFileRowActions | null;
+  runningAction: GitChangeIntent["action"] | null;
   discardUnavailable: string | null;
   onOpenMenu: (event: MouseEvent<HTMLButtonElement>) => void;
 }): ReactElement {
-  const pending = (action: "stage" | "unstage" | "discard") =>
-    rowActions !== null &&
-    rowActions.changingKey === gitChangeIntentKey(fileIntent(rowActions, action, filePath));
+  const pending = (action: GitChangeIntent["action"]) => runningAction === action;
   const toggle = GROUP_TOGGLE[rowActions?.group ?? "unstaged"];
-  const anyPending = pending("discard") || pending(toggle.action);
+  const anyPending = runningAction !== null;
   return (
     // Only a hover or keyboard focus shows the actions, so a click on the row does not keep them.
     <div
@@ -334,6 +336,7 @@ function FileDiffEntryHeader({
   viewMode,
   status,
   rowActions,
+  runningAction,
   onToggle,
   onViewFile,
 }: {
@@ -341,6 +344,7 @@ function FileDiffEntryHeader({
   viewMode: FileListViewMode;
   status: RowStatus;
   rowActions: GitFileRowActions | null;
+  runningAction: GitChangeIntent["action"] | null;
   onToggle: (filePath: string) => void;
   onViewFile: ((filePath: string) => void) | null;
 }): ReactElement {
@@ -417,6 +421,7 @@ function FileDiffEntryHeader({
           <FileRowActionBar
             filePath={diff.file}
             rowActions={rowActions}
+            runningAction={runningAction}
             discardUnavailable={discardUnavailableReason(diff)}
             onOpenMenu={openMenu}
           />
@@ -596,6 +601,7 @@ function FileDiffEntry({
   onViewFile,
   diffStyle,
   rowActions,
+  runningAction,
 }: FileDiffEntryProps): ReactElement {
   const { diff } = row;
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
@@ -633,6 +639,7 @@ function FileDiffEntry({
           statusColor,
         }}
         rowActions={rowActions}
+        runningAction={runningAction}
         onToggle={onToggle}
         onViewFile={onViewFile}
       />
@@ -666,6 +673,7 @@ export const FileDiffEntryWithMemo = memo(
     previous.viewState.reserveConflictSlot === next.viewState.reserveConflictSlot &&
     previous.diffStyle === next.diffStyle &&
     previous.rowActions === next.rowActions &&
+    previous.runningAction === next.runningAction &&
     previous.onToggle === next.onToggle &&
     previous.onViewFile === next.onViewFile &&
     previous.fileComments === next.fileComments &&

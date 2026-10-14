@@ -69,21 +69,29 @@ export function useGitPanelReads({
   const canRead = enabled && repoPath !== null;
   const hasComparison = repoPath !== null && comparisonReference !== null;
   const comparisonReady = canRead && hasComparison;
-  // A hidden view keeps its keys, so its cached data and late results stay in view.
-  const localOptions =
-    repoPath !== null
-      ? localChangesQueryOptions(repoPath, workingDir, cacheKey)
-      : skippedLocalChangesQueryOptions();
-  const comparisonOptions = hasComparison
-    ? worktreeStatusQueryOptions(
-        repoPath,
-        comparisonReference,
-        "target",
-        workingDir,
-        undefined,
-        cacheKey,
-      )
-    : skippedWorktreeStatusQueryOptions();
+  // A hidden view keeps its keys, so its cached data and late results stay in view. Stable keys
+  // keep the read callbacks below stable.
+  const localOptions = useMemo(
+    () =>
+      repoPath !== null
+        ? localChangesQueryOptions(repoPath, workingDir, cacheKey)
+        : skippedLocalChangesQueryOptions(),
+    [cacheKey, repoPath, workingDir],
+  );
+  const comparisonOptions = useMemo(
+    () =>
+      repoPath !== null && comparisonReference !== null
+        ? worktreeStatusQueryOptions(
+            repoPath,
+            comparisonReference,
+            "target",
+            workingDir,
+            undefined,
+            cacheKey,
+          )
+        : skippedWorktreeStatusQueryOptions(),
+    [cacheKey, comparisonReference, repoPath, workingDir],
+  );
   // A refresh or a Git action reads again. Opening a view reuses the cached result.
   const local = useQuery({
     ...localOptions,
@@ -146,27 +154,17 @@ export function useGitPanelReads({
       refreshGitHistoryQueries(queryClient, repoPath, historyDirectory, { throwOnError: false }),
     ]);
   }, [canRead, comparisonKey, comparisonReady, historyDirectory, localKey, queryClient, repoPath]);
-  // Primitive inputs keep this callback stable, so the Git actions that use it stay stable too.
   const applyLocalChanges = useCallback(
     async (changes: GitLocalChanges): Promise<void> => {
       if (repoPath === null) return;
-      const key = localChangesQueryOptions(repoPath, workingDir, cacheKey).queryKey;
       // A read that started before the change must not replace the newer result.
-      await queryClient.cancelQueries({ queryKey: key, exact: true });
-      queryClient.setQueryData(key, changes);
-      if (comparisonReference === null) return;
-      const comparison = worktreeStatusQueryOptions(
-        repoPath,
-        comparisonReference,
-        "target",
-        workingDir,
-        undefined,
-        cacheKey,
-      ).queryKey;
+      await queryClient.cancelQueries({ queryKey: localKey, exact: true });
+      queryClient.setQueryData(localKey, changes);
+      if (!hasComparison) return;
       // Branch changes show their own failed read, so this read does not delay the next change.
-      void queryClient.invalidateQueries({ queryKey: comparison, exact: true });
+      void queryClient.invalidateQueries({ queryKey: comparisonKey, exact: true });
     },
-    [cacheKey, comparisonReference, queryClient, repoPath, workingDir],
+    [comparisonKey, hasComparison, localKey, queryClient, repoPath],
   );
   const scopeStatesByScope = useMemo(
     () => ({

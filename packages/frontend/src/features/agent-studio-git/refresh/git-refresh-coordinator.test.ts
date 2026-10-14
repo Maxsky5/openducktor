@@ -115,7 +115,7 @@ describe("GitRefreshCoordinator", () => {
     });
   });
 
-  test("a manual Refresh reads local changes during the fetch and the comparison after it", async () => {
+  test("a manual Refresh reads local changes during the fetch and again after it", async () => {
     const log: Log = [];
     const fetch = deferred();
     const view = createView(log, {
@@ -142,7 +142,8 @@ describe("GitRefreshCoordinator", () => {
     fetch.resolve();
     await refresh;
 
-    expect(log).toEqual(["branch", "local", "fetch", "check", "comparison:reject"]);
+    // The fetch moves the remote branches, so the upstream counts of local changes read again.
+    expect(log).toEqual(["branch", "local", "fetch", "check", "local", "comparison:reject"]);
   });
 
   test("a manual Refresh keeps its failure until a later Refresh succeeds", async () => {
@@ -380,9 +381,16 @@ describe("GitRefreshCoordinator", () => {
     coordinator.publish(view);
 
     await coordinator.refresh("hard");
-
-    expect(view.steps.readLocal).toHaveBeenCalledTimes(1);
+    // Local changes have no target in their keys, so they read again after the fetch.
+    expect(view.steps.readLocal).toHaveBeenCalledTimes(2);
     expect(view.steps.readComparison).not.toHaveBeenCalled();
+
+    await coordinator.refresh("soft");
+    expect(view.steps.readLocal).toHaveBeenCalledTimes(3);
+    expect(view.steps.readComparison).not.toHaveBeenCalled();
+
+    await coordinator.refresh("scheduled");
+    expect(view.steps.readInBackground).toHaveBeenCalledTimes(1);
   });
 
   test("a failed fetch reports its cause, reads once, and fails the Refresh", async () => {
@@ -408,7 +416,8 @@ describe("GitRefreshCoordinator", () => {
     );
 
     expect(failedChecks).toEqual(["remote unavailable"]);
-    expect(view.steps.readLocal).toHaveBeenCalledTimes(2);
+    // The manual Refresh reads local changes before and after its failed fetch. The soft one reads once.
+    expect(view.steps.readLocal).toHaveBeenCalledTimes(3);
     expect(view.steps.readComparison).toHaveBeenCalledTimes(2);
     expect(coordinator.manualState(manualRefreshKey(view)).error).toBe("remote unavailable");
     expect(softOutcome).toBe("resolved");
@@ -422,7 +431,8 @@ describe("GitRefreshCoordinator", () => {
 
     await coordinator.refresh("soft");
 
-    expect(log).toEqual(["branch", "check", "local", "comparison:show"]);
+    // Local changes do not wait for the target check.
+    expect(log).toEqual(["branch", "local", "check", "comparison:show"]);
   });
 
   test("a scheduled fetch waits for its cooldown, and a failed fetch can run again", async () => {

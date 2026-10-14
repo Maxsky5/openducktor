@@ -4,6 +4,7 @@ import {
   useEffectEvent,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -61,10 +62,17 @@ export function useGitRefresh({
     (mode, withFiles) => coordinator.refresh(mode, withFiles),
     [coordinator],
   );
+  // A return to the window fires both focus and visibilitychange, so one scheduled refresh runs.
+  const scheduledRun = useRef<Promise<void> | null>(null);
   const refreshWhenVisible = useEffectEvent(() => {
+    if (document.visibilityState !== "visible" || scheduledRun.current) return;
     // Each view shows its own failed read.
-    if (document.visibilityState === "visible")
-      void coordinator.refresh("scheduled").catch(() => undefined);
+    scheduledRun.current = coordinator
+      .refresh("scheduled")
+      .catch(() => undefined)
+      .finally(() => {
+        scheduledRun.current = null;
+      });
   });
   useEffect(() => {
     if (!refreshOnFocus) return;

@@ -46,17 +46,18 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   const collapsedGroups = useGitPanelViewField(contextKey, "collapsedGroups");
   const expandedSelection = useExpandedFileSelection(contextKey);
   const onTabChange = useCallback(
-    (tab: GitPanelTab): void => updateView({ selectedTab: tab }),
+    (tab: GitPanelTab): void => updateView(() => ({ selectedTab: tab })),
     [updateView],
   );
+  // The toggle reads the current view, so it stays one callback and two quick toggles both count.
   const onToggleGroup = useCallback(
     (group: GitChangeGroup) =>
-      updateView({
-        collapsedGroups: collapsedGroups.includes(group)
-          ? collapsedGroups.filter((entry) => entry !== group)
-          : [...collapsedGroups, group],
-      }),
-    [collapsedGroups, updateView],
+      updateView(({ collapsedGroups: current }) => ({
+        collapsedGroups: current.includes(group)
+          ? current.filter((entry) => entry !== group)
+          : [...current, group],
+      })),
+    [updateView],
   );
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
   const conflict = useGitConflictPanel(model);
@@ -96,11 +97,14 @@ function AgentStudioGitPanelContent({
 }): ReactElement {
   const diffPanelId = `${useId()}-diff`;
   const local = model.scopeStatesByScope.uncommitted.localChanges;
+  const { refresh } = model;
+  // The panel shows refresh failures. Keep a read failure out of the app error boundary.
+  const onRefresh = useCallback(() => void refresh().catch(() => {}), [refresh]);
   return (
     <>
       <GitInfoHeader
         key={model.subjectKey}
-        {...getGitInfoHeaderProps(model, view)}
+        {...getGitInfoHeaderProps(model, view, onRefresh)}
         diffPanelId={diffPanelId}
       />
       <PanelNotices model={model} view={view} />

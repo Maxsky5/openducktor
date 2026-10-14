@@ -33,7 +33,8 @@ const createGitInfoHeaderProps = (
   upstreamStatus: "tracking",
   activeTab: "target",
   onTabChange: () => {},
-  tabBadges: {},
+  uncommittedTabCount: null,
+  targetTabCount: null,
   uncommittedFileCount: 0,
   isLoading: false,
   isRefreshing: false,
@@ -270,7 +271,7 @@ describe("GitInfoHeader", () => {
     const props = createGitInfoHeaderProps({
       activeTab: "uncommitted",
       onTabChange,
-      tabBadges: { uncommitted: <span data-testid="uncommitted-tab-badge">3</span> },
+      uncommittedTabCount: 3,
       diffPanelId: "git-panel",
     });
     rendered = renderGitInfoHeader(props);
@@ -286,7 +287,11 @@ describe("GitInfoHeader", () => {
       "Branch changes",
       "History",
     ]);
-    expect(tabs[0]?.contains(screen.getByTestId("uncommitted-tab-badge"))).toBe(true);
+    expect(
+      within(screen.getByTestId("agent-studio-git-diff-scope-uncommitted")).getByLabelText(
+        "3 files",
+      ).textContent,
+    ).toBe("3");
     expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual([
       "true",
       "false",

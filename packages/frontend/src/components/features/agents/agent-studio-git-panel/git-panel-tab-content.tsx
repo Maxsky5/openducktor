@@ -4,8 +4,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
 import { toInlineCommentDraftOwnerKey } from "@/state/use-inline-comment-draft-store";
 import { PRELOAD_DIFF_LIMIT } from "./constants";
-import { EmptyDiffState } from "./empty-diff-state";
-import { FileDiffList } from "./file-diff-list";
+import { DiffLoadFailedState, EmptyDiffState } from "./empty-diff-state";
+import { FileDiffListWithHeader } from "./file-diff-list";
 import { type FileListViewMode, useFileListViewModeStore } from "./file-list-view-preference";
 import { listFileKey } from "./git-file-row-actions";
 import { GitHistoryView } from "./git-history-view";
@@ -83,12 +83,15 @@ function UncommittedTabContent({
     // A read that has not finished or that failed must not look like a clean repository.
     return (
       <ScrollArea className="min-h-0 flex-1">
-        <EmptyDiffState
-          isLoading={!local && (!model.loadedScopesByScope.uncommitted || model.isLoading)}
-          contextMode={contextMode}
-          diffScope="uncommitted"
-          failed={!local && model.scopeStatesByScope.uncommitted.error !== null}
-        />
+        {!local && model.scopeStatesByScope.uncommitted.error !== null ? (
+          <DiffLoadFailedState diffScope="uncommitted" />
+        ) : (
+          <EmptyDiffState
+            isLoading={!local && (!model.loadedScopesByScope.uncommitted || model.isLoading)}
+            contextMode={contextMode}
+            diffScope="uncommitted"
+          />
+        )}
       </ScrollArea>
     );
   }
@@ -157,20 +160,23 @@ function TargetChangesView({
   if (target.fileDiffs.length === 0) {
     return (
       <ScrollArea className="min-h-0 flex-1">
-        <EmptyDiffState
-          targetBranch={model.targetBranch}
-          isLoading={(model.comparisonPending ?? false) || !model.loadedScopesByScope.target}
-          contextMode={model.contextMode ?? "worktree"}
-          diffScope="target"
-          upstreamStatus={target.upstreamStatus}
-          failed={target.error !== null}
-        />
+        {target.error !== null ? (
+          <DiffLoadFailedState diffScope="target" />
+        ) : (
+          <EmptyDiffState
+            targetBranch={model.targetBranch}
+            isLoading={(model.comparisonPending ?? false) || !model.loadedScopesByScope.target}
+            contextMode={model.contextMode ?? "worktree"}
+            diffScope="target"
+            upstreamStatus={target.upstreamStatus}
+          />
+        )}
       </ScrollArea>
     );
   }
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
-      <FileDiffList
+      <FileDiffListWithHeader
         fileDiffs={target.fileDiffs}
         diffScope="target"
         listKey="target"
@@ -188,6 +194,7 @@ function TargetChangesView({
         onViewFile={model.onViewFile ?? null}
         preloadLimit={PRELOAD_DIFF_LIMIT}
         rowActions={null}
+        changingKey={null}
       />
     </div>
   );

@@ -300,6 +300,35 @@ describe("GitHistoryView", () => {
     expect(details.textContent).toContain("2026-10-13 14:05:22 +02:00");
   });
 
+  test("keeps one details card for the list and closes it on a second click or a scroll", async () => {
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    renderHistory();
+
+    const [first, second] = await screen.findAllByTestId("agent-studio-git-history-row");
+    if (!first || !second) throw new Error("History has fewer than two rows.");
+    const details = () => screen.queryByTestId("agent-studio-git-history-details");
+
+    fireEvent.click(first);
+    expect((await screen.findByTestId("agent-studio-git-history-details")).textContent).toContain(
+      "Body of c2.",
+    );
+    expect(first.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(second);
+    await waitFor(() => expect(details()?.textContent).toContain("Body of t1."));
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(second);
+    await waitFor(() => expect(details()).toBeNull());
+
+    fireEvent.click(first);
+    await screen.findByTestId("agent-studio-git-history-details");
+    fireEvent.scroll(
+      screen.getByRole("list", { name: "Commits of feature compared with origin/main" }),
+    );
+    await waitFor(() => expect(details()).toBeNull());
+  });
+
   test("explains a branch without commits and unrelated histories", async () => {
     historyPage.mockImplementation(async () => ({ outcome: "no_commits" }));
     const { unmount } = renderHistory();
@@ -430,12 +459,22 @@ describe("GitHistoryView", () => {
       const scroller = await screen.findByTestId("agent-studio-git-history-graph-scroll");
       expect(scroller.style.width).toBe("120px");
       const [graph] = screen.getAllByTestId("agent-studio-git-history-graph");
-      expect(graph?.parentElement?.style.width).toBe("120px");
+      const [lanes] = screen.getAllByTestId("agent-studio-git-history-graph-lanes");
+      // The graph cell shows 120 px of the wider lanes.
+      expect(lanes?.parentElement?.style.width).toBe("120px");
       expect(Number(graph?.getAttribute("width"))).toBeGreaterThan(120);
+      expect(lanes?.style.transform).toBe(
+        "translateX(calc(-1 * var(--history-graph-offset, 0px)))",
+      );
       expect(screen.getByText("Subject merge")).toBeTruthy();
 
+      // The scroll moves every row through one CSS variable, so no row renders again.
       fireEvent.scroll(scroller, { target: { scrollLeft: 40 } });
-      expect(graph?.style.transform).toBe("translateX(-40px)");
+      expect(
+        screen
+          .getByTestId("agent-studio-git-history")
+          .style.getPropertyValue("--history-graph-offset"),
+      ).toBe("40px");
     } finally {
       globalThis.ResizeObserver = OriginalResizeObserver;
     }

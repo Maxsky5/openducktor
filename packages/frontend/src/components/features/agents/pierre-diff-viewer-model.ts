@@ -328,6 +328,27 @@ export const buildPierreDiffSelection = (
 };
 
 /**
+ * The text of each line on one side of a parsed diff. The parsed diff comes from a cache, so all
+ * comments of a file share one map for each side.
+ */
+const sideTexts = new WeakMap<FileDiffMetadata, Map<SelectionSide, Map<number, string>>>();
+const sideTextByLine = (fileDiff: FileDiffMetadata, side: SelectionSide): Map<number, string> => {
+  let bySide = sideTexts.get(fileDiff);
+  if (!bySide) {
+    bySide = new Map();
+    sideTexts.set(fileDiff, bySide);
+  }
+  let textByLine = bySide.get(side);
+  if (!textByLine) {
+    textByLine = new Map(
+      buildSideLines(fileDiff, side).map((line) => [line.lineNumber, line.text]),
+    );
+    bySide.set(side, textByLine);
+  }
+  return textByLine;
+};
+
+/**
  * True when the commented lines still hold the captured text on the same side of this diff.
  * A comment that fails this check must not attach to other content at the same line numbers.
  */
@@ -338,8 +359,7 @@ export const commentMatchesDiff = (
 ): boolean => {
   const { fileDiff } = getRenderableFileDiff(patch, filePath);
   if (fileDiff == null) return false;
-  const sideLines = buildSideLines(fileDiff, comment.side === "old" ? "deletions" : "additions");
-  const textByLine = new Map(sideLines.map((line) => [line.lineNumber, line.text]));
+  const textByLine = sideTextByLine(fileDiff, comment.side === "old" ? "deletions" : "additions");
   const selected = comment.codeContext.filter((line) => line.isSelected);
   if (selected.length === 0) {
     return textByLine.has(comment.startLine) && textByLine.has(comment.endLine);

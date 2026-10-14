@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import { hostClient } from "@/lib/host-client";
 import { errorMessage } from "@/lib/errors";
@@ -129,7 +129,11 @@ export function useSessionComparisonControl(input: {
     enabled: input.editable,
   });
   const selectionValue = input.target ? targetBranchSelectionValue(input.target) : "";
-  const options = sessionComparisonOptions(branches.data ?? [], input.target, input.allowUpstream);
+  const { target, allowUpstream } = input;
+  const options = useMemo(
+    () => sessionComparisonOptions(branches.data ?? [], target, allowUpstream),
+    [allowUpstream, branches.data, target],
+  );
   const { refetch } = branches;
   const retryBranches = useCallback(async () => {
     const result = await refetch();
