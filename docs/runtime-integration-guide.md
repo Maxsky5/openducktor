@@ -77,8 +77,6 @@ Put shared data in `packages/contracts` only when it is an OpenDucktor concept. 
 
 Create and subscribe the live-session adapter before the runtime can send events. Use TanStack Query for stable frontend reads such as history and catalogs. Keep live transcript state in the live-session store.
 
-Automatic live restoration excludes saved sessions of closed tasks. It keeps their saved records and history. Reopening a task makes its saved sessions eligible on the next restoration. Non-closed task sessions and active workspace sessions keep their stored runtime, directory, session ID, and owner. Missing directories and native access failures for eligible sessions still produce actionable errors.
-
 OpenCode creation, fork, and reattach prepare a conversation without starting agent work. Keep control summaries in sync with the known turn state. Prompt submission reports running activity while OpenCode starts the turn. Native turn events then confirm running or idle activity. Registration must not emit a synthetic `session_started` activity event.
 
 Restoring an idle Claude session must not publish new activity. Publish startup activity for a new session, a fork, or an interrupted turn that the runtime continues.

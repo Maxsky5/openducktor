@@ -20,9 +20,7 @@ export const createLiveSessionRootRefsReader =
         workspaceId: config.workspaceId,
         repoPath,
       });
-      const tasks = (yield* taskStore.listTasks({ repoPath })).filter(
-        (task) => task.status !== "closed",
-      );
+      const tasks = yield* taskStore.listTasks({ repoPath, doneVisibleDays: 0 });
       const records = tasks.length
         ? yield* taskStore.listAgentSessionsForTasks({
             repoPath,
