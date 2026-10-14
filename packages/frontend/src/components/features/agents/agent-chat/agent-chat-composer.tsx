@@ -431,6 +431,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         ) : null}
 
         <ModelPicker
+          popoverSide="top"
+          popoverAvoidCollisions={false}
           runtimes={modelPicker.runtimes}
           value={modelPicker.value}
           favoriteState={modelPicker.favoriteState}
@@ -454,8 +456,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             <Combobox
               value={selectedModelSelection?.variant ?? ""}
               options={variantOptions}
-              className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
+              className="w-[min(16rem,var(--radix-popover-content-available-width))] max-w-[min(90vw,22rem)] p-0"
               placeholder="Effort"
+              popoverSide="top"
+              popoverAvoidCollisions={false}
               searchPlaceholder="Search effort..."
               triggerClassName={cn(
                 COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
@@ -473,6 +477,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         ) : null}
         {speed && (
           <SpeedSelect
+            popoverSide="top"
+            popoverAvoidCollisions={false}
             key={speed.key}
             model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
             compact

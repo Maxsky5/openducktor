@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_CHAT_SETTINGS, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createElement, createRef } from "react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
 import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import { buildModelSelection } from "./agent-chat-test-fixtures";
+
+enableReactActEnvironment();
 
 const readComposerCard = (html: string): Element => {
   const card = new DOMParser().parseFromString(html, "text/html").body.querySelector("form > div");
@@ -153,6 +157,66 @@ const buildCodexModelSelectionWithoutProfile = () => {
 };
 
 describe("AgentChatComposer", () => {
+  test.each(["Select model, OpenCode, GPT-5.3 Codex", "high", "Speed: Standard"])(
+    "keeps %s opening above the composer when there is little space above",
+    async (name) => {
+      const view = render(
+        createElement(AgentChatComposer, {
+          model: {
+            ...buildModel(),
+            speed: {
+              key: "session",
+              choice: "standard",
+              levels: [{ id: "fast", label: "Fast" }],
+              blockedReason: undefined,
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange: () => {},
+            },
+          },
+        }),
+      );
+      const viewport = document.documentElement;
+      const heightDescriptor = Object.getOwnPropertyDescriptor(viewport, "clientHeight");
+      Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 768 });
+      try {
+        await waitFor(
+          () =>
+            expect(
+              document.activeElement === view.container.querySelector("[data-composer-editor]"),
+            ).toBe(true),
+          { timeout: 300 },
+        );
+        // The trigger is at y=0 in Happy DOM, with room below in this viewport.
+        const trigger = Array.from(view.container.querySelectorAll("button")).find(
+          (button) => button.getAttribute("aria-label") === name || button.textContent === name,
+        );
+        if (!trigger) throw new Error(`Expected the ${name} picker trigger`);
+        for (let opening = 0; opening < 2; opening += 1) {
+          await act(async () => fireEvent.click(trigger));
+          const popup = await waitFor(
+            () => {
+              const content = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+              if (!content) throw new Error("Expected an open composer picker");
+              // Radix uses this transform until positioning finishes. Wait before checking data-side,
+              // so the initial "top" value cannot hide a later collision flip.
+              expect(content.parentElement?.style.transform).not.toBe("translate(0, -200%)");
+              expect(content.getAttribute("data-side")).toBe("top");
+              return content;
+            },
+            { timeout: 300 },
+          );
+          await act(async () => fireEvent.keyDown(popup, { key: "Escape" }));
+        }
+      } finally {
+        view.unmount();
+        if (heightDescriptor) Object.defineProperty(viewport, "clientHeight", heightDescriptor);
+        else Reflect.deleteProperty(viewport, "clientHeight");
+      }
+    },
+  );
+
   test("renders the runtime-aware model picker and send controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
