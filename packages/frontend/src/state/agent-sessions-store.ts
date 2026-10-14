@@ -34,7 +34,14 @@ import {
   buildSessionErrorNoticeMessage,
   buildSessionPolicyNoticeMessage,
 } from "./operations/agent-orchestrator/support/session-notice-messages";
-import { markSessionHistoriesStale } from "./operations/agent-orchestrator/history/session-history-freshness";
+import {
+  markSessionHistoriesStale,
+  markSessionHistoryStale,
+} from "./operations/agent-orchestrator/history/session-history-freshness";
+import type {
+  SessionHistoryFreshnessTracker,
+  SessionHistoryVersion,
+} from "./queries/agent-session-history-freshness-tracker";
 
 export {
   type AgentActivitySessionsSnapshot,
@@ -43,7 +50,7 @@ export {
 } from "@/state/agent-session-snapshots";
 
 type Listener = () => void;
-type LiveNoticeEnvelope = Extract<
+type LiveSessionStateEnvelope = Extract<
   AgentSessionLiveEnvelope,
   { type: "snapshot" | "session_upsert" | "session_removed" }
 >;
@@ -61,7 +68,8 @@ export type AgentSessionsStore = {
     identity: AgentSessionIdentity | null,
   ) => AgentSessionVisiblePendingInput;
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
-  applyLiveNotices: (envelope: LiveNoticeEnvelope) => void;
+  applyLiveSessionEnvelope: (envelope: LiveSessionStateEnvelope) => void;
+  recordHistoryEnvelope: (envelope: AgentSessionLiveEnvelope) => void;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -77,10 +85,13 @@ export type AgentSessionsStore = {
 
 export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
+  historyFreshness?: SessionHistoryFreshnessTracker,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
   const pendingTaskRemovals = new Map<string, Set<string>>();
   const retainedCollections = new Map<string, AgentSessionCollection>();
+  const retainedHistoryVersions = new Map<string, Map<string, SessionHistoryVersion>>();
+  const historyProgress = historyFreshness?.createHistoryProgressTracker();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   if (workspaceRepoPath !== null) {
     retainedCollections.set(workspaceRepoPath, sessionCollection);
@@ -192,6 +203,13 @@ export const createAgentSessionsStore = (
     if (workspaceRepoPath === null) {
       return;
     }
+    const versions = new Map<string, SessionHistoryVersion>();
+    for (const session of listAgentSessions(sessionCollection)) {
+      if (session.historyLoadState !== "loaded" || session.historyLoadFailure) continue;
+      const version = historyProgress?.getVersion(session);
+      if (version) versions.set(agentSessionIdentityKey(session), version);
+    }
+    retainedHistoryVersions.set(workspaceRepoPath, versions);
     retainedCollections.set(workspaceRepoPath, markSessionHistoriesStale(sessionCollection));
   };
 
@@ -256,13 +274,51 @@ export const createAgentSessionsStore = (
       return snapshot;
     },
     commitSessionCollection,
-    applyLiveNotices: (envelope) => {
+    recordHistoryEnvelope: (envelope) => historyProgress?.recordEvent(envelope),
+    applyLiveSessionEnvelope: (envelope) => {
       switch (envelope.type) {
-        case "snapshot":
+        case "snapshot": {
           if (envelope.repoPath !== workspaceRepoPath) return;
+          // Recheck when attachment completes: events may arrive after workspace activation.
+          const versions = retainedHistoryVersions.get(envelope.repoPath);
+          retainedHistoryVersions.delete(envelope.repoPath);
+          if (versions || (envelope.isConnectionSnapshot && historyFreshness)) {
+            setSessionCollection((current) => {
+              let collection = current;
+              for (const session of listAgentSessions(current)) {
+                const version = versions?.get(agentSessionIdentityKey(session));
+                if (
+                  session.historyLoadState === "stale" &&
+                  !envelope.historyReplayGap &&
+                  version &&
+                  historyFreshness?.isCurrent(envelope.repoPath, session, version)
+                ) {
+                  historyProgress?.restoreVersion(session, version);
+                  collection = replaceAgentSession(collection, {
+                    ...session,
+                    historyLoadState: "loaded",
+                  });
+                } else if (
+                  envelope.isConnectionSnapshot &&
+                  historyFreshness &&
+                  (envelope.historyReplayGap ||
+                    !historyFreshness.isCurrent(
+                      envelope.repoPath,
+                      session,
+                      historyProgress?.getVersion(session) ?? null,
+                    ))
+                ) {
+                  // The rail can advance while this observer is detached. A snapshot has no transcript.
+                  collection = replaceAgentSession(collection, markSessionHistoryStale(session));
+                }
+              }
+              return collection;
+            });
+          }
           clearLiveNotices();
           for (const snapshot of envelope.sessions) retainLiveNotices(snapshot);
           return;
+        }
         case "session_upsert":
           if (envelope.session.ref.repoPath !== workspaceRepoPath) return;
           retainLiveNotices(envelope.session);
@@ -290,6 +346,16 @@ export const createAgentSessionsStore = (
         return null;
       }
 
+      if (
+        workspaceRepoPath &&
+        nextSession.historyLoadState !== current.historyLoadState &&
+        (nextSession.historyLoadState === "loading" ||
+          nextSession.historyLoadState === "refreshing")
+      ) {
+        // Pin the full read's starting position, never the rail's position at departure.
+        historyProgress?.captureReadVersion(workspaceRepoPath, nextSession);
+      }
+
       setSessionCollection((current) =>
         replaceAgentSessionByIdentity(current, identity, nextSession),
       );
@@ -297,6 +363,7 @@ export const createAgentSessionsStore = (
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       retainActiveCollection();
+      historyProgress?.reset();
       if (nextWorkspaceRepoPath !== workspaceRepoPath) clearLiveNotices();
       workspaceRepoPath = nextWorkspaceRepoPath;
       sessionCollection = activateCollection(nextWorkspaceRepoPath);

@@ -233,6 +233,10 @@ const createClaudeHistoryImportStore = (target: { sessionId: string; subpath?: s
     },
     load: async (key) =>
       keyMatchesSession(key) ? (entriesBySubpath.get(key.subpath) ?? null) : null,
+    listSubkeys: async (key) =>
+      keyMatchesSession(key)
+        ? [...entriesBySubpath.keys()].filter((subpath): subpath is string => subpath !== undefined)
+        : [],
   };
   return { entriesBySubpath, store };
 };
@@ -285,6 +289,7 @@ export const readSubagentAgentIdsByToolUseId = (
 export type ClaudeHistoryProjectionInput = {
   messages: ClaudeHistoryMessage[];
   subagentAgentIdsByToolUseId: Map<string, string>;
+  store: SessionStore;
 };
 
 const CLAUDE_SESSION_MISSING_MESSAGE =
@@ -297,25 +302,23 @@ export const isClaudeSessionMissingError = (cause: unknown): boolean =>
 
 export const loadClaudeHistoryProjectionInput = async (
   input: LoadAgentSessionHistoryInput,
+  includeSubagents = true,
 ): Promise<ClaudeHistoryProjectionInput> => {
   const target = parseClaudeTranscriptTarget(input.externalSessionId);
-  const session = await getSessionInfo(target.sessionId, { dir: input.workingDirectory });
-  if (!session || session.sessionId !== target.sessionId) {
+  if (!z.uuid().safeParse(target.sessionId).success) {
     throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
-  }
-  if (session.cwd !== input.workingDirectory) {
-    throw new AgentRuntimeQueryError(
-      "scope_mismatch",
-      "The Claude session belongs to another working directory. Select the matching session.",
-    );
   }
   const { entriesBySubpath, store } = createClaudeHistoryImportStore(target);
   try {
     await importSessionToStore(target.sessionId, store, {
       dir: input.workingDirectory,
-      includeSubagents: true,
+      includeSubagents,
     });
   } catch (cause) {
+    // The SDK reports a missing local transcript with this exact error (0.3.295).
+    if (cause instanceof Error && cause.message === `Session ${target.sessionId} not found`) {
+      throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
+    }
     if (cause instanceof HostValidationError) {
       throw cause;
     }
@@ -329,6 +332,19 @@ export const loadClaudeHistoryProjectionInput = async (
       },
     });
   }
+  const session = await getSessionInfo(target.sessionId, {
+    dir: input.workingDirectory,
+    sessionStore: store,
+  });
+  if (!session || session.sessionId !== target.sessionId) {
+    throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
+  }
+  if (session.cwd !== input.workingDirectory) {
+    throw new AgentRuntimeQueryError(
+      "scope_mismatch",
+      "The Claude session belongs to another working directory. Select the matching session.",
+    );
+  }
   const entries = entriesBySubpath.get(target.subpath);
   if (!entries && target.subpath) {
     throw new AgentRuntimeQueryError(
@@ -339,9 +355,16 @@ export const loadClaudeHistoryProjectionInput = async (
   return {
     messages: filterClaudeHistoryMessages(entries ?? []),
     subagentAgentIdsByToolUseId: readSubagentAgentIdsByToolUseId(entriesBySubpath, target.subpath),
+    store,
   };
 };
 
 export const loadClaudeRawHistoryMessages = async (
   input: LoadAgentSessionHistoryInput,
-): Promise<ClaudeHistoryMessage[]> => (await loadClaudeHistoryProjectionInput(input)).messages;
+): Promise<ClaudeHistoryMessage[]> =>
+  (
+    await loadClaudeHistoryProjectionInput(
+      input,
+      parseClaudeTranscriptTarget(input.externalSessionId).subpath !== undefined,
+    )
+  ).messages;

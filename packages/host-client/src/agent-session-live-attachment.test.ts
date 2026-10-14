@@ -6,10 +6,12 @@ const snapshot = {
   type: "snapshot",
   repoPath: "/repo",
   sessions: [],
+  messageQueues: [],
 } as const satisfies AgentSessionLiveEnvelope;
 
 const transcriptEvent = (messageId: string): AgentSessionLiveEnvelope => ({
   type: "transcript_event",
+  sequence: 2,
   event: {
     type: "assistant_message",
     externalSessionId: "child-thread",
@@ -107,7 +109,7 @@ describe("agent session live attachment", () => {
 
     expect(received).toEqual([
       { ...snapshot, sequence: 50, isConnectionSnapshot: true },
-      { ...snapshot, sequence: 2, isConnectionSnapshot: true },
+      { ...snapshot, sequence: 2, isConnectionSnapshot: true, historyReplayGap: true },
       transcriptEvent("after-gap"),
       upsert(3),
     ]);

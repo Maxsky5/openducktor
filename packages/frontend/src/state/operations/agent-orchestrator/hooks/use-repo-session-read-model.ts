@@ -10,8 +10,13 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { AgentMessageQueuesStore } from "@/state/agent-message-queues-store";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  type AgentSessionCollection,
+  getAgentSession,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
 import {
@@ -21,6 +26,7 @@ import {
 } from "@/state/queries/agent-sessions";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
@@ -34,7 +40,10 @@ import {
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
 import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
-import { markSessionHistoriesStale } from "../history/session-history-freshness";
+import {
+  markSessionHistoriesStale,
+  markSessionHistoryStale,
+} from "../history/session-history-freshness";
 import {
   applyAgentSessionLiveDelta,
   buildAgentSessionLiveCollection,
@@ -79,7 +88,8 @@ type UseRepoSessionReadModelArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
-  applyLiveNotices: AgentSessionsStore["applyLiveNotices"];
+  applyLiveSessionEnvelope: AgentSessionsStore["applyLiveSessionEnvelope"];
+  recordHistoryEnvelope: AgentSessionsStore["recordHistoryEnvelope"];
   messageQueues: Pick<AgentMessageQueuesStore, "replaceRepository" | "apply" | "removeAccepted">;
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
@@ -135,7 +145,8 @@ export const useRepoSessionReadModel = ({
   currentWorkspaceRepoPathRef,
   repoEpochRef,
   commitSessionCollection,
-  applyLiveNotices,
+  applyLiveSessionEnvelope,
+  recordHistoryEnvelope,
   messageQueues,
   liveSessionPort,
   transcriptEvents,
@@ -215,7 +226,7 @@ export const useRepoSessionReadModel = ({
     (...args: Parameters<AgentSessionTranscriptEventConsumer["handle"]>) =>
       transcriptEvents.handle(...args),
   );
-  const retainLiveNotices = useEffectEvent(applyLiveNotices);
+  const applyLiveEnvelopeToStore = useEffectEvent(applyLiveSessionEnvelope);
   const flushTranscriptSession = useEffectEvent((ref: AgentSessionLiveRef) =>
     transcriptEvents.flushSession(ref),
   );
@@ -704,6 +715,24 @@ export const useRepoSessionReadModel = ({
         { tags: { repoPath } },
       );
     };
+    const markScopedHistoryStale = (ref: AgentSessionLiveRef): void => {
+      commitSessionCollection((current) => {
+        let collection = current;
+        let session = getAgentSession(current, ref);
+        const visited = new Set<string>();
+        while (session && !visited.has(agentSessionIdentityKey(session))) {
+          visited.add(agentSessionIdentityKey(session));
+          collection = replaceAgentSession(collection, markSessionHistoryStale(session));
+          session = session.liveParentExternalSessionId
+            ? getAgentSession(current, {
+                ...session,
+                externalSessionId: session.liveParentExternalSessionId,
+              })
+            : null;
+        }
+        return { collection, result: undefined };
+      });
+    };
     const applyPendingApprovalPolicy = (actions: PendingApprovalPolicyAction[]): void => {
       if (actions.length === 0) {
         return;
@@ -735,7 +764,12 @@ export const useRepoSessionReadModel = ({
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
     ): void => {
-      if (envelope.isConnectionSnapshot) markHistoryStale();
+      if (
+        envelope.isConnectionSnapshot &&
+        (envelope.historyReplayGap ||
+          !getSessionHistoryFreshnessTracker(queryClient).isWorkspaceObserved(repoPath))
+      )
+        markHistoryStale();
       commitProjected((current) => {
         const registered = applyWorkspaceRecords(applyLoadedRecords(current, current), current);
         const projected = buildAgentSessionLiveCollection({
@@ -787,7 +821,7 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "snapshot") {
         messageQueues.replaceRepository(envelope.repoPath, envelope.messageQueues);
-        retainLiveNotices(envelope);
+        applyLiveEnvelopeToStore(envelope);
         commitInitialSnapshot(envelope);
         return;
       }
@@ -798,6 +832,7 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "fault") {
         const message = faultMessage(envelope);
         if (envelope.ref) {
+          markScopedHistoryStale(envelope.ref);
           recordSessionFault(envelope.ref, message);
         } else {
           failObservation(message);
@@ -833,7 +868,7 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
-        retainLiveNotices(envelope);
+        applyLiveEnvelopeToStore(envelope);
         const upsert = envelope.type === "session_upsert";
         clearSessionFault(upsert ? envelope.session.ref : envelope.ref);
         if (upsert && isSettlingLiveSessionSnapshot(envelope.session)) {
@@ -926,6 +961,7 @@ export const useRepoSessionReadModel = ({
       }
       try {
         applyEnvelope(envelope);
+        recordHistoryEnvelope(envelope);
       } catch (error: unknown) {
         reportEnvelopeFailure(envelope, error);
       }
@@ -957,6 +993,7 @@ export const useRepoSessionReadModel = ({
   }, [
     canObserveRepo,
     commitSessionCollection,
+    recordHistoryEnvelope,
     currentWorkspaceRepoPathRef,
     messageQueues,
     queryClient,

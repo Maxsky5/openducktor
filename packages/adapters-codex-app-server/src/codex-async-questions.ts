@@ -255,7 +255,8 @@ export class CodexAsyncQuestionState {
     runtimeId: string,
     threadId: string,
     messages: readonly AgentSessionHistoryMessage[],
-  ): void {
+  ): boolean {
+    const before = JSON.stringify(this.pendingForSession(runtimeId, threadId));
     const pending = new Map<string, AgentPendingQuestionRequest>();
     const handled = new Set<string>();
     for (const message of messages) {
@@ -273,6 +274,7 @@ export class CodexAsyncQuestionState {
     }
     this.resolve(runtimeId, threadId, [...handled]);
     for (const request of pending.values()) this.add(runtimeId, threadId, request);
+    return before !== JSON.stringify(this.pendingForSession(runtimeId, threadId));
   }
 
   claimRepliesForSession(

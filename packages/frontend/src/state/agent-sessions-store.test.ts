@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
+import { getSessionHistoryFreshnessTracker } from "./queries/agent-session-history-freshness-tracker";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionCollection } from "./agent-session-collection";
@@ -45,6 +47,68 @@ describe("toAgentSessionSummary", () => {
 });
 
 describe("createAgentSessionsStore session snapshots", () => {
+  test.each(["sibling", "child", "closed", "refreshing", "attaching"] as const)(
+    "retains covered workspace history after %s",
+    (change) => {
+      const queryClient = new QueryClient();
+      const freshnessTracker = getSessionHistoryFreshnessTracker(queryClient);
+      const observation = freshnessTracker.observeWorkspace("/repo");
+      const session = createAgentSessionFixture({
+        workingDirectory: "/repo",
+        historyLoadState: change === "refreshing" ? "refreshing" : "loaded",
+      });
+      const root: AgentSessionLiveSnapshot = {
+        ref: {
+          repoPath: "/repo",
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+          externalSessionId: session.externalSessionId,
+        },
+        activity: "idle",
+        title: "Chat",
+        startedAt: session.startedAt,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        contextUsage: null,
+      };
+      const child: AgentSessionLiveSnapshot = {
+        ...root,
+        ref: { ...root.ref, externalSessionId: "child" },
+        parentExternalSessionId: session.externalSessionId,
+      };
+      observation.recordEvent(createLiveSnapshotEnvelope({ sessions: [root, child] }));
+      const store = createAgentSessionsStore("/repo", freshnessTracker);
+      store.replaceSession({ ...session, historyLoadState: "not_requested" });
+      store.updateSession(session, (current) => ({ ...current, historyLoadState: "loading" }));
+      store.updateSession(session, () => session);
+      store.resetWorkspace("/other");
+      if (change === "sibling")
+        observation.recordEvent({
+          type: "session_upsert",
+          session: { ...root, ref: { ...root.ref, externalSessionId: "sibling" } },
+        });
+      if (change === "child")
+        observation.recordEvent({
+          type: "session_upsert",
+          session: { ...child, activity: "running" },
+        });
+      if (change === "closed") observation.close();
+      store.resetWorkspace("/repo");
+      expect(store.getSessionSnapshot(session)?.historyLoadState).toBe("stale");
+      if (change === "attaching")
+        observation.recordEvent({
+          type: "session_upsert",
+          session: { ...root, activity: "running" },
+        });
+      store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [root, child] }));
+      expect(store.getSessionSnapshot(session)?.historyLoadState).toBe(
+        change === "sibling" ? "loaded" : "stale",
+      );
+      expect(store.getSessionSnapshot(session)?.messages).toBe(session.messages);
+      observation.close();
+      queryClient.clear();
+    },
+  );
   test.each(["removed", "snapshot", "workspace"] as const)(
     "clears unregistered policy feedback after %s and keeps runtime identities separate",
     (cleanup) => {
@@ -73,7 +137,7 @@ describe("createAgentSessionsStore session snapshots", () => {
           timestamp: "2026-10-03T10:00:00Z",
         },
       };
-      store.applyLiveNotices({ type: "session_upsert", session: snapshot });
+      store.applyLiveSessionEnvelope({ type: "session_upsert", session: snapshot });
       const siblings = [
         { ...session, runtimeKind: "codex" as const },
         { ...session, workingDirectory: "/repo/other" },
@@ -83,13 +147,13 @@ describe("createAgentSessionsStore session snapshots", () => {
         expect(getSessionMessageCount(store.getSessionSnapshot(sibling)!)).toBe(0);
       }
       if (cleanup === "removed") {
-        store.applyLiveNotices({ type: "session_removed", ref: snapshot.ref });
+        store.applyLiveSessionEnvelope({ type: "session_removed", ref: snapshot.ref });
       } else if (cleanup === "snapshot") {
-        store.applyLiveNotices(createLiveSnapshotEnvelope({ sessions: [] }));
+        store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [] }));
       } else {
         store.resetWorkspace("/other");
         // A late callback from the previous workspace must not retain feedback here.
-        store.applyLiveNotices({ type: "session_upsert", session: snapshot });
+        store.applyLiveSessionEnvelope({ type: "session_upsert", session: snapshot });
         store.replaceSession(session);
         expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
         store.resetWorkspace("/repo");
@@ -127,7 +191,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       launchFailure,
     };
     // A browser that opens after the launch only receives the snapshot.
-    store.applyLiveNotices(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
+    store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
     store.replaceSession({
       ...session,
       messages: createSessionMessagesState(session.externalSessionId, [
@@ -147,7 +211,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       meta: { kind: "session_notice", tone: "error", reason: "session_error" },
     });
 
-    store.applyLiveNotices({
+    store.applyLiveSessionEnvelope({
       type: "session_upsert",
       session: { ...snapshot, launchFailure: undefined },
     });

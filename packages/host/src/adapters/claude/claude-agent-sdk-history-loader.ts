@@ -1,4 +1,8 @@
-import { getSubagentMessages, type SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  getSubagentMessages,
+  type SessionMessage,
+  type SessionStore,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
   type AgentSessionHistoryMessage,
@@ -131,6 +135,7 @@ const reconcileClaudeSubagentStatuses = async (
   input: LoadAgentSessionHistoryInput,
   history: AgentSessionHistoryMessage[],
   rootMessages: readonly SessionMessage[],
+  store: SessionStore,
 ): Promise<void> => {
   const latestStatusBySessionId = new Map<
     string,
@@ -174,12 +179,14 @@ const reconcileClaudeSubagentStatuses = async (
     const selectedAgentMessages = selectedAgentId
       ? await getSubagentMessages(target.sessionId, selectedAgentId, {
           dir: input.workingDirectory,
+          sessionStore: store,
         })
       : rootMessages;
     const completionStates = await Promise.all(
       runningAgents.map(async ({ agentId, executionMode }) => {
         const messages = await getSubagentMessages(target.sessionId, agentId, {
           dir: input.workingDirectory,
+          sessionStore: store,
         });
         return [
           agentId,
@@ -265,18 +272,16 @@ export const loadClaudeHistory = async (
     ) {
       throw cause;
     }
-    return {
-      messages: [],
-      subagentAgentIdsByToolUseId: new Map<string, string>(),
-    };
+    return null;
   });
-  const { messages, subagentAgentIdsByToolUseId } = projectionInput;
+  const messages = projectionInput?.messages ?? [];
   const isSubagentTranscript = isClaudeSubagentTranscriptTarget(input.externalSessionId);
-  const projectionOptions: Parameters<typeof toClaudeHistoryMessages>[3] = {
+  const projectionOptions: NonNullable<Parameters<typeof toClaudeHistoryMessages>[3]> = {
     includeNestedEntries: isSubagentTranscript,
-    subagentAgentIdsByToolUseId,
     transcriptExternalSessionId: input.externalSessionId,
   };
+  if (projectionInput)
+    projectionOptions.subagentAgentIdsByToolUseId = projectionInput.subagentAgentIdsByToolUseId;
   projectionOptions.currentBackgroundTaskIds = liveContext?.activeBackgroundTaskIds() ?? new Set();
   const history = toClaudeHistoryMessages(
     messages,
@@ -284,6 +289,12 @@ export const loadClaudeHistory = async (
     liveContext?.userMessages ?? [],
     projectionOptions,
   );
-  await reconcileClaudeSubagentStatuses(input, history, claudeSessionMessages(messages));
+  if (projectionInput)
+    await reconcileClaudeSubagentStatuses(
+      input,
+      history,
+      claudeSessionMessages(messages),
+      projectionInput.store,
+    );
   return finalizeClaudeHistory(input, history);
 };

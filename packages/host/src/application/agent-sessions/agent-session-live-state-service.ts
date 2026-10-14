@@ -92,12 +92,12 @@ export const createAgentSessionLiveStateService = ({
   };
   const executionEpisodes = createAgentSessionExecutionEpisodes();
   const engagement = createRuntimeSessionEngagement();
-  // Numbers state changes in publication order, so an attachment can drop the ones its snapshot covers.
+  // One publication position lets independent live consumers compare the history they applied.
   let liveStateSequence = 0;
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
     (envelope) =>
       publish(
-        isAgentSessionLiveStateEnvelope(envelope)
+        isAgentSessionLiveStateEnvelope(envelope) || envelope.type === "transcript_event"
           ? { ...envelope, sequence: ++liveStateSequence }
           : envelope,
       ),

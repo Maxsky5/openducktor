@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type AgentMessageQueuesStore,
   createAgentMessageQueuesStore,
@@ -8,6 +8,7 @@ import {
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-history";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -18,7 +19,10 @@ import type {
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
 import type { EnsureSession, UpdateSession } from "./events/session-event-types";
-import { createAgentSessionTranscriptEventConsumer } from "./events/session-transcript-events";
+import {
+  createAgentSessionTranscriptEventConsumer,
+  type AgentSessionTranscriptEventConsumer,
+} from "./events/session-transcript-events";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
 import { createLoadAgentSessionHistory } from "./history/session-history-loader";
@@ -74,10 +78,14 @@ export function useAgentOrchestratorOperations({
   const { queryClient, hostPort, liveSessionHostPort } = resolvedDependencies;
   // The host owns every queue for the app lifetime. This store only mirrors them.
   const [messageQueues] = useState(createAgentMessageQueuesStore);
+  const transcriptEventsRef = useRef<AgentSessionTranscriptEventConsumer | null>(null);
+  const flushTranscriptEvents = useCallback(() => transcriptEventsRef.current?.close(), []);
   const { sessionStore, taskRef, currentWorkspaceRepoPathRef, repoEpochRef, sessionTurnState } =
     useOrchestratorSessionState({
       workspaceRepoPath,
       tasks,
+      historyFreshness: getSessionHistoryFreshnessTracker(queryClient),
+      flushTranscriptEvents,
     });
   const invalidateSessionStopQueries = useCallback(
     ({ repoPath }: { repoPath: string; taskId: string }) =>
@@ -128,13 +136,21 @@ export function useAgentOrchestratorOperations({
     [ensureSession, queryClient, sessionStore, sessionTurnState, updateSession],
   );
   const historyReadGeneration = useMemo(() => createSessionHistoryReadGeneration(), []);
+  useLayoutEffect(() => {
+    transcriptEventsRef.current = transcriptEvents;
+    return () => {
+      transcriptEventsRef.current = null;
+    };
+  }, [transcriptEvents]);
   const sessionHistoryLoaders = useMemo(() => {
     const loaderArgs = {
       workspaceRepoPath,
       workspaceId,
       adapter: {
         loadSessionHistory: (input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) =>
-          queryClient.fetchQuery(sessionHistoryQueryOptions(input, agentEngine.loadSessionHistory)),
+          queryClient.fetchQuery(
+            sessionHistoryQueryOptions(input, agentEngine.loadSessionHistory, queryClient),
+          ),
       },
       repoEpochRef,
       currentWorkspaceRepoPathRef,
@@ -173,7 +189,8 @@ export function useAgentOrchestratorOperations({
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     commitSessionCollection: sessionStore.commitSessionCollection,
-    applyLiveNotices: sessionStore.applyLiveNotices,
+    applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
+    recordHistoryEnvelope: sessionStore.recordHistoryEnvelope,
     messageQueues,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,

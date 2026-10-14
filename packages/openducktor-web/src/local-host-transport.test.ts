@@ -915,6 +915,7 @@ describe("local host SSE subscriptions", () => {
         sessions: [],
         sequence: 9,
         isConnectionSnapshot: true,
+        historyReplayGap: true,
       },
       transcriptEvent("during-reattach"),
     ]);
@@ -956,6 +957,7 @@ describe("local host SSE subscriptions", () => {
       sessions: [],
       sequence: 9,
       isConnectionSnapshot: true,
+      historyReplayGap: true,
     });
     stopObserving();
   });
@@ -984,6 +986,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener.mock.calls[1]?.[0]).toMatchObject({
       type: "snapshot",
       isConnectionSnapshot: true,
+      historyReplayGap: true,
     });
     expect(throwingListener.mock.calls[2]?.[0]).toEqual({
       type: "fault",

@@ -960,8 +960,12 @@ export class CodexAppServerAdapter
       input.externalSessionId,
       nativeHistory,
     );
-    this.asyncQuestions.loadHistory(runtime.runtimeId, input.externalSessionId, history);
-    if (session && this.options.onLiveSessionMutation) {
+    const questionsChanged = this.asyncQuestions.loadHistory(
+      runtime.runtimeId,
+      input.externalSessionId,
+      history,
+    );
+    if (questionsChanged && session && this.options.onLiveSessionMutation) {
       await this.options.onLiveSessionMutation({
         provenance: "baseline",
         runtimeId: runtime.runtimeId,

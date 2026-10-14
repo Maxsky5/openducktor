@@ -2,6 +2,9 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
+import type { SessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { markSessionHistoriesStale } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
 
 type UseOrchestratorSessionStateRefs = {
@@ -14,6 +17,8 @@ type UseOrchestratorSessionStateRefs = {
 type UseOrchestratorSessionStateArgs = {
   workspaceRepoPath: string | null;
   tasks: TaskCard[];
+  historyFreshness: SessionHistoryFreshnessTracker;
+  flushTranscriptEvents: () => void;
 };
 
 type UseOrchestratorSessionStateResult = {
@@ -23,11 +28,13 @@ type UseOrchestratorSessionStateResult = {
 export const useOrchestratorSessionState = ({
   workspaceRepoPath,
   tasks,
+  historyFreshness,
+  flushTranscriptEvents,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
   const initialWorkspaceRepoPathRef = useRef(workspaceRepoPath);
   const sessionStore = useMemo(
-    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current),
-    [],
+    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current, historyFreshness),
+    [historyFreshness],
   );
   const taskRef = useRef(tasks);
   const currentWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
@@ -38,16 +45,30 @@ export const useOrchestratorSessionState = ({
     taskRef.current = tasks;
   }, [tasks]);
 
+  useEffect(
+    () =>
+      historyFreshness.subscribeWorkspaceResets((repoPath) => {
+        const currentRepoPath = currentWorkspaceRepoPathRef.current;
+        if (currentRepoPath && normalizeWorkingDirectory(currentRepoPath) === repoPath) {
+          // The rail can finish recovery after the selected attachment restored its collection.
+          sessionStore.setSessionCollection(markSessionHistoriesStale);
+        }
+      }),
+    [historyFreshness, sessionStore],
+  );
+
   useLayoutEffect(() => {
     if (currentWorkspaceRepoPathRef.current === workspaceRepoPath) {
       return;
     }
+    // Commit buffered events to the old workspace before its collection is retained.
+    flushTranscriptEvents();
     repoEpochRef.current += 1;
     currentWorkspaceRepoPathRef.current = workspaceRepoPath;
 
     sessionTurnState.clearAll();
     sessionStore.resetWorkspace(workspaceRepoPath);
-  }, [sessionTurnState, workspaceRepoPath, sessionStore]);
+  }, [flushTranscriptEvents, sessionTurnState, workspaceRepoPath, sessionStore]);
 
   const clearMutableSessionState = useCallback(() => {
     sessionTurnState.clearAll();

@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { QueryClient } from "@tanstack/react-query";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createAgentSessionTranscriptEventConsumer,
+  type AgentSessionTranscriptEventConsumer,
+} from "../events/session-transcript-events";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
@@ -54,14 +60,22 @@ const createSessionFixture = (): AgentSessionState => ({
   selectedModel: null,
 });
 
-type HookArgs = Parameters<typeof useOrchestratorSessionState>[0];
+type HookArgs = Omit<
+  Parameters<typeof useOrchestratorSessionState>[0],
+  "historyFreshness" | "flushTranscriptEvents"
+> & { flushTranscriptEvents?: () => void };
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: ReturnType<typeof useOrchestratorSessionState> | null = null;
   let currentArgs = initialArgs;
+  const historyFreshness = getSessionHistoryFreshnessTracker(new QueryClient());
 
   const Harness = () => {
-    latest = useOrchestratorSessionState(currentArgs);
+    latest = useOrchestratorSessionState({
+      ...currentArgs,
+      historyFreshness,
+      flushTranscriptEvents: currentArgs.flushTranscriptEvents ?? (() => {}),
+    });
     return null;
   };
 
@@ -107,6 +121,65 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
+  test("commits buffered transcript events before retaining the old workspace", async () => {
+    const session = createSessionFixture();
+    let consumer: AgentSessionTranscriptEventConsumer | null = null;
+    const flushTranscriptEvents = () => consumer?.close();
+    const harness = createHookHarness({
+      workspaceRepoPath: "/tmp/repo-a",
+      tasks: [taskFixture],
+      flushTranscriptEvents,
+    });
+    try {
+      await harness.mount();
+      const { sessionStore, sessionTurnState } = harness.getLatest();
+      consumer = createAgentSessionTranscriptEventConsumer(
+        {
+          readSession: sessionStore.getSessionSnapshot,
+          ensureSession: (identity, createSession) =>
+            sessionStore.getSessionSnapshot(identity) ?? createSession(),
+          updateSession: sessionStore.updateSession,
+          updateSessionTodos: () => {},
+          sessionTurnState,
+        },
+        { batchWindowMs: 1_000 },
+      );
+      await harness.run(() => {
+        sessionStore.replaceSession(session);
+        consumer!.handle({
+          type: "assistant_delta",
+          externalSessionId: session.externalSessionId,
+          sessionRef: {
+            repoPath: "/tmp/repo-a",
+            runtimeKind: session.runtimeKind,
+            workingDirectory: session.workingDirectory,
+            externalSessionId: session.externalSessionId,
+          },
+          messageId: "buffered-message",
+          channel: "text",
+          delta: "Buffered text",
+          timestamp: session.startedAt,
+        });
+      });
+      expect(sessionStore.getSessionSnapshot(session)?.messages.items).toHaveLength(0);
+      await harness.update({
+        workspaceRepoPath: "/tmp/repo-b",
+        tasks: [taskFixture],
+        flushTranscriptEvents,
+      });
+      await harness.update({
+        workspaceRepoPath: "/tmp/repo-a",
+        tasks: [taskFixture],
+        flushTranscriptEvents,
+      });
+      expect(sessionStore.getSessionSnapshot(session)?.messages.items).toContainEqual(
+        expect.objectContaining({ content: "Buffered text" }),
+      );
+    } finally {
+      consumer?.close();
+      await harness.unmount();
+    }
+  });
   test("scopes session reads to the active repository on repo change", async () => {
     const harness = createHookHarness({
       workspaceRepoPath: "/tmp/repo-a",

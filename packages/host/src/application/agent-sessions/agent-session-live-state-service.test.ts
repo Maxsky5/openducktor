@@ -313,7 +313,9 @@ test.each(["session_idle", "session_status", "session_finished"] as const)(
                 ? [{ type: "transcript_event" as const, event: idleStatus }]
                 : []),
             ];
-      expect(terminal).toEqual(expectedTerminal);
+      expect(terminal).toEqual(
+        expectedTerminal.map((envelope) => ({ ...envelope, sequence: expect.any(Number) })),
+      );
       // A later native idle still ends a running turn exactly once.
       await Effect.runPromise(
         binding.runMutation(
@@ -390,8 +392,8 @@ test.each(["before", "after"] as const)(
     await Effect.runPromise(service.holdWorkflowLaunch(snapshot.ref, false));
     expect(occurrences).toEqual([]);
     expect(events.filter((event) => event.type === "transcript_event")).toEqual([
-      { type: "transcript_event", event: stopped },
-      { type: "transcript_event", event: idle },
+      { type: "transcript_event", event: stopped, sequence: expect.any(Number) },
+      { type: "transcript_event", event: idle, sequence: expect.any(Number) },
     ]);
   },
 );
@@ -438,7 +440,9 @@ test.each(["turn_error", "session_error"] as const)(
       ),
     );
     const transcript = () => events.filter((envelope) => envelope.type === "transcript_event");
-    expect(transcript()).toEqual([{ type: "transcript_event", event: failure }]);
+    expect(transcript()).toEqual([
+      { type: "transcript_event", event: failure, sequence: expect.any(Number) },
+    ]);
     // The error does not end the hold, so the first turn still shows as running.
     const held = await Effect.runPromise(service.read(snapshot.ref));
     expect(held.type === "live" && held.session.activity).toBe("running");
@@ -448,7 +452,7 @@ test.each(["turn_error", "session_error"] as const)(
 
     const released = events.slice(published);
     expect(released.filter((envelope) => envelope.type === "transcript_event")).toEqual([
-      { type: "transcript_event", event: idle },
+      { type: "transcript_event", event: idle, sequence: expect.any(Number) },
     ]);
     const releasedSnapshots = released.flatMap((envelope) =>
       envelope.type === "session_upsert" ? [envelope.session] : [],
@@ -681,7 +685,14 @@ describe("createAgentSessionLiveStateService", () => {
 
     test("restores a repository once and answers later attachments from the live projection", async () => {
       const { adapter, counts, events, service } = createAttachHarness();
-      await Effect.runPromise(service.registerRuntimeAdapter(adapter("runtime-1")));
+      const runtime = {
+        ...adapter("runtime-1"),
+        binding: service.createRuntimeRegistration({
+          runtimeId: "runtime-1",
+          runtimeKind: "codex",
+        }),
+      };
+      await Effect.runPromise(service.registerRuntimeAdapter(runtime));
       expect(events).toMatchObject([{ type: "session_upsert", sequence: 1 }]);
       events.length = 0;
 
@@ -699,6 +710,24 @@ describe("createAgentSessionLiveStateService", () => {
       expect(counts).toEqual({ rootReads: 1, refreshes: 1 });
       // The caller receives its snapshot. Other observers receive nothing.
       expect(events).toEqual([]);
+
+      const event: AgentSessionTranscriptEvent = {
+        type: "assistant_message",
+        sessionRef: liveSnapshot("session-1").ref,
+        externalSessionId: "session-1",
+        timestamp: "2026-07-16T10:00:01.000Z",
+        messageId: "message-1",
+        message: "New transcript content",
+      };
+      await Effect.runPromise(
+        runtime.binding.runMutation(
+          Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
+        ),
+      );
+      expect(events).toEqual([{ type: "transcript_event", event, sequence: 2 }]);
+      const afterTranscript = await Effect.runPromise(service.attach({ repoPath: "/repo" }));
+      expect(afterTranscript).toEqual({ ...first, sequence: 2 });
+      expect(counts).toEqual({ rootReads: 1, refreshes: 1 });
     });
 
     test("concurrent first attachments share one restoration and its failure", async () => {

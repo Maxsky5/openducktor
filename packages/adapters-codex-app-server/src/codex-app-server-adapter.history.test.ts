@@ -270,6 +270,9 @@ describe("CodexAppServerAdapter history loading", () => {
         ],
       }),
     );
+    const mutationCount = mutations.length;
+    await adapter.loadSessionHistory(ref);
+    expect(mutations).toHaveLength(mutationCount);
 
     await adapter.replyQuestion({
       ...ref,
