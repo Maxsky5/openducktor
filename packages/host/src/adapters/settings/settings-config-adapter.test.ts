@@ -28,7 +28,6 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
 describe("settings config adapter initialization", () => {
   test("saves global default steering and reads it after settings service restart", async () => {
     await withTempConfig(async (configPath) => {
-      // An existing version 4 config has no preference until the user saves it.
       await writeFile(
         configPath,
         JSON.stringify({ version: 4, chat: { showThinkingMessages: true } }),

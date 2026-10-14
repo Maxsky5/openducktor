@@ -95,7 +95,6 @@ const FileEditCardHeader = ({
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
 }: AgentChatFileEditCardProps): ReactElement {
-  // Display defaults keep transcript controls available before the first settings read.
   const chatSettings = useAgentChatSettings() ?? DEFAULT_CHAT_SETTINGS;
   const { expandFileDiffsByDefault } = chatSettings;
   const hasContent = data.kind !== "path";

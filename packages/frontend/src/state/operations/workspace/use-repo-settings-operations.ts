@@ -268,7 +268,6 @@ export function useRepoSettingsOperations({
       const saveResult = await host.workspaceSaveSettingsSnapshot(snapshot, runtimeConfirmation);
       // Nothing was written. The caller shows the changed impact for a new review.
       if (saveResult.type === "runtime_impact_changed") return saveResult;
-      // Publish only confirmed Chat settings. Older reads must not undo the saved mapping.
       await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
       queryClient.setQueryData<SettingsSnapshot>(settingsSnapshotQueryKey, (current) =>
         current ? { ...current, chat: savedChat } : undefined,

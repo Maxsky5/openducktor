@@ -319,7 +319,6 @@ describe("AgentChatComposer", () => {
     test.each<[string, Partial<AgentChatComposerModel>, string]>([
       [
         "a working session",
-        // A send waits in the queue, so it does not show the preparing state.
         { isSessionWorking: true, isSending: true },
         steerMessagesByDefault
           ? `@ for files; / for commands; Enter to steer; ${steerShortcutLabel()} to queue`
@@ -350,7 +349,6 @@ describe("AgentChatComposer", () => {
 
       const card = readComposerCard(html);
       expect(card.querySelector('[aria-label="Message composer"]')?.textContent).toBe(placeholder);
-      // The send button stays the same. Only the placeholder names the queue keys.
       expect(card.querySelector('[aria-label="Send message"]')).not.toBeNull();
       expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
     });

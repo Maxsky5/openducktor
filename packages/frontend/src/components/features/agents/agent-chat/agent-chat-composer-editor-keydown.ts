@@ -500,7 +500,6 @@ export const handleComposerEditorKeyDown = ({
     return false;
   }
 
-  // The alternate shortcut sends the whole draft before autocomplete selection.
   if (isSteerShortcut(event)) {
     event.preventDefault();
     if (!disabled && !event.repeat) {

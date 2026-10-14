@@ -40,7 +40,6 @@ import * as sessionContent from "./workspace-session-content";
 // Every test here renders the full workspace session page, which can exceed 1000 ms on a loaded
 // CI runner. Each test sets a 5_000 ms budget for that render.
 
-// These page tests own navigation and archive behavior. Chat lifecycle has its own tests.
 let chatStub: ReturnType<typeof spyOn<typeof workspaceChat, "WorkspaceSessionChat">>;
 beforeEach(() => {
   chatStub = spyOn(workspaceChat, "WorkspaceSessionChat").mockImplementation(() => <></>);

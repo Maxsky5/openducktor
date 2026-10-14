@@ -10,7 +10,6 @@ import {
 } from "./agent-chat-composer-draft";
 import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
 
-/** Keep shortcut guards separate so a blocked steer can show its reason before the draft clears. */
 export function useComposerPolicy({
   model,
   draft,
@@ -51,16 +50,14 @@ export function useComposerPolicy({
   const hasSlashAttachmentConflict =
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
 
-  // A steer checks its attachments against the running turn model when it submits.
-  const steerDisabled =
+  const sendInputBlocked =
     isSubmitting ||
     Boolean(model.isSavingModel) ||
     isComposerInputDisabled ||
-    // A speed change blocks only sends, so model and effort controls keep their state.
     model.speed?.pending === true ||
     hasSlashAttachmentConflict ||
     !hasComposerSendContent(draft, model.pendingSendItems);
-  const defaultSendDisabled = steerDisabled || hasBlockingAttachments;
+  const defaultSendDisabled = sendInputBlocked || hasBlockingAttachments;
   const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
   const sendBlockedReason = settingsReady
     ? steerBlockedReason
@@ -68,7 +65,7 @@ export function useComposerPolicy({
   const sendDisabled =
     !settingsReady ||
     (steersTurn
-      ? steerDisabled || steerBlockedReason !== null || Object.keys(attachmentErrors).length > 0
+      ? sendInputBlocked || steerBlockedReason !== null || Object.keys(attachmentErrors).length > 0
       : defaultSendDisabled);
 
   return {
@@ -77,7 +74,7 @@ export function useComposerPolicy({
     placeholder: composerPlaceholderFor(model, primaryMode, settingsReady),
     attachmentErrors,
     hasSlashAttachmentConflict,
-    steerDisabled,
+    sendInputBlocked,
     defaultSendDisabled,
     sendDisabled,
     sendBlockedReason,
@@ -115,7 +112,7 @@ type ComposerPolicy = {
   placeholder: string;
   attachmentErrors: Record<string, string>;
   hasSlashAttachmentConflict: boolean;
-  steerDisabled: boolean;
+  sendInputBlocked: boolean;
   defaultSendDisabled: boolean;
   sendDisabled: boolean;
   sendBlockedReason: string | null;

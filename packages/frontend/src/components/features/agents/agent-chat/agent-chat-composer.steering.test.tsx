@@ -41,7 +41,6 @@ describe("AgentChatComposer steering", () => {
       const onSend = mock(
         async (_draft: AgentChatComposerDraft, _mode: AgentMessageSubmitMode) => true,
       );
-      // The user selects a text-only model for later messages while the turn reads PDF files.
       const { container, unmount } = render(
         <AgentChatComposer
           settings={{ ...DEFAULT_CHAT_SETTINGS, steerMessagesByDefault }}

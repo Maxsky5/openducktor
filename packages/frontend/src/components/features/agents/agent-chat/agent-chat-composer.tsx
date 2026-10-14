@@ -101,7 +101,7 @@ export function AgentChatComposer({
   });
   const draftRef = useRef<AgentChatComposerDraft>(draft);
   const defaultSendDisabledRef = useRef(false);
-  const steerDisabledRef = useRef(false);
+  const sendInputBlockedRef = useRef(false);
   const modelRef = useRef(model);
   const settingsReadyRef = useRef(settingsReady);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -111,7 +111,7 @@ export function AgentChatComposer({
     placeholder,
     attachmentErrors,
     hasSlashAttachmentConflict,
-    steerDisabled,
+    sendInputBlocked,
     defaultSendDisabled,
     sendDisabled,
     sendBlockedReason,
@@ -170,10 +170,10 @@ export function AgentChatComposer({
   useLayoutEffect(() => {
     draftRef.current = draft;
     defaultSendDisabledRef.current = defaultSendDisabled;
-    steerDisabledRef.current = steerDisabled;
+    sendInputBlockedRef.current = sendInputBlocked;
     modelRef.current = model;
     settingsReadyRef.current = settingsReady;
-  }, [draft, model, defaultSendDisabled, steerDisabled, settingsReady]);
+  }, [draft, model, defaultSendDisabled, sendInputBlocked, settingsReady]);
 
   const modelPickerDisabled = isSendOrModelPending || !isInteractionEnabled || isReadOnly;
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
@@ -189,12 +189,11 @@ export function AgentChatComposer({
     async (mode: AgentMessageSubmitMode): Promise<void> => {
       if (!settingsReadyRef.current) return;
       const steersTurn = steersRunningTurn(mode, modelRef.current.isSessionWorking);
-      if (steersTurn ? steerDisabledRef.current : defaultSendDisabledRef.current) {
+      if (steersTurn ? sendInputBlockedRef.current : defaultSendDisabledRef.current) {
         return;
       }
       const submitDraft = modelRef.current.onSend;
       const submittedDraft = draftRef.current;
-      // Check before clearing the draft so the user can fix a blocked steer.
       const steerBlockedReason = steersTurn
         ? draftSteerBlockedReason(submittedDraft, modelRef.current)
         : null;
@@ -482,7 +481,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
         )}
       </div>
 
-      {/* In a narrow pane, the context meter wraps above stop and send, so they stay in view. */}
       <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
         {contextUsage ? (
           <AgentContextUsageIndicator
