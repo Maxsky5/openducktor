@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
 import { worktreeBranchQueryOptions } from "@/state/queries/git";
+import { checkoutReadIdentity } from "../agent-studio-git/model/checkout-read-identity";
 import { useSessionComparison } from "../agent-studio-git/use-session-comparison";
 import { useComparisonView } from "../agent-studio-git/session-comparison-view";
 import { hostClient } from "@/lib/host-client";
@@ -350,7 +351,8 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
     target,
     targetError,
     branchError: branch.isError ? errorMessage(branch.error) : null,
-    branchKey: JSON.stringify([input.branchKey, branch.data]),
+    // A commit keeps the read keys, so the panel shows its data while it reads again.
+    branchKey: JSON.stringify([input.branchKey, checkoutReadIdentity(branch.data)]),
     branchReady: branch.data !== undefined && !branch.isError,
   });
   const queryClient = useQueryClient();

@@ -639,6 +639,81 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     }
   });
 
+  test("a commit keeps every Git panel read on screen while it reads again", async () => {
+    let revision = "first";
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false, revision }),
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/release",
+          }),
+        },
+      }),
+    );
+    const queryClient = createQueryClient();
+    type Shown = { local: unknown; target: unknown; reference: string | null; pending: boolean };
+    const renders: Shown[] = [];
+    const harness = createSharedHookHarness(
+      (args: HookArgs) => {
+        const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(args);
+        const { diffData } = snapshot;
+        renders.push({
+          local: diffData.scopeStatesByScope.uncommitted.localChanges,
+          target: diffData.scopeStatesByScope.target.commitsAheadBehind,
+          reference: diffData.comparisonReference ?? null,
+          pending: diffData.comparisonPending ?? false,
+        });
+        return snapshot;
+      },
+      createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release", remote: "origin" },
+          }),
+        }),
+      }),
+      { queryClient },
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.diffData.loadedScopesByScope.target &&
+          state.diffData.comparisonReference !== null &&
+          queryClient.isFetching() === 0,
+      );
+      renders.length = 0;
+      const localReads = readLocalChanges.mock.calls.length;
+
+      // An agent turn commits. The panel reads the checkout and its Git data again.
+      revision = "second";
+      await harness.run(async () => {
+        await refreshGitAfterAgentChange(queryClient, "/repo", "/repo/.worktrees/task-24");
+      });
+      await harness.waitFor(
+        (state) =>
+          state.diffData.checkout?.revision === "second" &&
+          readLocalChanges.mock.calls.length > localReads &&
+          queryClient.isFetching() === 0,
+      );
+
+      // No render lost the shown data or fell back to a loading state.
+      expect(renders.length).toBeGreaterThan(0);
+      for (const shown of renders) {
+        expect(shown.local).toBeDefined();
+        expect(shown.target).not.toBeNull();
+        expect(shown.reference).toBe("refs/remotes/origin/release");
+        expect(shown.pending).toBe(false);
+      }
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("disables the snapshot when the build-tools panel is closed", async () => {
     const harness = createHookHarness(
       createBaseArgs({ isGitTabActive: false, isRightPanelOpen: false }),

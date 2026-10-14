@@ -12,6 +12,7 @@ export type {
   GitCommitMode,
   GitDiffRefreshMode,
 } from "./contracts";
+export { checkoutReadIdentity } from "./model/checkout-read-identity";
 export { collectUnmergedFilePaths } from "./model/unmerged-file-paths";
 export { gitChangeIntentKey } from "./model/git-change-intent";
 export { applyPendingChanges } from "./model/pending-local-changes";
