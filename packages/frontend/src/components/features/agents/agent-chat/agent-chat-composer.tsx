@@ -886,31 +886,27 @@ const composerPlaceholderFor = (
     isWaitingInput,
     waitingInputPlaceholder,
   } = model;
-  let referencePlaceholder: string | null = null;
-  if (supportsFileSearch && supportsSubagentReferences) {
-    referencePlaceholder = "@ for files and subagents";
-  } else if (supportsSubagentReferences) {
-    referencePlaceholder = "@ for subagents";
-  } else if (supportsFileSearch) {
-    referencePlaceholder = "@ for files";
+  if (isWaitingInput) {
+    return waitingInputPlaceholder ?? "Resolve the pending request above to continue";
   }
-  const composerPlaceholderParts = [
-    referencePlaceholder,
+  if (isReadOnly && readOnlyReason) return readOnlyReason;
+  if (!settingsReady) return "Load chat settings before sending";
+
+  let referenceHint: string | null = null;
+  if (supportsFileSearch && supportsSubagentReferences) {
+    referenceHint = "@ for files and subagents";
+  } else if (supportsSubagentReferences) {
+    referenceHint = "@ for subagents";
+  } else if (supportsFileSearch) {
+    referenceHint = "@ for files";
+  }
+  const hints = [
+    referenceHint,
     supportsSlashCommands ? "/ for commands" : null,
     supportsSkillReferences ? "$ for skills" : null,
     ...queuePlaceholderParts(model, primaryMode),
   ].filter((part): part is string => Boolean(part));
-  let composerPlaceholder =
-    composerPlaceholderParts.length > 0 ? composerPlaceholderParts.join("; ") : "Type a message";
-  if (!settingsReady) composerPlaceholder = "Load chat settings before sending";
-  if (isReadOnly && readOnlyReason) {
-    composerPlaceholder = readOnlyReason;
-  }
-  if (isWaitingInput) {
-    composerPlaceholder =
-      waitingInputPlaceholder ?? "Resolve the pending request above to continue";
-  }
-  return composerPlaceholder;
+  return hints.length > 0 ? hints.join("; ") : "Type a message";
 };
 
 const queuePlaceholderParts = (
