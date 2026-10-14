@@ -3,7 +3,7 @@ import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
-import { sessionHistoryCoverage } from "./agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "./agent-session-history-freshness-tracker";
 import { agentSessionHistoryQueryKeys, sessionHistoryQueryOptions } from "./agent-session-history";
 
 const sessionRefFixture: LoadAgentSessionHistoryInput = {
@@ -35,10 +35,10 @@ describe("agent session history queries", () => {
     contextUsage: null,
   };
 
-  test("reuses covered history on reopen and reads again after activity, a gap, or loss of coverage", async () => {
+  test("reuses current history on reopen and reads again after activity, a gap, or observation teardown", async () => {
     const client = new QueryClient();
-    const observation = sessionHistoryCoverage(client).observe("/repo");
-    observation.accept(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
+    const observation = getSessionHistoryFreshnessTracker(client).observeWorkspace("/repo");
+    observation.recordEvent(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
     const reader = mock(async () => [{ ...historyMessageFixture }]);
     const options = sessionHistoryQueryOptions(sessionRefFixture, reader, client);
     const reopen = async () => {
@@ -54,22 +54,25 @@ describe("agent session history queries", () => {
       await reopen();
       await reopen();
       expect(reader).toHaveBeenCalledTimes(1);
-      observation.accept({
+      observation.recordEvent({
         type: "session_upsert",
         session: { ...snapshot, title: "Renamed chat" },
       });
       await reopen();
       expect(reader).toHaveBeenCalledTimes(1);
-      observation.accept({
+      observation.recordEvent({
         type: "session_upsert",
         session: { ...snapshot, ref: { ...snapshot.ref, externalSessionId: "other" } },
       });
       await reopen();
       expect(reader).toHaveBeenCalledTimes(1);
-      observation.accept({ type: "session_upsert", session: { ...snapshot, activity: "running" } });
+      observation.recordEvent({
+        type: "session_upsert",
+        session: { ...snapshot, activity: "running" },
+      });
       await reopen();
       expect(reader).toHaveBeenCalledTimes(2);
-      observation.accept(
+      observation.recordEvent(
         createLiveSnapshotEnvelope({
           sessions: [snapshot],
           isConnectionSnapshot: true,
@@ -97,8 +100,8 @@ describe("agent session history queries", () => {
     "refreshes both ancestor chains for %s with next parent %s",
     async (type, nextParent) => {
       const client = new QueryClient();
-      const coverage = sessionHistoryCoverage(client);
-      const observation = coverage.observe("/repo");
+      const freshnessTracker = getSessionHistoryFreshnessTracker(client);
+      const observation = freshnessTracker.observeWorkspace("/repo");
       const session = (externalSessionId: string, parentExternalSessionId?: string) => ({
         ...snapshot,
         ref: {
@@ -117,12 +120,12 @@ describe("agent session history queries", () => {
       const initial = createLiveSnapshotEnvelope({
         sessions: [ancestor, oldParent, newParent, child, peer],
       });
-      observation.accept(initial);
-      const projection = coverage.createProjection();
-      projection.accept(initial);
+      observation.recordEvent(initial);
+      const historyProgress = freshnessTracker.createHistoryProgressTracker();
+      historyProgress.recordEvent(initial);
       const histories = [oldParent, newParent, ancestor, peer].map((entry) => {
         const reader = mock(async () => [historyMessageFixture]);
-        projection.capture("/repo", entry.ref);
+        historyProgress.captureReadVersion("/repo", entry.ref);
         return {
           ref: entry.ref,
           reader,
@@ -148,14 +151,16 @@ describe("agent session history queries", () => {
                 agentSessions: [],
                 liveSession: updated,
               };
-        observation.accept(envelope);
+        observation.recordEvent(envelope);
         for (const { ref } of histories) {
           const affected =
             ref.externalSessionId === "old-parent" ||
             ref.externalSessionId === "ancestor" ||
             ref.externalSessionId === nextParent;
           // A selected attachment that has not applied the update cannot retain these histories.
-          expect(coverage.isCurrent("/repo", ref, projection.read(ref))).toBe(!affected);
+          expect(freshnessTracker.isCurrent("/repo", ref, historyProgress.getVersion(ref))).toBe(
+            !affected,
+          );
         }
         await reopen();
         expect(histories.map(({ reader }) => reader.mock.calls.length)).toEqual([
@@ -164,11 +169,13 @@ describe("agent session history queries", () => {
           2,
           1,
         ]);
-        projection.accept(structuredClone(envelope));
+        historyProgress.recordEvent(structuredClone(envelope));
         for (const { ref } of histories) {
-          expect(coverage.isCurrent("/repo", ref, projection.read(ref))).toBe(true);
+          expect(freshnessTracker.isCurrent("/repo", ref, historyProgress.getVersion(ref))).toBe(
+            true,
+          );
         }
-        observation.accept({
+        observation.recordEvent({
           type: "transcript_event",
           sequence: 2,
           event: {
@@ -204,8 +211,8 @@ describe("agent session history queries", () => {
     "does not reuse a raced read with warm cache %s and prior unsequenced fault %s",
     async (warm, priorFault) => {
       const client = new QueryClient();
-      const observation = sessionHistoryCoverage(client).observe("/repo");
-      observation.accept(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
+      const observation = getSessionHistoryFreshnessTracker(client).observeWorkspace("/repo");
+      observation.recordEvent(createLiveSnapshotEnvelope({ sessions: [snapshot] }));
       const transcript = (sequence: number) =>
         ({
           type: "transcript_event",
@@ -220,8 +227,8 @@ describe("agent session history queries", () => {
           },
         }) as const;
       if (priorFault) {
-        observation.accept(transcript(1));
-        observation.accept({
+        observation.recordEvent(transcript(1));
+        observation.recordEvent({
           type: "fault",
           repoPath: "/repo",
           ref: snapshot.ref,
@@ -239,7 +246,7 @@ describe("agent session history queries", () => {
           await client.invalidateQueries({ queryKey: options.queryKey, refetchType: "none" });
         }
         const pending = client.fetchQuery(options);
-        observation.accept(
+        observation.recordEvent(
           priorFault
             ? transcript(2)
             : { type: "session_upsert", session: { ...snapshot, activity: "running" } },

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { sessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
@@ -62,18 +62,18 @@ const createSessionFixture = (): AgentSessionState => ({
 
 type HookArgs = Omit<
   Parameters<typeof useOrchestratorSessionState>[0],
-  "historyCoverage" | "flushTranscriptEvents"
+  "historyFreshness" | "flushTranscriptEvents"
 > & { flushTranscriptEvents?: () => void };
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: ReturnType<typeof useOrchestratorSessionState> | null = null;
   let currentArgs = initialArgs;
-  const historyCoverage = sessionHistoryCoverage(new QueryClient());
+  const historyFreshness = getSessionHistoryFreshnessTracker(new QueryClient());
 
   const Harness = () => {
     latest = useOrchestratorSessionState({
       ...currentArgs,
-      historyCoverage,
+      historyFreshness,
       flushTranscriptEvents: currentArgs.flushTranscriptEvents ?? (() => {}),
     });
     return null;

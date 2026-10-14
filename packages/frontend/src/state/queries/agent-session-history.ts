@@ -11,9 +11,9 @@ import { resolveAgentSessionRuntimePolicy } from "@/state/operations/agent-orche
 import { toRuntimeSessionRefWithPolicy } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
-  sessionHistoryCoverage,
+  getSessionHistoryFreshnessTracker,
   type SessionHistoryVersion,
-} from "./agent-session-history-coverage";
+} from "./agent-session-history-freshness-tracker";
 
 export const SESSION_HISTORY_STALE_TIME_MS = Number.POSITIVE_INFINITY;
 const historyVersions = new WeakMap<AgentSessionHistoryMessage[], SessionHistoryVersion | null>();
@@ -92,7 +92,10 @@ export const sessionHistoryQueryOptions = (
   queryOptions<AgentSessionHistoryMessage[], Error, AgentSessionHistoryMessage[], QueryKey>({
     queryKey: agentSessionHistoryQueryKeys.history(session),
     queryFn: async (): Promise<AgentSessionHistoryMessage[]> => {
-      const version = sessionHistoryCoverage(queryClient).read(session.repoPath, session);
+      const version = getSessionHistoryFreshnessTracker(queryClient).getVersion(
+        session.repoPath,
+        session,
+      );
       const history = await readSessionHistory(session);
       historyVersions.set(history, version);
       return history;
@@ -100,7 +103,7 @@ export const sessionHistoryQueryOptions = (
     // Keep the response identity with its coverage token, including a cold read raced by events.
     structuralSharing: false,
     staleTime: (query) =>
-      sessionHistoryCoverage(queryClient).isCurrent(
+      getSessionHistoryFreshnessTracker(queryClient).isCurrent(
         session.repoPath,
         session,
         query.state.data ? (historyVersions.get(query.state.data) ?? null) : null,

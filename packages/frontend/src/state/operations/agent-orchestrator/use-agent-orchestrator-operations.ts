@@ -8,7 +8,7 @@ import {
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import { loadAgentSessionContextFromQuery } from "@/state/queries/agent-session-context";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-history";
-import { sessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { updateSessionTodosQueryData } from "@/state/queries/agent-session-todos";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import { loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
@@ -84,7 +84,7 @@ export function useAgentOrchestratorOperations({
     useOrchestratorSessionState({
       workspaceRepoPath,
       tasks,
-      historyCoverage: sessionHistoryCoverage(queryClient),
+      historyFreshness: getSessionHistoryFreshnessTracker(queryClient),
       flushTranscriptEvents,
     });
   const invalidateSessionStopQueries = useCallback(

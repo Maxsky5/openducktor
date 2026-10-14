@@ -165,7 +165,7 @@ Files: `history/session-history-loader.ts`, `history/use-selected-session-histor
 
 Owns one selected session history request, its load state, transient prompt context, message projection, merge with live messages, and subagent correlation.
 
-The workspace rail's existing subscriptions also feed `state/queries/agent-session-history-coverage.ts`. It records freshness versions for cached and retained history. Workspace switches flush buffered transcript events before retaining the old collection.
+The workspace rail's existing subscriptions also feed `state/queries/agent-session-history-freshness-tracker.ts`. It records freshness versions for cached and retained history. Workspace switches flush buffered transcript events before retaining the old collection.
 
 Rules:
 

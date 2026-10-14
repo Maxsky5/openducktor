@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { sessionHistoryCoverage } from "./queries/agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "./queries/agent-session-history-freshness-tracker";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionCollection } from "./agent-session-collection";
@@ -51,8 +51,8 @@ describe("createAgentSessionsStore session snapshots", () => {
     "retains covered workspace history after %s",
     (change) => {
       const queryClient = new QueryClient();
-      const coverage = sessionHistoryCoverage(queryClient);
-      const observation = coverage.observe("/repo");
+      const freshnessTracker = getSessionHistoryFreshnessTracker(queryClient);
+      const observation = freshnessTracker.observeWorkspace("/repo");
       const session = createAgentSessionFixture({
         workingDirectory: "/repo",
         historyLoadState: change === "refreshing" ? "refreshing" : "loaded",
@@ -76,24 +76,30 @@ describe("createAgentSessionsStore session snapshots", () => {
         ref: { ...root.ref, externalSessionId: "child" },
         parentExternalSessionId: session.externalSessionId,
       };
-      observation.accept(createLiveSnapshotEnvelope({ sessions: [root, child] }));
-      const store = createAgentSessionsStore("/repo", coverage);
+      observation.recordEvent(createLiveSnapshotEnvelope({ sessions: [root, child] }));
+      const store = createAgentSessionsStore("/repo", freshnessTracker);
       store.replaceSession({ ...session, historyLoadState: "not_requested" });
       store.updateSession(session, (current) => ({ ...current, historyLoadState: "loading" }));
       store.updateSession(session, () => session);
       store.resetWorkspace("/other");
       if (change === "sibling")
-        observation.accept({
+        observation.recordEvent({
           type: "session_upsert",
           session: { ...root, ref: { ...root.ref, externalSessionId: "sibling" } },
         });
       if (change === "child")
-        observation.accept({ type: "session_upsert", session: { ...child, activity: "running" } });
+        observation.recordEvent({
+          type: "session_upsert",
+          session: { ...child, activity: "running" },
+        });
       if (change === "closed") observation.close();
       store.resetWorkspace("/repo");
       expect(store.getSessionSnapshot(session)?.historyLoadState).toBe("stale");
       if (change === "attaching")
-        observation.accept({ type: "session_upsert", session: { ...root, activity: "running" } });
+        observation.recordEvent({
+          type: "session_upsert",
+          session: { ...root, activity: "running" },
+        });
       store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [root, child] }));
       expect(store.getSessionSnapshot(session)?.historyLoadState).toBe(
         change === "sibling" ? "loaded" : "stale",

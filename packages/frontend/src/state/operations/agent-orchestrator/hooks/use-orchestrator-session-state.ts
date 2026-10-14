@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
-import type { SessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import type { SessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { markSessionHistoriesStale } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
@@ -17,7 +17,7 @@ type UseOrchestratorSessionStateRefs = {
 type UseOrchestratorSessionStateArgs = {
   workspaceRepoPath: string | null;
   tasks: TaskCard[];
-  historyCoverage: SessionHistoryCoverage;
+  historyFreshness: SessionHistoryFreshnessTracker;
   flushTranscriptEvents: () => void;
 };
 
@@ -28,13 +28,13 @@ type UseOrchestratorSessionStateResult = {
 export const useOrchestratorSessionState = ({
   workspaceRepoPath,
   tasks,
-  historyCoverage,
+  historyFreshness,
   flushTranscriptEvents,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
   const initialWorkspaceRepoPathRef = useRef(workspaceRepoPath);
   const sessionStore = useMemo(
-    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current, historyCoverage),
-    [historyCoverage],
+    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current, historyFreshness),
+    [historyFreshness],
   );
   const taskRef = useRef(tasks);
   const currentWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
@@ -47,14 +47,14 @@ export const useOrchestratorSessionState = ({
 
   useEffect(
     () =>
-      historyCoverage.subscribeResets((repoPath) => {
+      historyFreshness.subscribeWorkspaceResets((repoPath) => {
         const currentRepoPath = currentWorkspaceRepoPathRef.current;
         if (currentRepoPath && normalizeWorkingDirectory(currentRepoPath) === repoPath) {
           // The rail can finish recovery after the selected attachment restored its collection.
           sessionStore.setSessionCollection(markSessionHistoriesStale);
         }
       }),
-    [historyCoverage, sessionStore],
+    [historyFreshness, sessionStore],
   );
 
   useLayoutEffect(() => {

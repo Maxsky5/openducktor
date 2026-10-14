@@ -26,7 +26,7 @@ import {
 } from "@/state/queries/agent-sessions";
 import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
 import { agentSessionHistoryQueryKeys } from "@/state/queries/agent-session-history";
-import { sessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
@@ -766,7 +766,8 @@ export const useRepoSessionReadModel = ({
     ): void => {
       if (
         envelope.isConnectionSnapshot &&
-        (envelope.historyReplayGap || !sessionHistoryCoverage(queryClient).isObserved(repoPath))
+        (envelope.historyReplayGap ||
+          !getSessionHistoryFreshnessTracker(queryClient).isWorkspaceObserved(repoPath))
       )
         markHistoryStale();
       commitProjected((current) => {

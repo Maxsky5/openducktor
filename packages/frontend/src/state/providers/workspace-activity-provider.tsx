@@ -4,7 +4,7 @@ import { createWorkspaceActivityObserver } from "@/features/workspace-activity/w
 import { hostBridge } from "@/lib/host-client";
 import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
 import { createAgentSessionListLiveSync } from "@/state/queries/agent-sessions";
-import { sessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
 import { createWorkspaceArchivedSessionsPort } from "../workspace-activity/archived-sessions-port";
@@ -29,19 +29,21 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
       createWorkspaceActivityObserver({
         observe: async (input, listener) => {
           const syncLists = createAgentSessionListLiveSync(queryClient);
-          const coverage = sessionHistoryCoverage(queryClient).observe(input.repoPath);
+          const historyObservation = getSessionHistoryFreshnessTracker(
+            queryClient,
+          ).observeWorkspace(input.repoPath);
           try {
             const stop = await hostBridge.observeAgentSessionLive(input, (envelope) => {
-              coverage.accept(envelope);
+              historyObservation.recordEvent(envelope);
               syncLists(envelope);
               listener(envelope);
             });
             return () => {
-              coverage.close();
+              historyObservation.close();
               stop();
             };
           } catch (cause) {
-            coverage.close();
+            historyObservation.close();
             throw cause;
           }
         },

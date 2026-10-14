@@ -3,7 +3,7 @@ import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { createAgentRuntimeServices } from "@/state/agent-runtime-services";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { sessionHistoryCoverage } from "@/state/queries/agent-session-history-coverage";
+import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { createHostRuntimeStatusFixture } from "@/test-utils/shared-test-fixtures";
 import { hasLoadedSessionHistory } from "./transcript/session-transcript-content";
 import {
@@ -658,7 +658,7 @@ describe("use-agent-orchestrator-operations session state", () => {
   });
 
   test.each(["healthy", "missed-event", "pending-read"] as const)(
-    "reattaches the selected observer with %s history coverage",
+    "reattaches the selected observer with %s history continuity",
     async (continuity) => {
       const baseline: AgentSessionHistoryMessage = {
         messageId: "baseline",
@@ -708,7 +708,7 @@ describe("use-agent-orchestrator-operations session state", () => {
               if (!emitOnDisconnect) return;
               emitOnDisconnect = false;
               missedEvent = true;
-              coverage.accept({
+              historyObservation.recordEvent({
                 type: "transcript_event",
                 sequence: 2,
                 event: {
@@ -724,8 +724,10 @@ describe("use-agent-orchestrator-operations session state", () => {
           },
         },
       );
-      const coverage = sessionHistoryCoverage(dependencies.queryClient).observe("/tmp/repo-a");
-      coverage.accept(
+      const historyObservation = getSessionHistoryFreshnessTracker(
+        dependencies.queryClient,
+      ).observeWorkspace("/tmp/repo-a");
+      historyObservation.recordEvent(
         createLiveSnapshotEnvelope({ repoPath: "/tmp/repo-a", sessions: [snapshot] }),
       );
       const harness = createHookHarness({
@@ -792,7 +794,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         delayedRead.resolve();
         await pendingRead;
         await harness.unmount();
-        coverage.close();
+        historyObservation.close();
         AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       }
     },
@@ -812,7 +814,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     "applied-selected-first",
   ] as const;
   test.each([...retentionCoverageCases])(
-    "returns to retained workspace history with %s coverage",
+    "returns to retained workspace history with %s continuity",
     async (continuity) => {
       const baselineHistory: AgentSessionHistoryMessage[] = [
         {
@@ -871,9 +873,11 @@ describe("use-agent-orchestrator-operations session state", () => {
             ),
         },
       );
-      const coverage = sessionHistoryCoverage(dependencies.queryClient).observe("/tmp/repo-a");
+      const historyObservation = getSessionHistoryFreshnessTracker(
+        dependencies.queryClient,
+      ).observeWorkspace("/tmp/repo-a");
       if (continuity !== "unknown")
-        coverage.accept(
+        historyObservation.recordEvent(
           createLiveSnapshotEnvelope({ repoPath: "/tmp/repo-a", sessions: snapshots }),
         );
       const harness = createHookHarness({
@@ -934,19 +938,19 @@ describe("use-agent-orchestrator-operations session state", () => {
           await harness.run(() => {
             if (continuity === "rail-first-recovery") {
               // The rail's recovery attach finished while the selected attach still holds events.
-              coverage.accept(
+              historyObservation.recordEvent(
                 createLiveSnapshotEnvelope({
                   repoPath: "/tmp/repo-a",
                   sessions: snapshots,
                   historyReplayGap: true,
                 }),
               );
-              coverage.accept(event);
+              historyObservation.recordEvent(event);
             } else if (continuity === "applied-selected-first") {
               liveStream.emit(structuredClone(event));
-              coverage.accept(event);
+              historyObservation.recordEvent(event);
             } else {
-              coverage.accept(event);
+              historyObservation.recordEvent(event);
               liveStream.emit(structuredClone(event));
             }
           });
@@ -968,7 +972,7 @@ describe("use-agent-orchestrator-operations session state", () => {
             message: "The runtime lost this session.",
           } as const satisfies AgentSessionLiveEnvelope;
           await harness.run(() => {
-            coverage.accept(fault);
+            historyObservation.recordEvent(fault);
             liveStream.emit(fault);
           });
           if (continuity === "read-fault") {
@@ -980,7 +984,7 @@ describe("use-agent-orchestrator-operations session state", () => {
             });
             await harness.waitFor(() => historyCalls === 2);
             await harness.run(async () => {
-              coverage.accept(fault);
+              historyObservation.recordEvent(fault);
               liveStream.emit(fault);
               delayedRead.resolve();
               await pendingRead;
@@ -994,7 +998,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         }
         await harness.updateArgs({ activeRepo: "/tmp/repo-b", tasks: [taskFixture] });
         if (continuity === "gap")
-          coverage.accept(
+          historyObservation.recordEvent(
             createLiveSnapshotEnvelope({
               repoPath: "/tmp/repo-a",
               sessions: snapshots,
@@ -1023,7 +1027,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         if (continuity === "rail-late-recovery") {
           expect(restoredSession?.historyLoadState).toBe("loaded");
           await harness.run(() => {
-            coverage.accept(
+            historyObservation.recordEvent(
               createLiveSnapshotEnvelope({
                 repoPath: "/tmp/repo-a",
                 sessions: snapshots,
@@ -1060,7 +1064,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         }
       } finally {
         delayedRead.resolve();
-        coverage.close();
+        historyObservation.close();
         dependencies.queryClient.clear();
         await harness.unmount();
         AgentRuntimeTestAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;

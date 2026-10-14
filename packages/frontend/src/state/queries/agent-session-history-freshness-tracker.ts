@@ -6,34 +6,63 @@ import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type SessionHistoryVersion = { epoch: number; revision: number };
 
-type Coverage = {
+type HistoryEventObserver = {
+  recordEvent: (envelope: AgentSessionLiveEnvelope) => void;
+  close: () => void;
+};
+
+type HistoryProgressTracker = {
+  captureReadVersion: (repoPath: string, identity: AgentSessionIdentity) => void;
+  restoreVersion: (identity: AgentSessionIdentity, version: SessionHistoryVersion) => void;
+  getVersion: (identity: AgentSessionIdentity) => SessionHistoryVersion | null;
+  recordEvent: (envelope: AgentSessionLiveEnvelope) => void;
+  reset: () => void;
+};
+
+export type SessionHistoryFreshnessTracker = {
+  getVersion: (repoPath: string, identity: AgentSessionIdentity) => SessionHistoryVersion | null;
+  isCurrent: (
+    repoPath: string,
+    identity: AgentSessionIdentity,
+    version: SessionHistoryVersion | null,
+  ) => boolean;
+  isWorkspaceObserved: (repoPath: string) => boolean;
+  observeWorkspace: (repoPath: string) => HistoryEventObserver;
+  createHistoryProgressTracker: () => HistoryProgressTracker;
+  subscribeWorkspaceResets: (listener: (repoPath: string) => void) => () => void;
+};
+
+type WorkspaceHistoryState = {
   ready: boolean;
   epoch: number;
   revisions: Map<string, SessionHistoryVersion["revision"]>;
-  sessions: Map<string, { parent: AgentSessionIdentity | null; historyState: string }>;
+  sessions: Map<string, { parent: AgentSessionIdentity | null; historyFingerprint: string }>;
 };
 
-type HistorySessions = Coverage["sessions"];
+type SessionHistoryMetadata = WorkspaceHistoryState["sessions"];
 
-const rememberSession = (sessions: HistorySessions, session: AgentSessionLiveSnapshot): boolean => {
+const updateSessionHistoryMetadata = (
+  sessions: SessionHistoryMetadata,
+  session: AgentSessionLiveSnapshot,
+): boolean => {
   const { ref, parentExternalSessionId, activity, executionEpisodeId, pendingQuestions } = session;
   const key = agentSessionIdentityKey(ref);
-  const historyState = JSON.stringify([
+  const historyFingerprint = JSON.stringify([
     parentExternalSessionId,
     activity,
     executionEpisodeId,
     pendingQuestions,
   ]);
-  const changed = sessions.get(key)?.historyState !== historyState;
+  const changed = sessions.get(key)?.historyFingerprint !== historyFingerprint;
   sessions.set(key, {
     parent: parentExternalSessionId ? { ...ref, externalSessionId: parentExternalSessionId } : null,
-    historyState,
+    historyFingerprint,
   });
   return changed;
 };
 
-const applyHistoryEnvelope = (
-  sessions: HistorySessions,
+const applyHistoryEvent = (
+  sessions: SessionHistoryMetadata,
   envelope: AgentSessionLiveEnvelope,
 ): AgentSessionIdentity[] => {
   let identity: AgentSessionIdentity | undefined;
@@ -41,7 +70,7 @@ const applyHistoryEnvelope = (
   switch (envelope.type) {
     case "snapshot":
       sessions.clear();
-      for (const session of envelope.sessions) rememberSession(sessions, session);
+      for (const session of envelope.sessions) updateSessionHistoryMetadata(sessions, session);
       return [];
     case "transcript_event":
       identity = envelope.event.sessionRef;
@@ -51,7 +80,7 @@ const applyHistoryEnvelope = (
       const session = envelope.type === "session_upsert" ? envelope.session : envelope.liveSession;
       if (!session) break;
       const parent = sessions.get(agentSessionIdentityKey(session.ref))?.parent;
-      if (rememberSession(sessions, session)) {
+      if (updateSessionHistoryMetadata(sessions, session)) {
         identity = session.ref;
         previousParent = parent ?? undefined;
       }
@@ -80,28 +109,34 @@ const applyHistoryEnvelope = (
   return changed;
 };
 
-/** The rail's existing subscriptions prove history freshness, including inactive workspaces. */
-export const createSessionHistoryCoverage = (queryClient: QueryClient) => {
-  const repositories = new Map<string, Coverage>();
+/** Tracks whether cached and retained histories include the current live session updates. */
+const createSessionHistoryFreshnessTracker = (
+  queryClient: QueryClient,
+): SessionHistoryFreshnessTracker => {
+  const workspaceStates = new Map<string, WorkspaceHistoryState>();
   const resetListeners = new Set<(repoPath: string) => void>();
   const notifyReset = (repoPath: string): void => {
     for (const listener of resetListeners) listener(repoPath);
   };
-  const read = (repoPath: string, identity: AgentSessionIdentity): SessionHistoryVersion | null => {
-    const coverage = repositories.get(normalizeWorkingDirectory(repoPath));
-    return coverage?.ready && coverage.sessions.has(agentSessionIdentityKey(identity))
-      ? {
-          epoch: coverage.epoch,
-          revision: coverage.revisions.get(agentSessionIdentityKey(identity)) ?? 0,
-        }
-      : null;
+  const getVersion = (
+    repoPath: string,
+    identity: AgentSessionIdentity,
+  ): SessionHistoryVersion | null => {
+    const workspaceState = workspaceStates.get(normalizeWorkingDirectory(repoPath));
+    if (!workspaceState?.ready || !workspaceState.sessions.has(agentSessionIdentityKey(identity))) {
+      return null;
+    }
+    return {
+      epoch: workspaceState.epoch,
+      revision: workspaceState.revisions.get(agentSessionIdentityKey(identity)) ?? 0,
+    };
   };
   const isCurrent = (
     repoPath: string,
     identity: AgentSessionIdentity,
     version: SessionHistoryVersion | null,
   ): boolean => {
-    const current = read(repoPath, identity);
+    const current = getVersion(repoPath, identity);
     return (
       version !== null &&
       current !== null &&
@@ -110,16 +145,16 @@ export const createSessionHistoryCoverage = (queryClient: QueryClient) => {
     );
   };
 
-  const observe = (repoPath: string) => {
+  const observeWorkspace = (repoPath: string): HistoryEventObserver => {
     const repo = normalizeWorkingDirectory(repoPath);
-    const previous = repositories.get(repo);
-    const coverage: Coverage = {
+    const previous = workspaceStates.get(repo);
+    const workspaceState: WorkspaceHistoryState = {
       ready: false,
       epoch: (previous?.epoch ?? 0) + 1,
       revisions: new Map(),
       sessions: new Map(),
     };
-    repositories.set(repo, coverage);
+    workspaceStates.set(repo, workspaceState);
     let localRevision = 0;
     if (previous) notifyReset(repo);
     const invalidate = (identity?: AgentSessionIdentity): void => {
@@ -138,26 +173,26 @@ export const createSessionHistoryCoverage = (queryClient: QueryClient) => {
     };
     invalidate();
     return {
-      accept(envelope: AgentSessionLiveEnvelope): void {
-        if (repositories.get(repo) !== coverage) return;
-        const changed = applyHistoryEnvelope(coverage.sessions, envelope);
+      recordEvent(envelope: AgentSessionLiveEnvelope): void {
+        if (workspaceStates.get(repo) !== workspaceState) return;
+        const changed = applyHistoryEvent(workspaceState.sessions, envelope);
         switch (envelope.type) {
           case "snapshot": {
             // A repeated connection snapshot is the transport's repair for an actual gap.
-            const resets = coverage.ready || envelope.historyReplayGap;
+            const resets = workspaceState.ready || envelope.historyReplayGap;
             if (resets) {
-              coverage.epoch += 1;
-              coverage.revisions.clear();
+              workspaceState.epoch += 1;
+              workspaceState.revisions.clear();
             }
-            coverage.ready = true;
+            workspaceState.ready = true;
             invalidate();
             if (resets) notifyReset(repo);
             return;
           }
           case "fault":
             if (!envelope.ref) {
-              coverage.ready = false;
-              coverage.epoch += 1;
+              workspaceState.ready = false;
+              workspaceState.epoch += 1;
               invalidate();
               notifyReset(repo);
             }
@@ -165,7 +200,7 @@ export const createSessionHistoryCoverage = (queryClient: QueryClient) => {
         }
         for (const identity of changed) {
           const key = agentSessionIdentityKey(identity);
-          coverage.revisions.set(
+          workspaceState.revisions.set(
             key,
             "sequence" in envelope && envelope.sequence !== undefined
               ? envelope.sequence
@@ -176,38 +211,38 @@ export const createSessionHistoryCoverage = (queryClient: QueryClient) => {
         }
       },
       close(): void {
-        if (repositories.get(repo) !== coverage) return;
-        coverage.ready = false;
-        coverage.epoch += 1;
+        if (workspaceStates.get(repo) !== workspaceState) return;
+        workspaceState.ready = false;
+        workspaceState.epoch += 1;
         invalidate();
         notifyReset(repo);
       },
     };
   };
-  const isObserved = (repoPath: string): boolean =>
-    repositories.get(normalizeWorkingDirectory(repoPath))?.ready === true;
-  const createProjection = () => {
-    const sessions: HistorySessions = new Map();
+  const isWorkspaceObserved = (repoPath: string): boolean =>
+    workspaceStates.get(normalizeWorkingDirectory(repoPath))?.ready === true;
+  const createHistoryProgressTracker = (): HistoryProgressTracker => {
+    const sessions: SessionHistoryMetadata = new Map();
     const versions = new Map<string, SessionHistoryVersion>();
     return {
-      capture(repoPath: string, identity: AgentSessionIdentity): void {
-        const version = read(repoPath, identity);
+      captureReadVersion(repoPath: string, identity: AgentSessionIdentity): void {
+        const version = getVersion(repoPath, identity);
         const key = agentSessionIdentityKey(identity);
         if (version) versions.set(key, version);
         else versions.delete(key);
       },
-      restore(identity: AgentSessionIdentity, version: SessionHistoryVersion): void {
+      restoreVersion(identity: AgentSessionIdentity, version: SessionHistoryVersion): void {
         versions.set(agentSessionIdentityKey(identity), version);
       },
-      read(identity: AgentSessionIdentity): SessionHistoryVersion | null {
+      getVersion(identity: AgentSessionIdentity): SessionHistoryVersion | null {
         return versions.get(agentSessionIdentityKey(identity)) ?? null;
       },
-      accept(envelope: AgentSessionLiveEnvelope): void {
-        for (const identity of applyHistoryEnvelope(sessions, envelope)) {
+      recordEvent(envelope: AgentSessionLiveEnvelope): void {
+        for (const identity of applyHistoryEvent(sessions, envelope)) {
           const key = agentSessionIdentityKey(identity);
           const version = versions.get(key);
           if (!version) continue;
-          // A snapshot is not a transcript baseline. Keep the read's epoch until another full read.
+          // A snapshot has no transcript. Only a full history read establishes a new epoch.
           if (!("sequence" in envelope) || envelope.sequence === undefined) versions.delete(key);
           else if (envelope.sequence > version.revision) {
             versions.set(key, { epoch: version.epoch, revision: envelope.sequence });
@@ -220,23 +255,31 @@ export const createSessionHistoryCoverage = (queryClient: QueryClient) => {
       },
     };
   };
-  const subscribeResets = (listener: (repoPath: string) => void): (() => void) => {
+  const subscribeWorkspaceResets = (listener: (repoPath: string) => void): (() => void) => {
     resetListeners.add(listener);
     return () => {
       resetListeners.delete(listener);
     };
   };
-  return { read, isCurrent, isObserved, observe, createProjection, subscribeResets };
+  return {
+    getVersion,
+    isCurrent,
+    isWorkspaceObserved,
+    observeWorkspace,
+    createHistoryProgressTracker,
+    subscribeWorkspaceResets,
+  };
 };
 
-export type SessionHistoryCoverage = ReturnType<typeof createSessionHistoryCoverage>;
-const owners = new WeakMap<QueryClient, SessionHistoryCoverage>();
+const trackersByQueryClient = new WeakMap<QueryClient, SessionHistoryFreshnessTracker>();
 
-export const sessionHistoryCoverage = (queryClient: QueryClient): SessionHistoryCoverage => {
-  let owner = owners.get(queryClient);
-  if (!owner) {
-    owner = createSessionHistoryCoverage(queryClient);
-    owners.set(queryClient, owner);
+export const getSessionHistoryFreshnessTracker = (
+  queryClient: QueryClient,
+): SessionHistoryFreshnessTracker => {
+  let tracker = trackersByQueryClient.get(queryClient);
+  if (!tracker) {
+    tracker = createSessionHistoryFreshnessTracker(queryClient);
+    trackersByQueryClient.set(queryClient, tracker);
   }
-  return owner;
+  return tracker;
 };
