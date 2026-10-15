@@ -61,7 +61,7 @@ A command terminal runs commands, then leaves an interactive shell under the sam
 
 `startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new chat has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
 
-For zsh, the host waits for an authenticated ready marker, then submits the commands through the interactive shell's line editor. zsh owns history and keeps directory and environment changes. The host reads the result from the authenticated completion marker and keeps the last 20 screen lines.
+For zsh, the host waits for an authenticated ready marker, then submits the Action through the interactive shell's line editor. Each Action runs in one subshell, so `exec`, `exit`, and `logout` cannot end the interactive shell. Directory and environment changes reach later Action lines but end with the Action. zsh owns history. The host reads the result from the authenticated completion marker and keeps the last 20 screen lines.
 
 Other supported shells keep the command-process flow:
 
@@ -77,7 +77,7 @@ The label stays for the full terminal life. OSC titles do not replace it. During
 
 The launch environment port supplies shell and command launch settings. Only the infrastructure adapter knows the shell and its syntax.
 
-zsh Actions require ZLE. A single line without `#` enters history unchanged. Multiline commands and lines with `#` use quoted `builtin eval` commands joined with `&&` to preserve script comment syntax and shell options.
+zsh Actions require ZLE. History records the subshell command. Multiline commands and lines with `#` use quoted `builtin eval` commands joined with `&&` to preserve script comment syntax and shell options.
 
 Other command launches use the probe flags: `-ilc`, or `-ic` for csh and tcsh. The adapter builds the script in the syntax of the shell: POSIX (sh, bash, ksh, mksh, dash, and ash), csh and tcsh, or fish. Another login shell fails with `unsupported_shell`, and no process starts.
 

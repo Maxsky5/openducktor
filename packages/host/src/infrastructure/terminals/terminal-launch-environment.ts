@@ -92,16 +92,17 @@ const commandLaunch = (
 ): Effect.Effect<TerminalCommandLaunch, TerminalServiceError> => {
   const shellName = basename(shell).toLowerCase();
   if (platform !== "win32" && shellName === "zsh") {
+    const input =
+      commandLines.length === 1 && !commandLines[0].includes("#")
+        ? commandLines[0]
+        : commandLines
+            .map((line) => `builtin eval ${formatTerminalPathInput(shell, [line])}`)
+            .join(" && ");
     return Effect.succeed({
       shell,
       env,
       args,
-      interactiveCommand:
-        commandLines.length === 1 && !commandLines[0].includes("#")
-          ? commandLines[0]
-          : commandLines
-              .map((line) => `builtin eval ${formatTerminalPathInput(shell, [line])}`)
-              .join(" && "),
+      interactiveCommand: `(\n${input}\n)`,
     });
   }
   if (platform === "win32" && shellName === "cmd.exe") {

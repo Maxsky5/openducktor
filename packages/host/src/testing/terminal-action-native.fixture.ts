@@ -74,6 +74,23 @@ try {
   assert.ok((await readFile(join(root, "history"), "utf8")).includes(historyCommand));
   console.log("PASS history: Ctrl+C, Up Arrow, and native history save");
 
+  for (const [id, commandLine, exitCode] of [
+    ["exit", "exit 7", 7],
+    ["logout", "logout 9", 9],
+  ] as const) {
+    const action = await start(id, [commandLine, "echo NEVER"]);
+    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    assert.equal(result.type === "exited" && result.exitCode, exitCode);
+    assert.equal(
+      engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+      "running",
+    );
+    assert.ok(!outputs.get(id)!.includes("\r\nNEVER\r\n"));
+    await write(id, 'printf "PROMPT_ALIVE\\n"\r');
+    await wait(() => outputs.get(id)!.includes("PROMPT_ALIVE\r\n"));
+  }
+  console.log("PASS exit: exit and logout return their status without closing the shell");
+
   const server = join(root, "server.cjs");
   await writeFile(
     server,
@@ -83,11 +100,15 @@ try {
   const actionRoot = join(root, "action's root");
   await mkdir(join(actionRoot, "target"), { recursive: true });
   const unpadded = await Effect.runPromise(
-    launchEnvironment.command(["cd target", "export ODT_LONG_ACTION=", command]),
+    launchEnvironment.command(["cd target", "export ODT_LONG_ACTION=", `exec ${command}`]),
   );
   const gap = 1000 - new TextEncoder().encode(unpadded.command.interactiveCommand!).byteLength;
   const padding = "xé🙂".repeat(Math.floor(gap / 7)) + "x".repeat(gap % 7);
-  await start("restart", ["cd target", `export ODT_LONG_ACTION=${padding}`, command], actionRoot);
+  await start(
+    "restart",
+    ["cd target", `export ODT_LONG_ACTION=${padding}`, `exec ${command}`],
+    actionRoot,
+  );
   await wait(
     () =>
       activities.get("restart")?.restartable === true &&
@@ -120,7 +141,9 @@ try {
   );
   const serverDirectory = await realpath(join(actionRoot, "target"));
   assert.equal(output.split(`SERVER_CWD=${serverDirectory}\r\n`).length, 4);
-  console.log("PASS restart: relative directory setup restarts twice after each graceful stop");
+  console.log(
+    "PASS restart: exec with relative directory setup restarts twice after each graceful stop",
+  );
 
   const closing = await start("close", [command]);
   await wait(() => outputs.get("close")!.includes("SERVER_READY\r\n"));
@@ -143,7 +166,7 @@ try {
   assert.ok(!outputs.get("state")!.includes("VALUE=#"));
   assert.ok(!outputs.get("state")!.includes("\r\nNEVER\r\n"));
   await write("state", 'printf "AFTER=%s:%s\\n" "$PWD" "$ODT_VALUE"\r');
-  await wait(() => outputs.get("state")!.includes(`AFTER=${target}:kept\r\n`));
+  await wait(() => outputs.get("state")!.includes(`AFTER=${root}:\r\n`));
   await write("state", 'printf "COMMENTS=%s\\n" "$options[interactivecomments]"\r');
   await wait(() => outputs.get("state")!.includes("COMMENTS=off\r\n"));
   const syntax = await start("syntax", ["echo )"]);
@@ -155,7 +178,7 @@ try {
     noHistory.result.pipe(Effect.timeout("2 seconds")),
   );
   assert.equal(noHistoryResult.type === "exited" && noHistoryResult.exitCode, 0);
-  console.log("PASS state: multiline failure stops later lines and preserves cwd and environment");
+  console.log("PASS state: multiline state stays within the Action and failure stops later lines");
 } catch (cause) {
   throw new Error(JSON.stringify([...outputs].map(([id, output]) => [id, output.slice(-1200)])), {
     cause,
