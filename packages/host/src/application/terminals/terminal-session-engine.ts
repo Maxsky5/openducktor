@@ -249,18 +249,20 @@ export const createTerminalSessionEngine = ({
               terminalId,
             ),
           );
+        const inputBlocked = () =>
+          terminalFailure(
+            "invalid_input",
+            "write",
+            session.inputOwner === "action"
+              ? "Wait for the Action to start before sending input."
+              : "Wait for the command restart to finish before sending input.",
+            terminalId,
+          );
+        if (session.inputOwner !== null) return yield* Effect.fail(inputBlocked());
         // Read the process in lane order: a command terminal replaces its process in this lane.
         return yield* session.operations.run(
           Effect.suspend(() => {
-            if (session.restartPending)
-              return Effect.fail(
-                terminalFailure(
-                  "invalid_input",
-                  "write",
-                  "Wait for the command restart to finish before sending input.",
-                  terminalId,
-                ),
-              );
+            if (session.inputOwner !== null) return Effect.fail(inputBlocked());
             const handle = session.resources.handle;
             if (!handle || !isLiveTerminal(session))
               return Effect.fail(

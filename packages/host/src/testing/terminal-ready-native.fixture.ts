@@ -1,25 +1,10 @@
 import assert from "node:assert/strict";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { TerminalActivity } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type {
-  StartedCommandTerminal,
-  TerminalCommandLines,
-} from "../application/terminals/terminal-command";
 import { formatTerminalPathInput } from "../application/terminals/terminal-path-input";
-import type { createTerminalSessionEngine } from "../application/terminals/terminal-session-engine";
 
-type Fixture = {
-  root: string;
-  shell: string;
-  engine: ReturnType<typeof createTerminalSessionEngine>;
-  activities: Map<string, TerminalActivity>;
-  outputs: Map<string, string>;
-  start(id: string, lines: TerminalCommandLines): Promise<StartedCommandTerminal>;
-  write(id: string, text: string): Promise<void>;
-  wait(check: () => boolean): Promise<void>;
-};
+import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 
 export async function checkReady({
   root,
@@ -29,7 +14,7 @@ export async function checkReady({
   outputs,
   start,
   wait,
-}: Fixture) {
+}: TerminalNativeFixture) {
   const server = join(root, "reader.cjs");
   await writeFile(
     server,
@@ -101,8 +86,9 @@ export async function checkBuffer({
   outputs,
   start,
   write,
+  writeRaw,
   wait,
-}: Fixture) {
+}: TerminalNativeFixture) {
   const server = join(root, "buffer-server.cjs");
   await writeFile(
     server,
@@ -134,7 +120,7 @@ export async function checkBuffer({
       const started = await start(id, [phase === "initial" ? "print ACTION_RAN" : command]);
       if (side === "pending") {
         await wait(() => outputs.get(id)!.includes("WIDGET_WAITING\r\n"));
-        await write(id, `!${prefix}`);
+        await writeRaw(id, `!${prefix}`);
       }
       if (phase === "initial") {
         const result = await Effect.runPromise(started.result.pipe(Effect.timeout("2 seconds")));

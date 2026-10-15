@@ -30,7 +30,7 @@ export const restartCommand = (
           return yield* failure(
             "The running command changed. Select Restart for the current command.",
           );
-        if (session.restartPending)
+        if (session.inputOwner === "restart")
           return yield* failure("A restart is already waiting for this command to stop.");
         const prepared = yield* Effect.try({
           try: () => {
@@ -56,13 +56,13 @@ export const restartCommand = (
               ? terminalFailure(cause.code, "restart", cause.message, terminalId, cause)
               : terminalOperationFailure(cause, "restart"),
         });
-        session.restartPending = true;
+        session.inputOwner = "restart";
         const ready = session.ready;
         yield* handle.write(new Uint8Array([3])).pipe(
           Effect.mapError((cause) => failure(`Could not interrupt the command: ${cause.message}`)),
           Effect.tapError(() =>
             Effect.sync(() => {
-              session.restartPending = false;
+              session.inputOwner = null;
             }),
           ),
         );
@@ -106,7 +106,7 @@ export const restartCommand = (
       ),
     () =>
       Effect.sync(() => {
-        session.restartPending = false;
+        session.inputOwner = null;
       }),
   );
 };

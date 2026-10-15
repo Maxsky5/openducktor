@@ -1,3 +1,4 @@
+import { checkSubmit } from "./terminal-submit-native.fixture";
 import { checkDisplay } from "./terminal-display-native.fixture";
 import { checkBuffer, checkReady } from "./terminal-ready-native.fixture";
 import assert from "node:assert/strict";
@@ -13,6 +14,8 @@ import type {
 import { formatTerminalPathInput } from "../application/terminals/terminal-path-input";
 import { createTerminalSessionEngine } from "../application/terminals/terminal-session-engine";
 import { createTerminalLaunchEnvironment } from "../infrastructure/terminals/terminal-launch-environment";
+import { TerminalScreenState } from "../application/terminals/terminal-screen-state";
+import type { TerminalPtyHandle } from "../ports/terminal-pty-port";
 import { createNodePtyPort } from "../adapters/node/pty-process-adapter";
 
 const root = await mkdtemp(join(tmpdir(), "odt-action-native-"));
@@ -28,7 +31,23 @@ const launchEnvironment = createTerminalLaunchEnvironment({
   }),
   readUserShell: () => shell,
 });
-const engine = createTerminalSessionEngine({ now: () => new Date(), ptyPort: createNodePtyPort() });
+const nativePty = createNodePtyPort();
+const handles: TerminalPtyHandle[] = [];
+const terminals = new Map<string, TerminalPtyHandle>();
+const screens = new Map<string, TerminalScreenState>();
+const engine = createTerminalSessionEngine({
+  now: () => new Date(),
+  ptyPort: {
+    start: (plan, handlers) =>
+      nativePty.start(plan, handlers).pipe(
+        Effect.tap((handle) =>
+          Effect.sync(() => {
+            handles.push(handle);
+          }),
+        ),
+      ),
+  },
+});
 const activities = new Map<string, TerminalActivity>();
 const outputs = new Map<string, string>();
 const stop = engine.observeActivity((message) => {
@@ -36,8 +55,21 @@ const stop = engine.observeActivity((message) => {
     activities.set(message.activity.summary.terminalId, message.activity);
   else if (message.type === "activity_removed") activities.delete(message.terminalId);
 });
-const fixture = { root, shell, engine, activities, outputs, start, write, wait };
+const fixture = {
+  root,
+  shell,
+  engine,
+  activities,
+  outputs,
+  start,
+  write,
+  writeRaw,
+  readScreen,
+  wait,
+};
+export type TerminalNativeFixture = typeof fixture;
 const cases = new Map([
+  ["submit", () => checkSubmit(fixture)],
   ["display", () => checkDisplay(fixture)],
   ["history", checkHistory],
   ["state", checkState],
@@ -64,6 +96,8 @@ try {
 } finally {
   stop();
   await Effect.runPromise(engine.dispose());
+  await Promise.all([...screens.values()].map((screen) => screen.drained()));
+  for (const screen of screens.values()) screen.dispose();
   await rm(root, { recursive: true, force: true });
 }
 
@@ -76,6 +110,14 @@ async function wait(predicate: () => boolean): Promise<void> {
 function write(id: string, text: string): Promise<void> {
   return Effect.runPromise(engine.write(id, new TextEncoder().encode(text)));
 }
+function writeRaw(id: string, text: string): Promise<void> {
+  return Effect.runPromise(terminals.get(id)!.write(new TextEncoder().encode(text)));
+}
+async function readScreen(id: string): Promise<readonly string[]> {
+  const screen = screens.get(id)!;
+  await screen.drained();
+  return screen.outputTail(100);
+}
 async function start(
   id: string,
   commandLines: TerminalCommandLines,
@@ -84,6 +126,8 @@ async function start(
 ): Promise<StartedCommandTerminal> {
   const plans = await Effect.runPromise(launchEnvironment.command(commandLines));
   const grid = { columns: 120, rows: 24 };
+  const handleIndex = handles.length;
+  screens.set(id, new TerminalScreenState(grid));
   const started = await Effect.runPromise(
     engine.startCommand(
       {
@@ -103,6 +147,7 @@ async function start(
       },
     ),
   );
+  terminals.set(id, handles[handleIndex]!);
   outputs.set(id, "");
   await Effect.runPromise(
     engine.attach({
@@ -110,8 +155,10 @@ async function start(
       attachmentId: id,
       lastConsumedSequence: 0,
       sink: (event, data) => {
-        if (event.type === "output")
+        if (event.type === "output") {
+          screens.get(id)!.write(data, () => {});
           outputs.set(id, outputs.get(id)! + new TextDecoder().decode(data));
+        }
       },
     }),
   );
@@ -131,11 +178,7 @@ async function checkHistory() {
       activities.get("history")?.restartable === true &&
       outputs.get("history")!.includes("HISTORY_READY\r\n"),
   );
-  assert.ok(
-    (await Effect.runPromise(engine.readOutputTail("history", 24))).includes(
-      `fixture> ${historyCommand}`,
-    ),
-  );
+  assert.ok((await readScreen("history")).includes(`fixture> ${historyCommand}`));
   await write("history", "\u0003");
   assert.equal(
     (await Effect.runPromise(history.result.pipe(Effect.timeout("2 seconds")))).type,
@@ -150,7 +193,7 @@ async function checkHistory() {
       outputs.get("history")!.includes("another-shell"),
   );
   assert.ok(outputs.get("history")!.includes(historyCommand), "Up Arrow must recall the Action");
-  const recalled = await Effect.runPromise(engine.readOutputTail("history", 24));
+  const recalled = await readScreen("history");
   assert.equal(recalled.at(-1), `fixture> ${historyCommand}`);
   await write("history", "\r");
   await wait(() => outputs.get("history")!.includes("HISTORY_READY\r\n"));
@@ -295,7 +338,7 @@ async function checkRestart() {
         outputs.get("restart")!.split("SERVER_READY\r\n").length === starts + 1,
     );
   }
-  const screen = await Effect.runPromise(engine.readOutputTail("restart", 100));
+  const screen = await readScreen("restart");
   assert.ok(
     !screen.some((line) => line.includes("builtin eval") || line.includes("builtin cd --")),
   );

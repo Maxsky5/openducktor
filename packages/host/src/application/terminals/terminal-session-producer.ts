@@ -245,6 +245,7 @@ export const createTerminalSessionProducer = ({
         sessions.set(summary.terminalId, session);
         const commandNonce = globalThis.crypto.randomUUID();
         const interactiveCommand = command?.plan.interactiveCommand;
+        if (interactiveCommand !== undefined) session.inputOwner = "action";
         let submitted = false;
         session.screen.onOsc(
           633,
@@ -254,6 +255,7 @@ export const createTerminalSessionProducer = ({
               if (interactiveCommand === undefined || submitted) return;
               submitted = true;
               if (!details.ready && command) {
+                session.inputOwner = null;
                 command.run.phase = "shell";
                 session.command = null;
                 acceptOutput(session, new TextEncoder().encode(`\r\n${COMMAND_BUFFER_ERROR}\r\n`));
@@ -275,7 +277,13 @@ export const createTerminalSessionProducer = ({
                       .pipe(
                         Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
                       );
-                  }),
+                  }).pipe(
+                    Effect.ensuring(
+                      Effect.sync(() => {
+                        session.inputOwner = null;
+                      }),
+                    ),
+                  ),
                 ),
               );
               return;

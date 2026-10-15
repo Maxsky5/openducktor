@@ -34,7 +34,7 @@ export type TerminalSession = {
     command: string;
     startPrefix: string;
   } | null;
-  restartPending: boolean;
+  inputOwner: "action" | "restart" | null;
   readonly commandRun: TerminalCommandRun | null;
   resources: TerminalSessionResources;
 };
@@ -55,7 +55,7 @@ export const createTerminalSession = (input: TerminalSessionInput): TerminalSess
     ready: Deferred.makeUnsafe(),
     runningCommand: null,
     pendingActionReplay: null,
-    restartPending: false,
+    inputOwner: null,
     commandRun: input.commandRun,
     resources: new TerminalSessionResources(input.titleTracker),
   };
@@ -124,6 +124,7 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
 
 export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
+  session.inputOwner = null;
   session.pendingActionReplay = null;
   Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   if (session.screenReleaseStarted) return;
@@ -144,6 +145,7 @@ export const exitTerminalSession = (
 ): boolean => {
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
+  session.inputOwner = null;
   session.pendingActionReplay = null;
   Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   settleCommandRunAfterOutput(session, closedResult);

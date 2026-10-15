@@ -4,18 +4,19 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { formatTerminalPathInput } from "../application/terminals/terminal-path-input";
 import type { TerminalCommandLines } from "../application/terminals/terminal-command";
-import type { checkReady } from "./terminal-ready-native.fixture";
+import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 
 export async function checkDisplay({
   root,
   shell,
   engine,
+  readScreen,
   start,
   write,
   wait,
   outputs,
   activities,
-}: Parameters<typeof checkReady>[0]) {
+}: TerminalNativeFixture) {
   await writeFile(
     join(root, ".zshrc"),
     [
@@ -37,7 +38,7 @@ export async function checkDisplay({
   );
   assert.equal(await readFile(join(root, "redraw"), "utf8"), "zle-line-pre-redraw:start\n");
   assert.equal(await readFile(join(root, "widget"), "utf8"), "zle-line-finish:start:0\n");
-  const screen = await Effect.runPromise(engine.readOutputTail("display", 24));
+  const screen = await readScreen("display");
   assert.ok(screen.includes("fixture> print FIRST"), JSON.stringify(screen));
   assert.ok(screen.includes("exit 9"), JSON.stringify(screen));
   assert.ok(
@@ -47,7 +48,7 @@ export async function checkDisplay({
   );
   await write("display", "\u001b[A");
   await wait(() => outputs.get("display")!.split("print FIRST").length >= 3);
-  const recalled = await Effect.runPromise(engine.readOutputTail("display", 24));
+  const recalled = await readScreen("display");
   assert.deepEqual(recalled.slice(-2), ["fixture> print FIRST", "exit 9"]);
   await write("display", "\r");
   await wait(
