@@ -36,7 +36,7 @@ import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler"
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
 import type { createTerminalActivity } from "./terminal-activity";
 import { createTerminalCommandTracker } from "./terminal-command-tracker";
-import { COMMAND_BUFFER_ERROR, commandInput } from "./terminal-command-input";
+import { COMMAND_BUFFER_ERROR, COMMAND_READY_ERROR, commandInput } from "./terminal-command-input";
 
 /** The command that a command terminal runs before it continues in a shell. */
 type CommandPhase = {
@@ -246,46 +246,13 @@ export const createTerminalSessionProducer = ({
         const commandNonce = globalThis.crypto.randomUUID();
         const interactiveCommand = command?.plan.interactiveCommand;
         if (interactiveCommand !== undefined) session.inputOwner = "action";
+        const initialReady = session.ready;
         let submitted = false;
         session.screen.onOsc(
           633,
           createTerminalCommandTracker(commandNonce, (activityCommand, details) => {
             if (details.ready !== undefined) {
               Deferred.doneUnsafe(session.ready, Effect.succeed(details.ready));
-              if (interactiveCommand === undefined || submitted) return;
-              submitted = true;
-              if (!details.ready && command) {
-                session.inputOwner = null;
-                command.run.phase = "shell";
-                session.command = null;
-                acceptOutput(session, new TextEncoder().encode(`\r\n${COMMAND_BUFFER_ERROR}\r\n`));
-                settleCommandRunAfterOutput(session, (outputTail) => ({
-                  type: "failed",
-                  message: COMMAND_BUFFER_ERROR,
-                  outputTail,
-                }));
-                activity.changed(session);
-                return;
-              }
-              Effect.runFork(
-                session.operations.run(
-                  Effect.suspend(() => {
-                    const handle = session.resources.handle;
-                    if (!handle || session.summary.lifecycle !== "running") return Effect.void;
-                    return handle
-                      .write(commandInput(interactiveCommand.input))
-                      .pipe(
-                        Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
-                      );
-                  }).pipe(
-                    Effect.ensuring(
-                      Effect.sync(() => {
-                        session.inputOwner = null;
-                      }),
-                    ),
-                  ),
-                ),
-              );
               return;
             }
             if (activityCommand !== null) {
@@ -367,6 +334,52 @@ export const createTerminalSessionProducer = ({
             handleResult.failure.message,
             summary.terminalId,
             handleResult.failure,
+          );
+        }
+        if (command && interactiveCommand !== undefined) {
+          yield* Effect.forkDetach(
+            Effect.gen(function* () {
+              const ready = yield* Effect.result(
+                Deferred.await(initialReady).pipe(Effect.timeout("10 seconds")),
+              );
+              yield* session.operations.run(
+                Effect.suspend(() => {
+                  const handle = session.resources.handle;
+                  if (!handle || session.summary.lifecycle !== "running") return Effect.void;
+                  submitted = true;
+                  const message =
+                    ready._tag === "Failure"
+                      ? COMMAND_READY_ERROR
+                      : ready.success
+                        ? null
+                        : COMMAND_BUFFER_ERROR;
+                  if (message !== null) {
+                    command.run.phase = "shell";
+                    session.command = null;
+                    acceptOutput(session, new TextEncoder().encode(`\r\n${message}\r\n`));
+                    settleCommandRunAfterOutput(session, (outputTail) => ({
+                      type: "failed",
+                      message,
+                      outputTail,
+                    }));
+                    activity.changed(session);
+                    return Effect.void;
+                  }
+                  return handle
+                    .write(commandInput(interactiveCommand.input))
+                    .pipe(
+                      Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
+                    );
+                }),
+              );
+            }).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  session.inputOwner = null;
+                }),
+              ),
+            ),
+            { startImmediately: true },
           );
         }
         return session;

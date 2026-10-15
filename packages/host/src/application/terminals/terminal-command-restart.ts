@@ -1,5 +1,10 @@
 import { Deferred, Effect } from "effect";
-import { actionReplay, COMMAND_BUFFER_ERROR, commandInput } from "./terminal-command-input";
+import {
+  actionReplay,
+  COMMAND_BUFFER_ERROR,
+  COMMAND_READY_ERROR,
+  commandInput,
+} from "./terminal-command-input";
 import { terminalFailure, terminalOperationFailure } from "./terminal-session-lifecycle";
 import { TerminalPathInputError } from "./terminal-path-input";
 import { canRestartCommand, type TerminalSession } from "./terminal-session";
@@ -72,11 +77,7 @@ export const restartCommand = (
     ({ ready, handle, prepared }) =>
       Deferred.await(ready).pipe(
         Effect.timeout("10 seconds"),
-        Effect.mapError(() =>
-          failure(
-            "The shell did not become ready within 10 seconds. Stop the command or finish the prompt in the terminal, then run it again.",
-          ),
-        ),
+        Effect.mapError(() => failure(COMMAND_READY_ERROR)),
         Effect.andThen((empty) =>
           session.operations.run(
             Effect.gen(function* () {
