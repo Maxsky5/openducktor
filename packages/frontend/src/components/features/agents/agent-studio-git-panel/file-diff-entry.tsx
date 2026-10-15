@@ -451,13 +451,16 @@ function FileDiffEntryHeader({
           </span>
         </div>
       </ContextMenuTrigger>
-      <FileRowMenu
-        filePath={diff.file}
-        isDeleted={diff.type === "deleted"}
-        rowActions={rowActions}
-        discardUnavailable={discardUnavailableReason(diff)}
-        onViewFile={onViewFile}
-      />
+      {/* A closed menu still mounts its content parts, which doubles the cost of a long list. */}
+      {menu.open ? (
+        <FileRowMenu
+          filePath={diff.file}
+          isDeleted={diff.type === "deleted"}
+          rowActions={rowActions}
+          discardUnavailable={discardUnavailableReason(diff)}
+          onViewFile={onViewFile}
+        />
+      ) : null}
     </ContextMenu>
   );
 }
