@@ -441,34 +441,42 @@ describe("FileDiffList tree view and search", () => {
       expect(list.scrollTop).toBe(2_900);
     });
 
-    test("keeps the known height of a file that a closed directory or a search hides", () => {
-      render(
-        <NavigableFileDiffListHarness
-          files={THREE_DIRECTORY_FILES}
-          initialExpandedFiles={["b/file-29.ts"]}
-        />,
-      );
-      measurements.resize(600, 800);
-      const list = screen.getByRole("list");
-      // Rows: "a", 30 files, "b", 29 files, the expanded "b/file-29.ts" at row 61, then "c".
-      const scrollToDirectoryC = (): void => {
-        fireEvent.scroll(list, { target: { scrollTop: 61 * TREE_ROW + EXPANDED_TREE_ROW } });
-      };
-      fireEvent.scroll(list, { target: { scrollTop: 61 * TREE_ROW } });
-      scrollToDirectoryC();
-      expect(rowTop(directoryButton("c"))).toBe(0);
+    test.each(["closed directory", "search"] as const)(
+      "keeps the known height of a file that a %s hides",
+      (hiddenBy) => {
+        render(
+          <NavigableFileDiffListHarness
+            files={THREE_DIRECTORY_FILES}
+            initialExpandedFiles={["b/file-29.ts"]}
+          />,
+        );
+        measurements.resize(600, 800);
+        const list = screen.getByRole("list");
+        const listQueries = within(list);
+        // Rows: "a", 30 files, "b", 29 files, the expanded "b/file-29.ts" at row 61, then "c".
+        const scrollToDirectoryC = (): void => {
+          fireEvent.scroll(list, { target: { scrollTop: 61 * TREE_ROW + EXPANDED_TREE_ROW } });
+        };
+        fireEvent.scroll(list, { target: { scrollTop: 61 * TREE_ROW } });
+        scrollToDirectoryC();
+        expect(rowTop(listQueries.getByRole("button", { name: "c" }))).toBe(0);
 
-      fireEvent.scroll(list, { target: { scrollTop: 31 * TREE_ROW } });
-      fireEvent.click(directoryButton("b"));
-      fireEvent.click(directoryButton("b"));
-      scrollToDirectoryC();
-      expect(rowTop(directoryButton("c"))).toBe(0);
+        // Each case starts with fresh measurements and tests only its own hide path.
+        if (hiddenBy === "closed directory") {
+          fireEvent.scroll(list, { target: { scrollTop: 31 * TREE_ROW } });
+          const toggle = listQueries.getByRole("button", { name: "b" });
+          fireEvent.click(toggle);
+          fireEvent.click(toggle);
+        } else {
+          const search = searchField();
+          fireEvent.change(search, { target: { value: "c/" } });
+          fireEvent.change(search, { target: { value: "" } });
+        }
 
-      typeSearch("c/");
-      typeSearch("");
-      scrollToDirectoryC();
-      expect(rowTop(directoryButton("c"))).toBe(0);
-    });
+        scrollToDirectoryC();
+        expect(rowTop(listQueries.getByRole("button", { name: "c" }))).toBe(0);
+      },
+    );
 
     test.each(["open", "closed"])(
       "shows the first file of the top %s directory when the tree changes to a list",
