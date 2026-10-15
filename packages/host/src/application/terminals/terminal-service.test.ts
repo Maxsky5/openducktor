@@ -212,7 +212,7 @@ describe("TerminalService", () => {
     const terminal = await Effect.runPromise(service.create({ workingDir: "/repo", context: {} }));
     pty.emit(
       new TextEncoder().encode(
-        `\u001b]633;E;sleep 30;${pty.launches[0]?.commandNonce}\u0007\u001b]633;C\u0007`,
+        `\u001b]633;E;sleep 30;${pty.launches[0]?.commandNonce};1\u0007\u001b]633;C\u0007`,
       ),
     );
     await Bun.sleep(10);
@@ -231,6 +231,10 @@ describe("TerminalService", () => {
       service.observeActivity((message) => messages.push(message)),
     );
     try {
+      expect(messages.at(-2)).toMatchObject({
+        type: "activity_updated",
+        activity: { summary: { lifecycle: "running" }, restartable: true },
+      });
       pty.failNextTerminate();
       rejectDelivery = true;
       const failure = await Effect.runPromise(
@@ -243,6 +247,15 @@ describe("TerminalService", () => {
         type: "activity_updated",
         activity: { summary: { lifecycle: "close_failed" } },
       });
+      expect(
+        messages
+          .filter((message) => message.type === "activity_updated")
+          .map((message) => [message.activity.summary.lifecycle, message.activity.restartable]),
+      ).toEqual([
+        ["running", true],
+        ["closing", false],
+        ["close_failed", false],
+      ]);
       expect(rejected).toBe(1);
       await Effect.runPromise(
         service.close({ terminalId: terminal.ref.terminalId, confirmTerminate: true }),

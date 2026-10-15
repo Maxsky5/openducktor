@@ -1,3 +1,4 @@
+import { checkBuffer, checkReady } from "./terminal-ready-native.fixture";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -34,13 +35,15 @@ const stop = engine.observeActivity((message) => {
     activities.set(message.activity.summary.terminalId, message.activity);
   else if (message.type === "activity_removed") activities.delete(message.terminalId);
 });
+const fixture = { root, shell, engine, activities, outputs, start, write, wait };
 const cases = new Map([
   ["history", checkHistory],
   ["state", checkState],
   ["restart", checkRestart],
   ["hooks", checkHooks],
   ["manual", checkManual],
-  ["ready", checkReady],
+  ["ready", () => checkReady(fixture)],
+  ["buffer", () => checkBuffer(fixture)],
 ]);
 try {
   await writeFile(
@@ -432,68 +435,4 @@ async function serverCommand() {
     'process.on("SIGINT", () => { console.log("SERVER_STOPPING"); setTimeout(() => { console.log("SERVER_STOPPED"); process.exit(0); }, 40); }); console.log("SERVER_CWD=" + process.cwd()); console.log("SERVER_READY"); setInterval(() => {}, 1000);',
   );
   return formatTerminalPathInput(shell, [process.execPath, server]);
-}
-
-async function checkReady() {
-  const server = join(root, "reader.cjs");
-  await writeFile(
-    server,
-    'process.on("SIGINT", () => { require("node:fs").writeFileSync("prompt-read", ""); process.exit(0); }); console.log("SERVER_READY"); setInterval(() => {}, 1000);',
-  );
-  const command = formatTerminalPathInput(shell, [process.execPath, server]);
-  for (const hook of ["precmd", "widget", "startup", "vared", "widget-error"] as const) {
-    await rm(join(root, "prompt-read"), { force: true });
-    await writeFile(
-      join(root, ".zshrc"),
-      [
-        'PROMPT="fixture> "',
-        "HISTSIZE=1000",
-        "read_once=0",
-        `user_read() { if (( !read_once )) && ${hook === "startup" ? "true" : '[[ -f "$HOME/prompt-read" ]]'}; then read_once=1; print READER_WAITING; if read -k 1 -t 0.15 reply; then print -r -- "READER_STOLE=$reply"; fi; print READER_DONE; fi; }`,
-        ...(hook === "widget-error"
-          ? [
-              'user_init() { setopt localoptions nounset; print "$ODT_MISSING_WIDGET_VALUE"; }',
-              "zle -N zle-line-init user_init",
-            ]
-          : hook === "vared"
-            ? [
-                "user_init() { print -r -- \"USER_WIDGET=$WIDGET:$CONTEXT:$#\"; if [[ $CONTEXT == vared ]]; then user_read; zle -U $'\\n'; fi; }",
-                "zle -N zle-line-init user_init",
-                'precmd() { if [[ -f "$HOME/prompt-read" ]] && (( !read_once )); then local answer=; vared answer; print VARED_DONE; fi; }',
-              ]
-            : hook === "widget"
-              ? [
-                  'user_init() { print -r -- "USER_WIDGET=$WIDGET:$CONTEXT:$#"; user_read; }',
-                  "zle -N zle-line-init user_init",
-                ]
-              : ["precmd() { user_read; }"]),
-      ].join("\n"),
-    );
-    const id = `ready-${hook}`;
-    await start(id, [command]);
-    await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
-    if (hook !== "startup") {
-      await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
-      await wait(() =>
-        outputs
-          .get(id)!
-          .includes(hook === "widget-error" ? "parameter not set" : "READER_DONE\r\n"),
-      );
-    }
-    const output = outputs.get(id)!;
-    assert.ok(!output.includes("READER_STOLE="));
-    const done = output.indexOf(
-      hook === "widget-error"
-        ? "parameter not set"
-        : hook === "vared"
-          ? "VARED_DONE\r\n"
-          : "READER_DONE\r\n",
-    );
-    assert.ok(done >= 0 && output.indexOf("\u001b]633;R;", done) > done);
-    if (hook === "widget" || hook === "vared")
-      assert.ok(output.includes("USER_WIDGET=zle-line-init:start:0\r\n"));
-    if (hook === "vared") assert.ok(output.includes("USER_WIDGET=zle-line-init:vared:0\r\n"));
-    if (hook !== "startup")
-      await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
-  }
 }

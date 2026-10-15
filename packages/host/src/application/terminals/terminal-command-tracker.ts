@@ -14,8 +14,8 @@ export const createTerminalCommandTracker = (
   let pending: { command: string; input: string | null } | null = null;
   return (data) => {
     const [kind, line, source, restart] = data.split(";");
-    if (kind === "R" && line === nonce) {
-      onCommand(null, { input: null, exitCode: null, ready: true });
+    if (kind === "R" && line === nonce && (source === "0" || source === "1")) {
+      onCommand(null, { input: null, exitCode: null, ready: source === "1" });
     } else if (kind === "E") {
       const input = source === nonce && line ? decodeCommand(line) : null;
       const command = input === null ? null : commandPrefix(input);

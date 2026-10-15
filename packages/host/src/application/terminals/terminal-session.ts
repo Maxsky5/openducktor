@@ -23,7 +23,7 @@ export type TerminalSession = {
   grid: TerminalGrid;
   readonly shell: string;
   command: string | null;
-  ready: Deferred.Deferred<void>;
+  ready: Deferred.Deferred<boolean>;
   runningCommand: {
     input: string;
     restartDir: string | null;
@@ -76,6 +76,7 @@ export const isCommandRunning = (session: TerminalSession): boolean =>
   session.commandRun?.phase === "command" && isLiveTerminal(session);
 
 export const canRestartCommand = (session: TerminalSession): boolean =>
+  session.summary.lifecycle === "running" &&
   session.runningCommand !== null &&
   !(session.summary.startedBy === "host" && isCommandRunning(session));
 
@@ -124,7 +125,7 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
 export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
   session.pendingActionReplay = null;
-  Deferred.doneUnsafe(session.ready, Effect.void);
+  Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
   void session.screen.drained().then(() => {
@@ -144,7 +145,7 @@ export const exitTerminalSession = (
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
   session.pendingActionReplay = null;
-  Deferred.doneUnsafe(session.ready, Effect.void);
+  Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   settleCommandRunAfterOutput(session, closedResult);
   session.summary.lifecycle = "exited";
   session.summary.exit = {

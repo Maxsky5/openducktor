@@ -1,5 +1,5 @@
 import { Deferred, Effect } from "effect";
-import { commandInput } from "./terminal-command-input";
+import { COMMAND_BUFFER_ERROR, commandInput } from "./terminal-command-input";
 import { terminalFailure, terminalOperationFailure } from "./terminal-session-lifecycle";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
 import { canRestartCommand, type TerminalSession } from "./terminal-session";
@@ -77,13 +77,14 @@ export const restartCommand = (
             "The shell did not become ready within 10 seconds. Stop the command or finish the prompt in the terminal, then run it again.",
           ),
         ),
-        Effect.andThen(
+        Effect.andThen((empty) =>
           session.operations.run(
             Effect.gen(function* () {
               if (session.summary.lifecycle !== "running" || session.resources.handle !== handle)
                 return yield* failure(
                   "The terminal closed before the command could restart. Create a new terminal.",
                 );
+              if (!empty) return yield* failure(COMMAND_BUFFER_ERROR);
               if (session.command !== null)
                 return yield* failure(
                   "Another command started before the restart. Stop it before restarting.",

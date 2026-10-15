@@ -44,9 +44,11 @@ test("restart rejects stale requests, waits for authenticated ZLE readiness, and
     expect(pty.operations).toEqual(["write:\u0003"]);
     await emit(`D;130;${nonce}`);
     expect(pty.operations).toEqual(["write:\u0003"]);
-    await emit("R;another-shell");
-    expect(pty.operations).toEqual(["write:\u0003"]);
     await emit(`R;${nonce}`);
+    await emit(`R;${nonce};invalid`);
+    await emit("R;another-shell;1");
+    expect(pty.operations).toEqual(["write:\u0003"]);
+    await emit(`R;${nonce};1`);
     expect(await pending).toEqual({ restarted: true });
     expect(pty.operations).toEqual(["write:\u0003", "write:\u001b[200~sleep 30\u001b[201~\r"]);
   } finally {
@@ -83,7 +85,7 @@ test.each(["running", "prompt"])(
       );
       expect(result._tag === "Failure" && result.failure.message).toContain("did not become ready");
       await emit(`D;0;${nonce}`);
-      await emit(`R;${nonce}`);
+      await emit(`R;${nonce};1`);
       expect(pty.operations).toEqual(["write:\u0003"]);
       await Effect.runPromise(service.write(terminalId, new TextEncoder().encode("ls\r")));
       expect(pty.operations.at(-1)).toBe("write:ls\r");
