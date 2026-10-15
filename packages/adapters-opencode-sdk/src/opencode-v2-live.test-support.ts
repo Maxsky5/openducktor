@@ -1,6 +1,9 @@
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
 import type { ManagedMcpServerResolver } from "@openducktor/core";
-import { createPrepareOpencodeSessionRuntime } from "./opencode-session-runtime";
+import {
+  createPrepareOpencodeSessionRuntime,
+  type PreparedOpencodeSessionRuntime,
+} from "./opencode-session-runtime";
 import {
   connection,
   ref,
@@ -21,7 +24,7 @@ export const prepareFixture = (
     command: ["odt-mcp"],
     environment: { OPENDUCKTOR_WORKSPACE_ID: "workspace-1" },
   }),
-) => {
+): Fixture => {
   const channel = eventChannel();
   const requests: NativeRequest[] = [];
   const installed = new Set<string>();
@@ -101,3 +104,9 @@ export const backgroundLaunch = (): SessionMessageInfo => ({
     },
   ],
 });
+
+type Fixture = {
+  requests: NativeRequest[];
+  channel: ReturnType<typeof eventChannel>;
+  prepare: () => Promise<PreparedOpencodeSessionRuntime>;
+};

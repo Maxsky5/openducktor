@@ -119,22 +119,20 @@ export class OpenCodeLiveMessageProjector {
           }
           reasoningOrdinal++;
         }
-        if (part.type === "tool") {
+        if (part.type === "tool" && part.state.status === "streaming") {
           const prior = liveParts.find((item) => item.type === "tool" && item.id === part.id);
-          if (part.state.status === "streaming") {
-            // OpenCode saves streaming input at input.ended; live deltas can still be partial.
-            const nativePart =
-              snapshot.type === "assistant"
-                ? snapshot.content.find((item) => item.type === "tool" && item.id === part.id)
-                : undefined;
-            const hasSavedInput =
-              nativePart?.type === "tool" &&
-              nativePart.state.status === "streaming" &&
-              nativePart.state.input.length > 0;
-            if (hasSavedInput || settledInput.has(part.id)) this.settledInput.add(part.id);
-            else if (prior?.type === "tool" && prior.state.status === "streaming")
-              part.state.input = prior.state.input;
-          }
+          // OpenCode saves streaming input at input.ended; live deltas can still be partial.
+          const nativePart =
+            snapshot.type === "assistant"
+              ? snapshot.content.find((item) => item.type === "tool" && item.id === part.id)
+              : undefined;
+          const hasSavedInput =
+            nativePart?.type === "tool" &&
+            nativePart.state.status === "streaming" &&
+            nativePart.state.input.length > 0;
+          if (hasSavedInput || settledInput.has(part.id)) this.settledInput.add(part.id);
+          else if (prior?.type === "tool" && prior.state.status === "streaming")
+            part.state.input = prior.state.input;
         }
       }
     }
