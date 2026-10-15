@@ -300,14 +300,48 @@ describe("OpenCode V2 subagent projection and history", () => {
     },
   );
   test.each([
-    { live: "completed", saved: "completed", fields: "missing" },
-    { live: "error", saved: "error", fields: "missing" },
-    { live: "cancelled", saved: "cancelled", fields: "missing" },
-    { live: "completed", saved: "cancelled", fields: "partial" },
-    { live: "error", saved: "completed", fields: "partial" },
+    {
+      live: "completed",
+      saved: "completed",
+      fields: "missing",
+      background: false,
+      state: "completed",
+    },
+    { live: "error", saved: "error", fields: "missing", background: false, state: "error" },
+    {
+      live: "cancelled",
+      saved: "cancelled",
+      fields: "missing",
+      background: false,
+      state: "cancelled",
+    },
+    {
+      live: "completed",
+      saved: "cancelled",
+      fields: "partial",
+      background: false,
+      state: "cancelled",
+    },
+    { live: "error", saved: "completed", fields: "partial", background: false, state: "completed" },
+    {
+      live: "running",
+      saved: "completed",
+      fields: "missing",
+      background: false,
+      state: "completed",
+    },
+    { live: "running", saved: "error", fields: "partial", background: false, state: "error" },
+    { live: "running", saved: "completed", fields: "missing", background: true, state: "running" },
+    {
+      live: "backgrounded",
+      saved: "completed",
+      fields: "missing",
+      background: false,
+      state: "running",
+    },
   ] as const)(
-    "keeps terminal $live links with $saved history and $fields metadata",
-    async ({ live, saved, fields }) => {
+    "keeps $live subagent links with $saved history and $fields metadata (background=$background)",
+    async ({ live, saved, fields, background, state }) => {
       const message: Extract<SessionMessageInfo, { type: "assistant" }> = {
         id: "msg_terminal",
         type: "assistant",
@@ -321,7 +355,7 @@ describe("OpenCode V2 subagent projection and history", () => {
           time: { created: 3, ran: 4 },
           state: {
             status: "running",
-            input: { agent: "general", prompt: "Check changes" },
+            input: { agent: "general", prompt: "Check changes", background },
             metadata: {},
           },
         })),
@@ -353,20 +387,36 @@ describe("OpenCode V2 subagent projection and history", () => {
             sessionID: ref.externalSessionId,
             assistantMessageID: message.id,
             id: `call_${name}`,
-            executed: false,
             metadata:
               name === "subagent"
-                ? { ...metadata, sessionID: "ses_child", status: live }
+                ? {
+                    ...metadata,
+                    sessionID: "ses_child",
+                    status: live === "backgrounded" ? "running" : live,
+                  }
                 : metadata,
           };
+          if (live === "running") {
+            fixture.channel.push({
+              id: `evt_${name}_progress`,
+              type: "session.tool.progress",
+              created: 9,
+              data,
+            });
+            continue;
+          }
           fixture.channel.push(
-            live === "completed"
+            live === "completed" || live === "backgrounded"
               ? {
                   id: `evt_${name}_success`,
                   type: "session.tool.success",
                   created: 9,
                   durable: { ...durable, seq: index + 1, version: 2 },
-                  data: { ...data, content: [{ type: "text", text: "Live result" }] },
+                  data: {
+                    ...data,
+                    executed: false,
+                    content: [{ type: "text", text: "Live result" }],
+                  },
                 }
               : {
                   id: `evt_${name}_failed`,
@@ -375,6 +425,7 @@ describe("OpenCode V2 subagent projection and history", () => {
                   durable: { ...durable, seq: index + 1, version: 2 },
                   data: {
                     ...data,
+                    executed: false,
                     error: {
                       type: live === "cancelled" ? "aborted" : "tool",
                       message: "Live error",
@@ -395,7 +446,7 @@ describe("OpenCode V2 subagent projection and history", () => {
         for (const part of history.content) {
           if (part.type !== "tool") continue;
           part.time.completed = 10;
-          const input = { agent: "general", prompt: "Saved prompt" };
+          const input = { agent: "general", prompt: "Saved prompt", background };
           const content = [{ type: "text" as const, text: "Saved result" }] as const;
           part.state =
             saved === "completed"
@@ -419,8 +470,8 @@ describe("OpenCode V2 subagent projection and history", () => {
         const child = {
           kind: "subagent",
           externalSessionId: "ses_child",
-          status: saved,
-          endedAtMs: 10,
+          status: state,
+          executionMode: state === "running" ? "background" : "foreground",
           prompt: "Saved prompt",
           metadata: { ...expectedMetadata, sessionID: "ses_child" },
         };
@@ -428,12 +479,14 @@ describe("OpenCode V2 subagent projection and history", () => {
           kind: "tool",
           status: saved === "completed" ? "completed" : "error",
           endedAtMs: 10,
-          input: { agent: "general", prompt: "Saved prompt" },
+          input: { agent: "general", prompt: "Saved prompt", background },
           output: "Saved result",
           metadata: expectedMetadata,
         };
+        const parts = [state === "running" ? child : { ...child, endedAtMs: 10 }, tool];
         const loaded = await runtime.queries.loadSessionHistory(ref);
-        expect(loaded[0]?.parts).toMatchObject([child, tool]);
+        expect(loaded[0]?.parts).toMatchObject(parts);
+        if (state === "running") expect(loaded[0]?.parts[0]).not.toHaveProperty("endedAtMs");
         if (saved !== "completed")
           expect(loaded[0]?.parts).toMatchObject([
             { error: "Saved error" },
@@ -457,11 +510,8 @@ describe("OpenCode V2 subagent projection and history", () => {
               ? [signal.event.part]
               : [],
           ),
-        ).toMatchObject([child, tool]);
-        expect((await runtime.queries.loadSessionHistory(ref))[0]?.parts).toMatchObject([
-          child,
-          tool,
-        ]);
+        ).toMatchObject(parts);
+        expect((await runtime.queries.loadSessionHistory(ref))[0]?.parts).toMatchObject(parts);
       } finally {
         await runtime.release();
       }

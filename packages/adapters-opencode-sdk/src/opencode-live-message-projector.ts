@@ -626,9 +626,20 @@ const keepLiveTools = (
     if (!prior) return part;
     if (part.state.status === "completed" || part.state.status === "error") {
       if (prior.state.status === "streaming" || !prior.state.metadata) return part;
+      let metadata = prior.state.metadata;
+      // Progress alone cannot confirm that a foreground call finished in the background.
+      if (
+        part.name === "subagent" &&
+        part.state.status === "completed" &&
+        prior.state.status === "running" &&
+        part.state.input.background !== true
+      ) {
+        const { status: _status, ...progress } = metadata;
+        metadata = progress;
+      }
       return {
         ...part,
-        state: { ...part.state, metadata: { ...prior.state.metadata, ...part.state.metadata } },
+        state: { ...part.state, metadata: { ...metadata, ...part.state.metadata } },
       };
     }
     if (part.state.status === "streaming") {
@@ -642,7 +653,51 @@ const keepLiveTools = (
       state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
     };
   });
-  return { ...message, content: [...content, ...liveTools.values()] };
+  return {
+    ...message,
+    content: liveTools.size === 0 ? content : insertMissingTools(content, live.content),
+  };
+};
+
+/** Tool IDs and text or reasoning ordinals stay stable when history omits live tools. */
+const insertMissingTools = (
+  content: SessionMessageAssistant["content"],
+  live: SessionMessageAssistant["content"],
+): SessionMessageAssistant["content"] => {
+  const positions = new Map(contentKeys(content).map((key, index) => [key, index]));
+  const inserts = new Map<number, SessionMessageAssistant["content"]>();
+  const keys = contentKeys(live);
+  let pending: SessionMessageAssistant["content"] = [];
+  let after = 0;
+  for (const [index, part] of live.entries()) {
+    const at = positions.get(keys[index]!);
+    if (at === undefined) {
+      if (part.type === "tool") pending.push(part);
+      continue;
+    }
+    if (pending.length > 0) {
+      const group = inserts.get(at);
+      if (group) group.push(...pending);
+      else inserts.set(at, pending);
+      pending = [];
+    }
+    after = at + 1;
+  }
+  if (pending.length > 0) {
+    const group = inserts.get(after);
+    if (group) group.push(...pending);
+    else inserts.set(after, pending);
+  }
+  const merged = content.flatMap((part, index) => [...(inserts.get(index) ?? []), part]);
+  merged.push(...(inserts.get(content.length) ?? []));
+  return merged;
+};
+
+const contentKeys = (content: SessionMessageAssistant["content"]): string[] => {
+  const ordinals = { text: 0, reasoning: 0 };
+  return content.map((part) =>
+    part.type === "tool" ? `tool:${part.id}` : `${part.type}:${ordinals[part.type]++}`,
+  );
 };
 
 const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
