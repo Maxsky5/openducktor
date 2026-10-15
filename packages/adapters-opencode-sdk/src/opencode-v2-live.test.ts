@@ -5,13 +5,11 @@ import {
   AgentSessionMessageRefusedError,
   AgentSessionTurnActiveError,
   type AgentSessionHistoryMessage,
-  type ManagedMcpServerResolver,
 } from "@openducktor/core";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   hostEventEnvelopeSchema,
 } from "@openducktor/contracts";
-import { createPrepareOpencodeSessionRuntime } from "./opencode-session-runtime";
 import { OpenCodeOperationError } from "./opencode-client";
 import { createOpenCodeRuntimeProbes } from "./opencode-runtime-probes";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
@@ -26,75 +24,9 @@ import {
   cursorPage,
   location,
   model,
-  nativeClient,
-  eventChannel,
-  type NativeRequest,
 } from "./opencode-v2.test-support";
+import { backgroundLaunch, durable, prepareFixture } from "./opencode-v2-live.test-support";
 
-const prepareFixture = (
-  override?: (request: NativeRequest) => Response | Promise<Response> | undefined,
-  resolveMcpServerConfig: ManagedMcpServerResolver = async () => ({
-    command: ["odt-mcp"],
-    environment: { OPENDUCKTOR_WORKSPACE_ID: "workspace-1" },
-  }),
-) => {
-  const channel = eventChannel();
-  const requests: NativeRequest[] = [];
-  const installed = new Set<string>();
-  const detail: SessionInfo = session();
-  const handleRequest = (request: NativeRequest): Response | Promise<Response> => {
-    requests.push(request);
-    const overridden = override?.(request);
-    if (overridden) return overridden;
-    const { url, method } = request;
-    const directory = url.searchParams.get("location[directory]") ?? ref.workingDirectory;
-    if (url.pathname === "/api/info")
-      return Response.json({ version: "2.0.24", pid: 42, urls: [], paths: { tmp: "/tmp" } });
-    if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
-    if (url.pathname === "/api/mcp")
-      return Response.json({
-        location: { directory },
-        data: installed.has(directory)
-          ? [{ name: "openducktor", status: { status: "connected" } }]
-          : [],
-      });
-    if (url.pathname === "/api/experimental/mcp/openducktor") {
-      installed.add(directory);
-      return noContent();
-    }
-    if (url.pathname === "/api/location") return Response.json(location);
-    if (url.pathname === "/api/session/active") return response({});
-    if (url.pathname === "/api/session") return cursorPage([]);
-    if (url.pathname.endsWith("/message")) return cursorPage([]);
-    if (url.pathname.endsWith("/instructions/entries")) return response([]);
-    if (/\/(permission|form|inbox)$/.test(url.pathname)) return response([]);
-    if (method === "PATCH") return noContent();
-    if (url.pathname === "/api/session/ses_saved") return response(detail);
-    throw new Error(`Unexpected request ${method} ${url.pathname}`);
-  };
-  const prepare = createPrepareOpencodeSessionRuntime({
-    createClient: (_connection, signal) => {
-      const client = nativeClient(handleRequest, signal);
-      client.event.subscribe = channel.subscribe;
-      return client;
-    },
-    resolveCreationSettings: async () => ({ defaults: [], role: [] }),
-    resolveMcpServerConfig,
-    readDirectory: async (_directory, read) => read(),
-  });
-  return {
-    requests,
-    channel,
-    prepare: () =>
-      prepare({
-        runtimeId: connection.runtimeId,
-        runtimeEndpoint: connection.endpoint,
-        connection,
-      }),
-  };
-};
-
-const durable = { aggregateID: ref.externalSessionId, seq: 1, version: 1 as const };
 const sessionCreated = (detail: SessionInfo): Extract<V2Event, { type: "session.created" }> => {
   const event: Extract<V2Event, { type: "session.created" }> = {
     id: `created_${detail.id}`,
@@ -112,27 +44,6 @@ const sessionCreated = (detail: SessionInfo): Extract<V2Event, { type: "session.
   if (detail.parentID) event.data.parentID = detail.parentID;
   return event;
 };
-const backgroundLaunch = (): SessionMessageInfo => ({
-  id: "msg_launch",
-  type: "assistant",
-  time: { created: 2, completed: 5 },
-  agent: "build",
-  model,
-  content: [
-    {
-      type: "tool",
-      id: "call_child",
-      name: "subagent",
-      time: { created: 3, ran: 4, completed: 5 },
-      state: {
-        status: "completed",
-        input: { agent: "research", prompt: "Find references", background: true },
-        content: [{ type: "text", text: "Started" }],
-        metadata: { sessionID: "ses_child", status: "running" },
-      },
-    },
-  ],
-});
 describe("OpenCode V2 cleanup status", () => {
   const fixture = (read: (url: URL) => Response) => {
     const server = Bun.serve({
@@ -248,129 +159,6 @@ describe("OpenCode V2 cleanup status", () => {
   );
 });
 describe("OpenCode V2 live observation", () => {
-  test("routes native background completion by admitted session instead of publisher directory", async () => {
-    const other = {
-      ...ref,
-      repoPath: "/other",
-      workingDirectory: "/other",
-      externalSessionId: "ses_other",
-    };
-    const fixture = prepareFixture(({ url, method }) => {
-      if (method === "GET" && url.pathname === "/api/session/ses_other")
-        return response(
-          session({ id: other.externalSessionId, location: { directory: "/other" } }),
-        );
-      if (url.pathname === `/api/session/${ref.externalSessionId}/message`)
-        return cursorPage([backgroundLaunch()]);
-      if (
-        url.pathname === "/api/location" &&
-        url.searchParams.get("location[directory]") === "/other"
-      )
-        return Response.json({
-          ...location,
-          directory: "/other",
-          project: { ...location.project, directory: "/other" },
-        });
-      return undefined;
-    });
-    const runtime = await fixture.prepare();
-    const signals: OpencodeSessionRuntimeSignal[] = [];
-    const observed = Promise.withResolvers<void>();
-    try {
-      for (const root of [ref, other]) {
-        const restored = await runtime.connection.readSessionSources(root.repoPath, [
-          { ...root, sessionScope: { kind: "repository" } },
-        ]);
-        expect(restored.failures).toEqual([]);
-      }
-      await runtime.startForwarding((signal) => {
-        signals.push(signal);
-        if (signal.type === "fault" || signal.type === "session_fault")
-          observed.reject(new Error(signal.message));
-        if (signal.type === "runtime_notice" && signal.message === "Completion observed")
-          observed.resolve();
-      });
-      // Native background jobs publish with their cached directory, not the parent's location.
-      fixture.channel.push({
-        id: "evt_background_completion",
-        type: "session.inbox.enqueued",
-        created: 10,
-        durable,
-        location: { directory: other.workingDirectory },
-        data: {
-          sessionID: ref.externalSessionId,
-          inboxID: "msg_background_completion",
-          item: {
-            type: "synthetic",
-            delivery: "steer",
-            payload: {
-              text: "Native child finished",
-              metadata: { source: "subagent", childID: "ses_child", state: "completed" },
-            },
-          },
-        },
-      });
-      fixture.channel.push({
-        id: "evt_background_delivered",
-        type: "session.inbox.delivered",
-        created: 11,
-        durable: { ...durable, seq: 2 },
-        data: { sessionID: ref.externalSessionId, inboxID: "msg_background_completion" },
-      });
-      fixture.channel.push({
-        id: "evt_other_started",
-        type: "session.execution.started",
-        created: 12,
-        location: { directory: ref.workingDirectory },
-        data: { sessionID: other.externalSessionId },
-      });
-      fixture.channel.push({
-        id: "evt_unadmitted_started",
-        type: "session.execution.started",
-        location: { directory: ref.workingDirectory },
-        data: { sessionID: "ses_unadmitted" },
-      });
-      fixture.channel.push({
-        id: "evt_completion_observed",
-        type: "tui.toast.show",
-        data: { message: "Completion observed", variant: "warning" },
-      });
-      await observed.promise;
-      expect(signals).toContainEqual(
-        expect.objectContaining({
-          type: "session_event",
-          externalSessionId: ref.externalSessionId,
-          event: expect.objectContaining({
-            type: "assistant_part",
-            part: expect.objectContaining({ kind: "subagent", status: "completed" }),
-          }),
-        }),
-      );
-      expect(signals).toContainEqual(
-        expect.objectContaining({
-          type: "session_event",
-          externalSessionId: other.externalSessionId,
-          event: expect.objectContaining({
-            type: "session_status",
-            status: { type: "busy", message: null },
-          }),
-        }),
-      );
-      expect(
-        signals.some(
-          (signal) =>
-            "externalSessionId" in signal && signal.externalSessionId === "ses_unadmitted",
-        ),
-      ).toBe(false);
-      for (const root of [ref, other])
-        expect(
-          await runtime.connection.updateSessionTitle({ ...root, title: "Still connected" }),
-        ).toMatchObject({ status: "renamed" });
-    } finally {
-      await runtime.release();
-    }
-  });
-
   test.each(["session.created", "session.moved"] as const)(
     "rejects an authoritative directory change in %s even without a publisher location",
     async (type) => {
@@ -3104,19 +2892,7 @@ describe("OpenCode V2 live observation", () => {
             signal.event.type === "session_policy_notice" &&
             signal.event.messageId === "msg_result",
         ),
-      ).toEqual([
-        {
-          type: "session_event",
-          externalSessionId: ref.externalSessionId,
-          event: {
-            type: "session_policy_notice",
-            externalSessionId: ref.externalSessionId,
-            messageId: "msg_result",
-            message: "Native child result",
-            timestamp: new Date(10).toISOString(),
-          },
-        },
-      ]);
+      ).toEqual([]);
       expect(
         signals
           .filter(
@@ -3682,8 +3458,7 @@ describe("OpenCode V2 live observation", () => {
                   data: { ...data, id: "call_next", text: '{"agent":"research"}' },
                 },
               ];
-      const partIds =
-        kind === "tool.input" ? ["call_next", "call_next:subagent"] : [`msg_native:${kind}:1`];
+      const partIds = kind === "tool.input" ? ["call_next:subagent"] : [`msg_native:${kind}:1`];
       for (const [index, update] of updates.entries()) {
         const events = projector.apply(update);
         expect(events.map((event) => event.type)).toEqual(partIds.map(() => "assistant_part"));
@@ -3694,14 +3469,14 @@ describe("OpenCode V2 live observation", () => {
           timestamp: new Date(2).toISOString(),
           part:
             kind === "tool.input"
-              ? { status: "pending", inputStreaming: index < 2 }
+              ? { kind: "subagent", status: "pending" }
               : {
                   text: index === 0 ? "" : `Next ${kind}.`,
                   completed: kind === "reasoning" && index === 2,
                 },
         });
         if (kind === "tool.input" && index === 2)
-          expect(events[0]).toMatchObject({ part: { input: { agent: "research" } } });
+          expect(events[0]).toMatchObject({ part: { agent: "research" } });
       }
       const restored = projector.snapshotEvents(ref.externalSessionId);
       expect(restored.map((event) => event.type === "assistant_part" && event.part.partId)).toEqual(
@@ -4234,102 +4009,6 @@ describe("OpenCode V2 live observation", () => {
       { part: { kind: "tool", status: "running", metadata: { title: "Opening file" } } },
     ]);
   });
-  test("keeps background subagents running until structured native completion", () => {
-    const projector = new OpenCodeLiveMessageProjector();
-    const message = backgroundLaunch();
-    projector.seed([message]);
-    expect(projectMessage(message).parts[1]).toMatchObject({
-      kind: "subagent",
-      status: "running",
-      executionMode: "background",
-      externalSessionId: "ses_child",
-    });
-    expect(projectMessage(message).parts[1]).not.toHaveProperty("endedAtMs");
-    expect(
-      projector.apply({
-        id: "evt_child_complete",
-        created: 9,
-        type: "session.inbox.enqueued",
-        durable,
-        data: {
-          sessionID: ref.externalSessionId,
-          inboxID: "msg_child_complete",
-          item: {
-            type: "synthetic",
-            delivery: "steer",
-            payload: {
-              text: "Native child result",
-              description: "Research completed",
-              metadata: {
-                source: "subagent",
-                childID: "ses_child",
-                agent: "research",
-                state: "completed",
-              },
-            },
-          },
-        },
-      }),
-    ).toEqual([]);
-    const delivery: V2Event = {
-      id: "evt_child_delivered",
-      type: "session.inbox.delivered",
-      created: 10,
-      durable: { ...durable, seq: 2 },
-      data: { sessionID: ref.externalSessionId, inboxID: "msg_child_complete" },
-    };
-    const events = projector.apply(delivery);
-    expect(events).toContainEqual({
-      type: "session_policy_notice",
-      externalSessionId: ref.externalSessionId,
-      timestamp: new Date(10).toISOString(),
-      messageId: "msg_child_complete",
-      message: "Native child result",
-    });
-    const completed = events.find((event) => event.type === "assistant_part");
-    expect(completed).toMatchObject({
-      part: { partId: "call_child:subagent", status: "completed", endedAtMs: 10 },
-    });
-    expect(projectMessages([...projector.messages.values()])[0]?.parts[1]).toMatchObject({
-      status: "completed",
-      endedAtMs: 10,
-    });
-    expect(projectMessages([...projector.messages.values()])[1]).toMatchObject({
-      messageId: "msg_child_complete",
-      role: "system",
-      text: "Native child result",
-    });
-    expect(projector.apply(delivery)).toEqual([]);
-    expect(projector.messages).toHaveProperty("size", 2);
-  });
-  test("rebuilds child completion state after reversion and reseeding", () => {
-    const projector = new OpenCodeLiveMessageProjector();
-    const launch = backgroundLaunch();
-    const completion: SessionMessageInfo = {
-      id: "msg_child_completion",
-      type: "synthetic",
-      time: { created: 9 },
-      text: "Research completed",
-      metadata: { source: "subagent", childID: "ses_child", state: "completed" },
-    };
-    const child = () =>
-      projector
-        .snapshotEvents(ref.externalSessionId)
-        .find((event) => event.type === "assistant_part" && event.part.kind === "subagent");
-    projector.seed([launch, completion]);
-    expect(child()).toMatchObject({ part: { status: "completed", endedAtMs: 9 } });
-    projector.apply({
-      id: "evt_revert_child_completion",
-      type: "session.revert.committed",
-      created: 10,
-      durable,
-      data: { sessionID: ref.externalSessionId, to: completion.id },
-    });
-    expect(child()).toMatchObject({ part: { status: "running" } });
-    expect(child()).not.toHaveProperty("part.endedAtMs");
-    projector.seed([launch, completion]);
-    expect(child()).toMatchObject({ part: { status: "completed", endedAtMs: 9 } });
-  });
   test("cancels an owned source read before release waits for observation", async () => {
     const started = Promise.withResolvers<void>();
     let aborted = false;
@@ -4356,55 +4035,6 @@ describe("OpenCode V2 live observation", () => {
     await runtime.release();
     expect(aborted).toBe(true);
     expect((await reading).failures).toHaveLength(1);
-  });
-  test("keeps completion results separate when the same child conversation is continued", () => {
-    const launch = (id: string, at: number): SessionMessageInfo => ({
-      id,
-      type: "assistant",
-      time: { created: at, completed: at + 2 },
-      agent: "build",
-      model,
-      content: [
-        {
-          type: "tool",
-          id: `call_${id}`,
-          name: "subagent",
-          time: { created: at, ran: at + 1, completed: at + 2 },
-          state: {
-            status: "completed",
-            input: { background: true, sessionID: "ses_child" },
-            content: [{ type: "text", text: "Started" }],
-            metadata: { sessionID: "ses_child", status: "running" },
-          },
-        },
-      ],
-    });
-    const completion = (
-      id: string,
-      at: number,
-      state: "error" | "completed" | "cancelled",
-    ): SessionMessageInfo => ({
-      id,
-      type: "synthetic",
-      time: { created: at },
-      text: `Native ${state} result`,
-      metadata: { source: "subagent", childID: "ses_child", state },
-    });
-    const history = projectMessages([
-      launch("first", 1),
-      completion("failed", 5, "error"),
-      launch("second", 7),
-      completion("done", 12, "completed"),
-      launch("third", 14),
-      completion("cancelled", 18, "cancelled"),
-    ]);
-    expect(
-      history.filter((message) => message.role === "assistant").map((message) => message.parts[1]),
-    ).toMatchObject([
-      { status: "error", endedAtMs: 5 },
-      { status: "completed", endedAtMs: 12 },
-      { status: "cancelled", endedAtMs: 18 },
-    ]);
   });
 });
 

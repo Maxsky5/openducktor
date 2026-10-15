@@ -233,6 +233,7 @@ const inferredAgentStreamPartSchema = z.discriminatedUnion("kind", [
       kind: z.literal("subagent"),
       messageId: z.string(),
       partId: z.string(),
+      // Different "call:" keys keep calls to the same child separate.
       correlationKey: z.string(),
       status: z.enum(["pending", "running", "completed", "cancelled", "error"]),
       agent: z.string().optional(),

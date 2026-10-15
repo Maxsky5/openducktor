@@ -114,7 +114,14 @@ describe("OpenCode runtime composition directory guard", () => {
           authentication: { type: "basic", username: "opencode", password: "test-password" },
         },
         { resolveCreationSettings: async () => ({ defaults: [], role: [] }) },
-        { readDirectory: createReadDirectory(), ensureMcp: async () => {}, admitted: () => {} },
+        {
+          readDirectory: createReadDirectory(),
+          ensureMcp: async () => {},
+          admitted: () => {},
+          projectHistory: () => {
+            throw new Error("Unexpected history read");
+          },
+        },
       );
       try {
         const failure = await controller.stopSession(ref).catch((cause: unknown) => cause);

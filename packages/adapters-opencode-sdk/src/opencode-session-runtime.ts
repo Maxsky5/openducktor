@@ -342,6 +342,8 @@ export const createPrepareOpencodeSessionRuntime =
     controller = new OpencodeSdkAdapter(input.connection, options, {
       readDirectory: options.readDirectory,
       ensureMcp,
+      projectHistory: (sessionID, messages) =>
+        (projectors.get(sessionID) ?? new OpenCodeLiveMessageProjector()).projectHistory(messages),
       admitted: (binding) => {
         if (!projectors.has(binding.detail.id))
           projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector());

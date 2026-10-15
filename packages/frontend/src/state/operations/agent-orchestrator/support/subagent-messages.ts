@@ -217,7 +217,9 @@ const resolveSubagentMessageUpdateTarget = (
   const sessionMessage = incoming.externalSessionId
     ? findLastSubagentMessage(
         owner,
-        (message) => message.meta.externalSessionId === incoming.externalSessionId,
+        (message) =>
+          message.meta.externalSessionId === incoming.externalSessionId &&
+          !areDifferentCalls(message.meta, incoming),
       )
     : undefined;
   const partScopedRowMatches =
@@ -415,6 +417,7 @@ const matchesLoadedSubagent = (
   if (candidate.id === loadedMessage.id) {
     return false;
   }
+  if (areDifferentCalls(loadedMessage.meta, candidate.meta)) return false;
 
   const loadedSessionId = loadedMessage.meta.externalSessionId;
   if (loadedSessionId) {
@@ -506,40 +509,6 @@ export const findCurrentSubagentMessagesForLoadedHistory = ({
   return matches;
 };
 
-const resolvePreferredLoadedCorrelationKey = (
-  existingMeta: SubagentMeta,
-  incomingMeta: SubagentMeta,
-): string => {
-  if (
-    existingMeta.correlationKey !== incomingMeta.correlationKey &&
-    incomingMeta.externalSessionId &&
-    !existingMeta.externalSessionId
-  ) {
-    return incomingMeta.correlationKey;
-  }
-  if (
-    existingMeta.correlationKey !== incomingMeta.correlationKey &&
-    existingMeta.externalSessionId &&
-    !incomingMeta.externalSessionId
-  ) {
-    return existingMeta.correlationKey;
-  }
-  if (isPartScopedSubagentKey(existingMeta.correlationKey)) {
-    return existingMeta.correlationKey;
-  }
-  if (isPartScopedSubagentKey(incomingMeta.correlationKey)) {
-    return incomingMeta.correlationKey;
-  }
-  if (existingMeta.correlationKey.startsWith("spawn:")) {
-    return existingMeta.correlationKey;
-  }
-  if (incomingMeta.correlationKey.startsWith("spawn:")) {
-    return incomingMeta.correlationKey;
-  }
-
-  return existingMeta.correlationKey;
-};
-
 const matchesLoadedSubagentMessage = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
@@ -577,6 +546,7 @@ const shouldIgnoreIncomingHistorySubagent = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
+  if (areDifferentCalls(existingMessage.meta, incomingMessage.meta)) return false;
   return Boolean(
     existingMessage.meta.externalSessionId &&
     !incomingMessage.meta.externalSessionId &&
@@ -589,6 +559,7 @@ const canMergeHistorySubagentMessage = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
+  if (areDifferentCalls(existingMessage.meta, incomingMessage.meta)) return false;
   if (matchesLoadedSubagentMessage(existingMessage, incomingMessage)) {
     return true;
   }
@@ -606,7 +577,7 @@ const mergeHistorySubagentMessages = (
 ): SubagentMessage => {
   const existingMeta = existingMessage.meta;
   const incomingMeta = incomingMessage.meta;
-  const correlationKey = resolvePreferredLoadedCorrelationKey(existingMeta, incomingMeta);
+  const correlationKey = pickKey(existingMeta, incomingMeta);
   const nextMeta = mergeSubagentMeta(existingMeta, {
     ...incomingMeta,
     correlationKey,
@@ -666,3 +637,44 @@ export const appendHistorySubagentMessage = (
 
   messages.push(incomingMessage);
 };
+
+const pickKey = (existingMeta: SubagentMeta, incomingMeta: SubagentMeta): string => {
+  if (existingMeta.correlationKey.startsWith("call:")) return existingMeta.correlationKey;
+  if (incomingMeta.correlationKey.startsWith("call:")) return incomingMeta.correlationKey;
+  if (
+    existingMeta.correlationKey !== incomingMeta.correlationKey &&
+    incomingMeta.externalSessionId &&
+    !existingMeta.externalSessionId
+  ) {
+    return incomingMeta.correlationKey;
+  }
+  if (
+    existingMeta.correlationKey !== incomingMeta.correlationKey &&
+    existingMeta.externalSessionId &&
+    !incomingMeta.externalSessionId
+  ) {
+    return existingMeta.correlationKey;
+  }
+  if (isPartScopedSubagentKey(existingMeta.correlationKey)) {
+    return existingMeta.correlationKey;
+  }
+  if (isPartScopedSubagentKey(incomingMeta.correlationKey)) {
+    return incomingMeta.correlationKey;
+  }
+  if (existingMeta.correlationKey.startsWith("spawn:")) {
+    return existingMeta.correlationKey;
+  }
+  if (incomingMeta.correlationKey.startsWith("spawn:")) {
+    return incomingMeta.correlationKey;
+  }
+
+  return existingMeta.correlationKey;
+};
+
+const areDifferentCalls = (
+  left: Pick<SubagentMeta, "correlationKey">,
+  right: Pick<SubagentMeta, "correlationKey">,
+): boolean =>
+  left.correlationKey.startsWith("call:") &&
+  right.correlationKey.startsWith("call:") &&
+  left.correlationKey !== right.correlationKey;

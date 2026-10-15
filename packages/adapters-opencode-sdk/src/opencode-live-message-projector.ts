@@ -9,38 +9,57 @@ import type {
   ToolContent1,
   V2Event,
 } from "@opencode/client";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   iso,
   assistantPartEvents,
   messageEvents,
   messageProjectionContext,
   projectInboxUser,
+  projectMessages,
 } from "./opencode-message-projection";
-
-const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
-  ToolContent,
-  ...ToolContent[],
-] => {
-  const map = (item: ToolContent1): ToolContent => {
-    if (item.type === "text") return { type: "text", text: item.text };
-    const file: Extract<ToolContent, { type: "file" }> = {
-      type: "file",
-      uri: item.uri,
-      mime: item.mime,
-    };
-    if (item.name !== undefined) file.name = item.name;
-    return file;
-  };
-  return [map(first), ...rest.map(map)];
-};
 
 export class OpenCodeLiveMessageProjector {
   readonly messages = new Map<string, SessionMessageInfo>();
   readonly inbox = new Map<string, SessionInboxInfo>();
   private readonly settledText = new Set<string>();
   private readonly settledInput = new Set<string>();
+  private readonly retractedIds = new Set<string>();
   private projectionContext = messageProjectionContext(this.messages.values());
+
+  /**
+   * History can lag live events and omit tool progress.
+   * Keep live updates and drop reverted calls without changing the live transcript.
+   */
+  projectHistory(messages: SessionMessageInfo[]): AgentSessionHistoryMessage[] {
+    const history = messages.filter((message) => !this.retractedIds.has(message.id));
+    const settledInput = new Set(this.settledInput);
+    for (const message of history) {
+      if (message.type !== "assistant") continue;
+      for (const part of message.content)
+        if (
+          part.type === "tool" &&
+          part.state.status === "streaming" &&
+          part.state.input.length > 0
+        )
+          settledInput.add(part.id);
+    }
+    const merged = history.map((message) =>
+      keepLiveTools(message, this.messages.get(message.id), this.settledInput),
+    );
+    const ids = new Set(history.map((message) => message.id));
+    for (const message of this.messages.values()) {
+      if (message.type !== "assistant" || ids.has(message.id)) continue;
+      if (message.content.some((part) => part.type === "tool")) merged.push(message);
+    }
+    const context = messageProjectionContext(merged);
+    const completions = new Map(context.completions);
+    for (const [callID, completion] of this.projectionContext.completions) {
+      const saved = completions.get(callID);
+      if (!saved || saved.created < completion.created) completions.set(callID, completion);
+    }
+    return projectMessages(merged, { ...context, completions }, settledInput);
+  }
 
   /**
    * Returns the user message of an input that the event stream already showed, queued or
@@ -58,6 +77,10 @@ export class OpenCodeLiveMessageProjector {
     return projectInboxUser({ id, sessionID, time, payload }, "read");
   }
 
+  /**
+   * Replace the baseline and keep unsaved live updates on matching messages.
+   * Return removed message IDs so the caller can drop stale transcript rows.
+   */
   seed(messages: SessionMessageInfo[]): string[] {
     const previous = new Map(this.messages);
     const settledText = new Set(this.settledText);
@@ -66,8 +89,9 @@ export class OpenCodeLiveMessageProjector {
     this.settledText.clear();
     this.settledInput.clear();
     for (const snapshot of messages) {
-      const message = structuredClone(snapshot);
-      const live = previous.get(message.id);
+      this.retractedIds.delete(snapshot.id);
+      const live = previous.get(snapshot.id);
+      const message = keepLiveTools(structuredClone(snapshot), live, settledInput);
       this.messages.set(message.id, message);
       if (message.type !== "assistant") continue;
       let textOrdinal = 0;
@@ -95,28 +119,25 @@ export class OpenCodeLiveMessageProjector {
           }
           reasoningOrdinal++;
         }
-        if (part.type === "tool") {
+        if (part.type === "tool" && part.state.status === "streaming") {
           const prior = liveParts.find((item) => item.type === "tool" && item.id === part.id);
-          if (part.state.status === "streaming") {
-            if (part.state.input.length > 0 || settledInput.has(part.id))
-              this.settledInput.add(part.id);
-            else if (prior?.type === "tool" && prior.state.status === "streaming")
-              part.state.input = prior.state.input;
-          }
-          if (
-            part.state.status === "running" &&
-            prior?.type === "tool" &&
-            prior.state.status === "running"
-          )
-            part.state.metadata = { ...part.state.metadata, ...prior.state.metadata };
+          // OpenCode saves streaming input at input.ended; live deltas can still be partial.
+          const nativePart =
+            snapshot.type === "assistant"
+              ? snapshot.content.find((item) => item.type === "tool" && item.id === part.id)
+              : undefined;
+          const hasSavedInput =
+            nativePart?.type === "tool" &&
+            nativePart.state.status === "streaming" &&
+            nativePart.state.input.length > 0;
+          if (hasSavedInput || settledInput.has(part.id)) this.settledInput.add(part.id);
+          else if (prior?.type === "tool" && prior.state.status === "streaming")
+            part.state.input = prior.state.input;
         }
       }
     }
     this.updateProjectionContext();
     return [...previous.keys()].filter((id) => !this.messages.has(id));
-  }
-  private updateProjectionContext() {
-    this.projectionContext = messageProjectionContext(this.messages.values());
   }
   snapshotEvents(sessionID: string): AgentEvent[] {
     return [...this.messages.values()].flatMap((message) =>
@@ -545,12 +566,19 @@ export class OpenCodeLiveMessageProjector {
             "The native reversion target is absent from the retained transcript. Reload this conversation.",
           );
         const removed = ids.slice(index);
-        for (const id of removed) this.messages.delete(id);
+        for (const id of removed) {
+          this.messages.delete(id);
+          this.retractedIds.add(id);
+        }
         this.updateProjectionContext();
         return [{ ...base, type: "transcript_retracted", messageIds: removed }];
       }
     }
     return system ? this.recordMessage(sessionID, system) : [];
+  }
+
+  private updateProjectionContext() {
+    this.projectionContext = messageProjectionContext(this.messages.values());
   }
 
   private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {
@@ -580,3 +608,111 @@ export class OpenCodeLiveMessageProjector {
     return events;
   }
 }
+
+/** Keep progress that OpenCode does not save, while trusting saved final results. */
+const keepLiveTools = (
+  message: SessionMessageInfo,
+  live: SessionMessageInfo | undefined,
+  settledInput: ReadonlySet<string>,
+): SessionMessageInfo => {
+  if (message.type !== "assistant" || live?.type !== "assistant") return message;
+  const liveTools = new Map(
+    live.content.filter((part) => part.type === "tool").map((part) => [part.id, part] as const),
+  );
+  const content = message.content.map((part) => {
+    if (part.type !== "tool") return part;
+    const prior = liveTools.get(part.id);
+    liveTools.delete(part.id);
+    if (!prior) return part;
+    if (part.state.status === "completed" || part.state.status === "error") {
+      if (prior.state.status === "streaming" || !prior.state.metadata) return part;
+      let metadata = prior.state.metadata;
+      // Progress alone cannot confirm that a foreground call finished in the background.
+      if (
+        part.name === "subagent" &&
+        part.state.status === "completed" &&
+        prior.state.status === "running" &&
+        part.state.input.background !== true
+      ) {
+        const { status: _status, ...progress } = metadata;
+        metadata = progress;
+      }
+      return {
+        ...part,
+        state: { ...part.state, metadata: { ...metadata, ...part.state.metadata } },
+      };
+    }
+    if (part.state.status === "streaming") {
+      if (prior.state.status === "streaming" && !settledInput.has(prior.id)) return part;
+      return prior;
+    }
+    if (prior.state.status === "streaming") return part;
+    if (prior.state.status === "completed" || prior.state.status === "error") return prior;
+    return {
+      ...part,
+      state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
+    };
+  });
+  return {
+    ...message,
+    content: liveTools.size === 0 ? content : insertMissingTools(content, live.content),
+  };
+};
+
+/** Tool IDs and text or reasoning ordinals stay stable when history omits live tools. */
+const insertMissingTools = (
+  content: SessionMessageAssistant["content"],
+  live: SessionMessageAssistant["content"],
+): SessionMessageAssistant["content"] => {
+  const positions = new Map(contentKeys(content).map((key, index) => [key, index]));
+  const inserts = new Map<number, SessionMessageAssistant["content"]>();
+  const keys = contentKeys(live);
+  let pending: SessionMessageAssistant["content"] = [];
+  let after = 0;
+  for (const [index, part] of live.entries()) {
+    const at = positions.get(keys[index]!);
+    if (at === undefined) {
+      if (part.type === "tool") pending.push(part);
+      continue;
+    }
+    if (pending.length > 0) {
+      const group = inserts.get(at);
+      if (group) group.push(...pending);
+      else inserts.set(at, pending);
+      pending = [];
+    }
+    after = at + 1;
+  }
+  if (pending.length > 0) {
+    const group = inserts.get(after);
+    if (group) group.push(...pending);
+    else inserts.set(after, pending);
+  }
+  const merged = content.flatMap((part, index) => [...(inserts.get(index) ?? []), part]);
+  merged.push(...(inserts.get(content.length) ?? []));
+  return merged;
+};
+
+const contentKeys = (content: SessionMessageAssistant["content"]): string[] => {
+  const ordinals = { text: 0, reasoning: 0 };
+  return content.map((part) =>
+    part.type === "tool" ? `tool:${part.id}` : `${part.type}:${ordinals[part.type]++}`,
+  );
+};
+
+const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
+  ToolContent,
+  ...ToolContent[],
+] => {
+  const map = (item: ToolContent1): ToolContent => {
+    if (item.type === "text") return { type: "text", text: item.text };
+    const file: Extract<ToolContent, { type: "file" }> = {
+      type: "file",
+      uri: item.uri,
+      mime: item.mime,
+    };
+    if (item.name !== undefined) file.name = item.name;
+    return file;
+  };
+  return [map(first), ...rest.map(map)];
+};

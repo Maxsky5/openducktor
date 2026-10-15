@@ -178,6 +178,7 @@ Rules:
 - Merge history with current messages. Do not erase live items.
 - A history read does not resume, discover pending input, change activity, set context, or drain events.
 - `support/subagent-messages.ts` owns subagent formatting and correlation.
+- A `call:` key names one tool call. Keep different call keys separate in live updates, history conversion, and history refresh, even when the calls share one child session.
 - Transcript data lives in `SessionMessagesState`.
 
 ## Selected context

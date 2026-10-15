@@ -255,13 +255,19 @@ export const messageProjectionContext = (
 
 const isVisibleNativeMessage = (message: SessionMessageInfo): boolean =>
   message.type !== "agent-switched" &&
-  !(message.type === "idle" && message.outcome === "succeeded");
+  !(message.type === "idle" && message.outcome === "succeeded") &&
+  !(message.type === "synthetic" && message.metadata?.source === "subagent");
 
-export const projectMessages = (messages: SessionMessageInfo[]): AgentSessionHistoryMessage[] => {
-  const { completions, durations } = messageProjectionContext(messages);
+export const projectMessages = (
+  messages: SessionMessageInfo[],
+  { completions, durations } = messageProjectionContext(messages),
+  settledToolInputs?: ReadonlySet<string>,
+): AgentSessionHistoryMessage[] => {
   return messages
     .filter(isVisibleNativeMessage)
-    .map((message) => projectMessage(message, completions, durations.get(message.id)));
+    .map((message) =>
+      projectMessage(message, completions, durations.get(message.id), settledToolInputs),
+    );
 };
 
 const projectAssistantContent = (
@@ -361,27 +367,21 @@ const projectAssistantContent = (
   if (content.time.completed !== undefined) tool.endedAtMs = content.time.completed;
   const metadata = "metadata" in state ? state.metadata : undefined;
   if (content.name !== "subagent") return [tool];
-  const input =
-    state.status === "streaming"
-      ? undefined
-      : z.record(z.string(), z.json()).safeParse(state.input).data;
+  const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
+  // Native progress confirms ownership; tool input can name an unrelated session.
   const childID = z.string().safeParse(metadata?.sessionID).data;
   const completion = completions?.get(content.id);
-  const status =
-    tool.status === "error"
-      ? "error"
-      : (completion?.state ??
-        (tool.status === "completed" && metadata?.status === "running" ? "running" : tool.status));
+  // A completed tool can leave its child running in the background.
+  const backgrounded = tool.status === "completed" && metadata?.status === "running";
+  let status = completion?.state ?? (backgrounded ? "running" : tool.status);
+  if (state.status === "error") status = state.error.type === "aborted" ? "cancelled" : "error";
   const subagent: Extract<AgentTranscriptStreamPart, { kind: "subagent" }> = {
     ...part,
     kind: "subagent",
     partId: `${content.id}:subagent`,
-    correlationKey: content.id,
+    correlationKey: `call:${content.id}`,
     status,
-    executionMode:
-      input?.background === true || (tool.status === "completed" && metadata?.status === "running")
-        ? "background"
-        : "foreground",
+    executionMode: input?.background === true || backgrounded ? "background" : "foreground",
     startedAtMs: tool.startedAtMs,
   };
   if (childID) subagent.externalSessionId = childID;
@@ -398,7 +398,7 @@ const projectAssistantContent = (
   if (completion) subagent.endedAtMs = completion.created;
   else if (status !== "running" && tool.endedAtMs !== undefined)
     subagent.endedAtMs = tool.endedAtMs;
-  return [tool, subagent];
+  return [subagent];
 };
 
 /** History and live events use the same native content order and part IDs. */
