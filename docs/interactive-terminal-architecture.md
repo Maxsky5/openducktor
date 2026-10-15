@@ -87,7 +87,7 @@ On Windows, ComSpec must be `cmd.exe`, or the command fails with `unsupported_sh
 
 ## Restart a running command
 
-The command bar uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Manual commands above the 1,024-byte hook limit cannot restart. Direct manual `exec`, `exit`, and `logout` commands cannot restart because they can end the shell. The host retains full Action input, so the byte limit does not restrict Action restarts.
+The command bar uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Manual commands above the 1,024-byte hook limit cannot restart. Manual commands with the words `exec`, `exit`, or `logout` cannot restart, including when a word is an argument. The host retains full Action input, so the byte limit does not restrict Action restarts.
 
 Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
 

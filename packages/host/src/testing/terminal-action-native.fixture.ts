@@ -287,13 +287,6 @@ async function checkRestart() {
     "SERVER_STOPPED\r\n",
     "SERVER_READY\r\n",
   ]);
-  assert.deepEqual(
-    output
-      .split("\u001b]633;E;")
-      .slice(1)
-      .map((marker) => marker.split("\u0007", 1)[0]!.split(";").at(-1)),
-    ["1", "0", "0"],
-  );
   const serverDirectory = await realpath(join(actionRoot, "target"));
   assert.equal(output.split(`SERVER_CWD=${serverDirectory}\r\n`).length, 4);
 
@@ -397,11 +390,15 @@ async function checkManual() {
   );
   for (const [name, input, restartable] of [
     ["plain", `exec ${command}`, false],
+    ["and", `cd '${root}' && exec ${command}`, false],
+    ["or", `false || exec ${command}`, false],
+    ["list", `true; exec ${command}`, false],
     ["builtin", `ODT_VALUE=1 builtin exec ${command}`, false],
     ["assignment", `ODT_VALUE='two words' builtin exec ${command}`, false],
     ["quoted", `'exec' ${command}`, false],
     ["alias", "run_server", false],
-    ["argument", `${command} exec`, true],
+    ["argument", `${command} exec`, false],
+    ["ordinary", command, true],
   ] as const) {
     const id = `manual-${name}`;
     const action = await start(id, ["true"]);

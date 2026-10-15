@@ -209,17 +209,12 @@ function posixHooks(nonce: string, zsh = false): string {
     ...(zsh
       ? [
           `  (( \${#1} <= ${TERMINAL_LIMITS.commandMarkerBytes} )) && [[ -o zle ]] && restart=1`,
-          '  local word name input="${3-$1}"',
+          '  local word input="${3-$1}"',
           "  if (( restart )); then",
           '    for word in "${(@z)input}"; do',
-          "      word=${(Q)word}",
-          "      name=${word%%=*}",
-          "      [[ $word == *=* && $name == [A-Za-z_]* && $name != *[^A-Za-z0-9_]* ]] && continue",
-          '      case "$word" in',
-          "        builtin|command|noglob|nocorrect|time|!) continue;;",
-          "        exec|exit|logout) restart=0;;",
+          '      case "${(Q)word}" in',
+          "        exec|exit|logout) restart=0; break;;",
           "      esac",
-          "      break",
           "    done",
           "  fi",
         ]
