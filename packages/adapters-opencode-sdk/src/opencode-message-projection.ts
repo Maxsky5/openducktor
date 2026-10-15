@@ -368,7 +368,8 @@ const projectAssistantContent = (
   const metadata = "metadata" in state ? state.metadata : undefined;
   if (content.name !== "subagent") return [tool];
   const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
-  const childID = z.string().safeParse(metadata?.sessionID ?? input?.sessionID).data;
+  // Native progress confirms ownership; tool input can name an unrelated session.
+  const childID = z.string().safeParse(metadata?.sessionID).data;
   const completion = completions?.get(content.id);
   // A completed tool can leave its child running in the background.
   const backgrounded = tool.status === "completed" && metadata?.status === "running";

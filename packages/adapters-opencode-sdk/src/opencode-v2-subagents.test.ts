@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionMessageInfo } from "@opencode/client";
+import type { SessionMessageInfo, V2Event } from "@opencode/client";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
 import { projectMessage, projectMessages } from "./opencode-message-projection";
 import type { OpencodeSessionRuntimeSignal } from "./opencode-session-runtime-signals";
@@ -409,7 +409,7 @@ describe("OpenCode V2 subagent projection and history", () => {
     expect(projector.apply(delivery)).toEqual([]);
     expect(projector.messages).toHaveProperty("size", 2);
   });
-  test("links a continued child from complete input before progress arrives", () => {
+  test("links a continued child only after native progress confirms it", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const snapshot: SessionMessageInfo = {
       id: "msg_continuation",
@@ -472,7 +472,6 @@ describe("OpenCode V2 subagent projection and history", () => {
         part: {
           kind: "subagent",
           status: "pending",
-          externalSessionId: "ses_child",
           agent: "general",
           description: "Continue review",
           prompt: "Check changes",
@@ -481,9 +480,42 @@ describe("OpenCode V2 subagent projection and history", () => {
       },
     ]);
     expect(events).toHaveLength(1);
+    expect(events[0]).not.toHaveProperty("part.externalSessionId");
+    expect(projector.projectHistory([snapshot])[0]?.parts[0]).not.toHaveProperty(
+      "externalSessionId",
+    );
+    projector.apply({
+      id: "evt_continue_called",
+      type: "session.tool.called",
+      created: 5,
+      durable: { ...durable, seq: 2 },
+      data: {
+        sessionID: ref.externalSessionId,
+        assistantMessageID: snapshot.id,
+        id: "call_continue",
+        input: { sessionID: "ses_child", agent: "general", prompt: "Check changes" },
+        executed: false,
+      },
+    });
+    expect(projector.projectHistory([snapshot])[0]?.parts[0]).not.toHaveProperty(
+      "externalSessionId",
+    );
+    expect(
+      projector.apply({
+        id: "evt_continue_progress",
+        type: "session.tool.progress",
+        created: 6,
+        data: {
+          sessionID: ref.externalSessionId,
+          assistantMessageID: snapshot.id,
+          id: "call_continue",
+          metadata: { sessionID: "ses_child", status: "running" },
+        },
+      }),
+    ).toMatchObject([{ part: { externalSessionId: "ses_child", status: "running" } }]);
     expect(projector.projectHistory([snapshot])[0]?.parts[0]).toMatchObject({
       kind: "subagent",
-      status: "pending",
+      status: "running",
       externalSessionId: "ses_child",
       prompt: "Check changes",
     });
