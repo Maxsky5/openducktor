@@ -637,7 +637,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.unmount();
       queryClient.clear();
     }
-  });
+    // This full render flow switches the task twice and waits for host reads. A loaded runner can
+    // exceed 1000 ms.
+  }, 5_000);
 
   test("a commit keeps every Git panel read on screen while it reads again", async () => {
     let revision = "first";
