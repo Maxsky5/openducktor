@@ -47,6 +47,8 @@ export const prepareTerminalShell = (
 
 function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
   const quote = (value: string) => formatTerminalPathInput(plan.shell, [value]);
+  const hookFailure =
+    '{ builtin print -u2 -- "OpenDucktor could not install zsh command hooks. Fix the precmd function in your zsh startup files, then reopen the terminal."; exit 1; }';
   return {
     ".zshenv": [
       plan.env.ZDOTDIR === undefined ? "unset ZDOTDIR" : `ZDOTDIR=${quote(plan.env.ZDOTDIR)}`,
@@ -59,7 +61,12 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
     "hooks.zsh": [
       posixHooks(nonce, true),
       "preexec_functions+=(_odt_command_start)",
-      "precmd_functions+=(_odt_command_end)",
+      "builtin typeset -ga precmd_functions",
+      "if (( $+functions[precmd] )); then",
+      `  builtin functions -c precmd _odt_user_precmd || ${hookFailure}`,
+      '  precmd_functions=(_odt_user_precmd "${precmd_functions[@]}")',
+      "fi",
+      `builtin functions -c _odt_command_end precmd || ${hookFailure}`,
       ...(plan.interactiveCommand === undefined
         ? []
         : [

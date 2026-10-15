@@ -61,7 +61,7 @@ A command terminal runs commands, then leaves an interactive shell under the sam
 
 `startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new chat has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
 
-For zsh, the host waits for an authenticated ready marker, then submits the Action through the interactive shell's line editor. Each Action runs in one subshell, so `exec`, `exit`, and `logout` cannot end the interactive shell. Directory and environment changes reach later Action lines but end with the Action. zsh owns history. The host reads the result from the authenticated completion marker and keeps the last 20 screen lines.
+For zsh, the host waits for an authenticated ready marker, then submits the Action through the interactive shell's line editor. Each Action runs in one subshell, so `exec`, `exit`, and `logout` cannot end the interactive shell. Directory and environment changes reach later Action lines but end with the Action. zsh owns history and emits authenticated completion before user prompt hooks. The host records the result and keeps the last 20 screen lines.
 
 Other supported shells keep the command-process flow:
 

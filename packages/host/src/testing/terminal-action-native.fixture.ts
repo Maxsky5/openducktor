@@ -211,6 +211,37 @@ try {
   );
   assert.equal(noHistoryResult.type === "exited" && noHistoryResult.exitCode, 0);
   console.log("PASS state: multiline state stays within the Action and failure stops later lines");
+
+  for (const [hook, commandLine, exitCode] of [
+    ["named", "true", 0],
+    ["array", "false", 1],
+  ] as const) {
+    await rm(join(root, "fail-hook"), { force: true });
+    const fail =
+      'if [[ -f "$HOME/fail-hook" ]]; then setopt localoptions nounset; print "$ODT_MISSING_HOOK_VALUE"; fi';
+    await writeFile(
+      join(root, ".zshrc"),
+      [
+        'PROMPT="fixture> "',
+        `precmd() { local code=$?; print -r -- "NAMED_STATUS=$code"; ${hook === "named" ? fail : "true"}; }`,
+        `user_precmd() { local code=$?; print -r -- "ARRAY_STATUS=$code"; ${hook === "array" ? fail : "true"}; }`,
+        "precmd_functions=(user_precmd)",
+      ].join("\n"),
+    );
+    const id = `hook-${hook}`;
+    const action = await start(id, ["touch fail-hook", commandLine], root, "host");
+    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    assert.equal(result.type === "exited" && result.exitCode, exitCode);
+    await wait(() => outputs.get(id)!.includes("parameter not set"));
+    const output = outputs.get(id)!;
+    const firstNamed = output.indexOf("NAMED_STATUS=0\r\n");
+    assert.ok(firstNamed >= 0 && firstNamed < output.indexOf("ARRAY_STATUS=0\r\n"));
+    const completed = output.lastIndexOf(`\u001b]633;D;${exitCode};`);
+    const named = output.lastIndexOf(`NAMED_STATUS=${exitCode}\r\n`);
+    assert.ok(completed >= 0 && completed < named);
+    if (hook === "array") assert.ok(named < output.lastIndexOf(`ARRAY_STATUS=${exitCode}\r\n`));
+  }
+  console.log("PASS hooks: completion precedes prompt errors and user hooks keep order and status");
 } catch (cause) {
   throw new Error(JSON.stringify([...outputs].map(([id, output]) => [id, output.slice(-1200)])), {
     cause,
