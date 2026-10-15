@@ -10,10 +10,11 @@ import type {
 } from "../../ports/git-port";
 import {
   combineOutput,
+  GIT_OUTPUT_ENCODING_FIELD,
   type GitCommandRunner,
   pathExists,
-  runGit,
   runGitAllowFailure,
+  runGitStrictUtf8,
   runGitWithStdinAllowFailure,
 } from "./git-command-runner";
 import { invalid, literal, RAW_DIFF_OPTIONS, STALE_SELECTION_MESSAGE } from "./git-local-changes";
@@ -157,17 +158,25 @@ const readWritePatch = (
     const args = ["diff", ...RAW_DIFF_OPTIONS];
     if (group === "staged") args.push("--cached");
     if (options.binary) args.push("--binary");
-    const patch = yield* runGit(runner, workingDirectory, [...args, "--", ...paths.map(literal)]);
+    // The patch goes back to Git as text, so bytes that are not UTF-8 would change on the way.
+    const patch = yield* runGitStrictUtf8(runner, workingDirectory, [
+      ...args,
+      "--",
+      ...paths.map(literal),
+    ]).pipe(
+      Effect.catchIf(
+        (error) =>
+          error instanceof HostValidationError && error.field === GIT_OUTPUT_ENCODING_FIELD,
+        () =>
+          Effect.fail(
+            invalid(
+              `${paths[0]} holds bytes that are not UTF-8 text, so Git cannot change this selection without changing those bytes. ${options.wholeFileHint}`,
+              "selection",
+            ),
+          ),
+      ),
+    );
     if (!patch.trim()) return yield* Effect.fail(invalid(STALE_SELECTION_MESSAGE, "selection"));
-    // Invalid UTF-8 decodes to U+FFFD. Writing that text back would replace the original bytes.
-    if (patch.includes("\uFFFD")) {
-      return yield* Effect.fail(
-        invalid(
-          `${paths[0]} holds bytes that are not UTF-8 text, so Git cannot change this selection without changing those bytes. ${options.wholeFileHint}`,
-          "selection",
-        ),
-      );
-    }
     return patch;
   });
 

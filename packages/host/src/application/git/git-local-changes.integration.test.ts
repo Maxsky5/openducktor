@@ -765,6 +765,34 @@ describe("local changes", () => {
   );
 
   test(
+    "changes chunks of a UTF-8 file that holds the replacement character",
+    async () => {
+      // U+FFFD is valid text. Only bytes that are not UTF-8 stop a chunk write.
+      await commitBase();
+      await write("app.txt", lines(20, { 2: "first \uFFFD", 18: "second \uFFFD" }));
+      let changes = await localChanges();
+
+      changes = (
+        await change(changes, {
+          action: "stage",
+          group: "unstaged",
+          selection: { kind: "hunk", filePath: "app.txt", hunkIndex: 1 },
+        })
+      ).localChanges;
+      expect(git("show", ":app.txt")).toBe(lines(20, { 18: "second \uFFFD" }));
+
+      await change(changes, {
+        action: "discard",
+        group: "staged",
+        selection: { kind: "file", filePath: "app.txt" },
+      });
+      expect(git("diff", "--cached", "--name-only")).toBe("");
+      expect(await read("app.txt")).toBe(lines(20, { 2: "first \uFFFD" }));
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "refuses chunk and staged discard writes that would change non-UTF-8 bytes",
     async () => {
       const latin1 = (accent: string) =>
