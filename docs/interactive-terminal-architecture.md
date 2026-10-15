@@ -91,7 +91,7 @@ The Restart button in the tab header uses the activity stream to offer Restart f
 
 Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
 
-`terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for an authenticated main-prompt line-editor marker before submitting the command again. Prompt hooks and the existing line-init widget run before this marker. If the line editor contains text or has input waiting, the host rejects Action input and restart input, reports an error, and keeps that text. Restart sends only the running command line in the current directory. It does not rerun earlier Action lines.
+`terminal_restart` takes the terminal ID and displayed command. It rejects stale or concurrent requests. It blocks other input during Restart. It sends Ctrl+C. It waits for authenticated line-editor readiness. Prompt hooks and the existing line-init widget finish before readiness. A populated line editor cancels the rerun and keeps its text. An error tells the user to clear that text. Restart sends only the running command line in the current directory. It does not rerun earlier Action lines.
 
 Closing the terminal or exceeding the 10-second readiness timeout cancels the rerun. The button shows pending state. A small popover shows restart errors.
 
