@@ -9,7 +9,7 @@ import {
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
-import { buildFileDiffs } from "./git-diff";
+import { buildFileDiffs, DIFF_PREFIX_OPTIONS } from "./git-diff";
 import {
   isUnmergedStatusPair,
   type PorcelainEntry,
@@ -43,6 +43,7 @@ export const invalid = (message: string, field?: string): HostValidationError =>
  * options, so a chunk index names the same hunk in both.
  */
 export const RAW_DIFF_OPTIONS = [
+  ...DIFF_PREFIX_OPTIONS,
   // The status read finds renames too, whatever `diff.renames` holds.
   "--find-renames",
   "--full-index",

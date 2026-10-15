@@ -33,6 +33,11 @@ type GitDiffError =
   | HostOperationErrorAggregate
   | HostResourceErrorAggregate
   | HostValidationErrorAggregate;
+/**
+ * The parser reads `a/` and `b/` paths, and `git apply` removes one path part. A `diff.noprefix` or
+ * `diff.mnemonicPrefix` setting changes the prefixes, so every patch read sets them.
+ */
+export const DIFF_PREFIX_OPTIONS = ["--src-prefix=a/", "--dst-prefix=b/"];
 const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 type DiffStats = { additions: number; deletions: number };
@@ -184,6 +189,7 @@ const loadNoIndexDiffPayload = (
       "--numstat",
       "-z",
       "--patch",
+      ...DIFF_PREFIX_OPTIONS,
       ...(fullIndex ? ["--full-index"] : []),
       "--",
       "/dev/null",
@@ -374,6 +380,7 @@ export const loadDiffPayload = (
     }
     const diffResult = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
+      ...DIFF_PREFIX_OPTIONS,
       "--end-of-options",
       target,
     ]);

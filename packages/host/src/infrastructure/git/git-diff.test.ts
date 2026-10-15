@@ -61,12 +61,14 @@ describe("untracked file diffs", () => {
           const release = yield* Deferred.make<void>();
           const runner: GitCommandRunner = (_root, args) =>
             Effect.gen(function* () {
-              expect(args.slice(0, 6)).toEqual([
+              expect(args.slice(0, 8)).toEqual([
                 "diff",
                 "--no-index",
                 "--numstat",
                 "-z",
                 "--patch",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
                 "--",
               ]);
               const file = args.at(-1)!;
@@ -152,7 +154,18 @@ test("expands each directory once and deduplicates paths before loading diffs", 
     );
     expect(calls).toEqual([
       ["ls-files", "--others", "--exclude-standard", "-z", "--", "generated/"],
-      ["diff", "--no-index", "--numstat", "-z", "--patch", "--", "/dev/null", file],
+      [
+        "diff",
+        "--no-index",
+        "--numstat",
+        "-z",
+        "--patch",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "--",
+        "/dev/null",
+        file,
+      ],
     ]);
     expect(result).toEqual([
       {

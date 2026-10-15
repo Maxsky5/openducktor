@@ -765,6 +765,43 @@ describe("local changes", () => {
   );
 
   test(
+    "reads and writes patches whatever diff prefix setting the repository has",
+    async () => {
+      await commitBase();
+      // Without fixed prefixes, the parser lost the file sections and their content in the snapshot.
+      git("config", "diff.noprefix", "true");
+      await write("other.txt", "first\n");
+      const reviewed = await localChanges();
+      expect(reviewed.unstaged.fileDiffs.find((diff) => diff.file === "other.txt")?.diff).toContain(
+        "+first",
+      );
+      await write("other.txt", "later\n");
+      expect(
+        await failure(
+          change(reviewed, {
+            action: "discard",
+            group: "unstaged",
+            selection: { kind: "file", filePath: "other.txt" },
+          }),
+        ),
+      ).toBe(STALE_SELECTION_MESSAGE);
+      expect(await read("other.txt")).toBe("later\n");
+
+      // `git apply` reads the `a/` and `b/` prefixes of a chunk patch.
+      git("config", "--unset", "diff.noprefix");
+      git("config", "diff.mnemonicPrefix", "true");
+      await write("app.txt", lines(20, { 2: "first chunk", 18: "second chunk" }));
+      await change(await localChanges(), {
+        action: "stage",
+        group: "unstaged",
+        selection: { kind: "hunk", filePath: "app.txt", hunkIndex: 1 },
+      });
+      expect(git("show", ":app.txt")).toBe(lines(20, { 18: "second chunk" }));
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "changes chunks of a UTF-8 file that holds the replacement character",
     async () => {
       // U+FFFD is valid text. Only bytes that are not UTF-8 stop a chunk write.
