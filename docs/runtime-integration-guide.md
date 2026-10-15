@@ -376,16 +376,6 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
 
-### OpenCode subagents
-
-OpenCode V2 publishes the child `sessionID` through `session.tool.progress` while a foreground subagent runs. Native history does not store this live metadata.
-
-- History reads for an observed session must keep its live tool metadata, complete arguments, and final tool events. This includes snapshots that still report input streaming or omit an observed tool or assistant message. Match tools and messages by their native IDs. Keep native retractions so an older response cannot restore a removed call. Do not treat partial input deltas as complete arguments. Keep this state in the runtime projector. Use native history alone for a session that has no live observation.
-- Project each native `subagent` call as one subagent part. Use `call:<nativeCallID>` as its correlation key. Keep calls separate when they share one child session.
-- Link a child only from native progress or result metadata. Native OpenCode checks the child's parent before it publishes progress. Tool input alone does not prove ownership.
-- Map a native `aborted` tool error to `cancelled`.
-- Synthetic messages with `metadata.source: "subagent"` update the matching background call's final state but do not add their raw result text to the parent transcript.
-
 ### Queue and steering
 
 The host owns the message queue. A runtime is eligible when its adapter can refuse a new turn while native work runs. Steering is optional.
