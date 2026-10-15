@@ -2,22 +2,28 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { tabState, targetIndex } from "../src/motion/tabs";
 
-// The site tests share one process, so the browser globals exist only while this file runs. The
-// motion modules load GSAP, so they load after the globals.
-beforeAll(() => {
-  GlobalRegistrator.register();
-});
-afterAll(async () => {
-  await GlobalRegistrator.unregister();
-});
-
-async function motion() {
-  const [{ gsap }, { createScene }, text, dom] = await Promise.all([
+const loadMotion = () =>
+  Promise.all([
     import("../src/motion/gsap"),
     import("../src/motion/scene"),
     import("../src/motion/text"),
     import("../src/motion/dom"),
   ]);
+let modules: Awaited<ReturnType<typeof loadMotion>>;
+
+// The site tests share one process, so the browser globals exist only while this file runs. The
+// motion modules load GSAP, so they load after the globals. The first load of GSAP can exceed
+// the 1000 ms test budget on a loaded Windows runner, so it runs once here.
+beforeAll(async () => {
+  GlobalRegistrator.register();
+  modules = await loadMotion();
+}, 5_000);
+afterAll(async () => {
+  await GlobalRegistrator.unregister();
+});
+
+function motion() {
+  const [{ gsap }, { createScene }, text, dom] = modules;
   const stage = document.createElement("div");
   const frame = document.createElement("div");
   frame.append(stage);
@@ -43,7 +49,7 @@ describe("tab keys", () => {
 
 describe("stream", () => {
   test("hides the message at build time and shows every word by its end time", async () => {
-    const { scene, stage, text } = await motion();
+    const { scene, stage, text } = motion();
     stage.innerHTML = "<p>I saved the plan.</p><p>The hook opens search.</p>";
     const end = text.stream(scene, stage, 0.5);
     const words = [...stage.querySelectorAll("p > span")];
@@ -57,8 +63,8 @@ describe("stream", () => {
   });
 
   test("streams the same text with the same rhythm in every loop", async () => {
-    const first = await motion();
-    const second = await motion();
+    const first = motion();
+    const second = motion();
     for (const { stage } of [first, second]) stage.innerHTML = "<p>Search opens with Cmd+K.</p>";
     expect(first.text.stream(first.scene, first.stage, 0)).toBe(
       second.text.stream(second.scene, second.stage, 0),
@@ -68,7 +74,7 @@ describe("stream", () => {
 
 describe("typeText", () => {
   test("empties the element at build time and types the whole text by its end time", async () => {
-    const { scene, stage, text } = await motion();
+    const { scene, stage, text } = motion();
     stage.textContent = "old";
     const shown: string[] = [];
     const end = text.typeText(scene, stage, "Cmd+K", 1, {
@@ -85,7 +91,7 @@ describe("typeText", () => {
 
 describe("typed queries", () => {
   test("fail loudly when the markup lost an element or changed its kind", async () => {
-    const { stage, dom } = await motion();
+    const { stage, dom } = motion();
     stage.innerHTML = '<span data-wait="1.5"></span><svg class="icon"></svg>';
     expect(() => dom.must(stage, ".missing")).toThrow("Markup is missing .missing.");
     expect(() => dom.must(stage, ".icon")).toThrow("but not as HTMLElement");
