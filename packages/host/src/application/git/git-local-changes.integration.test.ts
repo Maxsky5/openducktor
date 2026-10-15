@@ -346,6 +346,68 @@ describe("local changes", () => {
   );
 
   test(
+    "refuses to stage or discard edits that stay inside a submodule",
+    async () => {
+      await commitBase();
+      const sub = path.join(repo, "sub");
+      await mkdir(sub);
+      const subGit = (...args: string[]) =>
+        execFileSync("git", args, {
+          cwd: sub,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      subGit("init", "--initial-branch=main");
+      subGit("config", "user.name", "Submodule Test");
+      subGit("config", "user.email", "submodule@example.invalid");
+      subGit("config", "commit.gpgsign", "false");
+      subGit("config", "core.autocrlf", "false");
+      await writeFile(path.join(sub, "inside.txt"), "one\n");
+      subGit("add", "inside.txt");
+      subGit("commit", "-m", "one");
+      git("add", "sub");
+      git("commit", "-m", "add submodule");
+      // The submodule stays on its recorded commit, so Git shows only a `-dirty` line.
+      await writeFile(path.join(sub, "inside.txt"), "two\n");
+      const changes = await localChanges();
+      const diff = changes.unstaged.fileDiffs.find((entry) => entry.file === "sub");
+      expect(diff?.type).toBe("submodule");
+      expect(diff?.diff).toContain("-dirty");
+
+      expect(
+        await failure(
+          change(changes, {
+            action: "stage",
+            group: "unstaged",
+            selection: { kind: "file", filePath: "sub" },
+          }),
+        ),
+      ).toContain("sub has edits only inside the submodule. Commit them in the submodule");
+      expect(
+        await failure(
+          change(changes, {
+            action: "discard",
+            group: "unstaged",
+            selection: { kind: "file", filePath: "sub" },
+          }),
+        ),
+      ).toContain("sub has edits inside the submodule. Discard them inside the submodule");
+      expect(
+        await failure(
+          change(changes, {
+            action: "stage",
+            group: "unstaged",
+            selection: { kind: "hunk", filePath: "sub", hunkIndex: 0 },
+          }),
+        ),
+      ).toContain("Submodule changes have no text chunks.");
+      expect(await readFile(path.join(sub, "inside.txt"), "utf8")).toBe("two\n");
+      expect(git("status", "--porcelain=v1", "-z")).toBe(" M sub\0");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "stages a whole file and unstages it without losing working edits",
     async () => {
       await commitBase();

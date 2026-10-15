@@ -149,9 +149,11 @@ const splitDiffByFile = (
 /** A header line that names a submodule entry, which has Git file mode 160000. */
 const SUBMODULE_MODE_LINE =
   /^(?:index \S+|new file mode|deleted file mode|old mode|new mode) 160000$/mu;
+/** A `--submodule=short` hunk line. A submodule with edits only inside it has no mode line. */
+const SUBMODULE_COMMIT_LINE = /^[-+]Subproject commit [0-9a-f]+(?:-dirty)?$/mu;
 
 const inferDiffType = (diff: string): GitFileDiffType => {
-  if (SUBMODULE_MODE_LINE.test(diff)) return "submodule";
+  if (SUBMODULE_MODE_LINE.test(diff) || SUBMODULE_COMMIT_LINE.test(diff)) return "submodule";
   for (const line of diff.split(/\r?\n/)) {
     if (line.startsWith("new file mode")) {
       return "added";

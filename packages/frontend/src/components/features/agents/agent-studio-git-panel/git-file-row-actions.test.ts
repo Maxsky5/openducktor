@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { gitChangeIntentKey } from "@/features/agent-studio-git";
-import { runningFileAction } from "./git-file-row-actions";
+import { discardUnavailableReason, runningFileAction } from "./git-file-row-actions";
 
 const fileKey = (
   action: "stage" | "unstage" | "discard",
@@ -32,5 +32,38 @@ describe("runningFileAction", () => {
       ),
     ).toBeNull();
     expect(runningFileAction("unstaged", "a.ts", null)).toBeNull();
+  });
+});
+
+describe("discardUnavailableReason", () => {
+  const submodule = (diff: string) =>
+    ({ file: "sub", type: "submodule", additions: 1, deletions: 1, diff }) as const;
+  const oid = "0332".padEnd(40, "0");
+
+  test("names the cause for a submodule commit and for edits inside a submodule", () => {
+    expect(
+      discardUnavailableReason(
+        submodule(`@@ -1 +1 @@\n-Subproject commit ${oid}\n+Subproject commit ${"1".repeat(40)}\n`),
+      ),
+    ).toContain("Discard cannot change the commit");
+    expect(
+      discardUnavailableReason(
+        submodule(`@@ -1 +1 @@\n-Subproject commit ${oid}\n+Subproject commit ${oid}-dirty\n`),
+      ),
+    ).toBe(
+      "sub has edits inside the submodule. Discard them inside the submodule, for example with `git -C sub restore .`.",
+    );
+  });
+
+  test("is null for a file", () => {
+    expect(
+      discardUnavailableReason({
+        file: "a.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "@@ -1 +1 @@\n-a\n+b\n",
+      }),
+    ).toBeNull();
   });
 });

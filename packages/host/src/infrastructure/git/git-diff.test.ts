@@ -249,6 +249,24 @@ test("reads a copy as a new file, because a write reads it alone", async () => {
   expect(result.map(({ file, type }) => [file, type])).toEqual([["new.txt", "added"]]);
 });
 
+test("reads edits that stay inside a submodule as a submodule change", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const oid = "0332".padEnd(40, "0");
+  const patch = [
+    "diff --git a/sub b/sub",
+    "--- a/sub",
+    "+++ b/sub",
+    "@@ -1 +1 @@",
+    `-Subproject commit ${oid}`,
+    `+Subproject commit ${oid}-dirty`,
+    "",
+  ].join("\n");
+
+  const result = await Effect.runPromise(buildFileDiffs(runner, "/repo", [], "0\t0\tsub\0", patch));
+
+  expect(result.map(({ file, type }) => [file, type])).toEqual([["sub", "submodule"]]);
+});
+
 for (const [stdout, ok, message] of [
   ["", true, "returned no files"],
   ["partial\0", false, "cannot list directory"],

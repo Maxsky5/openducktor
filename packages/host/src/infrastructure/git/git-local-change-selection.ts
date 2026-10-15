@@ -231,15 +231,36 @@ const selectHunkPatch = (
     return combinePatchHunk(parsed.header, hunk);
   });
 
+/** Edits inside a submodule that stays on its recorded commit. Git shows them with `-dirty`. */
+const SUBMODULE_EDITS_ONLY = /^-Subproject commit ([0-9a-f]+)\n\+Subproject commit \1-dirty$/mu;
+
+const submoduleDiff = (group: GitLocalChangeGroupData, filePath: string) =>
+  group.fileDiffs.find((diff) => diff.file === filePath && diff.type === "submodule");
+
 /**
  * Git applies a submodule change to the index only, and a plain restore does not change the
- * submodule checkout. Discard would report a change that did not happen, so it stops first.
+ * submodule checkout or the files inside it. Discard would report a change that did not happen,
+ * so it stops first.
  */
-const requireDiscardable = (group: GitLocalChangeGroupData, filePath: string) =>
-  group.fileDiffs.some((diff) => diff.file === filePath && diff.type === "submodule")
+const requireDiscardable = (group: GitLocalChangeGroupData, filePath: string) => {
+  const diff = submoduleDiff(group, filePath);
+  if (!diff) return Effect.void;
+  return Effect.fail(
+    invalid(
+      SUBMODULE_EDITS_ONLY.test(diff.diff)
+        ? `${filePath} has edits inside the submodule. Discard them inside the submodule, for example with \`git -C ${filePath} restore .\`.`
+        : `${filePath} is a submodule. Discard cannot change the commit that the submodule has checked out. Run \`git submodule update -- ${filePath}\` to check out the recorded commit, or unstage the change.`,
+      "selection",
+    ),
+  );
+};
+
+/** The parent repository records only the commit of a submodule, so edits inside it cannot stage. */
+const requireStageable = (group: GitLocalChangeGroupData, filePath: string) =>
+  SUBMODULE_EDITS_ONLY.test(submoduleDiff(group, filePath)?.diff ?? "")
     ? Effect.fail(
         invalid(
-          `${filePath} is a submodule. Discard cannot change the commit that the submodule has checked out. Run \`git submodule update -- ${filePath}\` to check out the recorded commit, or unstage the change.`,
+          `${filePath} has edits only inside the submodule. Commit them in the submodule, then stage its new commit.`,
           "selection",
         ),
       )
@@ -293,6 +314,7 @@ const changeFile = (
     const group = changes[input.group];
     const status = yield* requireGroupEntry(group, filePath);
     if (input.action === "stage") {
+      yield* requireStageable(group, filePath);
       const paths = renamePaths(group, filePath);
       yield* runGitStep(
         runner,

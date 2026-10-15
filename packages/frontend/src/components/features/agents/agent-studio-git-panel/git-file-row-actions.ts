@@ -25,14 +25,18 @@ export function chunkActionUnavailableReason(diff: GitFileDiff): string | null {
   return null;
 }
 
+/** Edits inside a submodule that stays on its recorded commit. Git shows them with `-dirty`. */
+const SUBMODULE_EDITS_ONLY = /^-Subproject commit ([0-9a-f]+)\n\+Subproject commit \1-dirty$/mu;
+
 /**
- * Discard cannot change the commit that a submodule has checked out. The host refuses it with the
- * same reason in `git-local-change-selection.ts`.
+ * Discard cannot change the commit that a submodule has checked out, or the files inside it. The
+ * host refuses it with the same reasons in `git-local-change-selection.ts`.
  */
 export function discardUnavailableReason(diff: GitFileDiff): string | null {
-  return diff.type === "submodule"
-    ? `${diff.file} is a submodule. Discard cannot change the commit that the submodule has checked out. Run \`git submodule update -- ${diff.file}\` to check out the recorded commit, or unstage the change.`
-    : null;
+  if (diff.type !== "submodule") return null;
+  return SUBMODULE_EDITS_ONLY.test(diff.diff)
+    ? `${diff.file} has edits inside the submodule. Discard them inside the submodule, for example with \`git -C ${diff.file} restore .\`.`
+    : `${diff.file} is a submodule. Discard cannot change the commit that the submodule has checked out. Run \`git submodule update -- ${diff.file}\` to check out the recorded commit, or unstage the change.`;
 }
 
 /** The action that moves content of a group to the other group. */
