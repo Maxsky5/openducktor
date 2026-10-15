@@ -1,5 +1,6 @@
 import {
   type TerminalCloseResponse,
+  terminalRestartRequestSchema,
   terminalCloseRequestSchema,
   terminalCreateRequestSchema,
   terminalListRequestSchema,
@@ -11,7 +12,10 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import { commandInputRecordSchema, requireRecord } from "./command-inputs";
 
 export const createTerminalCommandHandlers = (
-  terminalService: Pick<TerminalService, "close" | "create" | "list" | "preparePathInput">,
+  terminalService: Pick<
+    TerminalService,
+    "close" | "create" | "list" | "preparePathInput" | "restart"
+  >,
 ) =>
   ({
     terminal_create: (args) =>
@@ -33,6 +37,12 @@ export const createTerminalCommandHandlers = (
             commandInputRecordSchema.safeParse(args),
             "terminal_prepare_path_input input",
           ),
+        ),
+      ),
+    terminal_restart: (args) =>
+      terminalService.restart(
+        terminalRestartRequestSchema.parse(
+          requireRecord(commandInputRecordSchema.safeParse(args), "terminal_restart input"),
         ),
       ),
     terminal_close: (args) =>

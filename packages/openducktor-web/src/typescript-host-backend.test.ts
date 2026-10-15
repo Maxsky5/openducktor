@@ -179,6 +179,7 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
     create: () => unexpectedTerminalOperation("create"),
     detach: () => unexpectedTerminalOperation("detach"),
     dispose: () => unexpectedTerminalOperation("dispose"),
+    restart: () => unexpectedTerminalOperation("restart"),
     hostInstanceId: "test-instance",
     inspectWorkspaceActivity: () => unexpectedTerminalOperation("inspectWorkspaceActivity"),
     list: () => unexpectedTerminalOperation("list"),

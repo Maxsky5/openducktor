@@ -1,0 +1,95 @@
+import { expect, mock, test } from "bun:test";
+import {
+  TERMINAL_PROTOCOL_VERSION,
+  type TerminalActivity,
+  TerminalRestartResponse,
+  TerminalSummary,
+} from "@openducktor/contracts";
+import { act, fireEvent, render } from "@testing-library/react";
+import { createTerminalActivityStore } from "./terminal-activity-store";
+import { TerminalCommandBar } from "./terminal-command-bar";
+
+const summary: TerminalSummary = {
+  terminalId: "terminal-1",
+  label: "Dev",
+  context: { repoPath: "/repo", taskId: "task-1" },
+  initialWorkingDir: "/repo",
+  createdAt: "2026-10-14T00:00:00Z",
+  lifecycle: "running",
+  exit: null,
+  startedBy: "user",
+};
+const harness = () => {
+  const store = createTerminalActivityStore();
+  store.apply({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_start" });
+  store.apply({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_end" });
+  const update = (activity: TerminalActivity) =>
+    act(() =>
+      store.apply({ version: TERMINAL_PROTOCOL_VERSION, type: "activity_updated", activity }),
+    );
+  return {
+    store,
+    update,
+    controller: { readActivity: store.read, subscribeActivity: store.subscribe },
+  };
+};
+
+test("shows Restart only for this terminal's complete live command", () => {
+  const { store, update, controller } = harness();
+  const view = render(
+    <TerminalCommandBar
+      summary={summary}
+      controller={controller}
+      onRestart={async () => ({ restarted: true })}
+    />,
+  );
+  try {
+    update({
+      summary: { ...summary, terminalId: "another-terminal" },
+      command: "bun dev",
+      restartable: true,
+    });
+    expect(view.queryByRole("button", { name: "Restart" })).toBeNull();
+    update({ summary, command: "bun dev", restartable: false });
+    expect(view.getByText("bun dev")).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Restart" })).toBeNull();
+    update({ summary, command: "bun dev", restartable: true });
+    expect(view.getByRole("button", { name: "Restart" })).toBeTruthy();
+    act(() => store.disconnected());
+    expect(view.queryByRole("button", { name: "Restart" })).toBeNull();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("keeps restart pending through command completion and shows the host failure", async () => {
+  const { store, update, controller } = harness();
+  const pending = Promise.withResolvers<TerminalRestartResponse>();
+  const restart = mock(() => pending.promise);
+  const view = render(
+    <TerminalCommandBar summary={summary} controller={controller} onRestart={restart} />,
+  );
+  try {
+    update({ summary, command: "bun dev", restartable: true });
+    fireEvent.click(view.getByRole("button", { name: "Restart" }));
+    expect(restart).toHaveBeenCalledWith({ terminalId: "terminal-1", expectedCommand: "bun dev" });
+    expect(view.getByRole("button", { name: "Restarting…" }).hasAttribute("disabled")).toBe(true);
+    act(() =>
+      store.apply({
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "activity_removed",
+        terminalId: "terminal-1",
+      }),
+    );
+    expect(view.getByText("bun dev")).toBeTruthy();
+    expect(view.getByRole("button", { name: "Restarting…" })).toBeTruthy();
+    await act(async () => {
+      pending.reject(new Error("The command did not stop. Stop it in the terminal."));
+      await pending.promise.catch(() => {});
+    });
+    expect(view.getByRole("alert").textContent).toContain("Stop it in the terminal");
+    expect(view.queryByRole("button", { name: "Restarting…" })).toBeNull();
+  } finally {
+    view.unmount();
+  }
+});

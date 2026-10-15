@@ -1,5 +1,6 @@
 import { basename, isAbsolute } from "node:path";
 import { Effect } from "effect";
+import { formatTerminalPathInput } from "../../application/terminals/terminal-path-input";
 import type { TerminalCommandLines } from "../../application/terminals/terminal-command";
 import type {
   TerminalCommandLaunch,
@@ -85,11 +86,24 @@ const resolveTerminalShell = ({
 };
 
 const commandLaunch = (
-  { shell, env }: TerminalShellLaunch,
+  { shell, env, args }: TerminalShellLaunch,
   platform: NodeJS.Platform,
   commandLines: TerminalCommandLines,
 ): Effect.Effect<TerminalCommandLaunch, TerminalServiceError> => {
   const shellName = basename(shell).toLowerCase();
+  if (platform !== "win32" && shellName === "zsh") {
+    return Effect.succeed({
+      shell,
+      env,
+      args,
+      interactiveCommand:
+        commandLines.length === 1 && !commandLines[0].includes("#")
+          ? commandLines[0]
+          : commandLines
+              .map((line) => `builtin eval ${formatTerminalPathInput(shell, [line])}`)
+              .join(" && "),
+    });
+  }
   if (platform === "win32" && shellName === "cmd.exe") {
     return Effect.succeed({
       shell,

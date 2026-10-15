@@ -125,6 +125,7 @@ export const HOST_COMMAND_NAMES = [
   "terminal_create",
   "terminal_list",
   "terminal_prepare_path_input",
+  "terminal_restart",
   "terminal_run_action",
   "workspace_add",
   "workspace_apply_agent_studio_state_action",

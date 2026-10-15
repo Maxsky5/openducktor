@@ -733,6 +733,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "terminalActivitySchema",
   "terminalCloseRequestSchema",
   "terminalCloseResponseSchema",
+  "terminalRestartRequestSchema",
+  "terminalRestartResponseSchema",
   "terminalContextSchema",
   "terminalOwnedContextSchema",
   "terminalCreateRequestSchema",

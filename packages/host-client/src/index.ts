@@ -238,6 +238,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     terminalRunAction: terminalClient.terminalRunAction.bind(terminalClient),
     terminalList: terminalClient.terminalList.bind(terminalClient),
     terminalPreparePathInput: terminalClient.terminalPreparePathInput.bind(terminalClient),
+    terminalRestart: terminalClient.terminalRestart.bind(terminalClient),
     terminalClose: terminalClient.terminalClose.bind(terminalClient),
     pathCheck: agentClient.pathCheck.bind(agentClient),
     gitCheck: agentClient.gitCheck.bind(agentClient),

@@ -1,6 +1,7 @@
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { formatTerminalPathInput } from "../../application/terminals/terminal-path-input";
+import { TERMINAL_LIMITS } from "../../application/terminals/terminal-limits";
 import { TerminalPtyError, type TerminalPtyLaunchPlan } from "../../ports/terminal-pty-port";
 import { writeTerminalTempFiles } from "./terminal-temp-files";
 
@@ -56,10 +57,15 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
       `builtin sched +0 ${quote(`source ${quote(join(root, "hooks.zsh"))}`)}`,
     ].join("\n"),
     "hooks.zsh": [
-      posixHooks(nonce),
+      posixHooks(nonce, true),
       "preexec_functions+=(_odt_command_start)",
       "precmd_functions+=(_odt_command_end)",
-      "_odt_command_end",
+      ...(plan.interactiveCommand === undefined
+        ? []
+        : [
+            '[[ -o zle ]] || { print -u2 -- "OpenDucktor Actions need the zsh line editor. Enable ZLE, then run the Action again."; exit 1; }',
+          ]),
+      String.raw`builtin printf '\033]633;R;%s\007' "$_odt_nonce"`,
     ].join("\n"),
   };
 }
@@ -143,12 +149,15 @@ function bashScript(plan: TerminalPtyLaunchPlan, nonce: string): string {
   ].join("\n");
 }
 
-function posixHooks(nonce: string): string {
+function posixHooks(nonce: string, hasFullInput = false): string {
   return [
     `_odt_nonce=${formatTerminalPathInput("/bin/bash", [nonce])}`,
     "_odt_command_start() {",
-    '  local line="${1:0:1024}" char code index',
     "  local LC_ALL=C",
+    `  local line="\${1:0:${TERMINAL_LIMITS.commandMarkerBytes}}" char code index complete=0`,
+    ...(hasFullInput
+      ? [`  (( \${#1} <= ${TERMINAL_LIMITS.commandMarkerBytes} )) && complete=1`]
+      : []),
     String.raw`  builtin printf '\033]633;E;'`,
     "  for (( index=0; index<${#line}; index++ )); do",
     '    char="${line:$index:1}"',
@@ -161,22 +170,25 @@ function posixHooks(nonce: string): string {
     String.raw`      builtin printf '%s' "$char"`,
     "    fi",
     "  done",
-    String.raw`  builtin printf ';%s\007\033]633;C\007' "$_odt_nonce"`,
+    String.raw`  builtin printf ';%s;%s\007\033]633;C\007' "$_odt_nonce" "$complete"`,
     "}",
-    String.raw`_odt_command_end() { builtin printf '\033]633;D\007'; }`,
+    "_odt_command_end() {",
+    "  local code=$?",
+    String.raw`  builtin printf '\033]633;D;%s;%s\007' "$code" "$_odt_nonce"`,
+    "}",
   ].join("\n");
 }
 
 function fishHooks(nonce: string): string {
   return [
     "function _odt_command_start --on-event fish_preexec",
-    '  set -l line (string sub --length 1024 -- "$argv[1]")',
+    `  set -l line (string sub --length ${TERMINAL_LIMITS.activityCommandLength} -- "$argv[1]")`,
     '  set line (string escape --style=url -- "$line")',
     String.raw`  set line (string replace --all '%' '\x' -- "$line")`,
     String.raw`  printf '\033]633;E;%s;%s\007\033]633;C\007' "$line" ${formatTerminalPathInput("fish", [nonce])}`,
     "end",
     "function _odt_command_end --on-event fish_postexec",
-    String.raw`  printf '\033]633;D\007'`,
+    String.raw`  printf '\033]633;D;%s;%s\007' $status ${formatTerminalPathInput("fish", [nonce])}`,
     "end",
   ].join("\n");
 }

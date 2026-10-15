@@ -34,6 +34,7 @@ import {
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalSessionProducer } from "./terminal-session-producer";
 import { createTerminalActivity } from "./terminal-activity";
+import { restartCommand } from "./terminal-command-restart";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
 
@@ -123,6 +124,14 @@ export const createTerminalSessionEngine = ({
         return { activeTerminalIds, unknownTerminalIds };
       }),
     ...producer,
+    restart: (terminalId: string, expectedCommand: string) =>
+      Effect.gen(function* () {
+        const session = yield* Effect.try({
+          try: () => getSession(terminalId, "restart"),
+          catch: (cause) => terminalOperationFailure(cause, "restart"),
+        });
+        yield* restartCommand(session, expectedCommand);
+      }),
     list: (filter: TerminalListFilter): TerminalSummary[] => {
       pruneExited();
       return [...sessions.values()].flatMap((session) => {
@@ -243,6 +252,15 @@ export const createTerminalSessionEngine = ({
         // Read the process in lane order: a command terminal replaces its process in this lane.
         return yield* session.operations.run(
           Effect.suspend(() => {
+            if (session.restartPending)
+              return Effect.fail(
+                terminalFailure(
+                  "invalid_input",
+                  "write",
+                  "Wait for the command restart to finish before sending input.",
+                  terminalId,
+                ),
+              );
             const handle = session.resources.handle;
             if (!handle || !isLiveTerminal(session))
               return Effect.fail(

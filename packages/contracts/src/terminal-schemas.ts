@@ -99,6 +99,8 @@ export const terminalActivitySchema = z
   .object({
     summary: terminalSummarySchema,
     command: z.string().min(1),
+    /** True only when the host has the complete command and a shell completion hook. */
+    restartable: z.boolean().optional(),
   })
   .strict();
 export type TerminalActivity = z.infer<typeof terminalActivitySchema>;
@@ -222,3 +224,14 @@ export const terminalCloseResponseSchema = z.discriminatedUnion("closed", [
   z.object({ closed: z.literal(false), confirmationRequired: z.literal(true) }).strict(),
 ]);
 export type TerminalCloseResponse = z.infer<typeof terminalCloseResponseSchema>;
+
+export const terminalRestartRequestSchema = z
+  .object({
+    terminalId: terminalIdSchema,
+    expectedCommand: withMaxUtf16Length(z.string().min(1), 1024),
+  })
+  .strict();
+export type TerminalRestartRequest = z.infer<typeof terminalRestartRequestSchema>;
+
+export const terminalRestartResponseSchema = z.object({ restarted: z.literal(true) }).strict();
+export type TerminalRestartResponse = z.infer<typeof terminalRestartResponseSchema>;

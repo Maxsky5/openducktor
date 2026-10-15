@@ -36,6 +36,7 @@ import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler"
 import { createTerminalTitleTracker } from "./terminal-title-tracker";
 import type { createTerminalActivity } from "./terminal-activity";
 import { createTerminalCommandTracker } from "./terminal-command-tracker";
+import { commandInput } from "./terminal-command-input";
 
 /** The command that a command terminal runs before it continues in a shell. */
 type CommandPhase = {
@@ -106,6 +107,16 @@ export const createTerminalSessionProducer = ({
     );
   };
 
+  const failCommand = (session: TerminalSession, failure: TerminalPtyError): void => {
+    publishPtyFailure(session, failure);
+    settleCommandRunAfterOutput(session, (outputTail) => ({
+      type: "failed",
+      message: failure.message,
+      outputTail,
+    }));
+    handleFailure(session);
+  };
+
   const shellHandlers = (session: TerminalSession): TerminalPtyHandlers => ({
     onOutput: (data) => acceptOutput(session, data),
     onFailure: (failure) => {
@@ -153,16 +164,22 @@ export const createTerminalSessionProducer = ({
     shell: TerminalPtyLaunchPlan,
   ): TerminalPtyHandlers => ({
     onOutput: (data) => acceptOutput(session, data),
-    onFailure: (failure) => {
-      publishPtyFailure(session, failure);
-      settleCommandRunAfterOutput(session, (outputTail) => ({
-        type: "failed",
-        message: failure.message,
-        outputTail,
-      }));
-      handleFailure(session);
+    onFailure: (failure) => failCommand(session, failure),
+    onExit: (exit) => {
+      if (command.plan.interactiveCommand === undefined) {
+        finishCommand(session, exit, command, shell);
+        return;
+      }
+      if (session.summary.lifecycle === "starting" || session.summary.lifecycle === "running") {
+        settleCommandRunAfterOutput(session, (outputTail) => ({
+          type: "exited",
+          exitCode: exit.exitCode,
+          signal: exit.signal,
+          outputTail,
+        }));
+      }
+      handleExit(session, exit.exitCode, exit.signal);
     },
-    onExit: (exit) => finishCommand(session, exit, command, shell),
   });
 
   const finishCommand = (
@@ -227,25 +244,89 @@ export const createTerminalSessionProducer = ({
         });
         sessions.set(summary.terminalId, session);
         const commandNonce = globalThis.crypto.randomUUID();
+        const interactiveCommand = command?.plan.interactiveCommand;
+        let submitted = false;
         session.screen.onOsc(
           633,
-          createTerminalCommandTracker(commandNonce, (activityCommand) => {
-            if (session.command === activityCommand) return;
-            session.command = activityCommand;
+          createTerminalCommandTracker(commandNonce, (activityCommand, details) => {
+            if (details.ready) {
+              if (interactiveCommand === undefined || submitted) return;
+              submitted = true;
+              Effect.runFork(
+                session.operations.run(
+                  Effect.suspend(() => {
+                    const handle = session.resources.handle;
+                    if (!handle || session.summary.lifecycle !== "running") return Effect.void;
+                    return handle
+                      .write(commandInput(interactiveCommand))
+                      .pipe(
+                        Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
+                      );
+                  }),
+                ),
+              );
+              return;
+            }
+            if (activityCommand !== null) {
+              const replay =
+                session.pendingActionReplay?.startPrefix === activityCommand
+                  ? session.pendingActionReplay
+                  : null;
+              session.pendingActionReplay = null;
+              let input = details.input;
+              let restartDir: string | null = null;
+              if (command?.run.phase === "command" && interactiveCommand !== undefined) {
+                input = interactiveCommand;
+                restartDir = command.plan.cwd;
+              } else if (replay) {
+                input = replay.fullInput;
+                restartDir = replay.restartDir;
+              }
+              session.runningCommand =
+                input === null || commandInput(input).byteLength > TERMINAL_LIMITS.inputBytes
+                  ? null
+                  : {
+                      input,
+                      restartDir,
+                      completed: Deferred.makeUnsafe(),
+                    };
+              if (command?.run.phase !== "command")
+                session.command = replay?.command ?? activityCommand;
+            } else {
+              session.pendingActionReplay = null;
+              if (interactiveCommand !== undefined && command?.run.phase === "command") {
+                if (!submitted || session.summary.lifecycle !== "running") return;
+                command.run.phase = "shell";
+                settleCommandRunAfterOutput(session, (outputTail) => ({
+                  type: "exited",
+                  exitCode: details.exitCode,
+                  signal: null,
+                  outputTail,
+                }));
+              }
+              const completed = session.runningCommand?.completed;
+              session.runningCommand = null;
+              session.command = null;
+              if (completed) Deferred.doneUnsafe(completed, Effect.void);
+            }
             activity.changed(session);
           }),
         );
         activity.changed(session);
         const shell = { ...shellPlan, commandNonce };
-        if (command) acceptOutput(session, formatCommandEcho(command.lines));
+        if (command && interactiveCommand === undefined)
+          acceptOutput(session, formatCommandEcho(command.lines));
+        let plan: TerminalPtyLaunchPlan = shell;
+        let handlers = shellHandlers(session);
+        if (command) {
+          plan =
+            interactiveCommand === undefined
+              ? { ...command.plan, runsCommand: true }
+              : { ...command.plan, commandNonce };
+          handlers = commandHandlers(session, command, shell);
+        }
         const handleResult = yield* Effect.result(
-          (command
-            ? ptyPort.start(
-                { ...command.plan, runsCommand: true },
-                commandHandlers(session, command, shell),
-              )
-            : ptyPort.start(shell, shellHandlers(session))
-          ).pipe(
+          ptyPort.start(plan, handlers).pipe(
             Effect.tap((handle) =>
               Effect.sync(() => {
                 activateTerminalSession(session, handle);

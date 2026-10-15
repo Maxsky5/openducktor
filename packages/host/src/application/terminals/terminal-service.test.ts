@@ -130,7 +130,7 @@ describe("TerminalService", () => {
         { type: "activity_updated", activity: { command: "sleep 30" } },
         { type: "activity_snapshot_end" },
       ]);
-      pty.emit(new TextEncoder().encode("\u001b]633;D;0\u0007"));
+      pty.emit(new TextEncoder().encode(`\u001b]633;D;0;${nonce}\u0007`));
       await Bun.sleep(10);
       expect(messages.at(-1)).toMatchObject({
         type: "activity_removed",

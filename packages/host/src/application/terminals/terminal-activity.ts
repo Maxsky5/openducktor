@@ -13,6 +13,7 @@ export const createTerminalActivity = (sessions: ReadonlyMap<string, TerminalSes
     return {
       summary: copyTerminalSummary(session),
       command: session.command,
+      restartable: session.runningCommand !== null,
     };
   };
   const publish = (message: TerminalActivityMessage): void => {

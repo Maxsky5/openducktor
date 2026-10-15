@@ -9,6 +9,10 @@ import {
   type TerminalPreparePathInputRequest,
   type TerminalPreparePathInputResponse,
   type TerminalRunActionRequest,
+  type TerminalRestartRequest,
+  type TerminalRestartResponse,
+  terminalRestartRequestSchema,
+  terminalRestartResponseSchema,
   terminalCloseRequestSchema,
   terminalCloseResponseSchema,
   terminalCreateRequestSchema,
@@ -27,7 +31,8 @@ type TerminalRequest =
   | TerminalListRequest
   | TerminalPreparePathInputRequest
   | TerminalCloseRequest
-  | TerminalRunActionRequest;
+  | TerminalRunActionRequest
+  | TerminalRestartRequest;
 
 export class HostTerminalClientError extends Error {
   readonly code: TerminalFailure["code"];
@@ -52,6 +57,7 @@ export class HostTerminalClient {
       | "terminal_create"
       | "terminal_list"
       | "terminal_prepare_path_input"
+      | "terminal_restart"
       | "terminal_close"
       | "terminal_run_action",
   >(command: Command, request: TerminalRequest, schema: z.ZodType<Response>): Promise<Response> {
@@ -89,6 +95,11 @@ export class HostTerminalClient {
       request,
       terminalPreparePathInputResponseSchema,
     );
+  }
+
+  async terminalRestart(input: TerminalRestartRequest): Promise<TerminalRestartResponse> {
+    const request = terminalRestartRequestSchema.parse(input);
+    return this.invoke("terminal_restart", request, terminalRestartResponseSchema);
   }
 
   async terminalClose(input: TerminalCloseRequest): Promise<TerminalCloseResponse> {

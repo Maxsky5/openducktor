@@ -14,7 +14,7 @@ type TerminalLaunchPolicyInput = {
 export type TerminalShellLaunch = Pick<TerminalPtyLaunchPlan, "shell" | "args" | "env">;
 export type TerminalCommandLaunch = Pick<
   TerminalPtyLaunchPlan,
-  "shell" | "args" | "env" | "windowsBatchScript"
+  "shell" | "args" | "env" | "windowsBatchScript" | "interactiveCommand"
 >;
 
 /** Selects how the account shell runs. Only infrastructure knows the shell and its syntax. */
@@ -22,10 +22,10 @@ export type TerminalLaunchEnvironmentPort = {
   /** Returns how to start the interactive login shell. */
   shell(): Effect.Effect<TerminalShellLaunch, TerminalServiceError>;
   /**
-   * Returns how to run the command lines in order in one login shell process, and how to start the
-   * shell after them. The process stops after the first failed line and exits with the status of
-   * the last line that ran. Fails with `unsupported_shell` when the login shell has no supported
-   * command syntax.
+   * Returns how to run the lines in order in the login shell. zsh uses the interactive shell and
+   * its completion hooks. Other supported shells run a command process, then start a shell.
+   * The run stops after the first failed line and reports the last status. Fails with
+   * `unsupported_shell` when the login shell has no supported command syntax.
    */
   command(
     commandLines: TerminalCommandLines,
@@ -37,7 +37,6 @@ export type TerminalLaunchEnvironmentPort = {
 
 export type TerminalCommandLaunchPlans = {
   command: TerminalPtyLaunchPlan;
-  /** The shell that continues after the command. */
   shell: TerminalPtyLaunchPlan;
 };
 

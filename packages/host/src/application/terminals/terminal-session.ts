@@ -23,53 +23,20 @@ export type TerminalSession = {
   grid: TerminalGrid;
   readonly shell: string;
   command: string | null;
+  runningCommand: {
+    input: string;
+    restartDir: string | null;
+    completed: Deferred.Deferred<void>;
+  } | null;
+  pendingActionReplay: {
+    fullInput: string;
+    restartDir: string;
+    command: string;
+    startPrefix: string;
+  } | null;
+  restartPending: boolean;
   readonly commandRun: TerminalCommandRun | null;
   resources: TerminalSessionResources;
-};
-
-class TerminalSessionResources {
-  private currentHandle: TerminalPtyHandle | null = null;
-  private disposed = false;
-
-  constructor(private readonly titleTracker: TerminalTitleTracker) {}
-
-  get handle(): TerminalPtyHandle | null {
-    return this.currentHandle;
-  }
-
-  activate(handle: TerminalPtyHandle): boolean {
-    if (this.disposed) return false;
-    this.currentHandle = handle;
-    return true;
-  }
-
-  /** A command terminal releases its command process before its next process starts. */
-  releaseHandle(): void {
-    this.currentHandle = null;
-  }
-
-  consumeOutput(data: Uint8Array): void {
-    if (!this.disposed) this.titleTracker.consume(data);
-  }
-
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    this.titleTracker.dispose();
-    this.currentHandle = null;
-  }
-}
-
-type TerminalSessionInput = {
-  summary: TerminalSummary;
-  titleTracker: TerminalTitleTracker;
-  operations: SerialLane;
-  replayByteLimit: number;
-  shell: string;
-  grid: TerminalGrid;
-  /** The activity command. A command terminal shows its command lines until the command ends. */
-  command: string | null;
-  commandRun: TerminalCommandRun | null;
 };
 
 export const createTerminalSession = (input: TerminalSessionInput): TerminalSession => {
@@ -85,6 +52,9 @@ export const createTerminalSession = (input: TerminalSessionInput): TerminalSess
     grid: input.grid,
     shell: input.shell,
     command: input.command,
+    runningCommand: null,
+    pendingActionReplay: null,
+    restartPending: false,
     commandRun: input.commandRun,
     resources: new TerminalSessionResources(input.titleTracker),
   };
@@ -148,6 +118,8 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
 
 export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
+  session.pendingActionReplay = null;
+  if (session.runningCommand) Deferred.doneUnsafe(session.runningCommand.completed, Effect.void);
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
   void session.screen.drained().then(() => {
@@ -166,6 +138,8 @@ export const exitTerminalSession = (
 ): boolean => {
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
+  session.pendingActionReplay = null;
+  if (session.runningCommand) Deferred.doneUnsafe(session.runningCommand.completed, Effect.void);
   settleCommandRunAfterOutput(session, closedResult);
   session.summary.lifecycle = "exited";
   session.summary.exit = {
@@ -181,3 +155,46 @@ const closedResult = (outputTail: readonly string[]): TerminalCommandResult => (
   type: "closed",
   outputTail,
 });
+
+class TerminalSessionResources {
+  private currentHandle: TerminalPtyHandle | null = null;
+  private disposed = false;
+
+  constructor(private readonly titleTracker: TerminalTitleTracker) {}
+
+  get handle(): TerminalPtyHandle | null {
+    return this.currentHandle;
+  }
+
+  activate(handle: TerminalPtyHandle): boolean {
+    if (this.disposed) return false;
+    this.currentHandle = handle;
+    return true;
+  }
+
+  releaseHandle(): void {
+    this.currentHandle = null;
+  }
+
+  consumeOutput(data: Uint8Array): void {
+    if (!this.disposed) this.titleTracker.consume(data);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.titleTracker.dispose();
+    this.currentHandle = null;
+  }
+}
+
+type TerminalSessionInput = {
+  summary: TerminalSummary;
+  titleTracker: TerminalTitleTracker;
+  operations: SerialLane;
+  replayByteLimit: number;
+  shell: string;
+  grid: TerminalGrid;
+  command: string | null;
+  commandRun: TerminalCommandRun | null;
+};
