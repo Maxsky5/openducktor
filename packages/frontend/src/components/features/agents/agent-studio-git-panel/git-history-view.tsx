@@ -1,5 +1,5 @@
 import type { GitCurrentBranch, GitHistoryComparison } from "@openducktor/contracts";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   memo,
   type ReactElement,
@@ -15,7 +15,7 @@ import {
 import { List } from "react-window";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
-import { gitHistoryQueryOptions } from "@/state/queries/git";
+import { gitHistoryQueryOptions, refreshGitWorkingDirectory } from "@/state/queries/git";
 import {
   historyColumnLeft,
   useHistoryColumnsStore,
@@ -144,6 +144,11 @@ function GitHistoryComparisonView({
     [commits, comparison],
   );
   const currentLabel = checkout.detached ? "Detached HEAD" : (checkout.name ?? "Current branch");
+  const queryClient = useQueryClient();
+  // A retry reads the checkout too, so a branch that moved since the last read reads again.
+  const retry = useCallback(() => {
+    void refreshGitWorkingDirectory(queryClient, repoPath, workingDir).catch(() => undefined);
+  }, [queryClient, repoPath, workingDir]);
   const { fetchNextPage } = history;
   // A page load during a refresh joins that refresh instead of cancelling it.
   const loadNext = useCallback(() => void fetchNextPage({ cancelRefetch: false }), [fetchNextPage]);
@@ -173,13 +178,7 @@ function GitHistoryComparisonView({
     return (
       <HistoryMessage title="History could not load" tone="error">
         {errorMessage(history.error)}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={() => void history.refetch()}
-        >
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={retry}>
           Retry
         </Button>
       </HistoryMessage>
@@ -190,7 +189,7 @@ function GitHistoryComparisonView({
     <HistoryRefreshFailure
       message={errorMessage(history.error)}
       isRefreshing={history.isRefetching}
-      onRefresh={() => void history.refetch()}
+      onRefresh={retry}
     />
   ) : null;
   if (!firstPage || firstPage.outcome === "no_commits") {

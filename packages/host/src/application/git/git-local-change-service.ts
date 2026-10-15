@@ -52,6 +52,26 @@ export const requireCheckout = (
     return actual;
   });
 
+const branchChangedError = () =>
+  new HostValidationError({
+    field: "expectedBranch",
+    message: "The branch changed. Refresh to read its History.",
+  });
+
+/**
+ * A read of the branch that the panel shows. A commit after the panel read the branch keeps the
+ * same branch, so the read uses the newest commit. Another branch, or a detached HEAD instead of
+ * a branch, fails the read. Writes use `requireCheckout`, which also checks the commit.
+ */
+const requireBranch = (gitPort: GitPort, workingDirectory: string, expected: GitCurrentBranch) =>
+  Effect.gen(function* () {
+    const actual = yield* gitPort.getCurrentBranch(workingDirectory);
+    if (expected.detached !== actual.detached || expected.name !== actual.name) {
+      return yield* Effect.fail(branchChangedError());
+    }
+    return actual;
+  });
+
 /** Reads both groups of a working directory with the snapshots that check a later change. */
 const readLocalChanges = (
   gitPort: GitPort,
@@ -185,7 +205,7 @@ export const createGitLocalChangeMethods = (
         input.repoPath,
         input.workingDir,
       );
-      const currentBranch = yield* requireCheckout(gitPort, workingDirectory, input.expectedBranch);
+      const currentBranch = yield* requireBranch(gitPort, workingDirectory, input.expectedBranch);
       const pageInput: GitHistoryPageInput = {
         currentBranch,
         targetReference: input.targetReference,

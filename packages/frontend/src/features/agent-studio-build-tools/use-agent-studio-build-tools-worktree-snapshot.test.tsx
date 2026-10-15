@@ -22,7 +22,7 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { gitHistoryQueryOptions, refreshGitAfterAgentChange } from "@/state/queries/git";
+import { gitHistoryQueryOptions, refreshGitWorkingDirectory } from "@/state/queries/git";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 
@@ -627,7 +627,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.update(createBaseArgs({ selectedView: otherTask }));
       // The live session stream reports that the task agent ended a turn.
       await harness.run(async () => {
-        await refreshGitAfterAgentChange(queryClient, "/repo", "/repo/.worktrees/task-24");
+        await refreshGitWorkingDirectory(queryClient, "/repo", "/repo/.worktrees/task-24");
       });
       const reads = readLocalChanges.mock.calls.length;
 
@@ -691,7 +691,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       // An agent turn commits. The panel reads the checkout and its Git data again.
       revision = "second";
       await harness.run(async () => {
-        await refreshGitAfterAgentChange(queryClient, "/repo", "/repo/.worktrees/task-24");
+        await refreshGitWorkingDirectory(queryClient, "/repo", "/repo/.worktrees/task-24");
       });
       await harness.waitFor(
         (state) =>

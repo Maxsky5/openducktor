@@ -467,6 +467,19 @@ describe("GitHistoryView", () => {
     queryClient.clear();
   });
 
+  test("loads History again from Retry after a failed first read", async () => {
+    historyPage.mockImplementation(async () => {
+      throw new Error("The branch changed. Refresh to read its History.");
+    });
+    renderHistory();
+    await screen.findByText("History could not load");
+
+    historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("Subject c2")).toBeTruthy();
+  });
+
   test("shows the loader for a pending check of another target", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
     const queryClient = createQueryClient();

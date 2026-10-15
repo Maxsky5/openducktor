@@ -192,10 +192,11 @@ export const markGitWorkingDirectoryStale = (
   });
 
 /**
- * An agent changed a directory, for example in a turn that the user did not watch. A view that
- * shows the directory reads its checkout and Git data again now. Other views read when they show.
+ * Reads the checkout and the Git data of a directory again, for example after an agent turn that
+ * the user did not watch. A view that shows the directory reads now, and other views read when
+ * they show. The shown data stays until the new results arrive.
  */
-export const refreshGitAfterAgentChange = async (
+export const refreshGitWorkingDirectory = async (
   queryClient: QueryClient,
   repoPath: string,
   workingDir: string,

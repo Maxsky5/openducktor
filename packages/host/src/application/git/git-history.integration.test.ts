@@ -179,6 +179,30 @@ describe("branch history", () => {
     expect(order.indexOf(f2)).toBeLessThan(order.indexOf(f1));
   });
 
+  test("reads the newest commit of the branch after a commit that the panel did not read", async () => {
+    await commit("base.txt", "base");
+    git(["checkout", "-b", "feature"]);
+    await commit("a.txt", "first");
+    const expectedBranch = await Effect.runPromise(service.getCurrentBranch({ repoPath: repo }));
+    const newest = await commit("a.txt", "second");
+    const read = (branch: typeof expectedBranch) =>
+      Effect.runPromise(
+        service.getHistoryPage({
+          repoPath: repo,
+          targetReference: "refs/heads/main",
+          expectedBranch: branch,
+        }),
+      );
+
+    // The panel still holds the older commit. The read follows the branch to its newest commit.
+    expect(requirePage(await read(expectedBranch)).comparison.currentTip).toBe(newest);
+
+    git(["checkout", "main"]);
+    expect(await failure(read(expectedBranch))).toBe(
+      "The branch changed. Refresh to read its History.",
+    );
+  });
+
   test("lists the author email and the branches and tags of each commit", async () => {
     const base = await commit("base.txt", "shared base");
     git(["tag", "-a", "v1.0.0", "-m", "Release"]);
