@@ -35,8 +35,13 @@ export async function checkHooks({
     const action = await start(id, ["touch fail-hook", commandLine], root, "host");
     const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
     assert.equal(result.type === "exited" && result.exitCode, exitCode);
-    await wait(() => outputs.get(id)!.includes("parameter not set"));
+    await wait(() => {
+      const output = outputs.get(id)!;
+      const completed = output.lastIndexOf(`\u001b]633;D;${exitCode};`);
+      return completed >= 0 && output.indexOf("\u001b]633;R;", completed) > completed;
+    });
     const output = outputs.get(id)!;
+    assert.ok(output.includes("parameter not set"), "The user hook must run");
     const firstNamed = output.indexOf("NAMED_STATUS=0\r\n");
     assert.ok(firstNamed >= 0 && firstNamed < output.indexOf("ARRAY_STATUS=0\r\n"));
     const completed = output.lastIndexOf(`\u001b]633;D;${exitCode};`);
