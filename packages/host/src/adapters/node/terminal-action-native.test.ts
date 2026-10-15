@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const zsh = Bun.which("zsh");
-test.skipIf(process.platform === "win32" || zsh === null)(
-  "zsh Action terminals keep history and enforce restart rules",
-  async () => {
+test
+  .skipIf(process.platform === "win32" || zsh === null)
+  .each(["history", "state", "restart", "hooks", "manual", "ready"])(
+  "zsh Action terminals: %s",
+  async (name) => {
     const root = await mkdtemp(join(tmpdir(), "odt-native-action-test-"));
     try {
       const build = await Bun.build({
@@ -27,7 +29,7 @@ test.skipIf(process.platform === "win32" || zsh === null)(
       expect(build.success).toBe(true);
       const script = join(root, "probe.mjs");
       await writeFile(script, await build.outputs[0]!.text());
-      const child = Bun.spawn([Bun.which("node")!, script], {
+      const child = Bun.spawn([Bun.which("node")!, script, name], {
         env: { ...process.env, ODT_TEST_ZSH: zsh! },
         stdout: "pipe",
         stderr: "pipe",
@@ -38,16 +40,7 @@ test.skipIf(process.platform === "win32" || zsh === null)(
         new Response(child.stderr).text(),
       ]);
       expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
-      expect(stdout).toContain("PASS history");
-      expect(stdout).toContain("PASS exit");
-      expect(stdout).toContain("PASS setup");
-      expect(stdout).toContain("PASS restart");
-      expect(stdout).toContain("PASS state");
-      expect(stdout).toContain("PASS err-exit");
-      expect(stdout).toContain("PASS hooks");
-      expect(stdout).toContain("PASS start");
-      expect(stdout).toContain("PASS manual");
-      expect(stdout).toContain("PASS autoload");
+      expect(stdout).toContain(`PASS ${name}`);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

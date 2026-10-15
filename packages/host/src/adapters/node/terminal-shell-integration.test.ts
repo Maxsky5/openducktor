@@ -139,8 +139,9 @@ for (const [name, config] of [
           failure = error;
         });
         exited = new Promise((resolve) => child!.once("close", () => resolve()));
+        if (name === "zsh") child.stdin!.write(":\n");
         await waitUntil(() => commands.includes(null), detail);
-        expect(commands.filter((command) => command !== null)).toEqual([]);
+        expect(commands.filter((command) => command !== null)).toEqual(name === "zsh" ? [":"] : []);
 
         if (name === "zsh") {
           commands.length = 0;

@@ -61,7 +61,7 @@ A command terminal runs commands, then leaves an interactive shell under the sam
 
 `startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new chat has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
 
-For zsh, the host waits for an authenticated ready marker, then submits the Action through the interactive shell's line editor. Each Action runs in one subshell, so `exec`, `exit`, and `logout` cannot end the interactive shell. Directory and environment changes reach later Action lines but end with the Action. zsh owns history and emits authenticated start and completion markers before user hooks. The host records the result and keeps the last 20 screen lines.
+For zsh, the host waits for an authenticated line-editor ready marker, then submits the Action through the interactive shell's line editor. Each Action runs in one subshell, so `exec`, `exit`, and `logout` cannot end the interactive shell. Directory and environment changes reach later Action lines but end with the Action. zsh owns history and emits authenticated start and completion markers before user hooks. The host records the result and keeps the last 20 screen lines.
 
 Other supported shells keep the command-process flow:
 
@@ -91,9 +91,9 @@ The command bar uses the activity stream to offer Restart for zsh commands with 
 
 Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
 
-`terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for authenticated completion before submitting the command again. Actions restart from their launch directory. Manual commands restart from the current directory.
+`terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for an authenticated main-prompt line-editor marker before submitting the command again. Prompt hooks and the existing line-init widget run before this marker. Actions restart from their launch directory. Manual commands restart from the current directory.
 
-Closing the terminal or exceeding the 10-second stop timeout cancels the rerun. The command bar shows pending state and errors.
+Closing the terminal or exceeding the 10-second readiness timeout cancels the rerun. The command bar shows pending state and errors.
 
 ## Run an action
 

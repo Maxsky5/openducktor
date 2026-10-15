@@ -250,6 +250,7 @@ export const createTerminalSessionProducer = ({
           633,
           createTerminalCommandTracker(commandNonce, (activityCommand, details) => {
             if (details.ready) {
+              Deferred.doneUnsafe(session.ready, Effect.void);
               if (interactiveCommand === undefined || submitted) return;
               submitted = true;
               Effect.runFork(
@@ -268,6 +269,7 @@ export const createTerminalSessionProducer = ({
               return;
             }
             if (activityCommand !== null) {
+              session.ready = Deferred.makeUnsafe();
               const replay =
                 session.pendingActionReplay?.startPrefix === activityCommand
                   ? session.pendingActionReplay
@@ -288,7 +290,6 @@ export const createTerminalSessionProducer = ({
                   : {
                       input,
                       restartDir,
-                      completed: Deferred.makeUnsafe(),
                     };
               if (command?.run.phase !== "command")
                 session.command = replay?.command ?? activityCommand;
@@ -304,10 +305,8 @@ export const createTerminalSessionProducer = ({
                   outputTail,
                 }));
               }
-              const completed = session.runningCommand?.completed;
               session.runningCommand = null;
               session.command = null;
-              if (completed) Deferred.doneUnsafe(completed, Effect.void);
             }
             activity.changed(session);
           }),

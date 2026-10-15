@@ -23,10 +23,10 @@ export type TerminalSession = {
   grid: TerminalGrid;
   readonly shell: string;
   command: string | null;
+  ready: Deferred.Deferred<void>;
   runningCommand: {
     input: string;
     restartDir: string | null;
-    completed: Deferred.Deferred<void>;
   } | null;
   pendingActionReplay: {
     fullInput: string;
@@ -52,6 +52,7 @@ export const createTerminalSession = (input: TerminalSessionInput): TerminalSess
     grid: input.grid,
     shell: input.shell,
     command: input.command,
+    ready: Deferred.makeUnsafe(),
     runningCommand: null,
     pendingActionReplay: null,
     restartPending: false,
@@ -123,7 +124,7 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
 export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
   session.pendingActionReplay = null;
-  if (session.runningCommand) Deferred.doneUnsafe(session.runningCommand.completed, Effect.void);
+  Deferred.doneUnsafe(session.ready, Effect.void);
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
   void session.screen.drained().then(() => {
@@ -143,7 +144,7 @@ export const exitTerminalSession = (
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
   session.pendingActionReplay = null;
-  if (session.runningCommand) Deferred.doneUnsafe(session.runningCommand.completed, Effect.void);
+  Deferred.doneUnsafe(session.ready, Effect.void);
   settleCommandRunAfterOutput(session, closedResult);
   session.summary.lifecycle = "exited";
   session.summary.exit = {

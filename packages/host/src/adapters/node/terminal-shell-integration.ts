@@ -64,7 +64,7 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
         : [
             '[[ -o zle ]] || { print -u2 -- "OpenDucktor Actions need the zsh line editor. Enable ZLE, then run the Action again."; exit 1; }',
           ]),
-      String.raw`builtin printf '\033]633;R;%s\007' "$_odt_nonce"`,
+      zshReady(),
     ].join("\n"),
   };
 }
@@ -91,6 +91,33 @@ function zshHooks(): string {
       ];
     })
     .join("\n");
+}
+
+function zshReady(): string {
+  const failure =
+    '{ builtin print -u2 -- "OpenDucktor could not install zsh line-editor hooks. Check zle-line-init in your zsh startup files, then reopen the terminal."; exit 1; }';
+  return [
+    "if [[ -o zle ]]; then",
+    "  if builtin zle -l zle-line-init; then",
+    `    builtin zle -A zle-line-init _odt_user_line_init || ${failure}`,
+    "  fi",
+    "  _odt_line_init() {",
+    "    local code=0",
+    "    {",
+    "      if builtin zle -l _odt_user_line_init; then",
+    '        builtin zle _odt_user_line_init -- "$@"',
+    "        code=$?",
+    "      fi",
+    "    } always {",
+    "      if [[ $CONTEXT == start ]]; then",
+    String.raw`        builtin printf '\033]633;R;%s\007' "$_odt_nonce"`,
+    "      fi",
+    "    }",
+    '    return "$code"',
+    "  }",
+    `  builtin zle -N zle-line-init _odt_line_init || ${failure}`,
+    "fi",
+  ].join("\n");
 }
 
 function supportsBashHooks(plan: TerminalPtyLaunchPlan): boolean {
@@ -180,7 +207,7 @@ function posixHooks(nonce: string, zsh = false): string {
     `  local line="\${1:0:${TERMINAL_LIMITS.commandMarkerBytes}}" char code index restart=0`,
     ...(zsh
       ? [
-          `  (( \${#1} <= ${TERMINAL_LIMITS.commandMarkerBytes} )) && restart=1`,
+          `  (( \${#1} <= ${TERMINAL_LIMITS.commandMarkerBytes} )) && [[ -o zle ]] && restart=1`,
           '  local word name input="${3-$1}"',
           "  if (( restart )); then",
           '    for word in "${(@z)input}"; do',

@@ -57,6 +57,7 @@ export const restartCommand = (
               : terminalOperationFailure(cause, "restart"),
         });
         session.restartPending = true;
+        const ready = session.ready;
         yield* handle.write(new Uint8Array([3])).pipe(
           Effect.mapError((cause) => failure(`Could not interrupt the command: ${cause.message}`)),
           Effect.tapError(() =>
@@ -65,15 +66,15 @@ export const restartCommand = (
             }),
           ),
         );
-        return { command, handle, prepared };
+        return { ready, handle, prepared };
       }),
     ),
-    ({ command, handle, prepared }) =>
-      Deferred.await(command.completed).pipe(
+    ({ ready, handle, prepared }) =>
+      Deferred.await(ready).pipe(
         Effect.timeout("10 seconds"),
         Effect.mapError(() =>
           failure(
-            "The command did not stop within 10 seconds. Stop it in the terminal, then run it again.",
+            "The shell did not become ready within 10 seconds. Stop the command or finish the prompt in the terminal, then run it again.",
           ),
         ),
         Effect.andThen(
