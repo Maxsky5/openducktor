@@ -110,15 +110,20 @@ export async function checkBuffer({
   );
   const command = formatTerminalPathInput(shell, [process.execPath, server]);
   for (const phase of ["initial", "restart"]) {
-    for (const side of ["left", "right", "both"]) {
+    for (const side of ["left", "right", "both", "queued", "pending"]) {
+      if (phase === "restart" && side === "pending") continue;
       await rm(join(root, "prompt-read"), { force: true });
-      const left = side === "right" ? "" : "print PRELOADED; ";
-      const right = side === "left" ? "" : "; print SUFFIX";
+      const prefix = "print PRELOADED; ";
+      const left = side === "left" || side === "both" ? prefix : "";
+      const right = side === "right" || side === "both" ? "; print SUFFIX" : "";
+      let setup = `LBUFFER='${left}'; RBUFFER='${right}';`;
+      if (side === "queued") setup = `zle -U '${prefix}';`;
+      else if (side === "pending") setup = "print WIDGET_WAITING; read -k 1 trigger;";
       await writeFile(
         join(root, ".zshrc"),
         [
           'PROMPT="fixture> "',
-          `user_init() { if ${phase === "initial" ? "true" : '[[ -f "$HOME/prompt-read" ]]'}; then LBUFFER='${left}'; RBUFFER='${right}'; fi; }`,
+          `user_init() { if ${phase === "initial" ? "true" : '[[ -f "$HOME/prompt-read" ]]'}; then ${setup} fi; }`,
           "zle -N zle-line-init user_init",
           'user_check() { print -rl -- "LEFT=$LBUFFER" "RIGHT=$RBUFFER"; BUFFER=; zle redisplay; }',
           "zle -N user_check",
@@ -127,6 +132,10 @@ export async function checkBuffer({
       );
       const id = `buffer-${phase}-${side}`;
       const started = await start(id, [phase === "initial" ? "print ACTION_RAN" : command]);
+      if (side === "pending") {
+        await wait(() => outputs.get(id)!.includes("WIDGET_WAITING\r\n"));
+        await write(id, `!${prefix}`);
+      }
       if (phase === "initial") {
         const result = await Effect.runPromise(started.result.pipe(Effect.timeout("2 seconds")));
         assert.ok(outputs.get(id)!.includes("Clear it, then run the Action or command again."));
@@ -147,7 +156,9 @@ export async function checkBuffer({
         assert.equal(outputs.get(id)!.split("SERVER_READY\r\n").length, 2);
       }
       await write(id, "\x18\x02");
-      await wait(() => outputs.get(id)!.includes(`LEFT=${left}\r\nRIGHT=${right}\r\n`));
+      await wait(() =>
+        outputs.get(id)!.includes(`LEFT=${side === "right" ? "" : prefix}\r\nRIGHT=${right}\r\n`),
+      );
       await write(id, 'printf "PARENT_ALIVE\\n"\r');
       await wait(() => outputs.get(id)!.includes("PARENT_ALIVE\r\n"));
       const output = outputs.get(id)!;

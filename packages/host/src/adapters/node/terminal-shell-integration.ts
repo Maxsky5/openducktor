@@ -110,7 +110,7 @@ function zshReady(): string {
     "      fi",
     "    } always {",
     "      if [[ $CONTEXT == start ]]; then",
-    "        [[ -n $BUFFER ]] && ready=0",
+    "        if [[ -n $BUFFER ]] || (( KEYS_QUEUED_COUNT || PENDING )); then ready=0; fi",
     String.raw`        builtin printf '\033]633;R;%s;%s\007' "$_odt_nonce" "$ready"`,
     "      fi",
     "    }",
