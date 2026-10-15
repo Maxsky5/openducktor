@@ -454,6 +454,43 @@ describe("local changes", () => {
   );
 
   test(
+    "changes only the copy of a staged copy and keeps the staged edit of its source",
+    async () => {
+      // With this setting, Git reports a staged copy beside a staged edit of its source.
+      git("config", "status.renames", "copies");
+      await write("source.txt", lines(20));
+      git("add", "source.txt");
+      git("commit", "-m", "source");
+      await write("copy.txt", lines(20));
+      await write("source.txt", lines(20, { 2: "source edit" }));
+      git("add", "-A");
+      let changes = await localChanges();
+      expect(changes.staged.fileStatuses).toEqual([
+        { path: "copy.txt", status: "copied", staged: true },
+        { path: "source.txt", status: "modified", staged: true },
+      ]);
+
+      const unstaged = await change(changes, {
+        action: "unstage",
+        group: "staged",
+        selection: { kind: "file", filePath: "copy.txt" },
+      });
+      expect(unstaged.affectedPaths).toEqual(["copy.txt"]);
+      expect(git("status", "--porcelain=v1", "-z")).toBe("M  source.txt\0?? copy.txt\0");
+
+      git("add", "copy.txt");
+      changes = await localChanges();
+      await change(changes, {
+        action: "discard",
+        group: "staged",
+        selection: { kind: "file", filePath: "copy.txt" },
+      });
+      expect(git("status", "--porcelain=v1", "-z")).toBe("M  source.txt\0");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "deletes a discarded untracked file",
     async () => {
       await commitBase();

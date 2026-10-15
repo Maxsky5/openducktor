@@ -460,13 +460,10 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
-  // Commit all can stage content before its commit fails, so only that mode reads the result again.
-  test.each([
-    ["staged", 0],
-    ["all", 1],
-  ] as const)(
-    "clears the %s commit state after a commit write failure",
-    async (mode, refreshes) => {
+  // Commit all can stage content, and a commit hook can change files, before a commit fails.
+  test.each(["staged", "all"] as const)(
+    "clears the %s commit state and reads the changes again after a commit write failure",
+    async (mode) => {
       const failure = async (): Promise<GitCommitResult> => {
         throw new Error("Commit hook exploded");
       };
@@ -487,7 +484,8 @@ describe("useAgentStudioGitActions", () => {
         expect(harness.getLatest().isCommitting).toBe(false);
         expect(harness.getLatest().committingMode).toBeNull();
         expect(harness.getLatest().commitError).toBe("Commit hook exploded");
-        expect(refreshDiffData).toHaveBeenCalledTimes(refreshes);
+        expect(refreshDiffData).toHaveBeenCalledTimes(1);
+        expect(refreshDiffData).toHaveBeenCalledWith("soft");
       } finally {
         await harness.unmount();
       }

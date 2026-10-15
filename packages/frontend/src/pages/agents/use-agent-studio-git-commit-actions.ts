@@ -81,9 +81,9 @@ export function useAgentStudioGitCommitActions({
                 );
         } catch (error) {
           if (isCurrentContext()) setCommitError(toErrorMessage(error, "Commit failed."));
-          // Commit all can stage content before its commit fails. Show the actual state.
-          // The refresh path reports its own failure.
-          if (mode === "all") await refreshDiffData("soft").catch(() => undefined);
+          // Commit all can stage content, and a commit hook can change files, before a commit
+          // fails. Show the actual state. The refresh path reports its own failure.
+          await refreshDiffData("soft").catch(() => undefined);
           return false;
         }
         if (result.outcome === "no_changes") {

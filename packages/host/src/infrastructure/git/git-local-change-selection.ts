@@ -255,9 +255,12 @@ const requireGroupEntry = (group: GitLocalChangeGroupData, filePath: string) =>
     return status;
   });
 
+/** A rename removes its source path, so a file action changes both paths. A copy keeps its source. */
 const stagedPaths = (group: GitLocalChangeGroupData, filePath: string): string[] => {
   const status = group.fileStatuses.find((entry) => entry.path === filePath);
-  return status?.originalPath ? [filePath, status.originalPath] : [filePath];
+  return status?.status === "renamed" && status.originalPath
+    ? [filePath, status.originalPath]
+    : [filePath];
 };
 
 const discardUntrackedFile = (runner: GitCommandRunner, workingDirectory: string, file: string) =>
