@@ -13,7 +13,7 @@ export const createTerminalCommandTracker = (
 ): ((data: string) => boolean) => {
   let pending: { command: string; input: string | null } | null = null;
   return (data) => {
-    const [kind, line, source, complete] = data.split(";");
+    const [kind, line, source, restart] = data.split(";");
     if (kind === "R" && line === nonce) {
       onCommand(null, { input: null, exitCode: null, ready: true });
     } else if (kind === "E") {
@@ -24,7 +24,7 @@ export const createTerminalCommandTracker = (
         pending = {
           command,
           input:
-            complete === "1" &&
+            restart === "1" &&
             input !== null &&
             new TextEncoder().encode(input).byteLength <= TERMINAL_LIMITS.commandMarkerBytes
               ? input

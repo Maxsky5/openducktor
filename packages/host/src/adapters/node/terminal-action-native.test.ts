@@ -46,6 +46,8 @@ test.skipIf(process.platform === "win32" || zsh === null)(
       expect(stdout).toContain("PASS err-exit");
       expect(stdout).toContain("PASS hooks");
       expect(stdout).toContain("PASS start");
+      expect(stdout).toContain("PASS manual");
+      expect(stdout).toContain("PASS autoload");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

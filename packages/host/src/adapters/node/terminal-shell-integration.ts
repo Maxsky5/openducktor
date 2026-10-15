@@ -81,10 +81,13 @@ function zshHooks(): string {
       return [
         `builtin typeset -ga ${hook}_functions`,
         `if (( $+functions[${hook}] )); then`,
-        `  builtin functions -c ${hook} _odt_user_${hook} || ${failure}`,
+        `  if [[ \${functions[${hook}]} == 'builtin autoload -X'* ]]; then`,
+        `    builtin autoload +X ${hook} || ${failure}`,
+        "  fi",
+        `  functions[_odt_user_${hook}]=$functions[${hook}] || ${failure}`,
         `  ${hook}_functions=(_odt_user_${hook} "\${${hook}_functions[@]}")`,
         "fi",
-        `builtin functions -c ${handler} ${hook} || ${failure}`,
+        `functions[${hook}]=$functions[${handler}] || ${failure}`,
       ];
     })
     .join("\n");
@@ -169,14 +172,29 @@ function bashScript(plan: TerminalPtyLaunchPlan, nonce: string): string {
   ].join("\n");
 }
 
-function posixHooks(nonce: string, hasFullInput = false): string {
+function posixHooks(nonce: string, zsh = false): string {
   return [
     `_odt_nonce=${formatTerminalPathInput("/bin/bash", [nonce])}`,
     "_odt_command_start() {",
     "  local LC_ALL=C",
-    `  local line="\${1:0:${TERMINAL_LIMITS.commandMarkerBytes}}" char code index complete=0`,
-    ...(hasFullInput
-      ? [`  (( \${#1} <= ${TERMINAL_LIMITS.commandMarkerBytes} )) && complete=1`]
+    `  local line="\${1:0:${TERMINAL_LIMITS.commandMarkerBytes}}" char code index restart=0`,
+    ...(zsh
+      ? [
+          `  (( \${#1} <= ${TERMINAL_LIMITS.commandMarkerBytes} )) && restart=1`,
+          '  local word name input="${3-$1}"',
+          "  if (( restart )); then",
+          '    for word in "${(@z)input}"; do',
+          "      word=${(Q)word}",
+          "      name=${word%%=*}",
+          "      [[ $word == *=* && $name == [A-Za-z_]* && $name != *[^A-Za-z0-9_]* ]] && continue",
+          '      case "$word" in',
+          "        builtin|command|noglob|nocorrect|time|!) continue;;",
+          "        exec|exit|logout) restart=0;;",
+          "      esac",
+          "      break",
+          "    done",
+          "  fi",
+        ]
       : []),
     String.raw`  builtin printf '\033]633;E;'`,
     "  for (( index=0; index<${#line}; index++ )); do",
@@ -190,7 +208,7 @@ function posixHooks(nonce: string, hasFullInput = false): string {
     String.raw`      builtin printf '%s' "$char"`,
     "    fi",
     "  done",
-    String.raw`  builtin printf ';%s;%s\007\033]633;C\007' "$_odt_nonce" "$complete"`,
+    String.raw`  builtin printf ';%s;%s\007\033]633;C\007' "$_odt_nonce" "$restart"`,
     "}",
     "_odt_command_end() {",
     "  local code=$?",

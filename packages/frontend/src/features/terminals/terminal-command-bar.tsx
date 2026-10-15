@@ -26,7 +26,13 @@ export function TerminalCommandBar({
       ? state.commands.find((item) => item.summary.terminalId === summary.terminalId)
       : undefined;
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ command: string; message: string } | null>(null);
+  const [lastCommand, setLastCommand] = useState(activity?.command);
+
+  if (activity?.command !== lastCommand) {
+    setLastCommand(activity?.command);
+    setError(null);
+  }
 
   const restart = async () => {
     if (!activity?.restartable || pendingCommand !== null) return;
@@ -35,18 +41,25 @@ export function TerminalCommandBar({
     try {
       await onRestart({ terminalId: summary.terminalId, expectedCommand: activity.command });
     } catch (cause) {
-      setError(errorMessage(cause));
+      const latest = read();
+      const command =
+        latest.status === "ready"
+          ? latest.commands.find((item) => item.summary.terminalId === summary.terminalId)
+          : undefined;
+      if (!command || command.command === activity.command)
+        setError({ command: activity.command, message: errorMessage(cause) });
     } finally {
       setPendingCommand(null);
     }
   };
 
   if (!activity && pendingCommand === null && error === null) return null;
+  const command = pendingCommand ?? activity?.command ?? error?.command;
   return (
     <div className="shrink-0 border-t border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground">
       <div className="flex min-w-0 items-center gap-3">
-        <code className="min-w-0 flex-1 truncate" title={pendingCommand ?? activity?.command}>
-          {pendingCommand ?? activity?.command}
+        <code className="min-w-0 flex-1 truncate" title={command}>
+          {command}
         </code>
         {activity?.restartable || pendingCommand !== null ? (
           <Button
@@ -63,7 +76,7 @@ export function TerminalCommandBar({
       </div>
       {error !== null ? (
         <p role="alert" className="mt-1 text-destructive">
-          {error}
+          {error.message}
         </p>
       ) : null}
     </div>

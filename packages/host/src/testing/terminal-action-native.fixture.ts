@@ -290,6 +290,71 @@ try {
     await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
   }
   console.log("PASS start: user hook errors preserve command tracking and Restart");
+
+  await writeFile(
+    join(root, ".zshrc"),
+    `PROMPT="fixture> "\nHISTSIZE=1000\nsetopt SH_WORD_SPLIT\nalias run_server=${formatTerminalPathInput(shell, [`exec ${command}`])}\n`,
+  );
+  for (const [name, input, restartable] of [
+    ["plain", `exec ${command}`, false],
+    ["builtin", `ODT_VALUE=1 builtin exec ${command}`, false],
+    ["assignment", `ODT_VALUE='two words' builtin exec ${command}`, false],
+    ["quoted", `'exec' ${command}`, false],
+    ["alias", "run_server", false],
+    ["argument", `${command} exec`, true],
+  ] as const) {
+    const id = `manual-${name}`;
+    const action = await start(id, ["true"]);
+    await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    await write(id, `${input}\r`);
+    await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
+    assert.equal(activities.get(id)?.restartable, restartable);
+    const result = await Effect.runPromise(
+      Effect.result(engine.restart(id, activities.get(id)!.command)),
+    );
+    if (restartable) {
+      assert.equal(result._tag, "Success");
+      await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
+    } else {
+      assert.ok(result._tag === "Failure");
+      assert.equal(result.failure.code, "invalid_input");
+      assert.ok(result.failure.message.includes("no command that can restart"));
+      assert.ok(!outputs.get(id)!.includes("SERVER_STOPPING\r\n"));
+      assert.equal(
+        engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+        "running",
+      );
+    }
+  }
+  console.log("PASS manual: exit-style commands cannot restart, and ordinary commands still can");
+
+  await mkdir(join(root, "hooks"));
+  await writeFile(join(root, "hooks/preexec"), 'print -r -- "AUTO_START=$#"\n');
+  await writeFile(join(root, "hooks/precmd"), 'local code=$?; print -r -- "AUTO_END=$code"\n');
+  await writeFile(
+    join(root, ".zshrc"),
+    'PROMPT="fixture> "\nfpath=("$HOME/hooks" $fpath)\nautoload -Uz preexec precmd\n',
+  );
+  const autoload = await start("autoload", ["false"]);
+  const loaded = await Effect.runPromise(autoload.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(loaded.type === "exited" && loaded.exitCode, 1);
+  await wait(() => outputs.get("autoload")!.includes("AUTO_END=1\r\n"));
+  const autoloadOutput = outputs.get("autoload")!;
+  assert.ok(autoloadOutput.indexOf("\u001b]633;E;") < autoloadOutput.indexOf("AUTO_START=3\r\n"));
+  assert.ok(
+    autoloadOutput.lastIndexOf("\u001b]633;D;1;") < autoloadOutput.indexOf("AUTO_END=1\r\n"),
+  );
+  assert.ok(!autoloadOutput.includes("function definition file not found"));
+
+  await writeFile(
+    join(root, ".zshrc"),
+    'PROMPT="fixture> "\nfpath=("$HOME/missing")\nautoload -Uz preexec\n',
+  );
+  const missing = await start("missing-hook", ["true"]);
+  const failed = await Effect.runPromise(missing.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(failed.type === "exited" && failed.exitCode, 1);
+  assert.ok(outputs.get("missing-hook")!.includes("Fix the preexec function"));
+  console.log("PASS autoload: user hooks load before copying and missing hooks fail at startup");
 } catch (cause) {
   throw new Error(JSON.stringify([...outputs].map(([id, output]) => [id, output.slice(-1200)])), {
     cause,
