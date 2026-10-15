@@ -89,6 +89,8 @@ On Windows, ComSpec must be `cmd.exe`, or the command fails with `unsupported_sh
 
 The command bar uses the activity stream to offer Restart for zsh commands with complete input and authenticated completion hooks. Manual commands above the 1,024-byte hook limit cannot restart. The host retains full Action input, so this limit does not restrict Action restarts.
 
+Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
+
 `terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for authenticated completion before submitting the command again. Actions restart from their launch directory. Manual commands restart from the current directory.
 
 Closing the terminal or exceeding the 10-second stop timeout cancels the rerun. The command bar shows pending state and errors.

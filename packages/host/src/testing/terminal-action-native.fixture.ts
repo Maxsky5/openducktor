@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TerminalActivity } from "@openducktor/contracts";
+import type { TerminalActivity, TerminalStartedBy } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type {
   StartedCommandTerminal,
@@ -97,6 +97,38 @@ try {
     'process.on("SIGINT", () => { console.log("SERVER_STOPPING"); setTimeout(() => { console.log("SERVER_STOPPED"); process.exit(0); }, 40); }); console.log("SERVER_CWD=" + process.cwd()); console.log("SERVER_READY"); setInterval(() => {}, 1000);',
   );
   const command = formatTerminalPathInput(shell, [process.execPath, server]);
+  const setupScript = join(root, "setup.cjs");
+  await writeFile(
+    setupScript,
+    'process.on("SIGINT", () => { console.log("SETUP_INTERRUPTED"); process.exit(130); }); process.stdin.once("data", () => process.exit(0)); console.log("SETUP_READY"); process.stdin.resume();',
+  );
+  const setup = await start(
+    "setup",
+    [formatTerminalPathInput(shell, [process.execPath, setupScript])],
+    root,
+    "host",
+  );
+  await wait(() => outputs.get("setup")!.includes("SETUP_READY\r\n"));
+  assert.equal(activities.get("setup")?.restartable, false);
+  const refused = await Effect.runPromise(
+    Effect.result(engine.restart("setup", activities.get("setup")!.command)),
+  );
+  assert.equal(refused._tag, "Failure");
+  assert.ok(refused._tag === "Failure" && refused.failure.message.includes("setup"));
+  await write("setup", "done\r");
+  const setupResult = await Effect.runPromise(setup.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(setupResult.type === "exited" && setupResult.exitCode, 0);
+  assert.ok(!outputs.get("setup")!.includes("SETUP_INTERRUPTED\r\n"));
+  await write("setup", `${command}\r`);
+  await wait(
+    () =>
+      activities.get("setup")?.restartable === true &&
+      outputs.get("setup")!.includes("SERVER_READY\r\n"),
+  );
+  await Effect.runPromise(engine.restart("setup", activities.get("setup")!.command));
+  await wait(() => outputs.get("setup")!.split("SERVER_READY\r\n").length === 3);
+  console.log("PASS setup: the host's first run cannot restart, but later manual commands can");
+
   const actionRoot = join(root, "action's root");
   await mkdir(join(actionRoot, "target"), { recursive: true });
   const unpadded = await Effect.runPromise(
@@ -202,6 +234,7 @@ async function start(
   id: string,
   commandLines: TerminalCommandLines,
   workingDir = root,
+  startedBy: TerminalStartedBy = "user",
 ): Promise<StartedCommandTerminal> {
   const plans = await Effect.runPromise(launchEnvironment.command(commandLines));
   const grid = { columns: 120, rows: 24 };
@@ -215,7 +248,7 @@ async function start(
         createdAt: new Date().toISOString(),
         lifecycle: "starting",
         exit: null,
-        startedBy: "user",
+        startedBy,
       },
       { commandLines },
       {

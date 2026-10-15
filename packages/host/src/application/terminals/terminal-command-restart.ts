@@ -2,7 +2,7 @@ import { Deferred, Effect } from "effect";
 import { commandInput } from "./terminal-command-input";
 import { terminalFailure, terminalOperationFailure } from "./terminal-session-lifecycle";
 import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
-import type { TerminalSession } from "./terminal-session";
+import { canRestartCommand, type TerminalSession } from "./terminal-session";
 import { shellCommandPrefix } from "./terminal-command-prefix";
 import type { TerminalServiceError } from "./terminal-service-error";
 
@@ -21,6 +21,10 @@ export const restartCommand = (
         if (session.summary.lifecycle !== "running" || !command || !handle)
           return yield* failure(
             "This terminal has no command that can restart. Run the command from the shell.",
+          );
+        if (!canRestartCommand(session))
+          return yield* failure(
+            "This Action is still running for setup. Wait for it to finish before restarting commands.",
           );
         if (session.command !== expectedCommand)
           return yield* failure(

@@ -74,6 +74,10 @@ export const isLiveTerminal = (session: TerminalSession): boolean =>
 export const isCommandRunning = (session: TerminalSession): boolean =>
   session.commandRun?.phase === "command" && isLiveTerminal(session);
 
+export const canRestartCommand = (session: TerminalSession): boolean =>
+  session.runningCommand !== null &&
+  !(session.summary.startedBy === "host" && isCommandRunning(session));
+
 /** Settles the command result once. Call it after queued output is parsed, before the screen is released. */
 export const settleCommandRun = (
   session: TerminalSession,

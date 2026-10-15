@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 const zsh = Bun.which("zsh");
 test.skipIf(process.platform === "win32" || zsh === null)(
-  "zsh Actions keep history, restart exec gracefully, and isolate shell state",
+  "zsh Action terminals keep history and enforce restart rules",
   async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-native-action-test-"));
     try {
@@ -40,6 +40,7 @@ test.skipIf(process.platform === "win32" || zsh === null)(
       expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
       expect(stdout).toContain("PASS history");
       expect(stdout).toContain("PASS exit");
+      expect(stdout).toContain("PASS setup");
       expect(stdout).toContain("PASS restart");
       expect(stdout).toContain("PASS state");
     } finally {
