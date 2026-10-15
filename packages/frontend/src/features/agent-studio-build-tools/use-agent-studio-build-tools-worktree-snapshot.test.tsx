@@ -613,6 +613,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("a return to a task that an unseen agent turn changed reads its Git data again", async () => {
+    // Each task has its own worktree, so the reads of task-24 are hidden while task-99 shows.
+    taskWorktreeGetMock.mockImplementation(async (_repoPath, taskId) => ({
+      workingDirectory: `/repo/.worktrees/${taskId}`,
+    }));
     const queryClient = createQueryClient();
     const harness = createHookHarness(createBaseArgs(), { queryClient });
     const otherTask = createSelectedView({
@@ -625,6 +629,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.mount();
       await harness.waitFor((snapshot) => snapshot.diffData.loadedScopesByScope.uncommitted);
       await harness.update(createBaseArgs({ selectedView: otherTask }));
+      await harness.waitFor(
+        (snapshot) => snapshot.diffData.worktreePath === "/repo/.worktrees/task-99",
+      );
       // The live session stream reports that the task agent ended a turn.
       await harness.run(async () => {
         await refreshGitWorkingDirectory(queryClient, "/repo", "/repo/.worktrees/task-24");
@@ -637,9 +644,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.unmount();
       queryClient.clear();
     }
-    // This full render flow switches the task twice and waits for host reads. A loaded runner can
-    // exceed 1000 ms.
-  }, 5_000);
+  });
 
   test("a commit keeps every Git panel read on screen while it reads again", async () => {
     let revision = "first";
