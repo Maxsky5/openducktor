@@ -1843,6 +1843,9 @@ test.each(
       configureShellBridge(createUnavailableShellBridge());
     }
   },
+  // This full render flow opens the tools, waits for Git reads and a confirmation, and hides and
+  // shows the tools several times. A loaded runner can exceed 1000 ms.
+  5_000,
 );
 
 test("retains a force-push confirmation when the rejected push finishes with tools hidden", async () => {
