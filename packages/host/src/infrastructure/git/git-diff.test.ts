@@ -226,6 +226,29 @@ test("reads tracked paths that Git quotes or that hold spaces", async () => {
   expect(result[0]?.diff).toContain("+new");
 });
 
+test("reads a copy as a new file, because a write reads it alone", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const patch = [
+    "diff --git a/old.txt b/new.txt",
+    "similarity index 95%",
+    "copy from old.txt",
+    "copy to new.txt",
+    "index 111..222 100644",
+    "--- a/old.txt",
+    "+++ b/new.txt",
+    "@@ -1 +1,2 @@",
+    " old",
+    "+copy edit",
+    "",
+  ].join("\n");
+
+  const result = await Effect.runPromise(
+    buildFileDiffs(runner, "/repo", [], "1\t0\t\0old.txt\0new.txt\0", patch),
+  );
+
+  expect(result.map(({ file, type }) => [file, type])).toEqual([["new.txt", "added"]]);
+});
+
 for (const [stdout, ok, message] of [
   ["", true, "returned no files"],
   ["partial\0", false, "cannot list directory"],

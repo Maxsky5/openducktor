@@ -453,15 +453,71 @@ describe("local changes", () => {
     GIT_TEST_TIMEOUT_MS,
   );
 
+  /** A rename that Git reports in the working tree, because its destination is intent-to-add. */
+  const intentToAddRename = async () => {
+    await commitBase();
+    await rm(path.join(repo, "app.txt"));
+    await write("moved.txt", lines(20, { 18: "moved edit" }));
+    git("add", "-N", "moved.txt");
+  };
+
+  test(
+    "stages an intent-to-add rename together with its source",
+    async () => {
+      await intentToAddRename();
+      const changes = await localChanges();
+      expect(changes.unstaged.fileStatuses).toEqual([
+        { path: "moved.txt", status: "renamed", staged: false },
+      ]);
+
+      const staged = await change(changes, {
+        action: "stage",
+        group: "unstaged",
+        selection: { kind: "file", filePath: "moved.txt" },
+      });
+
+      expect(staged.affectedPaths).toEqual(["moved.txt", "app.txt"]);
+      expect(git("status", "--porcelain=v1", "-z")).toBe("R  moved.txt\0app.txt\0");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "discards intent-to-add files and restores the source of an intent-to-add rename",
+    async () => {
+      await intentToAddRename();
+      await write("intent.txt", "intent\n");
+      git("add", "-N", "intent.txt");
+      let changes = await localChanges();
+
+      changes = (
+        await change(changes, {
+          action: "discard",
+          group: "unstaged",
+          selection: { kind: "file", filePath: "intent.txt" },
+        })
+      ).localChanges;
+      await change(changes, {
+        action: "discard",
+        group: "unstaged",
+        selection: { kind: "file", filePath: "moved.txt" },
+      });
+
+      expect(await read("app.txt")).toBe(lines(20));
+      expect(git("status", "--porcelain=v1", "-z", "--untracked-files=all")).toBe("");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
   test(
     "changes only the copy of a staged copy and keeps the staged edit of its source",
     async () => {
       // With this setting, Git reports a staged copy beside a staged edit of its source.
-      git("config", "status.renames", "copies");
+      git("config", "diff.renames", "copies");
       await write("source.txt", lines(20));
       git("add", "source.txt");
       git("commit", "-m", "source");
-      await write("copy.txt", lines(20));
+      await write("copy.txt", lines(20, { 18: "copy edit" }));
       await write("source.txt", lines(20, { 2: "source edit" }));
       git("add", "-A");
       let changes = await localChanges();
@@ -469,6 +525,8 @@ describe("local changes", () => {
         { path: "copy.txt", status: "copied", staged: true },
         { path: "source.txt", status: "modified", staged: true },
       ]);
+      // A write reads the copy alone, as a new file, so it has no chunk actions.
+      expect(changes.staged.fileDiffs.find((diff) => diff.file === "copy.txt")?.type).toBe("added");
 
       const unstaged = await change(changes, {
         action: "unstage",

@@ -80,11 +80,14 @@ const classifyStatusEntries = (entries: PorcelainEntry[]) => {
       staged.push(status);
     }
     if (entry.worktree !== " ") {
-      unstaged.push({
+      const status: GitFileStatus = {
         path: entry.path,
         status: porcelainCharToStatus(entry.worktree),
         staged: false,
-      });
+      };
+      // Git reports a worktree rename only for an intent-to-add destination.
+      if (entry.originalPath && entry.worktree === "R") status.originalPath = entry.originalPath;
+      unstaged.push(status);
     }
   }
   return { unstaged, staged, conflicted };

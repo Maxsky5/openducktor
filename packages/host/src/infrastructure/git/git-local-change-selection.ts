@@ -256,7 +256,7 @@ const requireGroupEntry = (group: GitLocalChangeGroupData, filePath: string) =>
   });
 
 /** A rename removes its source path, so a file action changes both paths. A copy keeps its source. */
-const stagedPaths = (group: GitLocalChangeGroupData, filePath: string): string[] => {
+const renamePaths = (group: GitLocalChangeGroupData, filePath: string): string[] => {
   const status = group.fileStatuses.find((entry) => entry.path === filePath);
   return status?.status === "renamed" && status.originalPath
     ? [filePath, status.originalPath]
@@ -293,16 +293,17 @@ const changeFile = (
     const group = changes[input.group];
     const status = yield* requireGroupEntry(group, filePath);
     if (input.action === "stage") {
+      const paths = renamePaths(group, filePath);
       yield* runGitStep(
         runner,
         workingDirectory,
-        ["add", "-A", "--", literal(filePath)],
+        ["add", "-A", "--", ...paths.map(literal)],
         "git.add",
       );
-      return [filePath];
+      return paths;
     }
     if (input.action === "unstage") {
-      const paths = stagedPaths(group, filePath);
+      const paths = renamePaths(group, filePath);
       yield* runGitStep(
         runner,
         workingDirectory,
@@ -315,6 +316,24 @@ const changeFile = (
     if (input.group === "unstaged") {
       if (status?.status === "untracked") {
         yield* discardUntrackedFile(runner, workingDirectory, filePath);
+      } else if (status?.status === "added" || status?.status === "renamed") {
+        // Only an intent-to-add entry is added or renamed in the working tree. A restore keeps its
+        // empty index entry, so the entry and the file go, and a rename source comes back.
+        yield* runGitStep(
+          runner,
+          workingDirectory,
+          ["rm", "-f", "-q", "--", literal(filePath)],
+          "git.rm",
+        );
+        if (status.originalPath) {
+          yield* runGitStep(
+            runner,
+            workingDirectory,
+            ["restore", "--worktree", "--", literal(status.originalPath)],
+            "git.restore",
+          );
+        }
+        return renamePaths(group, filePath);
       } else {
         yield* runGitStep(
           runner,
@@ -325,7 +344,7 @@ const changeFile = (
       }
       return [filePath];
     }
-    const paths = stagedPaths(group, filePath);
+    const paths = renamePaths(group, filePath);
     const patch = yield* readWritePatch(runner, workingDirectory, "staged", paths, {
       binary: true,
       wholeFileHint: "Unstage the file, then review and discard it in Unstaged.",
