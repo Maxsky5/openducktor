@@ -242,6 +242,33 @@ try {
     if (hook === "array") assert.ok(named < output.lastIndexOf(`ARRAY_STATUS=${exitCode}\r\n`));
   }
   console.log("PASS hooks: completion precedes prompt errors and user hooks keep order and status");
+
+  for (const hook of ["named", "array"] as const) {
+    const fail = 'setopt localoptions nounset; print "$ODT_MISSING_HOOK_VALUE"';
+    await writeFile(
+      join(root, ".zshrc"),
+      [
+        'PROMPT="fixture> "',
+        "HISTSIZE=1000",
+        `preexec() { print -r -- "NAMED_ARGS=$#"; ${hook === "named" ? fail : "true"}; }`,
+        `user_preexec() { print -r -- "ARRAY_ARGS=$#"; ${hook === "array" ? fail : "true"}; }`,
+        "preexec_functions=(user_preexec)",
+      ].join("\n"),
+    );
+    const id = `start-${hook}`;
+    await start(id, [command]);
+    await wait(() => outputs.get(id)!.includes("SERVER_READY\r\n"));
+    assert.equal(activities.get(id)?.restartable, true);
+    const output = outputs.get(id)!;
+    const started = output.indexOf("\u001b]633;E;");
+    const named = output.indexOf("NAMED_ARGS=3\r\n");
+    assert.ok(started >= 0 && started < named);
+    if (hook === "array") assert.ok(named < output.indexOf("ARRAY_ARGS=3\r\n"));
+    assert.ok(output.includes("parameter not set"));
+    await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
+    await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
+  }
+  console.log("PASS start: user hook errors preserve command tracking and Restart");
 } catch (cause) {
   throw new Error(JSON.stringify([...outputs].map(([id, output]) => [id, output.slice(-1200)])), {
     cause,

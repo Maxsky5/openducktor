@@ -47,8 +47,6 @@ export const prepareTerminalShell = (
 
 function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
   const quote = (value: string) => formatTerminalPathInput(plan.shell, [value]);
-  const hookFailure =
-    '{ builtin print -u2 -- "OpenDucktor could not install zsh command hooks. Fix the precmd function in your zsh startup files, then reopen the terminal."; exit 1; }';
   return {
     ".zshenv": [
       plan.env.ZDOTDIR === undefined ? "unset ZDOTDIR" : `ZDOTDIR=${quote(plan.env.ZDOTDIR)}`,
@@ -60,13 +58,7 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
     ].join("\n"),
     "hooks.zsh": [
       posixHooks(nonce, true),
-      "preexec_functions+=(_odt_command_start)",
-      "builtin typeset -ga precmd_functions",
-      "if (( $+functions[precmd] )); then",
-      `  builtin functions -c precmd _odt_user_precmd || ${hookFailure}`,
-      '  precmd_functions=(_odt_user_precmd "${precmd_functions[@]}")',
-      "fi",
-      `builtin functions -c _odt_command_end precmd || ${hookFailure}`,
+      zshHooks(),
       ...(plan.interactiveCommand === undefined
         ? []
         : [
@@ -75,6 +67,27 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
       String.raw`builtin printf '\033]633;R;%s\007' "$_odt_nonce"`,
     ].join("\n"),
   };
+}
+
+function zshHooks(): string {
+  return (
+    [
+      ["preexec", "_odt_command_start"],
+      ["precmd", "_odt_command_end"],
+    ] as const
+  )
+    .flatMap(([hook, handler]) => {
+      const failure = `{ builtin print -u2 -- "OpenDucktor could not install zsh command hooks. Fix the ${hook} function in your zsh startup files, then reopen the terminal."; exit 1; }`;
+      return [
+        `builtin typeset -ga ${hook}_functions`,
+        `if (( $+functions[${hook}] )); then`,
+        `  builtin functions -c ${hook} _odt_user_${hook} || ${failure}`,
+        `  ${hook}_functions=(_odt_user_${hook} "\${${hook}_functions[@]}")`,
+        "fi",
+        `builtin functions -c ${handler} ${hook} || ${failure}`,
+      ];
+    })
+    .join("\n");
 }
 
 function supportsBashHooks(plan: TerminalPtyLaunchPlan): boolean {
