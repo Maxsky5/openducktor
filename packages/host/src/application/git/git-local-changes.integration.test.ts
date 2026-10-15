@@ -415,6 +415,30 @@ describe("local changes", () => {
   );
 
   test(
+    "keeps chunk actions for a file whose text names a submodule commit",
+    async () => {
+      await commitBase();
+      const oid = "0332".padEnd(40, "0");
+      await write("note.txt", `Subproject commit ${oid}\n`);
+      git("add", "note.txt");
+      git("commit", "-m", "note");
+      await write("note.txt", `Subproject commit ${oid}-dirty\n`);
+      const changes = await localChanges();
+      expect(changes.unstaged.fileDiffs.find((diff) => diff.file === "note.txt")?.type).toBe(
+        "modified",
+      );
+
+      await change(changes, {
+        action: "stage",
+        group: "unstaged",
+        selection: { kind: "hunk", filePath: "note.txt", hunkIndex: 0 },
+      });
+      expect(git("show", ":note.txt")).toBe(`Subproject commit ${oid}-dirty\n`);
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "stages a whole file and unstages it without losing working edits",
     async () => {
       await commitBase();

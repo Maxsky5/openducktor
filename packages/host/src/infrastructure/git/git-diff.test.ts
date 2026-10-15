@@ -280,6 +280,27 @@ test("reads edits that stay inside a submodule as a submodule change", async () 
   expect(result.map(({ file, type }) => [file, type])).toEqual([["sub", "submodule"]]);
 });
 
+test("reads a file whose text names a submodule commit as a file", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const oid = "0332".padEnd(40, "0");
+  const patch = [
+    "diff --git a/note.txt b/note.txt",
+    `index ${"1".repeat(40)}..${"2".repeat(40)} 100644`,
+    "--- a/note.txt",
+    "+++ b/note.txt",
+    "@@ -1 +1 @@",
+    `-Subproject commit ${oid}`,
+    `+Subproject commit ${oid}-dirty`,
+    "",
+  ].join("\n");
+
+  const result = await Effect.runPromise(
+    buildFileDiffs(runner, "/repo", [], "1\t1\tnote.txt\0", patch),
+  );
+
+  expect(result.map(({ file, type }) => [file, type])).toEqual([["note.txt", "modified"]]);
+});
+
 for (const [stdout, ok, message] of [
   ["", true, "returned no files"],
   ["partial\0", false, "cannot list directory"],
