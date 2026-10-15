@@ -1,6 +1,6 @@
 import { checkHooks } from "./terminal-hooks-native.fixture";
 import { checkSubmit } from "./terminal-submit-native.fixture";
-import { checkDisplay } from "./terminal-display-native.fixture";
+import { checkDirect } from "./terminal-direct-native.fixture";
 import { checkBuffer, checkReady } from "./terminal-ready-native.fixture";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -36,11 +36,24 @@ const nativePty = createNodePtyPort();
 const handles: TerminalPtyHandle[] = [];
 const terminals = new Map<string, TerminalPtyHandle>();
 const screens = new Map<string, TerminalScreenState>();
+const inputs = new Map<string, string[]>();
+const writes: string[][] = [];
 const engine = createTerminalSessionEngine({
   now: () => new Date(),
   ptyPort: {
     start: (plan, handlers) =>
       nativePty.start(plan, handlers).pipe(
+        Effect.map((handle) => {
+          const input: string[] = [];
+          writes.push(input);
+          return {
+            ...handle,
+            write: (data: Uint8Array) => {
+              input.push(new TextDecoder().decode(data));
+              return handle.write(data);
+            },
+          };
+        }),
         Effect.tap((handle) =>
           Effect.sync(() => {
             handles.push(handle);
@@ -62,6 +75,8 @@ const fixture = {
   engine,
   activities,
   outputs,
+  inputs,
+  screens,
   start,
   write,
   writeRaw,
@@ -72,7 +87,7 @@ const fixture = {
 export type TerminalNativeFixture = typeof fixture;
 const cases = new Map([
   ["submit", () => checkSubmit(fixture)],
-  ["display", () => checkDisplay(fixture)],
+  ["direct", () => checkDirect(fixture)],
   ["history", checkHistory],
   ["state", checkState],
   ["restart", checkRestart],
@@ -150,6 +165,7 @@ async function start(
     ),
   );
   terminals.set(id, handles[handleIndex]!);
+  inputs.set(id, writes[handleIndex]!);
   outputs.set(id, "");
   await Effect.runPromise(
     engine.attach({
@@ -222,11 +238,9 @@ async function checkHistory() {
     assert.equal(result.type === "exited" && result.exitCode, exitCode);
     assert.equal(
       engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
-      "running",
+      "exited",
     );
     assert.ok(!outputs.get(id)!.includes("\r\nNEVER\r\n"));
-    await write(id, 'printf "PROMPT_ALIVE\\n"\r');
-    await wait(() => outputs.get(id)!.includes("PROMPT_ALIVE\r\n"));
   }
 }
 
@@ -236,7 +250,7 @@ async function checkState() {
   const state = await start("state", [
     `cd '${target}'`,
     "export ODT_VALUE=kept",
-    'printf "VALUE=%s\\n" "$ODT_VALUE" # inline comment',
+    'printf "VALUE=%s\\n" "$ODT_VALUE"',
     'printf "SEMI\\n";',
     "false && true",
     "echo NEVER",
@@ -247,7 +261,8 @@ async function checkState() {
   assert.ok(!outputs.get("state")!.includes("VALUE=#"));
   assert.ok(!outputs.get("state")!.includes("\r\nNEVER\r\n"));
   await write("state", 'printf "AFTER=%s:%s\\n" "$PWD" "$ODT_VALUE"\r');
-  await wait(() => outputs.get("state")!.includes(`AFTER=${root}:\r\n`));
+  const directory = target;
+  await wait(() => outputs.get("state")!.includes(`AFTER=${directory}:kept\r\n`));
   await write("state", 'printf "COMMENTS=%s\\n" "$options[interactivecomments]"\r');
   await wait(() => outputs.get("state")!.includes("COMMENTS=off\r\n"));
   const syntax = await start("syntax", ["echo )"]);
@@ -274,10 +289,8 @@ async function checkState() {
     );
     assert.equal(
       engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
-      "running",
+      id === "err-exit" ? "exited" : "running",
     );
-    await write(id, 'printf "AFTER_ERR_EXIT=%s\\n" "$options[errexit]"\r');
-    await wait(() => outputs.get(id)!.includes("AFTER_ERR_EXIT=off\r\n"));
   }
 }
 
@@ -316,17 +329,8 @@ async function checkRestart() {
 
   const actionRoot = join(root, "action's root");
   await mkdir(join(actionRoot, "target"), { recursive: true });
-  const unpadded = await Effect.runPromise(
-    launchEnvironment.command(["cd target", "export ODT_LONG_ACTION=", `exec ${command}`]),
-  );
-  const gap =
-    1000 - new TextEncoder().encode(unpadded.command.interactiveCommand!.input).byteLength;
-  const padding = "xé🙂".repeat(Math.floor(gap / 7)) + "x".repeat(gap % 7);
-  await start(
-    "restart",
-    ["cd target", `export ODT_LONG_ACTION=${padding}`, `exec ${command}`],
-    actionRoot,
-  );
+  const longCommand = `ODT_LONG_ACTION='${"xé🙂".repeat(200)}' ${command}`;
+  await start("restart", ["cd target", "export ODT_VALUE=kept", longCommand], actionRoot);
   await wait(
     () =>
       activities.get("restart")?.restartable === true &&
@@ -334,6 +338,11 @@ async function checkRestart() {
   );
   for (const starts of [2, 3]) {
     await Effect.runPromise(engine.restart("restart", activities.get("restart")!.command));
+    assert.equal(
+      inputs.get("restart")!.at(-1),
+      `\u001b[200~${longCommand}\u001b[201~\r`,
+      "Restart must send the full direct command",
+    );
     await wait(
       () =>
         activities.get("restart")?.restartable === true &&
@@ -356,6 +365,32 @@ async function checkRestart() {
   ]);
   const serverDirectory = await realpath(join(actionRoot, "target"));
   assert.equal(output.split(`SERVER_CWD=${serverDirectory}\r\n`).length, 4);
+
+  const cancelled = await start("cancel", [command, "print SHOULD_NOT_RUN"]);
+  await wait(() => outputs.get("cancel")!.includes("SERVER_READY\r\n"));
+  await write("cancel", "\u0003");
+  const cancelledResult = await Effect.runPromise(
+    cancelled.result.pipe(Effect.timeout("2 seconds")),
+  );
+  assert.ok(cancelledResult.type === "exited");
+  assert.ok(cancelledResult.exitCode === 0 || cancelledResult.exitCode === 130);
+  assert.equal(
+    inputs.get("cancel")!.some((input) => input.includes("SHOULD_NOT_RUN")),
+    false,
+  );
+  await write("cancel", "\u001b[A\r");
+  await wait(() => outputs.get("cancel")!.split("SERVER_READY\r\n").length === 3);
+
+  const replaced = await start("exec", [`exec ${command}`]);
+  await wait(() => outputs.get("exec")!.includes("SERVER_READY\r\n"));
+  assert.equal(activities.get("exec")?.restartable, false);
+  await write("exec", "\u0003");
+  const replacedResult = await Effect.runPromise(replaced.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(replacedResult.type === "exited" && replacedResult.exitCode, 0);
+  assert.equal(
+    engine.list({ kind: "all" }).find((item) => item.terminalId === "exec")?.lifecycle,
+    "exited",
+  );
 
   const closing = await start("close", [command]);
   await wait(() => outputs.get("close")!.includes("SERVER_READY\r\n"));
@@ -380,6 +415,7 @@ async function checkManual() {
     ["alias", "run_server", false],
     ["argument", `${command} exec`, false],
     ["ordinary", command, true],
+    ["long", `ODT_VALUE='${"x".repeat(1200)}' ${command}`, true],
   ] as const) {
     const id = `manual-${name}`;
     const action = await start(id, ["true"]);

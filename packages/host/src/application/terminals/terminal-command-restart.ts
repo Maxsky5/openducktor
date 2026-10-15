@@ -1,14 +1,7 @@
 import { Deferred, Effect } from "effect";
-import {
-  actionReplay,
-  COMMAND_BUFFER_ERROR,
-  COMMAND_READY_ERROR,
-  commandInput,
-} from "./terminal-command-input";
-import { terminalFailure, terminalOperationFailure } from "./terminal-session-lifecycle";
-import { TerminalPathInputError } from "./terminal-path-input";
+import { COMMAND_BUFFER_ERROR, COMMAND_READY_ERROR, commandInput } from "./terminal-command-input";
+import { terminalFailure } from "./terminal-session-lifecycle";
 import { canRestartCommand, type TerminalSession } from "./terminal-session";
-import { shellCommandPrefix } from "./terminal-command-prefix";
 import type { TerminalServiceError } from "./terminal-service-error";
 
 export const restartCommand = (
@@ -37,30 +30,8 @@ export const restartCommand = (
           );
         if (session.inputOwner === "restart")
           return yield* failure("A restart is already waiting for this command to stop.");
-        const prepared = yield* Effect.try({
-          try: () => {
-            const text =
-              command.restartDir === null
-                ? command.input
-                : actionReplay(session.shell, command.input, command.restartDir);
-            return {
-              input: commandInput(text),
-              replay:
-                command.restartDir === null
-                  ? null
-                  : {
-                      fullInput: command.input,
-                      restartDir: command.restartDir,
-                      command: expectedCommand,
-                      startPrefix: shellCommandPrefix(text),
-                    },
-            };
-          },
-          catch: (cause) =>
-            cause instanceof TerminalPathInputError
-              ? terminalFailure(cause.code, "restart", cause.message, terminalId, cause)
-              : terminalOperationFailure(cause, "restart"),
-        });
+        const input = commandInput(command);
+        if (session.commandRun?.phase === "command") session.commandRun.stopRequested = true;
         session.inputOwner = "restart";
         const ready = session.ready;
         yield* handle.write(new Uint8Array([3])).pipe(
@@ -71,10 +42,10 @@ export const restartCommand = (
             }),
           ),
         );
-        return { ready, handle, prepared };
+        return { ready, handle, input };
       }),
     ),
-    ({ ready, handle, prepared }) =>
+    ({ ready, handle, input }) =>
       Deferred.await(ready).pipe(
         Effect.timeout("10 seconds"),
         Effect.mapError(() => failure(COMMAND_READY_ERROR)),
@@ -90,17 +61,13 @@ export const restartCommand = (
                 return yield* failure(
                   "Another command started before the restart. Stop it before restarting.",
                 );
-              session.pendingActionReplay = prepared.replay;
-              yield* handle.write(prepared.input).pipe(
-                Effect.tapError(() =>
-                  Effect.sync(() => {
-                    session.pendingActionReplay = null;
-                  }),
-                ),
-                Effect.mapError((cause) =>
-                  failure(`Could not restart the command: ${cause.message}`),
-                ),
-              );
+              yield* handle
+                .write(input)
+                .pipe(
+                  Effect.mapError((cause) =>
+                    failure(`Could not restart the command: ${cause.message}`),
+                  ),
+                );
             }),
           ),
         ),

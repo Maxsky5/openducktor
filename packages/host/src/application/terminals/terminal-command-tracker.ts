@@ -1,5 +1,5 @@
 import { TERMINAL_LIMITS } from "./terminal-limits";
-import { commandPrefix } from "./terminal-command-prefix";
+import { commandInput } from "./terminal-command-input";
 
 export type TerminalTrackedCommand = {
   input: string | null;
@@ -18,7 +18,8 @@ export const createTerminalCommandTracker = (
       onCommand(null, { input: null, exitCode: null, ready: source === "1" });
     } else if (kind === "E") {
       const input = source === nonce && line ? decodeCommand(line) : null;
-      const command = input === null ? null : commandPrefix(input);
+      const command =
+        input === null ? null : input.slice(0, TERMINAL_LIMITS.activityCommandLength).trim();
       pending = null;
       if (command) {
         pending = {
@@ -26,13 +27,16 @@ export const createTerminalCommandTracker = (
           input:
             restart === "1" &&
             input !== null &&
-            new TextEncoder().encode(input).byteLength <= TERMINAL_LIMITS.commandMarkerBytes
+            commandInput(input).byteLength <= TERMINAL_LIMITS.inputBytes
               ? input
               : null,
         };
       }
     } else if (kind === "C" && pending !== null) {
-      onCommand(pending.command, { input: pending.input, exitCode: null });
+      onCommand(pending.command, {
+        input: pending.input,
+        exitCode: null,
+      });
       pending = null;
     } else if (kind === "D" && source === nonce && /^\d{1,3}$/u.test(line ?? "")) {
       const exitCode = Number(line);

@@ -246,8 +246,8 @@ export const createTerminalSessionProducer = ({
         const commandNonce = globalThis.crypto.randomUUID();
         const interactiveCommand = command?.plan.interactiveCommand;
         if (interactiveCommand !== undefined) session.inputOwner = "action";
-        const initialReady = session.ready;
-        let submitted = false;
+        let lineIndex = 0;
+        let lineDone: Deferred.Deferred<void> | null = null;
         session.screen.onOsc(
           633,
           createTerminalCommandTracker(commandNonce, (activityCommand, details) => {
@@ -257,40 +257,30 @@ export const createTerminalSessionProducer = ({
             }
             if (activityCommand !== null) {
               session.ready = Deferred.makeUnsafe();
-              const replay =
-                session.pendingActionReplay?.startPrefix === activityCommand
-                  ? session.pendingActionReplay
-                  : null;
-              session.pendingActionReplay = null;
-              let input = details.input;
-              let restartDir: string | null = null;
-              if (command?.run.phase === "command" && interactiveCommand !== undefined) {
-                input = interactiveCommand.input;
-                restartDir = command.plan.cwd;
-              } else if (replay) {
-                input = replay.fullInput;
-                restartDir = replay.restartDir;
-              }
-              session.runningCommand =
-                input === null || commandInput(input).byteLength > TERMINAL_LIMITS.inputBytes
-                  ? null
-                  : {
-                      input,
-                      restartDir,
-                    };
-              if (command?.run.phase !== "command")
-                session.command = replay?.command ?? activityCommand;
+              session.runningCommand = details.input;
+              session.command = activityCommand;
             } else {
-              session.pendingActionReplay = null;
               if (interactiveCommand !== undefined && command?.run.phase === "command") {
-                if (!submitted || session.summary.lifecycle !== "running") return;
-                command.run.phase = "shell";
-                settleCommandRunAfterOutput(session, (outputTail) => ({
-                  type: "exited",
-                  exitCode: details.exitCode,
-                  signal: null,
-                  outputTail,
-                }));
+                if (lineDone === null || session.summary.lifecycle !== "running") return;
+                const done = lineDone;
+                lineDone = null;
+                if (
+                  details.exitCode === 0 &&
+                  lineIndex + 1 < interactiveCommand.length &&
+                  !command.run.stopRequested
+                ) {
+                  lineIndex += 1;
+                  session.inputOwner = "action";
+                } else {
+                  command.run.phase = "shell";
+                  settleCommandRunAfterOutput(session, (outputTail) => ({
+                    type: "exited",
+                    exitCode: details.exitCode,
+                    signal: null,
+                    outputTail,
+                  }));
+                }
+                Deferred.doneUnsafe(done, Effect.void);
               }
               session.runningCommand = null;
               session.command = null;
@@ -337,50 +327,64 @@ export const createTerminalSessionProducer = ({
           );
         }
         if (command && interactiveCommand !== undefined) {
-          yield* Effect.forkDetach(
+          const submission = yield* Effect.forkDetach(
             Effect.gen(function* () {
-              const ready = yield* Effect.result(
-                Deferred.await(initialReady).pipe(Effect.timeout("10 seconds")),
-              );
-              yield* session.operations.run(
-                Effect.suspend(() => {
-                  const handle = session.resources.handle;
-                  if (!handle || session.summary.lifecycle !== "running") return Effect.void;
-                  submitted = true;
-                  const message =
-                    ready._tag === "Failure"
-                      ? COMMAND_READY_ERROR
-                      : ready.success
-                        ? null
-                        : COMMAND_BUFFER_ERROR;
-                  if (message !== null) {
-                    command.run.phase = "shell";
-                    session.command = null;
-                    acceptOutput(session, new TextEncoder().encode(`\r\n${message}\r\n`));
-                    settleCommandRunAfterOutput(session, (outputTail) => ({
-                      type: "failed",
-                      message,
-                      outputTail,
-                    }));
-                    activity.changed(session);
-                    return Effect.void;
-                  }
-                  return handle
-                    .write(commandInput(interactiveCommand.input))
-                    .pipe(
-                      Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
+              while (command.run.phase === "command") {
+                const ready = yield* Effect.result(
+                  Deferred.await(session.ready).pipe(Effect.timeout("10 seconds")),
+                );
+                const done = Deferred.makeUnsafe<void>();
+                yield* session.operations.run(
+                  Effect.suspend(() => {
+                    const handle = session.resources.handle;
+                    if (!handle || session.summary.lifecycle !== "running") return Effect.void;
+                    const message =
+                      ready._tag === "Failure"
+                        ? COMMAND_READY_ERROR
+                        : ready.success
+                          ? null
+                          : COMMAND_BUFFER_ERROR;
+                    if (message !== null) {
+                      command.run.phase = "shell";
+                      session.command = null;
+                      acceptOutput(session, new TextEncoder().encode(`\r\n${message}\r\n`));
+                      settleCommandRunAfterOutput(session, (outputTail) => ({
+                        type: "failed",
+                        message,
+                        outputTail,
+                      }));
+                      activity.changed(session);
+                      return Effect.void;
+                    }
+                    const input = interactiveCommand[lineIndex]!;
+                    lineDone = done;
+                    return handle.write(commandInput(input)).pipe(
+                      Effect.catch((failure) =>
+                        Effect.sync(() => {
+                          failCommand(session, failure);
+                        }),
+                      ),
+                      Effect.ensuring(
+                        Effect.sync(() => {
+                          if (session.inputOwner === "action") session.inputOwner = null;
+                        }),
+                      ),
                     );
-                }),
-              );
+                  }),
+                );
+                yield* Effect.raceFirst(Deferred.await(done), Deferred.await(command.run.result));
+                if (Deferred.isDoneUnsafe(command.run.result)) return;
+              }
             }).pipe(
               Effect.ensuring(
                 Effect.sync(() => {
-                  session.inputOwner = null;
+                  if (session.inputOwner === "action") session.inputOwner = null;
                 }),
               ),
             ),
             { startImmediately: true },
           );
+          session.resources.ownSubmission(submission);
         }
         return session;
       }),
@@ -403,7 +407,11 @@ export const createTerminalSessionProducer = ({
       plans: TerminalCommandLaunchPlans,
     ): Effect.Effect<StartedCommandTerminal, TerminalServiceError> =>
       Effect.suspend(() => {
-        const run: TerminalCommandRun = { phase: "command", result: Deferred.makeUnsafe() };
+        const run: TerminalCommandRun = {
+          phase: "command",
+          stopRequested: false,
+          result: Deferred.makeUnsafe(),
+        };
         return startSession(summary, plans.shell, {
           lines: commandLines,
           plan: plans.command,

@@ -97,7 +97,7 @@ function makeInitial() {
           shell,
           command: {
             ...shell,
-            interactiveCommand: { input: "(\nprint ACTION\n)", display: "print ACTION" },
+            interactiveCommand: ["print ACTION"],
           },
         },
       ),

@@ -6,7 +6,7 @@ import { join } from "node:path";
 const zsh = Bun.which("zsh");
 test
   .skipIf(process.platform === "win32" || zsh === null)
-  .each(["submit", "display", "history", "state", "restart", "hooks", "manual", "ready", "buffer"])(
+  .each(["submit", "direct", "history", "state", "restart", "hooks", "manual", "ready", "buffer"])(
   "zsh Action terminals: %s",
   async (name) => {
     const root = await mkdtemp(join(tmpdir(), "odt-native-action-test-"));

@@ -25,7 +25,7 @@ const assertSafePath = (path: string): void => {
   }
 };
 
-export const quotePosix = (path: string): string => `'${path.replaceAll("'", "'\\''")}'`;
+const quotePosixPath = (path: string): string => `'${path.replaceAll("'", "'\\''")}'`;
 const quoteFishPath = (path: string): string =>
   `'${path.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const quotePowerShellPath = (path: string): string => `'${path.replaceAll("'", "''")}'`;
@@ -34,7 +34,7 @@ const quoteCmdPath = (path: string): string => `"${path.replaceAll('"', '""')}"`
 export const formatTerminalPathInput = (shell: string, paths: readonly string[]): string => {
   const executable = shellExecutableName(shell);
   let quote: (path: string) => string;
-  if (POSIX_SHELLS.has(executable)) quote = quotePosix;
+  if (POSIX_SHELLS.has(executable)) quote = quotePosixPath;
   else if (executable === "fish") quote = quoteFishPath;
   else if (POWERSHELL_SHELLS.has(executable)) quote = quotePowerShellPath;
   else if (executable === "cmd" || executable === "cmd.exe") quote = quoteCmdPath;

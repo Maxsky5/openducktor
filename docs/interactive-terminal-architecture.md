@@ -61,7 +61,7 @@ A command terminal runs commands, then leaves an interactive shell under the sam
 
 `startCommand` resolves the owner target as `terminal_create` does. `startCommandInPreparedTarget` starts in a target that the caller already validated, because a new chat has no saved record yet. Each request has a label, one or more command lines, and a `startedBy` value.
 
-For zsh, the host reserves terminal input until it submits the initial Action. It waits up to 10 seconds for an authenticated line-editor ready marker, then submits the Action through the interactive shell's line editor. A readiness timeout fails the Action and releases input so the user can finish the prompt. Each Action runs in one subshell, so `exec`, `exit`, and `logout` cannot end the interactive shell. Directory and environment changes reach later Action lines but end with the Action. zsh owns history and emits authenticated start and completion markers before user hooks. The host records the result and keeps the last 20 screen lines.
+For zsh, the host sends each original command line through ZLE after an authenticated ready marker. It waits up to 10 seconds and rejects a prompt that contains text. zsh owns execution, history, and cursor movement. The host sends no subshell, `eval`, status check, or directory command. It sends the next Action line only after success. Failure, Ctrl+C, or Restart stops the remaining lines. Directory and environment changes stay in the shell. `exec`, `exit`, and `logout` have their normal shell effects.
 
 Other supported shells keep the command-process flow:
 
@@ -71,27 +71,27 @@ Other supported shells keep the command-process flow:
 
 When the terminal closes or its process fails before the command ends, the result is `closed` or `failed`. The `failed` result has the process error. Both results have the last 20 lines of parsed output.
 
-The label stays for the full terminal life. OSC titles do not replace it. During the command phase, the activity command is the command lines, workspace activity checks report the terminal as active, and an unconfirmed close returns `confirmation_required`. The command phase does not use the PTY rule that reports a non-zero exit before output as `spawn_failed`. The terminal `exit` reports only the shell-phase exit. Ctrl+C stops the command, and the user continues in the shell.
+The label stays for the full terminal life. OSC titles do not replace it. During the command phase, workspace activity checks report the terminal as active, and an unconfirmed close returns `confirmation_required`. The command phase does not use the PTY rule that reports a non-zero exit before output as `spawn_failed`. The terminal `exit` reports the PTY process exit. Ctrl+C stops a foreground command and returns to the prompt when the shell remains open.
 
 ### Shell syntax
 
 The launch environment port supplies shell and command launch settings. Only the infrastructure adapter knows the shell and its syntax.
 
-zsh Actions require ZLE. ZLE shows the original Action lines, including when Up recalls the command. It restores the protected script after editing ends. History records that script. Multiline commands and lines with `#` use a quoted `builtin eval` for each line. The script checks each line's status after it runs, so `ERR_EXIT` still applies.
+zsh Actions require ZLE and use the shell's current options, aliases, and widgets. Authenticated start and completion markers run before user hooks. The host records the result and the last 20 screen lines. It does not change the ZLE buffer or shell history.
 
 Other command launches use the probe flags: `-ilc`, or `-ic` for csh and tcsh. The adapter builds the script in the syntax of the shell: POSIX (sh, bash, ksh, mksh, dash, and ash), csh and tcsh, or fish. Another login shell fails with `unsupported_shell`, and no process starts.
 
-The quoted commands or script keep each line unchanged, so an inline comment or a trailing `;` keeps its shell meaning. Changes from `cd`, `export`, or `set` reach the next line. The run stops after the first line that ends with a non-zero status. A script saves that status and exits with it. csh applies `exit` only at the end of a `-c` script, so its script skips the later lines with nested `if` blocks. The fish script uses the same nested blocks. A line that continues on the next line with `\` is not supported.
+The command lines and scripts keep each line unchanged, so an inline comment or a trailing `;` keeps its shell meaning. Changes from `cd`, `export`, or `set` reach the next line. The run stops after the first line that ends with a non-zero status. For other shells, a script saves that status and exits with it. csh applies `exit` only at the end of a `-c` script, so its script skips the later lines with nested `if` blocks. The fish script uses the same nested blocks. A line that continues on the next line with `\` is not supported.
 
 On Windows, ComSpec must be `cmd.exe`, or the command fails with `unsupported_shell`. The adapter writes the lines to a batch file and adds `if %errorlevel% neq 0 exit /b %errorlevel%` after each line. The PTY adapter writes the file to a private temporary directory, runs `cmd.exe /d /s /c ""<path>""`, and removes the directory when the process ends. Batch syntax applies to the lines, so a `for` loop variable needs `%%`.
 
 ## Restart a running command
 
-The Restart button in the tab header uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Manual commands above the 1,024-byte hook limit cannot restart. Manual commands with the words `exec`, `exit`, or `logout` cannot restart, including when a word is an argument. The host retains full Action input, so the byte limit does not restrict Action restarts.
+The Restart button in the tab header uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. The shell reports the actual command accepted by ZLE, within the 64 KiB terminal input limit. Commands with the words `exec`, `exit`, or `logout` cannot restart, including when a word is an argument.
 
 Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
 
-`terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for an authenticated main-prompt line-editor marker before submitting the command again. Prompt hooks and the existing line-init widget run before this marker. If the line editor contains text or has input waiting, the host rejects Action input and restart input, reports an error, and keeps that text. Actions restart from their launch directory. Manual commands restart from the current directory.
+`terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for an authenticated main-prompt line-editor marker before submitting the command again. Prompt hooks and the existing line-init widget run before this marker. If the line editor contains text or has input waiting, the host rejects Action input and restart input, reports an error, and keeps that text. Restart sends only the running command line in the current directory. It does not rerun earlier Action lines.
 
 Closing the terminal or exceeding the 10-second readiness timeout cancels the rerun. The button shows pending state. A small popover shows restart errors.
 

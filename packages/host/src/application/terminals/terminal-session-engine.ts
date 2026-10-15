@@ -273,6 +273,8 @@ export const createTerminalSessionEngine = ({
                   terminalId,
                 ),
               );
+            if (session.commandRun?.phase === "command" && data.includes(3))
+              session.commandRun.stopRequested = true;
             return handle
               .write(data)
               .pipe(

@@ -1,5 +1,5 @@
 import type { TerminalSummary } from "@openducktor/contracts";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, type Fiber } from "effect";
 import type { TerminalGrid, TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import type { TerminalCommandResult } from "./terminal-command";
 import { TERMINAL_LIMITS } from "./terminal-limits";
@@ -11,6 +11,7 @@ import { type SerialLane } from "../../effect/serial-gate";
 /** The command of a command terminal. The result settles once, when the command ends. */
 export type TerminalCommandRun = {
   phase: "command" | "shell";
+  stopRequested: boolean;
   readonly result: Deferred.Deferred<TerminalCommandResult>;
 };
 
@@ -24,16 +25,7 @@ export type TerminalSession = {
   readonly shell: string;
   command: string | null;
   ready: Deferred.Deferred<boolean>;
-  runningCommand: {
-    input: string;
-    restartDir: string | null;
-  } | null;
-  pendingActionReplay: {
-    fullInput: string;
-    restartDir: string;
-    command: string;
-    startPrefix: string;
-  } | null;
+  runningCommand: string | null;
   inputOwner: "action" | "restart" | null;
   readonly commandRun: TerminalCommandRun | null;
   resources: TerminalSessionResources;
@@ -54,7 +46,6 @@ export const createTerminalSession = (input: TerminalSessionInput): TerminalSess
     command: input.command,
     ready: Deferred.makeUnsafe(),
     runningCommand: null,
-    pendingActionReplay: null,
     inputOwner: null,
     commandRun: input.commandRun,
     resources: new TerminalSessionResources(input.titleTracker),
@@ -125,7 +116,6 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
 export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
   session.inputOwner = null;
-  session.pendingActionReplay = null;
   Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
@@ -146,7 +136,6 @@ export const exitTerminalSession = (
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
   session.inputOwner = null;
-  session.pendingActionReplay = null;
   Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   settleCommandRunAfterOutput(session, closedResult);
   session.summary.lifecycle = "exited";
@@ -167,6 +156,7 @@ const closedResult = (outputTail: readonly string[]): TerminalCommandResult => (
 class TerminalSessionResources {
   private currentHandle: TerminalPtyHandle | null = null;
   private disposed = false;
+  private submission: Fiber.Fiber<void> | null = null;
 
   constructor(private readonly titleTracker: TerminalTitleTracker) {}
 
@@ -180,6 +170,11 @@ class TerminalSessionResources {
     return true;
   }
 
+  ownSubmission(fiber: Fiber.Fiber<void>): void {
+    if (this.disposed) fiber.interruptUnsafe();
+    else this.submission = fiber;
+  }
+
   releaseHandle(): void {
     this.currentHandle = null;
   }
@@ -191,6 +186,8 @@ class TerminalSessionResources {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.submission?.interruptUnsafe();
+    this.submission = null;
     this.titleTracker.dispose();
     this.currentHandle = null;
   }
