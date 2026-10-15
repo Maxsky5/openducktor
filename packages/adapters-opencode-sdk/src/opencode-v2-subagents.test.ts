@@ -7,7 +7,7 @@ import { backgroundLaunch, durable, prepareFixture } from "./opencode-v2-live.te
 import { cursorPage, location, model, ref, response, session } from "./opencode-v2.test-support";
 
 describe("OpenCode V2 subagent projection and history", () => {
-  test("routes native background completion by admitted session instead of publisher directory", async () => {
+  test("routes background results by session ID", async () => {
     const other = {
       ...ref,
       repoPath: "/other",
@@ -131,8 +131,8 @@ describe("OpenCode V2 subagent projection and history", () => {
   });
 
   test.each(["running", "streaming", "empty", "missing"] as const)(
-    "keeps a foreground child link when history reports %s before live progress",
-    async (snapshotStatus) => {
+    "keeps live subagent links and final state over older %s history",
+    async (baseline) => {
       const message: SessionMessageInfo = {
         id: "msg_foreground",
         type: "assistant",
@@ -144,9 +144,9 @@ describe("OpenCode V2 subagent projection and history", () => {
             type: "tool",
             id: "call_foreground",
             name: "subagent",
-            time: snapshotStatus === "streaming" ? { created: 3 } : { created: 3, ran: 4 },
+            time: baseline === "streaming" ? { created: 3 } : { created: 3, ran: 4 },
             state:
-              snapshotStatus === "streaming"
+              baseline === "streaming"
                 ? { status: "streaming", input: "" }
                 : {
                     status: "running",
@@ -160,8 +160,8 @@ describe("OpenCode V2 subagent projection and history", () => {
           },
         ],
       };
-      if (snapshotStatus === "empty" || snapshotStatus === "missing") message.content = [];
-      const snapshots = snapshotStatus === "missing" ? [] : [message];
+      if (baseline === "empty" || baseline === "missing") message.content = [];
+      const snapshots = baseline === "missing" ? [] : [message];
       let delayedHistory = Promise.withResolvers<Response>();
       let historyStarted = Promise.withResolvers<void>();
       let delayHistory = false;
@@ -200,7 +200,7 @@ describe("OpenCode V2 subagent projection and history", () => {
         delayHistory = true;
         const runningRead = runtime.queries.loadSessionHistory(ref);
         await historyStarted.promise;
-        if (snapshotStatus === "missing") {
+        if (baseline === "missing") {
           fixture.channel.push({
             id: "evt_foreground_step",
             type: "session.step.started",
@@ -215,7 +215,7 @@ describe("OpenCode V2 subagent projection and history", () => {
             },
           });
         }
-        if (snapshotStatus === "empty" || snapshotStatus === "missing") {
+        if (baseline === "empty" || baseline === "missing") {
           fixture.channel.push({
             id: "evt_foreground_input",
             type: "session.tool.input.started",
@@ -229,7 +229,7 @@ describe("OpenCode V2 subagent projection and history", () => {
             },
           });
         }
-        if (snapshotStatus !== "running") {
+        if (baseline !== "running") {
           fixture.channel.push({
             id: "evt_foreground_called",
             type: "session.tool.called",
@@ -299,7 +299,7 @@ describe("OpenCode V2 subagent projection and history", () => {
       }
     },
   );
-  test("does not restore a subagent from history captured before native reversion", async () => {
+  test("keeps reverted calls out of older history reads", async () => {
     const launch = backgroundLaunch();
     let snapshots = [launch];
     let holdRead = false;
@@ -409,7 +409,7 @@ describe("OpenCode V2 subagent projection and history", () => {
     expect(projector.apply(delivery)).toEqual([]);
     expect(projector.messages).toHaveProperty("size", 2);
   });
-  test("links a continued child from settled arguments before live progress arrives", () => {
+  test("links a continued child from complete input before progress arrives", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const snapshot: SessionMessageInfo = {
       id: "msg_continuation",
@@ -520,7 +520,7 @@ describe("OpenCode V2 subagent projection and history", () => {
     ]);
     expect(history.parts).toHaveLength(1);
   });
-  test("rebuilds child completion state after reversion and reseeding", () => {
+  test("drops reverted child results and restores them from a fresh snapshot", () => {
     const projector = new OpenCodeLiveMessageProjector();
     const launch = backgroundLaunch();
     const completion: SessionMessageInfo = {
@@ -549,7 +549,7 @@ describe("OpenCode V2 subagent projection and history", () => {
     expect(child()).toMatchObject({ part: { status: "completed", endedAtMs: 9 } });
   });
 
-  test("keeps completion results separate when the same child conversation is continued", () => {
+  test("keeps separate results for repeated calls to one child", () => {
     const launch = (id: string, at: number): SessionMessageInfo => ({
       id,
       type: "assistant",

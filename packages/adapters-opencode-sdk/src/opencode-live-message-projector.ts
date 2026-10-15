@@ -9,7 +9,7 @@ import type {
   ToolContent1,
   V2Event,
 } from "@opencode/client";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   iso,
   assistantPartEvents,
@@ -19,64 +19,22 @@ import {
   projectMessages,
 } from "./opencode-message-projection";
 
-const retainLiveToolState = (
-  message: SessionMessageInfo,
-  live: SessionMessageInfo | undefined,
-  settledToolInputs: ReadonlySet<string>,
-): SessionMessageInfo => {
-  if (message.type !== "assistant" || live?.type !== "assistant") return message;
-  const liveTools = new Map(
-    live.content.filter((part) => part.type === "tool").map((part) => [part.id, part] as const),
-  );
-  const content = message.content.map((part) => {
-    if (part.type !== "tool") return part;
-    const prior = liveTools.get(part.id);
-    liveTools.delete(part.id);
-    if (!prior || (part.state.status !== "running" && part.state.status !== "streaming"))
-      return part;
-    if (part.state.status === "streaming") {
-      if (prior.state.status === "streaming" && !settledToolInputs.has(prior.id)) return part;
-      return prior;
-    }
-    if (prior.state.status === "streaming") return part;
-    if (prior.state.status === "completed" || prior.state.status === "error") return prior;
-    return {
-      ...part,
-      state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
-    };
-  });
-  return { ...message, content: [...content, ...liveTools.values()] };
-};
-
-const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
-  ToolContent,
-  ...ToolContent[],
-] => {
-  const map = (item: ToolContent1): ToolContent => {
-    if (item.type === "text") return { type: "text", text: item.text };
-    const file: Extract<ToolContent, { type: "file" }> = {
-      type: "file",
-      uri: item.uri,
-      mime: item.mime,
-    };
-    if (item.name !== undefined) file.name = item.name;
-    return file;
-  };
-  return [map(first), ...rest.map(map)];
-};
-
 export class OpenCodeLiveMessageProjector {
   readonly messages = new Map<string, SessionMessageInfo>();
   readonly inbox = new Map<string, SessionInboxInfo>();
   private readonly settledText = new Set<string>();
   private readonly settledInput = new Set<string>();
-  private readonly retractedMessageIds = new Set<string>();
+  private readonly retractedIds = new Set<string>();
   private projectionContext = messageProjectionContext(this.messages.values());
 
-  projectHistory(messages: SessionMessageInfo[]) {
-    const nativeMessages = messages.filter((message) => !this.retractedMessageIds.has(message.id));
-    const settledInputs = new Set(this.settledInput);
-    for (const message of nativeMessages) {
+  /**
+   * History can lag live events and omit tool progress.
+   * Keep live updates and drop reverted calls without changing the live transcript.
+   */
+  projectHistory(messages: SessionMessageInfo[]): AgentSessionHistoryMessage[] {
+    const history = messages.filter((message) => !this.retractedIds.has(message.id));
+    const settledInput = new Set(this.settledInput);
+    for (const message of history) {
       if (message.type !== "assistant") continue;
       for (const part of message.content)
         if (
@@ -84,23 +42,23 @@ export class OpenCodeLiveMessageProjector {
           part.state.status === "streaming" &&
           part.state.input.length > 0
         )
-          settledInputs.add(part.id);
+          settledInput.add(part.id);
     }
-    const retained = nativeMessages.map((message) =>
-      retainLiveToolState(message, this.messages.get(message.id), this.settledInput),
+    const merged = history.map((message) =>
+      keepLiveTools(message, this.messages.get(message.id), this.settledInput),
     );
-    const nativeIds = new Set(nativeMessages.map((message) => message.id));
+    const ids = new Set(history.map((message) => message.id));
     for (const message of this.messages.values()) {
-      if (message.type !== "assistant" || nativeIds.has(message.id)) continue;
-      if (message.content.some((part) => part.type === "tool")) retained.push(message);
+      if (message.type !== "assistant" || ids.has(message.id)) continue;
+      if (message.content.some((part) => part.type === "tool")) merged.push(message);
     }
-    const context = messageProjectionContext(retained);
+    const context = messageProjectionContext(merged);
     const completions = new Map(context.completions);
     for (const [callID, completion] of this.projectionContext.completions) {
-      const native = completions.get(callID);
-      if (!native || native.created < completion.created) completions.set(callID, completion);
+      const saved = completions.get(callID);
+      if (!saved || saved.created < completion.created) completions.set(callID, completion);
     }
-    return projectMessages(retained, { ...context, completions }, settledInputs);
+    return projectMessages(merged, { ...context, completions }, settledInput);
   }
 
   /**
@@ -119,6 +77,10 @@ export class OpenCodeLiveMessageProjector {
     return projectInboxUser({ id, sessionID, time, payload }, "read");
   }
 
+  /**
+   * Replace the baseline and keep unsaved live updates on matching messages.
+   * Return removed message IDs so the caller can drop stale transcript rows.
+   */
   seed(messages: SessionMessageInfo[]): string[] {
     const previous = new Map(this.messages);
     const settledText = new Set(this.settledText);
@@ -127,9 +89,9 @@ export class OpenCodeLiveMessageProjector {
     this.settledText.clear();
     this.settledInput.clear();
     for (const snapshot of messages) {
-      this.retractedMessageIds.delete(snapshot.id);
+      this.retractedIds.delete(snapshot.id);
       const live = previous.get(snapshot.id);
-      const message = retainLiveToolState(structuredClone(snapshot), live, settledInput);
+      const message = keepLiveTools(structuredClone(snapshot), live, settledInput);
       this.messages.set(message.id, message);
       if (message.type !== "assistant") continue;
       let textOrdinal = 0;
@@ -160,15 +122,16 @@ export class OpenCodeLiveMessageProjector {
         if (part.type === "tool") {
           const prior = liveParts.find((item) => item.type === "tool" && item.id === part.id);
           if (part.state.status === "streaming") {
+            // OpenCode saves streaming input at input.ended; live deltas can still be partial.
             const nativePart =
               snapshot.type === "assistant"
                 ? snapshot.content.find((item) => item.type === "tool" && item.id === part.id)
                 : undefined;
-            const nativeSettled =
+            const hasSavedInput =
               nativePart?.type === "tool" &&
               nativePart.state.status === "streaming" &&
               nativePart.state.input.length > 0;
-            if (nativeSettled || settledInput.has(part.id)) this.settledInput.add(part.id);
+            if (hasSavedInput || settledInput.has(part.id)) this.settledInput.add(part.id);
             else if (prior?.type === "tool" && prior.state.status === "streaming")
               part.state.input = prior.state.input;
           }
@@ -177,9 +140,6 @@ export class OpenCodeLiveMessageProjector {
     }
     this.updateProjectionContext();
     return [...previous.keys()].filter((id) => !this.messages.has(id));
-  }
-  private updateProjectionContext() {
-    this.projectionContext = messageProjectionContext(this.messages.values());
   }
   snapshotEvents(sessionID: string): AgentEvent[] {
     return [...this.messages.values()].flatMap((message) =>
@@ -610,13 +570,17 @@ export class OpenCodeLiveMessageProjector {
         const removed = ids.slice(index);
         for (const id of removed) {
           this.messages.delete(id);
-          this.retractedMessageIds.add(id);
+          this.retractedIds.add(id);
         }
         this.updateProjectionContext();
         return [{ ...base, type: "transcript_retracted", messageIds: removed }];
       }
     }
     return system ? this.recordMessage(sessionID, system) : [];
+  }
+
+  private updateProjectionContext() {
+    this.projectionContext = messageProjectionContext(this.messages.values());
   }
 
   private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {
@@ -646,3 +610,50 @@ export class OpenCodeLiveMessageProjector {
     return events;
   }
 }
+
+/** Keep progress that OpenCode does not save, while trusting saved final results. */
+const keepLiveTools = (
+  message: SessionMessageInfo,
+  live: SessionMessageInfo | undefined,
+  settledInput: ReadonlySet<string>,
+): SessionMessageInfo => {
+  if (message.type !== "assistant" || live?.type !== "assistant") return message;
+  const liveTools = new Map(
+    live.content.filter((part) => part.type === "tool").map((part) => [part.id, part] as const),
+  );
+  const content = message.content.map((part) => {
+    if (part.type !== "tool") return part;
+    const prior = liveTools.get(part.id);
+    liveTools.delete(part.id);
+    if (!prior || (part.state.status !== "running" && part.state.status !== "streaming"))
+      return part;
+    if (part.state.status === "streaming") {
+      if (prior.state.status === "streaming" && !settledInput.has(prior.id)) return part;
+      return prior;
+    }
+    if (prior.state.status === "streaming") return part;
+    if (prior.state.status === "completed" || prior.state.status === "error") return prior;
+    return {
+      ...part,
+      state: { ...part.state, metadata: { ...part.state.metadata, ...prior.state.metadata } },
+    };
+  });
+  return { ...message, content: [...content, ...liveTools.values()] };
+};
+
+const resultContent = ([first, ...rest]: [ToolContent1, ...ToolContent1[]]): [
+  ToolContent,
+  ...ToolContent[],
+] => {
+  const map = (item: ToolContent1): ToolContent => {
+    if (item.type === "text") return { type: "text", text: item.text };
+    const file: Extract<ToolContent, { type: "file" }> = {
+      type: "file",
+      uri: item.uri,
+      mime: item.mime,
+    };
+    if (item.name !== undefined) file.name = item.name;
+    return file;
+  };
+  return [map(first), ...rest.map(map)];
+};

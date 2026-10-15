@@ -370,23 +370,17 @@ const projectAssistantContent = (
   const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
   const childID = z.string().safeParse(metadata?.sessionID ?? input?.sessionID).data;
   const completion = completions?.get(content.id);
-  const status =
-    state.status === "error"
-      ? state.error.type === "aborted"
-        ? "cancelled"
-        : "error"
-      : (completion?.state ??
-        (tool.status === "completed" && metadata?.status === "running" ? "running" : tool.status));
+  // A completed tool can leave its child running in the background.
+  const backgrounded = tool.status === "completed" && metadata?.status === "running";
+  let status = completion?.state ?? (backgrounded ? "running" : tool.status);
+  if (state.status === "error") status = state.error.type === "aborted" ? "cancelled" : "error";
   const subagent: Extract<AgentTranscriptStreamPart, { kind: "subagent" }> = {
     ...part,
     kind: "subagent",
     partId: `${content.id}:subagent`,
     correlationKey: `call:${content.id}`,
     status,
-    executionMode:
-      input?.background === true || (tool.status === "completed" && metadata?.status === "running")
-        ? "background"
-        : "foreground",
+    executionMode: input?.background === true || backgrounded ? "background" : "foreground",
     startedAtMs: tool.startedAtMs,
   };
   if (childID) subagent.externalSessionId = childID;
