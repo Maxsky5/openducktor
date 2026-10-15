@@ -159,7 +159,7 @@ export const statusFromEntry = ({
 };
 
 /** One status for each changed path, as the HEAD worktree status shows it. */
-export const parseStatusPorcelain = (output: string): GitFileStatus[] =>
+const parseStatusPorcelain = (output: string): GitFileStatus[] =>
   parsePorcelainEntries(output).map(statusFromEntry);
 export const fileStatusCounts = (fileStatuses: FileStatus[]): GitFileStatusCounts => {
   const total = fileStatuses.length;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gitHubAvatarUrl, gravatarUrl } from "./git-history-avatar";
+import { gitHubAvatarUrl, gravatarUrl } from "./git-history-avatar-url";
 
 describe("author photos", () => {
   test("reads the GitHub account from a no-reply email", () => {

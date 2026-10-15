@@ -5,12 +5,14 @@ import { act, createElement, type ReactElement, type ReactNode } from "react";
 import type { DiffScope, DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { QueryProvider } from "@/lib/query-provider";
 import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
-import { gitPanelContextKey } from "./agent-studio-git-panel/agent-studio-git-panel";
 import {
   FILE_LIST_VIEW_MODE_STORAGE_KEY,
   useFileListViewModeStore,
 } from "./agent-studio-git-panel/file-list-view-preference";
-import { useGitPanelViewStore } from "./agent-studio-git-panel/git-panel-view-store";
+import {
+  gitPanelContextKey,
+  useGitPanelViewStore,
+} from "./agent-studio-git-panel/git-panel-view-store";
 
 const actualThemeProvider = await import("@/components/layout/theme-provider");
 const actualBranchSelector = await import("@/components/features/repository/branch-selector");

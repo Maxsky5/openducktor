@@ -2,6 +2,11 @@ import type { GitChangeGroup } from "@openducktor/contracts";
 import { useCallback } from "react";
 import { create } from "zustand";
 import type { GitPanelTab } from "./constants";
+import type { AgentStudioGitPanelModel } from "./types";
+
+/** The view state of one Git context, such as one task worktree or one session directory. */
+export const gitPanelContextKey = (model: AgentStudioGitPanelModel): string =>
+  JSON.stringify([model.subjectKey, model.repoPath ?? null, model.worktreePath]);
 
 /** View state of one Git context. It stays in app memory, so tab and panel changes keep it. */
 export type GitPanelContextView = {

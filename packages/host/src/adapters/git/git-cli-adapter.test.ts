@@ -312,7 +312,7 @@ describe("createGitCliAdapter", () => {
     ].join("\n");
     const git = createGitCliAdapter({
       runner: createRunner({
-        "diff --numstat --end-of-options HEAD": "2\t0\tsrc/b.ts\n1\t0\tsrc/a.ts\n",
+        "diff --numstat -z --end-of-options HEAD": "2\t0\tsrc/b.ts\x001\t0\tsrc/a.ts\x00",
         "diff --end-of-options HEAD": fullDiff,
         "status --porcelain=v1 -z --untracked-files=all": "",
       }),
@@ -353,7 +353,7 @@ describe("createGitCliAdapter", () => {
         "for-each-ref --format=%(refname) refs/remotes": "",
         "status --porcelain=v1 -z --untracked-files=all": " M src/main.ts\n",
         "merge-base --end-of-options origin/main HEAD": "base123\n",
-        "diff --numstat --end-of-options base123": "2\t0\tsrc/main.ts\n",
+        "diff --numstat -z --end-of-options base123": "2\t0\tsrc/main.ts\x00",
         "diff --end-of-options base123": fullDiff,
         "rev-list --count --left-right --end-of-options origin/main...HEAD": "1 2\n",
       }),

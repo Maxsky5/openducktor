@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GitHistoryCommit, GitHistoryComparison } from "@openducktor/contracts";
-import { historyRefGroups } from "./git-history-refs";
+import { historyRefGroups } from "./git-history-ref-groups";
 
 const oid = (name: string) => name.padEnd(40, "0");
 const commit = (name: string, refs: GitHistoryCommit["refs"]): GitHistoryCommit => ({

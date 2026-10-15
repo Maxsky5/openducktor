@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { DETECT_PR_ERROR_ID } from "./git-header-notices";
+import { DETECT_PR_ERROR_ID } from "./git-header-notice-items";
 
 type GitActionIconButtonProps = {
   testId: string;

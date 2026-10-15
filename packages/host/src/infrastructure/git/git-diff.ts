@@ -34,66 +34,71 @@ type GitDiffError =
   | HostValidationErrorAggregate;
 const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
-const normalizeNumstatFilePath = (file: string): string => {
-  let normalized = file.trim();
-  while (true) {
-    const start = normalized.indexOf("{");
-    if (start < 0) {
-      break;
+type DiffStats = { additions: number; deletions: number };
+
+/**
+ * Reads `git diff --numstat -z`, which writes each path without quotes. A record is
+ * `<added>\t<deleted>\t<path>\0`. A rename or a copy has an empty path, then
+ * `<old path>\0<new path>\0`. A binary file counts `-` lines.
+ */
+const parseNumstat = (output: string): Map<string, DiffStats> => {
+  const stats = new Map<string, DiffStats>();
+  const fields = output.split("\0");
+  for (let index = 0; index < fields.length; index += 1) {
+    const record = /^(\d+|-)\t(\d+|-)\t(.*)$/su.exec(fields[index] ?? "");
+    if (!record) continue;
+    let file = record[3] ?? "";
+    if (file === "") {
+      file = fields[index + 2] ?? "";
+      index += 2;
     }
-    const end = normalized.indexOf("}", start);
-    if (end < 0) {
-      break;
-    }
-    const segment = normalized.slice(start + 1, end);
-    const [, replacement] = segment.split(" => ", 2);
-    if (!replacement) {
-      break;
-    }
-    normalized = `${normalized.slice(0, start)}${replacement}${normalized.slice(end + 1)}`;
-  }
-  const addedPrefix = "/dev/null => ";
-  if (normalized.startsWith(addedPrefix)) {
-    return normalized.slice(addedPrefix.length);
-  }
-  const deletedSuffix = " => /dev/null";
-  if (normalized.endsWith(deletedSuffix)) {
-    return normalized.slice(0, -deletedSuffix.length);
-  }
-  if (normalized.includes(" => ")) {
-    const parts = normalized.split(" => ");
-    return parts.at(-1) || parts.at(0) || normalized;
-  }
-  return normalized;
-};
-const parseNumstat = (
-  output: string,
-): Map<
-  string,
-  {
-    additions: number;
-    deletions: number;
-  }
-> => {
-  const stats = new Map<
-    string,
-    {
-      additions: number;
-      deletions: number;
-    }
-  >();
-  for (const line of output.split(/\r?\n/)) {
-    const parts = line.split("\t");
-    if (parts.length < 3) {
-      continue;
-    }
-    stats.set(normalizeNumstatFilePath(parts.slice(2).join("\t")), {
-      additions: Number.parseInt(parts[0] ?? "", 10) || 0,
-      deletions: Number.parseInt(parts[1] ?? "", 10) || 0,
+    stats.set(file, {
+      additions: Number.parseInt(record[1] ?? "", 10) || 0,
+      deletions: Number.parseInt(record[2] ?? "", 10) || 0,
     });
   }
   return stats;
 };
+
+/** The bytes of the named C escapes that Git writes in a quoted path. */
+const GIT_PATH_ESCAPES = new Map([
+  ["a", 7],
+  ["b", 8],
+  ["t", 9],
+  ["n", 10],
+  ["v", 11],
+  ["f", 12],
+  ["r", 13],
+  ['"', 34],
+  ["\\", 92],
+]);
+const GIT_PATH_ESCAPE = /\\(?:([0-7]{3})|([abtnvfr"\\]))/gu;
+const utf8Encoder = new TextEncoder();
+const utf8Decoder = new TextDecoder();
+
+/**
+ * Reads the inside of a path that Git quotes in C style. Git writes each byte of a non-ASCII
+ * name as an octal escape, so `\303\251.txt` is `é.txt`.
+ */
+const unquoteGitPath = (quoted: string): string => {
+  const bytes: number[] = [];
+  let textStart = 0;
+  for (const escape of quoted.matchAll(GIT_PATH_ESCAPE)) {
+    bytes.push(...utf8Encoder.encode(quoted.slice(textStart, escape.index)));
+    const [sequence, octal, character] = escape;
+    bytes.push(octal ? Number.parseInt(octal, 8) : (GIT_PATH_ESCAPES.get(character ?? "") ?? 0));
+    textStart = escape.index + sequence.length;
+  }
+  bytes.push(...utf8Encoder.encode(quoted.slice(textStart)));
+  return utf8Decoder.decode(Uint8Array.from(bytes));
+};
+
+/** A path to the end of a header line, such as `rename to <path>`. Git quotes it when needed. */
+const headerLinePath = (value: string): string =>
+  value.length > 1 && value.startsWith('"') && value.endsWith('"')
+    ? unquoteGitPath(value.slice(1, -1))
+    : value;
+
 export type DiffGitHeaderToken = {
   remaining: string;
   token: string;
@@ -110,7 +115,7 @@ export const parseDiffGitHeaderToken = (input: string): DiffGitHeaderToken | und
       const character = trimmed[index];
       if (character === '"' && !escaped) {
         return {
-          token: trimmed.slice(1, index),
+          token: unquoteGitPath(trimmed.slice(1, index)),
           remaining: trimmed.slice(index + 1),
         };
       }
@@ -127,14 +132,38 @@ export const parseDiffGitHeaderToken = (input: string): DiffGitHeaderToken | und
   }
   return { token: trimmed.slice(0, tokenEnd), remaining: trimmed.slice(tokenEnd) };
 };
+/**
+ * The new path of a `diff --git a/<old> b/<new>` line. Git quotes a path with special characters.
+ * A bare path can hold spaces, so a bare line without a rename is split where both halves match.
+ */
 const parseDiffGitNewPath = (line: string): string | undefined => {
   const rest = line.slice("diff --git ".length);
-  const oldPath = parseDiffGitHeaderToken(rest);
-  if (!oldPath) {
-    return undefined;
+  if (rest.startsWith('"')) {
+    const oldPath = parseDiffGitHeaderToken(rest);
+    const newPath = oldPath ? parseDiffGitHeaderToken(oldPath.remaining) : undefined;
+    return newPath?.token.startsWith("b/") ? newPath.token.slice(2) : undefined;
   }
-  const newPath = parseDiffGitHeaderToken(oldPath.remaining);
-  return newPath?.token.startsWith("b/") ? newPath.token.slice(2) : undefined;
+  const pathLength = (rest.length - "a/ b/".length) / 2;
+  const newPath = rest.slice(rest.length - pathLength);
+  return rest.startsWith("a/") &&
+    rest.slice(2 + pathLength, 5 + pathLength) === " b/" &&
+    rest.slice(2, 2 + pathLength) === newPath
+    ? newPath
+    : undefined;
+};
+
+/**
+ * The new path of one file section. The `rename to` and `copy to` lines name the new path of a
+ * rename or a copy, where the `diff --git` line holds two different paths.
+ */
+const sectionPath = (lines: string[]): string | undefined => {
+  for (const line of lines.slice(1)) {
+    if (line.startsWith("@@") || line.startsWith("--- ") || line.startsWith("Binary files ")) break;
+    for (const prefix of ["rename to ", "copy to "]) {
+      if (line.startsWith(prefix)) return headerLinePath(line.slice(prefix.length));
+    }
+  }
+  return parseDiffGitNewPath(lines[0] ?? "");
 };
 const splitDiffByFile = (
   fullDiff: string,
@@ -142,27 +171,18 @@ const splitDiffByFile = (
   file: string;
   diff: string;
 }> => {
-  const results: Array<{
-    file: string;
-    diff: string;
-  }> = [];
-  let currentFile: string | undefined;
-  let currentDiff = "";
+  const sections: string[][] = [];
   for (const line of fullDiff.split(/\r?\n/)) {
     if (line.startsWith("diff --git ")) {
-      if (currentFile) {
-        results.push({ file: currentFile, diff: currentDiff });
-      }
-      currentFile = parseDiffGitNewPath(line) ?? "";
-      currentDiff = `${line}\n`;
+      sections.push([line]);
       continue;
     }
-    currentDiff += `${line}\n`;
+    sections.at(-1)?.push(line);
   }
-  if (currentFile) {
-    results.push({ file: currentFile, diff: currentDiff });
-  }
-  return results;
+  return sections.flatMap((lines) => {
+    const file = sectionPath(lines);
+    return file ? [{ file, diff: lines.map((line) => `${line}\n`).join("") }] : [];
+  });
 };
 /** A header line that names a submodule entry, which has Git file mode 160000. */
 const SUBMODULE_MODE_LINE =
@@ -372,6 +392,7 @@ export const loadDiffPayload = (
     const numstatResult = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
       "--numstat",
+      "-z",
       "--end-of-options",
       target,
     ]);

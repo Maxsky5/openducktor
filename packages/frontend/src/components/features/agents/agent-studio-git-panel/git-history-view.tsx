@@ -25,12 +25,11 @@ import { HistoryCommitPopover } from "./git-history-commit-details";
 import { GRAPH_OFFSET_PROPERTY, ROW_HEIGHT, useGraphView } from "./git-history-graph";
 import { HistoryColumnsHeader } from "./git-history-header";
 import { type GraphLayout, layoutHistoryGraph } from "./git-history-graph-model";
+import { type HistoryFooter, historyFooter } from "./git-history-footer";
 import {
-  type HistoryFooter,
   HistoryLoading,
   HistoryMessage,
   HistoryRefreshFailure,
-  historyFooter,
   RetainedHistoryMessage,
 } from "./git-history-messages";
 import { type HistoryRowProps, HistoryRowView } from "./git-history-row";

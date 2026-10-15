@@ -22,6 +22,8 @@ const session = (
   contextUsage: null,
 });
 
+const otherRef = { ...session("idle", OTHER).ref, externalSessionId: "s-2" };
+
 const checkout = { name: "feature", detached: false, revision: "abc" };
 const keys = {
   local: gitQueryKeys.localChanges(REPO, WORKTREE, "feature"),
@@ -84,11 +86,43 @@ describe("createAgentTurnGitSync", () => {
     await settle();
     expect(isStale(keys.local)).toBe(false);
 
-    // A removed session starts again without a known activity.
-    sync({ type: "session_upsert", session: session("running") });
+    // An idle session that ends had no turn to finish.
     sync({ type: "session_removed", ref: session("idle").ref });
+    sync(createLiveSnapshotEnvelope({ repoPath: REPO, sessions: [] }));
+    await settle();
+    expect(isStale(keys.local)).toBe(false);
+  });
+
+  test("reads again when the host removes a working session", async () => {
+    const sync = createAgentTurnGitSync(seed());
+
+    sync({ type: "session_upsert", session: session("running") });
+    sync({ type: "session_removed", ref: session("running").ref });
+    await settle();
+    expect(isStale(keys.local)).toBe(true);
+    expect(isStale(keys.history)).toBe(true);
+    expect(isStale(keys.otherLocal)).toBe(false);
+
+    // A removed session starts again without a known activity.
+    queryClient.setQueryData(keys.local, { read: 2 });
     sync({ type: "session_upsert", session: session("idle") });
     await settle();
     expect(isStale(keys.local)).toBe(false);
+  });
+
+  test("reads again when a snapshot no longer holds a working session", async () => {
+    const sync = createAgentTurnGitSync(seed());
+
+    sync(
+      createLiveSnapshotEnvelope({
+        repoPath: REPO,
+        sessions: [session("running"), { ...session("idle", OTHER), ref: otherRef }],
+      }),
+    );
+    sync(createLiveSnapshotEnvelope({ repoPath: REPO, sessions: [] }));
+    await settle();
+    expect(isStale(keys.local)).toBe(true);
+    // The idle session had no turn to finish.
+    expect(isStale(keys.otherLocal)).toBe(false);
   });
 });

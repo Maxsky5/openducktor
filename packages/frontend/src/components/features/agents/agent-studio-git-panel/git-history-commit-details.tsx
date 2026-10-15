@@ -6,13 +6,13 @@ import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { AuthorAvatar } from "./git-history-avatar";
 import { commitBodyBlocks } from "./git-history-commit-message";
-import { laneColor } from "./git-history-graph";
 import {
   formatExactCommitDate,
   formatRelativeCommitDate,
   type GraphRow,
 } from "./git-history-graph-model";
-import { type HistoryRefGroup, historyRefGroups } from "./git-history-refs";
+import { laneColor } from "./git-history-lane-colors";
+import { type HistoryRefGroup, historyRefGroups } from "./git-history-ref-groups";
 
 /**
  * The details card of the selected commit. The list owns one card for every row, so a row that

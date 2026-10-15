@@ -107,7 +107,7 @@ const loadGroupDiffs = (
     const args = ["diff", ...RAW_DIFF_OPTIONS, ...diffArgs];
     const [numstat, patch] = yield* Effect.all(
       [
-        runGit(runner, workingDirectory, [...args, "--numstat", ...pathspec]),
+        runGit(runner, workingDirectory, [...args, "--numstat", "-z", ...pathspec]),
         runGit(runner, workingDirectory, [...args, ...pathspec]),
       ],
       { concurrency: "unbounded" },

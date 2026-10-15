@@ -9,14 +9,17 @@ import { cn } from "@/lib/utils";
 import { AuthorAvatar } from "./git-history-avatar";
 import { type HistoryColumnId, historyColumnWidth } from "./git-history-columns";
 import { commitBodyPreview } from "./git-history-commit-message";
-import { type GraphView, HistoryGraphCell, laneColor } from "./git-history-graph";
+import { type GraphView, HistoryGraphCell } from "./git-history-graph";
 import {
   formatCompactCommitAge,
   formatExactCommitDate,
   type GraphRow,
 } from "./git-history-graph-model";
-import { type HistoryFooter, HistoryFooterRow } from "./git-history-messages";
-import { type HistoryRefGroup, HistoryRefsCell, historyRefGroups } from "./git-history-refs";
+import { laneColor } from "./git-history-lane-colors";
+import type { HistoryFooter } from "./git-history-footer";
+import { HistoryFooterRow } from "./git-history-messages";
+import { type HistoryRefGroup, historyRefGroups } from "./git-history-ref-groups";
+import { HistoryRefsCell } from "./git-history-refs";
 
 export type HistoryRowProps = {
   rows: GraphRow[];

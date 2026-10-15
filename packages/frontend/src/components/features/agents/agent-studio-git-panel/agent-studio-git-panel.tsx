@@ -9,7 +9,11 @@ import type { GitPanelTab } from "./constants";
 import { AgentStudioGitPanelDialogs } from "./git-panel-dialogs";
 import { getGitInfoHeaderProps } from "./git-panel-header-props";
 import { AgentStudioGitTabContent } from "./git-panel-tab-content";
-import { useGitPanelViewField, useGitPanelViewUpdate } from "./git-panel-view-store";
+import {
+  gitPanelContextKey,
+  useGitPanelViewField,
+  useGitPanelViewUpdate,
+} from "./git-panel-view-store";
 import { GitInfoHeader } from "./git-info-header";
 import type { AgentStudioGitPanelModel, GitPanelView } from "./types";
 import { useExpandedFileSelection } from "./use-expanded-file-selection";
@@ -29,10 +33,6 @@ function withPendingChanges(model: AgentStudioGitPanelModel): AgentStudioGitPane
     },
   };
 }
-
-/** The view state of one Git context, such as one task worktree or one session directory. */
-export const gitPanelContextKey = (model: AgentStudioGitPanelModel): string =>
-  JSON.stringify([model.subjectKey, model.repoPath ?? null, model.worktreePath]);
 
 export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
   model: source,

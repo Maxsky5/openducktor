@@ -1,8 +1,8 @@
-import type { GitHistoryCommitMembership } from "@openducktor/contracts";
 import { type ReactElement, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { AuthorAvatar } from "./git-history-avatar";
 import type { GraphEdge, GraphRow } from "./git-history-graph-model";
+import { laneColor } from "./git-history-lane-colors";
 
 export const ROW_HEIGHT = 32;
 /** The bar in the lane color that ends the graph column. */
@@ -21,37 +21,6 @@ const MIN_GRAPH_VIEW_WIDTH = GRAPH_PADDING * 2 + LANE_WIDTH * 2;
 const MIN_COLUMN_WIDTH = 84;
 /** The band of a row starts at the left edge of its avatar. */
 const BAND_INSET = AVATAR_RADIUS + 3;
-
-/**
- * Lane colors of each side. Branch commits use cool colors and missing target commits use warm
- * colors, so every lane keeps its side when the graph has many lanes. The dark theme uses lighter
- * shades, so thin lines stay visible on a dark surface.
- */
-const LANE_COLORS = {
-  current: [
-    "text-blue-500 dark:text-blue-400",
-    "text-violet-500 dark:text-violet-400",
-    "text-pink-500 dark:text-pink-400",
-    "text-teal-500 dark:text-teal-400",
-    "text-indigo-500 dark:text-indigo-400",
-  ],
-  target: [
-    "text-amber-500 dark:text-amber-400",
-    "text-orange-500 dark:text-orange-400",
-    "text-rose-500 dark:text-rose-400",
-  ],
-  boundary: ["text-slate-400 dark:text-slate-500"],
-} satisfies Record<GitHistoryCommitMembership, string[]>;
-
-/**
- * The text color of a line. Lines, nodes, and bands use it through `currentColor`. Color 0 is the
- * main line of a side, and merged lines use the other colors of that side.
- */
-export const laneColor = (tone: GitHistoryCommitMembership, color: number): string => {
-  const colors = LANE_COLORS[tone];
-  const index = color === 0 || colors.length === 1 ? 0 : 1 + ((color - 1) % (colors.length - 1));
-  return colors[index] ?? colors[0] ?? "";
-};
 
 /** The visible part of the graph. Rows show the same part, so lanes stay aligned. */
 export type GraphView = {
@@ -88,7 +57,7 @@ export function useGraphView(laneCount: number, rowWidth: number) {
   return { graph, scroller };
 }
 
-export const laneX = (lane: number) => GRAPH_PADDING + lane * LANE_WIDTH + LANE_WIDTH / 2;
+const laneX = (lane: number) => GRAPH_PADDING + lane * LANE_WIDTH + LANE_WIDTH / 2;
 
 /**
  * The graph part of a row. A band in the lane color runs from the commit node to the text, and a

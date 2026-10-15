@@ -146,7 +146,7 @@ test("expands each directory once and deduplicates paths before loading diffs", 
         runner,
         root,
         [status("generated/"), status("generated/"), status(file)],
-        "2\t1\ttracked.txt\n",
+        "2\t1\ttracked.txt\0",
         "diff --git a/tracked.txt b/tracked.txt\n",
       ),
     );
@@ -171,6 +171,59 @@ test("expands each directory once and deduplicates paths before loading diffs", 
       },
     ]);
   });
+});
+
+test("reads tracked paths that Git quotes or that hold spaces", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const patch = [
+    'diff --git "a/\\303\\251.txt" "b/\\303\\251.txt"',
+    "index 111..222 100644",
+    '--- "a/\\303\\251.txt"',
+    '+++ "b/\\303\\251.txt"',
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+    "diff --git a/new file.txt b/new file.txt",
+    "index 333..444 100644",
+    "--- a/new file.txt\t",
+    "+++ b/new file.txt\t",
+    "@@ -1 +1,2 @@",
+    " old",
+    "+new",
+    "diff --git a/old name.txt b/new name.txt",
+    "similarity index 100%",
+    "rename from old name.txt",
+    "rename to new name.txt",
+    'diff --git a/plain.txt "b/tab\\tname.txt"',
+    "similarity index 100%",
+    "rename from plain.txt",
+    'rename to "tab\\tname.txt"',
+    "",
+  ].join("\n");
+  // -z writes paths without quotes. A rename record holds both paths.
+  const numstat = [
+    "1\t1\t\u00e9.txt",
+    "1\t0\tnew file.txt",
+    "0\t0\t",
+    "old name.txt",
+    "new name.txt",
+    "0\t0\t",
+    "plain.txt",
+    "tab\tname.txt",
+    "",
+  ].join("\0");
+
+  const result = await Effect.runPromise(buildFileDiffs(runner, "/repo", [], numstat, patch));
+
+  expect(
+    result.map(({ file, type, additions, deletions }) => [file, type, additions, deletions]),
+  ).toEqual([
+    ["\u00e9.txt", "modified", 1, 1],
+    ["new file.txt", "modified", 1, 0],
+    ["new name.txt", "renamed", 0, 0],
+    ["tab\tname.txt", "renamed", 0, 0],
+  ]);
+  expect(result[0]?.diff).toContain("+new");
 });
 
 for (const [stdout, ok, message] of [
