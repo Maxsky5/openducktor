@@ -54,11 +54,11 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
   return {
     ".zshenv": [
       plan.env.ZDOTDIR === undefined ? "unset ZDOTDIR" : `ZDOTDIR=${quote(plan.env.ZDOTDIR)}`,
-      '[[ ! -r "${ZDOTDIR-$HOME}/.zshenv" ]] || source "${ZDOTDIR-$HOME}/.zshenv"',
+      '[[ ! -r "${ZDOTDIR-$HOME}/.zshenv" ]] || builtin source "${ZDOTDIR-$HOME}/.zshenv"',
       // System profiles use ZDOTDIR for history and key files. Keep the user's directory
       // throughout startup, then append our hooks before the first interactive command.
       'builtin zmodload zsh/sched || { print -u2 -- "OpenDucktor could not load zsh/sched. Install the zsh modules, then reopen the terminal."; exit 1; }',
-      `builtin sched +0 ${quote(`source ${quote(join(root, "hooks.zsh"))}`)}`,
+      `builtin sched +0 ${quote(`builtin source ${quote(join(root, "hooks.zsh"))}`)}`,
     ].join("\n"),
     "hooks.zsh": [
       posixHooks(nonce, true),
