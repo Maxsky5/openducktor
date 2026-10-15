@@ -299,6 +299,174 @@ describe("OpenCode V2 subagent projection and history", () => {
       }
     },
   );
+  test.each([
+    { live: "completed", saved: "completed", fields: "missing" },
+    { live: "error", saved: "error", fields: "missing" },
+    { live: "cancelled", saved: "cancelled", fields: "missing" },
+    { live: "completed", saved: "cancelled", fields: "partial" },
+    { live: "error", saved: "completed", fields: "partial" },
+  ] as const)(
+    "keeps terminal $live links with $saved history and $fields metadata",
+    async ({ live, saved, fields }) => {
+      const message: Extract<SessionMessageInfo, { type: "assistant" }> = {
+        id: "msg_terminal",
+        type: "assistant",
+        time: { created: 2 },
+        agent: "build",
+        model,
+        content: ["subagent", "shell"].map((name) => ({
+          type: "tool",
+          id: `call_${name}`,
+          name,
+          time: { created: 3, ran: 4 },
+          state: {
+            status: "running",
+            input: { agent: "general", prompt: "Check changes" },
+            metadata: {},
+          },
+        })),
+      };
+      let snapshots: SessionMessageInfo[] = [message];
+      const fixture = prepareFixture(({ url }) =>
+        url.pathname.endsWith("/message") ? cursorPage(snapshots) : undefined,
+      );
+      const runtime = await fixture.prepare();
+      let observed = Promise.withResolvers<void>();
+      const replay: OpencodeSessionRuntimeSignal[] = [];
+      try {
+        await runtime.connection.readSessionSources(ref.repoPath, [
+          { ...ref, sessionScope: { kind: "repository" } },
+        ]);
+        await runtime.startForwarding((signal) => {
+          if (signal.type === "fault" || signal.type === "session_fault") {
+            observed.reject(new Error(signal.message));
+          }
+          if (signal.type === "session_event" && signal.provenance === "baseline")
+            replay.push(signal);
+          if (signal.type === "runtime_notice") {
+            if (signal.message === "Tools settled") observed.resolve();
+          }
+        });
+        for (const [index, name] of ["subagent", "shell"].entries()) {
+          const metadata = { note: "Live metadata", liveOnly: "Kept" };
+          const data = {
+            sessionID: ref.externalSessionId,
+            assistantMessageID: message.id,
+            id: `call_${name}`,
+            executed: false,
+            metadata:
+              name === "subagent"
+                ? { ...metadata, sessionID: "ses_child", status: live }
+                : metadata,
+          };
+          fixture.channel.push(
+            live === "completed"
+              ? {
+                  id: `evt_${name}_success`,
+                  type: "session.tool.success",
+                  created: 9,
+                  durable: { ...durable, seq: index + 1, version: 2 },
+                  data: { ...data, content: [{ type: "text", text: "Live result" }] },
+                }
+              : {
+                  id: `evt_${name}_failed`,
+                  type: "session.tool.failed",
+                  created: 9,
+                  durable: { ...durable, seq: index + 1, version: 2 },
+                  data: {
+                    ...data,
+                    error: {
+                      type: live === "cancelled" ? "aborted" : "tool",
+                      message: "Live error",
+                    },
+                  },
+                },
+          );
+        }
+        fixture.channel.push({
+          id: "evt_live_settled",
+          type: "tui.toast.show",
+          created: 9,
+          data: { message: "Tools settled", variant: "warning" },
+        });
+        await observed.promise;
+        const history = structuredClone(message);
+        history.time.completed = 11;
+        for (const part of history.content) {
+          if (part.type !== "tool") continue;
+          part.time.completed = 10;
+          const input = { agent: "general", prompt: "Saved prompt" };
+          const content = [{ type: "text" as const, text: "Saved result" }] as const;
+          part.state =
+            saved === "completed"
+              ? { status: "completed", input, content: [...content] }
+              : {
+                  status: "error",
+                  input,
+                  content: [...content],
+                  error: {
+                    type: saved === "cancelled" ? "aborted" : "tool",
+                    message: "Saved error",
+                  },
+                };
+          if (fields === "partial") part.state.metadata = { note: "Saved metadata" };
+        }
+        snapshots = [history];
+        const expectedMetadata = {
+          note: fields === "partial" ? "Saved metadata" : "Live metadata",
+          liveOnly: "Kept",
+        };
+        const child = {
+          kind: "subagent",
+          externalSessionId: "ses_child",
+          status: saved,
+          endedAtMs: 10,
+          prompt: "Saved prompt",
+          metadata: { ...expectedMetadata, sessionID: "ses_child" },
+        };
+        const tool = {
+          kind: "tool",
+          status: saved === "completed" ? "completed" : "error",
+          endedAtMs: 10,
+          input: { agent: "general", prompt: "Saved prompt" },
+          output: "Saved result",
+          metadata: expectedMetadata,
+        };
+        const loaded = await runtime.queries.loadSessionHistory(ref);
+        expect(loaded[0]?.parts).toMatchObject([child, tool]);
+        if (saved !== "completed")
+          expect(loaded[0]?.parts).toMatchObject([
+            { error: "Saved error" },
+            { error: "Saved error" },
+          ]);
+        else for (const part of loaded[0]?.parts ?? []) expect(part).not.toHaveProperty("error");
+
+        replay.length = 0;
+        observed = Promise.withResolvers<void>();
+        fixture.channel.push({ id: "connected-terminal", type: "server.connected", data: {} });
+        fixture.channel.push({
+          id: "evt_reconnect_settled",
+          type: "tui.toast.show",
+          created: 12,
+          data: { message: "Tools settled", variant: "warning" },
+        });
+        await observed.promise;
+        expect(
+          replay.flatMap((signal) =>
+            signal.type === "session_event" && signal.event.type === "assistant_part"
+              ? [signal.event.part]
+              : [],
+          ),
+        ).toMatchObject([child, tool]);
+        expect((await runtime.queries.loadSessionHistory(ref))[0]?.parts).toMatchObject([
+          child,
+          tool,
+        ]);
+      } finally {
+        await runtime.release();
+      }
+    },
+  );
   test("keeps reverted calls out of older history reads", async () => {
     const launch = backgroundLaunch();
     let snapshots = [launch];

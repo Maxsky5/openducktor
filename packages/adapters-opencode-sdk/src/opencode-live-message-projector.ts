@@ -623,8 +623,14 @@ const keepLiveTools = (
     if (part.type !== "tool") return part;
     const prior = liveTools.get(part.id);
     liveTools.delete(part.id);
-    if (!prior || (part.state.status !== "running" && part.state.status !== "streaming"))
-      return part;
+    if (!prior) return part;
+    if (part.state.status === "completed" || part.state.status === "error") {
+      if (prior.state.status === "streaming" || !prior.state.metadata) return part;
+      return {
+        ...part,
+        state: { ...part.state, metadata: { ...prior.state.metadata, ...part.state.metadata } },
+      };
+    }
     if (part.state.status === "streaming") {
       if (prior.state.status === "streaming" && !settledInput.has(prior.id)) return part;
       return prior;
