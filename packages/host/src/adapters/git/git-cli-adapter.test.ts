@@ -168,7 +168,7 @@ describe("createGitCliAdapter", () => {
   test("parses porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "status --porcelain=v1 -z --untracked-files=all": [
+        "status --porcelain=v1 -z --untracked-files=all --find-renames": [
           " M src/unstaged.ts",
           "A  src/staged.ts",
           "?? src/new.ts",
@@ -190,7 +190,7 @@ describe("createGitCliAdapter", () => {
   test("normalizes an untracked embedded repository path", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "status --porcelain=v1 -z --untracked-files=all": "?? nested-repo/\0",
+        "status --porcelain=v1 -z --untracked-files=all --find-renames": "?? nested-repo/\0",
       }),
     });
 
@@ -201,7 +201,7 @@ describe("createGitCliAdapter", () => {
   test("prefers worktree changes in mixed porcelain status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "status --porcelain=v1 -z --untracked-files=all":
+        "status --porcelain=v1 -z --untracked-files=all --find-renames":
           "AD src/added.ts\0MD src/modified.ts\0RD src/renamed.ts\0src/original.ts\0TT src/typechanged.ts\0",
       }),
     });
@@ -244,7 +244,7 @@ describe("createGitCliAdapter", () => {
   test("uses the destination path for NUL-delimited rename status rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "status --porcelain=v1 -z --untracked-files=all":
+        "status --porcelain=v1 -z --untracked-files=all --find-renames":
           "R  src/new name.ts\0src/old name.ts\0 M src/other.ts\0",
       }),
     });
@@ -262,7 +262,7 @@ describe("createGitCliAdapter", () => {
   test("consumes original paths for unstaged NUL-delimited rename rows", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
-        "status --porcelain=v1 -z --untracked-files=all":
+        "status --porcelain=v1 -z --untracked-files=all --find-renames":
           " R src/new.ts\0src/old.ts\0 M src/other.ts\0",
       }),
     });
@@ -314,7 +314,7 @@ describe("createGitCliAdapter", () => {
       runner: createRunner({
         "diff --numstat -z --end-of-options HEAD": "2\t0\tsrc/b.ts\x001\t0\tsrc/a.ts\x00",
         "diff --end-of-options HEAD": fullDiff,
-        "status --porcelain=v1 -z --untracked-files=all": "",
+        "status --porcelain=v1 -z --untracked-files=all --find-renames": "",
       }),
     });
     await expect(Effect.runPromise(git.getDiff("/repo"))).resolves.toEqual([
@@ -351,7 +351,7 @@ describe("createGitCliAdapter", () => {
         "branch --show-current": "feature/electron\n",
         "rev-parse HEAD": "abc123\n",
         "for-each-ref --format=%(refname) refs/remotes": "",
-        "status --porcelain=v1 -z --untracked-files=all": " M src/main.ts\n",
+        "status --porcelain=v1 -z --untracked-files=all --find-renames": " M src/main.ts\n",
         "merge-base --end-of-options origin/main HEAD": "base123\n",
         "diff --numstat -z --end-of-options base123": "2\t0\tsrc/main.ts\x00",
         "diff --end-of-options base123": fullDiff,
@@ -674,7 +674,7 @@ describe("createGitCliAdapter", () => {
               "config --get branch.feature/electron.merge": "refs/heads/feature/electron\n",
               "for-each-ref --format=%(upstream) refs/heads/feature/electron":
                 "refs/remotes/origin/feature/electron\n",
-              "status --porcelain=v1 -z --untracked-files=all": "",
+              "status --porcelain=v1 -z --untracked-files=all --find-renames": "",
               "fetch --prune -- origin +refs/heads/feature/electron:refs/remotes/origin/feature/electron":
                 "Fetched origin\n",
               "rev-list --count --left-right --end-of-options refs/remotes/origin/feature/electron...HEAD":
@@ -717,7 +717,7 @@ describe("createGitCliAdapter", () => {
               "config --get branch.feature/electron.merge": "refs/heads/main\n",
               "for-each-ref --format=%(upstream) refs/heads/feature/electron":
                 "refs/remotes/origin/main\n",
-              "status --porcelain=v1 -z --untracked-files=all": rebaseFailed
+              "status --porcelain=v1 -z --untracked-files=all --find-renames": rebaseFailed
                 ? "UU src/main.ts\n"
                 : "",
               "fetch --prune -- origin +refs/heads/main:refs/remotes/origin/main":
@@ -762,7 +762,7 @@ describe("createGitCliAdapter", () => {
       output: "[feature abc123] Ship Electron host",
     });
     expect(calls).toEqual([
-      "status --porcelain=v1 -z --untracked-files=all",
+      "status --porcelain=v1 -z --untracked-files=all --find-renames",
       "add -A",
       "diff --cached --name-only",
       "commit -m Ship Electron host",
@@ -855,7 +855,7 @@ describe("createGitCliAdapter", () => {
             {
               "branch --show-current": "feature/electron\n",
               "rev-parse HEAD": "abc123\n",
-              "status --porcelain=v1 -z --untracked-files=all": "",
+              "status --porcelain=v1 -z --untracked-files=all --find-renames": "",
               "merge-base --is-ancestor origin/main HEAD": "",
               "rebase --end-of-options origin/main": "Successfully rebased\n",
             }[command] ?? "",
@@ -870,7 +870,7 @@ describe("createGitCliAdapter", () => {
     expect(calls).toEqual([
       "branch --show-current",
       "rev-parse HEAD",
-      "status --porcelain=v1 -z --untracked-files=all",
+      "status --porcelain=v1 -z --untracked-files=all --find-renames",
       "merge-base --is-ancestor origin/main HEAD",
       "rebase --end-of-options origin/main",
     ]);
@@ -880,7 +880,7 @@ describe("createGitCliAdapter", () => {
       runner: createRunner({
         "branch --show-current": "feature/electron\n",
         "rev-parse HEAD": "abc123\n",
-        "status --porcelain=v1 -z --untracked-files=all": "",
+        "status --porcelain=v1 -z --untracked-files=all --find-renames": "",
         "merge-base --is-ancestor origin/main HEAD": "",
       }),
     });
@@ -910,7 +910,7 @@ describe("createGitCliAdapter", () => {
             {
               "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes":
                 "1\0main\0refs/heads/main\0/repo\0\n0\0origin/main\0refs/remotes/origin/main\0\0\n0\0odt/task-1\0refs/heads/odt/task-1\0\0\n",
-              "status --porcelain=v1 -z --untracked-files=all": "",
+              "status --porcelain=v1 -z --untracked-files=all --find-renames": "",
               "switch --end-of-options main": "",
               "branch --show-current": "main\n",
               "merge --no-ff --end-of-options odt/task-1": "Merge made by recursive.\n",
@@ -933,7 +933,7 @@ describe("createGitCliAdapter", () => {
     });
     expect(calls).toEqual([
       "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes",
-      "status --porcelain=v1 -z --untracked-files=all",
+      "status --porcelain=v1 -z --untracked-files=all --find-renames",
       "switch --end-of-options main",
       "branch --show-current",
       "rev-parse HEAD",
@@ -961,7 +961,7 @@ describe("createGitCliAdapter", () => {
             {
               "for-each-ref --format=%(if)%(HEAD)%(then)1%(else)0%(end)%00%(refname:short)%00%(refname)%00%(worktreepath)%00 refs/heads refs/remotes":
                 "1\0main\0refs/heads/main\0/repo\0\n0\0odt/task-1\0refs/heads/odt/task-1\0\0\n",
-              "status --porcelain=v1 -z --untracked-files=all": mergeFailed
+              "status --porcelain=v1 -z --untracked-files=all --find-renames": mergeFailed
                 ? "UU src/main.ts\n"
                 : "",
               "switch --end-of-options main": "",
@@ -1009,7 +1009,7 @@ describe("createGitCliAdapter", () => {
             {
               "branch --show-current": "feature/electron\n",
               "rev-parse HEAD": "abc123\n",
-              "status --porcelain=v1 -z --untracked-files=all": rebaseFailed
+              "status --porcelain=v1 -z --untracked-files=all --find-renames": rebaseFailed
                 ? "AA src/main.ts\n"
                 : "",
             }[command] ?? "",

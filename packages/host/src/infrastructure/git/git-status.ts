@@ -189,8 +189,18 @@ export const getCurrentBranchUnchecked = (runner: GitCommandRunner, workingDirec
       revision,
     };
   });
+/**
+ * Rename detection does not follow `status.renames`, so the status and the diff reads of the local
+ * changes pair the same rename paths. A file action on a rename then changes both of its paths.
+ */
 export const readStatusPorcelain = (runner: GitCommandRunner, workingDirectory: string) =>
-  runGit(runner, workingDirectory, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  runGit(runner, workingDirectory, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+    "--find-renames",
+  ]);
 /** Commits must not stage or record a path that still has an unresolved conflict. */
 export const requireNoUnmergedPaths = (runner: GitCommandRunner, workingDirectory: string) =>
   Effect.gen(function* () {

@@ -43,6 +43,8 @@ export const invalid = (message: string, field?: string): HostValidationError =>
  * options, so a chunk index names the same hunk in both.
  */
 export const RAW_DIFF_OPTIONS = [
+  // The status read finds renames too, whatever `diff.renames` holds.
+  "--find-renames",
   "--full-index",
   "--no-color",
   "--no-ext-diff",

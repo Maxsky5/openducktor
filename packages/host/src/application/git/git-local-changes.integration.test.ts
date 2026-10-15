@@ -522,6 +522,33 @@ describe("local changes", () => {
     GIT_TEST_TIMEOUT_MS,
   );
 
+  test(
+    "keeps a staged rename together when the status rename setting is off",
+    async () => {
+      // Without forced detection, the status read lists the rename as an added and a deleted file.
+      git("config", "status.renames", "false");
+      await commitBase();
+      git("mv", "app.txt", "moved.txt");
+      await write("moved.txt", lines(20, { 18: "moved edit" }));
+      git("add", "moved.txt");
+      const changes = await localChanges();
+      expect(changes.staged.fileStatuses).toEqual([
+        { path: "moved.txt", status: "renamed", staged: true },
+      ]);
+
+      const discarded = await change(changes, {
+        action: "discard",
+        group: "staged",
+        selection: { kind: "file", filePath: "moved.txt" },
+      });
+
+      expect(discarded.affectedPaths).toEqual(["moved.txt", "app.txt"]);
+      expect(await read("app.txt")).toBe(lines(20));
+      expect(git("status", "--porcelain=v1", "-z", "--untracked-files=all")).toBe("");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
   /** A rename that Git reports in the working tree, because its destination is intent-to-add. */
   const intentToAddRename = async () => {
     await commitBase();
