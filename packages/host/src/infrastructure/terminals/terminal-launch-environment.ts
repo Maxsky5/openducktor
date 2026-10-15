@@ -95,9 +95,9 @@ const commandLaunch = (
     const input =
       commandLines.length === 1 && !commandLines[0].includes("#")
         ? commandLines[0]
-        : commandLines
-            .map((line) => `builtin eval ${formatTerminalPathInput(shell, [line])}`)
-            .join(" && ");
+        : posixCommandScript(
+            commandLines.map((line) => `builtin eval ${formatTerminalPathInput(shell, [line])}`),
+          );
     return Effect.succeed({
       shell,
       env,
@@ -142,7 +142,7 @@ const commandScript = (shellName: string, commandLines: TerminalCommandLines): s
   return null;
 };
 
-const posixCommandScript = (commandLines: TerminalCommandLines): string =>
+const posixCommandScript = (commandLines: readonly string[]): string =>
   commandLines
     .map(
       (line) =>

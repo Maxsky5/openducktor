@@ -77,7 +77,7 @@ The label stays for the full terminal life. OSC titles do not replace it. During
 
 The launch environment port supplies shell and command launch settings. Only the infrastructure adapter knows the shell and its syntax.
 
-zsh Actions require ZLE. History records the subshell command. Multiline commands and lines with `#` use quoted `builtin eval` commands joined with `&&` to preserve script comment syntax and shell options.
+zsh Actions require ZLE. History records the subshell command. Multiline commands and lines with `#` use a quoted `builtin eval` for each line. The script checks each line's status after it runs, so `ERR_EXIT` still applies.
 
 Other command launches use the probe flags: `-ilc`, or `-ic` for csh and tcsh. The adapter builds the script in the syntax of the shell: POSIX (sh, bash, ksh, mksh, dash, and ash), csh and tcsh, or fish. Another login shell fails with `unsupported_shell`, and no process starts.
 

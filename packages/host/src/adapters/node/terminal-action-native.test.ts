@@ -43,6 +43,7 @@ test.skipIf(process.platform === "win32" || zsh === null)(
       expect(stdout).toContain("PASS setup");
       expect(stdout).toContain("PASS restart");
       expect(stdout).toContain("PASS state");
+      expect(stdout).toContain("PASS err-exit");
       expect(stdout).toContain("PASS hooks");
       expect(stdout).toContain("PASS start");
     } finally {

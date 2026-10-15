@@ -212,6 +212,27 @@ try {
   assert.equal(noHistoryResult.type === "exited" && noHistoryResult.exitCode, 0);
   console.log("PASS state: multiline state stays within the Action and failure stops later lines");
 
+  for (const [id, lines, exitCode, expected] of [
+    ["err-exit", ["set -e", "false; echo CONTINUED", "echo LATER"], 1, []],
+    ["command-list", ["false; echo CONTINUED", "echo LATER"], 0, ["CONTINUED", "LATER"]],
+  ] as const) {
+    const action = await start(id, [...lines]);
+    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    assert.ok(result.type === "exited");
+    assert.equal(result.exitCode, exitCode);
+    assert.deepEqual(
+      result.outputTail.filter((line) => line === "CONTINUED" || line === "LATER"),
+      expected,
+    );
+    assert.equal(
+      engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+      "running",
+    );
+    await write(id, 'printf "AFTER_ERR_EXIT=%s\\n" "$options[errexit]"\r');
+    await wait(() => outputs.get(id)!.includes("AFTER_ERR_EXIT=off\r\n"));
+  }
+  console.log("PASS err-exit: each Action line keeps the shell's error handling");
+
   for (const [hook, commandLine, exitCode] of [
     ["named", "true", 0],
     ["array", "false", 1],
