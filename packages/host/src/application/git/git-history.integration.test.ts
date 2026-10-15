@@ -230,6 +230,24 @@ describe("branch history", () => {
   );
 
   test(
+    "reads a commit message that holds the record separator byte",
+    async () => {
+      await commit("base.txt", "base");
+      git(["checkout", "-b", "feature"]);
+      const message = "feature \u001e subject";
+      const oid = await commit("a.txt", message);
+
+      const page = requirePage(await history("refs/heads/main"));
+
+      expect(page.commits.find((entry) => entry.oid === oid)).toMatchObject({
+        subject: message,
+        message,
+      });
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "lists the author email and the branches and tags of each commit",
     async () => {
       const base = await commit("base.txt", "shared base");

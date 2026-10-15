@@ -346,7 +346,7 @@ describe("local changes", () => {
   );
 
   test(
-    "refuses to stage or discard edits that stay inside a submodule",
+    "refuses to stage or discard edits that stay inside a submodule, also in Stage all",
     async () => {
       await commitBase();
       const sub = path.join(repo, "sub");
@@ -369,6 +369,7 @@ describe("local changes", () => {
       git("commit", "-m", "add submodule");
       // The submodule stays on its recorded commit, so Git shows only a `-dirty` line.
       await writeFile(path.join(sub, "inside.txt"), "two\n");
+      await write("other.txt", "changed other\n");
       const changes = await localChanges();
       const diff = changes.unstaged.fileDiffs.find((entry) => entry.file === "sub");
       expect(diff?.type).toBe("submodule");
@@ -401,8 +402,14 @@ describe("local changes", () => {
           }),
         ),
       ).toContain("Submodule changes have no text chunks.");
+      // Stage all stops first, so it does not stage only part of the group.
+      expect(
+        await failure(
+          change(changes, { action: "stage", group: "unstaged", selection: { kind: "all" } }),
+        ),
+      ).toContain("sub has edits only inside the submodule. Commit them in the submodule");
       expect(await readFile(path.join(sub, "inside.txt"), "utf8")).toBe("two\n");
-      expect(git("status", "--porcelain=v1", "-z")).toBe(" M sub\0");
+      expect(git("status", "--porcelain=v1", "-z")).toBe(" M other.txt\0 M sub\0");
     },
     GIT_TEST_TIMEOUT_MS,
   );

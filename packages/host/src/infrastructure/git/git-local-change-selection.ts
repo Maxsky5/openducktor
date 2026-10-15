@@ -423,6 +423,10 @@ const changeAll = (
     if (paths.length === 0) {
       return yield* Effect.fail(invalid(`There are no ${input.group} changes.`, "selection"));
     }
+    if (input.action === "stage") {
+      // Git would skip these edits, so Stage all would change only part of the group.
+      for (const diff of group.fileDiffs) yield* requireStageable(group, diff.file);
+    }
     const args =
       input.action === "stage" ? ["add", "-A", "--", ":(top)"] : ["reset", "-q", "--", ":(top)"];
     yield* runGitStep(runner, workingDirectory, args, `git.${args[0]}`);

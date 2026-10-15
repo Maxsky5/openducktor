@@ -18,8 +18,9 @@ import { readRebasingBranch } from "./git-upstream";
 export const GIT_HISTORY_PAGE_SIZE = 100;
 
 const FIELD = "\u0000";
-const RECORD = "\u001e";
-const LOG_FORMAT = ["%H", "%P", "%an", "%ae", "%aI", "%s", "%B"].join("%x00") + "%x1e";
+/** A message can hold any byte except NUL, so `-z` ends each commit with NUL after these fields. */
+const LOG_FIELDS = ["%H", "%P", "%an", "%ae", "%aI", "%s", "%B"];
+const LOG_FORMAT = LOG_FIELDS.join("%x00");
 const REF_FORMAT = ["%(objectname)", "%(*objectname)", "%(refname)", "%(HEAD)", "%(symref)"].join(
   "%00",
 );
@@ -234,9 +235,17 @@ const parseLog = (
 ) =>
   Effect.gen(function* () {
     const commits: GitHistoryCommit[] = [];
-    for (const record of output.split(RECORD)) {
-      const trimmed = record.replace(/^\r?\n/u, "");
-      if (!trimmed) continue;
+    const fields = output.split(FIELD);
+    if (fields.at(-1) === "") fields.pop();
+    if (fields.length % LOG_FIELDS.length !== 0) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "git.log",
+          message: `Git returned History output that does not hold ${LOG_FIELDS.length} fields for each commit.`,
+        }),
+      );
+    }
+    for (let index = 0; index < fields.length; index += LOG_FIELDS.length) {
       const [
         oid = "",
         parents = "",
@@ -244,8 +253,8 @@ const parseLog = (
         authorEmail = "",
         authorDate = "",
         subject = "",
-        ...body
-      ] = trimmed.split(FIELD);
+        body = "",
+      ] = fields.slice(index, index + LOG_FIELDS.length);
       const membership = boundary.has(oid) ? "boundary" : sides.get(oid);
       if (!membership) {
         return yield* Effect.fail(
@@ -264,7 +273,7 @@ const parseLog = (
         ),
         membership,
         subject,
-        message: body.join(FIELD).trimEnd(),
+        message: body.trimEnd(),
         authorName,
         authorEmail,
         authorDate,
@@ -335,6 +344,7 @@ export const readHistoryPage = (
           "log",
           "--author-date-order",
           "--no-show-signature",
+          "-z",
           `--format=${LOG_FORMAT}`,
           `--skip=${offset}`,
           `--max-count=${GIT_HISTORY_PAGE_SIZE + 1}`,
