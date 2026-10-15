@@ -2704,5 +2704,6 @@ describe("useAgentChatWindow", () => {
     expect(seenDown.size).toBe(rows.length);
 
     await harness.unmount();
-  });
+    // Each step scrolls and renders a window of the 10,000 rows, which takes up to 850 ms on CI.
+  }, 5_000);
 });

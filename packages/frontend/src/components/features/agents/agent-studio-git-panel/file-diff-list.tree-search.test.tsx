@@ -629,7 +629,9 @@ describe("FileDiffList tree view and search", () => {
     } finally {
       measurements.restore();
     }
-  });
+    // This full render flow shows 420 files with three open diffs and switches the view. It takes
+    // up to 600 ms on CI, so a loaded runner can exceed 1000 ms.
+  }, 5_000);
 
   test("shows the first match at the top when the search text changes", () => {
     const files = Array.from({ length: 100 }, (_, index) => `src/file-${index}.ts`);
