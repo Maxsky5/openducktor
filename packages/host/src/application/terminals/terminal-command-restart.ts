@@ -1,7 +1,7 @@
 import { Deferred, Effect } from "effect";
-import { COMMAND_BUFFER_ERROR, commandInput } from "./terminal-command-input";
+import { actionReplay, COMMAND_BUFFER_ERROR, commandInput } from "./terminal-command-input";
 import { terminalFailure, terminalOperationFailure } from "./terminal-session-lifecycle";
-import { formatTerminalPathInput, TerminalPathInputError } from "./terminal-path-input";
+import { TerminalPathInputError } from "./terminal-path-input";
 import { canRestartCommand, type TerminalSession } from "./terminal-session";
 import { shellCommandPrefix } from "./terminal-command-prefix";
 import type { TerminalServiceError } from "./terminal-service-error";
@@ -37,7 +37,7 @@ export const restartCommand = (
             const text =
               command.restartDir === null
                 ? command.input
-                : `builtin cd -- ${formatTerminalPathInput(session.shell, [command.restartDir])} && {\n${command.input}\n}`;
+                : actionReplay(session.shell, command.input, command.restartDir);
             return {
               input: commandInput(text),
               replay:

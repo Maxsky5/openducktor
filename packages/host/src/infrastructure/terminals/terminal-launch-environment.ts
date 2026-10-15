@@ -102,7 +102,7 @@ const commandLaunch = (
       shell,
       env,
       args,
-      interactiveCommand: `(\n${input}\n)`,
+      interactiveCommand: { input: `(\n${input}\n)`, display: commandLines.join("\n") },
     });
   }
   if (platform === "win32" && shellName === "cmd.exe") {

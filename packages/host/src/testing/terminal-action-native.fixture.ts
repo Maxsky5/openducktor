@@ -1,3 +1,4 @@
+import { checkDisplay } from "./terminal-display-native.fixture";
 import { checkBuffer, checkReady } from "./terminal-ready-native.fixture";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -37,6 +38,7 @@ const stop = engine.observeActivity((message) => {
 });
 const fixture = { root, shell, engine, activities, outputs, start, write, wait };
 const cases = new Map([
+  ["display", () => checkDisplay(fixture)],
   ["history", checkHistory],
   ["state", checkState],
   ["restart", checkRestart],
@@ -129,6 +131,11 @@ async function checkHistory() {
       activities.get("history")?.restartable === true &&
       outputs.get("history")!.includes("HISTORY_READY\r\n"),
   );
+  assert.ok(
+    (await Effect.runPromise(engine.readOutputTail("history", 24))).includes(
+      `fixture> ${historyCommand}`,
+    ),
+  );
   await write("history", "\u0003");
   assert.equal(
     (await Effect.runPromise(history.result.pipe(Effect.timeout("2 seconds")))).type,
@@ -143,7 +150,17 @@ async function checkHistory() {
       outputs.get("history")!.includes("another-shell"),
   );
   assert.ok(outputs.get("history")!.includes(historyCommand), "Up Arrow must recall the Action");
-  await write("history", "\u0003exit\r");
+  const recalled = await Effect.runPromise(engine.readOutputTail("history", 24));
+  assert.equal(recalled.at(-1), `fixture> ${historyCommand}`);
+  await write("history", "\r");
+  await wait(() => outputs.get("history")!.includes("HISTORY_READY\r\n"));
+  await write("history", "\u0003");
+  await wait(() => !activities.has("history"));
+  await write("history", "\u001b[A");
+  await wait(() => outputs.get("history")!.split(historyCommand).length >= 3);
+  await write("history", "\u0001\u000bprint EDITED\r");
+  await wait(() => outputs.get("history")!.includes("EDITED\r\n"));
+  await write("history", "exit\r");
   await wait(
     () =>
       engine.list({ kind: "all" }).find((item) => item.terminalId === "history")?.lifecycle ===
@@ -257,7 +274,8 @@ async function checkRestart() {
   const unpadded = await Effect.runPromise(
     launchEnvironment.command(["cd target", "export ODT_LONG_ACTION=", `exec ${command}`]),
   );
-  const gap = 1000 - new TextEncoder().encode(unpadded.command.interactiveCommand!).byteLength;
+  const gap =
+    1000 - new TextEncoder().encode(unpadded.command.interactiveCommand!.input).byteLength;
   const padding = "xé🙂".repeat(Math.floor(gap / 7)) + "x".repeat(gap % 7);
   await start(
     "restart",
@@ -277,6 +295,10 @@ async function checkRestart() {
         outputs.get("restart")!.split("SERVER_READY\r\n").length === starts + 1,
     );
   }
+  const screen = await Effect.runPromise(engine.readOutputTail("restart", 100));
+  assert.ok(
+    !screen.some((line) => line.includes("builtin eval") || line.includes("builtin cd --")),
+  );
   const output = outputs.get("restart")!;
   assert.deepEqual(output.match(/SERVER_(?:READY|STOPPING|STOPPED)\r\n/gu), [
     "SERVER_READY\r\n",

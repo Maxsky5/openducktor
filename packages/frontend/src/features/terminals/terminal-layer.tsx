@@ -12,8 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { hostClient } from "@/lib/host-client";
-import { TerminalCommandBar } from "./terminal-command-bar";
 import type { TerminalExitNotice } from "./terminal-viewport-policy";
 import type { TerminalSessionsModel, TerminalTab } from "./use-terminals";
 
@@ -211,11 +209,6 @@ const TerminalViewport = memo(function TerminalViewport({
           />
         </Suspense>
       </div>
-      <TerminalCommandBar
-        summary={tab.summary}
-        controller={controller}
-        onRestart={hostClient.terminalRestart}
-      />
       {notice ? (
         <p
           role="status"

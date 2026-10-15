@@ -1,6 +1,10 @@
 import { basename, join } from "node:path";
 import { Effect } from "effect";
-import { formatTerminalPathInput } from "../../application/terminals/terminal-path-input";
+import { actionReplay } from "../../application/terminals/terminal-command-input";
+import {
+  formatTerminalPathInput,
+  quotePosix,
+} from "../../application/terminals/terminal-path-input";
 import { TERMINAL_LIMITS } from "../../application/terminals/terminal-limits";
 import { TerminalPtyError, type TerminalPtyLaunchPlan } from "../../ports/terminal-pty-port";
 import { writeTerminalTempFiles } from "./terminal-temp-files";
@@ -64,6 +68,7 @@ function zshFiles(plan: TerminalPtyLaunchPlan, root: string, nonce: string) {
         : [
             '[[ -o zle ]] || { print -u2 -- "OpenDucktor Actions need the zsh line editor. Enable ZLE, then run the Action again."; exit 1; }',
           ]),
+      zshDisplay(plan),
       zshReady(),
     ].join("\n"),
   };
@@ -93,6 +98,61 @@ function zshHooks(): string {
     .join("\n");
 }
 
+function zshDisplay(plan: TerminalPtyLaunchPlan): string {
+  const command = plan.interactiveCommand;
+  if (!command) return "";
+  const failure =
+    '{ builtin print -u2 -- "OpenDucktor could not install zsh Action display hooks. Check your ZLE widgets, then reopen the terminal."; exit 1; }';
+  return [
+    `_odt_action_input=${quotePosix(command.input)}`,
+    `_odt_action_replay=${quotePosix(actionReplay(plan.shell, command.input, plan.cwd))}`,
+    `_odt_action_display=${quotePosix(command.display)}`,
+    '_odt_hidden=""',
+    "_odt_line_redraw() {",
+    "  if [[ $CONTEXT == start ]]; then",
+    '    if [[ $BUFFER == "$_odt_action_input" || $BUFFER == "$_odt_action_replay" ]]; then',
+    "      _odt_hidden=$BUFFER",
+    "      BUFFER=$_odt_action_display",
+    '    elif [[ $BUFFER != "$_odt_action_display" ]]; then',
+    '      _odt_hidden=""',
+    "    fi",
+    "  fi",
+    "  if builtin zle -l _odt_user_line_redraw; then",
+    '    builtin zle _odt_user_line_redraw -- "$@"',
+    "  fi",
+    "}",
+    "_odt_line_finish() {",
+    "  local code=0",
+    "  {",
+    "    if builtin zle -l _odt_user_line_finish; then",
+    '      builtin zle _odt_user_line_finish -- "$@"',
+    "      code=$?",
+    "    fi",
+    "  } always {",
+    "    if [[ $CONTEXT == start ]]; then",
+    '      if [[ -n $_odt_hidden && $BUFFER == "$_odt_action_display" ]]; then',
+    "        builtin zle -I",
+    "        BUFFER=$_odt_hidden",
+    "      fi",
+    '      _odt_hidden=""',
+    "    fi",
+    "  }",
+    '  return "$code"',
+    "}",
+    ...(
+      [
+        ["pre-redraw", "redraw"],
+        ["finish", "finish"],
+      ] as const
+    ).flatMap(([widget, name]) => [
+      `if builtin zle -l zle-line-${widget}; then`,
+      `  builtin zle -A zle-line-${widget} _odt_user_line_${name} || ${failure}`,
+      "fi",
+      `builtin zle -N zle-line-${widget} _odt_line_${name} || ${failure}`,
+    ]),
+  ].join("\n");
+}
+
 function zshReady(): string {
   const failure =
     '{ builtin print -u2 -- "OpenDucktor could not install zsh line-editor hooks. Check zle-line-init in your zsh startup files, then reopen the terminal."; exit 1; }';
@@ -103,6 +163,7 @@ function zshReady(): string {
     "  fi",
     "  _odt_line_init() {",
     "    local code=0 ready=1",
+    '    [[ $CONTEXT != start ]] || _odt_hidden=""',
     "    {",
     "      if builtin zle -l _odt_user_line_init; then",
     '        builtin zle _odt_user_line_init -- "$@"',

@@ -1,11 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TerminalSummary } from "@openducktor/contracts";
+import { TERMINAL_PROTOCOL_VERSION, type TerminalSummary } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { TerminalTab } from "@/features/terminals";
 import {
+  createTerminalSessionsFixture,
   createSessionPanelFixture,
   createSessionPanelsFixture,
 } from "@/test-utils/session-panel-fixtures";
+import { createTerminalActivityStore } from "@/features/terminals/terminal-activity-store";
+import { createTerminalTransportController } from "@/features/terminals/terminal-transport-controller";
 import { SessionPanel } from "./session-panel";
 import { SessionPanelsRoot } from "./session-panels-root";
 
@@ -46,6 +49,47 @@ describe("SessionPanel", () => {
     expect(screen.getByRole("button", { name: "Close Diffs" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Close Files" })).toBeDefined();
     expect(screen.getByRole("button", { name: "New tab in the right panel" })).toBeDefined();
+  });
+
+  test("offers Restart in the tab header only for the selected terminal", () => {
+    const store = createTerminalActivityStore();
+    for (const message of [
+      { version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_start" },
+      { version: TERMINAL_PROTOCOL_VERSION, type: "activity_snapshot_end" },
+      {
+        version: TERMINAL_PROTOCOL_VERSION,
+        type: "activity_updated",
+        activity: { summary: terminal.summary, command: "bun dev", restartable: true },
+      },
+    ] as const)
+      store.apply(message);
+    const controller = {
+      ...createTerminalTransportController(
+        { connect: async () => ({ send: async () => {}, close: () => {} }) },
+        () => {},
+      ),
+      readActivity: store.read,
+      subscribeActivity: store.subscribe,
+    };
+    const model = createSessionPanelFixture({
+      tabs: [
+        { id: "files", kind: "files" },
+        { id: "terminal-1", kind: "terminal", terminal },
+      ],
+      selectedTabId: "terminal-1",
+      terminals: createTerminalSessionsFixture({ controller }),
+    });
+    const view = render(<SessionPanel model={model} toolTabs={toolTabs} />);
+    const add = screen.getByRole("button", { name: "New tab in the right panel" });
+    expect(
+      add.parentElement?.contains(screen.getByRole("button", { name: "Restart command" })),
+    ).toBe(true);
+    view.rerender(
+      <SessionPanel model={{ ...model, selectedTabId: "files" }} toolTabs={toolTabs} />,
+    );
+    expect(screen.queryByRole("button", { name: "Restart command" })).toBeNull();
+    view.rerender(<SessionPanel model={model} toolTabs={toolTabs} />);
+    expect(screen.getByRole("button", { name: "Restart command" })).toBeDefined();
   });
 
   test("keeps Files mounted while another tab shows, and mounts other tools only when selected", () => {

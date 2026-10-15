@@ -271,7 +271,7 @@ export const createTerminalSessionProducer = ({
                     const handle = session.resources.handle;
                     if (!handle || session.summary.lifecycle !== "running") return Effect.void;
                     return handle
-                      .write(commandInput(interactiveCommand))
+                      .write(commandInput(interactiveCommand.input))
                       .pipe(
                         Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
                       );
@@ -290,7 +290,7 @@ export const createTerminalSessionProducer = ({
               let input = details.input;
               let restartDir: string | null = null;
               if (command?.run.phase === "command" && interactiveCommand !== undefined) {
-                input = interactiveCommand;
+                input = interactiveCommand.input;
                 restartDir = command.plan.cwd;
               } else if (replay) {
                 input = replay.fullInput;

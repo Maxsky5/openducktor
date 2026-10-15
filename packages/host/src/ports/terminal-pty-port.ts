@@ -14,7 +14,7 @@ export type TerminalPtyLaunchPlan = {
    */
   windowsBatchScript?: string;
   /** Send this input only after the shell sends a ready marker with its nonce. */
-  interactiveCommand?: string;
+  interactiveCommand?: { input: string; display: string };
   cwd: string;
   env: Readonly<Record<string, string>>;
   grid: TerminalGrid;

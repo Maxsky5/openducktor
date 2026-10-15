@@ -77,7 +77,7 @@ The label stays for the full terminal life. OSC titles do not replace it. During
 
 The launch environment port supplies shell and command launch settings. Only the infrastructure adapter knows the shell and its syntax.
 
-zsh Actions require ZLE. History records the subshell command. Multiline commands and lines with `#` use a quoted `builtin eval` for each line. The script checks each line's status after it runs, so `ERR_EXIT` still applies.
+zsh Actions require ZLE. ZLE shows the original Action lines, including when Up recalls the command. It restores the protected script after editing ends. History records that script. Multiline commands and lines with `#` use a quoted `builtin eval` for each line. The script checks each line's status after it runs, so `ERR_EXIT` still applies.
 
 Other command launches use the probe flags: `-ilc`, or `-ic` for csh and tcsh. The adapter builds the script in the syntax of the shell: POSIX (sh, bash, ksh, mksh, dash, and ash), csh and tcsh, or fish. Another login shell fails with `unsupported_shell`, and no process starts.
 
@@ -87,13 +87,13 @@ On Windows, ComSpec must be `cmd.exe`, or the command fails with `unsupported_sh
 
 ## Restart a running command
 
-The command bar uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Manual commands above the 1,024-byte hook limit cannot restart. Manual commands with the words `exec`, `exit`, or `logout` cannot restart, including when a word is an argument. The host retains full Action input, so the byte limit does not restrict Action restarts.
+The Restart button in the tab header uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Manual commands above the 1,024-byte hook limit cannot restart. Manual commands with the words `exec`, `exit`, or `logout` cannot restart, including when a word is an argument. The host retains full Action input, so the byte limit does not restrict Action restarts.
 
 Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
 
 `terminal_restart` takes the terminal ID and displayed command. The host rejects stale or concurrent requests, blocks other input, sends Ctrl+C, and waits for an authenticated main-prompt line-editor marker before submitting the command again. Prompt hooks and the existing line-init widget run before this marker. If the line editor contains text or has input waiting, the host rejects Action input and restart input, reports an error, and keeps that text. Actions restart from their launch directory. Manual commands restart from the current directory.
 
-Closing the terminal or exceeding the 10-second readiness timeout cancels the rerun. The command bar shows pending state and errors.
+Closing the terminal or exceeding the 10-second readiness timeout cancels the rerun. The button shows pending state. A small popover shows restart errors.
 
 ## Run an action
 
