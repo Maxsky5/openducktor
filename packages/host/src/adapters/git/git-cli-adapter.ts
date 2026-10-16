@@ -30,9 +30,7 @@ import {
   runGitAllowFailure,
 } from "../../infrastructure/git/git-command-runner";
 import { buildFileDiffs, loadDiffPayload } from "../../infrastructure/git/git-diff";
-import { readHistoryPage } from "../../infrastructure/git/git-history";
-import { changeLocalSelection } from "../../infrastructure/git/git-local-change-selection";
-import { commitStaged, loadLocalChanges } from "../../infrastructure/git/git-local-changes";
+import { createGitCliLocalChangeMethods } from "./git-cli-local-change-methods";
 import {
   isAncestor,
   isMergeIncluded,
@@ -369,18 +367,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         status: () => status(workingDirectory, context),
       });
     },
-    getLocalChanges(workingDirectory, context) {
-      return loadLocalChanges(runner, workingDirectory, {
-        branch: () => branch(workingDirectory, context),
-        statusOutput: () => statusOutput(workingDirectory, context),
-      });
-    },
-    changeSelection(workingDirectory, changes, input) {
-      return changeLocalSelection(runner, workingDirectory, changes, input);
-    },
-    getHistoryPage(workingDirectory, input) {
-      return readHistoryPage(runner, workingDirectory, input);
-    },
+    ...createGitCliLocalChangeMethods(runner, { branch, statusOutput }),
     createWorktree(repoPath, worktreePath, branch, createBranch, startPoint) {
       return createWorktree(runner, repoPath, worktreePath, branch, createBranch, startPoint);
     },
@@ -460,9 +447,6 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     },
     inspectPublication(target) {
       return inspectPublication(runner, target);
-    },
-    commitStaged(workingDirectory, message) {
-      return commitStaged(runner, workingDirectory, message);
     },
     pushBranch(workingDirectory, branch, options) {
       return pushBranch(runner, workingDirectory, branch, options);

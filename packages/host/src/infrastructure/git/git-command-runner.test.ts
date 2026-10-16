@@ -118,7 +118,8 @@ test("a strict read fails on output that is not UTF-8 and keeps the replacement 
         Effect.flip(runner(root, ["hash-object", "--stdin"], { stdin: "", strictUtf8: true })),
       ),
     ).toMatchObject({
-      message: "A Git read with stdin or a start callback cannot check that its output is UTF-8 text.",
+      message:
+        "A Git read with stdin or a start callback cannot check that its output is UTF-8 text.",
     });
   } finally {
     await rm(root, { recursive: true, force: true });
