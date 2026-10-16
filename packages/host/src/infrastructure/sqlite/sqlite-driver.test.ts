@@ -18,8 +18,6 @@ afterEach(async () => {
   tempDirectories.clear();
 });
 
-const decode = (value: Uint8Array): string => new TextDecoder().decode(value);
-
 test("openSqliteDatabase supports the Node runtime adapter", async () => {
   const tempDirectory = await makeTempDirectory();
   const entryPath = path.join(tempDirectory, "node-sqlite-driver-check.ts");
@@ -72,13 +70,19 @@ test("openSqliteDatabase supports the Node runtime adapter", async () => {
   expect(build.success, build.logs.map((log) => String(log)).join("\n")).toBe(true);
 
   const outputPath = path.join(buildDirectory, "node-sqlite-driver-check.js");
-  const result = Bun.spawnSync(["node", outputPath, databasePath], {
+  const child = Bun.spawn(["node", outputPath, databasePath], {
     stderr: "pipe",
     stdout: "pipe",
   });
-
-  expect(
-    result.exitCode,
-    [decode(result.stdout), decode(result.stderr)].filter(Boolean).join("\n"),
-  ).toBe(0);
+  try {
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(exitCode, [stdout, stderr].filter(Boolean).join("\n")).toBe(0);
+  } finally {
+    child.kill();
+    await child.exited;
+  }
 });
