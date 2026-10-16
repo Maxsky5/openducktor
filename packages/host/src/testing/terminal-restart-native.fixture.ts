@@ -58,14 +58,14 @@ export async function checkRestart(fixture: TerminalNativeFixture) {
   const serverDirectory = await realpath(join(actionRoot, "target"));
   assert.equal(output.split(`SERVER_CWD=${serverDirectory}\r\n`).length, 4);
 
-  const cancelled = await start("cancel", [command, "print SHOULD_NOT_RUN"]);
+  const cancelled = await start("cancel", [command, "print SHOULD_NOT_RUN"], root, "host");
   await wait(() => outputs.get("cancel")!.includes("SERVER_READY\r\n"));
   await write("cancel", "\u0003");
   const cancelledResult = await Effect.runPromise(
     cancelled.result.pipe(Effect.timeout("2 seconds")),
   );
-  assert.ok(cancelledResult.type === "exited");
-  assert.ok(cancelledResult.exitCode === 0 || cancelledResult.exitCode === 130);
+  assert.equal(cancelledResult.type, "failed");
+  assert.ok(cancelledResult.type === "failed" && cancelledResult.message.includes("stopped"));
   assert.equal(
     inputs.get("cancel")!.some((input) => input.includes("SHOULD_NOT_RUN")),
     false,

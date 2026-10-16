@@ -289,21 +289,27 @@ export const createTerminalSessionProducer = ({
                 if (lineDone === null || session.summary.lifecycle !== "running") return;
                 const done = lineDone;
                 lineDone = null;
-                if (
-                  details.exitCode === 0 &&
-                  command.run.lineIndex + 1 < command.lines.length &&
-                  !command.run.stopRequested
-                ) {
+                const hasMoreLines = command.run.lineIndex + 1 < command.lines.length;
+                if (details.exitCode === 0 && hasMoreLines && !command.run.stopRequested) {
                   command.run.lineIndex += 1;
                   session.inputOwner = "action";
                 } else {
                   command.run.phase = "shell";
-                  settleCommandRunAfterOutput(session, (outputTail) => ({
-                    type: "exited",
-                    exitCode: details.exitCode,
-                    signal: null,
-                    outputTail,
-                  }));
+                  settleCommandRunAfterOutput(session, (outputTail) =>
+                    command.run.stopRequested && hasMoreLines
+                      ? {
+                          type: "failed",
+                          message:
+                            "The Action stopped before all commands ran. Run the Action again to finish it.",
+                          outputTail,
+                        }
+                      : {
+                          type: "exited",
+                          exitCode: details.exitCode,
+                          signal: null,
+                          outputTail,
+                        },
+                  );
                 }
                 Deferred.doneUnsafe(done, Effect.void);
               }
