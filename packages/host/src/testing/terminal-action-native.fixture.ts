@@ -220,7 +220,7 @@ async function checkHistory() {
   await write("history", "\u0003");
   assert.equal(
     (await Effect.runPromise(history.result.pipe(Effect.timeout("2 seconds")))).type,
-    "exited",
+    "failed",
   );
   await wait(() => outputs.get("history")!.includes("fixture> "));
   outputs.set("history", "");

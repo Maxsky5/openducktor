@@ -80,7 +80,15 @@ export const settleCommandRun = (
   const run = session.commandRun;
   if (!run || Deferred.isDoneUnsafe(run.result)) return;
   const outputTail = session.screen.outputTail(TERMINAL_LIMITS.commandOutputTailLines);
-  Deferred.doneUnsafe(run.result, Effect.succeed(result(outputTail)));
+  let outcome = result(outputTail);
+  if (run.stopRequested && outcome.type === "exited") {
+    outcome = {
+      type: "failed",
+      message: "The Action stopped. Run the Action again to finish it.",
+      outputTail,
+    };
+  }
+  Deferred.doneUnsafe(run.result, Effect.succeed(outcome));
 };
 
 /** Settles the command result after the screen parses the queued output. */

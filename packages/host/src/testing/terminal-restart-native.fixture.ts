@@ -78,7 +78,7 @@ export async function checkRestart(fixture: TerminalNativeFixture) {
   assert.equal(activities.get("exec")?.restartable, false);
   await write("exec", "\u0003");
   const replacedResult = await Effect.runPromise(replaced.result.pipe(Effect.timeout("2 seconds")));
-  assert.equal(replacedResult.type === "exited" && replacedResult.exitCode, 0);
+  assert.equal(replacedResult.type, "failed");
   assert.equal(
     engine.list({ kind: "all" }).find((item) => item.terminalId === "exec")?.lifecycle,
     "exited",
