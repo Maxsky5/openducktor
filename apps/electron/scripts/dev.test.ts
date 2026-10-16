@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -867,7 +868,7 @@ describe("electron dev script", () => {
           startElectronProcess: (_rendererDevUrl, _executablePath, remoteDebugging) => {
             const launchIndex = remoteDebuggingValues.length;
             remoteDebuggingValues.push(remoteDebugging);
-            void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+            writeFileSync(activePortPath, "45678\n/devtools/browser/example\n");
             if (launchIndex === 0) {
               return {
                 exited: initialExited,
