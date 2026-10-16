@@ -91,7 +91,7 @@ const commandLaunch = (
 ): Effect.Effect<TerminalCommandLaunch, TerminalServiceError> => {
   const shellName = basename(shell).toLowerCase();
   if (platform !== "win32" && shellName === "zsh") {
-    return Effect.succeed({ shell, env, args, interactiveCommand: commandLines });
+    return Effect.succeed({ shell, env, args, interactiveCommand: true });
   }
   if (platform === "win32" && shellName === "cmd.exe") {
     return Effect.succeed({
@@ -121,7 +121,7 @@ const commandLaunch = (
 // lines. Each line stays unchanged, so its comments and terminators keep their meaning. The script
 // stops after the first failed line and exits with that line's status.
 
-const POSIX_SHELL_NAMES = new Set(["sh", "bash", "zsh", "ksh", "mksh", "dash", "ash"]);
+const POSIX_SHELL_NAMES = new Set(["sh", "bash", "ksh", "mksh", "dash", "ash"]);
 
 const commandScript = (shellName: string, commandLines: TerminalCommandLines): string | null => {
   if (POSIX_SHELL_NAMES.has(shellName)) return posixCommandScript(commandLines);

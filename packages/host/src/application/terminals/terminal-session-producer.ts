@@ -266,7 +266,7 @@ export const createTerminalSessionProducer = ({
                 lineDone = null;
                 if (
                   details.exitCode === 0 &&
-                  lineIndex + 1 < interactiveCommand.length &&
+                  lineIndex + 1 < command.lines.length &&
                   !command.run.stopRequested
                 ) {
                   lineIndex += 1;
@@ -327,61 +327,50 @@ export const createTerminalSessionProducer = ({
           );
         }
         if (command && interactiveCommand !== undefined) {
-          const submission = yield* Effect.forkDetach(
-            Effect.gen(function* () {
-              while (command.run.phase === "command") {
-                const ready = yield* Effect.result(
-                  Deferred.await(session.ready).pipe(Effect.timeout("10 seconds")),
-                );
-                const done = Deferred.makeUnsafe<void>();
-                yield* session.operations.run(
-                  Effect.suspend(() => {
-                    const handle = session.resources.handle;
-                    if (!handle || session.summary.lifecycle !== "running") return Effect.void;
-                    const message =
-                      ready._tag === "Failure"
-                        ? COMMAND_READY_ERROR
-                        : ready.success
-                          ? null
-                          : COMMAND_BUFFER_ERROR;
-                    if (message !== null) {
-                      command.run.phase = "shell";
-                      session.command = null;
-                      acceptOutput(session, new TextEncoder().encode(`\r\n${message}\r\n`));
-                      settleCommandRunAfterOutput(session, (outputTail) => ({
-                        type: "failed",
-                        message,
-                        outputTail,
-                      }));
-                      activity.changed(session);
-                      return Effect.void;
-                    }
-                    const input = interactiveCommand[lineIndex]!;
-                    lineDone = done;
-                    return handle.write(commandInput(input)).pipe(
-                      Effect.catch((failure) =>
-                        Effect.sync(() => {
-                          failCommand(session, failure);
-                        }),
-                      ),
-                      Effect.ensuring(
-                        Effect.sync(() => {
-                          if (session.inputOwner === "action") session.inputOwner = null;
-                        }),
-                      ),
-                    );
-                  }),
-                );
-                yield* Effect.raceFirst(Deferred.await(done), Deferred.await(command.run.result));
-                if (Deferred.isDoneUnsafe(command.run.result)) return;
-              }
-            }).pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  if (session.inputOwner === "action") session.inputOwner = null;
+          const releaseInput = Effect.sync(() => {
+            if (session.inputOwner === "action") session.inputOwner = null;
+          });
+          const submitLines = Effect.gen(function* () {
+            while (command.run.phase === "command") {
+              const ready = yield* Effect.result(
+                Deferred.await(session.ready).pipe(Effect.timeout("10 seconds")),
+              );
+              const done = Deferred.makeUnsafe<void>();
+              yield* session.operations.run(
+                Effect.suspend(() => {
+                  const handle = session.resources.handle;
+                  if (!handle || session.summary.lifecycle !== "running") return Effect.void;
+                  let message: string | null = null;
+                  if (ready._tag === "Failure") message = COMMAND_READY_ERROR;
+                  else if (!ready.success) message = COMMAND_BUFFER_ERROR;
+                  if (message !== null) {
+                    command.run.phase = "shell";
+                    session.command = null;
+                    acceptOutput(session, new TextEncoder().encode(`\r\n${message}\r\n`));
+                    settleCommandRunAfterOutput(session, (outputTail) => ({
+                      type: "failed",
+                      message,
+                      outputTail,
+                    }));
+                    activity.changed(session);
+                    return Effect.void;
+                  }
+                  const input = command.lines[lineIndex]!;
+                  lineDone = done;
+                  return handle.write(commandInput(input)).pipe(
+                    Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
+                    Effect.ensuring(releaseInput),
+                  );
                 }),
-              ),
-            ),
+              );
+              yield* Deferred.await(done);
+            }
+          });
+          const submission = yield* Effect.forkDetach(
+            Effect.raceFirst(
+              submitLines,
+              Deferred.await(command.run.result).pipe(Effect.asVoid),
+            ).pipe(Effect.ensuring(releaseInput)),
             { startImmediately: true },
           );
           session.resources.ownSubmission(submission);
