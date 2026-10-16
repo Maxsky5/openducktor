@@ -14,6 +14,7 @@ export const restartCommand = (
   return Effect.acquireUseRelease(
     session.operations.run(
       Effect.gen(function* () {
+        yield* Effect.promise(() => session.screen.parsed());
         const command = session.runningCommand;
         const handle = session.resources.handle;
         if (session.summary.lifecycle !== "running" || !command || !handle)

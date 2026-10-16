@@ -168,4 +168,38 @@ export async function checkRestart({
   await wait(() => outputs.get("close")!.includes("SERVER_READY\r\n"));
   await Effect.runPromise(engine.close("close", true));
   assert.equal((await Effect.runPromise(closing.result)).type, "closed");
+
+  const finished = await start("finished", [setupCommand]);
+  await wait(
+    () =>
+      activities.get("finished")?.restartable === true &&
+      outputs.get("finished")!.includes("SETUP_READY\r\n"),
+  );
+  let request: Promise<string | null> | null = null;
+  let stale = false;
+  let completion = "";
+  await Effect.runPromise(
+    engine.attach({
+      terminalId: "finished",
+      attachmentId: "finished-restart",
+      lastConsumedSequence: 0,
+      sink: (event, data) => {
+        if (event.type !== "output" || event.replay || request !== null) return;
+        completion += new TextDecoder().decode(data);
+        if (!completion.split("\u001b]633;D;")[1]?.includes("\u0007")) return;
+        stale = activities.get("finished")?.restartable === true;
+        request = Effect.runPromise(Effect.result(engine.restart("finished", setupCommand))).then(
+          (result) => (result._tag === "Failure" ? result.failure.message : null),
+        );
+      },
+    }),
+  );
+  const count = inputs.get("finished")!.length;
+  await write("finished", "done\r");
+  await wait(() => request !== null);
+  assert.equal(stale, true);
+  assert.match((await request!) ?? "", /no command that can restart/u);
+  assert.deepEqual(inputs.get("finished")!.slice(count), ["done\r"]);
+  const result = await Effect.runPromise(finished.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(result.type === "exited" && result.exitCode, 0);
 }
