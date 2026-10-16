@@ -4,4 +4,4 @@ export const BRANCH_CHIP_CLASS_NAME =
 
 /** The interactive form of `BRANCH_CHIP_CLASS_NAME`. It shows a surface only on hover and focus. */
 export const BRANCH_CHIP_BUTTON_CLASS_NAME =
-  "cursor-pointer outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 data-[state=open]:bg-muted";
+  "cursor-pointer outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-input-focus disabled:cursor-not-allowed disabled:opacity-60 data-[state=open]:bg-muted";

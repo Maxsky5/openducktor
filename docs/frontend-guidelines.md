@@ -31,9 +31,9 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Apply semantic tokens with `className` at the use site.
 - Keep base shadcn components free of feature-specific hardcoded colors.
 - Make each new UI element work in light and dark themes.
-- Show the focus of a form control with the neutral `input-focus` color only. Do not use the primary color, a glow, or a ring.
-- Give a focused field or select trigger the `border-input-focus` border. `Input`, `Textarea`, and the `Combobox` trigger apply it. A field inside a group that draws the border, such as an input with an attached button, uses `embedded` and puts `focus-within:border-input-focus` or `has-[input:focus-visible]:border-input-focus` on the group.
-- Give a focused `Checkbox`, `RadioGroupItem`, or `Switch` a 2px `outline-input-focus` outline with an offset. The checked fill hides a border change.
+- Show the focus of a form control with the neutral `input-focus` color only. Do not use the primary color, the `ring` color, or a glow.
+- Give a focused field or select trigger with an input border the `border-input-focus` border. `Input`, `Textarea`, and the default `Combobox` trigger apply it. A `Button` select trigger also needs `focus-visible:ring-0`. A field inside a group that draws the border, such as an input with an attached button, uses `embedded` and puts `focus-within:border-input-focus` or `has-[input:focus-visible]:border-input-focus` on the group.
+- Give every other focused form control a 2px `ring-input-focus` ring. This includes `Checkbox`, `RadioGroupItem`, `Switch`, `Slider`, segmented items, option cards, color swatches, and a custom `Combobox` trigger without a border. A checked fill or a selected border hides a border change.
 - Use `warning-surface-hover` and `warning-surface-selected` for interactive warning surfaces. Use the matching `info-surface-hover` and `info-surface-selected` tokens for information surfaces. These tokens keep the base state color across hover and selection in both themes.
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
 - Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.

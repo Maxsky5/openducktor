@@ -69,9 +69,9 @@ function TileColorSwatchButton({
       className={cn(
         "flex size-8 items-center justify-center rounded-md border border-border/60 outline-none",
         className,
-        // The design system focus ring, tighter and softer than the solid ring plus offset gap
-        // that marks the selection, so a focused swatch never reads as a selected one.
-        "focus-visible:ring-2 focus-visible:ring-ring/40",
+        // The neutral focus ring sits tight, unlike the ring plus offset gap that marks the
+        // selection, so a focused swatch never reads as a selected one.
+        "focus-visible:ring-2 focus-visible:ring-input-focus",
         "disabled:cursor-not-allowed disabled:opacity-50",
         isSelected && "ring-2 ring-ring ring-offset-2 ring-offset-background",
       )}

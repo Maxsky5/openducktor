@@ -62,7 +62,7 @@ export function SpeedSelect({
               aria-label="Speed"
               aria-busy={pending}
               tabIndex={disabled ? 0 : undefined}
-              className="speed-select inline-flex min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="speed-select inline-flex min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-focus"
               onAnimationEnd={(event) => event.currentTarget.classList.remove("is-shaking")}
             >
               <Combobox
@@ -144,7 +144,10 @@ function SpeedButton({
       size="icon"
       aria-label={`Speed: ${label}`}
       disabled={disabled}
-      className={cn("size-7 rounded-lg text-muted-foreground", className)}
+      className={cn(
+        "size-7 rounded-lg text-muted-foreground focus-visible:ring-input-focus",
+        className,
+      )}
     >
       <SpeedIcon choice={choice} />
     </Button>

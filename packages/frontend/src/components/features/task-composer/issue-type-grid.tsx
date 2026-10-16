@@ -28,7 +28,7 @@ export function IssueTypeGrid({
               "group min-h-36 rounded-xl border p-4 text-left transition-colors",
               isDisabled
                 ? "cursor-not-allowed opacity-50"
-                : "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                : "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-input-focus",
               option.accentClass,
             )}
             onClick={() => onSelectIssueType(option.value)}

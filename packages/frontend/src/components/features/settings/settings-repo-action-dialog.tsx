@@ -88,7 +88,7 @@ export function RepoActionDialog({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="shrink-0"
+                      className="shrink-0 focus-visible:ring-0 focus-visible:border-input-focus"
                       aria-label={`Icon: ${selectedIcon.label}`}
                       title="Choose icon"
                     >

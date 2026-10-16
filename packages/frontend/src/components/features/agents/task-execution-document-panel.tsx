@@ -126,7 +126,7 @@ export function TaskExecutionDocumentPanel({
               type="button"
               variant="ghost"
               aria-label={`${activeDocument.title}, change document`}
-              className="h-8 min-w-0 gap-1.5 px-2 text-base font-semibold tracking-tight"
+              className="h-8 min-w-0 gap-1.5 px-2 text-base font-semibold tracking-tight focus-visible:ring-input-focus"
             >
               <span className="truncate">{activeDocument.title}</span>
               <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
