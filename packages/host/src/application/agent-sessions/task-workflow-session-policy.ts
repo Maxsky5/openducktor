@@ -43,6 +43,7 @@ export const createTaskWorkflowSessionPolicy = ({
   taskLifecycle,
   taskSessionStart,
   persistTaskModel,
+  resolveRoot,
 }: {
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
@@ -51,6 +52,9 @@ export const createTaskWorkflowSessionPolicy = ({
   taskLifecycle: TaskLifecycle;
   taskSessionStart: Pick<TaskSessionStartPreparationService, "prepare" | "complete">;
   persistTaskModel: TaskSessionModelPersistence;
+  resolveRoot: (
+    ref: AgentSessionLiveRef,
+  ) => Effect.Effect<import("@openducktor/contracts").AgentSessionAuthorizedRoot, HostError>;
 }) => {
   const progress: TaskSessionProgress = {
     checkCanceled: () => Effect.void,
@@ -83,16 +87,40 @@ export const createTaskWorkflowSessionPolicy = ({
         ),
       ),
     forkSession: (input: Parameters<RuntimeControl["forkSession"]>[0]) =>
-      operations.fork(input, progress).pipe(
-        Effect.flatMap(({ session, publish }) =>
-          publish.pipe(
-            Effect.as(session),
-            Effect.mapError((cause) => toHostOperationError(cause, "task-workflow-session.create")),
+      operations
+        .fork(input, {
+          ...progress,
+          workStartGuard: input.workStartGuard,
+          checkCanceled: () =>
+            Effect.try({
+              try: () => input.workStartGuard?.assertCurrent(),
+              catch: (cause) => toHostOperationError(cause, "task.fork.canceled"),
+            }),
+        })
+        .pipe(
+          Effect.flatMap(({ session, publish }) =>
+            publish.pipe(
+              Effect.as(session),
+              Effect.mapError((cause) =>
+                toHostOperationError(cause, "task-workflow-session.create"),
+              ),
+            ),
           ),
         ),
-      ),
 
     forScope: (scope: AgentSessionWorkflowScope): AgentSessionOperationPolicy => {
+      const readStored = (
+        input: AgentSessionLiveRef,
+        operation: "read-resume" | "send" | "update-model",
+      ) =>
+        Effect.gen(function* () {
+          const root = yield* resolveRoot(input);
+          return yield* readStoredWorkflowSession(
+            tasks,
+            { ...root, sessionScope: scope },
+            operation,
+          );
+        });
       const runOperation = <A, E, R>(
         ref: AgentSessionLiveRef,
         operation: string,
@@ -107,40 +135,32 @@ export const createTaskWorkflowSessionPolicy = ({
       return {
         run: runOperation,
         runSend: (ref, effect) => runOperation(ref, "send session message", effect),
-        validateRef: (ref) =>
-          readStoredWorkflowSession(tasks, { ...ref, sessionScope: scope }, "send").pipe(
-            Effect.asVoid,
-          ),
+        validateRef: (ref) => readStored(ref, "send").pipe(Effect.asVoid),
         prepareResume: (input) =>
           Effect.gen(function* () {
-            const stored = yield* readStoredWorkflowSession(
-              tasks,
-              { ...input, sessionScope: scope },
-              "read-resume",
-            );
+            const stored = yield* readStored(input, "read-resume");
             return {
               input: {
                 ...input,
                 runtimeKind: stored.runtimeKind,
                 workingDirectory: stored.workingDirectory,
+                model: stored.selectedModel ?? undefined,
               },
               save: (summary: AgentSessionControlSummary) =>
-                storeWorkflowSession(tasks.agentSessionUpsert, {
-                  repoPath: input.repoPath,
-                  sessionScope: scope,
-                  model: input.model,
-                  selectedModel: stored.selectedModel,
-                  summary,
-                }).pipe(Effect.asVoid),
+                summary.externalSessionId !== stored.externalSessionId
+                  ? Effect.void
+                  : storeWorkflowSession(tasks.agentSessionUpsert, {
+                      repoPath: input.repoPath,
+                      sessionScope: scope,
+                      model: stored.selectedModel ?? undefined,
+                      selectedModel: stored.selectedModel,
+                      summary,
+                    }).pipe(Effect.asVoid),
             };
           }),
         prepareSend: (input) =>
           Effect.gen(function* () {
-            const stored = yield* readStoredWorkflowSession(
-              tasks,
-              { ...input, sessionScope: scope },
-              "send",
-            );
+            const stored = yield* readStored(input, "send");
             const prepared: AgentSessionSendContent = {
               ...input,
               runtimeKind: stored.runtimeKind,
@@ -153,11 +173,13 @@ export const createTaskWorkflowSessionPolicy = ({
         recordAcceptedMessage: () => Effect.void,
         prepareModelUpdate: (input) =>
           Effect.gen(function* () {
-            const stored = yield* readStoredWorkflowSession(
-              tasks,
-              { ...input, sessionScope: scope },
-              "update-model",
-            );
+            const stored = yield* readStored(input, "update-model");
+            if (input.externalSessionId !== stored.externalSessionId)
+              return yield* new HostOperationError({
+                operation: "session.update-model",
+                message:
+                  "A child session has no saved model record. Change the model of its owned root or start a new workflow session.",
+              });
             const runtimeInput = {
               ...input,
               runtimeKind: stored.runtimeKind,

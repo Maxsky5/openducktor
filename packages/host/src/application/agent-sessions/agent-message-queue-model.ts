@@ -124,9 +124,9 @@ export const snapshotOf = (queue: MessageQueue): AgentMessageQueueSnapshot => ({
 });
 
 /** The runtime gave no conclusive answer, so the entry must not be sent again. */
-export const markAcceptanceUnknown = (entry: QueueEntry, messageId: string): void => {
+export const markAcceptanceUnknown = (entry: QueueEntry, messageId?: string): void => {
   entry.state = "acceptance_unknown";
-  entry.unknownMessageId = messageId;
+  if (messageId) entry.unknownMessageId = messageId;
   entry.error = ACCEPTANCE_UNKNOWN_ERROR;
 };
 
@@ -241,7 +241,20 @@ export const changeEntry = (
     case "remove":
       // A message with an unknown result stays until the conversation shows it, so it never
       // repeats.
-      return transitionEntry(entry, ["queued", "editing"], () => removeEntry(queue, entry)).pipe(
+      return (
+        entry.state === "editing"
+          ? requireCurrentEdit(entry, action.editId ?? "")
+          : action.editId === undefined
+            ? Effect.void
+            : Effect.fail(
+                actionError(
+                  "This edit ended or changed elsewhere. Open the message again to edit it.",
+                ),
+              )
+      ).pipe(
+        Effect.andThen(
+          transitionEntry(entry, ["queued", "editing"], () => removeEntry(queue, entry)),
+        ),
         Effect.as(true),
       );
   }

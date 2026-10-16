@@ -39,6 +39,12 @@ describe("blocker and approval concurrency", () => {
               },
               taskStore: {
                 listTasks: () => Effect.sync(() => [current]),
+                getTaskMetadata: () =>
+                  Effect.succeed({
+                    spec: { markdown: "" },
+                    plan: { markdown: "" },
+                    agentSessions: [],
+                  }),
                 transitionTask: (input) =>
                   Effect.gen(function* () {
                     if (scenario === "blocker writing" && input.status === "blocked") yield* pause;

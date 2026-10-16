@@ -33,10 +33,6 @@ import {
   resolveChatComposerModelSelections,
   resolveChatComposerSelectedRuntimeKind,
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
-import {
-  sessionModelPreparationKey,
-  useSessionModelPreparation,
-} from "@/features/agent-chat-composer/model-selection/use-session-model-preparation";
 import { useDraftModelSelectionState } from "@/features/agent-chat-composer/model-selection/use-draft-model-selection";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
@@ -85,7 +81,6 @@ type AgentStudioChatComposerState = {
   newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   /** Repairs the saved choice and returns a guard to keep Send bound to this chat. */
-  prepareSelectedSessionModelForSend: () => Promise<() => void>;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -394,15 +389,6 @@ export function useAgentStudioChatComposer({
     loadedSessionIdentity,
   ]);
   const { selectionCatalog, selectedModelSelection, selectionForNewSession } = modelSelections;
-  const prepareModelForSend = useSessionModelPreparation(
-    sessionModelPreparationKey(workspaceRepoPath, selectedSessionIdentity),
-    modelSelections,
-    hasSessionTarget,
-  );
-  const prepareSelectedSessionModelForSend = useCallback(
-    () => prepareModelForSend(updateAgentSessionModel),
-    [prepareModelForSend, updateAgentSessionModel],
-  );
 
   const searchFiles = useMemo(
     () =>
@@ -509,7 +495,6 @@ export function useAgentStudioChatComposer({
     newSessionCatalog: isRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
-    prepareSelectedSessionModelForSend,
     selectedModelDescriptor: selectedModelEntry,
     isSelectionCatalogLoading,
     supportsProfiles,

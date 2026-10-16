@@ -4,7 +4,7 @@ import type {
   AgentSessionLiveRef,
   AgentSessionLiveAttachInput,
 } from "@openducktor/contracts";
-import { agentSessionRefKey, buildReadOnlyPermissionRejectionMessage } from "@openducktor/core";
+import { agentSessionRefKey } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
@@ -38,7 +38,6 @@ import {
   unavailableAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
 import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
-import { loadEffectivePromptOverrides } from "../../prompt-overrides";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
 import {
   markSessionHistoriesStale,
@@ -54,10 +53,6 @@ import {
   type LoadedWorkflowSessionRecords,
   pruneVanishedWorkflowSessions,
 } from "../session-read-model/agent-session-workflow-records";
-import {
-  collectPendingApprovalPolicyActions,
-  type PendingApprovalPolicyAction,
-} from "../session-read-model/pending-approval-policy";
 import {
   readCachedTaskSessionRecords,
   toLoadedWorkflowSessionRecords,
@@ -90,7 +85,10 @@ type UseRepoSessionReadModelArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   applyLiveSessionEnvelope: AgentSessionsStore["applyLiveSessionEnvelope"];
   recordHistoryEnvelope: AgentSessionsStore["recordHistoryEnvelope"];
-  messageQueues: Pick<AgentMessageQueuesStore, "replaceRepository" | "apply" | "removeAccepted">;
+  messageQueues: Pick<
+    AgentMessageQueuesStore,
+    "replaceRepository" | "apply" | "removeAccepted" | "getQueue"
+  >;
   liveSessionPort: AgentSessionLiveFrontendPort;
   transcriptEvents: AgentSessionTranscriptEventConsumer;
   queryClient: QueryClient;
@@ -217,10 +215,6 @@ export const useRepoSessionReadModel = ({
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
       listener: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[1],
     ) => liveSessionPort.observeAgentSessionLive(input, listener),
-  );
-  const replyLiveApproval = useEffectEvent(
-    (input: Parameters<AgentSessionLiveFrontendPort["agentSessionLiveReplyApproval"]>[0]) =>
-      liveSessionPort.agentSessionLiveReplyApproval(input),
   );
   const handleTranscriptEvent = useEffectEvent(
     (...args: Parameters<AgentSessionTranscriptEventConsumer["handle"]>) =>
@@ -672,16 +666,10 @@ export const useRepoSessionReadModel = ({
           collection,
           result: {
             collection,
-            policyActions: collectPendingApprovalPolicyActions({
-              previous: current,
-              next: collection,
-              repoPath,
-            }),
           },
         };
       });
       updateWorkspaceTargetFaults(committed.collection);
-      applyPendingApprovalPolicy(committed.policyActions);
     };
     const commitTranscriptActivity = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>,
@@ -732,34 +720,6 @@ export const useRepoSessionReadModel = ({
         }
         return { collection, result: undefined };
       });
-    };
-    const applyPendingApprovalPolicy = (actions: PendingApprovalPolicyAction[]): void => {
-      if (actions.length === 0) {
-        return;
-      }
-      const promptOverrides = loadEffectivePromptOverrides(repoPath, queryClient);
-      for (const action of actions) {
-        runOrchestratorSideEffect(
-          "agent-session-live-auto-reject-mutating-approval",
-          promptOverrides.then((overrides) =>
-            replyLiveApproval({
-              ...action.input,
-              message: buildReadOnlyPermissionRejectionMessage({
-                role: action.role,
-                overrides,
-              }),
-            }),
-          ),
-          {
-            tags: {
-              repoPath,
-              role: action.role,
-              externalSessionId: action.input.externalSessionId,
-              requestId: action.input.requestId,
-            },
-          },
-        );
-      }
     };
     const commitInitialSnapshot = (
       envelope: Extract<AgentSessionLiveEnvelope, { type: "snapshot" }>,
@@ -815,14 +775,38 @@ export const useRepoSessionReadModel = ({
       }
       // Hydration owns the public state until its own read resolves.
     };
+    const projectCompletion = (
+      observation: import("@openducktor/contracts").TaskCompletionObservation,
+    ) => {
+      const id = `task-completion:${observation.repoPath}:${observation.taskId}`;
+      if (observation.failure)
+        toast.error(`Task ${observation.taskId} completion needs attention`, {
+          id,
+          description: `${observation.failure.message} ${observation.failure.nextAction}`,
+          duration: Infinity,
+        });
+      else toast.dismiss(id);
+    };
     const applyEnvelope = (envelope: AgentSessionLiveEnvelope): void => {
       if (isStaleRepoOperation()) {
         return;
       }
       if (envelope.type === "snapshot") {
+        const completions = envelope.taskCompletions ?? [];
+        const prefix = `task-completion:${envelope.repoPath}:`;
+        const currentIds = new Set(completions.map(({ taskId }) => `${prefix}${taskId}`));
+        for (const { id } of toast.getToasts()) {
+          const toastId = String(id);
+          if (toastId.startsWith(prefix) && !currentIds.has(toastId)) toast.dismiss(id);
+        }
+        for (const observation of completions) projectCompletion(observation);
         messageQueues.replaceRepository(envelope.repoPath, envelope.messageQueues);
         applyLiveEnvelopeToStore(envelope);
         commitInitialSnapshot(envelope);
+        return;
+      }
+      if (envelope.type === "task_completion_updated") {
+        projectCompletion(envelope.observation);
         return;
       }
       if (envelope.type === "runtime_notice") {
@@ -867,6 +851,14 @@ export const useRepoSessionReadModel = ({
         });
         return;
       }
+      if (
+        envelope.type === "session_operation_updated" ||
+        envelope.type === "submission_acknowledged"
+      ) {
+        applyLiveEnvelopeToStore(envelope);
+        commitProjected((current) => current);
+        return;
+      }
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         applyLiveEnvelopeToStore(envelope);
         const upsert = envelope.type === "session_upsert";
@@ -896,6 +888,11 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "message_queue_updated") {
         messageQueues.apply(envelope.queue);
+        const queue = messageQueues.getQueue(envelope.queue.target);
+        if (queue) {
+          applyLiveEnvelopeToStore({ type: "message_queue_updated", queue });
+          commitProjected((current) => current);
+        }
         return;
       }
       if (envelope.type === "catalog_invalidated") {

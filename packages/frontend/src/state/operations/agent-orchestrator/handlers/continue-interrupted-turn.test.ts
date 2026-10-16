@@ -16,14 +16,9 @@ const identity: AgentSessionIdentity = {
 const buildDependencies = ({
   session,
   continueInterruptedTurn,
-  prepareSessionSend = async () => ({}),
 }: {
   session: AgentSessionState | null;
   continueInterruptedTurn: ContinuationAdapter["continueInterruptedTurn"];
-  prepareSessionSend?: (
-    session: AgentSessionState,
-    options: { prepareWorkflowContext: boolean },
-  ) => Promise<{ systemPrompt?: string }>;
 }) => {
   const calls: unknown[] = [];
   const preparedContexts: boolean[] = [];
@@ -39,16 +34,12 @@ const buildDependencies = ({
         },
       },
       readSessionSnapshot: () => session,
-      prepareSessionSend: (target, options) => {
-        preparedContexts.push(options.prepareWorkflowContext);
-        return prepareSessionSend(target, options);
-      },
     }),
   };
 };
 
 describe("createContinueInterruptedTurn", () => {
-  test("sends the session identity, workflow scope, and selected model", async () => {
+  test("sends only session identity and workflow scope", async () => {
     const session = buildSession({
       status: "error",
       selectedModel: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
@@ -73,15 +64,13 @@ describe("createContinueInterruptedTurn", () => {
       workingDirectory: "/tmp/repo/worktree",
       externalSessionId: "session-1",
       sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-      model: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
     });
   });
 
-  test("continues a workflow session with the prepared workflow prompt", async () => {
+  test("leaves workflow prompt preparation to the host", async () => {
     const session = buildSession({ status: "error" });
     const { calls, preparedContexts, continueInterruptedTurn } = buildDependencies({
       session,
-      prepareSessionSend: async () => ({ systemPrompt: "Build the feature" }),
       continueInterruptedTurn: async () => ({
         externalSessionId: "session-1",
         runtimeKind: "opencode",
@@ -93,8 +82,8 @@ describe("createContinueInterruptedTurn", () => {
 
     await continueInterruptedTurn(identity);
 
-    expect(preparedContexts).toEqual([true]);
-    expect(calls[0]).toMatchObject({ systemPrompt: "Build the feature" });
+    expect(preparedContexts).toEqual([]);
+    expect(calls[0]).not.toHaveProperty("systemPrompt");
   });
 
   test("omits the prompt when the preparation returns none", async () => {
@@ -111,7 +100,7 @@ describe("createContinueInterruptedTurn", () => {
 
     await continueInterruptedTurn(identity);
 
-    expect(preparedContexts).toEqual([true]);
+    expect(preparedContexts).toEqual([]);
     expect(calls[0]).not.toHaveProperty("systemPrompt");
   });
 

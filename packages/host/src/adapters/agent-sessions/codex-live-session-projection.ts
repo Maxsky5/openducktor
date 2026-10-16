@@ -2,6 +2,7 @@ import { baselineLiveSessionChanges } from "../../application/agent-sessions/bas
 import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveRef,
+  type AgentSessionAuthorizedRoot,
   type AgentSessionLiveSnapshot,
   agentSessionLiveRefSchema,
   agentSessionLiveSnapshotSchema,
@@ -60,7 +61,10 @@ export const createCodexLiveSessionProjection = ({
   let forwardingChain = Promise.resolve();
 
   /** Parse all input before changing state so an invalid ref cannot leave partial changes. */
-  const applyMutation = (mutation: CodexLiveSessionMutation): Effect.Effect<void, HostError> =>
+  const applyMutation = (
+    mutation: CodexLiveSessionMutation,
+    admittedRoot?: AgentSessionAuthorizedRoot,
+  ): Effect.Effect<void, HostError> =>
     parseMutation(mutation).pipe(
       Effect.flatMap((parsed) =>
         binding.runMutation(
@@ -119,6 +123,7 @@ export const createCodexLiveSessionProjection = ({
             }
             return {
               value: undefined,
+              admittedRoot,
               changes:
                 parsed.provenance === "baseline" ? baselineLiveSessionChanges(changes) : changes,
             };

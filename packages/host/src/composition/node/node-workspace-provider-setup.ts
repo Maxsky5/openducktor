@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
-import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import {
+  createWorkspaceSettingsService,
+  type WorkspaceSettingsService,
+} from "../../application/workspaces/workspace-settings-service";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
 import { createWorkspaceProviderSetupCommandHandlers } from "../../interface/commands/workspace-provider-setup-command-handlers";
 import { detectWorkspaceProviders } from "../../adapters/git-providers/workspace-provider-detection";
@@ -22,8 +25,20 @@ export const createNodeWorkspaceProviderSetup = (
     eventBus?: HostEventBusPort | undefined;
     azureDevOpsFetch?: AzureDevOpsFetch | undefined;
   },
+  onWorkspaceAdded: (repoPath: string) => void,
 ) => {
-  const settings = createWorkspaceSettingsService(ports.settingsConfig);
+  const savedSettings = createWorkspaceSettingsService(ports.settingsConfig);
+  const settings: WorkspaceSettingsService = {
+    ...savedSettings,
+    addWorkspace: (input) =>
+      savedSettings.addWorkspace({
+        ...input,
+        onRegistered: (workspace) => {
+          input.onRegistered?.(workspace);
+          onWorkspaceAdded(workspace.repoPath);
+        },
+      }),
+  };
   const { eventBus } = input;
   const fetchImplementation = input.azureDevOpsFetch ?? fetch;
   const { git, configDir, startupEnv, systemCommands, toolDiscovery } = ports;

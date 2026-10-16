@@ -117,7 +117,7 @@ const createBaseArgs = (): HookArgs => ({
   role: "spec",
   selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
   isSessionModelCatalogLoading: false,
-  prepareSelectedSessionModelForSend: async () => () => {},
+
   assertCanPrepareSession: () => {},
   agentStudioReady: true,
   canStartNewSession: true,
@@ -144,7 +144,6 @@ describe("useAgentStudioSendTarget", () => {
     const args = {
       ...createBaseArgs(),
       isSessionModelCatalogLoading: true,
-      prepareSelectedSessionModelForSend: prepare,
       sendAgentMessage,
     };
     const harness = createTaskHarness(args);
@@ -178,7 +177,6 @@ describe("useAgentStudioSendTarget", () => {
       assertCanPrepareSession: () => {
         if (blocked) throw new Error("Answer the blocking question before sending.");
       },
-      prepareSelectedSessionModelForSend: prepare,
       sendAgentMessage: send,
     });
     let pending!: Promise<unknown>;
@@ -347,7 +345,7 @@ describe("useAgentStudioSendTarget", () => {
     const sendAgentMessage = mock(async () => null);
     const harness = createTaskHarness({
       ...createBaseArgs(),
-      prepareSelectedSessionModelForSend: async () => {
+      assertCanPrepareSession: () => {
         throw new Error("No valid model is available");
       },
       startSession,

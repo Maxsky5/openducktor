@@ -14,6 +14,12 @@ type AgentSessionLiveAttachment = {
 
 export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
   switch (envelope.type) {
+    case "session_operation_updated":
+      return envelope.observation.ref.repoPath;
+    case "submission_acknowledged":
+      return envelope.acknowledgement.ref.repoPath;
+    case "task_completion_updated":
+      return envelope.observation.repoPath;
     case "task_session_records_updated":
     case "snapshot":
     case "fault":

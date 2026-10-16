@@ -1,3 +1,4 @@
+import { withoutTaskMutationProgress } from "./task-mutation-result";
 import type { TaskChangeSet } from "@openducktor/contracts";
 import {
   type AgentSessionRecord,
@@ -82,6 +83,7 @@ import {
 } from "./task-mutation-progress-failure";
 import { createTaskCloseUseCase } from "./use-cases/close-task";
 import { createTaskCompleteDirectMergeUseCase } from "./use-cases/complete-direct-merge";
+import { createTaskCompletionState } from "./task-completion-state";
 import { createTaskDeleteUseCase } from "./use-cases/delete-task";
 import { createTaskPullRequestDetectionUseCase } from "./use-cases/detect-pull-request";
 import { createTaskDirectMergeUseCase } from "./use-cases/direct-merge";
@@ -156,7 +158,9 @@ export type TaskService = {
     input: PullRequestLinkMergedInput,
   ): Effect.Effect<TaskCard, TaskServiceError>;
   directMerge(input: DirectMergeInput): Effect.Effect<TaskDirectMergeResult, TaskServiceError>;
-  completeDirectMerge(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
+  completeDirectMerge(
+    input: import("@openducktor/contracts").TaskDirectMergeCompleteIntent,
+  ): Effect.Effect<TaskCard, TaskServiceError>;
   createTask(input: CreateTaskUseCaseInput): Effect.Effect<TaskCard, TaskServiceError>;
   deleteTask(input: DeleteTaskInput): Effect.Effect<TaskDeleteResult, TaskServiceError>;
   closeTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -207,6 +211,7 @@ export type TaskServiceWithMutationProgress = Omit<
   | "createTask"
   | "deleteTask"
   | "directMerge"
+  | "completeDirectMerge"
   | "linkMergedPullRequest"
   | "resetImplementation"
   | "resetTask"
@@ -226,6 +231,9 @@ export type TaskServiceWithMutationProgress = Omit<
   directMerge(
     input: DirectMergeInput,
   ): Effect.Effect<TaskDirectMergeResult, TaskServiceError | TaskMutationProgressFailure>;
+  completeDirectMerge(
+    input: import("@openducktor/contracts").TaskDirectMergeCompleteIntent,
+  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
   linkMergedPullRequest(
     input: PullRequestLinkMergedInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
@@ -252,6 +260,11 @@ export type RepoPullRequestSyncResult = {
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
+  publishCompletion?:
+    | ((
+        observation: import("@openducktor/contracts").TaskCompletionObservation,
+      ) => Effect.Effect<void, import("../../effect/host-errors").HostError>)
+    | undefined;
   terminalService?: TaskTerminalCleanupPort;
   worktreeActions?: WorktreeActionRunner;
   gitPort?: GitPort;
@@ -273,6 +286,7 @@ export type TaskServiceUseCaseInput = Omit<
   "taskSessionLifecycleCoordinator"
 > & {
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
+  completionState: ReturnType<typeof createTaskCompletionState>;
 };
 const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
   cause instanceof GitProviderCapabilityError ||
@@ -328,6 +342,7 @@ const createTaskServiceImplementation = (
   const useCaseInput: TaskServiceUseCaseInput = {
     ...input,
     taskSessionLifecycleCoordinator,
+    completionState: createTaskCompletionState(input.publishCompletion),
   };
   const taskSessionStart = createTaskSessionStartPreparationService(useCaseInput);
   const service = {
@@ -410,7 +425,8 @@ const createTaskServiceImplementation = (
     buildCompleted: (input) => mapTaskMutationProgressErrors(service.buildCompleted(input)),
     buildResumed: (input) => mapTaskServiceErrors(service.buildResumed(input)),
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
-    completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
+    completeDirectMerge: (input) =>
+      mapTaskMutationProgressErrors(service.completeDirectMerge(input)),
     createTask: (input) =>
       service
         .createTask(input)
@@ -458,31 +474,4 @@ const createTaskServiceImplementation = (
 
 export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
   return withoutTaskMutationProgress(createTaskServiceWithMutationProgress(input));
-};
-
-const discardTaskMutationProgress = <A>(
-  effect: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
-): Effect.Effect<A, TaskServiceError> =>
-  effect.pipe(
-    Effect.catchTag("TaskMutationProgressFailure", (progressFailure) =>
-      Effect.fail(progressFailure.failure),
-    ),
-  );
-
-const withoutTaskMutationProgress = (taskService: TaskServiceWithMutationProgress): TaskService => {
-  return {
-    ...taskService,
-    buildCompleted: (input) => discardTaskMutationProgress(taskService.buildCompleted(input)),
-    createTask: (input) => discardTaskMutationProgress(taskService.createTask(input)),
-    deleteTask: (input) => discardTaskMutationProgress(taskService.deleteTask(input)),
-    directMerge: (input) => discardTaskMutationProgress(taskService.directMerge(input)),
-    linkMergedPullRequest: (input) =>
-      discardTaskMutationProgress(taskService.linkMergedPullRequest(input)),
-    resetImplementation: (input) =>
-      discardTaskMutationProgress(taskService.resetImplementation(input)),
-    resetTask: (input) => discardTaskMutationProgress(taskService.resetTask(input)),
-    setPlan: (input) => discardTaskMutationProgress(taskService.setPlan(input)),
-    setSpec: (input) => discardTaskMutationProgress(taskService.setSpec(input)),
-    updateTask: (input) => discardTaskMutationProgress(taskService.updateTask(input)),
-  };
 };

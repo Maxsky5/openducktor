@@ -25,6 +25,11 @@ import { slashCommandCatalogSchema } from "./slash-command-schemas";
 import { fileDiffSchema } from "./git-schemas";
 import { runtimeOperationFailureSchema } from "./runtime-operation-failure-schemas";
 import { taskAgentSessionsSchema } from "./session-schemas";
+import {
+  sessionOperationObservationSchema,
+  submissionAcknowledgementSchema,
+  taskCompletionObservationSchema,
+} from "./workflow-operation-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const finiteNonNegativeNumberSchema = z.number().finite().nonnegative();
@@ -119,6 +124,7 @@ export const agentSessionLiveSnapshotSchema = z
     contextUsage: agentSessionContextUsageSchema.nullable(),
     model: agentModelSelectionSchema.optional(),
     policyNotice: agentSessionLiveNoticeSchema.optional(),
+    approvalPolicyFailure: agentSessionLiveNoticeSchema.optional(),
     /**
      * The failure of the last host launch of this session. The host keeps it in memory while it
      * runs, so a new attachment shows it. The next accepted message clears it.
@@ -172,6 +178,9 @@ export const agentSessionLiveSnapshotEnvelopeSchema = z
     sessions: z.array(agentSessionLiveSnapshotSchema),
     /** Every message queue of the repository, including queues of missing sessions. */
     messageQueues: z.array(agentMessageQueueSnapshotSchema),
+    sessionOperations: z.array(sessionOperationObservationSchema).optional(),
+    submissionAcknowledgements: z.array(submissionAcknowledgementSchema).optional(),
+    taskCompletions: z.array(taskCompletionObservationSchema).optional(),
     isConnectionSnapshot: z.boolean().optional(),
     /** The transport replaced a baseline after a replay gap or host change. */
     historyReplayGap: z.boolean().optional(),
@@ -183,6 +192,21 @@ export type AgentSessionLiveSnapshotEnvelope = z.infer<
 >;
 
 export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("session_operation_updated"),
+    observation: sessionOperationObservationSchema,
+    sequence: liveStateSequenceSchema.optional(),
+  }),
+  z.strictObject({
+    type: z.literal("submission_acknowledged"),
+    acknowledgement: submissionAcknowledgementSchema,
+    sequence: liveStateSequenceSchema.optional(),
+  }),
+  z.strictObject({
+    type: z.literal("task_completion_updated"),
+    observation: taskCompletionObservationSchema,
+    sequence: liveStateSequenceSchema.optional(),
+  }),
   z.strictObject({
     type: z.literal("runtime_notice"),
     scope: agentSessionLiveScopeSchema,
@@ -260,7 +284,16 @@ export type AgentSessionLiveEnvelope = z.infer<typeof agentSessionLiveEnvelopeSc
 
 export type AgentSessionLiveStateEnvelope = Extract<
   AgentSessionLiveEnvelope,
-  { type: "snapshot" | "session_upsert" | "session_removed" | "task_session_records_updated" }
+  {
+    type:
+      | "snapshot"
+      | "session_upsert"
+      | "session_removed"
+      | "task_session_records_updated"
+      | "session_operation_updated"
+      | "submission_acknowledged"
+      | "task_completion_updated";
+  }
 >;
 
 /** Reports whether the envelope carries live state that a later snapshot covers. */
@@ -270,7 +303,10 @@ export const isAgentSessionLiveStateEnvelope = (
   envelope.type === "snapshot" ||
   envelope.type === "session_upsert" ||
   envelope.type === "session_removed" ||
-  envelope.type === "task_session_records_updated";
+  envelope.type === "task_session_records_updated" ||
+  envelope.type === "session_operation_updated" ||
+  envelope.type === "submission_acknowledged" ||
+  envelope.type === "task_completion_updated";
 
 export const agentSessionLiveListInputSchema = z
   .object({

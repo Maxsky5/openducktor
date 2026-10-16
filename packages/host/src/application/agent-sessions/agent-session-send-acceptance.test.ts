@@ -1,3 +1,4 @@
+import { commandPreparationFixture } from "./test-support/command-preparation-fixture";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { describe, expect, test } from "bun:test";
 import { hostInvokeFailureSchema, type AgentSessionLiveEnvelope } from "@openducktor/contracts";
@@ -54,10 +55,10 @@ describe("message acceptance through the command and live adapter modules", () =
               ...prepared,
               connection: {
                 ...prepared.connection,
-                sendUserMessage: async (request) => {
+                sendUserMessage: async (request, options) => {
                   sends += 1;
                   if (stage === "reject") throw failure;
-                  const accepted = await prepared.connection.sendUserMessage(request);
+                  const accepted = await prepared.connection.sendUserMessage(request, options);
                   if (stage === "invalid") Reflect.deleteProperty(accepted, "messageId");
                   return accepted;
                 },
@@ -69,8 +70,8 @@ describe("message acceptance through the command and live adapter modules", () =
       await Effect.runPromise(
         live.registerRuntimeAdapter({
           ...prepared.adapter,
-          sendUserMessage: (input) =>
-            prepared.adapter.sendUserMessage(input).pipe(
+          sendUserMessage: (input, options) =>
+            prepared.adapter.sendUserMessage(input, options).pipe(
               Effect.tap(() =>
                 stage === "detach"
                   ? Effect.promise(async () => {
@@ -90,6 +91,10 @@ describe("message acceptance through the command and live adapter modules", () =
         }),
       );
       const commands = createAgentSessionCommandService({
+        turnPreparation: commandPreparationFixture,
+        readSessionRootRefs: () =>
+          Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
+        approvalPolicy: { reply: live.replyApproval },
         pauseForStop: () => Effect.void,
         runtime: live,
         repositoryPolicy: {
@@ -146,16 +151,21 @@ describe("message acceptance through the command and live adapter modules", () =
       if (result._tag !== "Failure") throw new Error("Expected send failure");
       const mapped = hostInvokeFailureFromError(result.failure);
       if (stage === "reject" || stage === "invalid") {
-        expect(mapped).toBeUndefined();
+        expect(mapped).toMatchObject({
+          kind: "session_operation",
+          observation: { nativeOutcome: stage === "reject" ? "not_issued" : "uncertain" },
+        });
         expect(result.failure).not.toBeInstanceOf(AgentSessionMessageAcceptedError);
         return;
       }
-      expect(result.failure).toBeInstanceOf(AgentSessionMessageAcceptedError);
+      expect(result.failure).toMatchObject({ observation: { nativeOutcome: "accepted" } });
       expect(hostInvokeFailureSchema.parse(mapped)).toMatchObject({
-        kind: "agent_session_message_accepted",
-        sessionRef: ref,
-        acceptedMessage: { messageId: "user-1", message: "Hello" },
-        stage: stage === "record" ? "record_message" : "live_update",
+        kind: "session_operation",
+        observation: {
+          ref,
+          nativeOutcome: "accepted",
+          acceptedInput: { messageId: "user-1", message: "Hello" },
+        },
       });
       expect(result.failure.message).toContain("Do not send the message again");
       expect(events.some((event) => event.type === "transcript_event")).toBe(true);

@@ -5,7 +5,12 @@ import type { SessionLaunchControls } from "../../application/agent-sessions/ses
 
 /** Stop cancels launches that target the session, so a launch cannot send to it afterwards. */
 export const createNodeSessionLaunchControls = <
-  Commands extends Pick<SessionLaunchRuntimePort, "stopSession">,
+  Commands extends {
+    stopSession: (
+      ref: AgentSessionLiveRef,
+      options?: { onValidated: (ref: AgentSessionLiveRef) => void },
+    ) => ReturnType<SessionLaunchRuntimePort["stopSession"]>;
+  },
 >(
   commands: Commands,
   services: SessionLaunchControls[],
@@ -13,9 +18,10 @@ export const createNodeSessionLaunchControls = <
   commands: {
     ...commands,
     stopSession: (ref: AgentSessionLiveRef) =>
-      Effect.suspend(() => {
-        for (const service of services) service.cancelSessionLaunches(ref);
-        return commands.stopSession(ref);
+      commands.stopSession(ref, {
+        onValidated: (canonical) => {
+          for (const service of services) service.cancelSessionLaunches(canonical);
+        },
       }),
   },
   shutdown: () => Effect.forEach(services, (service) => service.shutdown(), { discard: true }),

@@ -87,6 +87,7 @@ const fakeAdapter = (input: {
       );
     },
     loadContext: input.contextEffect ?? (() => Effect.succeed(null)),
+    resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
     replyApproval: () => Effect.void,
     replyQuestion: () => Effect.void,
     releaseRuntime: () => Effect.succeed(input.snapshots().map((snapshot) => snapshot.ref)),
@@ -704,6 +705,9 @@ describe("createAgentSessionLiveStateService", () => {
         repoPath: "/repo",
         sessions: [{ ...liveSnapshot("session-1"), executionEpisodeId: expect.any(String) }],
         messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
         sequence: 1,
       });
       expect(second).toEqual(first);
@@ -842,6 +846,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events.at(-1)).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       repoPath: "/repo",
       sessions: [next],
     });
@@ -904,6 +911,9 @@ describe("createAgentSessionLiveStateService", () => {
       {
         type: "snapshot",
         messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
         repoPath: "/repo",
         sessions: [{ ...snapshot, executionEpisodeId: episodeId }],
         sequence: 2,
@@ -937,12 +947,18 @@ describe("createAgentSessionLiveStateService", () => {
       {
         type: "snapshot",
         messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
         repoPath: "/repo",
         sessions: [liveSnapshot("runtime-session", "opencode")],
       },
       {
         type: "snapshot",
         messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
         repoPath: "/repo",
         sessions: [liveSnapshot("next-runtime-session", "opencode")],
       },
@@ -1016,7 +1032,15 @@ describe("createAgentSessionLiveStateService", () => {
       liveSnapshot("runtime-session", "opencode"),
     ]);
     expect(events).toMatchObject([
-      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [] },
+      {
+        type: "snapshot",
+        messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
+        repoPath: "/repo",
+        sessions: [],
+      },
       { type: "session_upsert", session: liveSnapshot("runtime-session", "opencode") },
     ]);
     expect(refreshCalls).toEqual(["opencode"]);
@@ -1045,7 +1069,15 @@ describe("createAgentSessionLiveStateService", () => {
     });
     expect(events).toMatchObject([
       { type: "session_upsert", session: snapshot },
-      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [snapshot] },
+      {
+        type: "snapshot",
+        messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
+        repoPath: "/repo",
+        sessions: [snapshot],
+      },
     ]);
   });
 
@@ -1203,6 +1235,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events[0]).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       repoPath: "/repo",
       sessions: [expect.objectContaining({ activity: "idle" })],
     });
@@ -1241,6 +1276,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events[0]).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       sessions: [expect.objectContaining({ activity: "running" })],
     });
   });
@@ -1312,6 +1350,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events[0]).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       sessions: [
         expect.objectContaining({
           pendingApprovals: [
@@ -1388,6 +1429,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events[0]).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       sessions: [expect.objectContaining({ contextUsage: { totalTokens: 10 } })],
     });
     expect(events[1]).toMatchObject({
@@ -1778,7 +1822,16 @@ describe("createAgentSessionLiveStateService", () => {
     await Effect.runPromise(service.refresh({ repoPath: "/repo" }));
 
     expect(events).toEqual([
-      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [], sequence: 1 },
+      {
+        type: "snapshot",
+        messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
+        repoPath: "/repo",
+        sessions: [],
+        sequence: 1,
+      },
     ]);
     expect(faultLogs).toEqual([]);
   });
@@ -1808,6 +1861,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events[0]).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       sessions: [expect.objectContaining({ ref: snapshot.ref })],
     });
   });
@@ -1850,6 +1906,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events[0]).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       sessions: [
         expect.objectContaining({
           pendingApprovals: [expect.objectContaining({ requestId: "opaque-1" })],
@@ -1968,6 +2027,9 @@ describe("createAgentSessionLiveStateService", () => {
     expect(events.at(-1)).toMatchObject({
       type: "snapshot",
       messageQueues: [],
+      sessionOperations: [],
+      submissionAcknowledgements: [],
+      taskCompletions: [],
       repoPath: "/repo",
       sessions: [],
     });
@@ -2038,7 +2100,16 @@ describe("createAgentSessionLiveStateService", () => {
     );
 
     expect(events).toEqual([
-      { type: "snapshot", messageQueues: [], repoPath: "/repo", sessions: [], sequence: 3 },
+      {
+        type: "snapshot",
+        messageQueues: [],
+        sessionOperations: [],
+        submissionAcknowledgements: [],
+        taskCompletions: [],
+        repoPath: "/repo",
+        sessions: [],
+        sequence: 3,
+      },
     ]);
     await expect(Effect.runPromise(service.list({ repoPath: "/repo" }))).resolves.toEqual([]);
   });

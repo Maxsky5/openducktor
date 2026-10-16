@@ -32,7 +32,7 @@ export const createStartTaskWorkflowSession =
     taskSessionStart,
   }: {
     canonicalizeRepoPath: CanonicalizeRepoPath;
-    runtime: Pick<RuntimeControl, "startSession">;
+    runtime: Pick<RuntimeControl, "startSession" | "releaseSession">;
     writes: TaskSessionWrites;
     taskLifecycle: TaskLifecycle;
     taskSessionStart: Pick<TaskSessionStartPreparationService, "prepare" | "complete">;
@@ -58,7 +58,9 @@ export const createStartTaskWorkflowSession =
               return;
             }
             if (summary) {
-              yield* progress.stop(toControlSessionRef(repoPath, summary));
+              const ref = toControlSessionRef(repoPath, summary);
+              yield* progress.stop(ref);
+              yield* runtime.releaseSession(ref);
             }
             yield* prepared.rollback();
           });
@@ -83,13 +85,15 @@ export const createStartTaskWorkflowSession =
               ),
             ),
           );
-          const runtimeInput: AgentSessionControlStartInput = {
+          const runtimeInput: AgentSessionControlStartInput &
+            import("@openducktor/core").AgentWorkStartOptions = {
             repoPath,
             runtimeKind: prepared.runtimeKind,
             workingDirectory: prepared.workingDirectory,
             sessionScope: scope,
             systemPrompt: input.systemPrompt,
             model: input.model,
+            workStartGuard: progress.workStartGuard,
           };
           // Cancellation must retain the returned identity so cleanup can stop the session.
           const launched = yield* Effect.gen(function* () {
@@ -138,13 +142,15 @@ export const createStartTaskWorkflowSession =
               },
             };
             // The worktree rollback runs only after the runtime session stops.
-            return yield* progress.stop(toControlSessionRef(repoPath, summary)).pipe(
+            const ref = toControlSessionRef(repoPath, summary);
+            return yield* progress.stop(ref).pipe(
+              Effect.andThen(runtime.releaseSession(ref)),
               Effect.mapError(
-                (stopFailure) =>
+                (cleanupFailure) =>
                   new HostOperationError({
                     ...storeError,
-                    message: `${errorMessage(storeFailure)} Cleanup failed: ${stopFailure.message}`,
-                    cause: { storeFailure, stopFailure },
+                    message: `${errorMessage(storeFailure)} Cleanup failed: ${cleanupFailure.message}`,
+                    cause: { storeFailure, cleanupFailure },
                   }),
               ),
               Effect.andThen(

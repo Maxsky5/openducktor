@@ -63,6 +63,7 @@ export const createWorkflowLaunchService = (
       };
       const progress: TaskSessionProgress = {
         checkCanceled: attempt.checkCanceled,
+        workStartGuard: { assertCurrent: attempt.assertCurrent },
         created: (summary) =>
           attempt.createdSession(repoPath, summary, { hold: parts !== undefined }),
         saved: attempt.ownershipSaved,
@@ -113,12 +114,14 @@ export const createWorkflowLaunchService = (
             .filter((question) => question.blocking === false)
             .map((question) => question.requestId);
         else {
-          const resumeInput: AgentSessionControlResumeInput = {
+          const resumeInput: AgentSessionControlResumeInput &
+            import("@openducktor/core").AgentWorkStartOptions = {
             repoPath,
             ...decision.sourceSession,
             sessionScope,
             resumeMode: "reattach",
             systemPrompt,
+            workStartGuard: { assertCurrent: attempt.assertCurrent },
           };
           if (model) resumeInput.model = model;
           ({ session, publish } = yield* deps.sessions.resume(resumeInput));

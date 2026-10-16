@@ -547,6 +547,7 @@ const createBuildStartGitPort = ({
         calls.push({ type: "deleteLocalBranch", repoPath, branch, force });
       });
     },
+    isMergeIncluded: () => Effect.succeed(true),
     isAncestor() {
       return Effect.sync(() => {
         return true;
@@ -609,6 +610,30 @@ const createDirectMergeGitPort = ({
   removeWorktreeErrors?: Record<string, Error>;
 }): GitPort =>
   createGitPort({
+    readPublicationTarget: (input) =>
+      Effect.succeed({
+        ...input,
+        sourceOid: "a".repeat(40),
+        endpoints: [{ identity: "origin", label: "/origin.git", url: "/origin.git" }],
+      }),
+    inspectPublication: (target) =>
+      Effect.succeed(
+        target.endpoints.map((endpoint) => ({
+          destinationIdentity: endpoint.identity,
+          oid: "a".repeat(40),
+        })),
+      ),
+    pushBoundPublication: (_repoPath, { target, destinationIdentities }) =>
+      destinationIdentities.length
+        ? Effect.die(new Error("unexpected remote publication"))
+        : Effect.succeed({
+            sourceOid: target.sourceOid,
+            targetRef: target.targetRef,
+            destinations: target.endpoints.map(({ identity }) => ({
+              identity,
+              outcome: "not_issued" as const,
+            })),
+          }),
     canonicalizePath(path) {
       return Effect.sync(() => {
         return canonicalPaths[path] ?? path;
@@ -687,6 +712,7 @@ const createDirectMergeGitPort = ({
         calls.push({ type: "deleteLocalBranch", repoPath, branch, force });
       });
     },
+    isMergeIncluded: () => Effect.succeed(true),
     isAncestor(workingDir, ancestor, descendant) {
       return Effect.sync(() => {
         calls.push({ type: "isAncestor", workingDir, ancestor, descendant });

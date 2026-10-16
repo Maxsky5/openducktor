@@ -9,7 +9,7 @@ import {
   normalizeAgentUserMessageParts,
   resolveAgentSessionAssociationTransition,
 } from "@openducktor/core";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AgentMessageSendError } from "@/lib/agent-message-send-error";
 import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
@@ -25,7 +25,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
-import { createRepoStaleGuard, now, throwIfRepoStale } from "../support/core";
+import { now } from "../support/core";
 import { closeBackgroundQuestions } from "../support/background-questions";
 import {
   appendSessionMessage,
@@ -41,8 +41,6 @@ import { removeRunningSessionCompactionNotices } from "../support/session-notice
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { SessionTurnMetadata } from "../support/session-turn-metadata";
 import { toUserChatMessage } from "../support/user-message-event";
-import { hasLoadedSessionHistory } from "../transcript/session-transcript-content";
-import type { PreparedSessionSend } from "./prepare-session-send";
 
 const withSendScope = (
   session: AgentSessionState,
@@ -70,14 +68,10 @@ export type SendAgentMessageDependencies = {
   workspaceRepoPath: string | null;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  adapter: Pick<AgentEnginePort, "submitUserMessage" | "resumeSession">;
-  messageQueues: Pick<AgentMessageQueuesStore, "apply">;
+  adapter: Pick<AgentEnginePort, "submitUserMessage">;
+  messageQueues: Pick<AgentMessageQueuesStore, "apply" | "getQueue">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  prepareSessionSend: (
-    session: AgentSessionState,
-    options: { prepareWorkflowContext: boolean },
-  ) => Promise<PreparedSessionSend>;
   turnMetadata: SessionTurnMetadata;
   clearSessionTurnState: (session: AgentSessionIdentity) => void;
   recordTurnUserMessageTimestamp: (
@@ -105,25 +99,6 @@ export const settleStartingSession = (
         }
       : current,
   );
-};
-
-const prepareIdleSessionForSend = async ({
-  session,
-  prepareSessionSend,
-  readSessionSnapshot,
-  updateSession,
-}: {
-  session: AgentSessionState;
-  prepareSessionSend: SendAgentMessageDependencies["prepareSessionSend"];
-  readSessionSnapshot: ReadSessionSnapshot;
-  updateSession: UpdateSession;
-}): Promise<PreparedSessionSend> => {
-  try {
-    return await prepareSessionSend(session, { prepareWorkflowContext: true });
-  } catch (error) {
-    settleStartingSession(session, "error", readSessionSnapshot, updateSession);
-    throw error;
-  }
 };
 
 const rejectSendWhileWaitingForInput = (
@@ -168,6 +143,7 @@ export const appendSendFailureNotice = (
   updateSession: UpdateSession,
   removeRunningCompactionNotice: boolean,
   errorAttentionId?: string,
+  unresolvedSubmissionId?: string,
 ): void => {
   const meta: Extract<
     NonNullable<AgentChatMessage["meta"]>,
@@ -181,6 +157,7 @@ export const appendSendFailureNotice = (
   if (errorAttentionId) {
     meta.attentionId = errorAttentionId;
   }
+  if (unresolvedSubmissionId) meta.unresolvedSubmissionId = unresolvedSubmissionId;
   updateSession(session, (current) => ({
     ...current,
     messages: appendSessionMessage(
@@ -217,40 +194,6 @@ export const upsertAcceptedUserMessage = (
   }));
 };
 
-/** Reattaches the same native session before a message or the queue can use it. */
-export const resumeStoppedSession = async (
-  dependencies: Pick<
-    SendAgentMessageDependencies,
-    "currentWorkspaceRepoPathRef" | "repoEpochRef" | "updateSession" | "workspaceRepoPath"
-  > & { adapter: Pick<AgentEnginePort, "resumeSession"> },
-  stoppedSession: AgentSessionState,
-): Promise<void> => {
-  const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
-  const isRepoStale = createRepoStaleGuard({
-    repoPath,
-    repoEpochRef: dependencies.repoEpochRef,
-    currentWorkspaceRepoPathRef: dependencies.currentWorkspaceRepoPathRef,
-  });
-  const staleError = "Workspace changed while resuming the session.";
-  throwIfRepoStale(isRepoStale, staleError);
-  const resumeInput: Parameters<typeof dependencies.adapter.resumeSession>[0] = {
-    ...toBoundRuntimeSessionRef(repoPath, stoppedSession, "resume session"),
-    resumeMode: "reattach",
-  };
-  const resumed = await dependencies.adapter.resumeSession(resumeInput);
-  throwIfRepoStale(isRepoStale, staleError);
-  if (!matchesAgentSessionIdentity(resumed, stoppedSession)) {
-    throw new Error(
-      `The runtime resumed a different session than '${stoppedSession.externalSessionId}'.`,
-    );
-  }
-  dependencies.updateSession(stoppedSession, (current) =>
-    current.status === "stopped" && current.executionEpisodeId === stoppedSession.executionEpisodeId
-      ? { ...current, status: resumed.status, runtimeStatusMessage: null }
-      : current,
-  );
-};
-
 export const createSendAgentMessage = (dependencies: SendAgentMessageDependencies) => {
   return async (
     identity: AgentSessionIdentity,
@@ -266,38 +209,18 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const isManualCompactionSend =
       classifySystemSlashCommandInvocation(normalizedParts).kind === "manual_session_compaction";
 
-    let currentSession = withSendScope(
+    const currentSession = withSendScope(
       requireLoadedSession(dependencies.readSessionSnapshot, identity),
       options?.sessionScope,
     );
     options?.assertCanSubmit?.(currentSession);
     const externalSessionId = currentSession.externalSessionId;
-    if (currentSession.status === "stopped") {
-      await resumeStoppedSession(dependencies, currentSession);
-      currentSession = withSendScope(
-        requireLoadedSession(dependencies.readSessionSnapshot, identity),
-        options?.sessionScope,
-      );
-      if (currentSession.status === "stopped") {
-        throw new Error(`Session '${externalSessionId}' is still stopped after resume.`);
-      }
-    }
     if (isAgentSessionBlockedOnInput(currentSession)) {
       rejectSendWhileWaitingForInput(currentSession, dependencies);
     }
 
     const mode = options?.mode ?? "default";
     const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
-    const sessionWasBusy = currentSession.status === "running";
-    const preparedSend = sessionWasBusy
-      ? await dependencies.prepareSessionSend(currentSession, { prepareWorkflowContext: false })
-      : await prepareIdleSessionForSend({
-          session: currentSession,
-          prepareSessionSend: dependencies.prepareSessionSend,
-          readSessionSnapshot: dependencies.readSessionSnapshot,
-          updateSession: dependencies.updateSession,
-        });
-
     const loadedReadySession = dependencies.readSessionSnapshot(currentSession);
     if (!loadedReadySession || isAgentSessionBlockedOnInput(loadedReadySession)) {
       if (!loadedReadySession) {
@@ -315,6 +238,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     }
     const readySession = withSendScope(loadedReadySession, options?.sessionScope);
     options?.assertCanSubmit?.(readySession);
+    const runtimeSessionRef = toBoundRuntimeSessionRef(repoPath, readySession, "send message");
 
     // The host decides if the message starts a turn or waits in the queue. An idle session shows
     // the send as running until the host answers; a queued answer restores the previous state.
@@ -322,18 +246,30 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const sendAttempt = sessionIsRunning
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);
-    const resolvedQuestionRequestIds = hasLoadedSessionHistory(readySession)
-      ? readySession.pendingQuestions
-          .filter((request) => request.blocking === false && request.source === undefined)
-          .map((request) => request.requestId)
-      : undefined;
+    const resolvedQuestionRequestIds = undefined;
 
     let sentMessage: AcceptedAgentInput | null = null;
+    const submissionId = crypto.randomUUID();
+    dependencies.updateSession(readySession, (current) => ({
+      ...current,
+      pendingSubmissionId: submissionId,
+    }));
+    const acknowledgeAttempt = () =>
+      dependencies.updateSession(readySession, (current) =>
+        current.pendingSubmissionId === submissionId
+          ? {
+              ...current,
+              pendingSubmissionId: undefined,
+              pendingUserMessageStartedAt: undefined,
+            }
+          : current,
+      );
     /** Returns the session to its state before this send marked it running. */
     const settleOwnAttempt = (): void => {
       let settledOwnAttempt = false;
       dependencies.updateSession(readySession, (current) => {
         if (
+          current.pendingSubmissionId !== submissionId ||
           sessionIsRunning ||
           current.executionEpisodeId !== readySession.executionEpisodeId ||
           current.pendingUserMessageStartedAt !== sendAttempt
@@ -345,6 +281,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           status: readySession.status === "starting" ? "idle" : readySession.status,
           runtimeStatusMessage: null,
           pendingUserMessageStartedAt: undefined,
+          pendingSubmissionId: undefined,
         };
       });
       if (settledOwnAttempt) {
@@ -353,31 +290,37 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     };
 
     try {
-      const runtimeSessionRef = toBoundRuntimeSessionRef(repoPath, readySession, "send message");
       const submitInput: AgentMessageSubmitInput = {
         ...runtimeSessionRef,
-        submissionId: crypto.randomUUID(),
+        submissionId,
         mode,
         parts: normalizedParts,
       };
-      if (resolvedQuestionRequestIds !== undefined) {
-        submitInput.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
-      }
-      if (readySession.selectedModel) {
-        submitInput.model = readySession.selectedModel;
-      }
-      if (preparedSend.systemPrompt !== undefined) {
-        submitInput.systemPrompt = preparedSend.systemPrompt;
-      }
       const result = await dependencies.adapter.submitUserMessage(submitInput);
+      if (result.kind === "acknowledged") {
+        if (result.outcome === "uncertain")
+          return { outcome: "uncertain", recipient: identity, submissionId };
+        if (result.outcome === "queued") settleOwnAttempt();
+        acknowledgeAttempt();
+        return result.outcome === "queued"
+          ? { outcome: "queued", recipient: identity }
+          : {
+              outcome: "acknowledged",
+              recipient: identity,
+              submissionId,
+              postAcceptanceFailure: null,
+            };
+      }
       if (result.kind === "queued") {
         // The message waits in the queue, so the current turn and transcript stay unchanged.
         dependencies.messageQueues.apply(result.queue);
         settleOwnAttempt();
+        acknowledgeAttempt();
         return { outcome: "queued", recipient: identity };
       }
       const acceptedUserMessage = result.acceptedMessage;
       sentMessage = acceptedUserMessage;
+      acknowledgeAttempt();
       if (!isManualCompactionSend) {
         upsertAcceptedUserMessage(
           readySession,
@@ -405,6 +348,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           : null);
       if (acceptedMessage) {
         try {
+          acknowledgeAttempt();
           if (!sentMessage && !isManualCompactionSend) {
             upsertAcceptedUserMessage(
               readySession,
@@ -433,7 +377,52 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
           postAcceptanceFailure: errorMessage(error),
         };
       }
+      if (
+        error instanceof HostInvokeError &&
+        error.failure?.kind === "session_operation" &&
+        error.failure.observation.nativeOutcome === "accepted"
+      ) {
+        acknowledgeAttempt();
+        appendSendFailureNotice(
+          readySession,
+          errorMessage(error),
+          dependencies.updateSession,
+          false,
+          options?.errorAttentionId,
+        );
+        return {
+          outcome: "acknowledged",
+          recipient: identity,
+          submissionId,
+          postAcceptanceFailure: errorMessage(error),
+        };
+      }
+      const confirmedRejection =
+        error instanceof HostInvokeError &&
+        (error.failure?.kind === "workflow_intent_rejected" ||
+          (error.failure?.kind === "session_operation" &&
+            ["not_issued", "refused"].includes(error.failure.observation.nativeOutcome)));
+      if (!confirmedRejection) {
+        const queued = dependencies.messageQueues
+          .getQueue(runtimeSessionRef)
+          ?.entries.find((entry) => entry.submissionId === submissionId);
+        if (queued?.state === "queued" || queued?.state === "editing") {
+          settleOwnAttempt();
+          acknowledgeAttempt();
+          return { outcome: "queued", recipient: identity };
+        }
+        appendSendFailureNotice(
+          readySession,
+          `The host response was lost or delivery remains uncertain. Inspect this submission before sending it again. ${errorMessage(error)}`,
+          dependencies.updateSession,
+          false,
+          options?.errorAttentionId,
+          submissionId,
+        );
+        return { outcome: "uncertain", recipient: identity, submissionId };
+      }
       settleOwnAttempt();
+      acknowledgeAttempt();
       appendSendFailureNotice(
         readySession,
         `Failed to send message: ${errorMessage(error)}`,

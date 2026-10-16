@@ -24,6 +24,7 @@ const adapter = (
   listSnapshots: () => Effect.succeed([]),
   readSnapshot: (candidate) => Effect.succeed({ type: "missing", ref: candidate }),
   loadContext: () => Effect.succeed(null),
+  resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
   replyApproval: () => Effect.void,
   replyQuestion: () => Effect.void,
   releaseRuntime: () => Effect.succeed([]),

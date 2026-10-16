@@ -10,6 +10,9 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
   repoConfigSchema,
+  taskCardSchema,
+  settingsSnapshotSchema,
+  type AgentModelCatalog,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { once } from "node:events";
@@ -27,6 +30,8 @@ import { HostOperationError, HostResourceError } from "../../effect/host-errors"
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
+import { createSessionCreationPreparation } from "../agent-sessions/session-creation-preparation";
+import { createSessionTurnPreparation } from "../agent-sessions/session-turn-preparation";
 
 const repoPath = "/remote/repo";
 const workingDirectory = "/worktrees/workspace/task";
@@ -36,6 +41,7 @@ const harness = async (
     sessionWorkingDirectory?: string;
     worktreeBasePath?: string | undefined;
     canonicalizePath?: SettingsConfigPort["canonicalizePath"];
+    catalog?: AgentModelCatalog;
   } = {},
 ) => {
   let runtime: RuntimeInstanceSummary | null = {
@@ -67,7 +73,7 @@ const harness = async (
             return {
               models: {
                 status: "available" as const,
-                catalog: { models: [], defaultModelsByProvider: {} },
+                catalog: options.catalog ?? { models: [], defaultModelsByProvider: {} },
               },
             };
           }),
@@ -178,6 +184,87 @@ const harness = async (
     },
   };
 };
+
+test("a fresh workflow session reads its catalog before native session ownership exists", async () => {
+  const h = await harness("codex", {
+    catalog: {
+      runtime: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+      models: [
+        {
+          id: "codex/current",
+          providerId: "codex",
+          providerName: "Codex",
+          modelId: "current",
+          modelName: "Current",
+          variants: ["low"],
+        },
+      ],
+      defaultModelsByProvider: { codex: "current" },
+    },
+  });
+  const turnPreparation = createSessionTurnPreparation({
+    queries: h.service,
+    settings: {
+      getRepoConfigByRepoPath: () =>
+        Effect.succeed(
+          repoConfigSchema.parse({
+            workspaceId: "workspace",
+            workspaceName: "Workspace",
+            repoPath,
+          }),
+        ),
+      getSettingsSnapshot: () => Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
+    },
+    taskReader: {
+      getTask: () =>
+        Effect.succeed(
+          taskCardSchema.parse({
+            id: "task-1",
+            title: "Fresh task",
+            description: "Current host task context",
+            status: "open",
+            priority: 2,
+            issueType: "task",
+            aiReviewEnabled: false,
+            createdAt: "2026-10-15T00:00:00Z",
+            updatedAt: "2026-10-15T00:00:00Z",
+          }),
+        ),
+    },
+  });
+  const creation = createSessionCreationPreparation({
+    turnPreparation,
+    resolveRoot: () => Effect.die("No native session exists before start"),
+    policyFor: () => {
+      throw new Error("No native session exists before start");
+    },
+    runtime: {
+      forkSession: () => Effect.die("Unexpected fork"),
+      startSession: (input) =>
+        Effect.sync(() => {
+          expect(input.systemPrompt).toContain("Current host task context");
+          return {
+            externalSessionId: "new-root",
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory!,
+            startedAt: "2026-10-15T00:00:00Z",
+            status: "idle" as const,
+          };
+        }),
+    },
+  });
+  const session = await Effect.runPromise(
+    creation.startSession({
+      repoPath,
+      runtimeKind: "codex",
+      workingDirectory,
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "spec" },
+      model: { providerId: "codex", modelId: "current", variant: "low" },
+      systemPrompt: "Old client context",
+    }),
+  );
+  expect(session.externalSessionId).toBe("new-root");
+});
 
 for (const runtimeKind of ["opencode", "claude", "codex"] as const) {
   test(`${runtimeKind} resolves the registered host adapter for a canonical repository`, async () => {

@@ -14,6 +14,7 @@ import type {
 } from "@openducktor/adapters-codex-app-server";
 import {
   type AgentSessionLiveSnapshot,
+  type AgentSessionAuthorizedRoot,
   type AgentSessionLiveEnvelope,
   type AgentSessionScope,
   type CodexEffectivePolicy,
@@ -233,6 +234,9 @@ const createControllerHarness = ({
       options = nextOptions;
       return {
         ...unexpectedNativeRuntimeQueries,
+        resolvePendingApproval: () => {
+          throw new Error("unexpected pending approval resolution");
+        },
         listSessionMetadataPage: async () => {
           throw new Error("Unexpected listing");
         },
@@ -424,6 +428,75 @@ const createControllerHarness = ({
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test.each(["start", "fork"] as const)(
+    "records ownership before publishing a Codex %s without a saved record",
+    async (operation) => {
+      const sessionScope = { kind: "repository" as const };
+      const publishedRoots: AgentSessionAuthorizedRoot[][] = [];
+      const service = createAgentSessionLiveStateService({
+        messageQueues: noMessageQueues,
+        adapterRegistry: createLiveSessionAdapterRegistry(),
+        runtimeAdmission: { admit: (_kind, effect) => effect },
+        faultLog: () => Effect.void,
+        publish: (event) => {
+          if (event.type === "session_upsert")
+            publishedRoots.push(service.readStartedRoots(ref.repoPath));
+        },
+      });
+      const harness = createControllerHarness({ initialSnapshots: [] });
+      let snapshots: AgentSessionLiveSnapshot[] = [];
+      const prepared = await Effect.runPromise(
+        createCodexLiveSessionAdapterPreparer({
+          resolveMcpServerConfig,
+          prepareImageGenerations: async () => {
+            throw new Error("Unexpected image preparation");
+          },
+          liveSessionLifecycle: service,
+          codexAppServer,
+          onBackgroundFailure: noBackgroundFailure,
+          resolveRuntimePolicy,
+          createController: (options) => {
+            const controller = harness.createController(options);
+            return {
+              ...controller,
+              listLiveSessionSnapshots: () => snapshots,
+              startSession: async (input) => {
+                const summary = await controller.startSession(input);
+                snapshots = [{ ...liveSnapshot(), repositoryScope: sessionScope }];
+                return summary;
+              },
+              forkSession: async (input) => {
+                const summary = await controller.forkSession(input);
+                snapshots = [{ ...liveSnapshot(), repositoryScope: sessionScope }];
+                return summary;
+              },
+              releaseSession: async () => {
+                snapshots = [];
+              },
+            };
+          },
+        })(runtime),
+      );
+      await Effect.runPromise(service.registerRuntimeAdapter(prepared.adapter));
+      await Effect.runPromise(prepared.startForwarding());
+      try {
+        const input = { ...ref, sessionScope, systemPrompt: "Instructions" };
+        if (operation === "start") await Effect.runPromise(service.startSession(input));
+        else
+          await Effect.runPromise(
+            service.forkSession({ ...input, parentExternalSessionId: "parent-1" }),
+          );
+        const root = { ...ref, sessionScope };
+        expect(service.readStartedRoots(ref.repoPath)).toEqual([root]);
+        expect(publishedRoots).toEqual([[root]]);
+        await Effect.runPromise(service.releaseSession(ref));
+        expect(service.readStartedRoots(ref.repoPath)).toEqual([]);
+      } finally {
+        await Effect.runPromise(service.releaseRuntime(runtime.runtimeId));
+      }
+    },
+  );
+
   test("binds the native controller to the workspace MCP server of each session repository", async () => {
     const harness = createControllerHarness();
     const resolvedRepos: string[] = [];

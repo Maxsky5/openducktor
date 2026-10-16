@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import * as approvalPolicy from "../session-read-model/pending-approval-policy";
+import { toast } from "sonner";
 import * as workspaceRecords from "../session-read-model/workspace-session-records";
 import { CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type {
@@ -8,7 +8,11 @@ import type {
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveSnapshot,
   AgentSessionRecord,
+  AgentMessageSubmitInput,
+  AgentMessageSubmitResult,
+  AgentQueuedMessageState,
   RepoConfig,
+  TaskCompletionObservation,
   WorkspaceSession,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
@@ -35,6 +39,8 @@ import {
   type AgentSessionTranscriptEventConsumer,
 } from "../events/session-transcript-events";
 import { createSessionTurnState } from "../support/session-turn-state";
+import { applyLoadedSessionHistory } from "../support/session-history-chat-messages";
+import { appendSendFailureNotice, createSendAgentMessage } from "../handlers/send-agent-message";
 import type { AgentSessionLiveFrontendPort } from "./use-repo-session-read-model";
 import { useRepoSessionReadModel } from "./use-repo-session-read-model";
 
@@ -239,6 +245,30 @@ const createRepositoryConflictRetryState = (
     agentSessionsListForTasks,
   });
 
+const createPendingResponseSend = (state: ReturnType<typeof createState>) => {
+  const response = createDeferred<AgentMessageSubmitResult>();
+  const submitted = createDeferred<AgentMessageSubmitInput>();
+  const turn = createSessionTurnState();
+  const send = createSendAgentMessage({
+    workspaceRepoPath: "/repo",
+    repoEpochRef: state.props.repoEpochRef,
+    currentWorkspaceRepoPathRef: state.props.currentWorkspaceRepoPathRef,
+    readSessionSnapshot: state.getStoredSession,
+    updateSession: state.updateSession,
+    messageQueues: state.messageQueues,
+    turnMetadata: turn.metadata,
+    clearSessionTurnState: turn.clearSession,
+    recordTurnUserMessageTimestamp: turn.timing.recordTurnUserMessageTimestamp,
+    adapter: {
+      submitUserMessage: (input) => {
+        submitted.resolve(input);
+        return response.promise;
+      },
+    },
+  });
+  return { response, submitted, send };
+};
+
 describe("useRepoSessionReadModel", () => {
   test.each(["codex", "claude", "opencode"] as const)(
     "%s binds a new task session with its running state in one update",
@@ -357,6 +387,460 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.unmount();
     }
   });
+
+  test("reconciles completion alerts with snapshots and preserves unrelated alerts", async () => {
+    const suffix = crypto.randomUUID();
+    const failed = (taskId: string): TaskCompletionObservation => ({
+      repoPath: "/repo",
+      taskId,
+      phase: "settled",
+      confirmedDestinations: [],
+      uncertainDestinations: [],
+      failure: {
+        stage: "cleanup",
+        code: "task_completion_failed",
+        message: "Worktree removal failed.",
+        nextAction: "Inspect the worktree.",
+      },
+    });
+    const removed = failed(`reset-${suffix}`);
+    const retained = failed(`pending-${suffix}`);
+    const removedId = `task-completion:/repo:${removed.taskId}`;
+    const retainedId = `task-completion:/repo:${retained.taskId}`;
+    const otherRepoId = `task-completion:/repo/other:${removed.taskId}`;
+    const unrelatedId = `unrelated-${suffix}`;
+    const activeIds = () => toast.getToasts().map(({ id }) => id);
+    const state = createState((emit) =>
+      emit(
+        createLiveSnapshotEnvelope({
+          sessions: [snapshot()],
+          taskCompletions: [removed, retained],
+        }),
+      ),
+    );
+    try {
+      toast.error("Another repository needs attention", { id: otherRepoId, duration: Infinity });
+      toast.error("Unrelated notification", { id: unrelatedId, duration: Infinity });
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(activeIds()).toContain(removedId);
+      expect(activeIds()).toContain(retainedId);
+
+      await state.harness.run(() =>
+        state.emit(
+          createLiveSnapshotEnvelope({ sessions: [snapshot()], taskCompletions: [retained] }),
+        ),
+      );
+      expect(activeIds()).not.toContain(removedId);
+      expect(activeIds()).toContain(retainedId);
+
+      await state.harness.run(() =>
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+      );
+      expect(activeIds()).not.toContain(retainedId);
+      expect(activeIds()).toContain(otherRepoId);
+      expect(activeIds()).toContain(unrelatedId);
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+      for (const id of [removedId, retainedId, otherRepoId, unrelatedId]) toast.dismiss(id);
+    }
+  });
+
+  test.each([
+    { outcome: "not_issued", responseFirst: true },
+    { outcome: "not_issued", responseFirst: false },
+    { outcome: "refused", responseFirst: true },
+    { outcome: "refused", responseFirst: false },
+  ] as const)("authoritative refusal clears matching Send uncertainty: %j", async (example) => {
+    const state = createState((emit) =>
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+    );
+    const { response, submitted, send } = createPendingResponseSend(state);
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      const session = state.getSession();
+      if (!session) throw new Error("Missing session");
+      let receipt!: ReturnType<typeof send>;
+      await state.harness.run(() => {
+        appendSendFailureNotice(session, "An unrelated failure", state.updateSession, false);
+        receipt = send(session, [{ kind: "text", text: "Follow up" }]);
+      });
+      const input = await submitted.promise;
+      const refuse = (submissionId: string) =>
+        state.emit({
+          type: "session_operation_updated",
+          observation: {
+            ref: snapshot().ref,
+            kind: "submission",
+            pending: false,
+            nativeOutcome: example.outcome,
+            submissionId,
+            failure: {
+              stage: "model",
+              code: "invalid_model",
+              message: "Select a model.",
+              nextAction: "Refresh the catalog.",
+            },
+          },
+        });
+      const loseResponse = async () => {
+        response.reject(new Error("Connection ended after dispatch"));
+        expect((await receipt)?.outcome).toBe("uncertain");
+      };
+      if (example.responseFirst) await state.harness.run(loseResponse);
+      await state.harness.run(() => refuse("different-submission"));
+      expect(state.getSession()?.pendingSubmissionId).toBe(input.submissionId);
+      if (example.responseFirst)
+        expect(sessionMessagesToArray(state.getSession()!)).toContainEqual(
+          expect.objectContaining({
+            meta: expect.objectContaining({ unresolvedSubmissionId: input.submissionId }),
+          }),
+        );
+      await state.harness.run(() => refuse(input.submissionId));
+      if (!example.responseFirst) await state.harness.run(loseResponse);
+      expect(state.getSession()?.status).toBe("idle");
+      expect(state.getSession()?.pendingSubmissionId).toBeUndefined();
+      expect(state.getSession()?.pendingUserMessageStartedAt).toBeUndefined();
+      const messages = sessionMessagesToArray(state.getSession()!);
+      expect(
+        messages.some(
+          (message) =>
+            message.meta?.kind === "session_notice" &&
+            message.meta.reason === "session_error" &&
+            message.meta.unresolvedSubmissionId === input.submissionId,
+        ),
+      ).toBe(false);
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          id: `host-operation:submission:${input.submissionId}`,
+          content: "Select a model. Refresh the catalog.",
+        }),
+      );
+      expect(messages).toContainEqual(expect.objectContaining({ content: "An unrelated failure" }));
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test.each([
+    { activity: "idle", acknowledgeFirst: false },
+    { activity: "running", acknowledgeFirst: false },
+    { activity: "idle", acknowledgeFirst: true },
+    { activity: "running", acknowledgeFirst: true },
+    { activity: "idle", acknowledgeFirst: false, connectionSnapshot: true },
+    { activity: "running", acknowledgeFirst: false, connectionSnapshot: true },
+    { activity: "idle", acknowledgeFirst: false, response: "accepted" },
+    { activity: "running", acknowledgeFirst: false, response: "accepted" },
+    { activity: "idle", acknowledgeFirst: false, response: "acknowledged" },
+    { activity: "running", acknowledgeFirst: false, response: "acknowledged" },
+  ] as const)("accepted Send snapshot uses current native activity: %j", async (example) => {
+    const { activity, acknowledgeFirst } = example;
+    const state = createState((emit) =>
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+    );
+    const { response, submitted, send } = createPendingResponseSend(state);
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      const session = state.getSession();
+      if (!session) throw new Error("Missing session");
+      let receipt!: ReturnType<typeof send>;
+      await state.harness.run(() => {
+        receipt = send(session, [{ kind: "text", text: "Follow up" }]);
+      });
+      const input = await submitted.promise;
+      await state.harness.run(async () => {
+        if ("response" in example) {
+          response.resolve(
+            example.response === "accepted"
+              ? {
+                  kind: "accepted",
+                  acceptedMessage: {
+                    type: "user_message",
+                    sessionRef: snapshot().ref,
+                    externalSessionId: input.externalSessionId,
+                    messageId: "accepted-user",
+                    timestamp: "2026-10-14T10:00:00.000Z",
+                    message: "Follow up",
+                    parts: [{ kind: "text", text: "Follow up" }],
+                    state: "read",
+                  },
+                }
+              : {
+                  kind: "acknowledged",
+                  outcome: "accepted",
+                  submissionId: input.submissionId,
+                },
+          );
+          expect((await receipt)?.outcome).toBe(example.response);
+        } else {
+          response.reject(new Error("Connection ended after dispatch"));
+          expect((await receipt)?.outcome).toBe("uncertain");
+        }
+      });
+      expect(state.getSession()?.status).toBe("running");
+      if ("response" in example) {
+        expect(state.getSession()?.pendingSubmissionId).toBeUndefined();
+        expect(state.getSession()?.pendingUserMessageStartedAt).toBeUndefined();
+      } else {
+        expect(state.getSession()?.pendingSubmissionId).toBe(input.submissionId);
+        expect(state.getSession()?.pendingUserMessageStartedAt).toBeDefined();
+      }
+      const acknowledgement = {
+        ref: snapshot().ref,
+        submissionId: input.submissionId,
+        kind: "message" as const,
+        messageId: "accepted-user",
+      };
+      if (acknowledgeFirst) {
+        await state.harness.run(() =>
+          state.emit({ type: "submission_acknowledged", acknowledgement }),
+        );
+        // Acceptance alone cannot use the older idle snapshot to end this turn.
+        expect(state.getSession()?.status).toBe("running");
+        expect(state.getSession()?.pendingSubmissionId).toBeUndefined();
+      }
+      await state.harness.run(() =>
+        state.emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot({ activity })],
+            submissionAcknowledgements: [acknowledgement],
+            isConnectionSnapshot: "connectionSnapshot" in example,
+          }),
+        ),
+      );
+      expect(state.getSession()).toMatchObject({ status: activity });
+      expect(state.getSession()?.pendingSubmissionId).toBeUndefined();
+      expect(state.getSession()?.pendingUserMessageStartedAt).toBeUndefined();
+      expect(
+        sessionMessagesToArray(state.getSession()!).filter((message) => message.role !== "user"),
+      ).toEqual([]);
+      await state.harness.run(() => {
+        state.updateSession(session, (current) =>
+          applyLoadedSessionHistory(current, [
+            {
+              role: "user",
+              messageId: "accepted-user",
+              timestamp: "2026-10-14T10:00:00.000Z",
+              text: "Follow up",
+              parts: [],
+              displayParts: [],
+              state: "read",
+            },
+            {
+              role: "assistant",
+              messageId: "completed-answer",
+              timestamp: "2026-10-14T10:00:01.000Z",
+              text: "Done",
+              parts: [],
+            },
+          ]),
+        );
+      });
+      expect(state.getSession()?.status).toBe(activity);
+      expect(
+        state.getSession()?.messages.items.filter((message) => message.role === "user"),
+      ).toMatchObject([{ id: "accepted-user", content: "Follow up" }]);
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test.each([
+    { projection: "delta", responseFirst: true },
+    { projection: "snapshot", responseFirst: true },
+    { projection: "delta", responseFirst: false },
+    { projection: "snapshot", responseFirst: false },
+    { projection: "delta", responseFirst: true, activity: "running", entryState: "editing" },
+    { projection: "snapshot", responseFirst: true, activity: "running", entryState: "editing" },
+  ] as const)("confirmed queue retention settles a lost Send response: %j", async (example) => {
+    const { projection, responseFirst } = example;
+    const activity = "activity" in example ? example.activity : "idle";
+    const state = createState((emit) =>
+      emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+    );
+    const { response, submitted, send } = createPendingResponseSend(state);
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      const session = state.getSession();
+      if (!session) throw new Error("Missing session");
+      await state.harness.run(() =>
+        appendSendFailureNotice(session, "An unrelated failure", state.updateSession, false),
+      );
+      state.messageQueues.apply(
+        createAgentMessageQueueSnapshot({
+          target: queueTarget(),
+          revision: 1,
+          pause: { message: "Resume required" },
+        }),
+      );
+      let receipt!: ReturnType<typeof send>;
+      await state.harness.run(() => {
+        receipt = send(session, [{ kind: "text", text: "Follow up" }]);
+      });
+      const input = await submitted.promise;
+      const loseResponse = () =>
+        state.harness.run(async () => {
+          response.reject(new Error("Connection ended after dispatch"));
+          expect((await receipt)?.outcome).toBe(responseFirst ? "uncertain" : "queued");
+        });
+      if (responseFirst) await loseResponse();
+      const queue = createAgentMessageQueueSnapshot({
+        target: queueTarget(),
+        revision: 2,
+        texts: ["Follow up"],
+        pause: { message: "Resume required" },
+      });
+      queue.entries[0]!.submissionId = input.submissionId;
+      if ("entryState" in example)
+        queue.entries[0] = { ...queue.entries[0]!, state: "editing", editId: "edit-1" };
+      if (projection === "delta")
+        await state.harness.run(() =>
+          state.emit({ type: "session_upsert", session: snapshot({ activity }) }),
+        );
+      await state.harness.run(() =>
+        state.emit(
+          projection === "delta"
+            ? { type: "message_queue_updated", queue }
+            : createLiveSnapshotEnvelope({
+                sessions: [snapshot({ activity })],
+                messageQueues: [queue],
+                isConnectionSnapshot: true,
+              }),
+        ),
+      );
+      if (!responseFirst) await loseResponse();
+      expect(state.getSession()).toMatchObject({ status: activity });
+      expect(state.getSession()?.pendingSubmissionId).toBeUndefined();
+      expect(state.getSession()?.pendingUserMessageStartedAt).toBeUndefined();
+      expect(state.getSession()?.messages.items).toEqual([
+        expect.objectContaining({ content: "An unrelated failure" }),
+      ]);
+      expect(state.messageQueues.getQueue(input)).toEqual(queue);
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test.each([
+    { projection: "delta", responseFirst: true },
+    { projection: "snapshot", responseFirst: true },
+    { projection: "delta", responseFirst: false },
+    { projection: "snapshot", responseFirst: false },
+  ] as const)(
+    "queue evidence cannot settle another target or unresolved delivery: %j",
+    async ({ projection, responseFirst }) => {
+      const state = createState((emit) =>
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+      );
+      const { response, submitted, send } = createPendingResponseSend(state);
+      try {
+        await state.harness.mount();
+        await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+        const session = state.getSession();
+        if (!session) throw new Error("Missing session");
+        let receipt!: ReturnType<typeof send>;
+        await state.harness.run(() => {
+          receipt = send(session, [{ kind: "text", text: "Follow up" }]);
+        });
+        const input = await submitted.promise;
+        const loseResponse = () =>
+          state.harness.run(async () => {
+            response.reject(new Error("Connection ended after dispatch"));
+            expect((await receipt)?.outcome).toBe("uncertain");
+          });
+        if (responseFirst) await loseResponse();
+        let revision = 0;
+        const project = (queue: ReturnType<typeof createAgentMessageQueueSnapshot>) =>
+          state.harness.run(() =>
+            state.emit(
+              projection === "delta"
+                ? { type: "message_queue_updated", queue }
+                : createLiveSnapshotEnvelope({
+                    sessions: [snapshot()],
+                    messageQueues: [queue],
+                    isConnectionSnapshot: true,
+                  }),
+            ),
+          );
+        for (const mismatch of [
+          { repoPath: "/other" },
+          { runtimeKind: "claude" as const },
+          { workingDirectory: "/other/checkout" },
+          { externalSessionId: "other-session" },
+          { submissionId: "other-submission" },
+        ]) {
+          const queue = createAgentMessageQueueSnapshot({
+            target: "submissionId" in mismatch ? queueTarget() : { ...queueTarget(), ...mismatch },
+            revision: ++revision,
+            texts: ["Follow up"],
+          });
+          queue.entries[0]!.submissionId =
+            "submissionId" in mismatch ? mismatch.submissionId : input.submissionId;
+          await project(queue);
+          expect(state.getSession()).toMatchObject({
+            status: "running",
+            pendingSubmissionId: input.submissionId,
+          });
+        }
+        for (const entryState of [
+          "sending",
+          "steering",
+          "acceptance_unknown",
+        ] satisfies AgentQueuedMessageState[]) {
+          const queue = createAgentMessageQueueSnapshot({
+            target: queueTarget(),
+            revision: ++revision,
+            texts: ["Follow up"],
+          });
+          queue.entries[0] = {
+            ...queue.entries[0]!,
+            submissionId: input.submissionId,
+            state: entryState,
+          };
+          await project(queue);
+          expect(state.getSession()).toMatchObject({
+            status: "running",
+            pendingSubmissionId: input.submissionId,
+          });
+          if (responseFirst)
+            expect(state.getSession()?.messages.items).toEqual([
+              expect.objectContaining({
+                content: expect.stringContaining("delivery remains uncertain"),
+              }),
+            ]);
+          expect(state.messageQueues.getQueue(input)).toEqual(queue);
+        }
+        if (projection === "delta") {
+          const stale = createAgentMessageQueueSnapshot({
+            target: queueTarget(),
+            revision: 0,
+            texts: ["Follow up"],
+          });
+          stale.entries[0]!.submissionId = input.submissionId;
+          await project(stale);
+          expect(state.getSession()?.pendingSubmissionId).toBe(input.submissionId);
+          expect(state.messageQueues.getQueue(input)?.entries[0]?.state).toBe("acceptance_unknown");
+        }
+        if (!responseFirst) await loseResponse();
+        expect(state.getSession()?.pendingSubmissionId).toBe(input.submissionId);
+        expect(state.getSession()?.messages.items).toEqual([
+          expect.objectContaining({
+            content: expect.stringContaining("delivery remains uncertain"),
+          }),
+        ]);
+      } finally {
+        await state.harness.unmount();
+        state.queryClient.clear();
+      }
+    },
+  );
 
   test("removes a pending queue entry in the step that adds its accepted message", async () => {
     const target = queueTarget();
@@ -850,14 +1334,11 @@ describe("useRepoSessionReadModel", () => {
       workflowRecords,
     );
     state.props.workspaceId = "workspace-A";
-    const policy = spyOn(approvalPolicy, "collectPendingApprovalPolicyActions");
     const targets = spyOn(workspaceRecords, "reconcileWorkspaceSessionTargetFaults");
     try {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      expect(policy).toHaveBeenCalled();
       expect(targets).toHaveBeenCalled();
-      policy.mockClear();
       targets.mockClear();
       await state.harness.run(() => {
         for (let index = 0; index < 10; index += 1)
@@ -880,10 +1361,8 @@ describe("useRepoSessionReadModel", () => {
           });
       });
       expect(state.transcriptEvents.handle).toHaveBeenCalledTimes(10);
-      expect(policy).not.toHaveBeenCalled();
       expect(targets).not.toHaveBeenCalled();
     } finally {
-      policy.mockRestore();
       targets.mockRestore();
       await state.harness.unmount();
       state.queryClient.clear();
@@ -2245,7 +2724,7 @@ describe("useRepoSessionReadModel", () => {
     expect(secondUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  test("uses the latest approval reply callback without restarting observation", async () => {
+  test("presents pending approvals without replying from the client", async () => {
     const mutatingApproval = {
       requestId: "latest-mutating",
       requestType: "file_change" as const,
@@ -2292,18 +2771,10 @@ describe("useRepoSessionReadModel", () => {
           }),
         });
       });
-      await waitFor(() => expect(refreshedReplyApproval).toHaveBeenCalledTimes(1), {
-        timeout: 750,
-      });
+      expect(refreshedReplyApproval).not.toHaveBeenCalled();
 
       expect(state.agentSessionLiveReplyApproval).not.toHaveBeenCalled();
-      expect(refreshedReplyApproval).toHaveBeenCalledWith(
-        expect.objectContaining({
-          requestId: "latest-mutating",
-          outcome: "reject",
-          message: "Custom read-only rejection for spec.",
-        }),
-      );
+
       expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
     } finally {
       await state.harness.unmount();
@@ -2899,7 +3370,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("applies one runtime-neutral role policy to initial and newly added pending ids", async () => {
+  test("keeps initial and new approvals for the host policy", async () => {
     const initialApproval = {
       requestId: "initial-mutating",
       requestType: "file_change" as const,
@@ -2937,17 +3408,7 @@ describe("useRepoSessionReadModel", () => {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
 
-      expect(state.agentSessionLiveReplyApproval).toHaveBeenCalledWith(
-        expect.objectContaining({
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "thread-1",
-          requestId: "initial-mutating",
-          outcome: "reject",
-          message: "Custom read-only rejection for spec.",
-        }),
-      );
+      expect(state.agentSessionLiveReplyApproval).not.toHaveBeenCalled();
       expect(state.getSession()?.pendingApprovals.map(({ requestId }) => requestId)).toEqual([
         "initial-mutating",
       ]);
@@ -2961,10 +3422,8 @@ describe("useRepoSessionReadModel", () => {
         });
       });
 
-      expect(state.agentSessionLiveReplyApproval).toHaveBeenCalledTimes(2);
-      expect(
-        state.agentSessionLiveReplyApproval.mock.calls.map(([input]) => input.requestId),
-      ).toEqual(["initial-mutating", "later-mutating"]);
+      expect(state.agentSessionLiveReplyApproval).not.toHaveBeenCalled();
+
       expect(state.getSession()?.pendingApprovals.map(({ requestId }) => requestId)).toEqual([
         "initial-mutating",
         "later-mutating",

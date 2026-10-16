@@ -1,7 +1,14 @@
-import type { AgentSessionControlSummary, AgentSessionLiveRef } from "@openducktor/contracts";
+import type {
+  AgentSessionControlSummary,
+  AgentSessionLiveRef,
+  AgentSessionAuthorizedRoot,
+} from "@openducktor/contracts";
 import type { AgentSessionSummary, AgentSessionTitleUpdateResult } from "@openducktor/core";
 import { Effect } from "effect";
-import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
+import {
+  toAgentSessionControlSummary,
+  toStartedSessionRoot,
+} from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import {
   type HostError,
@@ -16,7 +23,7 @@ export const createCodexControlRunner = ({
   reportProjectionFailure,
 }: {
   runtimeId: string;
-  refreshProjection: () => Effect.Effect<void, HostError>;
+  refreshProjection: (admittedRoot?: AgentSessionAuthorizedRoot) => Effect.Effect<void, HostError>;
   reportProjectionFailure: (
     ref: AgentSessionLiveRef,
     failure: HostError,
@@ -25,13 +32,14 @@ export const createCodexControlRunner = ({
   runSummary: (
     operation: string,
     run: () => Promise<AgentSessionSummary>,
+    creation?: Pick<AgentSessionAuthorizedRoot, "repoPath" | "sessionScope">,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     Effect.tryPromise({
       try: run,
       catch: (cause) => toHostOperationError(cause, operation, { runtimeId }),
     }).pipe(
       Effect.flatMap((summary) =>
-        refreshCodexSummary(summary, operation, runtimeId, refreshProjection),
+        refreshCodexSummary(summary, operation, runtimeId, refreshProjection, creation),
       ),
       Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
     ),
@@ -58,10 +66,13 @@ const refreshCodexSummary = (
   summary: AgentSessionSummary,
   operation: string,
   runtimeId: string,
-  refreshProjection: () => Effect.Effect<void, HostError>,
+  refreshProjection: (admittedRoot?: AgentSessionAuthorizedRoot) => Effect.Effect<void, HostError>,
+  creation?: Pick<AgentSessionAuthorizedRoot, "repoPath" | "sessionScope">,
 ): Effect.Effect<AgentSessionSummary, HostError> =>
   summary.runtimeKind === "codex"
-    ? refreshProjection().pipe(Effect.as(summary))
+    ? refreshProjection(creation ? toStartedSessionRoot(creation, summary) : undefined).pipe(
+        Effect.as(summary),
+      )
     : Effect.fail(
         new HostValidationError({
           field: "runtimeKind",

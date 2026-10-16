@@ -93,7 +93,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
     await expect(
       actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
     ).rejects.toThrow(
-      "Cannot resume session for unbound session 'session-1'; repository or workflow context is required.",
+      "Cannot send message for unbound session 'session-1'; repository or workflow context is required.",
     );
     expect(sendCalls).toBe(0);
   });

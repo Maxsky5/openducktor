@@ -35,11 +35,22 @@ type TestControlServiceInput = Omit<
   | "persistTaskModel"
   | "runtime"
   | "pauseForStop"
+  | "turnPreparation"
+  | "readSessionRootRefs"
+  | "approvalPolicy"
 > & {
   runtime: Omit<
     ControlServiceInput["runtime"],
-    "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
-  >;
+    | "loadContext"
+    | "loadSessionDiff"
+    | "replyApproval"
+    | "replyQuestion"
+    | "read"
+    | "list"
+    | "publishOperation"
+    | "retainOperation"
+  > &
+    Partial<Pick<ControlServiceInput["runtime"], "read">>;
   taskSessionStart?: ControlServiceInput["taskSessionStart"];
   tasks: Omit<ControlServiceInput["tasks"], "transitionTask"> &
     Partial<Pick<ControlServiceInput["tasks"], "transitionTask">>;
@@ -54,12 +65,49 @@ const createAgentSessionCommandService = ({
 }: TestControlServiceInput) =>
   createControlService({
     pauseForStop,
+    turnPreparation: {
+      context: () => Effect.succeed("Current host context"),
+      promptOverrides: () => Effect.succeed({}),
+      steeringContent: () => Effect.void,
+      model: (_target, selection) => Effect.succeed({ kind: "keep" as const, selection }),
+    },
+    approvalPolicy: { reply: () => Effect.die(new Error("unexpected approval reply")) },
+    readSessionRootRefs: (repoPath) =>
+      input.tasks.agentSessionsList({ repoPath, taskId: "task-1" }).pipe(
+        Effect.map((records) =>
+          records.map((record) => ({
+            repoPath,
+            ...record,
+            sessionScope: { kind: "workflow" as const, taskId: "task-1", role: record.role },
+          })),
+        ),
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({ operation: "test.read-roots", message: cause.message }),
+        ),
+      ),
     taskSessionStart: {
       prepare: () => Effect.die(new Error("unexpected task session preparation")),
       complete: () => Effect.die(new Error("unexpected task session completion")),
     },
     ...input,
     runtime: {
+      read: (ref) =>
+        Effect.succeed({
+          type: "live" as const,
+          session: {
+            ref,
+            title: "Session",
+            startedAt: "2026-10-13T12:00:00Z",
+            activity: "idle" as const,
+            pendingApprovals: [],
+            pendingQuestions: [],
+            contextUsage: null,
+          },
+        }),
+      list: () => Effect.succeed([]),
+      publishOperation: () => Effect.void,
+      retainOperation: () => Effect.void,
       loadContext: () => Effect.die(new Error("unexpected context read")),
       loadSessionDiff: () => Effect.die(new Error("unexpected diff read")),
       replyApproval: () => Effect.die(new Error("unexpected approval reply")),
@@ -286,7 +334,7 @@ describe("createAgentSessionCommandService", () => {
     { step: "store", stopFails: true, storeFails: false },
     { step: "store", stopFails: false, storeFails: true },
   ])(
-    "waits for the interrupted startup step before cleanup: %j",
+    "finishes admitted startup after the caller leaves: %j",
     async ({ step, stopFails, storeFails }) => {
       const calls: string[] = [];
       const created = await Effect.runPromise(Deferred.make<void>());
@@ -342,7 +390,10 @@ describe("createAgentSessionCommandService", () => {
           forkSession: () => Effect.die(new Error("unexpected fork")),
           sendUserMessage: unexpectedSend,
           updateSessionModel: () => Effect.die(new Error("unexpected model update")),
-          releaseSession: () => Effect.die(new Error("unexpected release")),
+          releaseSession: () =>
+            Effect.sync(() => {
+              calls.push("release-runtime");
+            }),
         },
         tasks: {
           agentSessionsList: () => Effect.die(new Error("unexpected list")),
@@ -369,12 +420,10 @@ describe("createAgentSessionCommandService", () => {
         await Effect.runPromise(Deferred.succeed(returnSummary, undefined));
         expect(Exit.isFailure(await Effect.runPromise(Fiber.await(fiber)))).toBe(true);
         const expected = ["runtime-created", "runtime-returned"];
-        if (step === "store") {
-          expected.push(storeFails ? "store-failed" : "store-committed");
-        }
-        expected.push("stop-runtime");
-        if (!stopFails && (step === "runtime" || storeFails)) {
-          expected.push("cleanup-worktree");
+        expected.push(storeFails ? "store-failed" : "store-committed");
+        if (storeFails) {
+          expected.push("stop-runtime");
+          if (!stopFails) expected.push("release-runtime", "cleanup-worktree");
         }
         expect(calls).toEqual(expected);
         await expect(
@@ -476,60 +525,158 @@ describe("createAgentSessionCommandService", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("stops the runtime and removes a new worktree when session storage fails", async () => {
-    const calls: string[] = [];
-    const preparedTask = task("ready_for_dev");
-    const service = createAgentSessionCommandService({
-      ...createControlDeps(),
-      taskSessionStart: {
-        prepare: () =>
-          Effect.succeed({
-            canonicalRepoPath: "/repo",
-            rollback: () =>
-              Effect.sync(() => {
-                calls.push("cleanup-worktree");
-                return "";
-              }),
-            preparedStatus: preparedTask.status,
-            role: "build" as const,
-            runtimeKind: "opencode" as const,
-            task: preparedTask,
-            workingDirectory: "/repo/worktree",
-          }),
-        complete: () => Effect.die(new Error("unexpected completion")),
-      },
-      runtime: {
-        startSession: () => Effect.succeed(summary),
-        resumeSession: () => Effect.die(new Error("unexpected resume")),
-        continueInterruptedTurn: () =>
-          Effect.die(new Error("unexpected continue interrupted turn")),
-        forkSession: () => Effect.die(new Error("unexpected fork")),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
-        stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
-        releaseSession: () => Effect.die(new Error("unexpected release")),
-      },
-      tasks: {
-        agentSessionsList: () => Effect.die(new Error("unexpected list")),
-        agentSessionUpsert: () =>
-          Effect.fail(new HostOperationError({ operation: "test.store", message: "store failed" })),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
-      },
-    });
+  test.each([false, true])(
+    "cleans an unsaved start before rollback, release failure: %s",
+    async (releaseFails) => {
+      const calls: string[] = [];
+      const preparedTask = task("ready_for_dev");
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        taskSessionStart: {
+          prepare: () =>
+            Effect.succeed({
+              canonicalRepoPath: "/repo",
+              rollback: () =>
+                Effect.sync(() => {
+                  calls.push("cleanup-worktree");
+                  return "";
+                }),
+              preparedStatus: preparedTask.status,
+              role: "build" as const,
+              runtimeKind: "opencode" as const,
+              task: preparedTask,
+              workingDirectory: "/repo/worktree",
+            }),
+          complete: () => Effect.die(new Error("unexpected completion")),
+        },
+        runtime: {
+          startSession: () => Effect.succeed(summary),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () =>
+            Effect.die(new Error("unexpected continue interrupted turn")),
+          forkSession: () => Effect.die(new Error("unexpected fork")),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
+          releaseSession: () =>
+            Effect.sync(() => {
+              calls.push("release-runtime");
+            }).pipe(
+              Effect.andThen(
+                releaseFails
+                  ? Effect.fail(
+                      new HostOperationError({
+                        operation: "test.release",
+                        message: "release failed",
+                      }),
+                    )
+                  : Effect.void,
+              ),
+            ),
+        },
+        tasks: {
+          agentSessionsList: () => Effect.die(new Error("unexpected list")),
+          agentSessionUpsert: () =>
+            Effect.fail(
+              new HostOperationError({ operation: "test.store", message: "store failed" }),
+            ),
+          agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
+        },
+      });
 
-    await expect(
-      Effect.runPromise(
-        service.startWorkflowSession({
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-          systemPrompt: workflowStart.systemPrompt,
-          model: workflowStart.model!,
-        }),
-      ),
-    ).rejects.toThrow("store failed");
-    expect(calls).toEqual(["stop-runtime", "cleanup-worktree"]);
-  });
+      await expect(
+        Effect.runPromise(
+          service.startWorkflowSession({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            systemPrompt: workflowStart.systemPrompt,
+            model: workflowStart.model!,
+          }),
+        ),
+      ).rejects.toThrow(
+        releaseFails ? "store failed Cleanup failed: release failed" : "store failed",
+      );
+      expect(calls).toEqual([
+        "stop-runtime",
+        "release-runtime",
+        ...(releaseFails ? [] : ["cleanup-worktree"]),
+      ]);
+    },
+  );
+
+  test.each(["none", "stop", "release"] as const)(
+    "releases only the unsaved fork, cleanup failure: %s",
+    async (cleanupFailure) => {
+      const calls: string[] = [];
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        runtime: {
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: () => Effect.die(new Error("unexpected resume")),
+          continueInterruptedTurn: () => Effect.die(new Error("unexpected continuation")),
+          forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopSession: (ref) =>
+            Effect.sync(() => {
+              calls.push(`stop:${ref.externalSessionId}`);
+            }).pipe(
+              Effect.andThen(
+                cleanupFailure === "stop"
+                  ? Effect.fail(
+                      new HostOperationError({ operation: "test.stop", message: "stop failed" }),
+                    )
+                  : Effect.void,
+              ),
+            ),
+          releaseSession: (ref) =>
+            Effect.sync(() => {
+              calls.push(`release:${ref.externalSessionId}`);
+            }).pipe(
+              Effect.andThen(
+                cleanupFailure === "release"
+                  ? Effect.fail(
+                      new HostOperationError({
+                        operation: "test.release",
+                        message: "release failed",
+                      }),
+                    )
+                  : Effect.void,
+              ),
+            ),
+        },
+        tasks: {
+          agentSessionsList: () =>
+            Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
+          agentSessionUpsert: () =>
+            Effect.fail(
+              new HostOperationError({ operation: "test.store", message: "store failed" }),
+            ),
+          agentSessionUpdateModel: () => Effect.die(new Error("unexpected model store")),
+        },
+      });
+      await expect(
+        Effect.runPromise(
+          service.forkSession({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+            parentExternalSessionId: "session-1",
+            sessionScope: workflowStart.sessionScope,
+            systemPrompt: "Fork it",
+            model: workflowStart.model,
+          }),
+        ),
+      ).rejects.toThrow(
+        cleanupFailure === "none" ? "store failed" : `Cleanup failed: ${cleanupFailure} failed`,
+      );
+      expect(calls).toEqual([
+        "stop:fork-1",
+        ...(cleanupFailure === "stop" ? [] : ["release:fork-1"]),
+      ]);
+    },
+  );
 
   test("closes worktree action terminals before it removes a new worktree when the runtime start fails", async () => {
     const calls: unknown[] = [];
@@ -864,7 +1011,6 @@ describe("createAgentSessionCommandService", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
         sessionScope: workflowStart.sessionScope,
-        model: storedModel,
         resumeMode: "continue_interrupted_turn",
       }),
     );
@@ -926,7 +1072,7 @@ describe("createAgentSessionCommandService", () => {
           sessionScope: workflowStart.sessionScope,
         }),
       ),
-    ).rejects.toThrow("Task 'task-1' does not own session 'session-1' for role 'build'.");
+    ).rejects.toThrow("belongs to another task, role, or workspace chat");
     expect(runtimeCalls).toBe(0);
   });
 
@@ -968,7 +1114,7 @@ describe("createAgentSessionCommandService", () => {
           model: workflowStart.model,
         }),
       ),
-    ).rejects.toThrow("Task 'task-1' does not own session 'session-1' for role 'build'.");
+    ).rejects.toThrow("Session 'session-1' has no verified saved owner.");
     expect(runtimeCalls).toBe(0);
   });
 
@@ -1052,18 +1198,19 @@ describe("createAgentSessionCommandService", () => {
     await expect(
       Effect.runPromise(service.sendUserMessage({ ...prepared, delivery: "new_turn" })),
     ).resolves.toEqual(acceptedUserMessage);
-    expect(runtimeInputs).toEqual([
+    expect(runtimeInputs).toMatchObject([
       {
         ...workflowSend,
         repoPath: "/repo",
         model: storedModel,
+        systemPrompt: "Current host context",
       },
     ]);
   });
 
-  test("sends the queued model for a new turn and a steer, but saves only the new-turn model", async () => {
+  test("uses the captured queued model for a new turn and keeps steering on the running settings", async () => {
     const runtimeInputs: AgentSessionControlSendInput[] = [];
-    const saveModels: boolean[] = [];
+    let activity: "idle" | "running" = "idle";
     const queuedModel = {
       runtimeKind: "opencode" as const,
       providerId: "openai",
@@ -1071,11 +1218,20 @@ describe("createAgentSessionCommandService", () => {
     };
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
-      recordAcceptedMessage: (_ref, _accepted, { saveModel }) =>
-        Effect.sync(() => {
-          saveModels.push(saveModel);
-        }),
       runtime: {
+        read: (ref) =>
+          Effect.succeed({
+            type: "live" as const,
+            session: {
+              ref,
+              title: "Session",
+              startedAt: "2026-10-13T12:00:00Z",
+              activity,
+              pendingApprovals: [],
+              pendingQuestions: [],
+              contextUsage: null,
+            },
+          }),
         startSession: () => Effect.die(new Error("unexpected start")),
         resumeSession: () => Effect.die(new Error("unexpected resume")),
         continueInterruptedTurn: () =>
@@ -1097,25 +1253,26 @@ describe("createAgentSessionCommandService", () => {
         agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
     });
-    const repositorySend = { ...workflowSend, sessionScope: { kind: "repository" as const } };
 
     for (const delivery of ["new_turn", "steer"] as const) {
       // The workflow session stores another model, but the queued model wins.
       await Effect.runPromise(
-        service.sendUserMessage({ ...workflowSend, model: queuedModel, delivery }),
+        service.sendUserMessage({
+          ...workflowSend,
+          model: queuedModel,
+          modelCaptured: true,
+          delivery,
+        }),
       );
-      await Effect.runPromise(service.sendUserMessage({ ...repositorySend, delivery }));
+      activity = "running";
     }
 
     expect(
       runtimeInputs.map((input) => [input.sessionScope.kind, input.delivery, input.model]),
     ).toEqual([
       ["workflow", "new_turn", queuedModel],
-      ["repository", "new_turn", workflowSend.model],
-      ["workflow", "steer", queuedModel],
-      ["repository", "steer", workflowSend.model],
+      ["workflow", "steer", undefined],
     ]);
-    expect(saveModels).toEqual([true, false]);
   });
 
   test("pauses the message queue before it stops the session", async () => {
@@ -1136,7 +1293,8 @@ describe("createAgentSessionCommandService", () => {
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
       tasks: {
-        agentSessionsList: () => Effect.die(new Error("unexpected session list")),
+        agentSessionsList: () =>
+          Effect.succeed([{ ...summary, role: "build", selectedModel: storedModel }]),
         agentSessionUpsert: () => Effect.die(new Error("unexpected store")),
         agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
       },
@@ -1181,7 +1339,7 @@ describe("createAgentSessionCommandService", () => {
     });
 
     await expect(Effect.runPromise(service.sendUserMessage(workflowSend))).rejects.toThrow(
-      "Task 'task-1' does not own session 'session-1' for role 'build'.",
+      "no verified saved owner",
     );
     expect(runtimeCalls).toBe(0);
   });
@@ -1294,7 +1452,7 @@ describe("createAgentSessionCommandService", () => {
       );
 
       expect(calls).toEqual(["runtime", "store"]);
-      expect(runtimeInputs).toEqual([
+      expect(runtimeInputs).toMatchObject([
         {
           repoPath: "/repo",
           runtimeKind: "opencode",
@@ -1479,7 +1637,10 @@ describe("createAgentSessionCommandService", () => {
       expect(result.failure.message).toBe(
         "task store unavailable Runtime model restore failed: runtime restore unavailable",
       );
-      expect(result.failure.cause).toEqual({ storeFailure, restoreFailure });
+      expect(result.failure).toMatchObject({
+        cause: { cause: { storeFailure, restoreFailure } },
+        observation: { modelChange: { state: "unresolved" } },
+      });
     }
   });
 
@@ -1522,7 +1683,7 @@ describe("createAgentSessionCommandService", () => {
           model: { providerId: "openai", modelId: "gpt-5.1" },
         }),
       ),
-    ).rejects.toThrow("Task 'task-1' does not own session 'session-1' for role 'build'.");
+    ).rejects.toThrow("no verified saved owner");
     expect(runtimeCalls).toBe(0);
   });
 

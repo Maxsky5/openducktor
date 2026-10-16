@@ -86,6 +86,7 @@ type CreateWorkspaceLifecycleServiceInput = {
   taskSessionLifecycleCoordinator: Pick<TaskSessionLifecycleCoordinator, "runWorkspaceLifecycle">;
   taskStore: Pick<TaskStorePort, "listTasks" | "listAgentSessionsForTasks">;
   workspaceSettingsService: WorkspaceSettingsService;
+  onWorkspaceReopened: (repoPath: string) => void;
   worktreeFiles: Pick<
     WorktreeFilePort,
     "pathIsWithinRoot" | "removePathIfPresent" | "resolvePathWithinRoot" | "resolveWorktreePath"
@@ -104,6 +105,7 @@ export const createWorkspaceLifecycleService = ({
   taskSessionLifecycleCoordinator,
   taskStore,
   workspaceSettingsService,
+  onWorkspaceReopened,
   worktreeFiles,
 }: CreateWorkspaceLifecycleServiceInput): WorkspaceLifecycleService => {
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
@@ -353,7 +355,7 @@ export const createWorkspaceLifecycleService = ({
         if (!repoConfig.closed) {
           return yield* workspaceSettingsService.getWorkspaceCatalog();
         }
-        return yield* runUnderReservation(
+        const catalog = yield* runUnderReservation(
           {
             operation: "reopen",
             repoPath: repoConfig.repoPath,
@@ -369,6 +371,8 @@ export const createWorkspaceLifecycleService = ({
               return catalog;
             }),
         );
+        onWorkspaceReopened(repoConfig.repoPath);
+        return catalog;
       });
     },
     removeWorkspace(input) {

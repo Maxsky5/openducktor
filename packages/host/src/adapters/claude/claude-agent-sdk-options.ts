@@ -164,6 +164,21 @@ export const buildClaudeAgentSdkOptions = async ({
     forwardSubagentText: true,
     includePartialMessages: true,
     hooks: {
+      UserPromptSubmit: [
+        {
+          hooks: [
+            async () =>
+              session.turnSystemPrompt === undefined
+                ? {}
+                : {
+                    hookSpecificOutput: {
+                      hookEventName: "UserPromptSubmit",
+                      additionalContext: session.turnSystemPrompt,
+                    },
+                  },
+          ],
+        },
+      ],
       PreToolUse: [
         {
           hooks: [createClaudePreToolUseHook({ session })],

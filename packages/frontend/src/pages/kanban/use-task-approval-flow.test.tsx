@@ -267,21 +267,31 @@ const waitForTaskApprovalModalClosed = async (): Promise<void> => {
 
 const createTaskApprovalContextFixture = (
   overrides: Partial<TaskApprovalContext> = {},
-): TaskApprovalContext => ({
-  taskId: "TASK-1",
-  taskStatus: "human_review",
-  workingDirectory: "/repo/.worktrees/task-1",
-  sourceBranch: "odt/TASK-1",
-  targetBranch: { remote: "origin", branch: "main" },
-  publishTarget: { remote: "origin", branch: "main" },
-  defaultMergeMethod: "merge_commit",
-  hasUncommittedChanges: false,
-  uncommittedFileCount: 0,
-  pullRequest: undefined,
-  directMerge: undefined,
-  suggestedSquashCommitMessage: undefined,
-  ...overrides,
-});
+): TaskApprovalContext => {
+  const result: TaskApprovalContext = {
+    taskId: "TASK-1",
+    taskStatus: "human_review",
+    workingDirectory: "/repo/.worktrees/task-1",
+    sourceBranch: "odt/TASK-1",
+    targetBranch: { remote: "origin", branch: "main" },
+    publishTarget: { remote: "origin", branch: "main" },
+    defaultMergeMethod: "merge_commit",
+    hasUncommittedChanges: false,
+    uncommittedFileCount: 0,
+    pullRequest: undefined,
+    directMerge: undefined,
+    suggestedSquashCommitMessage: undefined,
+    ...overrides,
+  };
+  if (overrides.directMerge?.targetBranch.remote)
+    result.publicationPreview = {
+      sourceOid: "a".repeat(40),
+      remote: overrides.directMerge.targetBranch.remote,
+      targetRef: `refs/heads/${overrides.directMerge.targetBranch.branch}`,
+      destinations: [{ identity: "destination", label: "/reviewed.git" }],
+    };
+  return result;
+};
 
 const createReadyTaskApprovalContextResult = (
   overrides: Partial<TaskApprovalContext> = {},
@@ -1518,13 +1528,27 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      expected: {
+        taskStatus: "human_review",
+        sourceBranch: "odt/TASK-1",
+        targetBranch: { remote: "upstream", branch: "main" },
+      },
       mergeMethod: "squash",
       squashCommitMessage: "feat: merged task",
     });
-    expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
-      remote: "upstream",
-    });
-    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(gitPushBranchMock).not.toHaveBeenCalled();
+    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith(
+      "/repo",
+      "TASK-1",
+      expect.objectContaining({
+        expectedMerge: expect.objectContaining({ sourceBranch: "odt/TASK-1" }),
+        expectedPublication: expect.objectContaining({
+          remote: "upstream",
+          sourceOid: "a".repeat(40),
+          destinations: [{ identity: "destination", label: "/reviewed.git" }],
+        }),
+      }),
+    );
     expect(storage.getItem(toAgentChatDraftStorageKey(draftIdentity))).toBeNull();
 
     await act(async () => {
@@ -1575,6 +1599,11 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      expected: {
+        taskStatus: "human_review",
+        sourceBranch: "odt/TASK-1",
+        targetBranch: { branch: "release/2026.03" },
+      },
       mergeMethod: "merge_commit",
       squashCommitMessage: undefined,
     });
@@ -1629,6 +1658,11 @@ describe("useTaskApprovalFlow", () => {
 
     expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
     expect(taskDirectMergeMock).toHaveBeenCalledWith("/repo", "TASK-1", {
+      expected: {
+        taskStatus: "human_review",
+        sourceBranch: "odt/TASK-1",
+        targetBranch: { remote: "origin", branch: "main" },
+      },
       mergeMethod: "merge_commit",
       squashCommitMessage: undefined,
     });
@@ -1689,10 +1723,8 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(agentSessionsListForTasksMock).toHaveBeenCalledWith("/repo", ["TASK-1"]);
-    expect(gitPushBranchMock).toHaveBeenCalledWith("/repo", "main", {
-      remote: "origin",
-    });
-    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1");
+    expect(gitPushBranchMock).not.toHaveBeenCalled();
+    expect(taskDirectMergeCompleteMock).toHaveBeenCalledWith("/repo", "TASK-1", expect.any(Object));
     await waitForTaskApprovalModalClosed();
     expect(toastErrorMock).toHaveBeenCalledWith("Task updated, but chat draft cleanup failed", {
       description: "session lookup failed",
@@ -2327,12 +2359,13 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskApprovalModal?.stage).toBe("complete_direct_merge");
     expect(latestHarnessValue?.taskApprovalModal?.isSubmitting).toBe(false);
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
-      "The configured target branch does not have a publish remote.",
+      "Publication context is missing. Refresh approval context before choosing Publish and complete.",
     );
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Failed to finish direct merge",
       expect.objectContaining({
-        description: "The configured target branch does not have a publish remote.",
+        description:
+          "Publication context is missing. Refresh approval context before choosing Publish and complete.",
       }),
     );
 
@@ -2342,12 +2375,9 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("uses a fallback message when direct-merge publish fails without output", async () => {
-    gitPushBranchMock.mockResolvedValueOnce({
-      outcome: "rejected_non_fast_forward" as const,
-      remote: "origin",
-      branch: "main",
-      output: "",
-    });
+    taskDirectMergeCompleteMock.mockRejectedValueOnce(
+      new Error("Publication failed. Review the recorded destination."),
+    );
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
         directMerge: {
@@ -2391,11 +2421,13 @@ describe("useTaskApprovalFlow", () => {
     });
 
     expect(latestHarnessValue?.taskApprovalModal?.errorMessage).toBe(
-      "Git push failed with no output.",
+      "Publication failed. Review the recorded destination.",
     );
     expect(toastErrorMock).toHaveBeenCalledWith(
       "Failed to finish direct merge",
-      expect.objectContaining({ description: "Git push failed with no output." }),
+      expect.objectContaining({
+        description: "Publication failed. Review the recorded destination.",
+      }),
     );
 
     await act(async () => {

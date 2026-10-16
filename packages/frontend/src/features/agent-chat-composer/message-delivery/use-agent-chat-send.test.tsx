@@ -96,7 +96,7 @@ type HookProps = Parameters<typeof useAgentChatSendForTarget>[1] & { target: Tar
 const useTestChatSend = ({ target: { canSend, ...target }, ...props }: HookProps) => {
   const activity = useAsyncActivityTracker();
   return useAgentChatSendForTarget(
-    { ...target, activity, activityKey: "chat", canSend: () => canSend },
+    { ...target, capture: () => () => true, activity, activityKey: "chat", canSend: () => canSend },
     props,
   );
 };
@@ -282,8 +282,14 @@ describe("useAgentChatSend", () => {
         });
 
         expect(sendAgentMessage.mock.calls.map(([, parts, options]) => [parts, options])).toEqual([
-          [[{ kind: "text", text: "First" }], { mode: "default" }],
-          [[{ kind: "text", text: "Second" }], { mode: "steer" }],
+          [
+            [{ kind: "text", text: "First" }],
+            { mode: "default", assertCanSubmit: expect.any(Function) },
+          ],
+          [
+            [{ kind: "text", text: "Second" }],
+            { mode: "steer", assertCanSubmit: expect.any(Function) },
+          ],
         ]);
       } finally {
         view.unmount();
@@ -363,7 +369,7 @@ describe("useAgentChatSend", () => {
                 attachment: expect.objectContaining({ path: "/staged/brief.pdf" }),
               },
             ],
-            { mode: "steer" },
+            { mode: "steer", assertCanSubmit: expect.any(Function) },
           ],
         ]);
         expect(textTurn.sendAgentMessage).not.toHaveBeenCalled();

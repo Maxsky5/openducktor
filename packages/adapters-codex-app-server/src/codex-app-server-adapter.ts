@@ -1,3 +1,9 @@
+import { InterruptedTurnResumeError } from "@openducktor/core";
+import {
+  assertAgentWorkStartCurrent,
+  markAgentWorkIssued,
+  markAgentWorkAccepted,
+} from "@openducktor/core";
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
 import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
@@ -168,9 +174,18 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
-const codexContinuationFailed = (externalSessionId: string, cause: unknown) =>
+const codexContinuationFailed = (
+  externalSessionId: string,
+  cause: unknown,
+  nativeOutcome?: "accepted" | "uncertain" | "not_issued",
+) =>
   interruptedTurnResumeError({
     reason: "continuation_failed",
+    ...(cause instanceof InterruptedTurnResumeError && cause.nativeOutcome
+      ? { nativeOutcome: cause.nativeOutcome }
+      : nativeOutcome
+        ? { nativeOutcome }
+        : {}),
     message: `Codex could not continue the interrupted turn for session '${externalSessionId}': ${cause instanceof Error ? cause.message : String(cause)}`,
     cause,
   });
@@ -238,7 +253,7 @@ const toLivePendingQuestion = (
   return liveRequest;
 };
 
-type CodexSendOptions = { onSent?: () => void };
+type CodexSendOptions = { onSent?: () => void; assertCurrent?: (() => void) | undefined };
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -460,6 +475,7 @@ export class CodexAppServerAdapter
       }),
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
+    assertAgentWorkStartCurrent(input);
     const response = await client.threadStart({
       ...codexTransportPolicy(policy),
       config,
@@ -518,6 +534,8 @@ export class CodexAppServerAdapter
         const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
         await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
         const config = await this.threadConfig(input.repoPath, sessionPolicy);
+        assertAgentWorkStartCurrent(input);
+        markAgentWorkIssued(input);
         const response = await client.threadResume({
           config,
           threadId: input.externalSessionId,
@@ -528,6 +546,7 @@ export class CodexAppServerAdapter
           response.cwd !== input.workingDirectory
         )
           throw new Error("Codex resumed a different conversation or directory.");
+        markAgentWorkAccepted(input);
         const previousTitleState = this.freshTitleState.get(current);
         this.freshTitleState.set(current, "pending");
         let firstTurnCompleted: boolean;
@@ -549,6 +568,7 @@ export class CodexAppServerAdapter
         return { ...current.summary, firstTurnCompleted };
       }
       const { client, response, session } = await this.resumeExistingThread(input);
+      markAgentWorkAccepted(input);
       this.localSessions.remember(session);
       this.freshTitleState.set(session, "pending");
       let firstTurnCompleted: boolean;
@@ -597,8 +617,11 @@ export class CodexAppServerAdapter
     if (input.systemPrompt) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
+    assertAgentWorkStartCurrent(input);
+    markAgentWorkIssued(input);
     const response = await client.threadResume(threadResumeInput);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
+    markAgentWorkAccepted(input);
     if (!current) this.localSessions.remember(session);
     if (checkFirstTurn) this.freshTitleState.set(session, "pending");
     let firstTurnCompleted = true;
@@ -747,6 +770,7 @@ export class CodexAppServerAdapter
     if (input.systemPrompt && !preserveNativeSettings) {
       threadResumeInput.developerInstructions = input.systemPrompt;
     }
+    assertAgentWorkStartCurrent(input);
     const response = await client.threadResume(threadResumeInput);
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
@@ -760,10 +784,23 @@ export class CodexAppServerAdapter
       throw codexContinuationFailed(input.externalSessionId, cause);
     }
     this.localSessions.remember(session);
+    let continuationIssued = false;
+    const continuationContext = this.turnLifecycleContext();
+    continuationContext.assertCurrent = () => input.workStartGuard?.assertCurrent();
+    continuationContext.systemPrompt = input.systemPrompt;
+    continuationContext.onSent = () => {
+      continuationIssued = true;
+      markAgentWorkIssued(input);
+    };
     try {
-      await startCodexContinuationTurn(this.turnLifecycleContext(), input.externalSessionId, model);
+      await startCodexContinuationTurn(continuationContext, input.externalSessionId, model);
+      markAgentWorkAccepted(input);
     } catch (cause) {
-      throw codexContinuationFailed(input.externalSessionId, cause);
+      throw codexContinuationFailed(
+        input.externalSessionId,
+        cause,
+        continuationIssued ? "uncertain" : "not_issued",
+      );
     }
     return session.summary;
   }
@@ -791,6 +828,7 @@ export class CodexAppServerAdapter
       }),
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
+    assertAgentWorkStartCurrent(input);
     const response = await client.threadFork({
       ...codexTransportPolicy(policy),
       config,
@@ -877,6 +915,7 @@ export class CodexAppServerAdapter
       await this.runtimeEvents.ensureRuntimeEventSubscription(session.runtimeId);
       const client = this.runtimeClients.clientForRuntime(session.runtimeId);
       try {
+        options.assertCurrent?.();
         const compacting = client.threadCompactStart({ threadId: session.threadId });
         options.onSent?.();
         await compacting;
@@ -888,6 +927,8 @@ export class CodexAppServerAdapter
     }
     const context = this.turnLifecycleContext();
     if (options.onSent) context.onSent = options.onSent;
+    context.assertCurrent = options.assertCurrent ?? input.workStartGuard?.assertCurrent;
+    context.systemPrompt = input.delivery === "new_turn" ? input.systemPrompt : undefined;
     const accepted = await sendCodexUserMessage(
       context,
       input.externalSessionId,
@@ -953,6 +994,8 @@ export class CodexAppServerAdapter
       session,
       runtime,
       threadInventory: this.threadInventory,
+      readRunningTurnModel: (threadId, turnId) =>
+        this.runtimeEvents.readRunningTurnModel(runtime.runtimeId, threadId, turnId),
       prepareImageGenerations: this.options.prepareImageGenerations,
     });
     const history = this.questionHistory.merge(
@@ -1176,6 +1219,8 @@ export class CodexAppServerAdapter
       "open existing Codex session",
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
+    assertAgentWorkStartCurrent(input);
+    markAgentWorkIssued(input);
     const response = await client.threadResume({
       config,
       threadId: input.externalSessionId,
@@ -1194,16 +1239,20 @@ export class CodexAppServerAdapter
     binding?: PolicyBoundSessionRef,
   ): Promise<void> {
     if (!this.localSessions.get(input.externalSessionId) && binding) {
-      const handle = await this.openExistingSession(binding);
+      const guardedBinding = {
+        ...binding,
+        workStartGuard: input.workStartGuard,
+        onWorkIssued: input.onWorkIssued,
+      };
+      const handle = await this.openExistingSession(guardedBinding);
       await handle.attach();
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
-    if (input.model) {
-      session.model = input.model;
-      return;
-    }
-    delete session.model;
+    assertAgentWorkStartCurrent(input);
+    if (input.model) session.model = input.model;
+    else delete session.model;
+    markAgentWorkAccepted(input);
   }
 
   async updateSessionTitle(
@@ -1291,6 +1340,8 @@ export class CodexAppServerAdapter
     if (model) {
       threadResumeInput.model = toTransportModelSelection(model).model;
     }
+    assertAgentWorkStartCurrent(input);
+    markAgentWorkIssued(input);
     const response = await client.threadResume(threadResumeInput);
     const session = sessionStateFromExistingThread(input, runtimeId, model, response);
     if (sessionPolicy.kind === "repository") {
@@ -1412,6 +1463,56 @@ export class CodexAppServerAdapter
     return session instanceof Promise ? session.then(reply) : reply(session);
   }
 
+  resolvePendingApproval(
+    input: import("@openducktor/contracts").AgentSessionLiveRef & {
+      runtimeId: string;
+      requestId: string;
+    },
+  ) {
+    const sessions = this.listLiveSessionSnapshots(input.runtimeId);
+    const caller = sessions.find(
+      (value) => value.ref.externalSessionId === input.externalSessionId,
+    );
+    if (
+      !caller ||
+      caller.ref.repoPath !== input.repoPath ||
+      caller.ref.workingDirectory !== input.workingDirectory ||
+      input.runtimeKind !== "codex"
+    )
+      throw new Error("The approval caller does not match its registered runtime session.");
+    const pending = this.pendingInput.requireApprovalForSession(
+      input.requestId,
+      input.externalSessionId,
+      input.runtimeId,
+    );
+    const owner = sessions.find((value) => value.ref.externalSessionId === pending.threadId);
+    if (
+      !owner ||
+      owner.ref.repoPath !== input.repoPath ||
+      owner.ref.workingDirectory !== input.workingDirectory
+    )
+      throw new Error("The approval owner is not registered in this workspace.");
+    let root = owner;
+    const seen = new Set<string>();
+    while (!this.localSessions.get(root.ref.externalSessionId)) {
+      if (seen.has(root.ref.externalSessionId))
+        throw new Error("The approval ancestry contains a cycle.");
+      seen.add(root.ref.externalSessionId);
+      const route = this.subagents.routeForChild(root.ref.externalSessionId, input.runtimeId);
+      const parent =
+        route &&
+        sessions.find((value) => value.ref.externalSessionId === route.parentExternalSessionId);
+      if (
+        !parent ||
+        parent.ref.repoPath !== input.repoPath ||
+        parent.ref.workingDirectory !== input.workingDirectory
+      )
+        throw new Error("The approval parent chain is not registered in this workspace.");
+      root = parent;
+    }
+    return { owner: owner.ref, root: root.ref, request: pending.request };
+  }
+
   async replyLiveApproval(input: CodexLiveApprovalReplyInput): Promise<void> {
     requireCodexPendingRequestKey(input.requestId, "approval");
     const pending = this.pendingInput.claimApprovalForSession(
@@ -1420,6 +1521,7 @@ export class CodexAppServerAdapter
       input.runtimeId,
     );
     const nativeRequest = pending.nativeRequest;
+    let issued = false;
     try {
       const supportedOutcomes = pending.request.supportedReplyOutcomes ?? [
         "approve_once",
@@ -1439,9 +1541,13 @@ export class CodexAppServerAdapter
           message: input.message,
         }),
         undefined,
+        () => {
+          issued = true;
+          input.onIssued?.();
+        },
       );
     } catch (error) {
-      this.pendingInput.releaseApprovalReplyClaim(input.requestId, pending.runtimeId);
+      if (!issued) this.pendingInput.releaseApprovalReplyClaim(input.requestId, pending.runtimeId);
       throw error;
     }
     const activeTurn = this.pendingInput.resolveApproval(input.requestId, pending.runtimeId);

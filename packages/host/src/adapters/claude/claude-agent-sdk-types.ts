@@ -126,6 +126,8 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     activity: ClaudeSessionActivity;
     externalSessionId: string;
     input: ClaudeSessionInput;
+    /** Host context for the next prompt and its running turn. Never persisted by OpenDucktor. */
+    turnSystemPrompt?: string | undefined;
     lastAssistantTextMessageId?: string;
     lastAssistantText?: string;
     lastAssistantTextFinal?: boolean;

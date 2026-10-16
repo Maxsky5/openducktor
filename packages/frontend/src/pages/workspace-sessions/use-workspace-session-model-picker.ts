@@ -10,10 +10,6 @@ import {
   type ChatComposerModelSelectionSource,
   resolveChatComposerModelSelections,
 } from "@/features/agent-chat-composer/model-selection/model-selection-preferences";
-import {
-  sessionModelPreparationKey,
-  useSessionModelPreparation,
-} from "@/features/agent-chat-composer/model-selection/use-session-model-preparation";
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
@@ -95,11 +91,6 @@ export function useWorkspaceSessionModelPicker(
     });
   }, [session, draftSelection, creationDefaultSelection, defaultSelection, liveSession]);
   const selection = modelSelections.selectedModelSelection;
-  const prepareModelForSend = useSessionModelPreparation(
-    sessionModelPreparationKey(repoPath, session?.identity ?? null, session?.runtimeRef),
-    modelSelections,
-    liveSession,
-  );
   const creationResources = session ? noCreationResources : resources;
   const projected = useMemo(
     () =>
@@ -213,7 +204,6 @@ export function useWorkspaceSessionModelPicker(
   );
   return {
     selection,
-    prepareModelForSend,
     catalog,
     supportsProfiles,
     ...options,

@@ -65,6 +65,7 @@ export type PrepareOpencodeSessionRuntimeInput = {
   readonly signal?: AbortSignal;
 };
 export type OpencodeNativeApprovalReply = {
+  onIssued?: (() => void) | undefined;
   ref: SessionRef;
   nativeRequestId: string;
   outcome: import("@openducktor/contracts").RuntimeApprovalReplyOutcome;
@@ -1105,6 +1106,7 @@ export const createPrepareOpencodeSessionRuntime =
               decision: permissionDecision(request.outcome),
             };
           if (request.message) reply.message = request.message;
+          request.onIssued?.();
           await client.permission.reply(reply);
         });
       },

@@ -96,6 +96,7 @@ export type CodexLiveSessionLocator = {
 };
 
 export type CodexLiveApprovalReplyInput = CodexLiveSessionLocator & {
+  onIssued?: (() => void) | undefined;
   requestId: string;
   outcome: RuntimeApprovalReplyOutcome;
   message?: string;
@@ -116,6 +117,7 @@ export type CodexServerRequestResponder = (
   requestId: CodexAppServerRequestId,
   result?: CodexAppServerRespondResult,
   error?: CodexAppServerRespondError,
+  onIssued?: () => void,
 ) => Promise<void>;
 
 export type CodexAppServerStreamEvent = CodexAppServerRuntimeStreamEvent;

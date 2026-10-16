@@ -164,7 +164,9 @@ export const createClaudeAgentSdkSession = async ({
       sessionOptions,
     });
     if (options.permissionMode) sessionContext.requestedPermissionMode = options.permissionMode;
+    input.workStartGuard?.assertCurrent();
     sdkQuery = query({ prompt: queue, options });
+    input.onWorkIssued?.();
   } catch (error) {
     abortController.abort();
     queue.close();
@@ -186,6 +188,7 @@ export const createClaudeAgentSdkSession = async ({
     consumptionInput.onContinuationAdmission = () => {
       if (continuationAdmissionReported) return;
       continuationAdmissionReported = true;
+      input.onWorkAccepted?.();
       continuationAdmission.resolve();
       onContinuationAdmission?.();
     };
@@ -197,6 +200,7 @@ export const createClaudeAgentSdkSession = async ({
       INIT_TIMEOUT_MS,
       "Claude Agent SDK session initialization timed out. Check Claude authentication and network connectivity.",
     );
+    if (!isContinuation) input.onWorkAccepted?.();
     await requireClaudeOpenDucktorMcpForScope(input.sessionScope, sdkQuery, {
       externalSessionId: session.externalSessionId,
       runtimeId,

@@ -1,7 +1,12 @@
 import { Deferred, Effect, Fiber } from "effect";
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  TaskCard,
+  TaskCompletionObservation,
+} from "@openducktor/contracts";
 import { TerminalServiceError } from "../terminals/terminal-service";
 import { HostOperationError } from "../../effect/host-errors";
+import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
@@ -23,17 +28,26 @@ const createHarness = ({
   cleanup = Effect.void,
   status = "human_review",
   role = "build",
+  gitOverrides = {},
+  closure = Effect.void,
 }: {
   countLiveSessions?: TaskActivityGuardPort["countLiveSessions"];
   sync?: ReturnType<GitPort["commitsAheadBehind"]>;
   cleanup?: Effect.Effect<void, TerminalServiceError>;
   status?: TaskCard["status"];
   role?: AgentSessionRecord["role"];
+  gitOverrides?: Partial<GitPort>;
+  closure?: Effect.Effect<void, TaskStoreError>;
 } = {}) => {
   const calls: unknown[] = [];
+  const observations: TaskCompletionObservation[] = [];
   const coordinator = createTaskSessionLifecycleCoordinator();
   let current = task({ status });
   const service = createTaskService({
+    publishCompletion: (observation) =>
+      Effect.sync(() => {
+        observations.push(observation);
+      }),
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
@@ -53,7 +67,19 @@ const createHarness = ({
           "/repo": { name: "main", detached: false },
         },
       }),
-      { commitsAheadBehind: () => sync },
+      {
+        commitsAheadBehind: () => sync,
+        inspectPublication: (target) =>
+          sync.pipe(
+            Effect.map(({ ahead, behind }) =>
+              target.endpoints.map((endpoint) => ({
+                destinationIdentity: endpoint.identity,
+                oid: ahead === 0 && behind === 0 ? target.sourceOid : null,
+              })),
+            ),
+          ),
+        ...gitOverrides,
+      },
     ),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
     taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
@@ -73,17 +99,158 @@ const createHarness = ({
           },
         }),
       transitionTask: ({ status: nextStatus }) =>
-        Effect.sync(() => {
-          calls.push(nextStatus);
-          current = { ...current, status: nextStatus };
-          return current;
-        }),
+        closure.pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              calls.push(nextStatus);
+              current = { ...current, status: nextStatus };
+              return current;
+            }),
+          ),
+        ),
     },
   });
-  return { service, calls, coordinator };
+  return { service, calls, coordinator, observations };
+};
+
+const createSourceBranch = ({
+  beforeDelete = Effect.void,
+  afterDelete = Effect.void,
+}: {
+  beforeDelete?: Effect.Effect<void>;
+  afterDelete?: Effect.Effect<void>;
+} = {}) => {
+  const branch = { name: "odt/task-1", oid: "b".repeat(40) };
+  let exists = true;
+  let restores = 0;
+  const gitOverrides: Partial<GitPort> = {
+    listBranches: () =>
+      Effect.sync(() => (exists ? [{ name: branch.name, isCurrent: false, isRemote: false }] : [])),
+    isMergeIncluded: () => Effect.sync(() => exists),
+    deleteLocalBranch: (_repo, _name, _force, onDeleting) =>
+      Effect.sync(() => onDeleting?.(branch)).pipe(
+        Effect.andThen(beforeDelete),
+        Effect.andThen(
+          Effect.sync(() => {
+            exists = false;
+          }),
+        ),
+        Effect.andThen(afterDelete),
+      ),
+    restoreDeletedBranch: (_repo, receipt) =>
+      Effect.sync(() => {
+        expect(receipt).toEqual(branch);
+        exists = true;
+        restores += 1;
+      }),
+  };
+  return { gitOverrides, exists: () => exists, restores: () => restores };
 };
 
 describe("direct merge completion session guard", () => {
+  test.each(["before deletion", "after deletion"] as const)(
+    "a rejected completion cannot change the owner's recovery or observations %s",
+    async (boundary) => {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const entered = yield* Deferred.make<void>();
+            const release = yield* Deferred.make<void>();
+            const pause = Deferred.succeed(entered, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+            );
+            const source = createSourceBranch(
+              boundary === "before deletion" ? { beforeDelete: pause } : { afterDelete: pause },
+            );
+            const harness = createHarness({
+              gitOverrides: source.gitOverrides,
+              closure:
+                boundary === "before deletion"
+                  ? Effect.fail(
+                      new HostOperationError({
+                        operation: "task.close",
+                        message: "Closure failed",
+                      }),
+                    )
+                  : Effect.void,
+            });
+            const worker = yield* Effect.forkScoped(
+              Effect.result(harness.service.completeDirectMerge(input)),
+            );
+            yield* Deferred.await(entered);
+            const observations = structuredClone(harness.observations);
+            yield* Effect.gen(function* () {
+              const rejected = yield* Effect.result(harness.service.completeDirectMerge(input));
+              expect(rejected).toMatchObject({
+                _tag: "Failure",
+                failure: { message: expect.stringContaining("another lifecycle operation") },
+              });
+              expect(source.restores()).toBe(0);
+              expect(harness.observations).toEqual(observations);
+            }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
+            const result = yield* Fiber.join(worker);
+            if (boundary === "before deletion") {
+              expect(result).toMatchObject({
+                _tag: "Failure",
+                failure: { message: expect.stringContaining("Closure failed") },
+              });
+              expect(source.exists()).toBe(true);
+              expect(source.restores()).toBe(1);
+              expect(harness.calls).not.toContain("closed");
+            } else {
+              expect(result).toMatchObject({ _tag: "Success", success: { status: "closed" } });
+              expect(source.exists()).toBe(false);
+              expect(source.restores()).toBe(0);
+            }
+          }),
+        ),
+      );
+    },
+  );
+
+  test("restores source evidence after closure failure so restart finishes without another publication", async () => {
+    const source = createSourceBranch();
+    const first = createHarness({
+      gitOverrides: source.gitOverrides,
+      closure: Effect.fail(
+        new HostOperationError({ operation: "task.close", message: "Closure failed" }),
+      ),
+    });
+    await expect(Effect.runPromise(first.service.completeDirectMerge(input))).rejects.toThrow(
+      "Closure failed",
+    );
+    expect(source.exists()).toBe(true);
+    expect(source.restores()).toBe(1);
+    const restarted = createHarness({ gitOverrides: source.gitOverrides });
+    expect((await Effect.runPromise(restarted.service.completeDirectMerge(input))).status).toBe(
+      "closed",
+    );
+    expect(source.exists()).toBe(false);
+    expect(source.restores()).toBe(1);
+  });
+
+  test("settles a committed closure during shutdown without restoring a deleted branch", async () => {
+    const source = createSourceBranch();
+    const entered = Deferred.makeUnsafe<void>();
+    const release = Deferred.makeUnsafe<void>();
+    const harness = createHarness({
+      gitOverrides: source.gitOverrides,
+      closure: Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    });
+    const worker = Effect.runFork(harness.service.completeDirectMerge(input));
+    await Effect.runPromise(Deferred.await(entered));
+    const interrupted = Effect.runPromise(Fiber.interrupt(worker));
+    Effect.runSync(Deferred.succeed(release, undefined));
+    await interrupted;
+    expect(harness.calls).toContain("closed");
+    expect(source.exists()).toBe(false);
+    expect(source.restores()).toBe(0);
+    expect((await Effect.runPromise(harness.service.completeDirectMerge(input))).status).toBe(
+      "closed",
+    );
+    expect(source.restores()).toBe(0);
+  });
+
   test.each(["build", "qa", "spec", "planner"] as const)(
     "rejects a running %s session before cleanup",
     async (role) => {
@@ -128,7 +295,7 @@ describe("direct merge completion session guard", () => {
       expect(calls.filter((call) => call === "closed")).toHaveLength(
         status === "human_review" ? 1 : 0,
       );
-      expect(calls.includes("cleanup")).toBe(status !== "blocked");
+      expect(calls.includes("cleanup")).toBe(status === "human_review");
     },
   );
 

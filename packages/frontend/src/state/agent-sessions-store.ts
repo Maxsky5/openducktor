@@ -1,4 +1,13 @@
-import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
+import { projectSessionSnapshotActivity } from "./operations/agent-orchestrator/session-read-model/agent-session-live-projection";
+import type {
+  AgentSessionLiveEnvelope,
+  AgentSessionLiveSnapshot,
+  AgentSessionLiveRef,
+  AgentMessageQueueSnapshot,
+  SessionOperationObservation,
+} from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
+import { replaceEqualDeep } from "@tanstack/react-query";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -27,6 +36,7 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import {
+  removeSessionMessageById,
   upsertSessionMessage,
   upsertSessionMessageByTimestamp,
 } from "./operations/agent-orchestrator/support/messages";
@@ -52,9 +62,21 @@ export {
 type Listener = () => void;
 type LiveSessionStateEnvelope = Extract<
   AgentSessionLiveEnvelope,
-  { type: "snapshot" | "session_upsert" | "session_removed" }
+  {
+    type:
+      | "snapshot"
+      | "session_upsert"
+      | "session_removed"
+      | "session_operation_updated"
+      | "submission_acknowledged"
+      | "message_queue_updated";
+  }
 >;
 type LiveNotice = NonNullable<AgentSessionLiveSnapshot["policyNotice"]>;
+type SubmissionReceipt = {
+  outcome: "accepted" | "queued";
+  fromSnapshot: boolean;
+};
 type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) => {
   collection: AgentSessionCollection;
   result: Result;
@@ -108,6 +130,15 @@ export const createAgentSessionsStore = (
   // reloads replace messages, so each commit puts the notices back.
   const policyNotices = new Map<string, AgentChatMessage>();
   const launchFailures = new Map<string, AgentChatMessage>();
+  const approvalFailures = new Map<string, AgentChatMessage>();
+  const operations = new Map<string, Map<string, SessionOperationObservation>>();
+  const operationFailures = new Map<string, Map<string, AgentChatMessage>>();
+  const observedActivity = new Map<string, AgentSessionLiveSnapshot>();
+  const acknowledged = new Map<string, Map<string, SubmissionReceipt>>();
+  const noticeUpdates = new Set<string>();
+
+  const needsNoticeProjection = (key: string, session: AgentSessionState) =>
+    sessionCollection.get(key) !== session || noticeUpdates.has(key);
 
   const projectNotices = (
     collection: AgentSessionCollection,
@@ -117,7 +148,7 @@ export const createAgentSessionsStore = (
     let next = collection;
     for (const [key, notice] of notices) {
       const session = next.get(key);
-      if (!session) continue;
+      if (!session || !needsNoticeProjection(key, session)) continue;
       const messages = upsert(session, notice);
       if (messages !== session.messages) {
         next = replaceAgentSession(next, { ...session, messages });
@@ -125,13 +156,70 @@ export const createAgentSessionsStore = (
     }
     return next;
   };
-  const projectLiveNotices = (collection: AgentSessionCollection): AgentSessionCollection =>
+  const projectLiveNotices = (collection: AgentSessionCollection): AgentSessionCollection => {
     // A launch failure can come before later runtime history, so it keeps its time order.
-    projectNotices(
+    let projected = projectNotices(
       projectNotices(collection, policyNotices, upsertSessionMessage),
       launchFailures,
       upsertSessionMessageByTimestamp,
     );
+    projected = projectNotices(projected, approvalFailures, upsertSessionMessageByTimestamp);
+    for (const session of listAgentSessions(projected)) {
+      const key = agentSessionIdentityKey(session);
+      if (!needsNoticeProjection(key, session)) continue;
+      const hostOperations = replaceEqualDeep(session.hostOperations ?? [], [
+        ...(operations.get(key)?.values() ?? []),
+      ]);
+      const settledRefusals = hostOperations.filter(
+        (operation) =>
+          !operation.pending &&
+          operation.kind === "submission" &&
+          (operation.nativeOutcome === "not_issued" || operation.nativeOutcome === "refused"),
+      );
+      const retainedFailures = operationFailures.get(key);
+      const receipts =
+        workspaceRepoPath === null
+          ? undefined
+          : acknowledged.get(agentSessionRefKey({ ...session, repoPath: workspaceRepoPath }));
+      let next = session;
+      for (const message of session.messages.items) {
+        if (message.id.startsWith("host-operation:") && !retainedFailures?.has(message.id))
+          next = { ...next, messages: removeSessionMessageById(next, message.id) };
+        const unresolvedSubmissionId =
+          message.meta?.kind === "session_notice" && message.meta.reason === "session_error"
+            ? message.meta.unresolvedSubmissionId
+            : undefined;
+        if (
+          unresolvedSubmissionId &&
+          (receipts?.has(unresolvedSubmissionId) ||
+            settledRefusals.some((operation) => operation.submissionId === unresolvedSubmissionId))
+        )
+          next = { ...next, messages: removeSessionMessageById(next, message.id) };
+      }
+      if (
+        hostOperations !== session.hostOperations &&
+        (hostOperations.length > 0 || session.hostOperations !== undefined)
+      )
+        next = { ...next, hostOperations };
+      const settledRefusal = settledRefusals.some(
+        (operation) => operation.submissionId === session.pendingSubmissionId,
+      );
+      if (
+        session.pendingSubmissionId &&
+        (receipts?.has(session.pendingSubmissionId) || settledRefusal)
+      ) {
+        next = { ...next, pendingSubmissionId: undefined, pendingUserMessageStartedAt: undefined };
+        const activity = observedActivity.get(key);
+        const receipt = receipts?.get(session.pendingSubmissionId);
+        if ((settledRefusal || receipt?.outcome === "queued" || receipt?.fromSnapshot) && activity)
+          next = { ...next, ...projectSessionSnapshotActivity(next, activity) };
+      }
+      for (const notice of operationFailures.get(key)?.values() ?? [])
+        next = { ...next, messages: upsertSessionMessageByTimestamp(next, notice) };
+      if (next !== session) projected = replaceAgentSession(projected, next);
+    }
+    return projected;
+  };
 
   const retainNotice = (
     notices: Map<string, AgentChatMessage>,
@@ -154,13 +242,67 @@ export const createAgentSessionsStore = (
   };
   const retainLiveNotices = (snapshot: AgentSessionLiveSnapshot): void => {
     const key = agentSessionIdentityKey(snapshot.ref);
+    noticeUpdates.add(key);
+    observedActivity.set(key, snapshot);
     retainNotice(policyNotices, key, snapshot.policyNotice, (timestamp, message, id) =>
       buildSessionPolicyNoticeMessage(timestamp, message, id, snapshot.ref.runtimeKind),
     );
     retainNotice(launchFailures, key, snapshot.launchFailure, buildSessionErrorNoticeMessage);
+    retainNotice(
+      approvalFailures,
+      key,
+      snapshot.approvalPolicyFailure,
+      buildSessionErrorNoticeMessage,
+    );
+  };
+  const retainOperation = (observation: SessionOperationObservation) => {
+    const key = agentSessionIdentityKey(observation.ref);
+    noticeUpdates.add(key);
+    const id = `host-operation:${observation.kind}:${observation.submissionId ?? "current"}`;
+    const current = operations.get(key) ?? new Map<string, SessionOperationObservation>();
+    if (observation.pending || observation.failure || observation.nativeOutcome === "uncertain")
+      current.set(id, observation);
+    else current.delete(id);
+    operations.set(key, current);
+    const notices = operationFailures.get(key) ?? new Map<string, AgentChatMessage>();
+    if (observation.failure)
+      notices.set(
+        id,
+        buildSessionErrorNoticeMessage(
+          notices.get(id)?.timestamp ?? new Date().toISOString(),
+          `${observation.failure.message} ${observation.failure.nextAction}`,
+          id,
+        ),
+      );
+    else notices.delete(id);
+    operationFailures.set(key, notices);
+  };
+  const retainAcknowledgement = (
+    ref: AgentSessionLiveRef,
+    submissionId: string,
+    outcome: "accepted" | "queued",
+    fromSnapshot = false,
+  ) => {
+    if (ref.repoPath !== workspaceRepoPath) return;
+    noticeUpdates.add(agentSessionIdentityKey(ref));
+    const key = agentSessionRefKey(ref);
+    const receipts = acknowledged.get(key) ?? new Map<string, SubmissionReceipt>();
+    if (
+      receipts.get(submissionId)?.outcome !== "accepted" ||
+      (outcome === "accepted" && fromSnapshot)
+    )
+      receipts.set(submissionId, { outcome, fromSnapshot });
+    acknowledged.set(key, receipts);
+  };
+  const retainQueueAcknowledgements = (queue: AgentMessageQueueSnapshot) => {
+    for (const entry of queue.entries)
+      if (entry.state === "queued" || entry.state === "editing")
+        retainAcknowledgement(queue.target, entry.submissionId, "queued");
   };
   const clearLiveNotices = (key?: string): void => {
-    for (const notices of [policyNotices, launchFailures]) {
+    if (key === undefined) observedActivity.clear();
+    else observedActivity.delete(key);
+    for (const notices of [policyNotices, launchFailures, approvalFailures]) {
       if (key === undefined) notices.clear();
       else notices.delete(key);
     }
@@ -178,6 +320,7 @@ export const createAgentSessionsStore = (
   ): Result => {
     const { collection, result } = commit(sessionCollection);
     const nextCollection = projectLiveNotices(collection);
+    noticeUpdates.clear();
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return result;
     }
@@ -315,16 +458,46 @@ export const createAgentSessionsStore = (
               return collection;
             });
           }
+          for (const key of sessionCollection.keys()) noticeUpdates.add(key);
           clearLiveNotices();
+          operations.clear();
+          operationFailures.clear();
+          // Snapshot absence cannot undo a known admission, including a removed queue entry.
           for (const snapshot of envelope.sessions) retainLiveNotices(snapshot);
+          for (const observation of envelope.sessionOperations ?? []) retainOperation(observation);
+          for (const acknowledgement of envelope.submissionAcknowledgements ?? []) {
+            retainAcknowledgement(
+              acknowledgement.ref,
+              acknowledgement.submissionId,
+              "accepted",
+              true,
+            );
+          }
+          for (const queue of envelope.messageQueues) retainQueueAcknowledgements(queue);
           return;
         }
+        case "session_operation_updated":
+          if (envelope.observation.ref.repoPath === workspaceRepoPath)
+            retainOperation(envelope.observation);
+          return;
+        case "submission_acknowledged": {
+          retainAcknowledgement(
+            envelope.acknowledgement.ref,
+            envelope.acknowledgement.submissionId,
+            "accepted",
+          );
+          return;
+        }
+        case "message_queue_updated":
+          retainQueueAcknowledgements(envelope.queue);
+          return;
         case "session_upsert":
           if (envelope.session.ref.repoPath !== workspaceRepoPath) return;
           retainLiveNotices(envelope.session);
           return;
         case "session_removed":
           if (envelope.ref.repoPath !== workspaceRepoPath) return;
+          noticeUpdates.add(agentSessionIdentityKey(envelope.ref));
           clearLiveNotices(agentSessionIdentityKey(envelope.ref));
       }
     },
@@ -363,6 +536,7 @@ export const createAgentSessionsStore = (
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       retainActiveCollection();
+      noticeUpdates.clear();
       historyProgress?.reset();
       if (nextWorkspaceRepoPath !== workspaceRepoPath) clearLiveNotices();
       workspaceRepoPath = nextWorkspaceRepoPath;

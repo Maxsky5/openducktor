@@ -26,7 +26,6 @@ type UseAgentStudioSendTargetArgs = {
   selectedSessionIdentity: AgentSessionIdentity | null;
   isSessionModelCatalogLoading: boolean;
   assertCanPrepareSession: (identity: AgentSessionIdentity) => void;
-  prepareSelectedSessionModelForSend: () => Promise<() => void>;
   agentStudioReady: boolean;
   canStartNewSession: boolean;
   isStarting: boolean;
@@ -45,7 +44,6 @@ export function useAgentStudioSendTarget({
   selectedSessionIdentity,
   isSessionModelCatalogLoading,
   assertCanPrepareSession,
-  prepareSelectedSessionModelForSend,
   agentStudioReady,
   canStartNewSession,
   isStarting,
@@ -72,6 +70,7 @@ export function useAgentStudioSendTarget({
     return {
       activity,
       activityKey,
+      capture: () => isCurrentContext,
       canSend: () =>
         !isStarting &&
         agentStudioReady &&
@@ -82,7 +81,6 @@ export function useAgentStudioSendTarget({
         if (!isCurrentContext()) return null;
         requireCompactionTarget(parts, selectedSessionIdentity);
         if (selectedSessionIdentity) assertCanPrepareSession(selectedSessionIdentity);
-        const assertModelCurrent = await prepareSelectedSessionModelForSend();
         if (!isCurrentContext()) return null;
         if (selectedSessionIdentity)
           return {
@@ -90,7 +88,6 @@ export function useAgentStudioSendTarget({
             identity: selectedSessionIdentity,
             sendOptions: {
               assertCanSubmit: (session) => {
-                assertModelCurrent();
                 if (
                   !isCurrentContext() ||
                   !matchesAgentSessionIdentity(session, selectedSessionIdentity)
@@ -123,7 +120,6 @@ export function useAgentStudioSendTarget({
     isCurrentContext,
     isSessionModelCatalogLoading,
     isStarting,
-    prepareSelectedSessionModelForSend,
     role,
     selectedSessionIdentity,
     startSession,

@@ -1,3 +1,4 @@
+import { agentSessionRefKey } from "@openducktor/core";
 import { createTaskSessionOperations } from "../../application/agent-sessions/task-session-operations";
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import {
@@ -16,6 +17,9 @@ import type { CreateTaskServiceInput } from "../../application/tasks/task-servic
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskSessionStartPreparationService } from "../../application/tasks/worktrees/task-session-start-preparation-service";
 import { createNodeTaskEventServices } from "./node-task-event-services";
+import { createSessionTurnPreparation } from "../../application/agent-sessions/session-turn-preparation";
+import { createHostApprovalPolicy } from "../../application/agent-sessions/host-approval-policy";
+import { createHostOperationWorkers } from "../../effect/host-operation-workers";
 
 type TaskServiceInput = Omit<
   Parameters<typeof createTaskServiceWithMutationProgress>[0],
@@ -44,6 +48,7 @@ export const createNodeTaskSessionServices = ({
   repositoryPolicy,
   workflowLaunch,
   pauseForStop,
+  readSessionRootRefs: readSavedRoots,
 }: {
   taskServiceInput: TaskServiceInput;
   eventServiceInput: Omit<Parameters<typeof createNodeTaskEventServices>[0], "baseTaskService">;
@@ -54,20 +59,80 @@ export const createNodeTaskSessionServices = ({
     adapterRegistry: AgentRuntimeQueryDependencies["adapterRegistry"];
   };
   pauseForStop: Parameters<typeof createAgentSessionCommandService>[0]["pauseForStop"];
+  readSessionRootRefs: Parameters<
+    typeof createAgentSessionCommandService
+  >[0]["readSessionRootRefs"];
 }) => {
+  const readSessionRootRefs: typeof readSavedRoots = (repoPath) =>
+    readSavedRoots(repoPath).pipe(
+      Effect.map((saved) => {
+        const keys = new Set(saved.map((root) => agentSessionRefKey(root)));
+        return [
+          ...saved,
+          ...agentSessionLiveStateService
+            .readStartedRoots(repoPath)
+            .filter((root) => !keys.has(agentSessionRefKey(root))),
+        ];
+      }),
+    );
   const baseTaskService = createTaskServiceWithMutationProgress({
     ...taskServiceInput,
+    publishCompletion: (observation) =>
+      agentSessionLiveStateService.publishOperation({
+        type: "task_completion_updated",
+        observation,
+      }),
     taskActivityGuard: createRuntimeTaskActivityGuard({
       runtimeRegistry: taskServiceInput.runtimeRegistry,
       sessionService: agentSessionLiveStateService,
       settingsConfig: taskServiceInput.settingsConfig,
+      readSessionRootRefs,
     }),
   });
   const eventServices = createNodeTaskEventServices({
     ...eventServiceInput,
     baseTaskService,
   });
+  const completionWorkers = createHostOperationWorkers();
+  const taskService = {
+    ...eventServices.taskService,
+    directMerge: (input: Parameters<typeof eventServices.taskService.directMerge>[0]) =>
+      completionWorkers.run(eventServices.taskService.directMerge(input)),
+    completeDirectMerge: (
+      input: Parameters<typeof eventServices.taskService.completeDirectMerge>[0],
+    ) => completionWorkers.run(eventServices.taskService.completeDirectMerge(input)),
+    closeTask: (input: Parameters<typeof eventServices.taskService.closeTask>[0]) =>
+      completionWorkers.run(eventServices.taskService.closeTask(input)),
+    humanApprove: (input: Parameters<typeof eventServices.taskService.humanApprove>[0]) =>
+      completionWorkers.run(eventServices.taskService.humanApprove(input)),
+    linkMergedPullRequest: (
+      input: Parameters<typeof eventServices.taskService.linkMergedPullRequest>[0],
+    ) => completionWorkers.run(eventServices.taskService.linkMergedPullRequest(input)),
+  };
   const taskSessionStart = createTaskSessionStartPreparationService(taskServiceInput);
+  const agentRuntimeQueries = createAgentRuntimeQueryService({
+    adapterRegistry: workflowLaunch.adapterRegistry,
+    settingsConfig: taskServiceInput.settingsConfig,
+    workspaceSettingsService: taskServiceInput.workspaceSettingsService,
+    worktreeFiles: taskServiceInput.worktreeFiles,
+    gitPort: taskServiceInput.gitPort,
+    taskReader: taskServiceInput.taskStore,
+    runtimeRegistry: taskServiceInput.runtimeRegistry,
+    worktreeReads: taskServiceInput.taskSessionLifecycleCoordinator,
+  });
+  const turnPreparation = createSessionTurnPreparation({
+    settings: taskServiceInput.workspaceSettingsService,
+    queries: agentRuntimeQueries,
+    taskReader: taskServiceInput.taskStore,
+  });
+  const approvalPolicy = createHostApprovalPolicy({
+    live: agentSessionLiveStateService,
+    readRoots: readSessionRootRefs,
+    definitions: taskServiceInput.runtimeDefinitionsService,
+    preparation: turnPreparation,
+    reportFailure: (error) =>
+      eventServiceInput.onBackgroundFailure(toHostOperationError(error, "approval-policy.observe")),
+  });
   const commandDeps: Omit<
     Parameters<typeof createAgentSessionCommandService>[0],
     "tasks" | "runtime"
@@ -75,6 +140,9 @@ export const createNodeTaskSessionServices = ({
     canonicalizeRepoPath,
     repositoryPolicy,
     pauseForStop,
+    readSessionRootRefs,
+    turnPreparation,
+    approvalPolicy,
     taskReader: taskServiceInput.taskStore,
     persistTaskModel: (input) =>
       eventServices.taskService.agentSessionUpdateModelDeferredPublication(input).pipe(
@@ -101,16 +169,6 @@ export const createNodeTaskSessionServices = ({
       tasks: eventServices.taskService,
     }),
   };
-  const agentRuntimeQueries = createAgentRuntimeQueryService({
-    adapterRegistry: workflowLaunch.adapterRegistry,
-    settingsConfig: taskServiceInput.settingsConfig,
-    workspaceSettingsService: taskServiceInput.workspaceSettingsService,
-    worktreeFiles: taskServiceInput.worktreeFiles,
-    gitPort: taskServiceInput.gitPort,
-    taskReader: taskServiceInput.taskStore,
-    runtimeRegistry: taskServiceInput.runtimeRegistry,
-    worktreeReads: taskServiceInput.taskSessionLifecycleCoordinator,
-  });
   const workflowLaunchService = createWorkflowLaunchService({
     resolveParts: workflowLaunch.resolveParts,
     queries: agentRuntimeQueries,
@@ -132,7 +190,10 @@ export const createNodeTaskSessionServices = ({
     },
     sessions: createTaskSessionOperations({
       canonicalizeRepoPath,
-      runtime: agentSessionLiveStateService,
+      runtime: {
+        ...agentSessionLiveStateService,
+        ...agentSessionCommandService.prepareSessionCreation,
+      },
       tasks: eventServices.taskService,
       taskReader: taskServiceInput.taskStore,
       taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
@@ -146,8 +207,11 @@ export const createNodeTaskSessionServices = ({
   });
   return {
     ...eventServices,
+    taskService,
+    shutdownCompletionOperations: completionWorkers.shutdown,
     agentSessionCommandService,
     workflowLaunchService,
     agentRuntimeQueries,
+    approvalPolicy,
   };
 };

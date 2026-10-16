@@ -34,7 +34,7 @@ import {
   type AgentSessionContextUsage,
   type AgentSessionControlForkInput,
   type AgentSessionControlReleaseInput,
-  type AgentSessionControlResumeInput,
+  type AgentSessionResumeIntent,
   type AgentSessionControlStopInput,
   type AgentSessionControlSummary,
   type AgentSessionControlUpdateModelInput,
@@ -54,7 +54,7 @@ import {
   agentSessionContextUsageSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
-  agentSessionControlResumeInputSchema,
+  agentSessionResumeIntentSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlSummarySchema,
@@ -131,11 +131,11 @@ export class HostAgentSessionLiveClient {
   }
 
   async agentSessionControlResume(
-    input: AgentSessionControlResumeInput,
+    input: AgentSessionResumeIntent,
   ): Promise<AgentSessionControlSummary> {
     return this.invokeFn(
       "agent_session_control_resume",
-      agentSessionControlResumeInputSchema.parse(input),
+      agentSessionResumeIntentSchema.parse(input),
       agentSessionControlSummarySchema,
     );
   }

@@ -323,7 +323,14 @@ describe("createEventPublishingTaskService", () => {
           .directMerge({
             repoPath: "/repo",
             taskId: "task-1",
-            input: { mergeMethod: "merge_commit" },
+            input: {
+              mergeMethod: "merge_commit",
+              expected: {
+                taskStatus: "human_review",
+                sourceBranch: "odt/task-1",
+                targetBranch: { branch: "main" },
+              },
+            },
           })
           .pipe(Effect.asVoid),
         setPlan: service
@@ -560,7 +567,14 @@ describe("createEventPublishingTaskService", () => {
           .directMerge({
             repoPath: "/repo",
             taskId: "task-1",
-            input: { mergeMethod: "merge_commit" },
+            input: {
+              mergeMethod: "merge_commit",
+              expected: {
+                taskStatus: "human_review",
+                sourceBranch: "odt/task-1",
+                targetBranch: { branch: "main" },
+              },
+            },
           })
           .pipe(Effect.flip),
       ),

@@ -763,7 +763,7 @@ describe("first-message composer recovery", () => {
           role: "build",
           selectedSessionIdentity: selected,
           isSessionModelCatalogLoading: false,
-          prepareSelectedSessionModelForSend: async () => () => {},
+
           assertCanPrepareSession: () => {},
           agentStudioReady: true,
           canStartNewSession: true,

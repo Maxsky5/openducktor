@@ -9,7 +9,6 @@ import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { PrepareModelForSend } from "@/features/agent-chat-composer/model-selection/use-session-model-preparation";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -290,14 +289,16 @@ export function useWorkspaceSessionChatActions(
     ({
       canSend,
       assertCanSubmit,
-      prepareModelForSend,
     }: {
       canSend: boolean;
       assertCanSubmit: NonNullable<AgentMessageSendOptions["assertCanSubmit"]>;
-      prepareModelForSend: PrepareModelForSend;
     }): AgentChatSendTarget => ({
       activity,
       activityKey,
+      capture: () => {
+        const version = recipientVersion.current;
+        return () => isMounted() && isCurrentWorkspace() && recipientVersion.current === version;
+      },
       canSend: () => canSend && !savingModel.current && !resuming.current && isMounted(),
       resolve: async (parts) => {
         setError(null);
@@ -315,24 +316,13 @@ export function useWorkspaceSessionChatActions(
             "The session is still loading. Wait for it to load, then send your draft.",
           );
         assertCanSubmit(session);
-        const assertModelCurrent = await prepareModelForSend((target, selection) => {
-          assertCurrentRecipient();
-          if (!matchesAgentSessionIdentity(target, identity))
-            throw new Error(
-              "The model repair does not belong to this chat. Reopen it before sending.",
-            );
-          // This Send owns the activity. Manual model changes still use their guard.
-          return updateAgentSessionModel(target, selection);
-        });
         assertCurrentRecipient();
-        assertModelCurrent();
         return {
           kind: "session",
           identity,
           sendOptions: {
             assertCanSubmit: (session) => {
               assertCurrentRecipient();
-              assertModelCurrent();
               if (!matchesAgentSessionIdentity(session, identity))
                 throw new Error(
                   "The send recipient changed. Reopen the original chat to send your draft.",
@@ -358,7 +348,6 @@ export function useWorkspaceSessionChatActions(
       reportSendFailure,
       settleSend,
       store,
-      updateAgentSessionModel,
     ],
   );
 

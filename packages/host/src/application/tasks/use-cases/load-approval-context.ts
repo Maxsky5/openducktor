@@ -75,6 +75,21 @@ export const createTaskApprovalContextUseCase = ({
           uncommittedFileCount: 0,
           directMerge,
         };
+        if (directMerge.targetBranch.remote) {
+          const branch = directMerge.targetBranch.branch.replace(/^refs\/heads\//, "");
+          const target = yield* dependencies.gitPort.readPublicationTarget({
+            repoPath: effectiveRepoPath,
+            sourceRef: `refs/heads/${branch}`,
+            remote: directMerge.targetBranch.remote,
+            targetRef: `refs/heads/${branch}`,
+          });
+          approvalContext.publicationPreview = {
+            sourceOid: target.sourceOid,
+            remote: target.remote,
+            targetRef: target.targetRef,
+            destinations: target.endpoints.map(({ identity, label }) => ({ identity, label })),
+          };
+        }
         if (workingDirectory !== undefined) {
           approvalContext.workingDirectory = workingDirectory;
         }

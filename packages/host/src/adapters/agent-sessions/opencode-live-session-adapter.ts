@@ -384,7 +384,13 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                 }),
             });
           }),
-        replyApproval: (input) =>
+        resolvePendingApproval: (input) =>
+          stateEffect(
+            "opencode-live-session.resolve-pending-approval",
+            () => state.resolvePendingApproval(input),
+            { runtimeId: runtime.runtimeId, externalSessionId: input.externalSessionId },
+          ),
+        replyApproval: (input, options) =>
           serializeRuntime(
             stateEffect(
               "opencode-live-session.resolve-approval-route",
@@ -406,6 +412,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                       ref: route.ref,
                       nativeRequestId: route.nativeRequestId,
                       outcome: input.outcome,
+                      onIssued: options?.onIssued,
                     };
                     if (input.message) request.message = input.message;
                     return prepared.connection.replyApproval(request);

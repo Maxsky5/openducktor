@@ -3,6 +3,7 @@ import {
   type AcceptedAgentInput,
   type AgentSessionControlSummary,
   type AgentSessionLiveRef,
+  type AgentSessionScope,
   type AgentSessionUserMessagePart,
   acceptedAgentInputSchema,
   agentSessionTranscriptEventSchema,
@@ -13,7 +14,10 @@ import type {
   AgentUserMessagePart,
 } from "@openducktor/core";
 import { Effect } from "effect";
-import { toAgentSessionControlSummary } from "../../application/agent-sessions/agent-session-control-summary";
+import {
+  toAgentSessionControlSummary,
+  toStartedSessionRoot,
+} from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
@@ -81,6 +85,7 @@ export const createOpenCodeSessionControlAdapter = ({
     operation: string,
     repoPath: string,
     run: () => Promise<AgentSessionSummary>,
+    sessionScope?: AgentSessionScope,
   ): Effect.Effect<AgentSessionControlSummary, HostError> =>
     serializeRuntime(
       Effect.tryPromise({
@@ -93,6 +98,9 @@ export const createOpenCodeSessionControlAdapter = ({
         Effect.flatMap((summary) =>
           commit(`${operation}.commit`, () => ({
             value: summary,
+            admittedRoot: sessionScope
+              ? toStartedSessionRoot({ repoPath, sessionScope }, summary)
+              : undefined,
             changes: state.applyControlSummary(repoPath, summary),
           })),
         ),
@@ -147,13 +155,19 @@ export const createOpenCodeSessionControlAdapter = ({
         runtimePolicy: { kind: "opencode" },
         workingDirectory: input.workingDirectory,
         sessionScope: input.sessionScope,
+        workStartGuard: input.workStartGuard,
+        onWorkIssued: input.onWorkIssued,
+        onWorkAccepted: input.onWorkAccepted,
         systemPrompt: input.systemPrompt,
       };
       if (input.model) {
         request.model = input.model;
       }
-      return runSummary("opencode-live-session.start-session", input.repoPath, () =>
-        connection.startSession(request),
+      return runSummary(
+        "opencode-live-session.start-session",
+        input.repoPath,
+        () => connection.startSession(request),
+        input.sessionScope,
       );
     },
     resumeSession: (input) => {
@@ -162,6 +176,9 @@ export const createOpenCodeSessionControlAdapter = ({
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
         sessionScope: input.sessionScope,
+        workStartGuard: input.workStartGuard,
+        onWorkIssued: input.onWorkIssued,
+        onWorkAccepted: input.onWorkAccepted,
       };
       if (input.model) {
         request.model = input.model;
@@ -180,6 +197,9 @@ export const createOpenCodeSessionControlAdapter = ({
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
         sessionScope: input.sessionScope,
+        workStartGuard: input.workStartGuard,
+        onWorkIssued: input.onWorkIssued,
+        onWorkAccepted: input.onWorkAccepted,
       };
       if (input.model) {
         request.model = input.model;
@@ -211,6 +231,9 @@ export const createOpenCodeSessionControlAdapter = ({
         runtimePolicy: { kind: "opencode" },
         workingDirectory: input.workingDirectory,
         sessionScope: input.sessionScope,
+        workStartGuard: input.workStartGuard,
+        onWorkIssued: input.onWorkIssued,
+        onWorkAccepted: input.onWorkAccepted,
         systemPrompt: input.systemPrompt,
         parentExternalSessionId: input.parentExternalSessionId,
       };
@@ -220,8 +243,11 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.model) {
         request.model = input.model;
       }
-      return runSummary("opencode-live-session.fork-session", input.repoPath, () =>
-        connection.forkSession(request),
+      return runSummary(
+        "opencode-live-session.fork-session",
+        input.repoPath,
+        () => connection.forkSession(request),
+        input.sessionScope,
       );
     },
     sendUserMessage: (input, options) => {
@@ -243,6 +269,9 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.submissionId) {
         request.submissionId = input.submissionId;
       }
+      if (options?.onModelIssued) request.onWorkIssued = options.onModelIssued;
+      if (options?.onModelAccepted) request.onWorkAccepted = options.onModelAccepted;
+      if (options?.assertCurrent) request.workStartGuard = { assertCurrent: options.assertCurrent };
       return sendGate.run(
         refKey(sessionRef),
         Effect.tryPromise({

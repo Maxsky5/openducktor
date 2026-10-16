@@ -111,10 +111,13 @@ export const createCodexAppServerTransport = (
         toHostOperationError(cause, "codexAppServerTransport.ensureOpen", { runtimeId }),
     });
 
-  const sendMessage = (message: CodexTransportResponseMessage | CodexTransportNotifyMessage) =>
+  const sendMessage = (
+    message: CodexTransportResponseMessage | CodexTransportNotifyMessage,
+    onIssued?: () => void,
+  ) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
-      yield* writeJsonLine(child.stdin, message).pipe(
+      yield* writeJsonLine(child.stdin, message, onIssued).pipe(
         Effect.mapError(
           (error) =>
             new HostOperationError({
@@ -436,7 +439,7 @@ export const createCodexAppServerTransport = (
         ...notification,
       });
     },
-    respond({ requestId, result, error }: Omit<CodexAppServerRespondInput, "runtimeId">) {
+    respond({ requestId, result, error, onIssued }: Omit<CodexAppServerRespondInput, "runtimeId">) {
       return Effect.gen(function* () {
         if (result !== undefined && error !== undefined) {
           return yield* Effect.fail(
@@ -458,13 +461,9 @@ export const createCodexAppServerTransport = (
           jsonrpc: "2.0",
           id: requestId,
         };
-        if (result !== undefined) {
-          response.result = result;
-        }
-        if (error !== undefined) {
-          response.error = error;
-        }
-        yield* sendMessage(response);
+        if (result !== undefined) response.result = result;
+        if (error !== undefined) response.error = error;
+        yield* sendMessage(response, onIssued);
       });
     },
     rejectPendingRequestsForShutdown() {

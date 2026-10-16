@@ -512,7 +512,14 @@ test("the first send reaches the runtime adapter with its native admission optio
   const h = await createLaunchHarness();
   const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
   expect(result.status).toBe("completed");
-  expect(h.sendOptions).toEqual([{ onSent: expect.any(Function) }]);
+  expect(h.sendOptions).toMatchObject([
+    {
+      assertCurrent: expect.any(Function),
+      onSent: expect.any(Function),
+      onModelIssued: expect.any(Function),
+      onModelAccepted: expect.any(Function),
+    },
+  ]);
 });
 
 test("a browser that attaches after the caller left sees the launch failure in the session", async () => {
@@ -642,7 +649,17 @@ test.each(["before", "during"] as const)(
     const wait = await pausePoint();
     if (point === "before") h.setPublicationGate(wait.pause);
     else h.setSendGate(wait.pause);
-    const { commands } = createNodeSessionLaunchControls(h.runtime, [h.service]);
+    const { commands } = createNodeSessionLaunchControls(
+      {
+        ...h.runtime,
+        stopSession: (ref, options) =>
+          Effect.suspend(() => {
+            options?.onValidated(ref);
+            return h.runtime.stopSession(ref);
+          }),
+      },
+      [h.service],
+    );
     await Effect.runPromise(
       Effect.gen(function* () {
         const launch = yield* Effect.forkChild(h.service.launch(requestFor("codex")));

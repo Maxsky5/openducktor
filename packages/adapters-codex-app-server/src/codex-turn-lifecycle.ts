@@ -1,3 +1,4 @@
+import { codexWorkflowContext } from "./codex-workflow-context";
 import type { AgentUserMessageDelivery, CodexEffectivePolicy } from "@openducktor/contracts";
 import {
   type AcceptedAgentUserMessage,
@@ -6,6 +7,7 @@ import {
   AgentSessionMessageRefusedError,
   AgentSessionTurnActiveError,
   type AgentUserMessagePart,
+  interruptedTurnResumeError,
 } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
@@ -56,6 +58,8 @@ export type CodexTurnLifecycleContext = {
    * the message.
    */
   onSent?: () => void;
+  assertCurrent?: (() => void) | undefined;
+  systemPrompt?: string | undefined;
 };
 
 /** Starts a turn for a user message, or steers the running turn, and publishes the message. */
@@ -97,7 +101,9 @@ export const sendCodexQuestionReply = async (
     externalSessionId,
     input,
     message: acceptedUserMessage,
-    delivery: "steer",
+    delivery: runningTurnOf(context.activeTurnsBySessionId, externalSessionId)
+      ? "steer"
+      : "new_turn",
     requestedModel,
     echoProvesAcceptance: false,
   });
@@ -134,9 +140,11 @@ export const startCodexContinuationTurn = async (
   // The `turn/start` answer already settled a turn that ended at once and left the session idle.
   const { status } = (await turnStartPromise).turn;
   if (status === "failed" || status === "interrupted") {
-    throw new Error(
-      `Codex ended the continuation turn for session '${externalSessionId}' as '${status}'.`,
-    );
+    throw interruptedTurnResumeError({
+      reason: "continuation_failed",
+      nativeOutcome: "accepted",
+      message: `Codex ended the continuation turn for session '${externalSessionId}' as '${status}'.`,
+    });
   }
 };
 
@@ -178,6 +186,12 @@ const admitCodexMessage = async (
     }
     return steerRunningTurn(context, session, runningTurn, input, message, echoProvesAcceptance);
   }
+  if (delivery === "steer")
+    throw new AgentSessionMessageRefusedError(
+      new Error(
+        "The running turn ended before steering. Send a new turn with current host context.",
+      ),
+    );
   const { turnStartPromise, echo } = await startNewTurn(
     context,
     session,
@@ -242,6 +256,7 @@ const steerRunningTurn = async (
   }
   requireRetainedTurnSession(context, runningTurn.session);
   try {
+    context.assertCurrent?.();
     const steered = context.clientForRuntime(runningTurn.session.runtimeId).turnSteer({
       threadId: runningTurn.session.threadId,
       input,
@@ -306,11 +321,14 @@ const startNewTurn = async (
     input,
     ...toTransportModelSelection(model),
   };
+  if (context.systemPrompt)
+    turnInput.additionalContext = codexWorkflowContext(context.systemPrompt);
   if (!session.preserveNativeSettings) {
     turnInput.approvalPolicy = policy.approvalPolicy;
     turnInput.approvalsReviewer = codexApprovalsReviewer(policy);
     turnInput.sandboxPolicy = sandboxPolicy;
   }
+  context.assertCurrent?.();
   const turnStartPromise = client
     .turnStart(turnInput)
     .then((result) => {

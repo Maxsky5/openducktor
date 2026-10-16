@@ -10,6 +10,7 @@ import {
   agentSessionScopeSchema,
 } from "./agent-session-schemas";
 import { isoTimestampSchema } from "./string-schemas";
+import { submissionAcknowledgementSchema } from "./workflow-operation-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -30,7 +31,7 @@ export const agentMessageSubmitInputSchema = agentMessageTargetSchema
   .extend({
     submissionId: nonEmptyStringSchema,
     mode: agentMessageSubmitModeSchema,
-    ...agentSessionMessageContentFields,
+    parts: agentSessionMessageContentFields.parts,
   })
   .strict()
   .superRefine(refineAgentSessionUserMessageParts);
@@ -97,6 +98,12 @@ export const agentMessageQueueSnapshotSchema = z
 export type AgentMessageQueueSnapshot = z.infer<typeof agentMessageQueueSnapshotSchema>;
 
 export const agentMessageSubmitResultSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("acknowledged"),
+    submissionId: nonEmptyStringSchema,
+    outcome: z.enum(["accepted", "queued", "uncertain"]),
+    acknowledgement: submissionAcknowledgementSchema.optional(),
+  }),
   z
     .object({
       kind: z.literal("queued"),
@@ -129,7 +136,13 @@ export const agentMessageQueueActionSchema = z.discriminatedUnion("kind", [
       editId: nonEmptyStringSchema,
     })
     .strict(),
-  z.object({ kind: z.literal("remove"), submissionId: nonEmptyStringSchema }).strict(),
+  z
+    .object({
+      kind: z.literal("remove"),
+      submissionId: nonEmptyStringSchema,
+      editId: nonEmptyStringSchema.optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal("steer"), submissionId: nonEmptyStringSchema }).strict(),
   z.object({ kind: z.literal("resume") }).strict(),
 ]);

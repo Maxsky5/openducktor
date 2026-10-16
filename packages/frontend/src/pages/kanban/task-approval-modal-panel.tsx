@@ -211,8 +211,10 @@ export function TaskApprovalModalPanel({
 function getDirectMergeCompletionContextError(
   model: TaskApprovalCompletionModalModel,
 ): string | null {
-  return model.targetBranch === null
-    ? "Missing target branch for direct-merge completion. Refresh approval context and retry."
+  if (model.targetBranch === null)
+    return "Missing target branch for direct-merge completion. Refresh approval context and retry.";
+  return model.publishTarget && !model.publicationPreview
+    ? "Missing publication destinations. Refresh approval context before publishing."
     : null;
 }
 
@@ -610,6 +612,16 @@ function TaskApprovalCompletionStage({
                   <div className="rounded-xl border border-border bg-muted/40 p-4">
                     <p className={sectionLabelClass}>Remote To Update</p>
                     <p className="mt-2 font-mono text-sm text-foreground">{publishTargetLabel}</p>
+                    {model.publicationPreview ? (
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <p>Commit {model.publicationPreview.sourceOid.slice(0, 12)}</p>
+                        {model.publicationPreview.destinations.map((destination) => (
+                          <p key={destination.identity} className="break-all">
+                            {destination.label}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </>
               ) : null}

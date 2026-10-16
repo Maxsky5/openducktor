@@ -112,7 +112,7 @@ export function AgentChatMessageQueue({
                       run(
                         submissionId,
                         "remove",
-                        () => onAction({ kind: "remove", submissionId }),
+                        () => onAction({ kind: "remove", submissionId, editId }),
                         endEdit,
                       )
                     }

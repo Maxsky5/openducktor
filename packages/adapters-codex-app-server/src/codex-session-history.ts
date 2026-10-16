@@ -2,6 +2,7 @@ import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
   type AgentSessionHistoryMessage,
+  type AgentModelSelection,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
@@ -40,6 +41,7 @@ type CodexSessionHistoryInput = {
   runtime: CodexSessionHistoryRuntime;
   prepareImageGenerations?: CodexImageGenerationPreparer | undefined;
   threadInventory: Pick<CodexThreadInventoryReader, "readThreadHistory" | "readThreadTurnIds">;
+  readRunningTurnModel: (threadId: string, turnId: string) => AgentModelSelection | undefined;
 };
 
 export const loadCodexSessionHistory = async ({
@@ -48,6 +50,7 @@ export const loadCodexSessionHistory = async ({
   runtime,
   threadInventory,
   prepareImageGenerations,
+  readRunningTurnModel,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   if (session?.firstTurnHistory) {
     const promptMessage = systemPromptMessage(input, session);
@@ -109,6 +112,7 @@ export const loadCodexSessionHistory = async ({
     runtimeId,
     forkBoundary,
     preparedImages,
+    readRunningTurnModel,
   });
 };
 
@@ -147,6 +151,7 @@ const toHistory = ({
   runtimeId,
   forkBoundary,
   preparedImages,
+  readRunningTurnModel,
 }: {
   input: LoadAgentSessionHistoryInput;
   session: CodexSessionState | undefined;
@@ -154,27 +159,20 @@ const toHistory = ({
   runtimeId: string;
   forkBoundary: CodexForkBoundary | null;
   preparedImages: ReadonlyMap<CodexImageGenerationItem, AgentImageGenerationPart> | undefined;
+  readRunningTurnModel: CodexSessionHistoryInput["readRunningTurnModel"];
 }): AgentSessionHistoryMessage[] => {
   const eventMapperPipeline = createCodexEventMapperPipeline();
   let boundaryAdded = false;
   const projectedHistory = codexTurnItemsFromThreadRead(response).flatMap(
     (
-      {
-        item,
-        turnIndex,
-        turn,
-        timestamp,
-        timestampIsApproximate,
-        isFinalAgentMessage,
-        turnTiming,
-        model,
-      },
+      { item, turnIndex, turn, timestamp, timestampIsApproximate, isFinalAgentMessage, turnTiming },
       index,
     ) => {
       const itemOwnerThreadId =
         forkBoundary && turnIndex < forkBoundary.beforeTurnIndex
           ? forkBoundary.parentThreadId
           : input.externalSessionId;
+      const model = readRunningTurnModel(itemOwnerThreadId, turn.id);
       const threadItemInput: CodexThreadItemInput = {
         item,
         turn,

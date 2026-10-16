@@ -1,3 +1,4 @@
+import type { AgentWorkStartOptions } from "@openducktor/core";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import type {
@@ -37,12 +38,16 @@ import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 
 /** Host options for one user message. */
 export type AgentSessionSendOptions = {
+  readonly onModelIssued?: (() => void) | undefined;
+  readonly onModelAccepted?: (() => void) | undefined;
+  readonly assertCurrent?: (() => void) | undefined;
   /**
    * The adapter calls it when it sends the native request that carries the message. If the send
    * fails before this call, the runtime did not get the message.
    */
   readonly onSent?: () => void;
 };
+export type ApprovalReplyOptions = { onIssued?: (() => void) | undefined };
 
 export type AgentSessionCatalogInvalidation = {
   readonly repoPath: string;
@@ -92,6 +97,7 @@ export type AgentSessionLiveAdapterChange = { readonly provenance?: "baseline" |
 export type AgentSessionLiveAdapterMutation<Success> = {
   readonly value: Success;
   readonly changes: ReadonlyArray<AgentSessionLiveAdapterChange>;
+  readonly admittedRoot?: AgentSessionAuthorizedRoot | undefined;
 };
 
 /** Routing metadata of one shared runtime. It never crosses the host boundary. */
@@ -123,6 +129,16 @@ export class AgentSessionLiveRegistration implements AgentSessionLiveAdapterBind
 export type AgentSessionLiveAdapterScope = Pick<AgentSessionLiveRef, "repoPath" | "runtimeKind">;
 
 type AgentSessionLiveAdapterBase = {
+  readonly resolvePendingApproval: (
+    input: AgentSessionLiveRef & { requestId: string },
+  ) => Effect.Effect<
+    {
+      owner: AgentSessionLiveRef;
+      root: AgentSessionLiveRef;
+      request: import("@openducktor/contracts").AgentSessionLivePendingApprovalRequest;
+    },
+    HostError
+  >;
   readonly claudeToolCatalog?: import("./claude-tool-catalog-port").ClaudeToolCatalogPort;
   readonly sessionImport: import("./runtime-session-import-port").RuntimeSessionImportPort;
   readonly queries: AgentRuntimeQueryAdapterPort;
@@ -157,6 +173,7 @@ type AgentSessionLiveAdapterBase = {
   ) => Effect.Effect<ReadonlyArray<FileDiff>, HostError>;
   readonly replyApproval: (
     input: AgentSessionLiveReplyApprovalInput,
+    options?: ApprovalReplyOptions,
   ) => Effect.Effect<void, HostError>;
   readonly replyQuestion: (
     input: AgentSessionLiveReplyQuestionInput,
@@ -182,23 +199,23 @@ export type AgentSessionTitleUpdateOutcome =
 
 export type AgentSessionControlAdapterPort = {
   readonly startSession: (
-    input: AgentSessionControlStartInput,
+    input: AgentSessionControlStartInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly resumeSession: (
-    input: AgentSessionControlResumeInput,
+    input: AgentSessionControlResumeInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly continueInterruptedTurn: (
-    input: AgentSessionControlContinueInterruptedTurnInput,
+    input: AgentSessionControlContinueInterruptedTurnInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly forkSession: (
-    input: AgentSessionControlForkInput,
+    input: AgentSessionControlForkInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly sendUserMessage: (
-    input: AgentSessionControlSendInput,
+    input: AgentSessionControlSendInput & AgentWorkStartOptions,
     options?: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
   readonly updateSessionModel: (
-    input: AgentSessionControlUpdateModelInput,
+    input: AgentSessionControlUpdateModelInput & AgentWorkStartOptions,
   ) => Effect.Effect<void, HostError>;
   readonly updateSessionTitle: (
     input: AgentSessionControlUpdateTitleInput,

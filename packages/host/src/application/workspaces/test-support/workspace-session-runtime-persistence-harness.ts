@@ -1,3 +1,4 @@
+import { commandPreparationFixture } from "../../agent-sessions/test-support/command-preparation-fixture";
 import { createWorkspaceSessionLaunchService } from "../workspace-session-launch-service";
 import { resolveSessionMessageParts } from "../../attachments/resolve-session-message-parts";
 import { noMessageQueues } from "../../../test-support/message-queue-observer-test-double";
@@ -13,12 +14,17 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import { randomUUID } from "node:crypto";
+import { assertAgentWorkStartCurrent } from "@openducktor/core";
 import { repoConfigSchema, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createLiveSessionAdapterRegistry } from "../../../adapters/agent-sessions/live-session-adapter-registry";
 import type { SqliteTaskStoreTestHarness } from "../../../adapters/sqlite/sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "../../../adapters/sqlite/sqlite-workspace-session-store";
-import { type HostError, HostOperationError } from "../../../effect/host-errors";
+import {
+  type HostError,
+  HostOperationError,
+  toHostOperationError,
+} from "../../../effect/host-errors";
 import type {
   AgentSessionRuntimeAdapterPort,
   AgentSessionTitleUpdateOutcome,
@@ -102,6 +108,7 @@ export const createPersistenceHarness = async (
   const updates: Array<{ workspaceId: string; session: WorkspaceSession }> = [];
   const events: AgentSessionLiveEnvelope[] = [];
   const starts: import("@openducktor/contracts").AgentSessionControlStartInput[] = [];
+  let nativeAttached = true;
   const inputs: Array<AgentSessionControlSendInput | AgentSessionControlResumeInput> = [];
   const releases: AgentSessionLiveRef[] = [];
   const stops: AgentSessionLiveRef[] = [];
@@ -129,6 +136,8 @@ export const createPersistenceHarness = async (
     registered: true,
     beforeResolveParts: Effect.void,
     nativeStart: Effect.void,
+    beforeNativeWork: Effect.void,
+    afterNativeWork: Effect.void,
     beforeSnapshot: Effect.void,
     beforeBind: Effect.void,
     beforeControl,
@@ -141,6 +150,23 @@ export const createPersistenceHarness = async (
   const renameFailures: string[] = [];
   const failure = (message: string) =>
     Effect.fail(new HostOperationError({ operation: "test", message }));
+  // Native Promise preparation can finish after its caller is interrupted.
+  const nativeWork = <A>(
+    input: Parameters<typeof assertAgentWorkStartCurrent>[0],
+    work: Effect.Effect<A>,
+  ) =>
+    Effect.uninterruptible(
+      state.beforeNativeWork.pipe(
+        Effect.andThen(
+          Effect.try({
+            try: () => assertAgentWorkStartCurrent(input),
+            catch: (cause) => toHostOperationError(cause, "test.native-work"),
+          }),
+        ),
+        Effect.andThen(work),
+        Effect.ensuring(state.afterNativeWork),
+      ),
+    );
   const accepted = (
     text = "First accepted prompt",
     timestamp = "2026-09-07T10:00:00Z",
@@ -259,43 +285,68 @@ export const createPersistenceHarness = async (
             Effect.andThen(
               state.failSnapshot
                 ? failure("snapshot read failed")
-                : Effect.succeed({ type: "missing" as const, ref }),
+                : Effect.succeed(
+                    nativeAttached
+                      ? {
+                          type: "live" as const,
+                          session: {
+                            ref,
+                            title: "Stored chat",
+                            startedAt: "2026-09-07T10:00:00Z",
+                            activity: "idle" as const,
+                            pendingApprovals: [],
+                            pendingQuestions: [],
+                            contextUsage: null,
+                          },
+                        }
+                      : { type: "missing" as const, ref },
+                  ),
             ),
           ),
         releaseSession: (input) =>
           Effect.sync(() => {
+            nativeAttached = false;
             releases.push(input);
             return true;
           }),
         stopSession: (input) =>
           Effect.sync(() => {
+            nativeAttached = false;
             stops.push(input);
           }),
         startSession: (input) =>
-          Effect.sync(() => {
-            starts.push(input);
-            return {
-              runtimeKind,
-              externalSessionId: ref.externalSessionId,
-              workingDirectory: ref.workingDirectory,
-              startedAt: "2026-09-07T10:00:00Z",
-              status: "idle" as const,
-            };
-          }).pipe(Effect.flatMap((summary) => state.nativeStart.pipe(Effect.as(summary)))),
+          nativeWork(
+            input,
+            Effect.sync(() => {
+              nativeAttached = true;
+              starts.push(input);
+              return {
+                runtimeKind,
+                externalSessionId: ref.externalSessionId,
+                workingDirectory: ref.workingDirectory,
+                startedAt: "2026-09-07T10:00:00Z",
+                status: "idle" as const,
+              };
+            }),
+          ).pipe(Effect.flatMap((summary) => state.nativeStart.pipe(Effect.as(summary)))),
         resumeSession: (input) =>
           state.beforeControl.pipe(
             Effect.andThen(
-              Effect.sync(() => {
-                inputs.push(input);
-                return {
-                  externalSessionId: input.externalSessionId,
-                  runtimeKind: input.runtimeKind,
-                  workingDirectory: input.workingDirectory,
-                  startedAt: "2026-09-07T10:00:00Z",
-                  status: "idle" as const,
-                  firstTurnCompleted: state.firstTurnCompleted,
-                };
-              }),
+              nativeWork(
+                input,
+                Effect.sync(() => {
+                  inputs.push(input);
+                  nativeAttached = true;
+                  return {
+                    externalSessionId: input.externalSessionId,
+                    runtimeKind: input.runtimeKind,
+                    workingDirectory: input.workingDirectory,
+                    startedAt: "2026-09-07T10:00:00Z",
+                    status: "idle" as const,
+                    firstTurnCompleted: state.firstTurnCompleted,
+                  };
+                }),
+              ),
             ),
           ),
         sendUserMessage: (input) =>
@@ -304,7 +355,7 @@ export const createPersistenceHarness = async (
               Effect.suspend(() => {
                 inputs.push(input);
                 if (state.failSend) return failure("runtime rejected message");
-                const acceptedMessage = accepted();
+                const acceptedMessage = { ...accepted(), model: input.model };
                 if (!state.publishAcceptedMessageDuringSend) return Effect.succeed(acceptedMessage);
                 return registration
                   .runMutation(
@@ -348,6 +399,10 @@ export const createPersistenceHarness = async (
   );
   events.length = 0;
   const commands = createAgentSessionCommandService({
+    turnPreparation: commandPreparationFixture,
+    readSessionRootRefs: () =>
+      Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
+    approvalPolicy: { reply: live.replyApproval },
     pauseForStop: () => Effect.void,
     runtime: live,
     repositoryPolicy: persistence,

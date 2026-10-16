@@ -1,3 +1,11 @@
+import { createNodeWorkflowCommandHandlers } from "./node-workflow-command-handlers";
+import {
+  createWorkflowWorkspaceObservation,
+  initializeWorkflowObservation,
+  createWorkflowLiveObserver,
+  workflowShutdown,
+} from "./workflow-workspace-observation";
+import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
 import { createEffectHostCommandRouter } from "../../interface/router/host-command-router";
 import { createRuntimeAdmissionGate } from "@openducktor/runtime-orchestration";
 import { createNodeNotificationServices } from "./node-notification-services";
@@ -27,7 +35,6 @@ import { createGitService } from "../../application/git/git-service";
 import { createOdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
-import { createClaudeToolCatalogService } from "../../application/runtimes/claude-tool-catalog-service";
 import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
 import { createOpenInToolsService } from "../../application/system/open-in-tools-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
@@ -36,16 +43,14 @@ import { createRepoActionService } from "../../application/actions/repo-action-s
 import { createWorktreeActionRunner } from "../../application/actions/worktree-action-runner";
 import { createTerminalService } from "../../application/terminals/terminal-service";
 import { createNodeSessionLaunchControls } from "./node-session-launch-controls";
-import { resolveSessionMessageParts } from "../../application/attachments/resolve-session-message-parts";
+import {
+  resolveSessionMessageParts,
+  resolvePreparedSessionAttachments,
+} from "../../application/attachments/resolve-session-message-parts";
 import type { GitProviderResolver } from "../../application/git/git-provider-resolver";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import { createTerminalLaunchEnvironment } from "../../infrastructure/terminals/terminal-launch-environment";
-import {
-  createWorkflowLaunchCommandHandlers,
-  createAgentSessionLiveCommandHandlers,
-} from "../../interface/commands/agent-session-live-command-handlers";
-import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
 import { createFilesystemCommandHandlers } from "../../interface/commands/filesystem-command-handlers";
 import { createGitCommandHandlers } from "../../interface/commands/git-command-handlers";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
@@ -80,7 +85,6 @@ import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
 import { createMcpBridgeStatusPublisher } from "./runtime-lifecycle-publisher";
-import { createModelCatalogPreviewComposition as previewModels } from "./model-catalog-preview-composition";
 export type { CreateNodeHostCommandRouterInput, EffectNodeHostCommandRouter };
 export const assembleNodeEffectHostCommandRouter = (
   input: CreateNodeHostCommandRouterInput,
@@ -124,7 +128,11 @@ export const assembleNodeEffectHostCommandRouter = (
     eventBus,
   );
   const { settingsConfig } = notificationComposition;
-  const setup = createNodeWorkspaceProviderSetup({ ...defaultPorts, settingsConfig }, input);
+  const setup = createNodeWorkspaceProviderSetup(
+    { ...defaultPorts, settingsConfig },
+    input,
+    (repoPath) => observeWorkflowWorkspace(repoPath),
+  );
   const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
   const assets = createNodeTaskAssetServices({
     configDir,
@@ -146,23 +154,33 @@ export const assembleNodeEffectHostCommandRouter = (
     updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
   const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
-  // The session commands and the runtime registry come later, so delivery reads them at use time.
   const messageDelivery = createNodeMessageDelivery({
     eventBus,
     onBackgroundFailure,
     canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
-    prepare: (content) => agentSessionCommandService.prepareUserMessage(content),
+    prepare: (content, options) =>
+      resolvePreparedSessionAttachments(
+        agentSessionCommandService.prepareUserMessage(content, options),
+        localAttachmentService,
+      ),
+    runOperation: (target, work, submissionId) =>
+      agentSessionCommandService.runMessageOperation(target, work, submissionId),
+    commitQueueResume: (commit) => agentSessionCommandService.commitQueueResume(commit),
+    prepareQueueResume: (content) => agentSessionCommandService.prepareQueueResume(content),
     send: (input) => launchControls.commands.sendUserMessage(input),
     runtimeRegistry: { status: (kind) => runtimeRegistry.status(kind) },
     runtimeDefinitions: runtimeDefinitionsService,
   });
-  // Services admit runtime work before the orchestrator exists, so the gate comes first.
   const runtimeAdmissionGate = createRuntimeAdmissionGate();
   const runtimeAdmission = createRuntimeAdmissionPort(runtimeAdmissionGate);
   const { liveSessionAdapterRegistry, liveState: agentSessionLiveStateService } =
     createNodeAgentSessionLiveState({
       runtimeAdmission,
       observeNotificationInput: notificationComposition.acceptLive,
+      observeApprovalInput: createWorkflowLiveObserver(
+        () => taskSessions,
+        messageDelivery.runBackground,
+      ),
       messageQueues: messageDelivery,
       persistence: workspaceSessions.persistence,
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
@@ -188,8 +206,6 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig,
     workspaceSettingsService,
   };
-  // The runtimes read the bridge at use time through `resolveBridge`. The default bridge needs
-  // services that this function creates after the runtimes, so it gets its value further down.
   let resolvedMcpHostBridge = mcpHostBridge;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
   const {
@@ -236,6 +252,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const worktreeActions = createWorktreeActionRunner(terminalService);
   const workspaceLifecycleService = createWorkspaceLifecycleService({
+    onWorkspaceReopened: (repoPath) => observeWorkflowWorkspace(repoPath),
     activity: createWorkspaceActivityInspector({
       agentSessionLiveStateService,
       terminalService,
@@ -304,11 +321,21 @@ export const assembleNodeEffectHostCommandRouter = (
     agentSessionLiveStateService,
     repositoryPolicy: workspaceSessions.persistence,
     pauseForStop: messageDelivery.pauseForStop,
+    readSessionRootRefs: createLiveSessionRootRefsReader({
+      store: assets.workspaceSessionStore,
+      taskStore,
+      settings: workspaceSettingsService,
+    }),
     workflowLaunch: {
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
       adapterRegistry: liveSessionAdapterRegistry,
     },
   });
+  const observeWorkflowWorkspace = createWorkflowWorkspaceObservation(
+    agentSessionLiveStateService,
+    onBackgroundFailure,
+    messageDelivery.runBackground,
+  );
   const { taskEventStream, taskService, taskSyncService, agentSessionCommandService } =
     taskSessions;
   const notificationService = notificationComposition.attach({
@@ -376,7 +403,14 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceChats.workspaceSessionLaunchService,
   ]);
   const hostRouterLifecycle = createNodeHostRouterLifecycle({
-    initializeAdmission: workspaceAdmissionService.initialize,
+    initializeAdmission: () =>
+      workspaceAdmissionService
+        .initialize()
+        .pipe(
+          Effect.andThen(
+            initializeWorkflowObservation(workspaceSettingsService, agentSessionLiveStateService),
+          ),
+        ),
     shutdownWorkspaceImports: workspaceChats.workspaceSessionImports.shutdown,
     shutdownWorkspaceSessionPersistence: workspaceSessions.persistence.shutdown,
     shutdownMessageDeliveries: messageDelivery.shutdown,
@@ -397,27 +431,27 @@ export const assembleNodeEffectHostCommandRouter = (
     taskAssetStagingService,
     taskSyncService,
     terminalService,
-    sessionLaunches: launchControls,
+    sessionLaunches: {
+      ...launchControls,
+      shutdown: () => workflowShutdown(launchControls, agentSessionCommandService, taskSessions),
+    },
   });
   const handlers = {
     ...setup.handlers,
     ...workspaceChats.handlers,
     ...createNotificationCommandHandlers(notificationService),
     ...createAutopilotCommandHandlers(autopilotService),
-    ...createAgentSessionLiveCommandHandlers(
-      launchControls.commands,
+    ...createNodeWorkflowCommandHandlers({
+      launchControls,
       messageDelivery,
-      localAttachmentService,
-    ),
-    ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),
-    ...createAgentRuntimeQueryCommandHandlers(
-      taskSessions.agentRuntimeQueries,
-      previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
-      createClaudeToolCatalogService({
-        runtimeRegistry,
-        adapterRegistry: liveSessionAdapterRegistry,
-      }),
-    ),
+      taskSessions,
+      defaultPorts,
+      git,
+      runtimeDefinitionsService,
+      clientVersion,
+      runtimeRegistry,
+      adapterRegistry: liveSessionAdapterRegistry,
+    }),
     ...createFilesystemCommandHandlers(filesystemService),
     ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
     ...createGitCommandHandlers(gitService),

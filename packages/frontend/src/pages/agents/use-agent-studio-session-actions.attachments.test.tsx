@@ -184,7 +184,7 @@ const createBaseArgs = (): HookArgs => {
     supportsAttachments: true,
     sessionsForTask: [],
     selectedTask: createTaskCardFixture(),
-    prepareSelectedSessionModelForSend: async () => () => {},
+
     assertCanPrepareSession: () => {},
     agentStudioReady: true,
     isActiveTaskReady: true,

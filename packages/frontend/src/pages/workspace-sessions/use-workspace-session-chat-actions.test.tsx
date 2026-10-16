@@ -52,7 +52,6 @@ const useWorkspaceChat = (
     actions.sendTarget({
       canSend: true,
       assertCanSubmit: () => {},
-      prepareModelForSend: async () => () => {},
     }),
     {
       identity,

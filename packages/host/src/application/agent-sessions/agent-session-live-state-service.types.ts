@@ -1,3 +1,4 @@
+import type { AgentWorkStartOptions } from "@openducktor/core";
 import type {
   AcceptedAgentInput,
   AgentSessionContextUsage,
@@ -25,6 +26,7 @@ import type {
   AgentSessionLiveSnapshot,
   AgentSessionLiveSnapshotEnvelope,
   FileDiff,
+  SessionOperationObservation,
   TaskAgentSessions,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
@@ -49,6 +51,26 @@ import type { WithProcessStartAdmission } from "../workspaces/workspace-admissio
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 
 export type AgentSessionLiveStateService = {
+  readonly readStartedRoots: (repoPath: string) => AgentSessionAuthorizedRoot[];
+  readonly resolvePendingApproval: (
+    input: Parameters<AgentSessionLiveAdapterPort["resolvePendingApproval"]>[0],
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<AgentSessionLiveAdapterPort["resolvePendingApproval"]>> & {
+      runtimeId: string;
+    },
+    HostError
+  >;
+  readonly reportApprovalPolicyFailure: (
+    ref: AgentSessionLiveRef,
+    message: string | null,
+  ) => Effect.Effect<void, HostError>;
+  readonly publishOperation: (
+    envelope: Extract<
+      AgentSessionLiveEnvelope,
+      { type: "session_operation_updated" | "submission_acknowledged" | "task_completion_updated" }
+    >,
+  ) => Effect.Effect<void, HostError>;
+  readonly retainOperation: (observation: SessionOperationObservation) => Effect.Effect<void>;
   readonly publishTaskSessionRecords: (
     ref: AgentSessionLiveRef,
     records: TaskAgentSessions,
@@ -93,28 +115,29 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<ReadonlyArray<FileDiff>, HostError>;
   readonly replyApproval: (
     input: AgentSessionLiveReplyApprovalInput,
+    options?: import("../../ports/agent-session-live-adapter-port").ApprovalReplyOptions,
   ) => Effect.Effect<void, HostError>;
   readonly replyQuestion: (
     input: AgentSessionLiveReplyQuestionInput,
   ) => Effect.Effect<void, HostError>;
   readonly startSession: (
-    input: AgentSessionControlStartInput,
+    input: AgentSessionControlStartInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly resumeSession: (
-    input: AgentSessionControlResumeInput,
+    input: AgentSessionControlResumeInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly continueInterruptedTurn: (
-    input: AgentSessionControlContinueInterruptedTurnInput,
+    input: AgentSessionControlContinueInterruptedTurnInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly forkSession: (
-    input: AgentSessionControlForkInput,
+    input: AgentSessionControlForkInput & AgentWorkStartOptions,
   ) => Effect.Effect<AgentSessionControlSummary, HostError>;
   readonly sendUserMessage: (
-    input: AgentSessionControlSendInput,
+    input: AgentSessionControlSendInput & AgentWorkStartOptions,
     options?: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
   readonly updateSessionModel: (
-    input: AgentSessionControlUpdateModelInput,
+    input: AgentSessionControlUpdateModelInput & AgentWorkStartOptions,
   ) => Effect.Effect<void, HostError>;
   readonly updateSessionTitle: (
     input: AgentSessionControlUpdateTitleInput,
@@ -148,6 +171,7 @@ export type CreateAgentSessionLiveStateServiceInput = {
     envelope: AgentSessionLiveEnvelope,
     provenance: "baseline" | "live",
   ) => void;
+  readonly observeApprovalInput?: (envelope: AgentSessionLiveEnvelope) => void;
   readonly coordinator?: LiveStateCoordinator;
   readonly messageQueues: AgentMessageQueueObserver;
 };

@@ -1,3 +1,4 @@
+import type { TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
@@ -1920,138 +1921,77 @@ describe("createTaskService build and review", () => {
       ),
     ).rejects.toThrow("local direct merge");
   });
-  test("human approval closes review tasks", async () => {
-    const calls: unknown[] = [];
-    const taskStore: TaskStorePort = {
-      listTasks(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "list", input });
-            return [task({ id: "task-1", status: "human_review" })];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
+  for (const { status, pendingMerge } of [
+    { status: "ai_review", pendingMerge: false },
+    { status: "human_review", pendingMerge: false },
+    { status: "ai_review", pendingMerge: true },
+    { status: "human_review", pendingMerge: true },
+    { status: "closed", pendingMerge: true },
+  ] as const) {
+    test(`human approval from ${status} with ${pendingMerge ? "a pending direct merge" : "no direct merge"}`, async () => {
+      let current = task({ id: "task-1", status });
+      const transitions: unknown[] = [];
+      let cleanups = 0;
+      const service = createTaskService({
+        gitPort: createBuildStartGitPort({ calls: [] }),
+        taskStore: {
+          listTasks: () => Effect.sync(() => [current]),
+          getTaskMetadata: () =>
+            Effect.sync(() => {
+              const metadata: TaskMetadataPayload = {
+                spec: { markdown: "" },
+                plan: { markdown: "" },
+                agentSessions: [],
+              };
+              if (pendingMerge) {
+                metadata.directMerge = {
+                  method: "merge_commit",
+                  sourceBranch: "odt/task-1",
+                  targetBranch: { remote: "origin", branch: "main" },
+                  mergedAt: "2026-05-10T00:00:00.000Z",
+                };
+              }
+              return metadata;
             }),
-        });
-      },
-      transitionTask(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "transition", input });
-            return task({ id: "task-1", status: "closed" });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
+          transitionTask: (input) =>
+            Effect.sync(() => {
+              transitions.push(input);
+              current = { ...current, status: input.status };
+              return current;
             }),
-        });
-      },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      recordQaOutcome() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected QA");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    };
-    const closed = await Effect.runPromise(
-      createTaskService({
-        gitPort: createBuildStartGitPort({ calls }),
-        taskStore,
-        terminalService: {
-          acquireTaskCleanup(input) {
-            return Effect.acquireRelease(
-              Effect.sync(() => {
-                calls.push({ type: "acquireTerminalCleanup", input });
-                return { closedTerminalIds: ["terminal-1"] };
-              }),
-              () =>
-                Effect.sync(() => {
-                  calls.push({ type: "releaseTerminalCleanup" });
-                }),
-            );
-          },
         },
-      }).humanApprove({ repoPath: "/repo", taskId: "task-1" }),
-    );
-    expect(calls).toEqual([
-      { type: "list", input: { repoPath: "/repo" } },
-      { type: "canonicalizePath", path: "/repo" },
-      { type: "list", input: { repoPath: "/repo" } },
-      {
-        type: "acquireTerminalCleanup",
-        input: { repoPath: "/repo", taskIds: ["task-1"] },
-      },
-      { type: "transition", input: { repoPath: "/repo", taskId: "task-1", status: "closed" } },
-      { type: "releaseTerminalCleanup" },
-    ]);
-    expect(closed).toMatchObject({
-      id: "task-1",
-      status: "closed",
-      availableActions: ["view_details"],
+        terminalService: {
+          acquireTaskCleanup: () =>
+            Effect.sync(() => {
+              cleanups += 1;
+              return { closedTerminalIds: [] };
+            }),
+        },
+      });
+      const result = await Effect.runPromise(
+        Effect.result(service.humanApprove({ repoPath: "/repo", taskId: "task-1" })),
+      );
+      const blocked = pendingMerge && status !== "closed";
+      if (blocked) {
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: {
+            _tag: "HostValidationError",
+            field: "taskId",
+            message: expect.stringContaining("complete the direct merge"),
+          },
+        });
+      } else {
+        expect(result).toMatchObject({
+          _tag: "Success",
+          success: { id: "task-1", status: "closed", availableActions: ["view_details"] },
+        });
+      }
+      expect(current.status).toBe(blocked ? status : "closed");
+      expect(cleanups).toBe(!pendingMerge ? 1 : 0);
+      expect(transitions).toEqual(
+        !pendingMerge ? [{ repoPath: "/repo", taskId: "task-1", status: "closed" }] : [],
+      );
     });
-  });
+  }
 });

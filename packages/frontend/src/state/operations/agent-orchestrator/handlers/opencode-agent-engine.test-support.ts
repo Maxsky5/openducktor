@@ -47,12 +47,6 @@ const bindResumeInput = (
     sessionScope: input.sessionScope,
     ...openCodeRuntimePolicy,
   };
-  if (input.model !== undefined) {
-    boundInput.model = input.model;
-  }
-  if (input.systemPrompt !== undefined) {
-    boundInput.systemPrompt = input.systemPrompt;
-  }
   return boundInput;
 };
 
@@ -67,12 +61,6 @@ const bindContinueInterruptedTurnInput = (
     sessionScope: input.sessionScope,
     ...openCodeRuntimePolicy,
   };
-  if (input.model !== undefined) {
-    boundInput.model = input.model;
-  }
-  if (input.systemPrompt !== undefined) {
-    boundInput.systemPrompt = input.systemPrompt;
-  }
   return boundInput;
 };
 
@@ -131,12 +119,6 @@ const bindSendInput = (
     ...openCodeRuntimePolicy,
   };
 
-  if (input.model !== undefined) {
-    boundInput.model = input.model;
-  }
-  if (input.systemPrompt !== undefined) {
-    boundInput.systemPrompt = input.systemPrompt;
-  }
   return boundInput;
 };
 

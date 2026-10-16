@@ -1,8 +1,13 @@
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
-import { TaskCreatedAssetError } from "../../effect/task-asset-error";
+import { TaskAssetError, TaskCreatedAssetError } from "../../effect/task-asset-error";
+import { createLiveWorkflowObservations } from "../agent-sessions/live-workflow-observations";
+import { createTaskCompletionState } from "./task-completion-state";
+import { createTaskDeleteUseCase } from "./use-cases/delete-task";
+import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -100,7 +105,7 @@ const createResetTaskStore = (
 const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
   gitPort: createDirectMergeGitPort({ calls: [], branches: { "/repo": [] } }),
   settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
-  taskStore,
+  taskStore: createTaskStoreTestDouble(taskStore),
   workspaceSettingsService: createBuildWorkspaceSettingsService({
     workspaceId: "repo",
     repoPath: "/repo",
@@ -108,6 +113,109 @@ const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
   }),
 });
 describe("createTaskService task mutations and reset", () => {
+  test.each(["success", "before commit", "asset cleanup", "publication"] as const)(
+    "clears deleted task completion state after durable deletion: %s",
+    async (failure) => {
+      const live = createLiveWorkflowObservations();
+      const completionState = createTaskCompletionState((observation) =>
+        Effect.gen(function* () {
+          if (failure === "publication" && !observation.failure && observation.taskId === "task-1")
+            return yield* new HostOperationError({
+              operation: "test.publish",
+              message: "publication failed",
+            });
+          live.accept({ type: "task_completion_updated", observation });
+        }),
+      );
+      const ids = ["task-1", "child", "unrelated"];
+      for (const id of ids) {
+        const state = completionState.ensure("/repo", id);
+        state.observation.failure = {
+          stage: "cleanup",
+          code: "task_completion_failed",
+          message: "cleanup failed",
+          nextAction: "Inspect cleanup.",
+        };
+        await Effect.runPromise(completionState.publish(state));
+      }
+      let deleted = false;
+      const service = createTaskDeleteUseCase({
+        ...createCleanupTaskServiceInput({
+          listTasks: () =>
+            Effect.succeed([
+              task({ id: "task-1", issueType: "epic" }),
+              task({ id: "child", parentId: "task-1" }),
+              task({ id: "unrelated" }),
+            ]),
+          getTaskMetadata: () => Effect.succeed(metadataWithSessions()),
+          deleteTask: () =>
+            Effect.gen(function* () {
+              if (failure === "before commit")
+                return yield* new HostOperationError({
+                  operation: "test.delete",
+                  message: "delete failed",
+                });
+              deleted = true;
+              if (failure === "asset cleanup")
+                return yield* new TaskAssetError({
+                  operation: "delete",
+                  code: "purge",
+                  taskId: "task-1",
+                  assetIds: [],
+                  failedPhase: "cleanup_after_commit",
+                  durableState: "committed_cleanup_pending",
+                  retryAllowed: false,
+                  message: "Asset cleanup failed.",
+                });
+              return true;
+            }),
+        }),
+        completionState,
+        taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
+        terminalService: { acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }) },
+      });
+      const result = await Effect.runPromise(
+        Effect.result(
+          service.deleteTask({
+            repoPath: "/repo",
+            taskId: "task-1",
+            deleteSubtasks: true,
+          }),
+        ),
+      );
+      expect(deleted).toBe(failure !== "before commit");
+      if (failure === "before commit") {
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { message: expect.stringContaining("delete failed") },
+        });
+        expect(live.snapshot("/repo").taskCompletions.map(({ taskId }) => taskId)).toEqual(ids);
+      } else {
+        for (const id of ["task-1", "child"])
+          expect(completionState.ensure("/repo", id).observation.failure).toBeUndefined();
+        expect(live.snapshot("/repo").taskCompletions.map(({ taskId }) => taskId)).toEqual(
+          failure === "publication" ? ["task-1", "unrelated"] : ["unrelated"],
+        );
+        if (failure === "success")
+          expect(result).toMatchObject({ _tag: "Success", success: { ok: true } });
+        else
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: {
+              operation: "delete-task",
+              changes: { taskIds: ["task-1", "child"], removedTaskIds: ["task-1", "child"] },
+              failure: {
+                message:
+                  failure === "publication"
+                    ? "publication failed"
+                    : expect.stringContaining("Asset cleanup failed."),
+              },
+            },
+          });
+      }
+      expect(completionState.ensure("/repo", "unrelated").observation.failure).toBeDefined();
+    },
+  );
   test("reports committed task asset cleanup failures as mutation progress", async () => {
     const createdTaskId = "task-2";
     const failure = new TaskCreatedAssetError(

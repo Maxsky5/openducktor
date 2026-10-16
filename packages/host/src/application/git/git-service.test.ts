@@ -87,6 +87,11 @@ const createFakeGitPort = ({
   existingRefs,
 }: FakeGitPortInput = {}): GitPort =>
   ({
+    isMergeIncluded: () => Effect.die(new Error("unexpected merge inclusion")),
+    restoreDeletedBranch: () => Effect.die(new Error("unexpected branch restore")),
+    readPublicationTarget: () => Effect.die(new Error("unexpected publication target")),
+    inspectPublication: () => Effect.die(new Error("unexpected publication inspect")),
+    pushBoundPublication: () => Effect.die(new Error("unexpected bound publication")),
     canonicalizePath(path) {
       return Effect.tryPromise({
         try: async () => {
@@ -1268,26 +1273,37 @@ describe("createGitService", () => {
     );
     expect(calls).toEqual([]);
   });
-  test("removes a worktree and cleans up the filesystem path", async () => {
+  test("removes a worktree when an unrelated registered repository is missing", async () => {
     const calls: string[] = [];
+    const config = createConfig();
+    config.workspaces = {
+      missing: { ...config.workspaces.repo!, workspaceId: "missing", repoPath: "/missing" },
+      ...config.workspaces,
+    };
+    const settingsConfig = createFakeSettingsConfig(config);
+    settingsConfig.canonicalizePath = (path) =>
+      path === "/missing"
+        ? Effect.fail(
+            new HostOperationError({ operation: "realpath", message: "ENOENT: /missing" }),
+          )
+        : Effect.succeed(path);
     const service = createGitService({
       gitPort: createFakeGitPort({
         canonicalPaths: { "/repo": "/canonical/repo" },
         gitRepositories: ["/canonical/repo"],
         calls,
       }),
-      settingsConfig: createFakeSettingsConfig(createConfig()),
+      settingsConfig,
       worktreeFiles: createFakeWorktreeFiles(calls),
     });
-    await expect(
-      Effect.runPromise(
-        service.removeWorktree({
-          repoPath: "/repo",
-          worktreePath: "/managed/repo/task-1",
-          force: true,
-        }),
-      ),
-    ).resolves.toEqual({ ok: true });
+    const result = await Effect.runPromise(
+      service.removeWorktree({
+        repoPath: "/repo",
+        worktreePath: "/managed/repo/task-1",
+        force: true,
+      }),
+    );
+    expect(result).toEqual({ ok: true });
     expect(calls).toEqual([
       "removeWorktree:/canonical/repo|/managed/repo/task-1|true",
       "removePathIfPresent:/managed/repo/task-1",

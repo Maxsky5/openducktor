@@ -91,9 +91,11 @@ const finishMergeBranchResult = (
   workingDirectory: string,
   beforeHead: string,
   output: string,
+  onApplied: GitMergeBranchRequest["onApplied"],
 ) =>
   Effect.gen(function* () {
     const afterHead = yield* runGit(runner, workingDirectory, ["rev-parse", "HEAD"]);
+    onApplied?.(afterHead.trim());
     if (beforeHead === afterHead) {
       return {
         outcome: "up_to_date" as const,
@@ -130,6 +132,7 @@ const mergeBranchWithCommit = (
   workingDirectory: string,
   sourceBranch: string,
   beforeHead: string,
+  onApplied: GitMergeBranchRequest["onApplied"],
 ) =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
@@ -142,7 +145,7 @@ const mergeBranchWithCommit = (
     if (!result.ok) {
       return yield* mergeConflictOrError(runner, workingDirectory, "git merge --no-ff", output);
     }
-    return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, output);
+    return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, output, onApplied);
   });
 const mergeBranchWithSquash = (
   runner: GitCommandRunner,
@@ -150,6 +153,7 @@ const mergeBranchWithSquash = (
   sourceBranch: string,
   beforeHead: string,
   squashCommitMessage: string | undefined,
+  onApplied: GitMergeBranchRequest["onApplied"],
 ) =>
   Effect.gen(function* () {
     const commitMessage = yield* requireNonEmptyEffect(
@@ -172,6 +176,7 @@ const mergeBranchWithSquash = (
       "--quiet",
     ]);
     if (staged.ok) {
+      onApplied?.(beforeHead.trim());
       return {
         outcome: "up_to_date" as const,
         output,
@@ -197,7 +202,13 @@ const mergeBranchWithSquash = (
         : commitOutput.length === 0
           ? output
           : `${output}\n${commitOutput}`;
-    return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, mergedOutput);
+    return yield* finishMergeBranchResult(
+      runner,
+      workingDirectory,
+      beforeHead,
+      mergedOutput,
+      onApplied,
+    );
   });
 const mergeBranchWithRebase = (
   runner: GitCommandRunner,
@@ -206,6 +217,7 @@ const mergeBranchWithRebase = (
   sourceBranch: string,
   targetBranch: string,
   beforeHead: string,
+  onApplied: GitMergeBranchRequest["onApplied"],
 ) =>
   Effect.gen(function* () {
     const rebaseWorkingDirectory = sourceWorkingDirectory ?? workingDirectory;
@@ -244,7 +256,7 @@ const mergeBranchWithRebase = (
         : fastForwardOutput.length === 0
           ? rebaseOutput
           : `${rebaseOutput}\n${fastForwardOutput}`;
-    return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, output);
+    return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, output, onApplied);
   });
 export const mergeBranch = (
   runner: GitCommandRunner,
@@ -261,6 +273,15 @@ export const mergeBranch = (
       ? checkoutBranchFromTargetRef(targetBranch)
       : targetBranch;
     if (sourceBranch === targetBranch) {
+      if (request.onApplied) {
+        const targetOid = yield* runGit(runner, workingDirectory, [
+          "rev-parse",
+          "--verify",
+          "--end-of-options",
+          `${targetBranch}^{commit}`,
+        ]);
+        request.onApplied(targetOid.trim());
+      }
       return {
         outcome: "up_to_date" as const,
         output: "Source and target branches are identical",
@@ -273,25 +294,41 @@ export const mergeBranch = (
     }
     yield* switchBranch(runner, workingDirectory, checkoutTargetBranch, false);
     const beforeHead = yield* runGit(runner, workingDirectory, ["rev-parse", "HEAD"]);
+    const mergeRunner: GitCommandRunner = (cwd, args, options) =>
+      runner(
+        cwd,
+        args,
+        ["merge", "rebase", "commit"].includes(args[0] ?? "") && request.onWorkIssued
+          ? { ...options, onStarted: request.onWorkIssued }
+          : options,
+      );
     if (request.method === "merge_commit") {
-      return yield* mergeBranchWithCommit(runner, workingDirectory, sourceBranch, beforeHead);
+      return yield* mergeBranchWithCommit(
+        mergeRunner,
+        workingDirectory,
+        sourceBranch,
+        beforeHead,
+        request.onApplied,
+      );
     }
     if (request.method === "squash") {
       return yield* mergeBranchWithSquash(
-        runner,
+        mergeRunner,
         workingDirectory,
         sourceBranch,
         beforeHead,
         request.squashCommitMessage,
+        request.onApplied,
       );
     }
     return yield* mergeBranchWithRebase(
-      runner,
+      mergeRunner,
       workingDirectory,
       request.sourceWorkingDirectory,
       sourceBranch,
       checkoutTargetBranch,
       beforeHead,
+      request.onApplied,
     );
   });
 export const switchBranch = (
@@ -307,4 +344,44 @@ export const switchBranch = (
       : ["switch", "--end-of-options", targetBranch];
     yield* runGit(runner, workingDirectory, args);
     return yield* getCurrentBranchUnchecked(runner, workingDirectory);
+  });
+
+/** Recovery requires the original immutable result; current branch refs cannot prove it. */
+export const isMergeIncluded = (
+  runner: GitCommandRunner,
+  repoPath: string,
+  sourceBranch: string,
+  targetOid: string,
+  appliedTargetOid?: string,
+) =>
+  Effect.gen(function* () {
+    yield* requireNonEmptyEffect(sourceBranch, "recorded source branch");
+    if (!/^[a-f0-9]{40,64}$/.test(targetOid))
+      return yield* gitValidationError(
+        "The recovery target has no valid commit. Refresh approval context.",
+        "targetOid",
+      );
+    if (appliedTargetOid === undefined)
+      return yield* gitValidationError(
+        "Original applied merge commit evidence is unavailable after host restart. Inspect the original Git result and current target before completing. OpenDucktor cannot safely authorize cleanup or closure from current branch refs. Do not replay the merge or publication.",
+        "appliedTargetOid",
+      );
+    if (!/^[a-f0-9]{40,64}$/.test(appliedTargetOid))
+      return yield* gitValidationError(
+        "The applied merge has no valid commit evidence. Inspect its original Git result before completing.",
+        "appliedTargetOid",
+      );
+    const targetTree = (yield* runGit(runner, repoPath, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${targetOid}^{tree}`,
+    ])).trim();
+    const expectedTree = (yield* runGit(runner, repoPath, [
+      "rev-parse",
+      "--verify",
+      "--end-of-options",
+      `${appliedTargetOid}^{tree}`,
+    ])).trim();
+    return expectedTree === targetTree;
   });

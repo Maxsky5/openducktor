@@ -218,6 +218,7 @@ const createHarness = async (
   };
   const service = {
     ...unexpectedRuntimeQueries,
+    resolvePendingApproval: () => Effect.die(new Error("unexpected pending approval resolution")),
     loadToolCatalog: () => Effect.die("Unexpected Claude tool catalog read"),
     inspectSessionForImport: (
       input: Parameters<ClaudeAgentSdkService["inspectSessionForImport"]>[0],

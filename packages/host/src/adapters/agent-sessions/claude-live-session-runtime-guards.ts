@@ -1,5 +1,5 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { Effect } from "effect";
 import type { z } from "zod";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
@@ -70,3 +70,29 @@ export const parseClaudeLiveSessionOutput = <Schema extends z.ZodType, Input>(
         details: { operation },
       }),
   });
+
+export const createClaudeRequiredSession =
+  (
+    store: import("./claude-live-session-adapter-contract").CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"],
+    runtimeId: string,
+  ) =>
+  (externalSessionId: string) =>
+    Effect.try({
+      try: () => {
+        const session = store.get(externalSessionId);
+        if (!session)
+          throw new HostValidationError({
+            field: "externalSessionId",
+            message: `Unknown Claude session '${externalSessionId}'.`,
+            details: { externalSessionId, runtimeId },
+          });
+        return session;
+      },
+      catch: (cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : toHostOperationError(cause, "claude-live-session.require-session", {
+              runtimeId,
+              externalSessionId,
+            }),
+    });

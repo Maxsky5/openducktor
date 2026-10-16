@@ -197,6 +197,15 @@ export const getAcceptedMessageAfterSendFailure = (
   sessionRef: AgentSessionLiveRef,
 ): AcceptedAgentInput | null => {
   if (
+    error.failure?.kind === "session_operation" &&
+    agentSessionRefsEqual(error.failure.observation.ref, sessionRef)
+  ) {
+    const accepted = error.failure.observation.acceptedInput;
+    return accepted?.type === "user_message"
+      ? toAcceptedAgentUserMessage(accepted)
+      : (accepted ?? null);
+  }
+  if (
     error.failure?.kind === "agent_session_command_accepted" &&
     agentSessionRefsEqual(error.failure.sessionRef, sessionRef)
   )

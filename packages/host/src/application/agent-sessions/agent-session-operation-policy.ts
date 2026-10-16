@@ -11,7 +11,10 @@ import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
 
 /** A send input before the host picks its `delivery`. */
-export type AgentSessionSendContent = Omit<AgentSessionControlSendInput, "delivery">;
+export type AgentSessionSendContent = Omit<AgentSessionControlSendInput, "delivery"> & {
+  /** A queued message keeps this choice; delivery validates it without repair. */
+  modelCaptured?: true;
+};
 
 export type PreparedSessionResume = {
   input: AgentSessionControlResumeInput;

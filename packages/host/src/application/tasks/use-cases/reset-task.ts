@@ -35,6 +35,7 @@ export const createTaskFullResetUseCase = ({
   worktreeFiles,
   workspaceSettingsService,
   taskSessionLifecycleCoordinator,
+  completionState,
 }: TaskServiceUseCaseInput) => ({
   resetTask(input: Parameters<TaskService["resetTask"]>[0]) {
     return Effect.gen(function* () {
@@ -158,12 +159,17 @@ export const createTaskFullResetUseCase = ({
           taskId,
           pullRequest: null,
         });
-        yield* storeDependencies.setDirectMerge({
-          repoPath: effectiveRepoPath,
-          taskId,
-          directMerge: null,
-        });
-        cleanupProgress.completedSteps.push("cleared linked delivery metadata");
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* storeDependencies.setDirectMerge({
+              repoPath: effectiveRepoPath,
+              taskId,
+              directMerge: null,
+            });
+            cleanupProgress.completedSteps.push("cleared linked delivery metadata");
+            yield* completionState.discard(effectiveRepoPath, taskId);
+          }),
+        );
         const updated = yield* taskStore.transitionTask({
           repoPath: effectiveRepoPath,
           taskId,

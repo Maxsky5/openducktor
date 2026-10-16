@@ -297,7 +297,11 @@ describe("AgentChatMessageQueue", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remove queued message" }));
     await waitFor(() =>
-      expect(onAction).toHaveBeenCalledWith({ kind: "remove", submissionId: "s-1" }),
+      expect(onAction).toHaveBeenCalledWith({
+        kind: "remove",
+        submissionId: "s-1",
+        editId: "edit-1",
+      }),
     );
   });
 

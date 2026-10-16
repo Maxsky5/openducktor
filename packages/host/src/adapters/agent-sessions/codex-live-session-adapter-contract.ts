@@ -43,6 +43,7 @@ export type CodexSessionController = Pick<
   | "loadSessionContextUsage"
   | "loadSessionDiff"
   | "replyLiveApproval"
+  | "resolvePendingApproval"
   | "replyLiveQuestion"
   | "replyQuestion"
   | "releaseRuntime"

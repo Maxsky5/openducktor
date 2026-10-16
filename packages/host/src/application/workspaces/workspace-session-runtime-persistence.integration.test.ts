@@ -1,3 +1,4 @@
+import { commandPreparationFixture } from "../agent-sessions/test-support/command-preparation-fixture";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type {
@@ -137,6 +138,10 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       }),
     );
     const commands = createAgentSessionCommandService({
+      turnPreparation: commandPreparationFixture,
+      readSessionRootRefs: () =>
+        Effect.succeed([{ ...ref, sessionScope: { kind: "repository" as const } }]),
+      approvalPolicy: { reply: live.replyApproval },
       pauseForStop: () => Effect.void,
       runtime: live,
       repositoryPolicy: persistence,

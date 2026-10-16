@@ -99,7 +99,7 @@ describe("createManageAgentMessageQueue", () => {
   });
 
   test.each(["resume", "steer"] as const)(
-    "reattaches a stopped session before %s delivers a message",
+    "sends one host %s intent for a stopped session",
     async (kind) => {
       const harness = createHarness("stopped", async () => ({
         queue: createAgentMessageQueueSnapshot({ target, revision: 2, texts: ["first"] }),
@@ -110,8 +110,8 @@ describe("createManageAgentMessageQueue", () => {
         kind === "resume" ? { kind } : { kind, submissionId: "submission-first" },
       );
 
-      expect(harness.calls).toEqual(["resume", `manage:${kind}`]);
-      expect(harness.session()?.status).toBe("idle");
+      expect(harness.calls).toEqual([`manage:${kind}`]);
+      expect(harness.session()?.status).toBe("stopped");
     },
   );
 

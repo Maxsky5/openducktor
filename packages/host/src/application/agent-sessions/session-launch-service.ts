@@ -1,3 +1,4 @@
+import { SessionOperationError } from "../../ports/session-operation-error";
 import type {
   AgentSessionControlSummary,
   AgentSessionLiveRef,
@@ -65,6 +66,9 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
   const active = new Set<Attempt<Request, Result>>();
   const owners = createSerialGate();
   let closing = false;
+  const assertCurrent = (attempt: Attempt<Request, Result>) => {
+    if (attempt.canceled || closing) throw invalid("Session launch was canceled.");
+  };
   const checkCanceled = (attempt: Attempt<Request, Result>) =>
     Effect.suspend(() =>
       attempt.canceled ? Effect.fail(invalid("Session launch was canceled.")) : Effect.void,
@@ -100,6 +104,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
       attempt.result.skipReason = reason;
     },
     checkCanceled: () => checkCanceled(attempt),
+    assertCurrent: () => assertCurrent(attempt),
     stopSession: (ref) =>
       Effect.suspend(() => {
         attempt.stopped = true;
@@ -112,6 +117,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
         const reply = yield* Effect.result(
           deps.runtime.sendUserMessage(input, {
+            assertCurrent: () => assertCurrent(attempt),
             onSent: () => {
               sent = true;
             },
@@ -121,13 +127,20 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           attempt.result.acceptedMessage = reply.success;
           return;
         }
-        if (reply.failure instanceof AgentSessionMessageAcceptedError)
-          attempt.result.acceptedMessage = reply.failure.failure.acceptedMessage;
-        else if (reply.failure instanceof AgentSessionCommandAcceptedError)
-          attempt.result.acceptedMessage = reply.failure.failure.acceptedCommand;
+        const failure =
+          reply.failure instanceof SessionOperationError ? reply.failure.cause : reply.failure;
+        if (
+          reply.failure instanceof SessionOperationError &&
+          reply.failure.observation.acceptedInput
+        )
+          attempt.result.acceptedMessage = reply.failure.observation.acceptedInput;
+        else if (failure instanceof AgentSessionMessageAcceptedError)
+          attempt.result.acceptedMessage = failure.failure.acceptedMessage;
+        else if (failure instanceof AgentSessionCommandAcceptedError)
+          attempt.result.acceptedMessage = failure.failure.acceptedCommand;
         else
           attempt.sendFailure =
-            !sent || reply.failure instanceof AgentSessionMessageRejectedError
+            !sent || failure instanceof AgentSessionMessageRejectedError
               ? { kind: "unsent", instruction }
               : { kind: "uncertain" };
         return yield* Effect.fail(reply.failure);
@@ -234,7 +247,8 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
       for (const attempt of active) {
         const target = attempt.session?.ref ?? attempt.target;
         if (
-          target?.runtimeKind === ref.runtimeKind &&
+          target?.repoPath === ref.repoPath &&
+          target.runtimeKind === ref.runtimeKind &&
           target.workingDirectory === ref.workingDirectory &&
           target.externalSessionId === ref.externalSessionId
         ) {

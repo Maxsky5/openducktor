@@ -14,7 +14,6 @@ import {
 import { toBoundRuntimeSessionRef } from "../support/session-runtime-ref";
 import {
   appendSendFailureNotice,
-  resumeStoppedSession,
   type SendAgentMessageDependencies,
   upsertAcceptedUserMessage,
 } from "./send-agent-message";
@@ -23,7 +22,7 @@ type MessageQueueActionDependencies = Pick<
   SendAgentMessageDependencies,
   "currentWorkspaceRepoPathRef" | "repoEpochRef" | "workspaceRepoPath"
 > & {
-  adapter: Pick<AgentEnginePort, "manageMessageQueue" | "resumeSession">;
+  adapter: Pick<AgentEnginePort, "manageMessageQueue">;
   messageQueues: Pick<AgentMessageQueuesStore, "apply">;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
@@ -32,12 +31,7 @@ type MessageQueueActionDependencies = Pick<
 export const createManageAgentMessageQueue =
   (dependencies: MessageQueueActionDependencies) =>
   async (identity: AgentSessionIdentity, action: AgentMessageQueueAction): Promise<void> => {
-    let session = requireLoadedSession(dependencies.readSessionSnapshot, identity);
-    // Resume and Steer now deliver a message, so a stopped session reattaches first, like a send.
-    if ((action.kind === "resume" || action.kind === "steer") && session.status === "stopped") {
-      await resumeStoppedSession(dependencies, session);
-      session = requireLoadedSession(dependencies.readSessionSnapshot, identity);
-    }
+    const session = requireLoadedSession(dependencies.readSessionSnapshot, identity);
     const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
     const target = toBoundRuntimeSessionRef(repoPath, session, "manage queued messages");
     try {

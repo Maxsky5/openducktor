@@ -1,0 +1,11 @@
+import { Effect } from "effect";
+import type { createSessionTurnPreparation } from "../session-turn-preparation";
+
+/** Policy and context fixture for tests of command sequencing, not catalog decisions. */
+export const commandPreparationFixture: ReturnType<typeof createSessionTurnPreparation> = {
+  context: (target) =>
+    Effect.succeed(target.sessionScope.kind === "workflow" ? "Current host context" : undefined),
+  promptOverrides: () => Effect.succeed({}),
+  steeringContent: () => Effect.void,
+  model: (_target, selection) => Effect.succeed({ kind: "keep", selection }),
+};

@@ -18,7 +18,14 @@ import {
 const mergeInput = {
   repoPath: "/repo",
   taskId: "task-1",
-  input: { mergeMethod: "merge_commit" as const },
+  input: {
+    mergeMethod: "merge_commit" as const,
+    expected: {
+      taskStatus: "ai_review" as const,
+      sourceBranch: "odt/task-1",
+      targetBranch: { remote: "origin", branch: "main" },
+    },
+  },
 };
 
 const createHarness = (
@@ -28,6 +35,7 @@ const createHarness = (
     output: "merged",
   }),
   publish = true,
+  recording: Effect.Effect<void> = Effect.void,
 ) => {
   const calls: unknown[] = [];
   const coordinator = createTaskSessionLifecycleCoordinator();
@@ -41,7 +49,10 @@ const createHarness = (
     gitPort: extendGitPort(
       createDirectMergeGitPort({
         calls,
-        currentBranches: { "/worktrees/repo/task-1": { name: "odt/task-1", detached: false } },
+        currentBranches: {
+          "/repo": { name: "main", detached: false, revision: "a".repeat(40) },
+          "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
+        },
       }),
       {
         suggestedSquashCommitMessage: () => Effect.succeed("Merge task"),
@@ -53,7 +64,11 @@ const createHarness = (
             targetAheadBehind: { ahead: 1, behind: 0 },
             upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
           }),
-        mergeBranch: () => Effect.sync(() => calls.push("merge")).pipe(Effect.andThen(mergeBranch)),
+        mergeBranch: (_repoPath, request) =>
+          Effect.sync(() => {
+            request.onWorkIssued?.();
+            calls.push("merge");
+          }).pipe(Effect.andThen(mergeBranch)),
       },
     ),
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
@@ -74,10 +89,14 @@ const createHarness = (
           agentSessions: [createAgentSessionRecord()],
         }),
       setDirectMerge: () =>
-        Effect.sync(() => {
-          calls.push("record");
-          return true;
-        }),
+        recording.pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              calls.push("record");
+              return true;
+            }),
+          ),
+        ),
       transitionTask: ({ status }) =>
         Effect.sync(() => {
           current = { ...current, status };
@@ -86,13 +105,48 @@ const createHarness = (
         }),
     },
   });
-  return { service, coordinator, calls };
+  return {
+    service,
+    coordinator,
+    calls,
+    mergeInput: {
+      ...mergeInput,
+      input: {
+        ...mergeInput.input,
+        expected: {
+          ...mergeInput.input.expected,
+          targetBranch: publish ? { remote: "origin", branch: "main" } : { branch: "main" },
+        },
+      },
+    },
+  };
 };
 
 describe("direct merge session guard", () => {
+  test("commits the confirmed native merge record when shutdown interrupts its settlement", async () => {
+    const recording = Deferred.makeUnsafe<void>();
+    const release = Deferred.makeUnsafe<void>();
+    const harness = createHarness(
+      () => Effect.succeed({ liveSessionCount: 0 }),
+      Effect.succeed({ outcome: "merged", output: "merged" }),
+      true,
+      Deferred.succeed(recording, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    );
+    const worker = Effect.runFork(harness.service.directMerge(harness.mergeInput));
+    await Effect.runPromise(Deferred.await(recording));
+    const interrupted = Effect.runPromise(Fiber.interrupt(worker));
+    Effect.runSync(Deferred.succeed(release, undefined));
+    await interrupted;
+    expect(harness.calls.filter((call) => call === "merge")).toHaveLength(1);
+    expect(harness.calls.filter((call) => call === "record")).toHaveLength(1);
+    await Effect.runPromise(
+      Effect.scoped(harness.coordinator.acquireLifecycle("/repo", ["task-1"], "next operation")),
+    );
+  });
+
   test("rejects a running task session before Git or task writes", async () => {
     const checked: unknown[] = [];
-    const { service, calls } = createHarness((input) =>
+    const { mergeInput, service, calls } = createHarness((input) =>
       Effect.sync(() => {
         checked.push(input);
         return { liveSessionCount: 1 };
@@ -121,7 +175,7 @@ describe("direct merge session guard", () => {
   });
 
   test("propagates a session check failure before Git mutation", async () => {
-    const { service, calls } = createHarness(() =>
+    const { mergeInput, service, calls } = createHarness(() =>
       Effect.fail(
         new HostOperationError({
           operation: "test.sessions",
@@ -138,7 +192,7 @@ describe("direct merge session guard", () => {
   test.each([true, false])(
     "allows idle sessions and completes with publish=%s",
     async (publish) => {
-      const { service } = createHarness(
+      const { service, mergeInput } = createHarness(
         () => Effect.succeed({ liveSessionCount: 0 }),
         undefined,
         publish,
@@ -150,6 +204,25 @@ describe("direct merge session guard", () => {
       });
     },
   );
+
+  test("an issued merge with no result cannot apply a second merge", async () => {
+    const { service, mergeInput, calls } = createHarness(
+      () => Effect.succeed({ liveSessionCount: 0 }),
+      Effect.fail(
+        new HostOperationError({
+          operation: "test.merge",
+          message: "Connection ended after dispatch",
+        }),
+      ),
+    );
+    await expect(Effect.runPromise(service.directMerge(mergeInput))).rejects.toThrow(
+      "Do not apply another merge",
+    );
+    await expect(Effect.runPromise(service.directMerge(mergeInput))).rejects.toThrow(
+      "original merge has no conclusive result",
+    );
+    expect(calls.filter((call) => call === "merge")).toHaveLength(1);
+  });
 
   test.each(["failure", "conflicts"])(
     "releases session exclusion after Git %s",
@@ -164,7 +237,7 @@ describe("direct merge session guard", () => {
               output: "Conflict",
               conflictedFiles: ["file.ts"],
             });
-      const { service, coordinator, calls } = createHarness(
+      const { mergeInput, service, coordinator, calls } = createHarness(
         () => Effect.succeed({ liveSessionCount: 0 }),
         merge,
       );
@@ -178,7 +251,7 @@ describe("direct merge session guard", () => {
   );
 
   test("rejects direct merge while session startup is in progress", async () => {
-    const { service, coordinator, calls } = createHarness(() =>
+    const { mergeInput, service, coordinator, calls } = createHarness(() =>
       Effect.succeed({ liveSessionCount: 0 }),
     );
     await Effect.runPromise(
@@ -199,7 +272,7 @@ describe("direct merge session guard", () => {
         Effect.gen(function* () {
           const entered = yield* Deferred.make<void>();
           const release = yield* Deferred.make<void>();
-          const { service, coordinator } = createHarness(
+          const { mergeInput, service, coordinator } = createHarness(
             () => Effect.succeed({ liveSessionCount: 0 }),
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(release)),
