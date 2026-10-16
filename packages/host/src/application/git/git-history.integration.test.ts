@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { GitHistoryPage, GitHistoryPageRequest } from "@openducktor/contracts";
@@ -67,16 +67,32 @@ const failure = async (promise: Promise<unknown>): Promise<string> => {
   throw new Error("Expected the History read to fail.");
 };
 
+let template = "";
+// Git process starts are slow on Windows runners, so the configured empty repository is made once
+// for the file. Each test copies it without a Git process.
+beforeAll(async () => {
+  template = await mkdtemp(path.join(tmpdir(), "git-history-template-"));
+  for (const args of [
+    ["init", "--initial-branch=main"],
+    ["config", "user.name", "History Test"],
+    ["config", "user.email", "history@example.invalid"],
+    ["config", "commit.gpgsign", "false"],
+  ]) {
+    execFileSync("git", args, { cwd: template, stdio: "ignore" });
+  }
+}, GIT_TEST_TIMEOUT_MS);
+
+afterAll(async () => {
+  await rm(template, { recursive: true, force: true });
+});
+
 beforeEach(async () => {
-  repo = await mkdtemp(path.join(tmpdir(), "git-history-"));
-  git(["init", "--initial-branch=main"]);
-  git(["config", "user.name", "History Test"]);
-  git(["config", "user.email", "history@example.invalid"]);
-  git(["config", "commit.gpgsign", "false"]);
+  repo = path.join(await mkdtemp(path.join(tmpdir(), "git-history-")), "repo");
+  await cp(template, repo, { recursive: true });
 });
 
 afterEach(async () => {
-  await rm(repo, { recursive: true, force: true });
+  await rm(path.dirname(repo), { recursive: true, force: true });
 });
 
 describe("branch history", () => {

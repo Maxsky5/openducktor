@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { GitChangeSelectionRequest, GitLocalChanges } from "@openducktor/contracts";
@@ -49,18 +49,34 @@ const failure = async (promise: Promise<unknown>): Promise<string> => {
   throw new Error("Expected the Git action to fail.");
 };
 
+let template = "";
+// Git process starts are slow on Windows runners, so the configured empty repository is made once
+// for the file. Each test copies it without a Git process.
+beforeAll(async () => {
+  template = await mkdtemp(path.join(tmpdir(), "git-local-changes-template-"));
+  for (const args of [
+    ["init", "--initial-branch=main"],
+    ["config", "user.name", "Local Changes Test"],
+    ["config", "user.email", "local@example.invalid"],
+    ["config", "commit.gpgsign", "false"],
+    // Windows runners convert line endings by default, and these tests compare exact bytes.
+    ["config", "core.autocrlf", "false"],
+  ]) {
+    execFileSync("git", args, { cwd: template, stdio: "ignore" });
+  }
+}, GIT_TEST_TIMEOUT_MS);
+
+afterAll(async () => {
+  await rm(template, { recursive: true, force: true });
+});
+
 beforeEach(async () => {
-  repo = await mkdtemp(path.join(tmpdir(), "git-local-changes-"));
-  git("init", "--initial-branch=main");
-  git("config", "user.name", "Local Changes Test");
-  git("config", "user.email", "local@example.invalid");
-  git("config", "commit.gpgsign", "false");
-  // Windows runners convert line endings by default, and these tests compare exact bytes.
-  git("config", "core.autocrlf", "false");
+  repo = path.join(await mkdtemp(path.join(tmpdir(), "git-local-changes-")), "repo");
+  await cp(template, repo, { recursive: true });
 });
 
 afterEach(async () => {
-  await rm(repo, { recursive: true, force: true });
+  await rm(path.dirname(repo), { recursive: true, force: true });
 });
 
 const commitBase = async () => {
