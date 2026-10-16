@@ -291,11 +291,57 @@ describe("Azure DevOps review adapter", () => {
     ]);
     expect(context.comments[0]).toMatchObject({
       author: "Ada",
+      authorAvatarUrl: "https://dev.azure.com/OpenDucktor/_apis/avatars/ada",
       createdAt: "2026-09-19T10:00:00Z",
       threadId: null,
       isResolved: null,
     });
     expect(context.reviewThreads.openCount).toBe(1);
+  });
+
+  test("credits a vote to the display name property when Azure attributes it to a service account", async () => {
+    const thread = voteThread(3, "10");
+    const context = await readLoadedContext({
+      threads: [
+        {
+          id: thread.id,
+          properties: {
+            CodeReviewThreadType: thread.properties.CodeReviewThreadType,
+            CodeReviewVoteResult: thread.properties.CodeReviewVoteResult,
+            CodeReviewVotedByDisplayName: { $type: "System.String", $value: "Grace" },
+          },
+          comments: [
+            {
+              id: 1,
+              content: "Grace voted 10",
+              commentType: "system",
+              author: {
+                displayName: "[DefaultCollection]\\Project Collection Service Accounts",
+                imageUrl: "https://dev.azure.com/OpenDucktor/_apis/avatars/service",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(context.comments).toMatchObject([
+      { source: "review", reviewOutcome: "approved", author: "Grace", authorAvatarUrl: null },
+    ]);
+  });
+
+  test("rejects a vote thread that does not identify the voter", async () => {
+    const thread = voteThread(3, "10");
+    const port = createAzureDevOpsReviewPort({
+      repositoryPort: reviewRepositoryPort,
+      client: reviewClient({ threads: [{ ...thread, identities: {} }] }),
+    });
+
+    const result = await Effect.runPromise(
+      Effect.flip(port.readContext({ repoConfig, linkedPullRequest: pullRequest })),
+    );
+
+    expect(result.message).toContain("vote thread 3 does not identify the voter");
   });
 
   test.each([
@@ -305,7 +351,10 @@ describe("Azure DevOps review adapter", () => {
     const thread = voteThread(3, "10");
     const properties =
       vote === null
-        ? { CodeReviewThreadType: thread.properties.CodeReviewThreadType }
+        ? {
+            CodeReviewThreadType: thread.properties.CodeReviewThreadType,
+            CodeReviewVotedByIdentity: thread.properties.CodeReviewVotedByIdentity,
+          }
         : {
             ...thread.properties,
             CodeReviewVoteResult: { $type: "System.String", $value: vote },
@@ -526,6 +575,10 @@ const voteThread = (id: number, vote: string) => ({
   properties: {
     CodeReviewThreadType: { $type: "System.String", $value: "VoteUpdate" },
     CodeReviewVoteResult: { $type: "System.String", $value: vote },
+    CodeReviewVotedByIdentity: { $type: "System.String", $value: "1" },
+  },
+  identities: {
+    "1": { displayName: "Ada", imageUrl: "https://dev.azure.com/OpenDucktor/_apis/avatars/ada" },
   },
   comments: [
     {

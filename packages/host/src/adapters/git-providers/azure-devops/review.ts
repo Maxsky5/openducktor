@@ -320,8 +320,10 @@ const voteActivities = (
       message: `Azure DevOps vote thread ${threadId} has unsupported vote value '${vote ?? "missing"}'.`,
     });
   }
+  const voter = readVoter(thread, threadId);
   return comments.map((comment) => ({
     ...commentActivityFields(comment, threadId, pullRequestUrl),
+    ...voter,
     source: "review",
     reviewOutcome: presentation.outcome,
     body: presentation.body,
@@ -332,6 +334,28 @@ const voteActivities = (
     threadId: null,
     isResolved: null,
   }));
+};
+
+// Azure DevOps Server sends the voter in `identities`. Azure DevOps Services can attribute the vote
+// comment to a service account and send only `CodeReviewVotedByDisplayName`.
+type AzureVoter = Pick<PullRequestReviewActivity, "author" | "authorAvatarUrl">;
+
+const readVoter = (thread: AzureDevOpsJsonRecord, threadId: string): AzureVoter => {
+  const identityKey = threadProperty(thread, "CodeReviewVotedByIdentity");
+  const identity =
+    identityKey === null ? null : optionalRecord(optionalRecord(thread.identities)?.[identityKey]);
+  const identityName = optionalString(identity?.displayName);
+  if (identityName !== null) {
+    return { author: identityName, authorAvatarUrl: optionalString(identity?.imageUrl) };
+  }
+  const displayName = threadProperty(thread, "CodeReviewVotedByDisplayName");
+  if (displayName !== null) {
+    return { author: displayName, authorAvatarUrl: null };
+  }
+  throw new HostValidationError({
+    field: "thread.properties.CodeReviewVotedByIdentity",
+    message: `Azure DevOps vote thread ${threadId} does not identify the voter.`,
+  });
 };
 
 const resolvedThreadStatus = (value: string | null): boolean | null => {
