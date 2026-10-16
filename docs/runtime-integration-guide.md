@@ -300,6 +300,8 @@ Live and loaded items use the same identity, role, order, time, completion, erro
 
 Feed thin native live and history readers into one projector. Use the public SDK or API for history. A history read does not resume the session, consume live events, discover pending input, or change live state.
 
+Claude can write title and queue records before a conversation entry supplies its working directory. Treat history without directory metadata as unavailable. Only a fresh session with active work can use its accepted live messages during this gap. Resumed, detached, and stopped sessions still report unavailable history. A known directory mismatch still fails the scope check.
+
 Use native fields to classify tool-result wrappers, synthetic messages, queue operations, command output, compaction, and child delivery. Do not classify them by displayed text or a regular expression.
 
 Use stable native IDs when present. Deduplicate by ID and lifecycle, not message text. Keep tool proposal, queue, execution, progress, and completion separate. Measure duration from native execution start. If history omits that point, omit duration.
