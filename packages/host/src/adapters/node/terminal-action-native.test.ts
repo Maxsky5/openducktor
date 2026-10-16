@@ -19,6 +19,7 @@ test
     "restart-set-e-line",
     "restart-setopt-line",
     "restart-finished",
+    "interrupt-finished",
     "hooks",
     "manual-exec",
     "manual-lists",

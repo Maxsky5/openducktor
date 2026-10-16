@@ -263,14 +263,15 @@ export const createTerminalSessionEngine = ({
           session.commandRun?.phase === "command" && !(data.byteLength === 1 && data[0] === 3)
             ? session.commandRun.lineIndex
             : null;
-        if (lineIndex !== null) yield* Effect.promise(() => session.screen.parsed());
         // Read the process in lane order: a command terminal replaces its process in this lane.
         return yield* session.operations.run(
-          Effect.suspend(() => {
-            if (session.inputOwner !== null) return Effect.fail(inputBlocked());
+          Effect.gen(function* () {
+            if (session.commandRun?.phase === "command")
+              yield* Effect.promise(() => session.screen.parsed());
+            if (session.inputOwner !== null) return yield* Effect.fail(inputBlocked());
             const handle = session.resources.handle;
             if (!handle || !isLiveTerminal(session))
-              return Effect.fail(
+              return yield* Effect.fail(
                 terminalFailure(
                   "terminal_not_found",
                   "write",
@@ -283,7 +284,7 @@ export const createTerminalSessionEngine = ({
               session.commandRun?.phase === "command" &&
               lineIndex !== session.commandRun.lineIndex
             )
-              return Effect.fail(
+              return yield* Effect.fail(
                 terminalFailure(
                   "invalid_input",
                   "write",
@@ -293,7 +294,7 @@ export const createTerminalSessionEngine = ({
               );
             if (session.commandRun?.phase === "command" && data.includes(3))
               session.commandRun.stopRequested = true;
-            return handle
+            return yield* handle
               .write(data)
               .pipe(
                 Effect.mapError((cause) =>

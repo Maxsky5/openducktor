@@ -2,7 +2,7 @@ import {
   checkRestart,
   checkSetupRestart,
   checkErrExitRestart,
-  checkFinishedRestart,
+  checkFinishedInput,
 } from "./terminal-restart-native.fixture";
 import { checkHooks } from "./terminal-hooks-native.fixture";
 import { checkSubmit } from "./terminal-submit-native.fixture";
@@ -106,7 +106,8 @@ const cases = new Map([
   ["restart-err-exit-manual", () => checkErrExitRestart(fixture, "err-exit-manual")],
   ["restart-set-e-line", () => checkErrExitRestart(fixture, "set-e-line")],
   ["restart-setopt-line", () => checkErrExitRestart(fixture, "setopt-line")],
-  ["restart-finished", () => checkFinishedRestart(fixture)],
+  ["restart-finished", () => checkFinishedInput(fixture, "restart")],
+  ["interrupt-finished", () => checkFinishedInput(fixture, "interrupt")],
   ["hooks", () => checkHooks(fixture)],
   ["manual-exec", () => checkManual("exec")],
   ["manual-lists", () => checkManual("lists")],

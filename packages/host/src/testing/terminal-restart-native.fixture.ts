@@ -172,15 +172,22 @@ export async function checkErrExitRestart(
   await wait(() => outputs.get(id)!.split("SETUP_READY\r\n").length === 4);
 }
 
-export async function checkFinishedRestart(fixture: TerminalNativeFixture) {
-  const { start, write, wait, activities, outputs, inputs, engine } = fixture;
+export async function checkFinishedInput(
+  fixture: TerminalNativeFixture,
+  input: "restart" | "interrupt",
+) {
+  const { root, start, write, wait, activities, outputs, inputs, engine } = fixture;
   const setupCommand = await inputCommand(fixture);
-  const finished = await start("finished", [setupCommand]);
-  await wait(
-    () =>
-      activities.get("finished")?.restartable === true &&
-      outputs.get("finished")!.includes("SETUP_READY\r\n"),
+  const finished = await start(
+    "finished",
+    [setupCommand],
+    root,
+    input === "interrupt" ? "host" : "user",
   );
+  await wait(
+    () => activities.has("finished") && outputs.get("finished")!.includes("SETUP_READY\r\n"),
+  );
+  if (input === "restart") assert.equal(activities.get("finished")?.restartable, true);
   let request: Promise<string | null> | null = null;
   let stale = false;
   let completion = "";
@@ -193,9 +200,13 @@ export async function checkFinishedRestart(fixture: TerminalNativeFixture) {
         if (event.type !== "output" || event.replay || request !== null) return;
         completion += new TextDecoder().decode(data);
         if (!completion.split("\u001b]633;D;")[1]?.includes("\u0007")) return;
-        stale = activities.get("finished")?.restartable === true;
-        request = Effect.runPromise(Effect.result(engine.restart("finished", setupCommand))).then(
-          (result) => (result._tag === "Failure" ? result.failure.message : null),
+        stale = activities.has("finished");
+        const operation =
+          input === "restart"
+            ? engine.restart("finished", setupCommand)
+            : engine.write("finished", new Uint8Array([3]));
+        request = Effect.runPromise(Effect.result(operation)).then((result) =>
+          result._tag === "Failure" ? result.failure.message : null,
         );
       },
     }),
@@ -204,8 +215,12 @@ export async function checkFinishedRestart(fixture: TerminalNativeFixture) {
   await write("finished", "done\r");
   await wait(() => request !== null);
   assert.equal(stale, true);
-  assert.match((await request!) ?? "", /no command that can restart/u);
-  assert.deepEqual(inputs.get("finished")!.slice(count), ["done\r"]);
+  if (input === "restart") assert.match((await request!) ?? "", /no command that can restart/u);
+  else assert.equal(await request!, null);
+  assert.deepEqual(
+    inputs.get("finished")!.slice(count),
+    input === "restart" ? ["done\r"] : ["done\r", "\u0003"],
+  );
   const result = await Effect.runPromise(finished.result.pipe(Effect.timeout("2 seconds")));
   assert.equal(result.type === "exited" && result.exitCode, 0);
 }
