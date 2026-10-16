@@ -209,7 +209,7 @@ function posixHooks(nonce: string, zsh = false): string {
     `  local line="\${1:0:${markerBytes}}" char code index restart=0`,
     ...(zsh
       ? [
-          `  (( \${#1} <= ${markerBytes} )) && [[ -o zle ]] && restart=1`,
+          `  (( \${#1} <= ${markerBytes} )) && [[ -o zle && ! -o errexit ]] && restart=1`,
           '  local word input="${3-$1}"',
           "  if (( restart )); then",
           '    for word in "${(@z)input}"; do',

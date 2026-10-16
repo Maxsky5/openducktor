@@ -330,6 +330,47 @@ async function checkRestart() {
   await Effect.runPromise(engine.restart("setup", activities.get("setup")!.command));
   await wait(() => outputs.get("setup")!.split("SERVER_READY\r\n").length === 3);
 
+  const setupCommand = formatTerminalPathInput(shell, [process.execPath, setupScript]);
+  for (const manual of [false, true]) {
+    const id = manual ? "err-exit-manual" : "err-exit-action";
+    const action = await start(id, manual ? ["true"] : ["set -e", setupCommand]);
+    if (manual) {
+      await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+      await write(id, "set -e\r");
+      await wait(() => outputs.get(id)!.split("\u001b]633;R;").length >= 4);
+      await write(id, `${setupCommand}\r`);
+    }
+    await wait(() => outputs.get(id)!.includes("SETUP_READY\r\n"));
+    assert.equal(activities.get(id)?.restartable, false);
+    const count = inputs.get(id)!.length;
+    const refused = await Effect.runPromise(
+      Effect.result(engine.restart(id, activities.get(id)!.command)),
+    );
+    assert.ok(refused._tag === "Failure");
+    assert.ok(refused.failure.message.includes("no command that can restart"));
+    assert.equal(inputs.get(id)!.length, count);
+    assert.equal(
+      engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+      "running",
+    );
+    assert.ok(!outputs.get(id)!.includes("SETUP_INTERRUPTED\r\n"));
+    const prompts = outputs.get(id)!.split("\u001b]633;R;").length;
+    await write(id, "done\r");
+    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts);
+    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    assert.equal(result.type === "exited" && result.exitCode, 0);
+    await write(id, "unsetopt ERR_EXIT\r");
+    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts + 1);
+    await write(id, `${setupCommand}\r`);
+    await wait(
+      () =>
+        activities.get(id)?.restartable === true &&
+        outputs.get(id)!.split("SETUP_READY\r\n").length === 3,
+    );
+    await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
+    await wait(() => outputs.get(id)!.split("SETUP_READY\r\n").length === 4);
+  }
+
   const actionRoot = join(root, "action's root");
   await mkdir(join(actionRoot, "target"), { recursive: true });
   const longCommand = `ODT_LONG_ACTION='${"xé🙂".repeat(200)}' ${command}`;
