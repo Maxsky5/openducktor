@@ -1,0 +1,171 @@
+import assert from "node:assert/strict";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { Effect } from "effect";
+import { formatTerminalPathInput } from "../application/terminals/terminal-path-input";
+import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
+
+export async function checkRestart({
+  root,
+  shell,
+  start,
+  write,
+  wait,
+  activities,
+  outputs,
+  inputs,
+  engine,
+  serverCommand,
+  readScreen,
+}: TerminalNativeFixture) {
+  const command = await serverCommand();
+  const setupScript = join(root, "setup.cjs");
+  await writeFile(
+    setupScript,
+    'process.on("SIGINT", () => { console.log("SETUP_INTERRUPTED"); process.exit(130); }); process.stdin.once("data", () => process.exit(0)); console.log("SETUP_READY"); process.stdin.resume();',
+  );
+  const setup = await start(
+    "setup",
+    [formatTerminalPathInput(shell, [process.execPath, setupScript])],
+    root,
+    "host",
+  );
+  await wait(() => outputs.get("setup")!.includes("SETUP_READY\r\n"));
+  assert.equal(activities.get("setup")?.restartable, false);
+  const refused = await Effect.runPromise(
+    Effect.result(engine.restart("setup", activities.get("setup")!.command)),
+  );
+  assert.equal(refused._tag, "Failure");
+  assert.ok(refused._tag === "Failure" && refused.failure.message.includes("setup"));
+  await write("setup", "done\r");
+  const setupResult = await Effect.runPromise(setup.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(setupResult.type === "exited" && setupResult.exitCode, 0);
+  assert.ok(!outputs.get("setup")!.includes("SETUP_INTERRUPTED\r\n"));
+  await write("setup", `cd . && ${command}\r`);
+  await wait(
+    () =>
+      activities.get("setup")?.restartable === true &&
+      outputs.get("setup")!.includes("SERVER_READY\r\n"),
+  );
+  await Effect.runPromise(engine.restart("setup", activities.get("setup")!.command));
+  await wait(() => outputs.get("setup")!.split("SERVER_READY\r\n").length === 3);
+
+  const setupCommand = formatTerminalPathInput(shell, [process.execPath, setupScript]);
+  for (const [id, manual, lines] of [
+    ["err-exit-action", false, ["set -e", setupCommand]],
+    ["err-exit-manual", true, ["true"]],
+    ["set-e-line", false, ["true", `set -e; ${setupCommand}`]],
+    ["setopt-line", false, ["true", `setopt ERR_EXIT; ${setupCommand}`]],
+  ] as const) {
+    const action = await start(id, [...lines]);
+    if (manual) {
+      await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+      await write(id, "set -e\r");
+      await wait(() => outputs.get(id)!.split("\u001b]633;R;").length >= 4);
+      await write(id, `${setupCommand}\r`);
+    }
+    await wait(
+      () =>
+        outputs.get(id)!.includes("SETUP_READY\r\n") &&
+        activities.get(id)?.command === (manual ? setupCommand : lines.at(-1)),
+    );
+    assert.equal(activities.get(id)?.restartable, false);
+    const count = inputs.get(id)!.length;
+    const refused = await Effect.runPromise(
+      Effect.result(engine.restart(id, activities.get(id)!.command)),
+    );
+    assert.ok(refused._tag === "Failure");
+    assert.ok(refused.failure.message.includes("no command that can restart"));
+    assert.equal(inputs.get(id)!.length, count);
+    assert.equal(
+      engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+      "running",
+    );
+    assert.ok(!outputs.get(id)!.includes("SETUP_INTERRUPTED\r\n"));
+    const prompts = outputs.get(id)!.split("\u001b]633;R;").length;
+    await write(id, "done\r");
+    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts);
+    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    assert.equal(result.type === "exited" && result.exitCode, 0);
+    await write(id, "unsetopt ERR_EXIT\r");
+    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts + 1);
+    await write(id, `${setupCommand}\r`);
+    await wait(
+      () =>
+        activities.get(id)?.restartable === true &&
+        outputs.get(id)!.split("SETUP_READY\r\n").length === 3,
+    );
+    await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
+    await wait(() => outputs.get(id)!.split("SETUP_READY\r\n").length === 4);
+  }
+
+  const actionRoot = join(root, "action's root");
+  await mkdir(join(actionRoot, "target"), { recursive: true });
+  const longCommand = `ODT_LONG_ACTION='${"xé🙂".repeat(200)}' ${command}`;
+  await start("restart", ["cd target", "export ODT_VALUE=kept", longCommand], actionRoot);
+  await wait(
+    () =>
+      activities.get("restart")?.restartable === true &&
+      outputs.get("restart")!.includes("SERVER_READY\r\n"),
+  );
+  for (const starts of [2, 3]) {
+    await Effect.runPromise(engine.restart("restart", activities.get("restart")!.command));
+    assert.equal(
+      inputs.get("restart")!.at(-1),
+      `\u001b[200~${longCommand}\u001b[201~\r`,
+      "Restart must send the full direct command",
+    );
+    await wait(
+      () =>
+        activities.get("restart")?.restartable === true &&
+        outputs.get("restart")!.split("SERVER_READY\r\n").length === starts + 1,
+    );
+  }
+  const screen = await readScreen("restart");
+  assert.ok(
+    !screen.some((line) => line.includes("builtin eval") || line.includes("builtin cd --")),
+  );
+  const output = outputs.get("restart")!;
+  assert.deepEqual(output.match(/SERVER_(?:READY|STOPPING|STOPPED)\r\n/gu), [
+    "SERVER_READY\r\n",
+    "SERVER_STOPPING\r\n",
+    "SERVER_STOPPED\r\n",
+    "SERVER_READY\r\n",
+    "SERVER_STOPPING\r\n",
+    "SERVER_STOPPED\r\n",
+    "SERVER_READY\r\n",
+  ]);
+  const serverDirectory = await realpath(join(actionRoot, "target"));
+  assert.equal(output.split(`SERVER_CWD=${serverDirectory}\r\n`).length, 4);
+
+  const cancelled = await start("cancel", [command, "print SHOULD_NOT_RUN"]);
+  await wait(() => outputs.get("cancel")!.includes("SERVER_READY\r\n"));
+  await write("cancel", "\u0003");
+  const cancelledResult = await Effect.runPromise(
+    cancelled.result.pipe(Effect.timeout("2 seconds")),
+  );
+  assert.ok(cancelledResult.type === "exited");
+  assert.ok(cancelledResult.exitCode === 0 || cancelledResult.exitCode === 130);
+  assert.equal(
+    inputs.get("cancel")!.some((input) => input.includes("SHOULD_NOT_RUN")),
+    false,
+  );
+  await write("cancel", "\u001b[A\r");
+  await wait(() => outputs.get("cancel")!.split("SERVER_READY\r\n").length === 3);
+
+  const replaced = await start("exec", [`exec ${command}`]);
+  await wait(() => outputs.get("exec")!.includes("SERVER_READY\r\n"));
+  assert.equal(activities.get("exec")?.restartable, false);
+  await write("exec", "\u0003");
+  const replacedResult = await Effect.runPromise(replaced.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(replacedResult.type === "exited" && replacedResult.exitCode, 0);
+  assert.equal(
+    engine.list({ kind: "all" }).find((item) => item.terminalId === "exec")?.lifecycle,
+    "exited",
+  );
+
+  const closing = await start("close", [command]);
+  await wait(() => outputs.get("close")!.includes("SERVER_READY\r\n"));
+  await Effect.runPromise(engine.close("close", true));
+  assert.equal((await Effect.runPromise(closing.result)).type, "closed");
+}

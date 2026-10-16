@@ -214,7 +214,7 @@ function posixHooks(nonce: string, zsh = false): string {
           "  if (( restart )); then",
           '    for word in "${(@z)input}"; do',
           '      case "${(Q)word}" in',
-          "        exec|exit|logout) restart=0; break;;",
+          "        exec|exit|logout|set|setopt) restart=0; break;;",
           "      esac",
           "    done",
           "  fi",

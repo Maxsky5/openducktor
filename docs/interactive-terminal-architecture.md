@@ -87,7 +87,7 @@ On Windows, ComSpec must be `cmd.exe`, or the command fails with `unsupported_sh
 
 ## Restart a running command
 
-The Restart button in the tab header uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Restart stays hidden if `ERR_EXIT` is enabled when the command starts. The shell reports the actual command accepted by ZLE, within the 64 KiB terminal input limit. Commands with the words `exec`, `exit`, or `logout` cannot restart, including when a word is an argument.
+The Restart button in the tab header uses the activity stream to offer Restart for running zsh commands with complete input and authenticated completion hooks. Restart stays hidden if `ERR_EXIT` is enabled when the command starts. The shell reports the actual command accepted by ZLE, within the 64 KiB terminal input limit. Commands with the words `exec`, `exit`, `logout`, `set`, or `setopt` cannot restart, including when a word is an argument.
 
 Host-started Actions cannot restart during their first run because setup can wait for that result. Later manual commands can restart.
 
