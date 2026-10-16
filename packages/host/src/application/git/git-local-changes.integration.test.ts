@@ -668,6 +668,20 @@ describe("local changes", () => {
     GIT_TEST_TIMEOUT_MS,
   );
 
+  // Linux keeps the bytes of a file name. macOS and Windows keep only Unicode names.
+  test.skipIf(process.platform !== "linux")(
+    "names the step to take for a file whose name is not UTF-8 text",
+    async () => {
+      await commitBase();
+      await writeFile(Buffer.from(path.join(repo, "bad-\xff.txt"), "latin1"), "bad\n");
+
+      expect(await failure(localChanges())).toContain(
+        "whose name is not UTF-8 text. Rename the file to a UTF-8 name, then refresh.",
+      );
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
   test(
     "deletes a discarded untracked file",
     async () => {

@@ -45,7 +45,7 @@ import {
   parseAheadBehind,
   listBranchesUnchecked,
   parseRemoteNames,
-  readStatusPorcelain,
+  readLocalChangesStatusPorcelain,
 } from "../../infrastructure/git/git-status";
 import {
   abortConflict,
@@ -186,7 +186,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
       });
   const status = captured(captureStatus, (dir) => getStatusUnchecked(runner, dir));
   const branch = captured(captureBranch, (dir) => getCurrentBranchUnchecked(runner, dir));
-  const statusOutput = captured(captureStatusOutput, (dir) => readStatusPorcelain(runner, dir));
+  const statusOutput = captured(captureStatusOutput, (dir) =>
+    readLocalChangesStatusPorcelain(runner, dir),
+  );
   return {
     releaseReadCaptures: () =>
       Effect.sync(() => {

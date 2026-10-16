@@ -7,7 +7,13 @@ import type {
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { GitFileStatus } from "../../ports/git-port";
-import { type GitCommandRunner, runGit, runGitAllowFailure } from "./git-command-runner";
+import {
+  GIT_OUTPUT_ENCODING_FIELD,
+  type GitCommandRunner,
+  runGit,
+  runGitAllowFailure,
+  runGitStrictUtf8,
+} from "./git-command-runner";
 
 const unmergedStatusPairs = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
@@ -193,14 +199,37 @@ export const getCurrentBranchUnchecked = (runner: GitCommandRunner, workingDirec
  * Rename detection does not follow `status.renames`, so the status and the diff reads of the local
  * changes pair the same rename paths. A file action on a rename then changes both of its paths.
  */
-export const readStatusPorcelain = (runner: GitCommandRunner, workingDirectory: string) =>
-  runGit(runner, workingDirectory, [
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all",
-    "--find-renames",
-  ]);
+const STATUS_PORCELAIN_ARGS = [
+  "status",
+  "--porcelain=v1",
+  "-z",
+  "--untracked-files=all",
+  "--find-renames",
+];
+const readStatusPorcelain = (runner: GitCommandRunner, workingDirectory: string) =>
+  runGit(runner, workingDirectory, STATUS_PORCELAIN_ARGS);
+
+/**
+ * The status read of the local changes. Their actions send the listed paths back to Git, and a
+ * name that is not UTF-8 text would come back as another path. So that name fails here with the
+ * step to take.
+ */
+export const readLocalChangesStatusPorcelain = (
+  runner: GitCommandRunner,
+  workingDirectory: string,
+) =>
+  runGitStrictUtf8(runner, workingDirectory, STATUS_PORCELAIN_ARGS).pipe(
+    Effect.catchIf(
+      (error) => error instanceof HostValidationError && error.field === GIT_OUTPUT_ENCODING_FIELD,
+      () =>
+        Effect.fail(
+          new HostValidationError({
+            message: `Git lists a file in ${workingDirectory} whose name is not UTF-8 text. Rename the file to a UTF-8 name, then refresh.`,
+            field: "fileName",
+          }),
+        ),
+    ),
+  );
 /** Commits must not stage or record a path that still has an unresolved conflict. */
 export const requireNoUnmergedPaths = (runner: GitCommandRunner, workingDirectory: string) =>
   Effect.gen(function* () {
