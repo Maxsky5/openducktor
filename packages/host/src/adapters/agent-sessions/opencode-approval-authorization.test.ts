@@ -48,10 +48,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
         ...["odt_set_spec", "odt_set_plan"].map((permission) => ({
           permission,
           mutation: "mutating" as const,
-          allowed:
-            role === "build" ||
-            (role === "spec" && permission === "odt_set_spec") ||
-            (role === "planner" && permission === "odt_set_plan"),
+          allowed: role === "build" || permittedWrite[role] === permission,
         })),
         {
           permission: role === "build" ? "odt_qa_approved" : "odt_build_completed",

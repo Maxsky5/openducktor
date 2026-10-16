@@ -26,23 +26,6 @@ type WorkflowDocumentTarget = {
   inputKey: "markdown" | "reportMarkdown";
 };
 
-const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
-  loadedSession,
-  workflowAliasMetadataReady,
-  previousWorkflowAliasMetadataReady,
-}: {
-  loadedSession: AgentSessionState | null;
-  workflowAliasMetadataReady: boolean;
-  previousWorkflowAliasMetadataReady: boolean;
-}): boolean => {
-  return Boolean(
-    loadedSession &&
-    isWorkflowAgentSession(loadedSession) &&
-    workflowAliasMetadataReady &&
-    !previousWorkflowAliasMetadataReady,
-  );
-};
-
 const resolveWorkflowDocumentTarget = (
   normalizedTool: string | null,
   docs: {
@@ -127,11 +110,10 @@ export function useAgentStudioDocuments({
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
     if (
-      shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady({
-        loadedSession,
-        workflowAliasMetadataReady,
-        previousWorkflowAliasMetadataReady,
-      })
+      loadedSession &&
+      isWorkflowAgentSession(loadedSession) &&
+      workflowAliasMetadataReady &&
+      !previousWorkflowAliasMetadataReady
     ) {
       previousMessagesRef.current = null;
     }
