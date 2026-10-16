@@ -465,6 +465,33 @@ describe("useAgentStudioDocuments", () => {
     },
   );
 
+  test("keeps saved documents when Builder history has no completion timestamp", async () => {
+    setTaskDocumentsState({
+      planDoc: createDocumentState({
+        markdown: "# Latest plan",
+        updatedAt: "2026-02-22T09:00:00.000Z",
+      }),
+    });
+    const session = createAgentSessionFixture({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      messages: [
+        createCompletedToolMessage({
+          tool: "odt_set_plan",
+          input: { markdown: "# Old plan" },
+          output: "done",
+        }),
+      ],
+    });
+    const harness = createHookHarness(createArgsForSelectedSession(session));
+    try {
+      await harness.mount();
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+      expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("dedupes completed tool refreshes for the same message across rerenders", async () => {
     const toolMessage = createCompletedToolMessage({
       id: "message-dedupe",

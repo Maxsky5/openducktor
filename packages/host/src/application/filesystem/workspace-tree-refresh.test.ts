@@ -395,12 +395,14 @@ describe("workspace tree refresh", () => {
         runner: createDefaultGitRunner(() => process.env, { command: "git" }),
       });
       const context = await Effect.runPromise(git.getFileTreeContext(root));
+      const repositoryRoot = await Effect.runPromise(git.getRepositoryRoot(root));
       let modified = false,
         projections = 0;
       const inventory = [{ path: "stable.txt", kind: "file" as const }];
       const service = createWorkspaceFilesService(createFilesystemAdapter(), {
         ...git,
         getFileTreeContext: () => Effect.succeed(context),
+        getRepositoryRoot: () => Effect.succeed(repositoryRoot),
         listFiles: () => Effect.succeed(inventory),
         listFileRegions: (_root, regions) => {
           projections += 1;

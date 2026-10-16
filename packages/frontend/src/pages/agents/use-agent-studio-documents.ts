@@ -167,7 +167,7 @@ export function useAgentStudioDocuments({
       let effectiveUpdatedAtTimestamp = target.state.updatedAt
         ? parseTimestamp(target.state.updatedAt)
         : null;
-      if (hasInputMarkdown) {
+      if (hasInputMarkdown && (completionInfo !== null || !target.state.markdown.trim())) {
         const shouldApplyOptimisticDocument =
           target.state.markdown.trim() !== inputMarkdown.trim() ||
           (completionInfo !== null &&
