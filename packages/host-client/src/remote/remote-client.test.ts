@@ -139,6 +139,89 @@ test("applies a finite synchronization barrier and canonicalizes manual addresse
   }
 });
 
+test.each(["recovery read", "host restart"])(
+  "releases the admission after a failed %s",
+  async (stage) => {
+    const f = fixture();
+    f.setMutation(async () => json({ error: "The workspace is no longer available." }, 503));
+    if (stage === "host restart") {
+      const request = f.transport.request;
+      f.transport.request = async (...args) => {
+        const response = await request(...args);
+        if (args[1].endsWith("/connections"))
+          return json({
+            status: "accepted",
+            host: { ...descriptor, hostInstanceId: "restarted-host" },
+            connectionId: crypto.randomUUID(),
+            protocolVersion: 1,
+            missingOptionalCapabilities: [],
+          });
+        return response;
+      };
+    }
+    const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {
+      await remote.client.workspaceGetSettingsSnapshot();
+    });
+    try {
+      const failure = await remote.connect().catch((cause: unknown) => cause);
+      expect(failure).toMatchObject({
+        failure: { code: stage === "host restart" ? "unavailable" : "synchronization_failed" },
+      });
+      expect(f.requests).toContain("DELETE https://host.example/connections/current");
+    } finally {
+      await remote.disconnect();
+    }
+  },
+);
+
+test("a file transfer can outlast its completed setup deadline", async () => {
+  const f = fixture();
+  const started = latch<void>();
+  const finish = latch<void>();
+  const nativeSetTimeout = globalThis.setTimeout;
+  const nativeClearTimeout = globalThis.clearTimeout;
+  const deadlines = new Map<ReturnType<typeof setTimeout>, () => void>();
+  const timers = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    const timer = nativeSetTimeout(callback, delay, ...args);
+    if (delay === 10_000) deadlines.set(timer, () => callback(...args));
+    return timer;
+  });
+  const clears = spyOn(globalThis, "clearTimeout").mockImplementation((timer) => {
+    if (timer !== undefined) deadlines.delete(timer);
+    nativeClearTimeout(timer);
+  });
+  const request = f.transport.request;
+  f.transport.request = async (...args) => {
+    if (!args[1].includes("/local-attachment-preview")) return request(...args);
+    return {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: (async function* () {
+        started.resolve();
+        await finish.promise;
+        yield encoder.encode("file contents");
+      })(),
+    };
+  };
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  try {
+    await remote.connect();
+    const result = remote
+      .readStagedPreview("file.txt", new AbortController().signal)
+      .catch((cause: unknown) => cause);
+    await started.promise;
+    for (const expire of deadlines.values()) expire();
+    finish.resolve();
+    expect(await result).toMatchObject({ bytes: encoder.encode("file contents") });
+  } finally {
+    finish.resolve();
+    await remote.disconnect();
+    for (const timer of deadlines.keys()) nativeClearTimeout(timer);
+    timers.mockRestore();
+    clears.mockRestore();
+  }
+});
+
 test.each(["idle", "synchronizing", "disconnected"])(
   "%s state listener errors leave connection and recovery intact",
   async (status) => {

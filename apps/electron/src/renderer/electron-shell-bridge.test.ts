@@ -1,15 +1,21 @@
+import { DEFAULT_AGENT_RUNTIMES, settingsSnapshotSchema } from "@openducktor/contracts";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   AgentSessionLiveSnapshotEnvelope,
   ExternalTaskSyncEvent,
   TaskEventCursor,
 } from "@openducktor/contracts";
-import { HostInvokeError, HostTerminalClientError } from "@openducktor/host-client";
+import {
+  createHostClient,
+  HostInvokeError,
+  HostTerminalClientError,
+} from "@openducktor/host-client";
 import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
   createElectronShellBridge,
+  withElectronNativeTheme,
   ElectronPreloadBridgeUnavailableError,
 } from "./electron-shell-bridge";
 
@@ -559,3 +565,35 @@ describe("electron shell bridge", () => {
     });
   });
 });
+
+test.each(["read", "write"])(
+  "remote theme %s updates local chrome only after host success",
+  async (action) => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let failure: Error | null = null;
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "dark",
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    });
+    const host = createHostClient(async (command, _args, schema) => {
+      await pending;
+      if (failure) throw failure;
+      return schema.parse(command === "workspace_get_settings_snapshot" ? snapshot : undefined);
+    });
+    const applyTheme = mock(async () => {});
+    const client = withElectronNativeTheme(host, applyTheme);
+    const run = () =>
+      action === "read" ? client.workspaceGetSettingsSnapshot() : client.setTheme("dark");
+    const result = run();
+    expect(applyTheme).not.toHaveBeenCalled();
+    finish();
+    await result;
+    expect(applyTheme).toHaveBeenCalledWith("dark");
+    failure = new Error("The host refused the command.");
+    expect(await run().catch((cause: unknown) => cause)).toBe(failure);
+    expect(applyTheme).toHaveBeenCalledTimes(1);
+  },
+);

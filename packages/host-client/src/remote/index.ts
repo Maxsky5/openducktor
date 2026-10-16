@@ -126,7 +126,7 @@ export const createRemoteHostClient = (
       );
     return { [REMOTE_CONNECTION_HEADER]: connectionId };
   };
-  /** Host commands can outlive setup deadlines. Live streams only need a setup deadline. */
+  /** Host commands can outlive setup deadlines. Streams and files only need a setup deadline. */
   const request = async (
     method: "GET" | "POST" | "DELETE",
     path: string,
@@ -245,8 +245,10 @@ export const createRemoteHostClient = (
   const lost = (current: number, cause: unknown) => {
     if (generation !== current || owner?.signal.aborted) return;
     const error = connectionError(cause);
+    const id = connectionId;
     owner?.abort(error);
     connectionId = null;
+    if (id) void release(id);
     publish(canRetry(error) ? "disconnected" : "failed", error.failure);
     if (canRetry(error)) schedule();
   };
@@ -286,6 +288,8 @@ export const createRemoteHostClient = (
           );
         const accepted = acceptedResult.data;
         if (accepted.status === "rejected") throw new RemoteConnectionError(accepted.failure);
+        abort.signal.throwIfAborted();
+        connectionId = accepted.connectionId;
         if (accepted.host.hostInstanceId !== discovered.hostInstanceId)
           throw remoteError(
             "unavailable",
@@ -308,7 +312,6 @@ export const createRemoteHostClient = (
             "Update the host to implement its advertised remote contract.",
           );
         abort.signal.throwIfAborted();
-        connectionId = accepted.connectionId;
         state = { ...state, host: accepted.host };
         if (previousHostInstanceId !== accepted.host.hostInstanceId) cursor = null;
         const replay = deferred<BrowserReplayComplete>();
@@ -428,7 +431,7 @@ export const createRemoteHostClient = (
     if (!connectionId && pending) await waitWithAbort(pending, combined);
     combined.throwIfAborted();
     currentConnection();
-    const response = await request("GET", path, combined);
+    const response = await request("GET", path, combined, undefined, true, true);
     return { bytes: await readBytes(response, combined), headers: response.headers };
   };
   /** Stop local delivery at once; host release uses its own bounded signal. */
@@ -443,21 +446,22 @@ export const createRemoteHostClient = (
     pending = null;
     oldOwner?.abort();
     publish("idle");
-    if (id) {
-      const signal = AbortSignal.timeout(SETUP_TIMEOUT_MS);
-      try {
-        await waitWithAbort(
-          transport.request(
-            "DELETE",
-            `${base}/connections/current`,
-            { [REMOTE_CONNECTION_HEADER]: id },
-            signal,
-          ),
+    if (id) await release(id);
+  };
+  const release = async (id: string) => {
+    const signal = AbortSignal.timeout(SETUP_TIMEOUT_MS);
+    try {
+      await waitWithAbort(
+        transport.request(
+          "DELETE",
+          `${base}/connections/current`,
+          { [REMOTE_CONNECTION_HEADER]: id },
           signal,
-        );
-      } catch {
-        // Local cleanup does not depend on the host reply.
-      }
+        ),
+        signal,
+      );
+    } catch {
+      // Local cleanup does not depend on the host reply.
     }
   };
   const disconnect = () => {
