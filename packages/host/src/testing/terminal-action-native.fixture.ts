@@ -64,6 +64,7 @@ const engine = createTerminalSessionEngine({
 });
 const activities = new Map<string, TerminalActivity>();
 const outputs = new Map<string, string>();
+const failures = new Map<string, string>();
 const stop = engine.observeActivity((message) => {
   if (message.type === "activity_updated")
     activities.set(message.activity.summary.terminalId, message.activity);
@@ -75,6 +76,7 @@ const fixture = {
   engine,
   activities,
   outputs,
+  failures,
   inputs,
   screens,
   start,
@@ -173,6 +175,7 @@ async function start(
       attachmentId: id,
       lastConsumedSequence: 0,
       sink: (event, data) => {
+        if (event.type === "protocol_error") failures.set(id, event.failure.message);
         if (event.type === "output") {
           screens.get(id)!.write(data, () => {});
           outputs.set(id, outputs.get(id)! + new TextDecoder().decode(data));

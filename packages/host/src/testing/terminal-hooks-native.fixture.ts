@@ -9,9 +9,12 @@ export async function checkHooks({
   engine,
   activities,
   outputs,
+  failures,
+  inputs,
   start,
   write,
   wait,
+  readScreen,
   serverCommand,
 }: TerminalNativeFixture) {
   const command = await serverCommand();
@@ -74,6 +77,35 @@ export async function checkHooks({
     assert.ok(output.includes("parameter not set"));
     await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
     await wait(() => outputs.get(id)!.split("SERVER_READY\r\n").length === 3);
+  }
+
+  for (const [id, input] of [
+    ["reload-hook", "source ~/.zshrc"],
+    ["replace-hook", "precmd() { print NEW_PROMPT_HOOK; }"],
+  ] as const) {
+    await writeFile(
+      join(root, ".zshrc"),
+      'PROMPT="fixture> "\nprecmd() { print USER_PROMPT_HOOK; }\n',
+    );
+    const action = await start(id, [input, "print SHOULD_NOT_RUN"], root, "host");
+    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    assert.ok(result.type === "failed");
+    assert.ok(result.message.includes("completion"), result.message);
+    assert.ok(result.message.includes("Reopen"), result.message);
+    assert.equal(failures.get(id), result.message);
+    assert.equal((await readScreen(id)).at(-1)?.trimEnd(), "fixture>");
+    assert.equal(
+      inputs.get(id)!.some((line) => line.includes("SHOULD_NOT_RUN")),
+      false,
+    );
+    assert.equal(activities.has(id), false);
+    assert.equal(
+      engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+      "running",
+    );
+    await write(id, "print AFTER_HOOK_FAILURE\r");
+    await wait(() => outputs.get(id)!.includes("AFTER_HOOK_FAILURE\r\n"));
+    assert.deepEqual(await Effect.runPromise(action.result), result);
   }
 
   await mkdir(join(root, "hooks"));

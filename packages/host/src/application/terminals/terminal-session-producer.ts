@@ -251,6 +251,32 @@ export const createTerminalSessionProducer = ({
           633,
           createTerminalCommandTracker(commandNonce, (activityCommand, details) => {
             if (details.ready !== undefined) {
+              if (
+                command?.run.phase === "command" &&
+                lineDone !== null &&
+                session.summary.lifecycle === "running"
+              ) {
+                const message =
+                  "The shell returned to the prompt without reporting command completion. Reopen this terminal, then run the Action again.";
+                command.run.phase = "shell";
+                lineDone = null;
+                session.command = null;
+                session.runningCommand = null;
+                applyStreamEvents(
+                  session,
+                  session.output.publishFailure({
+                    code: "protocol_error",
+                    message,
+                    terminalId: session.summary.terminalId,
+                  }),
+                );
+                settleCommandRunAfterOutput(session, (outputTail) => ({
+                  type: "failed",
+                  message,
+                  outputTail,
+                }));
+                activity.changed(session);
+              }
               Deferred.doneUnsafe(session.ready, Effect.succeed(details.ready));
               return;
             }
