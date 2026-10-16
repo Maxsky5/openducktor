@@ -639,6 +639,60 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("hides a failed skill read and its retry while the runtime is not ready", async () => {
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
+      throw new Error("catalog offline");
+    });
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(
+                async () => null,
+                mock(async () => []),
+              )}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </QueryClientProvider>
+    );
+    const props: Parameters<typeof useRuntimeTranscriptSessionHistory>[0] = {
+      isOpen: true,
+      repoPath: "/repo",
+      target: {
+        externalSessionId: "claude-thread",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      },
+      runtimeReadinessState: "ready",
+      liveSession: null,
+    };
+    const harness = createHookHarness(useRuntimeTranscriptSessionHistory, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.skillSurfaceError !== null);
+
+      await harness.update({ ...props, runtimeReadinessState: "checking" });
+
+      expect(harness.getLatest().skillSurfaceError).toBeNull();
+      expect(harness.getLatest().retrySkills).toBeNull();
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("drops retained skill mentions after a failed background refresh", async () => {
     const history: AgentSessionHistoryMessage[] = [
       {

@@ -143,9 +143,13 @@ export function useRuntimeTranscriptSessionHistory({
   );
   const { refetch: refetchHistory } = historyQuery;
   const skillsQuery = useRuntimeCatalogQuery({
-    runtimeRef: skillsRuntimeRef(emptyReason, targetRuntimeKind, runtimeRef),
+    runtimeRef: skillsRuntimeRef({
+      emptyReason,
+      runtimeReadinessState,
+      targetRuntimeKind,
+      runtimeRef,
+    }),
     loadRuntimeCatalog: loadRepoRuntimeCatalog,
-    enabled: runtimeReadinessState === "ready",
   });
   const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
   const session = useMemo(() => {
@@ -284,13 +288,24 @@ const useTranscriptTargetResolution = ({
   return { stableTarget, emptyReason, matchingSession, targetRuntimeKind };
 };
 
-/** Only an active Claude transcript reads runtime skills, to restore its skill mentions. */
-const skillsRuntimeRef = (
-  emptyReason: AgentSessionTranscriptEmptyReason | null,
-  targetRuntimeKind: RuntimeKind | null,
-  runtimeRef: RuntimeWorkingDirectoryRef | null,
-): RuntimeWorkingDirectoryRef | null =>
-  emptyReason === null && targetRuntimeKind === "claude" ? runtimeRef : null;
+/**
+ * Only an active Claude transcript reads runtime skills, to restore its skill mentions. A runtime
+ * that is not ready gets no ref, so the view shows no earlier read error and no retry.
+ */
+const skillsRuntimeRef = ({
+  emptyReason,
+  runtimeReadinessState,
+  targetRuntimeKind,
+  runtimeRef,
+}: {
+  emptyReason: AgentSessionTranscriptEmptyReason | null;
+  runtimeReadinessState: RuntimeReadinessState;
+  targetRuntimeKind: RuntimeKind | null;
+  runtimeRef: RuntimeWorkingDirectoryRef | null;
+}): RuntimeWorkingDirectoryRef | null =>
+  emptyReason === null && runtimeReadinessState === "ready" && targetRuntimeKind === "claude"
+    ? runtimeRef
+    : null;
 
 type TranscriptScopeResult =
   | {

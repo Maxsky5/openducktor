@@ -42,9 +42,23 @@ Invalidate these read-mostly values after a write.
 
 Query modules: `workspace.ts`, `runtime.ts`, and `runtime-catalog.ts` under `packages/frontend/src/state/queries`.
 The runtime catalog keeps inactive results for 60 minutes so a modal can show cached models during a later refresh.
-A live runtime catalog read starts only when the host status of its runtime kind is `ready`. Read a live catalog through `useRuntimeCatalogQuery`, `useRuntimeModelCatalogQuery`, `useRuntimeModelCatalogs`, or `useRefreshStaleRuntimeCatalog`, so each read applies this check. A model catalog view does not offer Retry while the runtime is not ready. Delegation reads without this check and shows the host error. A model catalog preview does not use the shared runtime, so it does not wait.
-A view shows a cached catalog during a background refresh and shows no loading state for it. A view shows a loading state only when it has no catalog yet. The model picker shows one loader for all runtimes that have no catalog yet.
-When a model catalog refresh fails, a view keeps the cached models visible and selectable, and shows the error with a retry action. This applies to a rejected read and to a read that returns failed models. The query `structuralSharing` keeps the previous models for the second case. Other catalog surfaces hide cached data after a failed read.
+
+Runtime catalog reads follow these rules:
+
+- A live runtime catalog read starts only when the host status of its runtime kind is `ready`.
+- Read a live catalog through `useRuntimeCatalogQuery`, `useRuntimeModelCatalogQuery`, `useRuntimeModelCatalogs`, or `useRefreshStaleRuntimeCatalog`. Each of these hooks applies the readiness check.
+- A catalog view does not show an earlier read error or offer Retry while its runtime is not ready.
+- Delegation reads without the readiness check. It shows the host error.
+- A model catalog preview does not use the shared runtime. It does not wait for readiness.
+- A view shows a cached catalog during a background refresh.
+- A view shows no loading state during a background refresh.
+- A view shows a loading state only when it has no catalog yet.
+- The model picker shows one loader for all runtimes that have no catalog yet.
+- When a model catalog refresh fails, a view keeps the cached models visible and selectable.
+- A failed model catalog refresh shows its error with a retry action.
+- These two rules apply to a rejected read and to a read that returns failed models.
+- For a read that returns failed models, the catalog query function keeps the previous models.
+- Other catalog surfaces hide cached data after a failed read.
 
 ### Workflow data
 
