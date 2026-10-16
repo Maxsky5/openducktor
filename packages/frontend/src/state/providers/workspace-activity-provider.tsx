@@ -38,15 +38,17 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
             const stop = await hostBridge.observeAgentSessionLive(input, (envelope) => {
               historyObservation.recordEvent(envelope);
               syncLists(envelope);
-              syncGit(envelope);
+              syncGit.observe(envelope);
               listener(envelope);
             });
             return () => {
               historyObservation.close();
+              syncGit.dispose();
               stop();
             };
           } catch (cause) {
             historyObservation.close();
+            syncGit.dispose();
             throw cause;
           }
         },

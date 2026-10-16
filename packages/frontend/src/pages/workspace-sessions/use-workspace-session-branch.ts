@@ -2,8 +2,8 @@ import type { GitCurrentBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
-import { checkoutReadIdentity } from "@/features/agent-studio-git";
 import {
+  checkoutReadIdentity,
   currentBranchQueryOptions,
   gitQueryKeys,
   invalidateCurrentBranchQuery,

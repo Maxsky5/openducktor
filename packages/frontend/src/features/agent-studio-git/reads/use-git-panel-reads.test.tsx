@@ -31,6 +31,7 @@ const input: GitPanelReadsInput = {
   workingDir: "/repo",
   comparisonReference: "origin/main",
   cacheKey: "feature",
+  checkoutIdentity: "branch:feature",
   enabled: true,
 };
 
@@ -239,6 +240,44 @@ test("a change result replaces an older unfinished read and reads Branch changes
     );
     await waitFor(() => expect(readTarget.mock.calls.length).toBe(targetReads + 1));
     expect(hook.result.current.isLoading).toBe(false);
+  } finally {
+    hook.unmount();
+    queryClient.clear();
+  }
+});
+
+test("a rebase step keeps the shown changes until its read arrives, and another branch starts empty", async () => {
+  const reads: Array<{ file: string; finish: () => void }> = [];
+  const { hook, queryClient } = renderReads({
+    gitGetLocalChanges: () =>
+      new Promise((resolve) => {
+        const file = `src/read-${reads.length + 1}.ts`;
+        reads.push({ file, finish: () => resolve(toLocalChanges(status(file, "uncommitted"))) });
+      }),
+  });
+  const shownFile = () =>
+    hook.result.current.scopeStatesByScope.uncommitted.fileStatuses[0]?.path ?? null;
+  try {
+    await waitFor(() => expect(reads).toHaveLength(1));
+    await act(async () => reads[0]?.finish());
+    await waitFor(() => expect(shownFile()).toBe("src/read-1.ts"));
+
+    // A rebase detaches HEAD, so the reads move to the keys of the detached checkout.
+    hook.rerender({ ...input, cacheKey: "detached", checkoutIdentity: "detached" });
+    await waitFor(() => expect(reads).toHaveLength(2));
+    expect(shownFile()).toBe("src/read-1.ts");
+    expect(hook.result.current.isLoading).toBe(false);
+    await act(async () => reads[1]?.finish());
+    await waitFor(() => expect(shownFile()).toBe("src/read-2.ts"));
+
+    // The rebase ends on its branch, and another branch then shows no data of this one.
+    hook.rerender(input);
+    await act(async () => {});
+    hook.rerender({ ...input, cacheKey: "other", checkoutIdentity: "branch:other" });
+    await waitFor(() => expect(reads.length).toBeGreaterThanOrEqual(3));
+    expect(shownFile()).toBeNull();
+    expect(hook.result.current.isLoading).toBe(true);
+    for (const read of reads) read.finish();
   } finally {
     hook.unmount();
     queryClient.clear();

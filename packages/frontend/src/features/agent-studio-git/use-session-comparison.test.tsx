@@ -21,6 +21,7 @@ const initial: SessionComparisonInput = {
   target: { branch: "main", remote: "origin" },
   targetError: null,
   branchKey: "feature",
+  checkoutIdentity: "branch:feature",
   branchReady: true,
 };
 

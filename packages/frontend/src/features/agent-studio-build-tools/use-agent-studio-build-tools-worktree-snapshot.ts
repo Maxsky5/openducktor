@@ -2,8 +2,7 @@ import type { GitTargetBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "@/lib/errors";
-import { worktreeBranchQueryOptions } from "@/state/queries/git";
-import { checkoutReadIdentity } from "../agent-studio-git/model/checkout-read-identity";
+import { checkoutReadIdentity, worktreeBranchQueryOptions } from "@/state/queries/git";
 import { useSessionComparison } from "../agent-studio-git/use-session-comparison";
 import { useComparisonView } from "../agent-studio-git/session-comparison-view";
 import { hostClient } from "@/lib/host-client";
@@ -149,6 +148,7 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     workingDir: worktree.path,
     comparisonReference: comparison.resolvedTarget,
     cacheKey: comparison.cacheKey,
+    checkoutIdentity: checkoutReadIdentity(currentBranch),
     enabled: !worktree.shouldBlockDiffLoading,
   });
   const comparisonView = useComparisonView(reads, comparison, {
@@ -353,6 +353,7 @@ function useTaskSessionComparison(input: TaskComparisonInput) {
     branchError: branch.isError ? errorMessage(branch.error) : null,
     // A commit keeps the read keys, so the panel shows its data while it reads again.
     branchKey: JSON.stringify([input.branchKey, checkoutReadIdentity(branch.data)]),
+    checkoutIdentity: checkoutReadIdentity(branch.data),
     branchReady: branch.data !== undefined && !branch.isError,
   });
   const queryClient = useQueryClient();

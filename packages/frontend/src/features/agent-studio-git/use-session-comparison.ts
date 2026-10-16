@@ -15,6 +15,7 @@ import {
   targetBranchSelectionValue,
 } from "@/lib/target-branch";
 import {
+  continuedCheckoutRead,
   gitComparisonTargetQueryOptions,
   invalidateRepoBranchesQuery,
   gitQueryKeys,
@@ -31,6 +32,8 @@ export type SessionComparisonInput = {
   target: GitTargetBranch | null;
   targetError: string | null;
   branchKey: string;
+  /** The checkout of the branch key. A rebase step continues the shown comparison. */
+  checkoutIdentity: string | null;
   branchReady: boolean;
   branchError?: string | null;
 };
@@ -53,13 +56,15 @@ export function useSessionComparison(input: SessionComparisonInput) {
   if (activation.identity !== identity) setActivation({ identity, version });
   const contextKey = JSON.stringify([mountId, version, identity]);
   const queryClient = useQueryClient();
+  const comparisonOptions = gitComparisonTargetQueryOptions(
+    input.repoPath,
+    input.workingDirectory ?? "__missing_directory__",
+    input.target ?? { branch: "HEAD" },
+    input.branchKey,
+  );
   const comparison = useQuery({
-    ...gitComparisonTargetQueryOptions(
-      input.repoPath,
-      input.workingDirectory ?? "__missing_directory__",
-      input.target ?? { branch: "HEAD" },
-      input.branchKey,
-    ),
+    ...comparisonOptions,
+    ...continuedCheckoutRead(comparisonOptions.queryKey, input.checkoutIdentity),
     staleTime: Infinity,
     refetchOnMount: false,
     enabled: input.enabled && canCheck(input),

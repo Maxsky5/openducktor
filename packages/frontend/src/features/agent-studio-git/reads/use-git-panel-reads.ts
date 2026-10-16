@@ -2,6 +2,7 @@ import type { GitLocalChanges } from "@openducktor/contracts";
 import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
+  continuedCheckoutRead,
   localChangesQueryOptions,
   markGitWorkingDirectoryStale,
   refreshGitHistoryQueries,
@@ -21,6 +22,8 @@ export type GitPanelReadsInput = {
   comparisonReference: string | null;
   /** The checkout identity, so each checkout keeps its own cache entries. */
   cacheKey: string;
+  /** The checkout that the reads show. A rebase step continues the shown reads. */
+  checkoutIdentity: string | null;
   enabled: boolean;
 };
 
@@ -69,6 +72,7 @@ export function useGitPanelReads({
   workingDir,
   comparisonReference,
   cacheKey,
+  checkoutIdentity,
   enabled,
 }: GitPanelReadsInput): GitPanelReads {
   const queryClient = useQueryClient();
@@ -94,12 +98,14 @@ export function useGitPanelReads({
   // A refresh or a Git action reads again. Opening a view reuses the cached result.
   const local = useQuery({
     ...localOptions,
+    ...continuedCheckoutRead(localOptions.queryKey, checkoutIdentity),
     select: toLocalScopeSnapshot,
     staleTime: Number.POSITIVE_INFINITY,
     enabled: canRead,
   });
   const comparison = useQuery({
     ...comparisonOptions,
+    ...continuedCheckoutRead(comparisonOptions.queryKey, checkoutIdentity),
     select: toScopeSnapshot,
     staleTime: Number.POSITIVE_INFINITY,
     enabled: comparisonReady,

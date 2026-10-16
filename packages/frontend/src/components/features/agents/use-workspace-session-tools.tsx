@@ -17,6 +17,7 @@ import { type ReactNode, useCallback, useMemo } from "react";
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
 import { canonicalTargetBranch } from "@/lib/target-branch";
+import { checkoutReadIdentity } from "@/state/queries/git";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,
@@ -91,6 +92,7 @@ export function useWorkspaceSessionTools({
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
     [workspaceId, sessionId],
   );
+  const checkoutIdentity = checkoutReadIdentity(currentBranch);
   const comparison = useSessionComparison({
     enabled: isVisible,
     viewKey: sessionKey,
@@ -99,6 +101,7 @@ export function useWorkspaceSessionTools({
     target,
     targetError,
     branchKey,
+    checkoutIdentity,
     branchReady,
     branchError: branchError ?? null,
   });
@@ -117,6 +120,7 @@ export function useWorkspaceSessionTools({
     workingDir: workingDirectory,
     comparisonReference: comparison.resolvedTarget,
     cacheKey: comparison.cacheKey,
+    checkoutIdentity,
     enabled: isVisible && workingDirectory !== null && branchReady,
   });
   const diffData = useComparisonView(reads, comparison, {
@@ -184,7 +188,7 @@ export function useWorkspaceSessionTools({
   };
   const diffsContent = (
     <WorkspaceSessionGitTools
-      key={JSON.stringify([repoPath, workingDirectory, branchKey])}
+      key={JSON.stringify([repoPath, workingDirectory])}
       commentOwner={commentOwner}
       actions={actions}
       diffData={diffData}
