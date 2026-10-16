@@ -476,6 +476,13 @@ describe("SettingsNotificationsSection", () => {
       fireEvent.click(soundPicker);
     });
     const menu = screen.getByRole("dialog", { name: "Sound for Permission Prompt menu" });
+    const choices = within(menu)
+      .getAllByRole("button")
+      .filter((button) => button.hasAttribute("aria-pressed"));
+    expect(choices).toHaveLength(12);
+    for (const choice of choices) {
+      expect(choice.className).toContain("focus-visible:ring-input-focus");
+    }
     const previews = within(menu).getAllByRole("button", { name: /^Preview / });
     expect(previews.filter((button) => !button.hasAttribute("disabled"))).toHaveLength(11);
     for (const button of previews) {

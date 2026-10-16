@@ -64,7 +64,7 @@ export function NotificationSoundPicker<Value extends string>({
                 variant="ghost"
                 aria-pressed={option.value === value}
                 className={cn(
-                  "h-8 min-w-0 flex-1 justify-start px-2 font-normal",
+                  "h-8 min-w-0 flex-1 justify-start px-2 font-normal focus-visible:ring-input-focus",
                   option.value === value && "bg-accent text-accent-foreground",
                 )}
                 onClick={() => {

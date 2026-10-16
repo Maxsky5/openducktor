@@ -114,7 +114,10 @@ export function RepoActionDialog({
                             aria-label={presentation.label}
                             aria-pressed={isSelected}
                             title={presentation.label}
-                            className={cn(isSelected && "bg-accent text-accent-foreground")}
+                            className={cn(
+                              "focus-visible:ring-input-focus",
+                              isSelected && "bg-accent text-accent-foreground",
+                            )}
                             onClick={() => {
                               updateFields({ icon });
                               setIsIconPickerOpen(false);

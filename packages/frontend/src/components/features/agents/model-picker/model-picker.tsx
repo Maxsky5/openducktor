@@ -331,7 +331,7 @@ const ModelSelectionButton = ({
       aria-pressed={selected}
       aria-description={selectionDescription || undefined}
       className={cn(
-        "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
+        "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal focus-visible:ring-input-focus",
         selected && "bg-accent text-accent-foreground",
       )}
       onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {

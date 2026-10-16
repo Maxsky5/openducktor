@@ -91,6 +91,13 @@ describe("RepositoryScriptsSection", () => {
 
       const dialog = getActionDialog("Add action");
       fireEvent.click(dialog.getByRole("button", { name: "Icon: Play" }));
+      const icons = within(screen.getByRole("dialog", { name: "Action icons" })).getAllByRole(
+        "button",
+      );
+      expect(icons.length).toBeGreaterThan(0);
+      for (const icon of icons) {
+        expect(icon.className).toContain("focus-visible:ring-input-focus");
+      }
       fireEvent.click(screen.getByRole("button", { name: "Build" }));
       expect(dialog.getByRole("button", { name: "Icon: Build" })).toBeTruthy();
       fireEvent.change(dialog.getByLabelText("Name"), { target: { value: "  Build  " } });

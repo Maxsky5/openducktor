@@ -233,6 +233,26 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("high");
   });
 
+  test("shows keyboard focus on the borderless selectors with a neutral ring", () => {
+    const view = render(createElement(AgentChatComposer, { model: buildModel() }));
+    try {
+      const triggers = Array.from(view.container.querySelectorAll("button")).filter(
+        (button) =>
+          ["Hephaestus (Deep Agent)", "high"].includes(button.textContent ?? "") ||
+          button.getAttribute("aria-label") === "Select model, OpenCode, GPT-5.3 Codex",
+      );
+      expect(triggers).toHaveLength(3);
+      for (const trigger of triggers) {
+        expect(trigger.className).toContain("!border-transparent");
+        expect(trigger.className).toContain("focus-visible:ring-2");
+        expect(trigger.className).toContain("focus-visible:ring-input-focus");
+        expect(trigger.className).not.toContain("focus-visible:ring-0");
+      }
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("includes skill references in the composer placeholder when supported", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

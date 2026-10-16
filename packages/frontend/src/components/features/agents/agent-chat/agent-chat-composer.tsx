@@ -298,10 +298,11 @@ type AgentChatComposerFormViewProps = {
   submitAction: () => void;
 };
 
-// The selectors shrink and truncate their labels in a narrow pane.
+// The selectors shrink and truncate their labels in a narrow pane. They have no border, so focus
+// shows as a ring.
 const COMPOSER_SELECTOR_TRIGGER_CLASS_NAME = cn(
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
-  "!h-7 !w-auto shrink !rounded-lg !border-transparent !bg-transparent text-xs hover:!bg-muted data-[state=open]:!bg-muted",
+  "!h-7 !w-auto shrink !rounded-lg !border-transparent !bg-transparent text-xs hover:!bg-muted focus-visible:ring-2 focus-visible:ring-input-focus data-[state=open]:!bg-muted",
 );
 
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
