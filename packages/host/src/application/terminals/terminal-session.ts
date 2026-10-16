@@ -11,6 +11,7 @@ import { type SerialLane } from "../../effect/serial-gate";
 /** The command of a command terminal. The result settles once, when the command ends. */
 export type TerminalCommandRun = {
   phase: "command" | "shell";
+  lineIndex: number;
   stopRequested: boolean;
   readonly result: Deferred.Deferred<TerminalCommandResult>;
 };

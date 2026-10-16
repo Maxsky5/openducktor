@@ -246,7 +246,6 @@ export const createTerminalSessionProducer = ({
         const commandNonce = globalThis.crypto.randomUUID();
         const interactiveCommand = command?.plan.interactiveCommand;
         if (interactiveCommand !== undefined) session.inputOwner = "action";
-        let lineIndex = 0;
         let lineDone: Deferred.Deferred<void> | null = null;
         session.screen.onOsc(
           633,
@@ -266,10 +265,10 @@ export const createTerminalSessionProducer = ({
                 lineDone = null;
                 if (
                   details.exitCode === 0 &&
-                  lineIndex + 1 < command.lines.length &&
+                  command.run.lineIndex + 1 < command.lines.length &&
                   !command.run.stopRequested
                 ) {
-                  lineIndex += 1;
+                  command.run.lineIndex += 1;
                   session.inputOwner = "action";
                 } else {
                   command.run.phase = "shell";
@@ -355,7 +354,7 @@ export const createTerminalSessionProducer = ({
                     activity.changed(session);
                     return Effect.void;
                   }
-                  const input = command.lines[lineIndex]!;
+                  const input = command.lines[command.run.lineIndex]!;
                   lineDone = done;
                   return handle.write(commandInput(input)).pipe(
                     Effect.catch((failure) => Effect.sync(() => failCommand(session, failure))),
@@ -398,6 +397,7 @@ export const createTerminalSessionProducer = ({
       Effect.suspend(() => {
         const run: TerminalCommandRun = {
           phase: "command",
+          lineIndex: 0,
           stopRequested: false,
           result: Deferred.makeUnsafe(),
         };

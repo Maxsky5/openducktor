@@ -7,7 +7,8 @@ import { TerminalScreenTail } from "./terminal-screen-tail";
 
 type ScreenOperation =
   | { type: "write"; data: Uint8Array; parsed: () => void }
-  | { type: "resize"; grid: TerminalGrid };
+  | { type: "resize"; grid: TerminalGrid }
+  | { type: "parsed"; done: () => void };
 
 type XtermColorRequest =
   | { type: 0; index: number }
@@ -86,6 +87,13 @@ export class TerminalScreenState {
   drained(): Promise<void> {
     if (!this.writing && this.nextOperation === this.operations.length) return Promise.resolve();
     return new Promise((resolve) => this.drainWaiters.push(resolve));
+  }
+
+  parsed(): Promise<void> {
+    return new Promise((done) => {
+      this.operations.push({ type: "parsed", done });
+      this.advance();
+    });
   }
 
   snapshot(): TerminalScreenSnapshot {
@@ -264,6 +272,10 @@ export class TerminalScreenState {
       }
       if (operation.type === "resize") {
         this.terminal.resize(operation.grid.columns, operation.grid.rows);
+        continue;
+      }
+      if (operation.type === "parsed") {
+        operation.done();
         continue;
       }
       this.writing = true;

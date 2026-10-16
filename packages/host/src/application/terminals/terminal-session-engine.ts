@@ -259,6 +259,11 @@ export const createTerminalSessionEngine = ({
             terminalId,
           );
         if (session.inputOwner !== null) return yield* Effect.fail(inputBlocked());
+        const lineIndex =
+          session.commandRun?.phase === "command" && !(data.byteLength === 1 && data[0] === 3)
+            ? session.commandRun.lineIndex
+            : null;
+        if (lineIndex !== null) yield* Effect.promise(() => session.screen.parsed());
         // Read the process in lane order: a command terminal replaces its process in this lane.
         return yield* session.operations.run(
           Effect.suspend(() => {
@@ -270,6 +275,19 @@ export const createTerminalSessionEngine = ({
                   "terminal_not_found",
                   "write",
                   `Terminal is not running: ${terminalId}`,
+                  terminalId,
+                ),
+              );
+            if (
+              lineIndex !== null &&
+              session.commandRun?.phase === "command" &&
+              lineIndex !== session.commandRun.lineIndex
+            )
+              return Effect.fail(
+                terminalFailure(
+                  "invalid_input",
+                  "write",
+                  "The Action moved to another command. Wait for it to start, then send input again.",
                   terminalId,
                 ),
               );
