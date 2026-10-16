@@ -51,6 +51,14 @@ describe("SessionPanel", () => {
     expect(screen.getByRole("button", { name: "New tab in the right panel" })).toBeDefined();
   });
 
+  test("draws no focus outline on a tab because the selected tab has its own style", () => {
+    render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
+
+    const tab = screen.getByRole("tab", { name: "Diffs" });
+    expect(tab.className).toContain("outline-none");
+    expect(tab.className).not.toContain("focus-visible:ring");
+  });
+
   test("offers Restart in the tab header only for the selected terminal", () => {
     const store = createTerminalActivityStore();
     for (const message of [

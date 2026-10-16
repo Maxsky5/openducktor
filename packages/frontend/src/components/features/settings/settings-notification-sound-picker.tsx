@@ -44,7 +44,7 @@ export function NotificationSoundPicker<Value extends string>({
           aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
-          className="w-full min-w-0 justify-between border-input bg-card px-3 font-normal"
+          className="w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-input-focus"
         >
           <span className="truncate">{selected.label}</span>
           <ChevronsUpDown aria-hidden="true" className="text-muted-foreground" />

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /** The border, surface, and focus of a standalone text field. */
 export const FIELD_CHROME_CLASS_NAME =
-  "rounded-md border border-input bg-card shadow-sm transition-[border-color,box-shadow] focus-visible:field-focus read-only:bg-muted/60";
+  "rounded-md border border-input bg-card shadow-sm transition-colors focus-visible:border-input-focus read-only:bg-muted/60";
 
 type InputProps = React.ComponentProps<"input"> & {
   /** The parent draws the border and the focus, as in an input group. */

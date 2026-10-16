@@ -260,7 +260,7 @@ export default function TaskDescriptionVisualEditor({
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-card transition-[border-color,box-shadow] focus-within:field-focus">
+    <div className="overflow-hidden rounded-md border border-input bg-card transition-colors focus-within:border-input-focus">
       <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0">
         <div className="flex flex-wrap gap-0.5 border-b border-border bg-muted/30 p-1.5">
           <TaskDescriptionFormattingToolbar

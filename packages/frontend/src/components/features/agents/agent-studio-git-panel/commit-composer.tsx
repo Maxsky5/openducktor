@@ -85,7 +85,7 @@ export const CommitComposer = memo(function CommitComposer({
     >
       <div
         // One input group: the field and the Commit button share one border, height, and focus.
-        className="flex h-8 min-w-0 items-stretch overflow-hidden rounded-md border border-input bg-card shadow-sm transition-[border-color,box-shadow] has-[input:focus-visible]:field-focus"
+        className="flex h-8 min-w-0 items-stretch overflow-hidden rounded-md border border-input bg-card shadow-sm transition-colors has-[input:focus-visible]:border-input-focus"
         data-testid="agent-studio-git-commit-input-group"
       >
         <Input
