@@ -10,7 +10,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createQueryClient } from "@/lib/query-client";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeModelCatalogs } from "./use-runtime-model-catalogs";
+
+const readyRuntimeStatus = createHostRuntimeStatusContextValue();
 
 const preview = (
   runtimeKind: AgentRuntimePreviewModelsInput["runtimeKind"],
@@ -31,7 +35,9 @@ test("loads preview catalogs only on the models stage and scopes them to the cho
     preview(input.runtimeKind),
   );
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+    </QueryClientProvider>
   );
   const view = renderHook(
     ({ repoPath, active }) =>
@@ -74,7 +80,9 @@ test("shows a preview failure and retries the same repository", async () => {
     return preview("codex");
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+    </QueryClientProvider>
   );
   const view = renderHook(
     () =>
@@ -103,7 +111,9 @@ test("reloads a preview when the saved executable path changes", async () => {
     preview(input.runtimeKind),
   );
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+    </QueryClientProvider>
   );
   const view = renderHook(
     ({ executablePath }) =>
@@ -131,7 +141,9 @@ test("keeps preview results separate from live runtime catalogs", async () => {
   const loadPreviewModels = mock(async () => preview("codex"));
   const loadRuntimeCatalog = mock(async () => preview("codex"));
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+    </QueryClientProvider>
   );
   const previewView = renderHook(
     () =>

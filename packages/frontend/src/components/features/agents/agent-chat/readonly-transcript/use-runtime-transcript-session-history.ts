@@ -1,5 +1,4 @@
 import {
-  type AgentRuntimeCatalog,
   type AgentSessionHistoryMessage,
   type AgentSessionScope,
   describeAgentSessionScope,
@@ -29,12 +28,8 @@ import {
   SESSION_HISTORY_STALE_TIME_MS,
   sessionHistoryQueryOptions,
 } from "@/state/queries/agent-session-history";
-import {
-  RUNTIME_CATALOG_STALE_TIME_MS,
-  resolveRuntimeCatalogSurface,
-  retryRuntimeCatalog,
-  runtimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { resolveRuntimeCatalogSurface, retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
+import { useRuntimeCatalogQuery } from "@/state/queries/use-runtime-catalog-query";
 import { skippedQueryOptions } from "@/state/queries/skipped-query";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -147,15 +142,15 @@ export function useRuntimeTranscriptSessionHistory({
     }),
   );
   const { refetch: refetchHistory } = historyQuery;
-  const skillsQuery = useQuery(
-    resolveTranscriptCatalogQueryOptions({
+  const skillsQuery = useRuntimeCatalogQuery({
+    runtimeRef: skillsRuntimeRef({
       emptyReason,
       runtimeReadinessState,
       targetRuntimeKind,
       runtimeRef,
-      loadRepoRuntimeCatalog,
     }),
-  );
+    loadRuntimeCatalog: loadRepoRuntimeCatalog,
+  });
   const skillSurface = resolveRuntimeCatalogSurface(skillsQuery.data?.skills, skillsQuery.error);
   const session = useMemo(() => {
     let transcriptSession: AgentChatTranscriptSession | null = null;
@@ -293,33 +288,24 @@ const useTranscriptTargetResolution = ({
   return { stableTarget, emptyReason, matchingSession, targetRuntimeKind };
 };
 
-const resolveTranscriptCatalogQueryOptions = ({
+/**
+ * Only an active Claude transcript reads runtime skills, to restore its skill mentions. A runtime
+ * that is not ready gets no ref, so the view shows no earlier read error and no retry.
+ */
+const skillsRuntimeRef = ({
   emptyReason,
   runtimeReadinessState,
   targetRuntimeKind,
   runtimeRef,
-  loadRepoRuntimeCatalog,
 }: {
   emptyReason: AgentSessionTranscriptEmptyReason | null;
   runtimeReadinessState: RuntimeReadinessState;
   targetRuntimeKind: RuntimeKind | null;
   runtimeRef: RuntimeWorkingDirectoryRef | null;
-  loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
-}): ReturnType<typeof runtimeCatalogQueryOptions> | typeof skippedTranscriptCatalogQueryOptions => {
-  if (emptyReason !== null) {
-    return skippedTranscriptCatalogQueryOptions;
-  }
-  if (runtimeReadinessState !== "ready") {
-    return skippedTranscriptCatalogQueryOptions;
-  }
-  if (targetRuntimeKind !== "claude") {
-    return skippedTranscriptCatalogQueryOptions;
-  }
-  if (runtimeRef === null) {
-    return skippedTranscriptCatalogQueryOptions;
-  }
-  return runtimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog);
-};
+}): RuntimeWorkingDirectoryRef | null =>
+  emptyReason === null && runtimeReadinessState === "ready" && targetRuntimeKind === "claude"
+    ? runtimeRef
+    : null;
 
 type TranscriptScopeResult =
   | {
@@ -432,9 +418,4 @@ const skippedRuntimeSessionRefQueryOptions = skippedQueryOptions<PolicyBoundSess
   queryKey: ["runtime-session-history-ref", "skipped"] as const,
   staleTime: Number.POSITIVE_INFINITY,
   refetchOnWindowFocus: false,
-});
-
-const skippedTranscriptCatalogQueryOptions = skippedQueryOptions<AgentRuntimeCatalog>({
-  queryKey: ["runtime-transcript-skills", "skipped"] as const,
-  staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
 });

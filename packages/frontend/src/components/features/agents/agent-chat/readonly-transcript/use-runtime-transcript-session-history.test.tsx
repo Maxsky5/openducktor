@@ -8,6 +8,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
 import {
   AgentOperationsContext,
@@ -29,6 +31,8 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
+
+const readyRuntimeStatus = createHostRuntimeStatusContextValue();
 
 const session = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
   createAgentSessionFixture(
@@ -103,13 +107,15 @@ const createHarness = (
 ) => {
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
-      <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
-        <AgentOperationsContext.Provider
-          value={operations(loadAgentSessionHistory, readSessionHistory)}
-        >
-          <HistoryOwner>{children}</HistoryOwner>
-        </AgentOperationsContext.Provider>
-      </RuntimeDefinitionsContext.Provider>
+      <HostRuntimeStatusContext value={readyRuntimeStatus}>
+        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+          <AgentOperationsContext.Provider
+            value={operations(loadAgentSessionHistory, readSessionHistory)}
+          >
+            <HistoryOwner>{children}</HistoryOwner>
+          </AgentOperationsContext.Provider>
+        </RuntimeDefinitionsContext.Provider>
+      </HostRuntimeStatusContext>
     </QueryProvider>
   );
   const target: Parameters<typeof useRuntimeTranscriptSessionHistory>[0]["target"] = {
@@ -238,11 +244,15 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const readSessionHistory = mock(async () => []);
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryProvider useIsolatedClient>
-        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
-          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            <HistoryOwner>{children}</HistoryOwner>
-          </AgentOperationsContext.Provider>
-        </RuntimeDefinitionsContext.Provider>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
       </QueryProvider>
     );
     const harness = createHookHarness(
@@ -292,11 +302,15 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const readSessionHistory = mock(async () => history);
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryProvider useIsolatedClient>
-        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
-          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            <HistoryOwner>{children}</HistoryOwner>
-          </AgentOperationsContext.Provider>
-        </RuntimeDefinitionsContext.Provider>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
       </QueryProvider>
     );
     const harness = createHookHarness(
@@ -344,11 +358,15 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     );
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
-        <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
-          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            <HistoryOwner>{children}</HistoryOwner>
-          </AgentOperationsContext.Provider>
-        </RuntimeDefinitionsContext.Provider>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
       </QueryClientProvider>
     );
     const harness = createHookHarness(
@@ -481,13 +499,17 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     );
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
-        <RuntimeDefinitionsContext.Provider
-          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
-        >
-          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            <HistoryOwner>{children}</HistoryOwner>
-          </AgentOperationsContext.Provider>
-        </RuntimeDefinitionsContext.Provider>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
       </QueryClientProvider>
     );
     const harness = createHookHarness(
@@ -568,13 +590,17 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     );
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
-        <RuntimeDefinitionsContext.Provider
-          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
-        >
-          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            <HistoryOwner>{children}</HistoryOwner>
-          </AgentOperationsContext.Provider>
-        </RuntimeDefinitionsContext.Provider>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
       </QueryClientProvider>
     );
     const harness = createHookHarness(
@@ -608,6 +634,60 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("hides a failed skill read and its retry while the runtime is not ready", async () => {
+    const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
+      throw new Error("catalog offline");
+    });
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(
+                async () => null,
+                mock(async () => []),
+              )}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
+      </QueryClientProvider>
+    );
+    const props: Parameters<typeof useRuntimeTranscriptSessionHistory>[0] = {
+      isOpen: true,
+      repoPath: "/repo",
+      target: {
+        externalSessionId: "claude-thread",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree",
+      },
+      runtimeReadinessState: "ready",
+      liveSession: null,
+    };
+    const harness = createHookHarness(useRuntimeTranscriptSessionHistory, props, { wrapper });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.skillSurfaceError !== null);
+
+      await harness.update({ ...props, runtimeReadinessState: "checking" });
+
+      expect(harness.getLatest().skillSurfaceError).toBeNull();
+      expect(harness.getLatest().retrySkills).toBeNull();
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
@@ -652,13 +732,17 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     );
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={queryClient}>
-        <RuntimeDefinitionsContext.Provider
-          value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
-        >
-          <AgentOperationsContext.Provider value={operations(async () => null, readSessionHistory)}>
-            <HistoryOwner>{children}</HistoryOwner>
-          </AgentOperationsContext.Provider>
-        </RuntimeDefinitionsContext.Provider>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>
+          <RuntimeDefinitionsContext.Provider
+            value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
+          >
+            <AgentOperationsContext.Provider
+              value={operations(async () => null, readSessionHistory)}
+            >
+              <HistoryOwner>{children}</HistoryOwner>
+            </AgentOperationsContext.Provider>
+          </RuntimeDefinitionsContext.Provider>
+        </HostRuntimeStatusContext>
       </QueryClientProvider>
     );
     const harness = createHookHarness(

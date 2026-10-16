@@ -20,6 +20,7 @@ import type {
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
 import {
+  modelPickerResourceFromCatalogQuery,
   selectableModelPickerCatalog,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
@@ -232,18 +233,11 @@ export function useAgentStudioChatComposer({
     () =>
       listEnabledModelPickerRuntimes(
         hasSessionTarget,
-        isRuntimeReady,
         isModelPickerOpen,
         modelPickerRuntimeKinds,
         selectedRuntimeKind,
       ),
-    [
-      hasSessionTarget,
-      isModelPickerOpen,
-      isRuntimeReady,
-      modelPickerRuntimeKinds,
-      selectedRuntimeKind,
-    ],
+    [hasSessionTarget, isModelPickerOpen, modelPickerRuntimeKinds, selectedRuntimeKind],
   );
   const { resources: repoModelPickerResources } = useRuntimeModelCatalogs({
     repoPath: workspaceRepoPath,
@@ -261,16 +255,7 @@ export function useAgentStudioChatComposer({
         return {
           descriptor,
           isEnabledForFavorites: availableKinds.has(descriptor.kind),
-          resource: resource
-            ? toModelPickerCatalogResource({
-                catalog: resource.catalog,
-                isFetching: resource.isFetching,
-                error: resource.error,
-                isAvailable: resource.isEnabled,
-                unavailableReason: "This runtime catalog is not available yet.",
-                retry: resource.retry,
-              })
-            : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
+          resource: modelPickerResourceFromCatalogQuery(resource),
         };
       });
     }
@@ -289,7 +274,7 @@ export function useAgentStudioChatComposer({
         isEnabledForFavorites: availableKinds.has(descriptor.kind),
         resource: toModelPickerCatalogResource({
           catalog: sessionModelCatalog,
-          isFetching: isSessionModelCatalogLoading,
+          isLoading: isSessionModelCatalogLoading,
           error: selectedSession.runtimeData.catalogError,
           isAvailable: true,
           unavailableReason: "The current session model catalog is unavailable.",
@@ -331,7 +316,7 @@ export function useAgentStudioChatComposer({
   const composerCatalog = hasSessionTarget ? null : (selectedComposerResource?.catalog ?? null);
   const isLoadingComposerCatalog = hasSessionTarget
     ? isSessionModelCatalogLoading
-    : isRuntimeReady && (selectedComposerResource?.isFetching ?? false);
+    : (selectedComposerResource?.isLoading ?? false);
   const {
     supportsSlashCommands,
     slashCommandCatalog,
@@ -492,7 +477,7 @@ export function useAgentStudioChatComposer({
 
   return {
     speed,
-    newSessionCatalog: isRuntimeReady && !selectedComposerResource?.error ? composerCatalog : null,
+    newSessionCatalog: isRuntimeReady ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
     selectedModelDescriptor: selectedModelEntry,
@@ -577,14 +562,14 @@ const listModelPickerRuntimes = (
   );
 };
 
+/** The catalog hook reads each requested kind only when that kind is ready. */
 const listEnabledModelPickerRuntimes = (
   hasSessionTarget: boolean,
-  isRuntimeReady: boolean,
   isModelPickerOpen: boolean,
   runtimeKinds: RuntimeDescriptor["kind"][],
   selectedRuntimeKind: RuntimeDescriptor["kind"] | null | undefined,
 ): RuntimeDescriptor["kind"][] => {
-  if (hasSessionTarget || !isRuntimeReady) {
+  if (hasSessionTarget) {
     return [];
   }
   if (isModelPickerOpen) {

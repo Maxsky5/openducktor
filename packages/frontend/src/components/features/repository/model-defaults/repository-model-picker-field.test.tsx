@@ -42,19 +42,20 @@ const resource = (
 ): RuntimeModelCatalogQueryResource => ({
   runtimeKind: "opencode",
   catalog,
-  isFetching: false,
+  isLoading: false,
+  unavailableReason: null,
   isEnabled: true,
   error: null,
   retry: async () => {},
   ...overrides,
 });
 
-test("selects a cached settings model while the catalog refreshes", async () => {
+test("selects a cached settings model without a refresh notice", async () => {
   const onSelect = mock(() => {});
   render(
     <RepositoryModelPickerField
       runtimeDefinitions={[OPENCODE_RUNTIME_DESCRIPTOR]}
-      catalogResources={[resource({ isFetching: true })]}
+      catalogResources={[resource()]}
       value={null}
       favoriteState={favoriteState}
       isReadOnly={false}
@@ -66,7 +67,7 @@ test("selects a cached settings model while the catalog refreshes", async () => 
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
   });
-  expect(screen.getByText("Refreshing OpenCode models...")).toBeTruthy();
+  expect(screen.queryByRole("status")).toBeNull();
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Select GPT Five model" }));
   });
@@ -77,7 +78,7 @@ test("selects a cached settings model while the catalog refreshes", async () => 
   );
 });
 
-test("does not show retained settings models after a catalog failure", async () => {
+test("keeps cached settings models selectable after a catalog failure", async () => {
   const onSelect = mock(() => {});
   render(
     <RepositoryModelPickerField
@@ -96,6 +97,11 @@ test("does not show retained settings models after a catalog failure", async () 
   });
 
   expect(screen.getByRole("alert").textContent).toContain("Catalog refresh failed");
-  expect(screen.queryByRole("button", { name: "Select GPT Five model" })).toBeNull();
-  expect(onSelect).not.toHaveBeenCalled();
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Select GPT Five model" }));
+  });
+  expect(onSelect).toHaveBeenCalledWith(
+    { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
+    catalog,
+  );
 });

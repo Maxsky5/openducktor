@@ -11,14 +11,21 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { createQueryClient } from "@/lib/query-client";
-import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import {
+  HostRuntimeStatusContext,
+  RuntimeDefinitionsContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import {
   NotificationContext,
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createHostRuntimeStatusContextValue,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { OnboardingPage } from "./onboarding-page";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
@@ -181,11 +188,13 @@ export const createOnboardingTestHarness = () => {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <RuntimeDefinitionsContext.Provider value={runtimeContextValue}>
-            <WorkspaceStateContext value={workspaceState}>
-              <NotificationContext.Provider value={notificationContextValue}>
-                <OnboardingPage onComplete={() => {}} />
-              </NotificationContext.Provider>
-            </WorkspaceStateContext>
+            <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+              <WorkspaceStateContext value={workspaceState}>
+                <NotificationContext.Provider value={notificationContextValue}>
+                  <OnboardingPage onComplete={() => {}} />
+                </NotificationContext.Provider>
+              </WorkspaceStateContext>
+            </HostRuntimeStatusContext>
           </RuntimeDefinitionsContext.Provider>
         </ThemeProvider>
       </QueryClientProvider>,

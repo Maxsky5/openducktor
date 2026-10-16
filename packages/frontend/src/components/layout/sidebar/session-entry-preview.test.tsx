@@ -17,10 +17,14 @@ import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
 import {
+  createHostRuntimeStatusContextValue,
+  createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
+import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionMenuProvider } from "./session-menu-provider";
 import {
@@ -119,6 +123,7 @@ afterEach(() => {
 const mountSidebar = (
   sessions: AgentSessionLiveSnapshot[],
   entry: SessionNavigationEntry = fixtureEntry(),
+  runtimeStatus: HostRuntimeStatusContextValue = createHostRuntimeStatusContextValue(),
 ) => {
   let listener: ((envelope: AgentSessionLiveEnvelope) => void) | undefined;
   const observe = mock(
@@ -153,21 +158,23 @@ const mountSidebar = (
   const other = workspaceSessionEntry("other");
   render(
     <QueryClientProvider client={client}>
-      <SessionMenuProvider>
-        <WorkspaceActivityContext value={observer}>
-          <VisibleSessionTargetProvider>
-            <SessionReadStateProvider>
-              <SessionNavigationList
-                model={navigationModel({ needs_you: [entry], recent: [other] })}
-                selection={{ entryKey: other.key, visibleKey: other.key }}
-                now={NOW}
-                onOpen={onOpen}
-                onRetry={() => {}}
-              />
-            </SessionReadStateProvider>
-          </VisibleSessionTargetProvider>
-        </WorkspaceActivityContext>
-      </SessionMenuProvider>
+      <HostRuntimeStatusContext value={runtimeStatus}>
+        <SessionMenuProvider>
+          <WorkspaceActivityContext value={observer}>
+            <VisibleSessionTargetProvider>
+              <SessionReadStateProvider>
+                <SessionNavigationList
+                  model={navigationModel({ needs_you: [entry], recent: [other] })}
+                  selection={{ entryKey: other.key, visibleKey: other.key }}
+                  now={NOW}
+                  onOpen={onOpen}
+                  onRetry={() => {}}
+                />
+              </SessionReadStateProvider>
+            </VisibleSessionTargetProvider>
+          </WorkspaceActivityContext>
+        </SessionMenuProvider>
+      </HostRuntimeStatusContext>
     </QueryClientProvider>,
   );
   return {
@@ -251,6 +258,33 @@ describe("Sidebar session previews", () => {
     expect(within(reopened).getByText("claude/Opus 5.5 · high")).toBeTruthy();
     expect(loadCatalog).toHaveBeenCalledTimes(1);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  test("shows loading and does not read the catalog while the session runtime starts", async () => {
+    const loadCatalog = mock(async () =>
+      createRuntimeCatalogFixture({ models: { models: [], defaultModelsByProvider: {} } }),
+    );
+    configureShellBridge(
+      createShellBridgeFixture({ client: { agentRuntimeLoadCatalog: loadCatalog } }),
+    );
+    const { row } = mountSidebar(
+      [],
+      fixtureEntry(),
+      createHostRuntimeStatusContextValue({
+        statusByKind: {
+          [ref.runtimeKind]: createHostRuntimeStatusFixture({
+            kind: ref.runtimeKind,
+            state: "starting",
+          }),
+        },
+      }),
+    );
+
+    const preview = await openPreview(row);
+    const configuration = within(preview).getByLabelText("Session configuration");
+
+    expect(within(configuration).getByText("Loading model details…")).toBeTruthy();
+    expect(loadCatalog).not.toHaveBeenCalled();
   });
 
   test("shows task workflow, metadata, live model and effort without reading history or adding observers", async () => {

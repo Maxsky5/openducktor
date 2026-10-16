@@ -396,6 +396,55 @@ describe("useSessionStartModalState", () => {
     });
   });
 
+  test("loads a ready runtime catalog while the selected runtime starts", async () => {
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) =>
+      runtimeCatalogFor(runtimeRef.runtimeKind === "claude" ? CLAUDE_CATALOG : CATALOG),
+    );
+    const hostRuntimeStatusContextRef = {
+      current: createHostRuntimeStatusContextValue({
+        statusByKind: {
+          opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
+          claude: createHostRuntimeStatusFixture({ kind: "claude" }),
+        },
+      }),
+    };
+    const { initialCatalog: _initialCatalog, ...props } = createBaseProps({
+      loadCatalog,
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
+    });
+    const harness = createHookHarness(props, { hostRuntimeStatusContextRef });
+
+    await harness.mount();
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "agent_studio",
+        taskId: "TASK-1",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        initialStartMode: "fresh",
+        postStartAction: "kickoff",
+        title: "Start Builder Session",
+      });
+    });
+    await harness.waitFor(
+      (state) =>
+        state.modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "claude")?.resource
+          .status === "ready",
+    );
+
+    expect(loadCatalog).toHaveBeenCalledTimes(1);
+    expect(loadCatalog).toHaveBeenCalledWith(expect.objectContaining({ runtimeKind: "claude" }));
+    expect(harness.getLatest().isCatalogLoading).toBe(true);
+    expect(
+      harness
+        .getLatest()
+        .modelPickerRuntimes.find((runtime) => runtime.descriptor.kind === "opencode")?.resource
+        .status,
+    ).toBe("loading");
+
+    await harness.unmount();
+  });
+
   test("initializes selection from repo role defaults", async () => {
     const harness = createHookHarness(createBaseProps());
 
@@ -1248,7 +1297,9 @@ describe("useSessionStartModalState", () => {
         });
       });
       await harness.waitFor(
-        (state) => state.modelPickerRuntimes[0]?.resource.status === "refreshing",
+        (state) =>
+          loadCatalog.mock.calls.length > 0 &&
+          state.modelPickerRuntimes[0]?.resource.status === "ready",
       );
 
       expect(loadCatalog).toHaveBeenCalledWith(runtimeRef);
@@ -1263,6 +1314,59 @@ describe("useSessionStartModalState", () => {
       expect(harness.getLatest().selection?.modelId).toBe("claude-sonnet");
     } finally {
       refresh.resolve(runtimeCatalogFor(CATALOG));
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("keeps a stale workflow catalog usable after its refresh fails", async () => {
+    const queryClient = new QueryClient();
+    const runtimeRef = {
+      repoPath: "/repo",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo",
+    };
+    queryClient.setQueryData(
+      runtimeCatalogQueryKeys.catalog(runtimeRef),
+      runtimeCatalogFor(CATALOG),
+      {
+        updatedAt: 0,
+      },
+    );
+    const loadCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
+      throw new Error("Catalog refresh failed");
+    });
+    const props = createBaseProps({ loadCatalog });
+    delete props.initialCatalog;
+    const harness = createHookHarness(props, { queryClient });
+
+    try {
+      await harness.mount();
+      await harness.run(() => {
+        harness.getLatest().openStartModal({
+          source: "kanban",
+          taskId: "TASK-FAILED-REFRESH",
+          role: "spec",
+          launchActionId: "spec_initial",
+          postStartAction: "kickoff",
+          title: "Start Spec Session",
+        });
+      });
+      await harness.waitFor((state) => state.modelPickerRuntimes[0]?.resource.status === "failed");
+
+      expect(harness.getLatest().modelPickerRuntimes[0]?.resource).toEqual(
+        expect.objectContaining({ catalog: CATALOG, error: "Catalog refresh failed" }),
+      );
+      expect(harness.getLatest().catalogError).toBeNull();
+      await harness.run(() => {
+        harness.getLatest().handleSelectModelPair({
+          runtimeKind: "opencode",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+        });
+      });
+      expect(harness.getLatest().selection?.modelId).toBe("claude-sonnet");
+    } finally {
       await harness.unmount();
       queryClient.clear();
     }

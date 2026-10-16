@@ -195,9 +195,7 @@ export function useAgentStudioSessionActions({
     taskId,
     role,
     selectedSessionIdentity: stableSelectedSessionIdentity,
-    isSessionModelCatalogLoading:
-      selectedSession.runtimeData.isLoadingModelCatalog &&
-      selectedSession.runtimeData.modelCatalog === null,
+    isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
     assertCanPrepareSession,
     agentStudioReady,
     canStartNewSession,

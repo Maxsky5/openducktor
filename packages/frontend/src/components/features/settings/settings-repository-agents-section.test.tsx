@@ -63,7 +63,8 @@ describe("RepositoryAgentsSection", () => {
           {
             runtimeKind: "codex",
             catalog: codexCatalog,
-            isFetching: false,
+            isLoading: false,
+            unavailableReason: null,
             isEnabled: true,
             error: null,
             retry: async () => {},
@@ -142,7 +143,8 @@ describe("RepositoryAgentsSection", () => {
           {
             runtimeKind: "codex",
             catalog: codexCatalog,
-            isFetching: false,
+            isLoading: false,
+            unavailableReason: null,
             isEnabled: true,
             error: null,
             retry: async () => {},

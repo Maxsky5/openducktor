@@ -70,14 +70,14 @@ export function useWorkspaceCreationModels({
     favoriteState,
     isLoadingRuntimeDefinitions:
       runtime.isLoadingRuntimeDefinitions || runtime.isLoadingRuntimeSettings,
-    isLoadingCatalog: resources.some((resource) => resource.isFetching),
+    isLoadingCatalog: resources.some((resource) => resource.isLoading),
     errors,
     getCatalogForRuntime: (runtimeKind) => {
       const resource = resources.find((candidate) => candidate.runtimeKind === runtimeKind);
-      return resource?.isEnabled && !resource.error ? resource.catalog : null;
+      return resource?.isEnabled ? resource.catalog : null;
     },
     isCatalogLoadingForRuntime: (runtimeKind) =>
-      resources.find((resource) => resource.runtimeKind === runtimeKind)?.isFetching ?? false,
+      resources.find((resource) => resource.runtimeKind === runtimeKind)?.isLoading ?? false,
     retry: async () => {
       setRetryError(null);
       try {

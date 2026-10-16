@@ -6,8 +6,13 @@ import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { createAzureDevOpsProtectedStorage } from "./protected-storage";
 
+// Native storage calls the OS credential store, which can exceed the default timeout while the
+// full suite runs in parallel.
+const NATIVE_STORAGE_TIMEOUT_MS = 30_000;
+
 // Linux CI has no Secret Service for libsecret.
-const testWithNativeStorage = process.platform === "linux" ? test.skip : test;
+const testWithNativeStorage = (name: string, run: () => Promise<void>) =>
+  (process.platform === "linux" ? test.skip : test)(name, run, NATIVE_STORAGE_TIMEOUT_MS);
 
 testWithNativeStorage("creates the cache directory for a first connection read", async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "openducktor-azure-storage-"));

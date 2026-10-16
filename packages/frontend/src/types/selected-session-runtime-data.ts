@@ -3,6 +3,7 @@ import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core"
 export type SelectedSessionRuntimeData = {
   modelCatalog: AgentModelCatalog | null;
   todos: AgentSessionTodoItem[];
+  /** No catalog is shown yet, and a read runs or waits for the runtime to become ready. */
   isLoadingModelCatalog: boolean;
   catalogError: string | null;
   todosError: string | null;

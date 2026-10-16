@@ -1,8 +1,8 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMemo } from "react";
-import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
 import type { SessionModelTarget } from "./workspace-session-model-resources";
-import { useWorkspaceSessionModelCatalog } from "./use-workspace-session-model-catalog";
 
 /** Keeps catalog reads and model writes bound to the saved chat target. */
 export function useWorkspaceSessionModelTarget({
@@ -10,7 +10,6 @@ export function useWorkspaceSessionModelTarget({
   record,
   identity,
   selection,
-  readinessState,
   updateDraft,
   updateSpeed,
   update,
@@ -19,7 +18,6 @@ export function useWorkspaceSessionModelTarget({
   record: WorkspaceSession;
   identity: SessionModelTarget["identity"];
   selection: SessionModelTarget["selection"];
-  readinessState: RuntimeReadinessState;
   updateDraft: NonNullable<SessionModelTarget["updateDraft"]>;
   updateSpeed: NonNullable<SessionModelTarget["updateSpeed"]>;
   update: SessionModelTarget["update"];
@@ -30,10 +28,11 @@ export function useWorkspaceSessionModelTarget({
     () => ({ repoPath, runtimeKind, workingDirectory }),
     [repoPath, runtimeKind, workingDirectory],
   );
-  const { catalog, error, isLoading, retry } = useWorkspaceSessionModelCatalog(
+  const { loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
+  const { catalog, error, isLoading, retry } = useRuntimeModelCatalogQuery({
     runtimeRef,
-    readinessState,
-  );
+    loadRuntimeCatalog: loadRepoRuntimeCatalog,
+  });
   return useMemo(
     () => ({
       identity,

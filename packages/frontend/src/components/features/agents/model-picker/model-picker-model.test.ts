@@ -9,7 +9,9 @@ import type { ModelPickerCatalogResource, ModelPickerRuntime } from "./model-pic
 import {
   buildModelPickerItems,
   isSameModelPickerValue,
+  modelPickerResourceFromCatalogQuery,
   modelPickerValueKey,
+  toModelPickerCatalogResource,
 } from "./model-picker-model";
 
 const catalog = (runtimeKind: "opencode" | "codex"): AgentModelCatalog => ({
@@ -130,7 +132,7 @@ describe("model-picker-model", () => {
     expect(favoriteItems.map((item) => item.value)).toEqual([codexFavorite]);
   });
 
-  test("does not expose retained catalog rows from a failed resource", () => {
+  test("exposes cached catalog rows from a failed refresh", () => {
     const failedRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -151,33 +153,60 @@ describe("model-picker-model", () => {
         activeView: "opencode",
         searchQuery: "",
         lockedRuntimeKind: null,
-      }),
-    ).toEqual([]);
-  });
-
-  test("exposes cached model rows during a background refresh", () => {
-    const refreshingRuntimes: ModelPickerRuntime[] = [
-      {
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        isEnabledForFavorites: true,
-        resource: {
-          status: "refreshing",
-          catalog: catalog("opencode"),
-          retry: async () => {},
-        },
-      },
-    ];
-    expect(
-      buildModelPickerItems({
-        runtimes: refreshingRuntimes,
-        favorites: [],
-        activeView: "opencode",
-        searchQuery: "",
-        lockedRuntimeKind: null,
       }).map((item) => item.value),
     ).toEqual([
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
       { runtimeKind: "opencode", providerId: "proxy", modelId: "sonnet" },
     ]);
+  });
+
+  test("keeps a cached catalog ready during a background refresh", () => {
+    const retry = async () => {};
+    expect(
+      toModelPickerCatalogResource({
+        catalog: catalog("opencode"),
+        isLoading: false,
+        error: null,
+        isAvailable: true,
+        unavailableReason: "Unavailable.",
+        retry,
+      }),
+    ).toEqual({ status: "ready", catalog: catalog("opencode") });
+    expect(
+      toModelPickerCatalogResource({
+        catalog: null,
+        isLoading: true,
+        error: null,
+        isAvailable: true,
+        unavailableReason: "Unavailable.",
+        retry,
+      }),
+    ).toEqual({ status: "loading", catalog: null, retry });
+  });
+
+  test("shows the runtime reason, or the caller reason, for an unavailable catalog query", () => {
+    const query = {
+      runtimeKind: "opencode" as const,
+      catalog: null,
+      isLoading: false,
+      isEnabled: true,
+      error: null,
+      unavailableReason: "OpenCode failed to start.",
+      retry: async () => {},
+    };
+
+    expect(modelPickerResourceFromCatalogQuery(query, "Not loaded.")).toEqual({
+      status: "unavailable",
+      catalog: null,
+      reason: "OpenCode failed to start.",
+    });
+    expect(
+      modelPickerResourceFromCatalogQuery({ ...query, unavailableReason: null }, "Not loaded."),
+    ).toEqual({ status: "unavailable", catalog: null, reason: "Not loaded." });
+    expect(modelPickerResourceFromCatalogQuery(undefined, "Not loaded.")).toEqual({
+      status: "unavailable",
+      catalog: null,
+      reason: "Not loaded.",
+    });
   });
 });

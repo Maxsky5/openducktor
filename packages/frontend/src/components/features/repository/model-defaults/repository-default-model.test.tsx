@@ -59,6 +59,7 @@ const opencodeCatalog: AgentModelCatalog = {
 const favoriteState = {
   favorites: [],
   isLoading: false,
+  unavailableReason: null,
   readError: null,
   isMutationPending: false,
   mutationError: null,
@@ -85,7 +86,8 @@ const renderBlock = ({
         {
           runtimeKind: descriptor.kind,
           catalog,
-          isFetching: false,
+          isLoading: false,
+          unavailableReason: null,
           isEnabled: true,
           error: null,
           retry: async () => {},

@@ -4,8 +4,7 @@ import type {
   AgentRuntimeCatalog,
   LoadAgentRuntimeCatalogInput,
 } from "@openducktor/core";
-import { createElement, type PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query-wrapper";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
@@ -14,8 +13,7 @@ import { useChatComposerSubagents } from "./use-chat-composer-subagents";
 
 enableReactActEnvironment();
 
-const wrapper = ({ children }: PropsWithChildren) =>
-  createElement(QueryProvider, { useIsolatedClient: true }, children);
+const wrapper = IsolatedRuntimeQueryWrapper;
 
 const EMPTY_CATALOG: AgentSubagentCatalog = { subagents: [] };
 const catalogFixture: AgentRuntimeCatalog = createRuntimeCatalogFixture({

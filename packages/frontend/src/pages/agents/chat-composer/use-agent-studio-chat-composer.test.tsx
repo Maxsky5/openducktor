@@ -20,7 +20,7 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   createSessionMessagesState,
   getSessionMessagesSlice,
@@ -32,7 +32,11 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import {
+  createHostRuntimeStatusContextValue,
+  createHostRuntimeStatusFixture,
+} from "@/test-utils/shared-test-fixtures";
+import type { HostRuntimeStatusContextValue, RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -275,6 +279,7 @@ const createRuntimeWrapper = (
   options: {
     runtimeDefinitions?: RuntimeDescriptor[];
     availableRuntimeDefinitions?: RuntimeDescriptor[];
+    runtimeStatus?: HostRuntimeStatusContextValue;
   } = {},
 ) => {
   const runtimeDefinitions = options.runtimeDefinitions ?? [OPENCODE_RUNTIME_DESCRIPTOR];
@@ -303,7 +308,11 @@ const createRuntimeWrapper = (
       createElement(
         RuntimeDefinitionsContext.Provider,
         { value: runtimeDefinitionsContext },
-        children,
+        createElement(
+          HostRuntimeStatusContext.Provider,
+          { value: options.runtimeStatus ?? createHostRuntimeStatusContextValue() },
+          children,
+        ),
       ),
     );
 
@@ -504,12 +513,19 @@ describe("useAgentStudioChatComposer", () => {
         repoSettings: createRepoSettings(expectedSelection),
         loadCatalog,
       }),
+      {
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: {
+            opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
+          },
+        }),
+      },
     );
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
 
+      expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(loadCatalog).not.toHaveBeenCalled();
       expect(harness.getLatest().selectionForNewSession).toEqual(expectedSelection);
     } finally {
@@ -676,7 +692,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("maps existing-session catalog refresh, success, and failure into picker resources", async () => {
+  test("maps existing-session catalog loading, success, and failure into picker resources", async () => {
     const loadedSession = createLoadedSession();
     const harness = createHookHarness(
       createBaseProps({
@@ -695,10 +711,7 @@ describe("useAgentStudioChatComposer", () => {
       await harness.update(
         createBaseProps({
           loadedSession,
-          sessionRuntimeData: createSessionRuntimeData({
-            modelCatalog: CATALOG,
-            isLoadingModelCatalog: true,
-          }),
+          sessionRuntimeData: createSessionRuntimeData({ isLoadingModelCatalog: true }),
         }),
       );
       let selectedRuntime = harness
@@ -706,7 +719,7 @@ describe("useAgentStudioChatComposer", () => {
         .modelPicker.runtimes.find((runtime) => runtime.descriptor.kind === "opencode");
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(selectedRuntime?.resource).toEqual(
-        expect.objectContaining({ status: "refreshing", catalog: CATALOG }),
+        expect.objectContaining({ status: "loading", catalog: null }),
       );
 
       await harness.update(
@@ -747,25 +760,20 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("selects cached models during refresh and rejects a failed catalog", async () => {
+  test("selects cached models before and after a failed refresh", async () => {
     const loadedSession = createLoadedSession();
     const updateAgentSessionModel = mock(async () => {});
     const harness = createHookHarness(
       createBaseProps({
         loadedSession,
-        sessionRuntimeData: createSessionRuntimeData({
-          modelCatalog: CATALOG,
-          isLoadingModelCatalog: true,
-        }),
+        sessionRuntimeData: createSessionRuntimeData({ modelCatalog: CATALOG }),
         updateAgentSessionModel,
       }),
     );
 
     try {
       await harness.mount();
-      await harness.waitFor(
-        (state) => state.modelPicker.runtimes[0]?.resource.status === "refreshing",
-      );
+      await harness.waitFor((state) => state.modelPicker.runtimes[0]?.resource.status === "ready");
       await harness.run(() => {
         harness.getLatest().modelPicker.onValueChange({
           runtimeKind: "opencode",
@@ -796,7 +804,11 @@ describe("useAgentStudioChatComposer", () => {
           modelId: "gpt-5",
         });
       });
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+      expect(updateAgentSessionModel).toHaveBeenLastCalledWith(
+        toAgentSessionIdentity(loadedSession),
+        expect.objectContaining({ providerId: "openai", modelId: "gpt-5" }),
+      );
     } finally {
       await harness.unmount();
     }

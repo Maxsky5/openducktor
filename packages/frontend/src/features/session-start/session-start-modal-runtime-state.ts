@@ -82,23 +82,16 @@ export function useSessionStartModalRuntimeState({
   const usesInitialCatalog =
     initialCatalog !== undefined &&
     (initialCatalog === null || initialCatalog.runtime?.kind === selectedRuntimeKind);
-  const canLoadCatalog = selectedRuntimeReadiness.state === "ready";
+  // The catalog hook reads each requested kind only when that kind is ready.
   const enabledRuntimeKinds = useMemo(() => {
-    if (!isOpen || selectedStartMode === "reuse" || !canLoadCatalog) {
+    if (!isOpen || selectedStartMode === "reuse") {
       return EMPTY_RUNTIME_KINDS;
     }
     if (!usesInitialCatalog || !selectedRuntimeKind) {
       return eligibleRuntimeKinds;
     }
     return eligibleRuntimeKinds.filter((runtimeKind) => runtimeKind !== selectedRuntimeKind);
-  }, [
-    canLoadCatalog,
-    eligibleRuntimeKinds,
-    isOpen,
-    selectedRuntimeKind,
-    selectedStartMode,
-    usesInitialCatalog,
-  ]);
+  }, [eligibleRuntimeKinds, isOpen, selectedRuntimeKind, selectedStartMode, usesInitialCatalog]);
   const { resources } = useRuntimeModelCatalogs({
     repoPath: workspaceRepoPath,
     runtimeKinds: eligibleRuntimeKinds,
@@ -112,7 +105,7 @@ export function useSessionStartModalRuntimeState({
           ? {
               ...resource,
               catalog: initialCatalog ?? null,
-              isFetching: false,
+              isLoading: false,
               error: null,
               isEnabled: true,
             }
@@ -123,18 +116,17 @@ export function useSessionStartModalRuntimeState({
   const selectedResource =
     catalogResources.find((resource) => resource.runtimeKind === selectedRuntimeKind) ?? null;
   const isWaitingForRuntime = selectedRuntimeReadiness.state === "checking";
-  const isFetchingWithoutCatalog =
-    selectedResource?.isFetching === true && !selectedResource.catalog;
 
   return {
     catalog: selectedResource?.catalog ?? null,
     catalogResources,
-    catalogError: selectedResource?.error ?? null,
+    // A cached catalog stays usable after a failed refresh. The picker shows the error.
+    catalogError: selectedResource?.catalog ? null : (selectedResource?.error ?? null),
     isCatalogLoading:
       isOpen &&
       selectedStartMode !== "reuse" &&
       selectedRuntimeKind !== null &&
-      (isWaitingForRuntime || isFetchingWithoutCatalog),
+      (isWaitingForRuntime || selectedResource?.isLoading === true),
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,

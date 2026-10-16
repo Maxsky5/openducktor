@@ -118,7 +118,6 @@ export function WorkspaceSessionChat({
     record,
     identity,
     selection: chatState.selectedModel,
-    readinessState: runtimeReadiness.state,
     updateDraft: actions.updateDraftModel,
     updateSpeed: actions.updateSpeed,
     update: actions.updateSessionModel,

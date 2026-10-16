@@ -13,11 +13,15 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createHostRuntimeStatusContextValue,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { useSessionRuntimeData } from "./use-session-runtime-data";
@@ -89,8 +93,14 @@ const sessionTarget = (state = sessionState()) => ({
   selectedModel: state.selectedModel,
 });
 
+const readyRuntimeStatus = createHostRuntimeStatusContextValue();
+
 const wrapper = ({ children }: PropsWithChildren) =>
-  createElement(QueryProvider, { useIsolatedClient: true }, children);
+  createElement(
+    QueryProvider,
+    { useIsolatedClient: true },
+    createElement(HostRuntimeStatusContext.Provider, { value: readyRuntimeStatus }, children),
+  );
 
 const useSessionRuntimeDataWithQueryClient = (
   args: Parameters<typeof useSessionRuntimeData>[0],
@@ -374,7 +384,7 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
-  test("marks a retained selected-session catalog as loading during a background refresh", async () => {
+  test("keeps a cached selected-session catalog without loading during a background refresh", async () => {
     let resolveSuccessfulRefresh: ((catalog: AgentRuntimeCatalog) => void) | undefined;
     const successfulRefresh = new Promise<AgentRuntimeCatalog>((resolve) => {
       resolveSuccessfulRefresh = resolve;
@@ -442,11 +452,10 @@ describe("useSessionRuntimeData", () => {
           exact: true,
         }),
       ).toBe(1);
-      await harness.waitFor((latest) => latest.runtimeData.isLoadingModelCatalog);
       expect(harness.getLatest().runtimeData).toEqual(
         expect.objectContaining({
           modelCatalog: emptyCatalog,
-          isLoadingModelCatalog: true,
+          isLoadingModelCatalog: false,
           catalogError: null,
         }),
       );
@@ -462,7 +471,7 @@ describe("useSessionRuntimeData", () => {
     }
   });
 
-  test("reports a failed selected-session background refresh after loading ends", async () => {
+  test("keeps the cached selected-session catalog and reports a failed background refresh", async () => {
     let rejectRefresh: ((reason: Error) => void) | undefined;
     const failedRefresh = new Promise<AgentRuntimeCatalog>((_resolve, reject) => {
       rejectRefresh = reject;
@@ -501,8 +510,10 @@ describe("useSessionRuntimeData", () => {
           exact: true,
         });
       });
-      await harness.waitFor((latest) => latest.runtimeData.isLoadingModelCatalog);
-      expect(harness.getLatest().runtimeData.catalogError).toBeNull();
+      await harness.waitFor(() => loadRuntimeCatalog.mock.calls.length === 2);
+      expect(harness.getLatest().runtimeData).toEqual(
+        expect.objectContaining({ isLoadingModelCatalog: false, catalogError: null }),
+      );
 
       rejectRefresh?.(new Error("Catalog refresh failed"));
       await harness.waitFor(
@@ -510,10 +521,58 @@ describe("useSessionRuntimeData", () => {
       );
       expect(harness.getLatest().runtimeData).toEqual(
         expect.objectContaining({
-          modelCatalog: null,
+          modelCatalog: emptyCatalog,
           isLoadingModelCatalog: false,
           catalogError: "Catalog refresh failed",
         }),
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the cached selected-session catalog when a refresh returns failed models", async () => {
+    const catalogRequests: AgentRuntimeCatalog[] = [
+      availableRuntimeCatalog(emptyCatalog),
+      { models: { status: "failed", message: "Model list failed" } },
+    ];
+    const loadRuntimeCatalog = mock(async () => {
+      const request = catalogRequests.shift();
+      if (!request) {
+        throw new Error("unexpected model catalog request");
+      }
+      return request;
+    });
+    const harness = createHookHarness(
+      useSessionRuntimeDataWithQueryClient,
+      {
+        repoPath: "/repo",
+        selectedSession: sessionTarget(),
+        runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
+        runtimeReadinessState: "ready",
+        loadRuntimeCatalog,
+        readSessionTodos: mock(async () => []),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((latest) => latest.runtimeData.modelCatalog === emptyCatalog);
+      await harness.run(({ queryClient }) =>
+        queryClient.invalidateQueries({
+          queryKey: runtimeCatalogQueryKeys.catalog({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          }),
+          exact: true,
+        }),
+      );
+      await harness.waitFor((latest) => latest.runtimeData.catalogError === "Model list failed");
+
+      expect(harness.getLatest().runtimeData).toEqual(
+        expect.objectContaining({ modelCatalog: emptyCatalog, isLoadingModelCatalog: false }),
       );
     } finally {
       await harness.unmount();

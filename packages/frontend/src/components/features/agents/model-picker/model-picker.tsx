@@ -99,19 +99,29 @@ const activeViewFor = (
   );
 };
 
+/** One loader covers every runtime whose catalog has not loaded yet. */
+const LoadingNotice = ({
+  runtimes,
+}: {
+  runtimes: readonly ModelPickerRuntime[];
+}): ReactElement | null => {
+  const [first, ...others] = runtimes.filter((runtime) => runtime.resource.status === "loading");
+  if (!first) {
+    return null;
+  }
+  const subject = others.length === 0 ? `${first.descriptor.label} models` : "models";
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground" role="status">
+      <LoaderCircle className="animate-spin" aria-hidden="true" />
+      Loading {subject}...
+    </div>
+  );
+};
+
 const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElement | null => {
   const { resource } = runtime;
-  if (resource.status === "loading" || resource.status === "refreshing") {
-    return (
-      <div
-        className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"
-        role="status"
-      >
-        <LoaderCircle className="animate-spin" aria-hidden="true" />
-        {resource.status === "refreshing" ? "Refreshing" : "Loading"} {runtime.descriptor.label}{" "}
-        models...
-      </div>
-    );
+  if (resource.status === "loading" || resource.status === "ready") {
+    return null;
   }
   if (resource.status === "unavailable") {
     return (
@@ -119,9 +129,6 @@ const ResourceNotice = ({ runtime }: { runtime: ModelPickerRuntime }): ReactElem
         {runtime.descriptor.label}: {resource.reason}
       </div>
     );
-  }
-  if (resource.status === "ready") {
-    return null;
   }
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm" role="alert">
@@ -997,6 +1004,7 @@ export function ModelPicker({
               </div>
               <FavoriteNotice state={favoriteState} />
               <div className="flex min-h-0 max-h-80 flex-col overflow-y-auto overflow-x-hidden">
+                <LoadingNotice runtimes={visibleResources} />
                 {visibleResources.map((runtime) => (
                   <ResourceNotice key={runtime.descriptor.kind} runtime={runtime} />
                 ))}

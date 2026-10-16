@@ -1,5 +1,4 @@
-import type { AgentModelSelection, RuntimeKind } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
+import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import {
   selectableModelPickerCatalog,
@@ -17,7 +16,7 @@ import { withSpeed } from "@/lib/model-catalog-selection";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
 import { host } from "@/state/operations/host";
-import { refreshRuntimeCatalogIfStale } from "@/state/queries/runtime-catalog";
+import { useRefreshStaleRuntimeCatalog } from "@/state/queries/use-runtime-catalog-query";
 import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
 import {
   projectWorkspaceModelResources,
@@ -148,37 +147,17 @@ export function useWorkspaceSessionModelPicker(
     },
     [runtimes, handleSelectModelPair],
   );
-  const queryClient = useQueryClient();
-  const refreshRuntimeCatalog = useCallback(
-    (runtimeKind: RuntimeKind) => {
-      refreshRuntimeCatalogIfStale(
-        queryClient,
-        { repoPath, runtimeKind, workingDirectory: repoPath },
-        loadRepoRuntimeCatalog,
-      );
-    },
-    [loadRepoRuntimeCatalog, queryClient, repoPath],
-  );
+  const refreshRuntimeCatalog = useRefreshStaleRuntimeCatalog(loadRepoRuntimeCatalog);
   const onCatalogSelectorOpen = useCallback(() => {
     if (session?.runtimeRef) {
-      refreshRuntimeCatalogIfStale(queryClient, session.runtimeRef, loadRepoRuntimeCatalog);
+      refreshRuntimeCatalog(session.runtimeRef);
       return;
     }
-    if (selection?.runtimeKind) {
-      refreshRuntimeCatalog(selection.runtimeKind);
-      return;
+    const kinds = selection?.runtimeKind ? [selection.runtimeKind] : runtimeKinds;
+    for (const runtimeKind of kinds) {
+      refreshRuntimeCatalog({ repoPath, runtimeKind, workingDirectory: repoPath });
     }
-    for (const runtimeKind of runtimeKinds) {
-      refreshRuntimeCatalog(runtimeKind);
-    }
-  }, [
-    loadRepoRuntimeCatalog,
-    queryClient,
-    refreshRuntimeCatalog,
-    runtimeKinds,
-    selection?.runtimeKind,
-    session?.runtimeRef,
-  ]);
+  }, [refreshRuntimeCatalog, repoPath, runtimeKinds, selection?.runtimeKind, session?.runtimeRef]);
   const modelPicker = useMemo(
     () => ({
       runtimes,
