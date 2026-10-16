@@ -32,10 +32,11 @@ import {
 } from "./review-suggestions";
 import {
   aggregateChecks,
+  ciChecks,
+  currentBuildIds,
   latestStatusChecks,
   parseBuildCheck,
   parseCiPolicy,
-  policyCheck,
   timestampOrNull,
 } from "./review-checks";
 import {
@@ -126,9 +127,7 @@ export const createAzureDevOpsReviewPort = ({
         },
         catch: asValidationError,
       });
-      const buildIds = new Set(
-        ciPolicies.flatMap((policy) => (policy.buildId === null ? [] : [policy.buildId])),
-      );
+      const buildIds = currentBuildIds(ciPolicies);
       const iterationStatuses =
         iterationId === null
           ? []
@@ -165,11 +164,11 @@ export const createAzureDevOpsReviewPort = ({
       });
       return yield* Effect.try({
         try: () => {
-          const statusChecks = latestStatusChecks([...statuses, ...iterationStatuses]);
-          const checks = [
-            ...ciPolicies.flatMap((policy) => policyCheck(policy, builds, statusChecks)),
-            ...statusChecks.values(),
-          ];
+          const checks = ciChecks(
+            ciPolicies,
+            builds,
+            latestStatusChecks([...statuses, ...iterationStatuses]),
+          );
           const activities = threads.flatMap((thread) =>
             parseThreadActivities(thread, pullRequest.record.url, suggestionFiles),
           );
@@ -254,7 +253,6 @@ const parseThreadActivities = (
   }
   return comments.flatMap((commentValue) => {
     const comment = requireRecord(commentValue, "thread.comment");
-    // System comments record pull request events, such as pushes, reviewer changes, and policy updates.
     if (comment.isDeleted === true || comment.commentType === "system") {
       return [];
     }
@@ -294,7 +292,6 @@ const parseThreadActivities = (
 const threadProperty = (thread: AzureDevOpsJsonRecord, name: string): string | null =>
   optionalString(optionalRecord(optionalRecord(thread.properties)?.[name])?.$value);
 
-// Azure DevOps reviewer vote values.
 const VOTE_PRESENTATION = new Map<string, { outcome: PullRequestReviewOutcome; body: string }>([
   ["10", { outcome: "approved", body: "" }],
   ["5", { outcome: "approved", body: "Approved with suggestions." }],
@@ -303,7 +300,6 @@ const VOTE_PRESENTATION = new Map<string, { outcome: PullRequestReviewOutcome; b
   ["-10", { outcome: "changes_requested", body: "Rejected." }],
 ]);
 
-/** Maps an Azure DevOps vote system thread to a review activity. */
 const voteActivities = (
   thread: AzureDevOpsJsonRecord,
   threadId: string,

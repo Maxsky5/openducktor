@@ -12,7 +12,6 @@ import {
 
 const statusKey = (genre: string, name: string): string => `${genre}\n${name}`;
 
-/** Returns the latest check for each status genre and name, keyed by `statusKey`. */
 export const latestStatusChecks = (
   values: AzureDevOpsJson[],
 ): Map<string, PullRequestReviewCheck> => {
@@ -69,19 +68,23 @@ const statusCheck = (
   };
 };
 
-// Azure DevOps policy type IDs. Other policy types, such as reviewer or merge strategy
-// policies, are pull request completion rules and not CI checks.
 const BUILD_POLICY_TYPE_ID = "0609b952-1397-4640-95ec-e00a01b2c241";
 const STATUS_POLICY_TYPE_ID = "cbdc66da-9728-4af8-aada-9a5a32e4a226";
 
-type AzureCiPolicy = {
+type AzureBuildPolicy = {
+  kind: "build";
   check: PullRequestReviewCheck;
   requirement: string;
-  /** Build that the policy currently evaluates. Null when no current build exists. */
-  buildId: number | null;
-  /** Status that the policy waits for. Null for build policies. */
-  statusKey: string | null;
+  currentBuildId: number | null;
 };
+
+type AzureStatusPolicy = {
+  kind: "status";
+  check: PullRequestReviewCheck;
+  statusKey: string;
+};
+
+type AzureCiPolicy = AzureBuildPolicy | AzureStatusPolicy;
 
 export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
   const record = requireRecord(value, "policy");
@@ -98,6 +101,7 @@ export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
     const isBuildCurrent = context.isExpired !== true && context.buildIsNotCurrent !== true;
     return [
       {
+        kind: "build",
         check: policyEvaluationCheck(
           record,
           name,
@@ -105,8 +109,7 @@ export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
           `${requirement} build policy`,
         ),
         requirement,
-        buildId: isBuildCurrent ? readBuildId(context.buildId) : null,
-        statusKey: null,
+        currentBuildId: isBuildCurrent ? readBuildId(context.buildId) : null,
       },
     ];
   }
@@ -116,14 +119,13 @@ export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
     const name = optionalString(settings.defaultDisplayName) ?? `${genre}: ${statusName}`;
     return [
       {
+        kind: "status",
         check: policyEvaluationCheck(
           record,
           name,
           "Azure DevOps status",
           `${requirement} status policy`,
         ),
-        requirement,
-        buildId: null,
         statusKey: statusKey(genre, statusName),
       },
     ];
@@ -131,29 +133,40 @@ export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
   return [];
 };
 
-/**
- * Builds one check per CI policy. A build policy uses its current build for state and link.
- * A status policy is omitted when the status it waits for is already posted.
- */
-export const policyCheck = (
-  policy: AzureCiPolicy,
+export const currentBuildIds = (policies: AzureCiPolicy[]): Set<number> =>
+  new Set(
+    policies.flatMap((policy) =>
+      policy.kind === "build" && policy.currentBuildId !== null ? [policy.currentBuildId] : [],
+    ),
+  );
+
+export const ciChecks = (
+  policies: AzureCiPolicy[],
   builds: ReadonlyMap<number, PullRequestReviewCheck>,
   statusChecks: ReadonlyMap<string, PullRequestReviewCheck>,
-): PullRequestReviewCheck[] => {
-  if (policy.statusKey !== null && statusChecks.has(policy.statusKey)) {
-    return [];
-  }
-  const build = policy.buildId === null ? undefined : builds.get(policy.buildId);
+): PullRequestReviewCheck[] => [
+  ...policies.flatMap((policy) => {
+    if (policy.kind === "build") {
+      return [buildPolicyCheck(policy, builds)];
+    }
+    return statusChecks.has(policy.statusKey) ? [] : [policy.check];
+  }),
+  ...statusChecks.values(),
+];
+
+const buildPolicyCheck = (
+  policy: AzureBuildPolicy,
+  builds: ReadonlyMap<number, PullRequestReviewCheck>,
+): PullRequestReviewCheck => {
+  const build = policy.currentBuildId === null ? undefined : builds.get(policy.currentBuildId);
   if (!build) {
-    return [policy.check];
+    return policy.check;
   }
-  return [
-    {
-      ...build,
-      name: policy.check.name,
-      details: `${policy.requirement} build policy; ${build.details}`,
-    },
-  ];
+  return {
+    ...build,
+    name: policy.check.name,
+    details: `${policy.requirement} build policy; ${build.details}`,
+  };
 };
 
 const policyEvaluationCheck = (
