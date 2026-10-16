@@ -23,8 +23,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { horizontalTabSortTransition } from "@/components/ui/use-horizontal-sortable-tabs";
-import { TerminalLayer, TerminalStatusMessages, terminalTabLifecycle } from "@/features/terminals";
+import {
+  TerminalLayer,
+  TerminalRestartButton,
+  TerminalStatusMessages,
+  terminalTabLifecycle,
+} from "@/features/terminals";
 import { cn } from "@/lib/utils";
+import { hostClient } from "@/lib/host-client";
 import {
   PANEL_NAMES,
   PANEL_TAB_KIND_RULES,
@@ -159,6 +165,7 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
   const scrollEdges = useScrollEdges(scrollRef);
   const dropGaps = useDropGaps(model.panel, model.tabs);
   const panelName = PANEL_NAMES[model.panel];
+  const controller = model.terminals.controller;
   return (
     <div
       ref={setNodeRef}
@@ -232,6 +239,18 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
         </TooltipTrigger>
         <TooltipContent side="bottom">New tab</TooltipContent>
       </Tooltip>
+      {controller &&
+        model.tabs.map((tab) =>
+          tab.kind === "terminal" && tab.terminal.terminalId ? (
+            <TerminalRestartButton
+              key={tab.terminal.terminalId}
+              summary={tab.terminal.summary}
+              controller={controller}
+              onRestart={hostClient.terminalRestart}
+              isVisible={tab.id === model.selectedTabId}
+            />
+          ) : null,
+        )}
       {dropState === "rejected" ? (
         <span role="status" className="sr-only">
           This tab cannot move to the {panelName}.

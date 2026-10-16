@@ -8,6 +8,7 @@ export class TerminalServiceError extends Data.TaggedError("TerminalServiceError
   readonly operation:
     | "create"
     | "start_command"
+    | "restart"
     | "read_output_tail"
     | "list"
     | "prepare_path_input"

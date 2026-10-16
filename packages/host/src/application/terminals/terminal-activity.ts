@@ -3,7 +3,12 @@ import {
   type TerminalActivity,
   type TerminalActivityMessage,
 } from "@openducktor/contracts";
-import { copyTerminalSummary, isLiveTerminal, type TerminalSession } from "./terminal-session";
+import {
+  canRestartCommand,
+  copyTerminalSummary,
+  isLiveTerminal,
+  type TerminalSession,
+} from "./terminal-session";
 
 /** Metadata observers never attach to terminal output or inspect the process tree. */
 export const createTerminalActivity = (sessions: ReadonlyMap<string, TerminalSession>) => {
@@ -13,6 +18,7 @@ export const createTerminalActivity = (sessions: ReadonlyMap<string, TerminalSes
     return {
       summary: copyTerminalSummary(session),
       command: session.command,
+      restartable: canRestartCommand(session),
     };
   };
   const publish = (message: TerminalActivityMessage): void => {

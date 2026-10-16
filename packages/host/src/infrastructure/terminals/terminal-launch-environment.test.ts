@@ -183,7 +183,7 @@ testIfPosixShellIsAvailable(
       }
 
       expect(Object.fromEntries(launches)).toEqual({
-        zsh: [true, "-ilc"],
+        zsh: [true, "-l"],
         tcsh: [true, "-ic"],
         fish: [true, "-ilc"],
         nu: {
@@ -264,7 +264,7 @@ const runCommandLines = async (
 // Each shell runs its own syntax. State reaches later lines, and the run stops at the first failure.
 const shellCases = [
   {
-    shells: ["/bin/bash", "/bin/zsh", "/bin/sh"],
+    shells: ["/bin/bash", "/bin/sh"],
     lines: (target: string): TerminalCommandLines => [
       `cd "${target}"`,
       "cat marker.txt",

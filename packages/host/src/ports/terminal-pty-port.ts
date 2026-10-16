@@ -13,6 +13,7 @@ export type TerminalPtyLaunchPlan = {
    * `args`, and removes the file after the process exits.
    */
   windowsBatchScript?: string;
+  interactiveCommand?: true;
   cwd: string;
   env: Readonly<Record<string, string>>;
   grid: TerminalGrid;

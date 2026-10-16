@@ -1,24 +1,48 @@
 import { TERMINAL_LIMITS } from "./terminal-limits";
+import { commandInput } from "./terminal-command-input";
 
-/** Read shell execution markers through the existing xterm parser, not terminal titles. */
+export type TerminalTrackedCommand = {
+  input: string | null;
+  exitCode: number | null;
+  ready?: boolean;
+};
+
 export const createTerminalCommandTracker = (
   nonce: string,
-  onCommand: (command: string | null) => void,
+  onCommand: (command: string | null, details: TerminalTrackedCommand) => void,
 ): ((data: string) => boolean) => {
-  let pending: string | null = null;
+  let pending: { command: string; input: string | null } | null = null;
   return (data) => {
-    const [kind, line, source] = data.split(";");
-    if (kind === "E") {
-      pending =
-        source === nonce && line
-          ? decodeCommand(line).slice(0, TERMINAL_LIMITS.activityCommandLength).trim() || null
-          : null;
+    const [kind, line, source, restart] = data.split(";");
+    if (kind === "R" && line === nonce && (source === "0" || source === "1")) {
+      onCommand(null, { input: null, exitCode: null, ready: source === "1" });
+    } else if (kind === "E") {
+      const input = source === nonce && line ? decodeCommand(line) : null;
+      const command =
+        input === null ? null : input.slice(0, TERMINAL_LIMITS.activityCommandLength).trim();
+      pending = null;
+      if (command) {
+        pending = {
+          command,
+          input:
+            restart === "1" &&
+            input !== null &&
+            commandInput(input).byteLength <= TERMINAL_LIMITS.inputBytes
+              ? input
+              : null,
+        };
+      }
     } else if (kind === "C" && pending !== null) {
-      onCommand(pending);
+      onCommand(pending.command, {
+        input: pending.input,
+        exitCode: null,
+      });
       pending = null;
-    } else if (kind === "D") {
+    } else if (kind === "D" && source === nonce && /^\d{1,3}$/u.test(line ?? "")) {
+      const exitCode = Number(line);
+      if (exitCode > 255) return true;
       pending = null;
-      onCommand(null);
+      onCommand(null, { input: null, exitCode });
     }
     return true;
   };

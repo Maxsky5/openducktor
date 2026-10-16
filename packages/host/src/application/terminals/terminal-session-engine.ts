@@ -34,6 +34,7 @@ import {
 import type { TerminalTitleSettlementScheduler } from "./terminal-title-settler";
 import { createTerminalSessionProducer } from "./terminal-session-producer";
 import { createTerminalActivity } from "./terminal-activity";
+import { restartCommand } from "./terminal-command-restart";
 
 export type { TerminalSessionAttachInput } from "./terminal-session-output";
 
@@ -123,6 +124,14 @@ export const createTerminalSessionEngine = ({
         return { activeTerminalIds, unknownTerminalIds };
       }),
     ...producer,
+    restart: (terminalId: string, expectedCommand: string) =>
+      Effect.gen(function* () {
+        const session = yield* Effect.try({
+          try: () => getSession(terminalId, "restart"),
+          catch: (cause) => terminalOperationFailure(cause, "restart"),
+        });
+        yield* restartCommand(session, expectedCommand);
+      }),
     list: (filter: TerminalListFilter): TerminalSummary[] => {
       pruneExited();
       return [...sessions.values()].flatMap((session) => {
@@ -240,12 +249,29 @@ export const createTerminalSessionEngine = ({
               terminalId,
             ),
           );
+        const inputBlocked = () =>
+          terminalFailure(
+            "invalid_input",
+            "write",
+            session.inputOwner === "action"
+              ? "Wait for the Action to start before sending input."
+              : "Wait for the command restart to finish before sending input.",
+            terminalId,
+          );
+        if (session.inputOwner !== null) return yield* Effect.fail(inputBlocked());
+        const lineIndex =
+          session.commandRun?.phase === "command" && !(data.byteLength === 1 && data[0] === 3)
+            ? session.commandRun.lineIndex
+            : null;
         // Read the process in lane order: a command terminal replaces its process in this lane.
         return yield* session.operations.run(
-          Effect.suspend(() => {
+          Effect.gen(function* () {
+            if (session.commandRun?.phase === "command")
+              yield* Effect.promise(() => session.screen.parsed());
+            if (session.inputOwner !== null) return yield* Effect.fail(inputBlocked());
             const handle = session.resources.handle;
             if (!handle || !isLiveTerminal(session))
-              return Effect.fail(
+              return yield* Effect.fail(
                 terminalFailure(
                   "terminal_not_found",
                   "write",
@@ -253,7 +279,22 @@ export const createTerminalSessionEngine = ({
                   terminalId,
                 ),
               );
-            return handle
+            if (
+              lineIndex !== null &&
+              session.commandRun?.phase === "command" &&
+              lineIndex !== session.commandRun.lineIndex
+            )
+              return yield* Effect.fail(
+                terminalFailure(
+                  "invalid_input",
+                  "write",
+                  "The Action moved to another command. Wait for it to start, then send input again.",
+                  terminalId,
+                ),
+              );
+            if (session.commandRun?.phase === "command" && data.includes(3))
+              session.commandRun.stopRequested = true;
+            return yield* handle
               .write(data)
               .pipe(
                 Effect.mapError((cause) =>

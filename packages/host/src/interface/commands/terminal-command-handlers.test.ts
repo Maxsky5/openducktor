@@ -10,6 +10,7 @@ type TerminalCommandService = Parameters<typeof createTerminalCommandHandlers>[0
 const createService = <Overrides extends Partial<TerminalCommandService>>(
   overrides: Overrides,
 ): TerminalCommandService => ({
+  restart: () => Effect.die("restart is not configured for this test"),
   close: () => Effect.die("close is not configured for this test"),
   create: () => Effect.die("create is not configured for this test"),
   list: () => Effect.die("list is not configured for this test"),

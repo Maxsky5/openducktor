@@ -1,5 +1,5 @@
 import type { TerminalSummary } from "@openducktor/contracts";
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, type Fiber } from "effect";
 import type { TerminalGrid, TerminalPtyHandle } from "../../ports/terminal-pty-port";
 import type { TerminalCommandResult } from "./terminal-command";
 import { TERMINAL_LIMITS } from "./terminal-limits";
@@ -11,6 +11,8 @@ import { type SerialLane } from "../../effect/serial-gate";
 /** The command of a command terminal. The result settles once, when the command ends. */
 export type TerminalCommandRun = {
   phase: "command" | "shell";
+  lineIndex: number;
+  stopRequested: boolean;
   readonly result: Deferred.Deferred<TerminalCommandResult>;
 };
 
@@ -23,53 +25,11 @@ export type TerminalSession = {
   grid: TerminalGrid;
   readonly shell: string;
   command: string | null;
+  ready: Deferred.Deferred<boolean>;
+  runningCommand: string | null;
+  inputOwner: "action" | "restart" | null;
   readonly commandRun: TerminalCommandRun | null;
   resources: TerminalSessionResources;
-};
-
-class TerminalSessionResources {
-  private currentHandle: TerminalPtyHandle | null = null;
-  private disposed = false;
-
-  constructor(private readonly titleTracker: TerminalTitleTracker) {}
-
-  get handle(): TerminalPtyHandle | null {
-    return this.currentHandle;
-  }
-
-  activate(handle: TerminalPtyHandle): boolean {
-    if (this.disposed) return false;
-    this.currentHandle = handle;
-    return true;
-  }
-
-  /** A command terminal releases its command process before its next process starts. */
-  releaseHandle(): void {
-    this.currentHandle = null;
-  }
-
-  consumeOutput(data: Uint8Array): void {
-    if (!this.disposed) this.titleTracker.consume(data);
-  }
-
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    this.titleTracker.dispose();
-    this.currentHandle = null;
-  }
-}
-
-type TerminalSessionInput = {
-  summary: TerminalSummary;
-  titleTracker: TerminalTitleTracker;
-  operations: SerialLane;
-  replayByteLimit: number;
-  shell: string;
-  grid: TerminalGrid;
-  /** The activity command. A command terminal shows its command lines until the command ends. */
-  command: string | null;
-  commandRun: TerminalCommandRun | null;
 };
 
 export const createTerminalSession = (input: TerminalSessionInput): TerminalSession => {
@@ -85,6 +45,9 @@ export const createTerminalSession = (input: TerminalSessionInput): TerminalSess
     grid: input.grid,
     shell: input.shell,
     command: input.command,
+    ready: Deferred.makeUnsafe(),
+    runningCommand: null,
+    inputOwner: null,
     commandRun: input.commandRun,
     resources: new TerminalSessionResources(input.titleTracker),
   };
@@ -104,6 +67,11 @@ export const isLiveTerminal = (session: TerminalSession): boolean =>
 export const isCommandRunning = (session: TerminalSession): boolean =>
   session.commandRun?.phase === "command" && isLiveTerminal(session);
 
+export const canRestartCommand = (session: TerminalSession): boolean =>
+  session.summary.lifecycle === "running" &&
+  session.runningCommand !== null &&
+  !(session.summary.startedBy === "host" && isCommandRunning(session));
+
 /** Settles the command result once. Call it after queued output is parsed, before the screen is released. */
 export const settleCommandRun = (
   session: TerminalSession,
@@ -112,7 +80,15 @@ export const settleCommandRun = (
   const run = session.commandRun;
   if (!run || Deferred.isDoneUnsafe(run.result)) return;
   const outputTail = session.screen.outputTail(TERMINAL_LIMITS.commandOutputTailLines);
-  Deferred.doneUnsafe(run.result, Effect.succeed(result(outputTail)));
+  let outcome = result(outputTail);
+  if (run.stopRequested && outcome.type === "exited") {
+    outcome = {
+      type: "failed",
+      message: "The Action stopped. Run the Action again to finish it.",
+      outputTail,
+    };
+  }
+  Deferred.doneUnsafe(run.result, Effect.succeed(outcome));
 };
 
 /** Settles the command result after the screen parses the queued output. */
@@ -148,6 +124,8 @@ export const markTerminalOverflowed = (session: TerminalSession): boolean => {
 
 export const forgetTerminalSession = (session: TerminalSession): void => {
   session.resources.dispose();
+  session.inputOwner = null;
+  Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   if (session.screenReleaseStarted) return;
   session.screenReleaseStarted = true;
   void session.screen.drained().then(() => {
@@ -166,6 +144,8 @@ export const exitTerminalSession = (
 ): boolean => {
   if (session.summary.lifecycle === "exited") return false;
   session.resources.dispose();
+  session.inputOwner = null;
+  Deferred.doneUnsafe(session.ready, Effect.succeed(false));
   settleCommandRunAfterOutput(session, closedResult);
   session.summary.lifecycle = "exited";
   session.summary.exit = {
@@ -181,3 +161,54 @@ const closedResult = (outputTail: readonly string[]): TerminalCommandResult => (
   type: "closed",
   outputTail,
 });
+
+class TerminalSessionResources {
+  private currentHandle: TerminalPtyHandle | null = null;
+  private disposed = false;
+  private submission: Fiber.Fiber<void> | null = null;
+
+  constructor(private readonly titleTracker: TerminalTitleTracker) {}
+
+  get handle(): TerminalPtyHandle | null {
+    return this.currentHandle;
+  }
+
+  activate(handle: TerminalPtyHandle): boolean {
+    if (this.disposed) return false;
+    this.currentHandle = handle;
+    return true;
+  }
+
+  ownSubmission(fiber: Fiber.Fiber<void>): void {
+    if (this.disposed) fiber.interruptUnsafe();
+    else this.submission = fiber;
+  }
+
+  releaseHandle(): void {
+    this.currentHandle = null;
+  }
+
+  consumeOutput(data: Uint8Array): void {
+    if (!this.disposed) this.titleTracker.consume(data);
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.submission?.interruptUnsafe();
+    this.submission = null;
+    this.titleTracker.dispose();
+    this.currentHandle = null;
+  }
+}
+
+type TerminalSessionInput = {
+  summary: TerminalSummary;
+  titleTracker: TerminalTitleTracker;
+  operations: SerialLane;
+  replayByteLimit: number;
+  shell: string;
+  grid: TerminalGrid;
+  command: string | null;
+  commandRun: TerminalCommandRun | null;
+};

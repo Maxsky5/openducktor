@@ -11,6 +11,7 @@ import {
   isLiveTerminal,
   markTerminalCloseFailed,
   markTerminalOverflowed,
+  settleCommandRun,
   type TerminalSession,
 } from "./terminal-session";
 import type { TerminalOutputEvents } from "./terminal-session-output";
@@ -245,14 +246,17 @@ export const createTerminalSessionLifecycle = ({
         const result = yield* Effect.result(handle.terminate());
         if (result._tag === "Failure") {
           handleFailure(session);
+          const message = `Failed to terminate terminal ${terminalId}: ${result.failure.message} Retry Close to stop the terminal.`;
+          yield* Effect.promise(() => session.screen.parsed());
+          if (session.commandRun?.phase === "command") {
+            session.commandRun.phase = "shell";
+            session.command = null;
+            session.runningCommand = null;
+            activity.changed(session);
+          }
+          settleCommandRun(session, (outputTail) => ({ type: "failed", message, outputTail }));
           return yield* Effect.fail(
-            terminalFailure(
-              "close_failed",
-              "close",
-              `Failed to terminate terminal ${terminalId}.`,
-              terminalId,
-              result.failure,
-            ),
+            terminalFailure("close_failed", "close", message, terminalId, result.failure),
           );
         }
       }

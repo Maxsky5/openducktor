@@ -9,6 +9,9 @@ import {
   type TerminalPreparePathInputResponse,
   type TerminalStartedBy,
   type TerminalSummary,
+  type TerminalRestartRequest,
+  type TerminalRestartResponse,
+  terminalRestartRequestSchema,
   type TerminalActivityMessage,
   terminalCloseRequestSchema,
   terminalCreateRequestSchema,
@@ -64,6 +67,9 @@ export type TerminalService = {
     sequenceEnd: number,
   ): Effect.Effect<void, TerminalServiceError>;
   detach(terminalId: string, attachmentId: string): Effect.Effect<void, TerminalServiceError>;
+  restart(
+    input: TerminalRestartRequest,
+  ): Effect.Effect<TerminalRestartResponse, TerminalServiceError>;
   close(input: TerminalCloseRequest): Effect.Effect<void, TerminalServiceError>;
   closeByTaskScope(
     scope: TerminalTaskScope,
@@ -156,7 +162,7 @@ export const createTerminalService = ({
     // A repository owner starts processes only while its workspace accepts them.
     const withRepositoryAdmission = <A>(
       context: TerminalContext,
-      operation: "create" | "start_command",
+      operation: "create" | "start_command" | "restart",
       start: Effect.Effect<A, TerminalServiceError>,
     ): Effect.Effect<A, TerminalServiceError> => {
       if (!("repoPath" in context) || !withProcessStartAdmission) return start;
@@ -274,6 +280,14 @@ export const createTerminalService = ({
                   }),
             ),
           );
+        }),
+      restart: (rawInput) =>
+        Effect.gen(function* () {
+          const input = terminalRestartRequestSchema.parse(rawInput);
+          const context = engine.getContext(input.terminalId);
+          const restart = engine.restart(input.terminalId, input.expectedCommand);
+          yield* context ? withRepositoryAdmission(context, "restart", restart) : restart;
+          return { restarted: true as const };
         }),
       resize: engine.resize,
       acknowledge: engine.acknowledge,
