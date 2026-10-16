@@ -131,6 +131,9 @@ export const requireString = (value: AzureDevOpsJson | undefined, field: string)
 export const optionalString = (value: AzureDevOpsJson | undefined): string | null =>
   azureDevOpsNonEmptyStringSchema.safeParse(value).data ?? null;
 
+export const timestampOrNull = (value: AzureDevOpsJson | undefined): string | null =>
+  azureDevOpsTimestampSchema.safeParse(value).data ?? null;
+
 export const requirePositiveInteger = (
   value: AzureDevOpsJson | undefined,
   field: string,

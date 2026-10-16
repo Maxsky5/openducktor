@@ -2,100 +2,89 @@ import type {
   PullRequestReviewAggregateStatus,
   PullRequestReviewCheck,
 } from "@openducktor/contracts";
-import { optionalRecord, optionalString, requireRecord } from "./models";
+import {
+  optionalRecord,
+  optionalString,
+  requireRecord,
+  requireString,
+  timestampOrNull,
+} from "./models";
 import {
   azureDevOpsPositiveIntegerSchema,
-  azureDevOpsTimestampSchema,
   type AzureDevOpsJson,
   type AzureDevOpsJsonRecord,
 } from "./json";
 
-const statusKey = (genre: string, name: string): string => `${genre}\n${name}`;
-
-export const latestStatusChecks = (
-  values: AzureDevOpsJson[],
-): Map<string, PullRequestReviewCheck> => {
-  const latest = new Map<string, { check: PullRequestReviewCheck; updatedAt: string }>();
-  for (const value of values) {
-    const record = requireRecord(value, "status");
-    const context = requireRecord(record.context, "status.context");
-    const genre = optionalString(context.genre) ?? "status";
-    const name = optionalString(context.name) ?? optionalString(record.description) ?? "Unnamed";
-    const updatedAt =
-      optionalString(record.updatedDate) ?? optionalString(record.creationDate) ?? "";
-    const key = statusKey(genre, name);
-    const prior = latest.get(key);
-    if (!prior || prior.updatedAt <= updatedAt) {
-      latest.set(key, {
-        updatedAt,
-        check: statusCheck(record, genre, name),
-      });
-    }
-  }
-  return new Map([...latest].map(([key, entry]) => [key, entry.check]));
-};
-
-const statusCheck = (
-  record: AzureDevOpsJsonRecord,
-  genre: string,
-  name: string,
-): PullRequestReviewCheck => {
-  const state = optionalString(record.state)?.toLowerCase() ?? "unknown";
-  const { status, conclusion } = statusState(state);
-  return {
-    name: `${genre}: ${name}`,
-    workflow: "Azure DevOps status",
-    status,
-    conclusion,
-    url: optionalString(record.targetUrl),
-    details: optionalString(record.description) ?? `Azure state: ${state}`,
-    startedAt: timestampOrNull(record.creationDate),
-    completedAt: status === "completed" ? timestampOrNull(record.updatedDate) : null,
-  };
-};
-
-type CheckState = Pick<PullRequestReviewCheck, "status" | "conclusion">;
-
-const statusState = (state: string): CheckState => {
-  switch (state) {
-    case "pending":
-    case "notset":
-    case "not_set":
-      return { status: "in_progress", conclusion: null };
-    case "succeeded":
-      return { status: "completed", conclusion: "success" };
-    case "failed":
-    case "error":
-      return { status: "completed", conclusion: "failure" };
-    case "notapplicable":
-    case "not_applicable":
-      return { status: "completed", conclusion: "skipped" };
-    case "unknown":
-      return { status: "unknown", conclusion: "unknown" };
-    default:
-      return { status: "unknown", conclusion: null };
-  }
-};
-
 const BUILD_POLICY_TYPE_ID = "0609b952-1397-4640-95ec-e00a01b2c241";
 const STATUS_POLICY_TYPE_ID = "cbdc66da-9728-4af8-aada-9a5a32e4a226";
 
-type AzureBuildPolicy = {
-  kind: "build";
-  check: PullRequestReviewCheck;
-  requirement: string;
-  currentBuildId: number | null;
+type AzureCiPolicy =
+  | { kind: "build"; check: PullRequestReviewCheck; currentBuildId: number | null }
+  | { kind: "status"; check: PullRequestReviewCheck; statusKey: string };
+
+type AzureCiPolicies = { policies: AzureCiPolicy[]; currentBuildIds: number[] };
+
+type AzureReviewChecks = {
+  checks: PullRequestReviewCheck[];
+  aggregateStatus: PullRequestReviewAggregateStatus;
 };
 
-type AzureStatusPolicy = {
-  kind: "status";
-  check: PullRequestReviewCheck;
-  statusKey: string;
+export const parseCiPolicies = (values: AzureDevOpsJson[]): AzureCiPolicies => {
+  const policies = values.flatMap(parseCiPolicy);
+  const currentBuildIds = new Set(
+    policies.flatMap((policy) =>
+      policy.kind === "build" && policy.currentBuildId !== null ? [policy.currentBuildId] : [],
+    ),
+  );
+  return { policies, currentBuildIds: [...currentBuildIds] };
 };
 
-type AzureCiPolicy = AzureBuildPolicy | AzureStatusPolicy;
+/**
+ * The policy evaluation decides each policy check's state. Its current build or posted status
+ * adds the link, times, and details. Posted statuses that no policy claims become their own checks.
+ */
+export const reviewChecks = ({
+  policies,
+  builds,
+  statuses,
+}: {
+  policies: AzureCiPolicy[];
+  builds: ReadonlyMap<number, AzureDevOpsJson>;
+  statuses: AzureDevOpsJson[];
+}): AzureReviewChecks => {
+  const statusChecks = latestStatusChecks(statuses);
+  const claimedStatusKeys = new Set(
+    policies.flatMap((policy) => (policy.kind === "status" ? [policy.statusKey] : [])),
+  );
+  const policyChecks = policies.map((policy) => {
+    if (policy.kind === "status") {
+      return withSource(policy.check, statusChecks.get(policy.statusKey));
+    }
+    const build = policy.currentBuildId === null ? undefined : builds.get(policy.currentBuildId);
+    return withSource(policy.check, build === undefined ? undefined : parseBuildCheck(build));
+  });
+  const unclaimedStatusChecks = [...statusChecks]
+    .filter(([key]) => !claimedStatusKeys.has(key))
+    .map(([, check]) => check);
+  const checks = [...policyChecks, ...unclaimedStatusChecks];
+  return { checks, aggregateStatus: aggregateChecks(checks) };
+};
 
-export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
+const withSource = (
+  check: PullRequestReviewCheck,
+  source: PullRequestReviewCheck | undefined,
+): PullRequestReviewCheck =>
+  source === undefined
+    ? check
+    : {
+        ...check,
+        url: source.url,
+        details: `${check.details}; ${source.details}`,
+        startedAt: source.startedAt,
+        completedAt: check.status === "completed" ? source.completedAt : null,
+      };
+
+const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
   const record = requireRecord(value, "policy");
   const configuration = requireRecord(record.configuration, "policy.configuration");
   const type = requireRecord(configuration.type, "policy.configuration.type");
@@ -117,14 +106,16 @@ export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
           "Azure Pipelines",
           `${requirement} build policy`,
         ),
-        requirement,
         currentBuildId: isBuildCurrent ? readBuildId(context.buildId) : null,
       },
     ];
   }
   if (type.id === STATUS_POLICY_TYPE_ID) {
     const genre = optionalString(settings.statusGenre) ?? "status";
-    const statusName = optionalString(settings.statusName) ?? "Unnamed";
+    const statusName = requireString(
+      settings.statusName,
+      "policy.configuration.settings.statusName",
+    );
     const name = optionalString(settings.defaultDisplayName) ?? `${genre}: ${statusName}`;
     return [
       {
@@ -142,40 +133,69 @@ export const parseCiPolicy = (value: AzureDevOpsJson): AzureCiPolicy[] => {
   return [];
 };
 
-export const currentBuildIds = (policies: AzureCiPolicy[]): Set<number> =>
-  new Set(
-    policies.flatMap((policy) =>
-      policy.kind === "build" && policy.currentBuildId !== null ? [policy.currentBuildId] : [],
-    ),
-  );
+const statusKey = (genre: string, name: string): string => `${genre}\n${name}`;
 
-export const ciChecks = (
-  policies: AzureCiPolicy[],
-  builds: ReadonlyMap<number, PullRequestReviewCheck>,
-  statusChecks: ReadonlyMap<string, PullRequestReviewCheck>,
-): PullRequestReviewCheck[] => [
-  ...policies.flatMap((policy) => {
-    if (policy.kind === "build") {
-      return [buildPolicyCheck(policy, builds)];
+const latestStatusChecks = (values: AzureDevOpsJson[]): Map<string, PullRequestReviewCheck> => {
+  const latest = new Map<string, { check: PullRequestReviewCheck; updatedAt: string }>();
+  for (const value of values) {
+    const record = requireRecord(value, "status");
+    const context = requireRecord(record.context, "status.context");
+    const genre = optionalString(context.genre) ?? "status";
+    const name = optionalString(context.name) ?? optionalString(record.description) ?? "Unnamed";
+    const updatedAt =
+      optionalString(record.updatedDate) ?? optionalString(record.creationDate) ?? "";
+    const key = statusKey(genre, name);
+    const prior = latest.get(key);
+    if (!prior || prior.updatedAt <= updatedAt) {
+      latest.set(key, {
+        updatedAt,
+        check: statusCheck(record, genre, name),
+      });
     }
-    return statusChecks.has(policy.statusKey) ? [] : [policy.check];
-  }),
-  ...statusChecks.values(),
-];
-
-const buildPolicyCheck = (
-  policy: AzureBuildPolicy,
-  builds: ReadonlyMap<number, PullRequestReviewCheck>,
-): PullRequestReviewCheck => {
-  const build = policy.currentBuildId === null ? undefined : builds.get(policy.currentBuildId);
-  if (!build) {
-    return policy.check;
   }
+  return new Map([...latest].map(([key, entry]) => [key, entry.check]));
+};
+
+type CheckState = Pick<PullRequestReviewCheck, "status" | "conclusion">;
+
+const statusCheck = (
+  record: AzureDevOpsJsonRecord,
+  genre: string,
+  name: string,
+): PullRequestReviewCheck => {
+  const state = optionalString(record.state)?.toLowerCase() ?? "unknown";
+  const { status, conclusion } = statusState(state);
   return {
-    ...build,
-    name: policy.check.name,
-    details: `${policy.requirement} build policy; ${build.details}`,
+    name: `${genre}: ${name}`,
+    workflow: "Azure DevOps status",
+    status,
+    conclusion,
+    url: optionalString(record.targetUrl),
+    details: optionalString(record.description) ?? `Azure state: ${state}`,
+    startedAt: timestampOrNull(record.creationDate),
+    completedAt: status === "completed" ? timestampOrNull(record.updatedDate) : null,
   };
+};
+
+const statusState = (state: string): CheckState => {
+  switch (state) {
+    case "pending":
+    case "notset":
+    case "not_set":
+      return { status: "in_progress", conclusion: null };
+    case "succeeded":
+      return { status: "completed", conclusion: "success" };
+    case "failed":
+    case "error":
+      return { status: "completed", conclusion: "failure" };
+    case "notapplicable":
+    case "not_applicable":
+      return { status: "completed", conclusion: "skipped" };
+    case "unknown":
+      return { status: "unknown", conclusion: "unknown" };
+    default:
+      return { status: "unknown", conclusion: null };
+  }
 };
 
 const policyEvaluationCheck = (
@@ -224,7 +244,7 @@ const readBuildId = (value: AzureDevOpsJson | undefined): number | null => {
   return azureDevOpsPositiveIntegerSchema.safeParse(numeric).data ?? null;
 };
 
-export const parseBuildCheck = (value: AzureDevOpsJson): PullRequestReviewCheck => {
+const parseBuildCheck = (value: AzureDevOpsJson): PullRequestReviewCheck => {
   const record = requireRecord(value, "build");
   const definition = requireRecord(record.definition, "build.definition");
   const statusValue = optionalString(record.status)?.toLowerCase() ?? "unknown";
@@ -276,9 +296,7 @@ const buildConclusion = (
   }
 };
 
-export const aggregateChecks = (
-  checks: PullRequestReviewCheck[],
-): PullRequestReviewAggregateStatus => {
+const aggregateChecks = (checks: PullRequestReviewCheck[]): PullRequestReviewAggregateStatus => {
   if (checks.length === 0) {
     return "unknown";
   }
@@ -310,6 +328,3 @@ const buildWebUrl = (record: AzureDevOpsJsonRecord): string | null => {
   }
   return optionalString(record.url);
 };
-
-export const timestampOrNull = (value: AzureDevOpsJson | undefined): string | null =>
-  azureDevOpsTimestampSchema.safeParse(value).data ?? null;

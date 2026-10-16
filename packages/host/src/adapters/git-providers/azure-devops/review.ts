@@ -5,11 +5,13 @@ import {
   type PullRequestReviewActivity,
   type PullRequestReviewContext,
   type PullRequestReviewOutcome,
+  type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostValidationError,
   errorMessage,
+  type HostError,
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
 import type { PullRequestReviewProviderPort } from "../../../ports/pull-request-review-provider-port";
@@ -22,6 +24,7 @@ import {
   requirePositiveInteger,
   requireRecord,
   requireString,
+  timestampOrNull,
 } from "./models";
 import type { AzureDevOpsRestClient } from "./rest-client";
 import type { GitProviderRepositoryPort } from "../../../ports/git-provider-port";
@@ -30,15 +33,7 @@ import {
   readAzureSuggestionFiles,
   type AzureSuggestionFile,
 } from "./review-suggestions";
-import {
-  aggregateChecks,
-  ciChecks,
-  currentBuildIds,
-  latestStatusChecks,
-  parseBuildCheck,
-  parseCiPolicy,
-  timestampOrNull,
-} from "./review-checks";
+import { parseCiPolicies, reviewChecks } from "./review-checks";
 import {
   azureDevOpsNumberSchema,
   azureDevOpsPositiveIntegerSchema,
@@ -122,7 +117,7 @@ export const createAzureDevOpsReviewPort = ({
           return {
             iterationId,
             sourceCommit: optionalString(optionalRecord(iteration?.sourceRefCommit)?.commitId),
-            ciPolicies: policies.flatMap(parseCiPolicy),
+            ciPolicies: parseCiPolicies(policies),
           };
         },
         catch: asValidationError,
@@ -134,25 +129,12 @@ export const createAzureDevOpsReviewPort = ({
               operation: "read pull request iteration statuses",
               path: `git/repositories/${encodeURIComponent(repository.repositoryId)}/pullrequests/${number}/iterations/${iterationId}/statuses`,
             });
-      const buildEntries = yield* Effect.all(
-        [...currentBuildIds(ciPolicies)].map((buildId) =>
-          client
-            .request(input.repoConfig, repository, {
-              operation: `read build ${buildId}`,
-              path: `build/builds/${buildId}`,
-            })
-            .pipe(
-              Effect.flatMap((response) =>
-                Effect.try({
-                  try: () => [buildId, parseBuildCheck(response.body)] as const,
-                  catch: asValidationError,
-                }),
-              ),
-            ),
-        ),
-        { concurrency: 4 },
+      const builds = yield* readBuilds(
+        client,
+        input.repoConfig,
+        repository,
+        ciPolicies.currentBuildIds,
       );
-      const builds = new Map(buildEntries);
       const suggestionFiles = yield* readAzureSuggestionFiles({
         client,
         repoConfig: input.repoConfig,
@@ -163,11 +145,11 @@ export const createAzureDevOpsReviewPort = ({
       });
       return yield* Effect.try({
         try: () => {
-          const checks = ciChecks(
-            ciPolicies,
+          const { checks, aggregateStatus } = reviewChecks({
+            policies: ciPolicies.policies,
             builds,
-            latestStatusChecks([...statuses, ...iterationStatuses]),
-          );
+            statuses: [...statuses, ...iterationStatuses],
+          });
           const activities = threads.flatMap((thread) =>
             parseThreadActivities(thread, pullRequest.record.url, suggestionFiles),
           );
@@ -187,7 +169,7 @@ export const createAzureDevOpsReviewPort = ({
                   ? "closed"
                   : pullRequest.record.state,
             },
-            aggregateStatus: aggregateChecks(checks),
+            aggregateStatus,
             checks,
             comments: activities,
             reviewThreads: {
@@ -222,6 +204,24 @@ const unavailable = (reason: string): PullRequestReviewContext => ({
   reason,
 });
 
+const readBuilds = (
+  client: AzureDevOpsRestClient,
+  repoConfig: RepoConfig,
+  repository: AzureDevOpsRepository,
+  buildIds: number[],
+): Effect.Effect<Map<number, AzureDevOpsJson>, HostError> =>
+  Effect.all(
+    buildIds.map((buildId) =>
+      client
+        .request(repoConfig, repository, {
+          operation: `read build ${buildId}`,
+          path: `build/builds/${buildId}`,
+        })
+        .pipe(Effect.map((response) => [buildId, response.body] as const)),
+    ),
+    { concurrency: 4 },
+  ).pipe(Effect.map((entries) => new Map(entries)));
+
 const latestIterationId = (iterations: AzureDevOpsJson[]): number | null => {
   const ids = iterations.flatMap((value) => {
     const id = requireRecord(value, "iteration").id;
@@ -238,54 +238,61 @@ const parseThreadActivities = (
 ): PullRequestReviewActivity[] => {
   const thread = requireRecord(value, "thread");
   const threadId = String(requirePositiveInteger(thread.id, "thread.id"));
-  const comments = Array.isArray(thread.comments) ? thread.comments : [];
+  const comments = (Array.isArray(thread.comments) ? thread.comments : [])
+    .map((comment) => requireRecord(comment, "thread.comment"))
+    .filter((comment) => comment.isDeleted !== true);
   if (threadProperty(thread, "CodeReviewThreadType") === "VoteUpdate") {
     return voteActivities(thread, threadId, comments, pullRequestUrl);
   }
   const isResolved = resolvedThreadStatus(optionalString(thread.status));
   const context = optionalRecord(thread.threadContext) ?? {};
+  const path = optionalString(context.filePath);
   const rightStart = optionalRecord(context.rightFileStart) ?? {};
   const rightEnd = optionalRecord(context.rightFileEnd) ?? {};
   const leftStart = optionalRecord(context.leftFileStart) ?? {};
   const rightLine = azureDevOpsNumberSchema.safeParse(rightStart.line).data ?? null;
   const leftLine = azureDevOpsNumberSchema.safeParse(leftStart.line).data ?? null;
   const line = rightLine ?? leftLine;
-  return comments.flatMap((commentValue) => {
-    const comment = requireRecord(commentValue, "thread.comment");
-    if (comment.isDeleted === true || comment.commentType === "system") {
-      return [];
-    }
-    const author = optionalRecord(comment.author) ?? {};
-    const body = optionalString(comment.content) ?? "";
-    const path = optionalString(context.filePath);
-    const suggestionFile = suggestionFiles.get(threadId);
-    const content = parseAzureReviewCommentContent({
-      body,
-      fileContent: suggestionFile?.content ?? null,
-      fileWarning: suggestionFile?.warning ?? null,
-      rightStart,
-      rightEnd,
-    });
-    return [
-      {
-        id: `${threadId}:${String(comment.id ?? "unknown")}`,
-        source: "review_thread" as const,
-        author: optionalString(author.displayName),
-        authorAvatarUrl: optionalString(author.imageUrl),
+  const suggestionFile = suggestionFiles.get(threadId);
+  return comments
+    .filter((comment) => comment.commentType !== "system")
+    .map((comment) => {
+      const content = parseAzureReviewCommentContent({
+        body: optionalString(comment.content) ?? "",
+        fileContent: suggestionFile?.content ?? null,
+        fileWarning: suggestionFile?.warning ?? null,
+        rightStart,
+        rightEnd,
+      });
+      return {
+        ...commentActivityFields(comment, threadId, pullRequestUrl),
+        source: "review_thread",
         body: content.body,
-        patch: null,
         suggestionPatches: content.suggestionPatches,
         suggestionWarning: content.suggestionWarning,
-        url: pullRequestUrl,
-        createdAt: timestampOrNull(comment.publishedDate),
-        updatedAt: timestampOrNull(comment.lastUpdatedDate),
         path,
         line,
         threadId,
         isResolved,
-      },
-    ];
-  });
+      };
+    });
+};
+
+const commentActivityFields = (
+  comment: AzureDevOpsJsonRecord,
+  threadId: string,
+  pullRequestUrl: string,
+) => {
+  const author = optionalRecord(comment.author) ?? {};
+  return {
+    id: `${threadId}:${String(comment.id ?? "unknown")}`,
+    author: optionalString(author.displayName),
+    authorAvatarUrl: optionalString(author.imageUrl),
+    patch: null,
+    url: pullRequestUrl,
+    createdAt: timestampOrNull(comment.publishedDate),
+    updatedAt: timestampOrNull(comment.lastUpdatedDate),
+  };
 };
 
 const threadProperty = (thread: AzureDevOpsJsonRecord, name: string): string | null =>
@@ -302,7 +309,7 @@ const VOTE_PRESENTATION = new Map<string, { outcome: PullRequestReviewOutcome; b
 const voteActivities = (
   thread: AzureDevOpsJsonRecord,
   threadId: string,
-  comments: AzureDevOpsJson[],
+  comments: AzureDevOpsJsonRecord[],
   pullRequestUrl: string,
 ): PullRequestReviewActivity[] => {
   const vote = threadProperty(thread, "CodeReviewVoteResult");
@@ -313,33 +320,18 @@ const voteActivities = (
       message: `Azure DevOps vote thread ${threadId} has unsupported vote value '${vote ?? "missing"}'.`,
     });
   }
-  return comments.flatMap((commentValue) => {
-    const comment = requireRecord(commentValue, "thread.comment");
-    if (comment.isDeleted === true) {
-      return [];
-    }
-    const author = optionalRecord(comment.author) ?? {};
-    return [
-      {
-        id: `${threadId}:${String(comment.id ?? "unknown")}`,
-        source: "review" as const,
-        reviewOutcome: presentation.outcome,
-        author: optionalString(author.displayName),
-        authorAvatarUrl: optionalString(author.imageUrl),
-        body: presentation.body,
-        patch: null,
-        suggestionPatches: [],
-        suggestionWarning: null,
-        url: pullRequestUrl,
-        createdAt: timestampOrNull(comment.publishedDate),
-        updatedAt: timestampOrNull(comment.lastUpdatedDate),
-        path: null,
-        line: null,
-        threadId: null,
-        isResolved: null,
-      },
-    ];
-  });
+  return comments.map((comment) => ({
+    ...commentActivityFields(comment, threadId, pullRequestUrl),
+    source: "review",
+    reviewOutcome: presentation.outcome,
+    body: presentation.body,
+    suggestionPatches: [],
+    suggestionWarning: null,
+    path: null,
+    line: null,
+    threadId: null,
+    isResolved: null,
+  }));
 };
 
 const resolvedThreadStatus = (value: string | null): boolean | null => {
