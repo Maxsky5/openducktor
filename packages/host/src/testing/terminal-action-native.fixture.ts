@@ -1,5 +1,6 @@
 import { checkHooks } from "./terminal-hooks-native.fixture";
 import { checkSubmit } from "./terminal-submit-native.fixture";
+import { checkClose } from "./terminal-close-native.fixture";
 import { checkDirect } from "./terminal-direct-native.fixture";
 import { checkBuffer, checkReady } from "./terminal-ready-native.fixture";
 import assert from "node:assert/strict";
@@ -89,6 +90,7 @@ const fixture = {
 export type TerminalNativeFixture = typeof fixture;
 const cases = new Map([
   ["submit", () => checkSubmit(fixture)],
+  ["close", () => checkClose(fixture)],
   ["direct", () => checkDirect(fixture)],
   ["history", checkHistory],
   ["state", checkState],
