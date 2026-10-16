@@ -1,10 +1,16 @@
-import { hostInvokeFailureSchema, type HostEventPayload } from "@openducktor/contracts";
+import {
+  hostInvokeFailureSchema,
+  themePreferenceSchema,
+  type HostEventPayload,
+  type ThemePreference,
+} from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
 import { observeShellEventResult } from "@openducktor/frontend/lib/shell-bridge";
 import {
   createAgentSessionLiveAttachment,
   createHostClient,
   HostInvokeError,
+  type HostClient,
 } from "@openducktor/host-client";
 import {
   type OpenDucktorElectronApi,
@@ -16,6 +22,24 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
+
+export function withElectronNativeTheme(
+  client: HostClient,
+  applyTheme: (theme: ThemePreference) => Promise<void>,
+): HostClient {
+  return {
+    ...client,
+    async workspaceGetSettingsSnapshot() {
+      const snapshot = await client.workspaceGetSettingsSnapshot();
+      await applyTheme(snapshot.theme);
+      return snapshot;
+    },
+    async setTheme(theme) {
+      await client.setTheme(theme);
+      await applyTheme(themePreferenceSchema.unwrap().parse(theme));
+    },
+  };
+}
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {

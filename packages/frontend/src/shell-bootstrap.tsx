@@ -17,6 +17,7 @@ import { loadSettingsSnapshotFromQuery } from "./state/queries/workspace";
 import { HostConnectionProvider } from "./components/layout/host-connection";
 import { HostConnectionPage } from "./components/layout/host-connection-page";
 import { HostPicker } from "./components/layout/host-picker";
+import { loadRecentItems } from "./features/command-palette/recent-items";
 import {
   hostLocation,
   parseHostEndpoint,
@@ -63,7 +64,7 @@ export const bootstrapOpenDucktorShell = (
   options.hosts
     ? bootstrapHostClient(options, options.hosts)
     : runOpenDucktorShellBootstrap(options, {
-        configureBridge: configureShellBridge,
+        configureBridge,
         getRootById: (rootId) => document.getElementById(rootId),
         loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(appQueryClient),
         applyTheme: (preference) =>
@@ -154,7 +155,7 @@ async function bootstrapHostClient(
   }
   if (!bridge) throw new Error("The local host connection is unavailable.");
   if (local && bridge.notifications !== local.notifications) local.notifications.dispose();
-  configureShellBridge(bridge);
+  configureBridge(bridge);
   window.addEventListener("pagehide", () => bridge?.notifications.dispose(), { once: true });
   const loadTheme = async () => {
     try {
@@ -177,4 +178,9 @@ async function bootstrapHostClient(
       </AppCrashShell>
     </StrictMode>,
   );
+}
+
+function configureBridge(bridge: ShellBridge): void {
+  configureShellBridge(bridge);
+  loadRecentItems();
 }

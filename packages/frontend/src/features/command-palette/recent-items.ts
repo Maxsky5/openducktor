@@ -75,10 +75,9 @@ type RecentItemsStore = {
 
 /** One device-local Recent list for the command palette. */
 export const useRecentItemsStore = create<RecentItemsStore>()((set, get) => {
-  const { items, error } = readRecentItems();
   return {
-    items,
-    loadError: error,
+    items: [],
+    loadError: null,
     record: (target) => {
       const current = get().items;
       const [first] = current;
@@ -95,6 +94,12 @@ export const useRecentItemsStore = create<RecentItemsStore>()((set, get) => {
     },
   };
 });
+
+/** Read only after the shell selects the host that owns this list. */
+export const loadRecentItems = (): void => {
+  const { items, error } = readRecentItems();
+  useRecentItemsStore.setState({ items, loadError: error });
+};
 
 export const recordRecentItem = (target: RecentItemTarget): void =>
   useRecentItemsStore.getState().record(target);

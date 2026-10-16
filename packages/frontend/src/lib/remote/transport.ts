@@ -63,7 +63,7 @@ export const createBrowserRemoteTransport = (): RemoteTransport => ({
       socket.binaryType = "arraybuffer";
       let opened = false;
       const abort = () => {
-        if (socket.readyState !== WebSocket.CONNECTING) socket.close();
+        socket.close();
         reject(signal.reason);
       };
       signal.addEventListener("abort", abort, { once: true });

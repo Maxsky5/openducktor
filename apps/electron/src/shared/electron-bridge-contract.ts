@@ -15,6 +15,7 @@ import type {
   TaskEventStreamAcknowledge,
   TaskEventStreamFrame,
   TaskEventStreamSubscribe,
+  ThemePreference,
 } from "@openducktor/contracts";
 import {
   hostInvokeFailureSchema,
@@ -30,6 +31,7 @@ import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
 export const ELECTRON_HOST_SELECT_CHANNEL = "openducktor:host-select";
+export const ELECTRON_NATIVE_THEME_CHANNEL = "openducktor:native-theme";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
 export const ELECTRON_OPEN_EXTERNAL_URL_CHANNEL = "openducktor:open-external-url";
 export const ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL = "openducktor:local-attachment-preview-src";
@@ -203,6 +205,7 @@ export type OpenDucktorElectronNotificationApi = {
 export type OpenDucktorElectronApi = {
   platform: AppPlatform;
   selectHost(): Promise<void>;
+  setNativeTheme(theme: ThemePreference): Promise<void>;
   invoke(
     command: HostCommandName,
     args?: ElectronHostInvokeRequest["args"],

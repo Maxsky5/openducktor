@@ -6,6 +6,7 @@ import {
 } from "@openducktor/remote-host";
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
+import { registerElectronNativeThemeIpc } from "./electron-native-theme-ipc";
 import { registerElectronNotificationStreamIpc } from "./electron-notification-stream-ipc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -742,6 +743,7 @@ const registerIpcHandlers = (
       shutdownController.isHostShutdownStarted,
     );
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
+  registerElectronNativeThemeIpc(ipcMain, nativeTheme, shutdownController.isHostShutdownStarted);
   registerElectronHostSelectionIpc(ipcMain, shutdownController.isHostShutdownStarted, () =>
     activeNotificationRuntime?.dispose(),
   );

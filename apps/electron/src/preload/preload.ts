@@ -2,11 +2,13 @@ import {
   remoteAccessStateSchema,
   remoteAccessEnableInputSchema,
   remoteAccessNetworksSchema,
+  themePreferenceSchema,
 } from "@openducktor/contracts";
 import {
   ELECTRON_REMOTE_ACCESS_CHANNEL,
   ELECTRON_REMOTE_ACCESS_STATE_CHANNEL,
   ELECTRON_HOST_SELECT_CHANNEL,
+  ELECTRON_NATIVE_THEME_CHANNEL,
 } from "../shared/electron-bridge-contract";
 import { createElectronNotificationStreamApi } from "./electron-notification-stream-ipc";
 import {
@@ -164,6 +166,8 @@ const notifications: OpenDucktorElectronNotificationApi = {
 const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
   selectHost: () => ipcRenderer.invoke(ELECTRON_HOST_SELECT_CHANNEL),
+  setNativeTheme: (theme) =>
+    ipcRenderer.invoke(ELECTRON_NATIVE_THEME_CHANNEL, themePreferenceSchema.unwrap().parse(theme)),
   invoke: invokeHost,
   subscribe(...subscription) {
     return subscribeElectronHostEvent(ipcRenderer, ...subscription);
