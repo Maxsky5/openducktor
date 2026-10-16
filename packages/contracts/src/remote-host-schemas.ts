@@ -136,7 +136,7 @@ export const remoteAccessEnableInputSchema = remoteAccessFieldsSchema.superRefin
         context.addIssue({
           code: "custom",
           path: ["listenPort"],
-          message: "Use a fixed port for a proxy so its forwarding target stays known.",
+          message: "Use a fixed port with a public host address.",
         });
       return;
     }
@@ -149,7 +149,7 @@ export const remoteAccessEnableInputSchema = remoteAccessFieldsSchema.superRefin
         code: "custom",
         path: ["listenHost"],
         message:
-          "Choose a network address that other devices can reach, or set a proxy address in Advanced.",
+          "Choose a network address that other devices can reach, or enter a public host address in Advanced.",
       });
     }
   },

@@ -142,15 +142,14 @@ export function RemoteAccessForm({
 
 function fieldError(field: PropertyKey | undefined, port: number): string | undefined {
   if (field === "listenHost")
-    return "Choose a network. For a custom listen address, set a reachable proxy address in Advanced.";
+    return "Choose a network, or enter a public host address in Advanced.";
   if (field === "listenPort")
     return port === 0
-      ? "Use a fixed port for a proxy. Turn off automatic port selection and enter the port your proxy forwards to."
+      ? "Turn off automatic port selection. Enter the fixed port for this public host address."
       : "Enter a whole port number from 1 to 65535.";
-  if (field === "publicEndpoint")
-    return "Enter a full http or https proxy address that other devices can reach, or leave it blank.";
+  if (field === "publicEndpoint") return "Enter a full http or https host URL, or leave it blank.";
   if (field === "webOrigins")
-    return "Enter web app origins separated by commas, without paths or trailing slashes.";
+    return "Enter web client URLs separated by commas, with no path or trailing slash.";
   return undefined;
 }
 
@@ -190,12 +189,12 @@ function AdvancedSettings({
             aria-describedby={`${id}-port-help`}
           />
           <p id={`${id}-port-help`} className="text-xs text-muted-foreground">
-            Use a fixed port only if your firewall or proxy needs one.
+            Keeps the same port for firewall or proxy rules.
           </p>
         </div>
       ) : null}
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-host`}>Listen address</Label>
+        <Label htmlFor={`${id}-host`}>Local listen address</Label>
         <Input
           id={`${id}-host`}
           name="listenHost"
@@ -205,12 +204,12 @@ function AdvancedSettings({
           aria-describedby={`${id}-host-help`}
         />
         <p id={`${id}-host-help`} className="text-xs text-muted-foreground">
-          Choose which network accepts connections. Use 0.0.0.0 for all IPv4 networks, or 127.0.0.1
-          for a local proxy. These two addresses require a proxy URL below.
+          This computer's IP address. Use 0.0.0.0 for all IPv4 networks or 127.0.0.1 for local
+          connections. Both need a public host address below.
         </p>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-endpoint`}>Proxy address</Label>
+        <Label htmlFor={`${id}-endpoint`}>Public host address</Label>
         <Input
           id={`${id}-endpoint`}
           name="publicEndpoint"
@@ -222,12 +221,12 @@ function AdvancedSettings({
           aria-describedby={`${id}-endpoint-help`}
         />
         <p id={`${id}-endpoint-help`} className="text-xs text-muted-foreground">
-          Leave blank for a direct connection. If a proxy forwards connections to this host, enter
-          its public URL.
+          The address clients use, for Copy, QR, and request checks. Leave blank for direct access.
+          Set up any proxy separately.
         </p>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-web-origins`}>Other web app URLs</Label>
+        <Label htmlFor={`${id}-web-origins`}>Other web clients</Label>
         <Input
           id={`${id}-web-origins`}
           name="webOrigins"
@@ -244,8 +243,8 @@ function AdvancedSettings({
           aria-describedby={`${id}-web-origins-help`}
         />
         <p id={`${id}-web-origins-help`} className="text-xs text-muted-foreground">
-          Local browser clients, Electron, and app.openducktor.dev are allowed. Add other web app
-          URLs here, separated by commas. Use only the scheme, hostname, and port.
+          Allow other web clients to use this host. Enter URLs separated by commas, with no path or
+          trailing slash. Local clients and app.openducktor.dev already work.
         </p>
       </div>
     </div>

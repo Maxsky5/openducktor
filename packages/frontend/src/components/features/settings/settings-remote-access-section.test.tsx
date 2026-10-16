@@ -89,8 +89,9 @@ test.each(["65536", ""])("keeps Advanced settings and rejects invalid port %s", 
   fireEvent.click(await screen.findByRole("button", { name: "Connection settings" }));
   const port = await screen.findByLabelText("Fixed port");
   if (!(port instanceof HTMLInputElement)) throw new Error("Fixed port must be an input.");
-  const proxy = screen.getByLabelText("Proxy address");
-  if (!(proxy instanceof HTMLInputElement)) throw new Error("Proxy address must be an input.");
+  const proxy = screen.getByLabelText("Public host address");
+  if (!(proxy instanceof HTMLInputElement))
+    throw new Error("Public host address must be an input.");
   expect(port.value).toBe("14328");
   expect(proxy.value).toBe(manual.publicEndpoint);
   fireEvent.change(port, { target: { value } });
@@ -110,11 +111,13 @@ test("requires a fixed port for a proxy so its forwarding target stays known", a
   show(operator);
   await screen.findByRole("radio", { name: /192.168.1.9/ });
   fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-  fireEvent.change(screen.getByLabelText("Proxy address"), {
+  fireEvent.change(screen.getByLabelText("Public host address"), {
     target: { value: "https://machine.test/remote" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
-  expect((await screen.findByRole("alert")).textContent).toContain("Use a fixed port for a proxy.");
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "Turn off automatic port selection.",
+  );
   expect(enable).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("switch", { name: "Choose a port automatically" }));
   fireEvent.click(screen.getByRole("button", { name: "Enable remote control" }));
@@ -135,10 +138,11 @@ test.each([
     bridge({ status: "available", configuration: { listenHost, listenPort: 0, publicEndpoint } }),
   );
   fireEvent.click(await screen.findByRole("button", { name: "Connection settings" }));
-  expect(screen.queryByLabelText("Proxy address") === null).toBe(true);
+  expect(screen.queryByLabelText("Public host address") === null).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-  const proxy = screen.getByLabelText("Proxy address");
-  if (!(proxy instanceof HTMLInputElement)) throw new Error("Proxy address must be an input.");
+  const proxy = screen.getByLabelText("Public host address");
+  if (!(proxy instanceof HTMLInputElement))
+    throw new Error("Public host address must be an input.");
   expect(proxy.value).toBe("");
   expect(
     screen
