@@ -248,6 +248,12 @@ export const createTerminalSessionLifecycle = ({
           handleFailure(session);
           const message = `Failed to terminate terminal ${terminalId}: ${result.failure.message} Retry Close to stop the terminal.`;
           yield* Effect.promise(() => session.screen.parsed());
+          if (session.commandRun?.phase === "command") {
+            session.commandRun.phase = "shell";
+            session.command = null;
+            session.runningCommand = null;
+            activity.changed(session);
+          }
           settleCommandRun(session, (outputTail) => ({ type: "failed", message, outputTail }));
           return yield* Effect.fail(
             terminalFailure("close_failed", "close", message, terminalId, result.failure),

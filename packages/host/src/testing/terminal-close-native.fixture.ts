@@ -40,6 +40,11 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
     "print LATER_LINE",
   ] as const;
   let output = "";
+  let command: string | null = null;
+  const stop = engine.observeActivity((message) => {
+    if (message.type === "activity_updated") command = message.activity.command;
+    else if (message.type === "activity_removed") command = null;
+  });
   try {
     const plans = await Effect.runPromise(environment.command(lines));
     const grid = { columns: 120, rows: 24 };
@@ -48,7 +53,7 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
         {
           terminalId: "close",
           label: "close",
-          context: {},
+          context: { repoPath: root, taskId: "close" },
           initialWorkingDir: root,
           createdAt: new Date().toISOString(),
           lifecycle: "starting",
@@ -80,15 +85,25 @@ export async function checkClose({ root, shell, wait }: TerminalNativeFixture) {
     assert.ok(result.outputTail.some((line) => line.includes("COMMAND_READY")));
     assert.ok(!output.includes("COMMAND_DONE\r\n"));
     assert.equal(engine.list({ kind: "all" })[0]?.lifecycle, "close_failed");
+    assert.equal(command, null);
     await Effect.runPromise(engine.write("close", new TextEncoder().encode("answer\r")));
     await wait(() => output.includes("COMMAND_DONE\r\n") && output.includes("\u001b]633;D;0;"));
-    await Effect.runPromise(engine.write("close", new TextEncoder().encode("print AFTER_CLOSE\r")));
-    await wait(() => output.includes("AFTER_CLOSE\r\n"));
+    assert.deepEqual(
+      (await Effect.runPromise(engine.inspectWorkspaceActivity(root))).activeTerminalIds,
+      [],
+    );
+    await Effect.runPromise(
+      engine.write("close", new TextEncoder().encode("print AFTER_CLOSE; read answer\r")),
+    );
+    await wait(() => output.includes("AFTER_CLOSE\r\n") && command !== null);
+    await Effect.runPromise(engine.write("close", new TextEncoder().encode("answer\r")));
+    await wait(() => command === null);
     assert.ok(!output.includes("LATER_LINE"));
     assert.deepEqual(await Effect.runPromise(action.result), result);
     await Effect.runPromise(engine.close("close", true));
     assert.equal(engine.list({ kind: "all" }).length, 0);
   } finally {
+    stop();
     await Effect.runPromise(engine.dispose());
   }
 }
