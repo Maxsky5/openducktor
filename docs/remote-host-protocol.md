@@ -54,11 +54,11 @@ The default address is the listener origin, such as `http://192.168.1.9:14328`. 
 Copy the address into a compatible OpenDucktor client, or show its QR code in a separate dialog.
 A browser opened at the host address shows its descriptor as JSON. To use the full app, open a standalone web client and paste the host address into its picker.
 The On status means the listener started; it does not prove that a phone can reach it.
-Advanced contains an optional fixed port, listen address, and proxy address.
+Advanced contains an optional fixed port, local listen address, and public host address.
 Choose a fixed port only when a firewall or proxy mapping needs one.
-An explicit proxy address requires a fixed port so its forwarding target stays known.
-The listen address selects which local network accepts connections; a wildcard or loopback listen address needs an explicit reachable proxy address.
-A proxy address replaces the generated address; it does not configure the proxy.
+An explicit public host address requires a fixed port.
+The local listen address selects which network accepts connections; a wildcard or loopback listen address needs an explicit reachable public host address.
+The public host address sets the copied address, QR code, allowed hostname and browser origin, and optional path prefix. It does not configure a proxy.
 Invalid fields show a readable error before the listener starts.
 An invalid endpoint or a bind failure leaves local host work usable and shows a configuration failure.
 Select Disable remote control to stop admission and end every remote attachment.
@@ -94,7 +94,7 @@ HTTPS clients must validate certificates; they must not downgrade to HTTP or ign
 
 The normal launcher needs no network parameters to open Remote control or Host connection. Enabling Remote control starts a separate work listener while the local frontend stays private. It does not publish the browser UI.
 
-The work listener accepts `https://app.openducktor.dev`, loopback web client origins, packaged Electron's opaque origin, and its own public origin. Add another static web deployment's origin in Advanced, Other web app URLs. An origin contains the scheme, hostname, and optional port, with no path or trailing slash. This allowlist applies to HTTP and terminal WebSocket requests. Unlisted browser origins get a `403` response.
+The work listener accepts `https://app.openducktor.dev`, loopback web client origins, packaged Electron's opaque origin, and its own public origin. Add another static web deployment's origin in Advanced, Other web clients. An origin contains the scheme, hostname, and optional port, with no path or trailing slash. This allowlist applies to HTTP and terminal WebSocket requests. Unlisted browser origins get a `403` response.
 
 An HTTPS web client must use an HTTPS host endpoint. A native client can use HTTP if its platform permits it. Hosting the client and exposing the host are separate operations.
 
