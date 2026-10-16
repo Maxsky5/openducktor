@@ -293,9 +293,13 @@ describe("buildAgentSystemPrompt", () => {
       "meaningful Conventional Commit before calling odt_build_completed",
       "odt_build_blocked with a specific reason",
       "odt_build_resumed",
+      "revise the spec with odt_set_spec and the plan with odt_set_plan",
+      "Save each changed document as complete Markdown",
+      "Get user approval before changing required scope, design contracts, or security posture",
     ]);
     expect(prompt).not.toContain("Execute the plan in dependency order");
-    expect(prompt).not.toContain("- odt_set_plan(");
+    expect(prompt).toContain("- odt_set_spec(");
+    expect(prompt).toContain("- odt_set_plan(");
   });
 
   test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
@@ -347,7 +351,7 @@ describe("buildAgentSystemPrompt", () => {
     ["system.shared.task_context", 3, 4, "build"],
     ["system.role.spec.base", 6, 7, "spec"],
     ["system.role.planner.base", 7, 8, "planner"],
-    ["system.role.build.base", 4, 5, "build"],
+    ["system.role.build.base", 5, 6, "build"],
     ["system.role.qa.base", 5, 6, "qa"],
     ["kickoff.spec_initial", 4, 5, "spec"],
     ["kickoff.planner_initial", 4, 5, "planner"],

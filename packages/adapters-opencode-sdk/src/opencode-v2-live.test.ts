@@ -470,10 +470,14 @@ describe("OpenCode V2 live observation", () => {
   });
 
   test.each([
-    { role: "spec", allowed: "odt_set_spec", blocked: "odt_build_completed" },
-    { role: "planner", allowed: "odt_set_plan", blocked: "odt_qa_approved" },
-    { role: "build", allowed: "odt_build_completed", blocked: "odt_set_plan" },
-    { role: "qa", allowed: "odt_qa_approved", blocked: "odt_build_completed" },
+    { role: "spec", allowed: ["odt_set_spec"], blocked: "odt_build_completed" },
+    { role: "planner", allowed: ["odt_set_plan"], blocked: "odt_qa_approved" },
+    {
+      role: "build",
+      allowed: ["odt_build_completed", "odt_set_spec", "odt_set_plan"],
+      blocked: "odt_qa_approved",
+    },
+    { role: "qa", allowed: ["odt_qa_approved"], blocked: "odt_build_completed" },
   ] as const)(
     "admits $role children without copying parent workflow instructions",
     async ({ role, allowed, blocked }) => {
@@ -538,11 +542,13 @@ describe("OpenCode V2 live observation", () => {
           await admitted.get(child.id)!.promise;
           expect(entries.has(child.id)).toBe(false);
           expect(child.permissions).toContainEqual(nativeRule);
-          expect(child.permissions).toContainEqual({
-            action: allowed,
-            resource: "*",
-            effect: "allow",
-          });
+          for (const action of allowed) {
+            expect(child.permissions).toContainEqual({
+              action,
+              resource: "*",
+              effect: "allow",
+            });
+          }
           expect(child.permissions).toContainEqual({
             action: blocked,
             resource: "*",

@@ -38,7 +38,6 @@ const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
   return Boolean(
     loadedSession &&
     isWorkflowAgentSession(loadedSession) &&
-    loadedSession.sessionAssociation.role !== "build" &&
     workflowAliasMetadataReady &&
     !previousWorkflowAliasMetadataReady,
   );
@@ -109,8 +108,6 @@ export function useAgentStudioDocuments({
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
   const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
-  const workflowAliasMetadataReadyRef = useRef(workflowAliasMetadataReady);
-  workflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
   useEffect(() => {
     void documentContextKey;
@@ -122,7 +119,7 @@ export function useAgentStudioDocuments({
     documentToolEvents.clear();
     previousSessionKeyRef.current = null;
     previousMessagesRef.current = null;
-    previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReadyRef.current;
+    previousWorkflowAliasMetadataReadyRef.current = false;
   }, [documentContextKey]);
 
   useEffect(() => {
@@ -142,15 +139,6 @@ export function useAgentStudioDocuments({
 
   useEffect(() => {
     if (!loadedSession || !selectedSessionKey || !taskId || !workspaceRepoPath) {
-      return;
-    }
-
-    if (
-      isWorkflowAgentSession(loadedSession) &&
-      loadedSession.sessionAssociation.role === "build"
-    ) {
-      previousSessionKeyRef.current = selectedSessionKey;
-      previousMessagesRef.current = loadedSession.messages;
       return;
     }
 

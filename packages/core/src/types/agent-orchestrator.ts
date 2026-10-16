@@ -243,6 +243,8 @@ export const AGENT_ROLE_TOOL_POLICY = {
     "odt_search_tasks",
     "odt_create_task",
     "odt_update_task",
+    "odt_set_spec",
+    "odt_set_plan",
     "odt_build_blocked",
     "odt_build_resumed",
     "odt_build_completed",
