@@ -216,7 +216,9 @@ describe("FolderPickerDialog", () => {
     const rendered = renderDialog({ onConfirm, selectionMode: "file" });
 
     try {
-      fireEvent.click(await screen.findByRole("button", { name: "codex" }));
+      const file = await screen.findByRole("button", { name: "codex" });
+      expect(file.className).toContain("focus-visible:ring-input-focus");
+      fireEvent.click(file);
       fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Select Folder" }));
 
       await waitFor(() => expect(onConfirm).toHaveBeenCalledWith("/Users/dev/codex"));
