@@ -1,4 +1,9 @@
-import { checkRestart } from "./terminal-restart-native.fixture";
+import {
+  checkRestart,
+  checkSetupRestart,
+  checkErrExitRestart,
+  checkFinishedRestart,
+} from "./terminal-restart-native.fixture";
 import { checkHooks } from "./terminal-hooks-native.fixture";
 import { checkSubmit } from "./terminal-submit-native.fixture";
 import { checkClose } from "./terminal-close-native.fixture";
@@ -96,8 +101,17 @@ const cases = new Map([
   ["history", checkHistory],
   ["state", checkState],
   ["restart", () => checkRestart(fixture)],
+  ["restart-setup", () => checkSetupRestart(fixture)],
+  ["restart-err-exit-action", () => checkErrExitRestart(fixture, "err-exit-action")],
+  ["restart-err-exit-manual", () => checkErrExitRestart(fixture, "err-exit-manual")],
+  ["restart-set-e-line", () => checkErrExitRestart(fixture, "set-e-line")],
+  ["restart-setopt-line", () => checkErrExitRestart(fixture, "setopt-line")],
+  ["restart-finished", () => checkFinishedRestart(fixture)],
   ["hooks", () => checkHooks(fixture)],
-  ["manual", checkManual],
+  ["manual-exec", () => checkManual("exec")],
+  ["manual-lists", () => checkManual("lists")],
+  ["manual-words", () => checkManual("words")],
+  ["manual-restart", () => checkManual("restart")],
   ["ready", () => checkReady(fixture)],
   ["buffer", () => checkBuffer(fixture)],
 ]);
@@ -300,25 +314,34 @@ async function checkState() {
   }
 }
 
-async function checkManual() {
+async function checkManual(group: "exec" | "lists" | "words" | "restart") {
   const command = await serverCommand();
   await writeFile(
     join(root, ".zshrc"),
     `PROMPT="fixture> "\nHISTSIZE=1000\nsetopt SH_WORD_SPLIT\nalias run_server=${formatTerminalPathInput(shell, [`exec ${command}`])}\n`,
   );
-  for (const [name, input, restartable] of [
-    ["plain", `exec ${command}`, false],
-    ["and", `cd '${root}' && exec ${command}`, false],
-    ["or", `false || exec ${command}`, false],
-    ["list", `true; exec ${command}`, false],
-    ["builtin", `ODT_VALUE=1 builtin exec ${command}`, false],
-    ["assignment", `ODT_VALUE='two words' builtin exec ${command}`, false],
-    ["quoted", `'exec' ${command}`, false],
-    ["alias", "run_server", false],
-    ["argument", `${command} exec`, false],
-    ["ordinary", command, true],
-    ["long", `ODT_VALUE='${"x".repeat(1200)}' ${command}`, true],
-  ] as const) {
+  const cases = {
+    exec: [
+      ["plain", `exec ${command}`, false],
+      ["builtin", `ODT_VALUE=1 builtin exec ${command}`, false],
+      ["assignment", `ODT_VALUE='two words' builtin exec ${command}`, false],
+      ["quoted", `'exec' ${command}`, false],
+    ],
+    lists: [
+      ["and", `cd '${root}' && exec ${command}`, false],
+      ["or", `false || exec ${command}`, false],
+      ["list", `true; exec ${command}`, false],
+    ],
+    words: [
+      ["alias", "run_server", false],
+      ["argument", `${command} exec`, false],
+    ],
+    restart: [
+      ["ordinary", command, true],
+      ["long", `ODT_VALUE='${"x".repeat(1200)}' ${command}`, true],
+    ],
+  } as const;
+  for (const [name, input, restartable] of cases[group]) {
     const id = `manual-${name}`;
     const action = await start(id, ["true"]);
     await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));

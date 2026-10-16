@@ -5,100 +5,20 @@ import { Effect } from "effect";
 import { formatTerminalPathInput } from "../application/terminals/terminal-path-input";
 import type { TerminalNativeFixture } from "./terminal-action-native.fixture";
 
-export async function checkRestart({
-  root,
-  shell,
-  start,
-  write,
-  wait,
-  activities,
-  outputs,
-  inputs,
-  engine,
-  serverCommand,
-  readScreen,
-}: TerminalNativeFixture) {
-  const command = await serverCommand();
-  const setupScript = join(root, "setup.cjs");
-  await writeFile(
-    setupScript,
-    'process.on("SIGINT", () => { console.log("SETUP_INTERRUPTED"); process.exit(130); }); process.stdin.once("data", () => process.exit(0)); console.log("SETUP_READY"); process.stdin.resume();',
-  );
-  const setup = await start(
-    "setup",
-    [formatTerminalPathInput(shell, [process.execPath, setupScript])],
+export async function checkRestart(fixture: TerminalNativeFixture) {
+  const {
     root,
-    "host",
-  );
-  await wait(() => outputs.get("setup")!.includes("SETUP_READY\r\n"));
-  assert.equal(activities.get("setup")?.restartable, false);
-  const refused = await Effect.runPromise(
-    Effect.result(engine.restart("setup", activities.get("setup")!.command)),
-  );
-  assert.equal(refused._tag, "Failure");
-  assert.ok(refused._tag === "Failure" && refused.failure.message.includes("setup"));
-  await write("setup", "done\r");
-  const setupResult = await Effect.runPromise(setup.result.pipe(Effect.timeout("2 seconds")));
-  assert.equal(setupResult.type === "exited" && setupResult.exitCode, 0);
-  assert.ok(!outputs.get("setup")!.includes("SETUP_INTERRUPTED\r\n"));
-  await write("setup", `cd . && ${command}\r`);
-  await wait(
-    () =>
-      activities.get("setup")?.restartable === true &&
-      outputs.get("setup")!.includes("SERVER_READY\r\n"),
-  );
-  await Effect.runPromise(engine.restart("setup", activities.get("setup")!.command));
-  await wait(() => outputs.get("setup")!.split("SERVER_READY\r\n").length === 3);
-
-  const setupCommand = formatTerminalPathInput(shell, [process.execPath, setupScript]);
-  for (const [id, manual, lines] of [
-    ["err-exit-action", false, ["set -e", setupCommand]],
-    ["err-exit-manual", true, ["true"]],
-    ["set-e-line", false, ["true", `set -e; ${setupCommand}`]],
-    ["setopt-line", false, ["true", `setopt ERR_EXIT; ${setupCommand}`]],
-  ] as const) {
-    const action = await start(id, [...lines]);
-    if (manual) {
-      await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
-      await write(id, "set -e\r");
-      await wait(() => outputs.get(id)!.split("\u001b]633;R;").length >= 4);
-      await write(id, `${setupCommand}\r`);
-    }
-    await wait(
-      () =>
-        outputs.get(id)!.includes("SETUP_READY\r\n") &&
-        activities.get(id)?.command === (manual ? setupCommand : lines.at(-1)),
-    );
-    assert.equal(activities.get(id)?.restartable, false);
-    const count = inputs.get(id)!.length;
-    const refused = await Effect.runPromise(
-      Effect.result(engine.restart(id, activities.get(id)!.command)),
-    );
-    assert.ok(refused._tag === "Failure");
-    assert.ok(refused.failure.message.includes("no command that can restart"));
-    assert.equal(inputs.get(id)!.length, count);
-    assert.equal(
-      engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
-      "running",
-    );
-    assert.ok(!outputs.get(id)!.includes("SETUP_INTERRUPTED\r\n"));
-    const prompts = outputs.get(id)!.split("\u001b]633;R;").length;
-    await write(id, "done\r");
-    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts);
-    const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
-    assert.equal(result.type === "exited" && result.exitCode, 0);
-    await write(id, "unsetopt ERR_EXIT\r");
-    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts + 1);
-    await write(id, `${setupCommand}\r`);
-    await wait(
-      () =>
-        activities.get(id)?.restartable === true &&
-        outputs.get(id)!.split("SETUP_READY\r\n").length === 3,
-    );
-    await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
-    await wait(() => outputs.get(id)!.split("SETUP_READY\r\n").length === 4);
-  }
-
+    start,
+    write,
+    wait,
+    activities,
+    outputs,
+    inputs,
+    engine,
+    serverCommand,
+    readScreen,
+  } = fixture;
+  const command = await serverCommand();
   const actionRoot = join(root, "action's root");
   await mkdir(join(actionRoot, "target"), { recursive: true });
   const longCommand = `ODT_LONG_ACTION='${"xé🙂".repeat(200)}' ${command}`;
@@ -168,7 +88,93 @@ export async function checkRestart({
   await wait(() => outputs.get("close")!.includes("SERVER_READY\r\n"));
   await Effect.runPromise(engine.close("close", true));
   assert.equal((await Effect.runPromise(closing.result)).type, "closed");
+}
 
+export async function checkSetupRestart(fixture: TerminalNativeFixture) {
+  const { root, start, write, wait, activities, outputs, engine, serverCommand } = fixture;
+  const command = await serverCommand();
+  const setupCommand = await inputCommand(fixture);
+  const setup = await start("setup", [setupCommand], root, "host");
+  await wait(() => outputs.get("setup")!.includes("SETUP_READY\r\n"));
+  assert.equal(activities.get("setup")?.restartable, false);
+  const refused = await Effect.runPromise(
+    Effect.result(engine.restart("setup", activities.get("setup")!.command)),
+  );
+  assert.equal(refused._tag, "Failure");
+  assert.ok(refused._tag === "Failure" && refused.failure.message.includes("setup"));
+  await write("setup", "done\r");
+  const setupResult = await Effect.runPromise(setup.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(setupResult.type === "exited" && setupResult.exitCode, 0);
+  assert.ok(!outputs.get("setup")!.includes("SETUP_INTERRUPTED\r\n"));
+  await write("setup", `cd . && ${command}\r`);
+  await wait(
+    () =>
+      activities.get("setup")?.restartable === true &&
+      outputs.get("setup")!.includes("SERVER_READY\r\n"),
+  );
+  await Effect.runPromise(engine.restart("setup", activities.get("setup")!.command));
+  await wait(() => outputs.get("setup")!.split("SERVER_READY\r\n").length === 3);
+}
+
+export async function checkErrExitRestart(
+  fixture: TerminalNativeFixture,
+  id: "err-exit-action" | "err-exit-manual" | "set-e-line" | "setopt-line",
+) {
+  const { start, write, wait, activities, outputs, inputs, engine } = fixture;
+  const setupCommand = await inputCommand(fixture);
+  const manual = id === "err-exit-manual";
+  const lines = {
+    "err-exit-action": ["set -e", setupCommand],
+    "err-exit-manual": ["true"],
+    "set-e-line": ["true", `set -e; ${setupCommand}`],
+    "setopt-line": ["true", `setopt ERR_EXIT; ${setupCommand}`],
+  } as const;
+  const commandLines = lines[id];
+  const action = await start(id, [...commandLines]);
+  if (manual) {
+    await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+    await write(id, "set -e\r");
+    await wait(() => outputs.get(id)!.split("\u001b]633;R;").length >= 4);
+    await write(id, `${setupCommand}\r`);
+  }
+  await wait(
+    () =>
+      outputs.get(id)!.includes("SETUP_READY\r\n") &&
+      activities.get(id)?.command === (manual ? setupCommand : commandLines.at(-1)),
+  );
+  assert.equal(activities.get(id)?.restartable, false);
+  const count = inputs.get(id)!.length;
+  const refused = await Effect.runPromise(
+    Effect.result(engine.restart(id, activities.get(id)!.command)),
+  );
+  assert.ok(refused._tag === "Failure");
+  assert.ok(refused.failure.message.includes("no command that can restart"));
+  assert.equal(inputs.get(id)!.length, count);
+  assert.equal(
+    engine.list({ kind: "all" }).find((item) => item.terminalId === id)?.lifecycle,
+    "running",
+  );
+  assert.ok(!outputs.get(id)!.includes("SETUP_INTERRUPTED\r\n"));
+  const prompts = outputs.get(id)!.split("\u001b]633;R;").length;
+  await write(id, "done\r");
+  await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts);
+  const result = await Effect.runPromise(action.result.pipe(Effect.timeout("2 seconds")));
+  assert.equal(result.type === "exited" && result.exitCode, 0);
+  await write(id, "unsetopt ERR_EXIT\r");
+  await wait(() => outputs.get(id)!.split("\u001b]633;R;").length > prompts + 1);
+  await write(id, `${setupCommand}\r`);
+  await wait(
+    () =>
+      activities.get(id)?.restartable === true &&
+      outputs.get(id)!.split("SETUP_READY\r\n").length === 3,
+  );
+  await Effect.runPromise(engine.restart(id, activities.get(id)!.command));
+  await wait(() => outputs.get(id)!.split("SETUP_READY\r\n").length === 4);
+}
+
+export async function checkFinishedRestart(fixture: TerminalNativeFixture) {
+  const { start, write, wait, activities, outputs, inputs, engine } = fixture;
+  const setupCommand = await inputCommand(fixture);
   const finished = await start("finished", [setupCommand]);
   await wait(
     () =>
@@ -202,4 +208,13 @@ export async function checkRestart({
   assert.deepEqual(inputs.get("finished")!.slice(count), ["done\r"]);
   const result = await Effect.runPromise(finished.result.pipe(Effect.timeout("2 seconds")));
   assert.equal(result.type === "exited" && result.exitCode, 0);
+}
+
+async function inputCommand({ root, shell }: TerminalNativeFixture) {
+  const script = join(root, "setup.cjs");
+  await writeFile(
+    script,
+    'process.on("SIGINT", () => { console.log("SETUP_INTERRUPTED"); process.exit(130); }); process.stdin.once("data", () => process.exit(0)); console.log("SETUP_READY"); process.stdin.resume();',
+  );
+  return formatTerminalPathInput(shell, [process.execPath, script]);
 }
