@@ -60,7 +60,8 @@ test("role model pickers show only runtimes that support that role", async () =>
       catalogResources={catalogs.map((catalog) => ({
         runtimeKind: catalog.runtime!.kind,
         catalog,
-        isFetching: false,
+        isLoading: false,
+        unavailableReason: null,
         isEnabled: true,
         error: null,
         retry: async () => {},

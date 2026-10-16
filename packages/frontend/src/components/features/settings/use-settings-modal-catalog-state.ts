@@ -45,7 +45,7 @@ export const useSettingsModalCatalogState = ({
     for (const resource of resources) {
       catalogs[resource.runtimeKind] = resource.catalog;
       errors[resource.runtimeKind] = resource.error;
-      if (resource.isFetching) {
+      if (resource.isLoading) {
         loading.push(resource.runtimeKind);
       }
     }

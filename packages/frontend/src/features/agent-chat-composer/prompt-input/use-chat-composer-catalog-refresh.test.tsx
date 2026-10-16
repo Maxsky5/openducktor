@@ -2,8 +2,7 @@ import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { createElement, type PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query-wrapper";
 import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
@@ -12,8 +11,7 @@ import { useChatComposerCatalogRefresh } from "./use-chat-composer-catalog-refre
 
 enableReactActEnvironment();
 
-const wrapper = ({ children }: PropsWithChildren) =>
-  createElement(QueryProvider, { useIsolatedClient: true }, children);
+const wrapper = IsolatedRuntimeQueryWrapper;
 
 const sessionRuntimeRef: RuntimeWorkingDirectoryRef = {
   repoPath: "/repo",

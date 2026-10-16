@@ -19,11 +19,7 @@ import { cn } from "@/lib/utils";
 import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
 import { createHostRuntimeCatalogOperations } from "@/state/operations/shared/runtime-catalog";
 import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import {
-  resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
 import type {
   SessionNavigationEntry,
   SessionNavigationWorkspace,
@@ -234,18 +230,15 @@ function SessionPreviewModelDetails({
       workingDirectory: executionTarget.workingDirectory,
     };
   }
-  const enabled = runtimeRef !== null && model !== null;
-  const catalogQuery = useQuery({
-    ...(runtimeRef
-      ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled,
+  const modelCatalog = useRuntimeModelCatalogQuery({
+    runtimeRef,
+    loadRuntimeCatalog,
+    enabled: model !== null,
   });
-  const surface = resolveRuntimeCatalogSurface(catalogQuery.data?.models, catalogQuery.error);
   let infoParts: string[];
   if (!model) infoParts = ["Model not recorded"];
-  else if (enabled && catalogQuery.isPending) infoParts = ["Loading model details…"];
-  else infoParts = agentModelInfoParts(model, surface.catalog);
+  else if (modelCatalog.isLoading) infoParts = ["Loading model details…"];
+  else infoParts = agentModelInfoParts(model, modelCatalog.catalog);
   const label = infoParts.join(" · ");
   return (
     <div aria-label="Session configuration" className="min-w-0 flex-1 space-y-1.5">
@@ -255,9 +248,9 @@ function SessionPreviewModelDetails({
           {label}
         </span>
       </div>
-      {surface.error ? (
+      {modelCatalog.error ? (
         <p role="alert" className="text-xs text-destructive-muted">
-          Could not load model details: {surface.error}
+          Could not load model details: {modelCatalog.error}
         </p>
       ) : null}
     </div>

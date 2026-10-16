@@ -4,9 +4,10 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import {
+  modelPickerResourceFromCatalogQuery,
+  type ModelPickerRuntime,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
-  type ModelPickerRuntime,
 } from "@/components/features/agents/model-picker";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -54,7 +55,7 @@ export function projectWorkspaceModelResources(
           descriptor.kind === sessionRuntimeKind
             ? toModelPickerCatalogResource({
                 catalog: session.catalog,
-                isFetching: session.isLoading,
+                isLoading: session.isLoading,
                 error: session.error,
                 isAvailable: true,
                 unavailableReason: "Session model catalog is unavailable.",
@@ -67,16 +68,7 @@ export function projectWorkspaceModelResources(
     return {
       descriptor,
       isEnabledForFavorites: availableKinds.has(descriptor.kind),
-      resource: resource
-        ? toModelPickerCatalogResource({
-            catalog: resource.catalog,
-            isFetching: resource.isFetching,
-            error: resource.error,
-            isAvailable: resource.isEnabled,
-            unavailableReason: "Runtime catalog is unavailable.",
-            retry: resource.retry,
-          })
-        : unavailableModelPickerCatalogResource("Runtime catalog is unavailable."),
+      resource: modelPickerResourceFromCatalogQuery(resource, "Runtime catalog is unavailable."),
     };
   });
   return {
@@ -87,8 +79,6 @@ export function projectWorkspaceModelResources(
     supportsProfiles:
       definitions.find((entry) => entry.kind === runtimeKind)?.capabilities.optionalSurfaces
         .supportsProfiles ?? false,
-    isLoading: session
-      ? session.isLoading && session.catalog === null
-      : resources.some((entry) => entry.isFetching && entry.catalog === null),
+    isLoading: session ? session.isLoading : resources.some((entry) => entry.isLoading),
   };
 }

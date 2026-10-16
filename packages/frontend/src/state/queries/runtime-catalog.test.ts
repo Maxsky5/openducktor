@@ -14,7 +14,6 @@ import {
   RUNTIME_CATALOG_GC_TIME_MS,
   RUNTIME_CATALOG_STALE_TIME_MS,
   loadRuntimeCatalogFromQuery,
-  refreshRuntimeCatalogIfStale,
   repoRuntimeFileSearchQueryOptions,
   resolveRuntimeCatalogSurface,
   retryRuntimeCatalog,
@@ -347,21 +346,5 @@ describe("runtime catalog queries", () => {
 
     rejectRetry?.(new Error("Runtime is unavailable."));
     await retryPromise;
-  });
-
-  test("refreshes a stale combined catalog and reuses a fresh entry", async () => {
-    const queryClient = new QueryClient();
-    const loadCatalog = mock(async () => runtimeCatalogFixture);
-    const queryKey = runtimeCatalogQueryKeys.catalog(workingDirectoryRefFixture);
-    queryClient.setQueryData(queryKey, runtimeCatalogFixture);
-
-    refreshRuntimeCatalogIfStale(queryClient, workingDirectoryRefFixture, loadCatalog);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(loadCatalog).toHaveBeenCalledTimes(0);
-
-    queryClient.setQueryData(queryKey, runtimeCatalogFixture, { updatedAt: 0 });
-    refreshRuntimeCatalogIfStale(queryClient, workingDirectoryRefFixture, loadCatalog);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(loadCatalog).toHaveBeenCalledTimes(1);
   });
 });

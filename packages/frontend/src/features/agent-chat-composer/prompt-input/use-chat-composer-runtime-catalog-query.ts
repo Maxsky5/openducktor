@@ -1,9 +1,5 @@
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
-import {
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { useRuntimeCatalogQuery } from "@/state/queries/use-runtime-catalog-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 type UseChatComposerRuntimeCatalogQueryArgs = {
@@ -16,13 +12,9 @@ export const useChatComposerRuntimeCatalogQuery = ({
   promptInputRuntime,
   supports,
   loadRuntimeCatalog,
-}: UseChatComposerRuntimeCatalogQueryArgs) => {
-  const runtimeRef =
-    promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
-  return useQuery({
-    ...(runtimeRef
-      ? runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled: runtimeRef !== null && supports,
+}: UseChatComposerRuntimeCatalogQueryArgs) =>
+  useRuntimeCatalogQuery({
+    runtimeRef: promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null,
+    loadRuntimeCatalog,
+    enabled: supports,
   });
-};

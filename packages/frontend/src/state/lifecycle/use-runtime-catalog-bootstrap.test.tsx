@@ -48,6 +48,8 @@ test("prefetches one catalog for each enabled and ready runtime", async () => {
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: true,
+      readError: null,
+      streamError: null,
       statusByKind: {
         opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
         claude: createHostRuntimeStatusFixture({ kind: "claude", state: "starting" }),
@@ -85,6 +87,8 @@ test("reuses a fresh catalog without another host read", async () => {
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: true,
+      readError: null,
+      streamError: null,
       statusByKind: {
         opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
@@ -115,6 +119,8 @@ test("reloads an invalidated catalog when the runtime is ready", async () => {
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: true,
+      readError: null,
+      streamError: null,
       statusByKind: {
         opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
@@ -143,6 +149,8 @@ test("loads a catalog when a runtime becomes ready after startup", async () => {
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: true,
+      readError: null,
+      streamError: null,
       statusByKind: {
         opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
       },
@@ -160,6 +168,8 @@ test("loads a catalog when a runtime becomes ready after startup", async () => {
       ...args,
       runtimeStatus: {
         isCurrent: true,
+        readError: null,
+        streamError: null,
         statusByKind: {
           opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
         },
@@ -182,6 +192,8 @@ test("loads the new repository catalogs after a workspace switch", async () => {
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: true,
+      readError: null,
+      streamError: null,
       statusByKind: {
         opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
@@ -230,6 +242,8 @@ test("does not read catalogs without an active workspace", async () => {
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: true,
+      readError: null,
+      streamError: null,
       statusByKind: {
         opencode: createHostRuntimeStatusFixture({ kind: "opencode" }),
       },
@@ -258,6 +272,8 @@ test("does not read catalogs while host runtime status is not current", async ()
     availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     runtimeStatus: {
       isCurrent: false,
+      readError: null,
+      streamError: null,
       statusByKind: { opencode: createHostRuntimeStatusFixture({ kind: "opencode" }) },
     },
     loadRepoRuntimeCatalog,

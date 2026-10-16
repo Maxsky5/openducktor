@@ -16,6 +16,7 @@ import type { PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import {
+  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
@@ -27,10 +28,13 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createDeferred,
+  createHostRuntimeStatusContextValue,
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
+
+const readyRuntimeStatus = createHostRuntimeStatusContextValue();
 
 test("allows a new workspace session model choice while a stale catalog refreshes", async () => {
   const catalog: AgentModelCatalog = {
@@ -74,7 +78,9 @@ test("allows a new workspace session model choice while a stale catalog refreshe
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={client}>
-      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+      <RuntimeDefinitionsContext value={definitions}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </RuntimeDefinitionsContext>
     </QueryClientProvider>
   );
   configureShellBridge(
@@ -89,7 +95,9 @@ test("allows a new workspace session model choice while a stale catalog refreshe
   try {
     await harness.mount();
     await harness.waitFor(
-      (state) => state.modelPicker.runtimes[0]?.resource.status === "refreshing",
+      (state) =>
+        loadRuntimeCatalog.mock.calls.length > 0 &&
+        state.modelPicker.runtimes[0]?.resource.status === "ready",
       2000,
     );
     expect(loadRuntimeCatalog).toHaveBeenCalledWith(runtimeRef);
@@ -160,7 +168,9 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
-      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+      <RuntimeDefinitionsContext value={definitions}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </RuntimeDefinitionsContext>
     </QueryProvider>
   );
   configureShellBridge(
@@ -270,7 +280,9 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
     };
     const wrapper = ({ children }: PropsWithChildren) => (
       <QueryProvider useIsolatedClient>
-        <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+        <RuntimeDefinitionsContext value={definitions}>
+          <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+        </RuntimeDefinitionsContext>
       </QueryProvider>
     );
     configureShellBridge(
@@ -359,7 +371,9 @@ test("prefills the creation picker from the repository Default Model when its ca
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
-      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+      <RuntimeDefinitionsContext value={definitions}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </RuntimeDefinitionsContext>
     </QueryProvider>
   );
   configureShellBridge(
@@ -459,7 +473,9 @@ test("refreshes a stale session catalog when the model picker opens", async () =
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryClientProvider client={client}>
-      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+      <RuntimeDefinitionsContext value={definitions}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </RuntimeDefinitionsContext>
     </QueryClientProvider>
   );
   configureShellBridge(
@@ -506,7 +522,9 @@ test("does not prefill the creation picker when the Default Model runtime is una
   };
   const wrapper = ({ children }: PropsWithChildren) => (
     <QueryProvider useIsolatedClient>
-      <RuntimeDefinitionsContext value={definitions}>{children}</RuntimeDefinitionsContext>
+      <RuntimeDefinitionsContext value={definitions}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </RuntimeDefinitionsContext>
     </QueryProvider>
   );
   configureShellBridge(

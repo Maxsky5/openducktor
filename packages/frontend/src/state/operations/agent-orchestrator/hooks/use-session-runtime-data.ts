@@ -13,11 +13,7 @@ import {
   sessionTodosQueryOptions,
   skippedSessionTodosQueryOptions,
 } from "@/state/queries/agent-session-todos";
-import {
-  resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
@@ -152,12 +148,10 @@ export const useSessionRuntimeData = ({
     stableSelectedSessionIdentity,
   );
 
-  const catalogQuery = useQuery({
-    ...(catalogRef
-      ? runtimeCatalogQueryOptions(catalogRef, loadRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled: catalogRef !== null && isRuntimeReady,
-    notifyOnChangeProps: ["data", "error", "isFetching"],
+  const modelCatalog = useRuntimeModelCatalogQuery({
+    runtimeRef: catalogRef,
+    loadRuntimeCatalog,
+    enabled: isRuntimeReady,
   });
 
   const todosQuery = useQuery({
@@ -172,29 +166,22 @@ export const useSessionRuntimeData = ({
       return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
     }
 
-    const modelSurface = resolveRuntimeCatalogSurface(
-      catalogQuery.data?.models,
-      catalogQuery.error,
-    );
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
-    const isLoadingModelCatalog =
-      isRuntimeReady && runtimeDataRefs.kind === "available" && catalogQuery.isFetching;
 
     return {
-      modelCatalog: modelSurface.catalog,
+      modelCatalog: modelCatalog.catalog,
       todos: todosQuery.data ?? [],
-      isLoadingModelCatalog,
-      catalogError: modelSurface.error,
+      isLoadingModelCatalog: modelCatalog.isLoading,
+      catalogError: modelCatalog.error,
       todosError: todosQueryError,
       runtimePolicyError,
       contextError,
     };
   }, [
-    catalogQuery.data,
-    catalogQuery.error,
-    catalogQuery.isFetching,
-    isRuntimeReady,
+    modelCatalog.catalog,
+    modelCatalog.error,
+    modelCatalog.isLoading,
     runtimeDataRefs,
     runtimePolicyError,
     todosQuery.data,

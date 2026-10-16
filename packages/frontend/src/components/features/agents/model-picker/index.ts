@@ -6,6 +6,7 @@ export type {
   ModelPickerValue,
 } from "./model-picker-model";
 export {
+  modelPickerResourceFromCatalogQuery,
   selectableModelPickerCatalog,
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,

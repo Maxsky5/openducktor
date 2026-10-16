@@ -4,11 +4,10 @@ import { type ReactElement, useMemo } from "react";
 import {
   ModelPicker,
   type ModelPickerFavoriteState,
+  modelPickerResourceFromCatalogQuery,
   type ModelPickerRuntime,
   type ModelPickerValue,
   selectableModelPickerCatalog,
-  toModelPickerCatalogResource,
-  unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
 import { Label } from "@/components/ui/label";
 import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
@@ -79,15 +78,6 @@ const toModelPickerRuntimes = ({
     return {
       descriptor,
       isEnabledForFavorites: true,
-      resource: resource
-        ? toModelPickerCatalogResource({
-            catalog: resource.catalog,
-            isFetching: resource.isFetching,
-            error: resource.error,
-            isAvailable: resource.isEnabled,
-            unavailableReason: "This runtime catalog is not available yet.",
-            retry: resource.retry,
-          })
-        : unavailableModelPickerCatalogResource("This runtime catalog is not available yet."),
+      resource: modelPickerResourceFromCatalogQuery(resource),
     };
   });

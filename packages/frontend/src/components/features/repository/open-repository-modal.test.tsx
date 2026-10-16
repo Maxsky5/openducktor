@@ -21,10 +21,18 @@ import {
 import { createQueryClient } from "@/lib/query-client";
 import { hostBridge, hostClient } from "@/lib/host-client";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
-import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import {
+  HostRuntimeStatusContext,
+  RuntimeDefinitionsContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createDeferred,
+  createHostRuntimeStatusContextValue,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   WorkspaceSelectionOperationsInput,
   WorkspaceStateContextValue,
@@ -144,18 +152,21 @@ const renderModal = ({
     entries: [],
   });
   client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
+  const runtimeStatus = createHostRuntimeStatusContextValue();
   const tree = (isOpen: boolean) => (
     <QueryClientProvider client={client}>
       <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
-        <WorkspaceStateContext.Provider value={state}>
-          <OpenRepositoryModal
-            open={isOpen}
-            canClose={canClose}
-            initialView={initialView}
-            onOpenChange={onOpenChange}
-            requestTransition={requestTransition}
-          />
-        </WorkspaceStateContext.Provider>
+        <HostRuntimeStatusContext value={runtimeStatus}>
+          <WorkspaceStateContext.Provider value={state}>
+            <OpenRepositoryModal
+              open={isOpen}
+              canClose={canClose}
+              initialView={initialView}
+              onOpenChange={onOpenChange}
+              requestTransition={requestTransition}
+            />
+          </WorkspaceStateContext.Provider>
+        </HostRuntimeStatusContext>
       </RuntimeDefinitionsContext.Provider>
     </QueryClientProvider>
   );
@@ -202,12 +213,14 @@ const renderGuardedModal = (state: WorkspaceStateContextValue) => {
   const view = render(
     <QueryClientProvider client={client}>
       <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
-        <WorkspaceStateContext.Provider value={state}>
-          <WorkspacePreviewTransitionGuardProvider>
-            <GuardedModal />
-            <DirtyPreview />
-          </WorkspacePreviewTransitionGuardProvider>
-        </WorkspaceStateContext.Provider>
+        <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+          <WorkspaceStateContext.Provider value={state}>
+            <WorkspacePreviewTransitionGuardProvider>
+              <GuardedModal />
+              <DirtyPreview />
+            </WorkspacePreviewTransitionGuardProvider>
+          </WorkspaceStateContext.Provider>
+        </HostRuntimeStatusContext>
       </RuntimeDefinitionsContext.Provider>
     </QueryClientProvider>,
   );

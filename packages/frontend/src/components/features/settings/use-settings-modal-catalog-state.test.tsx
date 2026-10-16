@@ -12,9 +12,13 @@ import type {
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createDeferred, createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createDeferred,
+  createHostRuntimeStatusContextValue,
+  createRuntimeCatalogFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
 
 enableReactActEnvironment();
@@ -69,7 +73,11 @@ const createHookHarness = (
       createElement(
         RuntimeDefinitionsContext.Provider,
         { value: runtimeDefinitionsContext },
-        children,
+        createElement(
+          HostRuntimeStatusContext.Provider,
+          { value: createHostRuntimeStatusContextValue() },
+          children,
+        ),
       ),
     );
 

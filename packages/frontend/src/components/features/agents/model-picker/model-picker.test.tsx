@@ -403,39 +403,36 @@ describe("ModelPicker", () => {
     expect(trigger.getAttribute("aria-label")).toBe("Select model, OpenCode, Model 1");
   });
 
-  test("keeps cached models selectable while a refresh is in flight", async () => {
-    const onValueChange = mock(() => {});
-    const refreshingRuntimes: ModelPickerRuntime[] = [
+  test("shows one loader for all runtimes whose catalogs are not loaded yet", async () => {
+    const loadingRuntimes: ModelPickerRuntime[] = [
       {
         descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         isEnabledForFavorites: true,
-        resource: {
-          status: "refreshing",
-          catalog: catalog("opencode"),
-          retry: async () => {},
-        },
+        resource: { status: "loading", catalog: null, retry: async () => {} },
+      },
+      {
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
+        resource: { status: "loading", catalog: null, retry: async () => {} },
       },
     ];
     render(
       <ModelPicker
-        runtimes={refreshingRuntimes}
-        value={value}
-        favoriteState={favoriteState()}
+        runtimes={loadingRuntimes}
+        value={null}
+        favoriteState={favoriteState({ favorites: [value] })}
         selectionPolicy={{ kind: "editable" }}
-        onValueChange={onValueChange}
+        onValueChange={() => {}}
       />,
     );
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+      fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
     });
 
-    expect(screen.getByRole("status").textContent).toContain("Refreshing OpenCode models");
-    expect(screen.getByRole("button", { name: "Select GPT Five model" })).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Select GPT Five model" }));
-    });
-    expect(onValueChange).toHaveBeenCalledWith(value);
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]?.textContent).toBe("Loading models...");
   });
 
   test("toggles a favorite without selecting the row or closing the picker", async () => {
@@ -1009,37 +1006,50 @@ describe("ModelPicker", () => {
         reason: "Start a new session to switch runtimes.",
       } as const,
     },
-  ])("keeps failed retained rows display-only when $name", async ({ policy }) => {
-    const failedRuntimes: ModelPickerRuntime[] = [
-      {
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        isEnabledForFavorites: true,
-        resource: {
-          status: "failed",
-          catalog: catalog("opencode"),
-          error: "Catalog refetch failed",
-          retry: async () => {},
+  ])(
+    "keeps failed cached rows selectable with the error and retry when $name",
+    async ({ policy }) => {
+      const onValueChange = mock(() => {});
+      const retry = mock(async () => {});
+      const failedRuntimes: ModelPickerRuntime[] = [
+        {
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          isEnabledForFavorites: true,
+          resource: {
+            status: "failed",
+            catalog: catalog("opencode"),
+            error: "Catalog refetch failed",
+            retry,
+          },
         },
-      },
-      ...makeRuntimes().filter((runtime) => runtime.descriptor.kind === "codex"),
-    ];
-    render(
-      <ModelPicker
-        runtimes={failedRuntimes}
-        value={value}
-        favoriteState={favoriteState()}
-        selectionPolicy={policy}
-        onValueChange={() => {}}
-      />,
-    );
+        ...makeRuntimes().filter((runtime) => runtime.descriptor.kind === "codex"),
+      ];
+      render(
+        <ModelPicker
+          runtimes={failedRuntimes}
+          value={value}
+          favoriteState={favoriteState()}
+          selectionPolicy={policy}
+          onValueChange={onValueChange}
+        />,
+      );
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
-    });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+      });
 
-    expect(screen.getByRole("alert").textContent).toContain("Catalog refetch failed");
-    expect(screen.getAllByText("GPT Five")).toHaveLength(1);
-  });
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toContain("Catalog refetch failed");
+      await act(async () => {
+        fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+      });
+      expect(retry).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Select GPT Five model" }));
+      });
+      expect(onValueChange).toHaveBeenCalledWith(value);
+    },
+  );
 
   test("shows context window and attachment support without the redundant runtime name", async () => {
     render(

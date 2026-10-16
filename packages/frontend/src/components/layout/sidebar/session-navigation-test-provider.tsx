@@ -1,14 +1,19 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
-import { createWorkspaceActivityObserverStub } from "@/test-utils/shared-test-fixtures";
+import {
+  createHostRuntimeStatusContextValue,
+  createWorkspaceActivityObserverStub,
+} from "@/test-utils/shared-test-fixtures";
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
 import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
 import { SessionMenuProvider } from "./session-menu-provider";
 
 const observer = createWorkspaceActivityObserverStub();
+const runtimeStatus = createHostRuntimeStatusContextValue();
 
 export function SessionNavigationTestProvider({
   children,
@@ -25,13 +30,15 @@ export function SessionNavigationTestProvider({
   });
   return (
     <QueryClientProvider client={queryClient}>
-      <WorkspaceActivityContext value={observer}>
-        <VisibleSessionTargetProvider>
-          <SessionReadStateProvider>
-            <SessionMenuProvider>{children}</SessionMenuProvider>
-          </SessionReadStateProvider>
-        </VisibleSessionTargetProvider>
-      </WorkspaceActivityContext>
+      <HostRuntimeStatusContext value={runtimeStatus}>
+        <WorkspaceActivityContext value={observer}>
+          <VisibleSessionTargetProvider>
+            <SessionReadStateProvider>
+              <SessionMenuProvider>{children}</SessionMenuProvider>
+            </SessionReadStateProvider>
+          </VisibleSessionTargetProvider>
+        </WorkspaceActivityContext>
+      </HostRuntimeStatusContext>
     </QueryClientProvider>
   );
 }

@@ -37,7 +37,7 @@ export const runtimeReadinessTargetForRuntime = (
   return { kind: "runtime", runtimeKind };
 };
 
-type RuntimeStatusReadinessInput = Pick<
+export type RuntimeStatusReadinessInput = Pick<
   HostRuntimeStatusContextValue,
   "statusByKind" | "isCurrent" | "readError" | "streamError"
 >;
@@ -88,7 +88,9 @@ export const deriveRuntimeReadiness = ({
     definitions = [definition];
   }
 
-  const entries = definitions.map((definition) => readKindReadiness(definition, runtimeStatus));
+  const entries = definitions.map((definition) =>
+    readRuntimeKindReadiness(runtimeStatus, definition),
+  );
   // A kind that is still checking can become ready, so it wins over a blocked kind.
   return (
     entries.find((entry) => entry.state === "ready") ??
@@ -100,10 +102,13 @@ export const deriveRuntimeReadiness = ({
   );
 };
 
-/** Readiness of one exact kind. Only a current `ready` host status admits session actions. */
-const readKindReadiness = (
-  definition: RuntimeDescriptor,
+/**
+ * Readiness of one exact kind. Only a current `ready` host status allows session actions and runtime
+ * reads. The label names the runtime in the message.
+ */
+export const readRuntimeKindReadiness = (
   runtimeStatus: RuntimeStatusReadinessInput,
+  runtime: Pick<RuntimeDescriptor, "kind" | "label">,
 ): RuntimeReadinessSnapshot => {
   if (runtimeStatus.streamError !== null) {
     return {
@@ -117,7 +122,7 @@ const readKindReadiness = (
       message: `Runtime status could not be read: ${runtimeStatus.readError} Select Recheck to read it again.`,
     };
   }
-  const status = runtimeStatus.statusByKind[definition.kind];
+  const status = runtimeStatus.statusByKind[runtime.kind];
   if (status === undefined || !runtimeStatus.isCurrent) {
     return { state: "checking", message: "Loading runtime status..." };
   }
@@ -129,13 +134,13 @@ const readKindReadiness = (
     case "stopping":
       return {
         state: "checking",
-        message: describeHostRuntimeUnavailable(definition.label, status.state, status.failure),
+        message: describeHostRuntimeUnavailable(runtime.label, status.state, status.failure),
       };
     case "disabled":
     case "error":
       return {
         state: "blocked",
-        message: describeHostRuntimeUnavailable(definition.label, status.state, status.failure),
+        message: describeHostRuntimeUnavailable(runtime.label, status.state, status.failure),
       };
   }
 };

@@ -77,7 +77,8 @@ const surface: WorkspaceCreationModelSurface = {
     {
       runtimeKind: "codex",
       catalog,
-      isFetching: false,
+      isLoading: false,
+      unavailableReason: null,
       isEnabled: true,
       error: null,
       retry: async () => {},

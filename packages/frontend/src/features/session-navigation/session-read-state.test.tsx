@@ -37,6 +37,8 @@ import {
   VisibleSessionTargetProvider,
 } from "./visible-session-target";
 import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
+import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 
 const observers: ReturnType<typeof createWorkspaceActivityObserver>[] = [];
 const clients: QueryClient[] = [];
@@ -212,18 +214,21 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
       />
     );
   }
+  const runtimeStatus = createHostRuntimeStatusContextValue();
   function View(props: ViewProps) {
     return (
       <QueryClientProvider client={client}>
-        <WorkspaceActivityContext value={observer}>
-          <VisibleSessionTargetProvider>
-            <SessionReadStateProvider>
-              <SessionMenuProvider>
-                <Body {...props} />
-              </SessionMenuProvider>
-            </SessionReadStateProvider>
-          </VisibleSessionTargetProvider>
-        </WorkspaceActivityContext>
+        <HostRuntimeStatusContext value={runtimeStatus}>
+          <WorkspaceActivityContext value={observer}>
+            <VisibleSessionTargetProvider>
+              <SessionReadStateProvider>
+                <SessionMenuProvider>
+                  <Body {...props} />
+                </SessionMenuProvider>
+              </SessionReadStateProvider>
+            </VisibleSessionTargetProvider>
+          </WorkspaceActivityContext>
+        </HostRuntimeStatusContext>
       </QueryClientProvider>
     );
   }

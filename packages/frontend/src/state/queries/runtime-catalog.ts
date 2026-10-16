@@ -1,6 +1,7 @@
 import type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
+  AgentModelCatalog,
   AgentRuntimeCatalog,
   AgentRuntimeCatalogSurface,
   RuntimeWorkingDirectoryRef,
@@ -60,20 +61,39 @@ export const runtimeCatalogQueryKeys = {
     ] as const,
 };
 
-export const runtimeCatalogQueryOptions = (
-  runtimeRef: RuntimeWorkingDirectoryRef,
-  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
+/** After a failed model read, the cache keeps the last models it had. */
+export type CachedModelSurface =
+  | { status: "available"; catalog: AgentModelCatalog }
+  | { status: "failed"; message: string; lastCatalog?: AgentModelCatalog };
+
+export type CachedRuntimeCatalog = Omit<AgentRuntimeCatalog, "models"> & {
+  models?: CachedModelSurface | undefined;
+};
+
+/** Options of every catalog read, live or preview. */
+export const catalogQueryOptions = (
+  queryKey: QueryKey,
+  loadCatalog: () => Promise<AgentRuntimeCatalog>,
 ) =>
-  queryOptions<AgentRuntimeCatalog, Error, AgentRuntimeCatalog, QueryKey>({
-    queryKey: runtimeCatalogQueryKeys.catalog(runtimeRef),
-    queryFn: (): Promise<AgentRuntimeCatalog> => loadRuntimeCatalog(runtimeRef),
+  queryOptions<CachedRuntimeCatalog, Error, CachedRuntimeCatalog, QueryKey>({
+    queryKey,
+    queryFn: async ({ client }): Promise<CachedRuntimeCatalog> =>
+      withLastModels(client.getQueryData<CachedRuntimeCatalog>(queryKey), await loadCatalog()),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
     gcTime: RUNTIME_CATALOG_GC_TIME_MS,
     retry: false,
   });
 
+export const runtimeCatalogQueryOptions = (
+  runtimeRef: RuntimeWorkingDirectoryRef,
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
+) =>
+  catalogQueryOptions(runtimeCatalogQueryKeys.catalog(runtimeRef), () =>
+    loadRuntimeCatalog(runtimeRef),
+  );
+
 export const skippedRuntimeCatalogQueryOptions = () =>
-  skippedQueryOptions<AgentRuntimeCatalog>({
+  skippedQueryOptions<CachedRuntimeCatalog>({
     queryKey: runtimeCatalogQueryKeys.skipped,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
@@ -82,17 +102,23 @@ export const loadRuntimeCatalogFromQuery = (
   queryClient: QueryClient,
   runtimeRef: RuntimeWorkingDirectoryRef,
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
-): Promise<AgentRuntimeCatalog> =>
+): Promise<CachedRuntimeCatalog> =>
   queryClient.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
 
-export const refreshRuntimeCatalogIfStale = (
+/**
+ * Marks the entry stale first: fetchQuery skips the network for a fresh entry.
+ * A failed read lands in the query error path.
+ */
+export const retryCatalogRead = async (
   queryClient: QueryClient,
-  runtimeRef: RuntimeWorkingDirectoryRef,
-  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
-): void => {
-  void queryClient
-    .fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog))
-    .catch(() => undefined);
+  options: ReturnType<typeof catalogQueryOptions>,
+): Promise<void> => {
+  await queryClient.invalidateQueries({
+    queryKey: options.queryKey,
+    exact: true,
+    refetchType: "none",
+  });
+  await queryClient.fetchQuery(options).catch(() => undefined);
 };
 
 export type RetryRuntimeCatalogArgs = {
@@ -101,23 +127,12 @@ export type RetryRuntimeCatalogArgs = {
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
 };
 
-/**
- * Marks the entry stale first: fetchQuery skips the network for a fresh entry.
- * A failed read lands in the query error path.
- */
-export const retryRuntimeCatalog = async ({
+export const retryRuntimeCatalog = ({
   queryClient,
   runtimeRef,
   loadRuntimeCatalog,
-}: RetryRuntimeCatalogArgs): Promise<void> => {
-  const queryOptions = runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog);
-  await queryClient.invalidateQueries({
-    queryKey: queryOptions.queryKey,
-    exact: true,
-    refetchType: "none",
-  });
-  await queryClient.fetchQuery(queryOptions).catch(() => undefined);
-};
+}: RetryRuntimeCatalogArgs): Promise<void> =>
+  retryCatalogRead(queryClient, runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
 
 export type ResolvedRuntimeCatalogSurface<Catalog> = {
   catalog: Catalog | null;
@@ -144,6 +159,18 @@ export const resolveRuntimeCatalogSurface = <Catalog>(
   return { catalog: null, error: null };
 };
 
+/** A failed refresh, rejected or with failed models, keeps the last models next to its error. */
+export const resolveRuntimeModelCatalogSurface = (
+  surface: CachedModelSurface | undefined,
+  queryError: Error | null,
+): ResolvedRuntimeCatalogSurface<AgentModelCatalog> => {
+  const catalog = lastModelCatalog(surface);
+  if (queryError !== null) {
+    return { catalog, error: errorMessage(queryError) };
+  }
+  return { catalog, error: surface?.status === "failed" ? surface.message : null };
+};
+
 export const repoRuntimeFileSearchQueryOptions = (
   runtimeRef: RuntimeWorkingDirectoryRef,
   query: string,
@@ -157,3 +184,25 @@ export const repoRuntimeFileSearchQueryOptions = (
     queryFn: (): Promise<AgentFileSearchResult[]> => loadRepoRuntimeFileSearch(runtimeRef, query),
     staleTime: RUNTIME_FILE_SEARCH_STALE_TIME_MS,
   });
+
+/**
+ * A read that returns failed models keeps the models of the previous read, so a view never hides
+ * loaded models. The other surfaces take the new read as it is.
+ */
+const withLastModels = (
+  previous: CachedRuntimeCatalog | undefined,
+  read: AgentRuntimeCatalog,
+): CachedRuntimeCatalog => {
+  const lastCatalog = lastModelCatalog(previous?.models);
+  if (read.models?.status !== "failed" || lastCatalog === null) {
+    return read;
+  }
+  return { ...read, models: { ...read.models, lastCatalog } };
+};
+
+const lastModelCatalog = (models: CachedModelSurface | undefined): AgentModelCatalog | null => {
+  if (models?.status === "available") {
+    return models.catalog;
+  }
+  return models?.lastCatalog ?? null;
+};

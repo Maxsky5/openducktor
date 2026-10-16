@@ -13,8 +13,8 @@ import type {
   ModelPickerValue,
 } from "@/components/features/agents/model-picker";
 import {
+  modelPickerResourceFromCatalogQuery,
   selectableModelPickerCatalog,
-  toModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
@@ -240,14 +240,7 @@ export function useSessionStartModalState({
             isEnabledForFavorites: availableRuntimeDefinitions.some(
               (runtime) => runtime.kind === descriptor.kind,
             ),
-            resource: toModelPickerCatalogResource({
-              catalog: resource.catalog,
-              isFetching: resource.isFetching,
-              error: resource.error,
-              isAvailable: resource.isEnabled,
-              unavailableReason: "This runtime catalog is not available yet.",
-              retry: resource.retry,
-            }),
+            resource: modelPickerResourceFromCatalogQuery(resource),
           },
         ];
       }),

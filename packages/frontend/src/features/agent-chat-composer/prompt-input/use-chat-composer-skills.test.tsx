@@ -6,8 +6,7 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createElement, type PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query-wrapper";
 import {
   runtimeCatalogQueryKeys,
   runtimeCatalogQueryOptions,
@@ -19,8 +18,7 @@ import { useChatComposerSkills } from "./use-chat-composer-skills";
 
 enableReactActEnvironment();
 
-const wrapper = ({ children }: PropsWithChildren) =>
-  createElement(QueryProvider, { useIsolatedClient: true }, children);
+const wrapper = IsolatedRuntimeQueryWrapper;
 
 const EMPTY_CATALOG: AgentSkillCatalog = { skills: [] };
 const emptyCatalogFixture: AgentRuntimeCatalog = createRuntimeCatalogFixture({

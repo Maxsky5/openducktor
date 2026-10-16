@@ -6,6 +6,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
 
 export type ModelPickerValue = AgentModelFavorite;
 export type ModelPickerView = "favorites" | RuntimeKind;
@@ -14,11 +15,6 @@ export type ModelPickerCatalogResource =
   | {
       status: "loading";
       catalog: null;
-      retry: () => Promise<void>;
-    }
-  | {
-      status: "refreshing";
-      catalog: AgentModelCatalog;
       retry: () => Promise<void>;
     }
   | {
@@ -37,14 +33,16 @@ export type ModelPickerCatalogResource =
       reason: string;
     };
 
+/** A failed refresh keeps its last catalog selectable. */
 export const selectableModelPickerCatalog = (
   resource: ModelPickerCatalogResource | undefined,
 ): AgentModelCatalog | null =>
-  resource?.status === "ready" || resource?.status === "refreshing" ? resource.catalog : null;
+  resource?.status === "ready" || resource?.status === "failed" ? resource.catalog : null;
 
 type ModelPickerCatalogResourceInput = {
   catalog: AgentModelCatalog | null;
-  isFetching: boolean;
+  /** No catalog is shown yet, and a read runs or waits for the runtime. */
+  isLoading: boolean;
   error: string | null;
   isAvailable: boolean;
   unavailableReason: string;
@@ -66,9 +64,10 @@ export const unavailableModelPickerCatalogResource = (
   reason,
 });
 
+/** A cached catalog stays ready during a background refresh. `isLoading` covers only a first read. */
 export const toModelPickerCatalogResource = ({
   catalog,
-  isFetching,
+  isLoading,
   error,
   isAvailable,
   unavailableReason,
@@ -77,11 +76,8 @@ export const toModelPickerCatalogResource = ({
   if (!isAvailable) {
     return unavailableModelPickerCatalogResource(unavailableReason);
   }
-  if (isFetching) {
-    const retryAction = requiredRetry(retry);
-    return catalog
-      ? { status: "refreshing", catalog, retry: retryAction }
-      : { status: "loading", catalog: null, retry: retryAction };
+  if (isLoading) {
+    return { status: "loading", catalog: null, retry: requiredRetry(retry) };
   }
   if (error) {
     return { status: "failed", catalog, error, retry: requiredRetry(retry) };
@@ -91,6 +87,22 @@ export const toModelPickerCatalogResource = ({
   }
   return { status: "ready", catalog };
 };
+
+/** A runtime that cannot serve its catalog shows its own reason, such as a failed start. */
+export const modelPickerResourceFromCatalogQuery = (
+  resource: RuntimeModelCatalogResource | undefined,
+  unavailableReason = "This runtime catalog is not available yet.",
+): ModelPickerCatalogResource =>
+  resource
+    ? toModelPickerCatalogResource({
+        catalog: resource.catalog,
+        isLoading: resource.isLoading,
+        error: resource.error,
+        isAvailable: resource.isEnabled,
+        unavailableReason: resource.unavailableReason ?? unavailableReason,
+        retry: resource.retry,
+      })
+    : unavailableModelPickerCatalogResource(unavailableReason);
 
 export type ModelPickerRuntime = {
   descriptor: RuntimeDescriptor;

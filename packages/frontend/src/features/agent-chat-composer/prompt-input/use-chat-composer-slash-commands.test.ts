@@ -4,8 +4,7 @@ import {
   type ReusablePrompt,
 } from "@openducktor/contracts";
 import type { AgentSlashCommand, LoadAgentRuntimeCatalogInput } from "@openducktor/core";
-import { createElement, type PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
@@ -18,8 +17,7 @@ import {
 
 enableReactActEnvironment();
 
-const wrapper = ({ children }: PropsWithChildren) =>
-  createElement(QueryProvider, { useIsolatedClient: true }, children);
+const wrapper = IsolatedRuntimeQueryWrapper;
 
 const sessionRuntime: ChatComposerPromptInputRuntime = {
   state: "available",

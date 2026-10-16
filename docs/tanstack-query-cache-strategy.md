@@ -42,6 +42,9 @@ Invalidate these read-mostly values after a write.
 
 Query modules: `workspace.ts`, `runtime.ts`, and `runtime-catalog.ts` under `packages/frontend/src/state/queries`.
 The runtime catalog keeps inactive results for 60 minutes so a modal can show cached models during a later refresh.
+A live runtime catalog read starts only when the host status of its runtime kind is `ready`. Read a live catalog through `useRuntimeCatalogQuery`, `useRuntimeModelCatalogQuery`, `useRuntimeModelCatalogs`, or `useRefreshStaleRuntimeCatalog`, so each read applies this check. A model catalog view does not offer Retry while the runtime is not ready. Delegation reads without this check and shows the host error. A model catalog preview does not use the shared runtime, so it does not wait.
+A view shows a cached catalog during a background refresh and shows no loading state for it. A view shows a loading state only when it has no catalog yet. The model picker shows one loader for all runtimes that have no catalog yet.
+When a model catalog refresh fails, a view keeps the cached models visible and selectable, and shows the error with a retry action. This applies to a rejected read and to a read that returns failed models. The query `structuralSharing` keeps the previous models for the second case. Other catalog surfaces hide cached data after a failed read.
 
 ### Workflow data
 

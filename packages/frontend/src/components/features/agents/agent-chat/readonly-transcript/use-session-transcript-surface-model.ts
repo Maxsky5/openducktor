@@ -1,16 +1,11 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
-import {
-  resolveRuntimeCatalogSurface,
-  runtimeCatalogQueryOptions,
-  skippedRuntimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
+import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import { deriveAgentChatReadiness } from "../agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-presentation";
@@ -79,16 +74,10 @@ export function useSessionTranscriptSurfaceModel({
           workingDirectory: target.workingDirectory,
         }
       : null;
-  const modelCatalogQuery = useQuery({
-    ...(runtimeRef
-      ? runtimeCatalogQueryOptions(runtimeRef, loadRepoRuntimeCatalog)
-      : skippedRuntimeCatalogQueryOptions()),
-    enabled: runtimeRef !== null && runtimeReadiness.state === "ready",
+  const modelCatalog = useRuntimeModelCatalogQuery({
+    runtimeRef,
+    loadRuntimeCatalog: loadRepoRuntimeCatalog,
   });
-  const modelSurface = resolveRuntimeCatalogSurface(
-    modelCatalogQuery.data?.models,
-    modelCatalogQuery.error,
-  );
   const runtimeBlockedAction = useMemo(
     () => ({
       label: "Recheck",
@@ -181,7 +170,7 @@ export function useSessionTranscriptSurfaceModel({
   );
 
   const model = useAgentChatSurfaceModel({
-    modelCatalog: modelSurface.catalog,
+    modelCatalog: modelCatalog.catalog,
     transcript,
     chatSettings,
     sessionAuxiliaryError: transcriptSurfaceState.loadError,

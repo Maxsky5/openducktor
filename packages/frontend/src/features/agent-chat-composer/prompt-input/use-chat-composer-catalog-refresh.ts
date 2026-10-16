@@ -1,7 +1,6 @@
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { refreshRuntimeCatalogIfStale } from "@/state/queries/runtime-catalog";
+import { useRefreshStaleRuntimeCatalog } from "@/state/queries/use-runtime-catalog-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 type UseChatComposerCatalogRefreshArgs = {
@@ -13,7 +12,7 @@ export const useChatComposerCatalogRefresh = ({
   promptInputRuntime,
   loadRuntimeCatalog,
 }: UseChatComposerCatalogRefreshArgs): (() => void) => {
-  const queryClient = useQueryClient();
+  const refreshStaleCatalog = useRefreshStaleRuntimeCatalog(loadRuntimeCatalog);
   const runtimeRef =
     promptInputRuntime.state === "available" ? promptInputRuntime.runtimeRef : null;
 
@@ -21,6 +20,6 @@ export const useChatComposerCatalogRefresh = ({
     if (runtimeRef === null) {
       return;
     }
-    refreshRuntimeCatalogIfStale(queryClient, runtimeRef, loadRuntimeCatalog);
-  }, [loadRuntimeCatalog, queryClient, runtimeRef]);
+    refreshStaleCatalog(runtimeRef);
+  }, [refreshStaleCatalog, runtimeRef]);
 };
