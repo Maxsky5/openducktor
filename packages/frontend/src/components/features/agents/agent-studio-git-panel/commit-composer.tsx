@@ -168,12 +168,13 @@ type CommitInput = {
 function commitBlockedReason(mode: GitCommitMode, input: CommitInput): string | null {
   if (input.blockedReason) return input.blockedReason;
   if (!input.canCommit) return "Wait for the current commit to finish.";
+  // Git records no commit while a path is unmerged, in either mode.
+  if (input.hasConflicts) return "Resolve the conflicted files first.";
   if (mode === "staged" && input.stagedFileCount === 0) {
     return input.changedFileCount > 0
       ? `Nothing is staged. Stage files, or press ${input.modifier}+Enter to commit all changes.`
       : "Nothing is staged.";
   }
-  if (mode === "all" && input.hasConflicts) return "Resolve the conflicted files first.";
   if (mode === "all" && input.changedFileCount === 0) return "No changes to commit.";
   if (input.message.trim().length === 0) return "Write a commit message.";
   return null;

@@ -1994,6 +1994,41 @@ describe("AgentStudioGitPanel", () => {
     expect(input).toHaveProperty("value", "feat: 日本");
   });
 
+  test("blocks both commit modes while a conflicted file remains beside a staged file", async () => {
+    const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
+    await act(async () => {
+      render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            commit,
+            fileStatuses: [
+              { path: "src/resolved.ts", staged: true, status: "modified" },
+              { path: "src/conflict.ts", staged: false, status: "unmerged" },
+            ],
+            fileDiffs: [toFileDiff("src/resolved.ts"), toFileDiff("src/conflict.ts")],
+          }),
+        }),
+      );
+      await flush();
+    });
+    const input = screen.getByTestId("agent-studio-git-commit-message-input");
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "fix: resolve the merge" } });
+      await flush();
+    });
+
+    expect(
+      screen.getByTestId("agent-studio-git-commit-submit-button").hasAttribute("disabled"),
+    ).toBe(true);
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+      await flush();
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   test("explains a disabled Commit when nothing is staged and keeps Cmd or Ctrl and Enter available", async () => {
     const commit = mock(async (_mode: GitCommitMode, _message: string) => true);
     await act(async () => {
