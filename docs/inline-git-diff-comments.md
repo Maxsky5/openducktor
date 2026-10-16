@@ -29,7 +29,7 @@ The first successful available diff validates each restored scope against its fu
 
 If validation finds a missing file while its comment is being sent, the store keeps the comment locked until Send settles. On rejection, the store drops and saves only the missing revisions found by that validation. On acceptance, the store clears the batch once. Later comments stay pending, even when they use the same file path. This tracking stays in memory and does not change stored records.
 
-Each scope keeps its read error until its own full diff read succeeds. A successful read of the other scope or a summary-only read cannot clear that error or remove restored comments.
+Each scope keeps its read error until its own diff read succeeds. A successful read of the other scope cannot clear that error or remove restored comments.
 
 ## Related work
 

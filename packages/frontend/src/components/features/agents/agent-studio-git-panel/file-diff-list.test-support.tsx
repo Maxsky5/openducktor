@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeEach, mock, spyOn } from "bun:test";
 import { cleanup, fireEvent } from "@testing-library/react";
 import { act, type ReactElement } from "react";
+import type { PierreHunkAction } from "@/components/features/agents/pierre-diff-viewer";
 import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
 import {
   resetInlineCommentDraftStoreForTests,
@@ -42,6 +43,12 @@ const reactActEnvironmentGlobal: typeof globalThis & {
 } = globalThis;
 const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
 
+/**
+ * A patch whose new lines 2 and 3 hold the text that "Select lines" of `viewerMock` selects.
+ * A comment saved from that selection stays on its line in this diff.
+ */
+export const COMMENTABLE_PATCH = "@@ -1,2 +1,3 @@\n before\n-old\n+selected one\n+selected two\n";
+
 export const preloaderMock = mock((_props: { patch: string; filePath: string }) => null);
 
 const fileViewerMock = mock(
@@ -64,6 +71,8 @@ export const viewerMock = mock(
     lineAnnotations,
     renderAnnotation,
   }: {
+    hunkActions?: readonly PierreHunkAction[] | undefined;
+    hunkActionsDisabledReason?: string | null;
     diffStyle?: string;
     filePath: string;
     diffIndicators?: string;

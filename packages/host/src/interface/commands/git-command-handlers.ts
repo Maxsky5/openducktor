@@ -3,14 +3,17 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import {
   parseGitAbortConflictInput,
   parseGitAheadBehindInput,
+  parseGitChangeSelectionInput,
   parseGitCommitAllInput,
+  parseGitCommitStagedInput,
   parseGitComparisonTargetInput,
   parseGitCreateWorktreeInput,
   parseGitDiffInput,
+  parseGitHistoryPageInput,
+  parseGitLocalChangesInput,
   parseGitPushBranchInput,
   parseGitRebaseBranchInput,
   parseGitRemoveWorktreeInput,
-  parseGitResetWorktreeSelectionInput,
   parseGitScopeInput,
   parseGitSwitchBranchInput,
   parseGitWorktreeStatusInput,
@@ -20,7 +23,9 @@ export const createGitCommandHandlers = (gitService: GitService) =>
   ({
     git_canonicalize_path: (args) => gitService.canonicalizePath(parseGitScopeInput(args)),
     git_abort_conflict: (args) => gitService.abortConflict(parseGitAbortConflictInput(args)),
+    git_change_selection: (args) => gitService.changeSelection(parseGitChangeSelectionInput(args)),
     git_commit_all: (args) => gitService.commitAll(parseGitCommitAllInput(args)),
+    git_commit_staged: (args) => gitService.commitStaged(parseGitCommitStagedInput(args)),
     git_comparison_target_get: (args) =>
       gitService.getComparisonTarget(parseGitComparisonTargetInput(args)),
     git_commits_ahead_behind: (args) =>
@@ -30,17 +35,15 @@ export const createGitCommandHandlers = (gitService: GitService) =>
     git_get_branches: (args) => gitService.getBranches(parseGitScopeInput(args)),
     git_get_current_branch: (args) => gitService.getCurrentBranch(parseGitScopeInput(args)),
     git_get_diff: (args) => gitService.getDiff(parseGitDiffInput(args)),
+    git_get_history_page: (args) => gitService.getHistoryPage(parseGitHistoryPageInput(args)),
+    git_get_local_changes: (args) => gitService.getLocalChanges(parseGitLocalChangesInput(args)),
     git_get_status: (args) => gitService.getStatus(parseGitScopeInput(args)),
     git_get_worktree_status: (args) =>
       gitService.getWorktreeStatus(parseGitWorktreeStatusInput(args)),
-    git_get_worktree_status_summary: (args) =>
-      gitService.getWorktreeStatusSummary(parseGitWorktreeStatusInput(args)),
     git_pull_branch: (args) => gitService.pullBranch(parseGitScopeInput(args)),
     git_push_branch: (args) => gitService.pushBranch(parseGitPushBranchInput(args)),
     git_rebase_abort: (args) => gitService.rebaseAbort(parseGitScopeInput(args)),
     git_rebase_branch: (args) => gitService.rebaseBranch(parseGitRebaseBranchInput(args)),
     git_remove_worktree: (args) => gitService.removeWorktree(parseGitRemoveWorktreeInput(args)),
-    git_reset_worktree_selection: (args) =>
-      gitService.resetWorktreeSelection(parseGitResetWorktreeSelectionInput(args)),
     git_switch_branch: (args) => gitService.switchBranch(parseGitSwitchBranchInput(args)),
   }) satisfies HostCommandHandlerDefinitions;

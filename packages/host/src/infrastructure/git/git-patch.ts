@@ -149,27 +149,18 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
   return renamePaths ? { ...parsedPatch, renamePaths } : parsedPatch;
 };
 
-export const combinePatchHunk = (header: string, hunk: ParsedHunk): string =>
-  `${header}${hunk.text}`;
+const FILE_MODE_LINE = /^(?:old|new) mode /;
 
-const rangesOverlap = (
-  leftStart: number,
-  leftCount: number,
-  rightStart: number,
-  rightCount: number,
-): boolean => {
-  const leftEnd = leftStart + Math.max(leftCount, 1) - 1;
-  const rightEnd = rightStart + Math.max(rightCount, 1) - 1;
-  return !(leftEnd < rightStart || rightEnd < leftStart);
-};
-
-const hunkSpecsOverlap = (left: HunkSpec, right: HunkSpec): boolean =>
-  rangesOverlap(left.oldStart, left.oldCount, right.oldStart, right.oldCount) ||
-  rangesOverlap(left.newStart, left.newCount, right.newStart, right.newCount);
-
-const hunkBody = (text: string): string => {
-  const index = text.indexOf("\n");
-  return index >= 0 ? text.slice(index + 1) : text;
+/**
+ * Builds the patch of one hunk. It leaves out a file-mode change, so a chunk action changes only
+ * the selected text. Whole-file actions change the mode.
+ */
+export const combinePatchHunk = (header: string, hunk: ParsedHunk): string => {
+  const textHeader = header
+    .split(/(?<=\n)/)
+    .filter((line) => !FILE_MODE_LINE.test(line))
+    .join("");
+  return `${textHeader}${hunk.text}`;
 };
 
 const hunkSpecsEqual = (left: HunkSpec, right: HunkSpec): boolean =>
@@ -178,24 +169,21 @@ const hunkSpecsEqual = (left: HunkSpec, right: HunkSpec): boolean =>
   left.newStart === right.newStart &&
   left.newCount === right.newCount;
 
-export const findMatchingCachedHunk = (
-  cachedPatch: ParsedPatch,
-  selectedHunk: ParsedHunk,
-): ParsedHunk | undefined => {
-  const exactMatch = cachedPatch.hunks.find(
-    (candidate) =>
-      hunkSpecsEqual(candidate.spec, selectedHunk.spec) &&
-      hunkBody(candidate.text) === hunkBody(selectedHunk.text),
+/** Hunk lines as a display diff holds them: no carriage return before a line end. */
+const displayedLines = (text: string): string[] => {
+  const lines = text.split(/\r?\n/);
+  // A display diff ends with a blank line. No hunk line is empty.
+  while (lines.at(-1) === "") lines.pop();
+  return lines;
+};
+
+/** True when both hunks have the same ranges and the same lines, as a display diff shows them. */
+export const hunksMatch = (reviewed: ParsedHunk, applied: ParsedHunk): boolean => {
+  if (!hunkSpecsEqual(reviewed.spec, applied.spec)) return false;
+  const reviewedLines = displayedLines(reviewed.text);
+  const appliedLines = displayedLines(applied.text);
+  return (
+    reviewedLines.length === appliedLines.length &&
+    reviewedLines.every((line, index) => line === appliedLines[index])
   );
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  if (cachedPatch.hunks.some((candidate) => hunkSpecsOverlap(candidate.spec, selectedHunk.spec))) {
-    throw invalidPatch(
-      "Cannot reset a hunk that mixes staged and unstaged changes. Unstage it or reset the whole file instead.",
-    );
-  }
-
-  return undefined;
 };

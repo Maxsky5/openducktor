@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import { NO_HIGHLIGHTS, searchFiles, sliceRanges, toSearchQuery } from "./file-list-search";
 
-const fileDiff = (file: string): FileDiff => ({
+const fileDiff = (file: string): GitFileDiff => ({
   file,
   type: "modified",
   additions: 1,

@@ -340,6 +340,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     15_000,
   );
 
+  // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("creates from_name from a dirty checkout with copy, worktree actions, and dirty-source isolation", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     await writeFile(path.join(repoPath, "tracked.txt"), "uncommitted\n");
@@ -382,7 +383,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       path.join(root, "worktrees", "workspace-sessions", "different-directory-name"),
     );
     expect(h.starts).toEqual([]);
-  });
+  }, 15_000);
 
   // Real Git worktree creation, a commit, archive checks, and SQLite writes can exceed 5 seconds on Windows.
   test("archives a from_name session and removes its worktree and branch", async () => {
@@ -445,6 +446,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     ).toEqual([result]);
   }, 15_000);
 
+  // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("restores an archived removed-worktree session from the current default branch", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     const h = setup();
@@ -508,8 +510,9 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       },
     ]);
     await expect(readFile(path.join(directory, "untracked.txt"), "utf8")).rejects.toThrow();
-  });
+  }, 15_000);
 
+  // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("reports a linked checkout on its branch field and leaves both worktrees untouched", async () => {
     const h = setup();
     const occupied = path.join(
@@ -551,7 +554,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
     ).toEqual([]);
     expect(h.events).toEqual([]);
-  });
+  }, 15_000);
 
   // Each case runs real Git and SQLite archive and restore work across many child processes.
   test.each([
@@ -796,6 +799,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     15_000,
   );
 
+  // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("keeps the default branch after its session worktree disappears", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     gitCommand("checkout", "-b", "other-checkout");
@@ -838,7 +842,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(gitCommand("rev-parse", "refs/heads/main")).toBe(branchHead);
     expect(gitCommand("branch", "--show-current")).toBe("other-checkout");
     expect(await h.router.invoke("workspace_session_get", ref)).toEqual(session);
-  });
+  }, 15_000);
 
   // Real Git worktree commands can exceed the host suite limit on Windows.
   test("keeps a protected default-branch worktree when removal is refused", async () => {

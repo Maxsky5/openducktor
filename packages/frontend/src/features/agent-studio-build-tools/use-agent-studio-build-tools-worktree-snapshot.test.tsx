@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import { repoConfigSchema, type GitWorktreeStatus } from "@openducktor/contracts";
+import {
+  type GitReadContext,
+  repoConfigSchema,
+  type GitWorktreeStatus,
+} from "@openducktor/contracts";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
-import type { QueryClient } from "@tanstack/react-query";
+import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -17,6 +22,7 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
+import { gitHistoryQueryOptions, refreshGitWorkingDirectory } from "@/state/queries/git";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 
@@ -133,6 +139,7 @@ beforeEach(async () => {
   taskWorktreeGetMock.mockClear();
   taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/.worktrees/task-24" });
   readStatus.mockClear();
+  readLocalChanges.mockClear();
   configureShellBridge(createGitBridge());
 });
 
@@ -188,9 +195,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         await harness.run(async (state) => {
           await state.refreshWorktree("scheduled");
         });
-        await harness.waitFor(() => fetch.mock.calls.length === 2);
-        expect(harness.getLatest().comparison?.resolvedTarget).toBe(
-          `refs/remotes/origin/${mode === "repository" ? "release" : "main"}`,
+        await harness.waitFor(
+          (state) =>
+            state.comparison?.resolvedTarget ===
+            `refs/remotes/origin/${mode === "repository" ? "release" : "main"}`,
         );
         expect(fetch).toHaveBeenCalledTimes(2);
         await harness.run(async (state) => {
@@ -358,16 +366,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         "Repair config permissions.",
       );
       expect(readComparison).not.toHaveBeenCalled();
-      let retryError: unknown;
       await harness.run(async (state) => {
-        try {
-          await state.snapshot.refreshWorktree("hard");
-        } catch (error) {
-          retryError = error;
-        }
+        await state.snapshot.refreshWorktree("hard");
       });
-      expect(retryError).toBeInstanceOf(Error);
-      expect(retryError).toMatchObject({ message: "Repair config permissions." });
+      // A manual Refresh shows its failure in its own state.
+      expect(harness.getLatest().snapshot.manualRefresh.refreshError).toBe(
+        "Repair config permissions.",
+      );
       expect(harness.getLatest().snapshot.diffData.comparisonUnavailableReason).toBe(
         "Repair config permissions.",
       );
@@ -379,6 +384,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         (state) => state.snapshot.comparison?.resolvedTarget === "refs/remotes/origin/main",
       );
       expect(readConfig).toHaveBeenCalledTimes(3);
+      expect(harness.getLatest().snapshot.manualRefresh.refreshError).toBeNull();
       expect(harness.getLatest().snapshot.comparison?.unavailableReason).toBeNull();
       expect(readComparison).toHaveBeenCalled();
     } finally {
@@ -401,16 +407,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
               ? { kind: "available", reference: "refs/heads/release" }
               : nextComparison.promise,
           gitGetWorktreeStatus: readStatus,
-          gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
-            const full = taskStatus(target, scope);
-            return {
-              currentBranch: full.currentBranch,
-              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-              targetAheadBehind: full.targetAheadBehind,
-              upstreamAheadBehind: full.upstreamAheadBehind,
-              snapshot: full.snapshot,
-            };
-          },
         },
       }),
     );
@@ -428,7 +424,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
       expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
       expect(harness.getLatest().diffData.statusHash).toBe("0123456789abcdef");
-      expect(readStatus.mock.calls.some((call) => call[1] === "HEAD")).toBe(true);
+      expect(readLocalChanges).toHaveBeenCalled();
       await harness.update({
         ...args,
         selectedView: createSelectedView({
@@ -494,6 +490,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           state.diffData.comparisonReference === "refs/heads/release" && !state.diffData.isLoading,
       );
       const reads = readStatus.mock.calls.length;
+      const localReads = readLocalChanges.mock.calls.length;
       for (const sessionId of ["second", "first"]) {
         await harness.update(argsFor(sessionId));
         expect(harness.getLatest().resolvedGitPanelBranch).toBe("feature/task-24");
@@ -501,6 +498,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
         expect(harness.getLatest().diffData.fileStatuses[0]?.path).toBe("draft.ts");
         expect(readStatus).toHaveBeenCalledTimes(reads);
+        expect(readLocalChanges).toHaveBeenCalledTimes(localReads);
         expect(readBranch).toHaveBeenCalledTimes(1);
         expect(readComparison).toHaveBeenCalledTimes(1);
       }
@@ -523,6 +521,10 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         return taskStatus(target, scope);
       },
     );
+    const readLocal = mock(async () => {
+      if (holdStatus) await nextStatus.promise;
+      return toLocalChanges(taskStatus("HEAD", "uncommitted"));
+    });
     configureShellBridge(
       createGitBridge({
         client: {
@@ -532,16 +534,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
             reference: "refs/heads/release",
           }),
           gitGetWorktreeStatus: readStatus,
-          gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
-            const full = taskStatus(target, scope);
-            return {
-              currentBranch: full.currentBranch,
-              fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-              targetAheadBehind: full.targetAheadBehind,
-              upstreamAheadBehind: full.upstreamAheadBehind,
-              snapshot: full.snapshot,
-            };
-          },
+          gitGetLocalChanges: readLocal,
         },
       }),
     );
@@ -559,7 +552,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
       expect(harness.getLatest().diffData.commitsAheadBehind).toEqual({ ahead: 2, behind: 1 });
       expect(harness.getLatest().diffData.statusHash).toBe("0123456789abcdef");
-      expect(readStatus.mock.calls.some((call) => call[1] === "HEAD")).toBe(true);
+      expect(readLocal).toHaveBeenCalled();
       holdBranch = true;
       let refresh: Promise<void> | undefined;
       await harness.run((state) => {
@@ -597,6 +590,134 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       nextStatus.resolve();
       nextBranch.resolve({ name: "feature/task-24", detached: false });
       await harness.unmount();
+    }
+  });
+
+  test("a soft refresh while the Git tab is hidden reads when the tab shows again", async () => {
+    const harness = createHookHarness(createBaseArgs());
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.diffData.loadedScopesByScope.uncommitted);
+      await harness.update(createBaseArgs({ isGitTabActive: false }));
+      // A tool finished while another tab showed. The hidden view cannot read now.
+      await harness.run(async (snapshot) => {
+        await snapshot.refreshWorktree("soft");
+      });
+      const reads = readLocalChanges.mock.calls.length;
+
+      await harness.update(createBaseArgs());
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > reads);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("a return to a task that an unseen agent turn changed reads its Git data again", async () => {
+    // Each task has its own worktree, so the reads of task-24 are hidden while task-99 shows.
+    taskWorktreeGetMock.mockImplementation(async (_repoPath, taskId) => ({
+      workingDirectory: `/repo/.worktrees/${taskId}`,
+    }));
+    const queryClient = createQueryClient();
+    const harness = createHookHarness(createBaseArgs(), { queryClient });
+    const otherTask = createSelectedView({
+      taskId: "task-99",
+      selectedTask: createTaskCardFixture({ id: "task-99" }),
+      loadedSession: null,
+      selectedSessionIdentity: null,
+    });
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.diffData.loadedScopesByScope.uncommitted);
+      await harness.update(createBaseArgs({ selectedView: otherTask }));
+      await harness.waitFor(
+        (snapshot) => snapshot.diffData.worktreePath === "/repo/.worktrees/task-99",
+      );
+      // The live session stream reports that the task agent ended a turn.
+      await harness.run(async () => {
+        await refreshGitWorkingDirectory(queryClient, "/repo", "/repo/.worktrees/task-24");
+      });
+      const reads = readLocalChanges.mock.calls.length;
+
+      await harness.update(createBaseArgs());
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > reads);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("a commit keeps every Git panel read on screen while it reads again", async () => {
+    let revision = "first";
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false, revision }),
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/release",
+          }),
+        },
+      }),
+    );
+    const queryClient = createQueryClient();
+    type Shown = { local: unknown; target: unknown; reference: string | null; pending: boolean };
+    const renders: Shown[] = [];
+    const harness = createSharedHookHarness(
+      (args: HookArgs) => {
+        const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(args);
+        const { diffData } = snapshot;
+        renders.push({
+          local: diffData.scopeStatesByScope.uncommitted.localChanges,
+          target: diffData.scopeStatesByScope.target.commitsAheadBehind,
+          reference: diffData.comparisonReference ?? null,
+          pending: diffData.comparisonPending ?? false,
+        });
+        return snapshot;
+      },
+      createBaseArgs({
+        selectedView: createSelectedView({
+          selectedTask: createTaskCardFixture({
+            id: "task-24",
+            targetBranch: { branch: "release", remote: "origin" },
+          }),
+        }),
+      }),
+      { queryClient },
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.diffData.loadedScopesByScope.target &&
+          state.diffData.comparisonReference !== null &&
+          queryClient.isFetching() === 0,
+      );
+      renders.length = 0;
+      const localReads = readLocalChanges.mock.calls.length;
+
+      // An agent turn commits. The panel reads the checkout and its Git data again.
+      revision = "second";
+      await harness.run(async () => {
+        await refreshGitWorkingDirectory(queryClient, "/repo", "/repo/.worktrees/task-24");
+      });
+      await harness.waitFor(
+        (state) =>
+          state.diffData.checkout?.revision === "second" &&
+          readLocalChanges.mock.calls.length > localReads &&
+          queryClient.isFetching() === 0,
+      );
+
+      // No render lost the shown data or fell back to a loading state.
+      expect(renders.length).toBeGreaterThan(0);
+      for (const shown of renders) {
+        expect(shown.local).toBeDefined();
+        expect(shown.target).not.toBeNull();
+        expect(shown.reference).toBe("refs/remotes/origin/release");
+        expect(shown.pending).toBe(false);
+      }
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
     }
   });
 
@@ -650,6 +771,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         shouldBlockDiffLoading: true,
       });
       expect(readStatus).not.toHaveBeenCalled();
+      expect(readLocalChanges).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
       queryClient.clear();
@@ -698,13 +820,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         shouldBlockDiffLoading: false,
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
-      await harness.waitFor(() => readStatus.mock.calls.length > 0);
-      expect(readStatus).toHaveBeenCalledWith(
-        "/repo",
-        "HEAD",
-        "uncommitted",
-        "/repo/.worktrees/task-24",
-      );
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > 0);
+      expect(readLocalChanges).toHaveBeenCalledWith("/repo", "/repo/.worktrees/task-24", undefined);
     } finally {
       await harness.unmount();
     }
@@ -739,13 +856,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         path: "/repo/.worktrees/task-24",
         disabledReason: null,
       });
-      await harness.waitFor(() => readStatus.mock.calls.length > 0);
-      expect(readStatus).toHaveBeenCalledWith(
-        "/repo",
-        "HEAD",
-        "uncommitted",
-        "/repo/.worktrees/task-24",
-      );
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > 0);
+      expect(readLocalChanges).toHaveBeenCalledWith("/repo", "/repo/.worktrees/task-24", undefined);
     } finally {
       await harness.unmount();
     }
@@ -905,13 +1017,8 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         status: "resolved",
         shouldBlockDiffLoading: false,
       });
-      await harness.waitFor(() => readStatus.mock.calls.length > 0);
-      expect(readStatus).toHaveBeenCalledWith(
-        "/repo",
-        "HEAD",
-        "uncommitted",
-        "/repo/.worktrees/task-25",
-      );
+      await harness.waitFor(() => readLocalChanges.mock.calls.length > 0);
+      expect(readLocalChanges).toHaveBeenCalledWith("/repo", "/repo/.worktrees/task-25", undefined);
 
       didResolveTaskWorktreeFetch = true;
       taskWorktreeFetch.resolve({ workingDirectory: "/repo/.worktrees/task-25" });
@@ -942,6 +1049,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         disabledReason: "Task worktree path is unavailable. Refresh the Git panel and try again.",
       });
       expect(readStatus).not.toHaveBeenCalled();
+      expect(readLocalChanges).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
@@ -990,12 +1098,11 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           path: "/repo/.worktrees/task-24",
           disabledReason: null,
         });
-        await harness.waitFor(() => readStatus.mock.calls.length > 0);
-        expect(readStatus).toHaveBeenCalledWith(
+        await harness.waitFor(() => readLocalChanges.mock.calls.length > 0);
+        expect(readLocalChanges).toHaveBeenCalledWith(
           "/repo",
-          "HEAD",
-          "uncommitted",
           "/repo/.worktrees/task-24",
+          undefined,
         );
       } finally {
         await harness.unmount();
@@ -1037,6 +1144,11 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
             ...taskStatus(target, scope),
             currentBranch: { detached: true, revision: "head-before" },
           }),
+          gitGetLocalChanges: async () =>
+            toLocalChanges({
+              ...taskStatus("HEAD", "uncommitted"),
+              currentBranch: { detached: true, revision: "head-before" },
+            }),
         },
       }),
     );
@@ -1115,7 +1227,217 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       await harness.unmount();
     }
   });
+
+  test("a hard refresh reads local changes during the fetch and again with the comparison after it", async () => {
+    const reads: string[] = [];
+    const fetchGate = createDeferred<void>();
+    let holdFetch = false;
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/release",
+          }),
+          gitFetchRemote: async () => {
+            reads.push("fetch");
+            if (holdFetch) await fetchGate.promise;
+            return { outcome: "skipped_no_remote", output: "" };
+          },
+          gitGetLocalChanges: async () => {
+            reads.push("local");
+            return toLocalChanges(taskStatus("HEAD", "uncommitted"));
+          },
+          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => {
+            reads.push(`status:${scope}`);
+            return taskStatus(target, scope);
+          },
+          gitGetHistoryPage: async () => {
+            reads.push("history");
+            return { outcome: "no_commits" };
+          },
+        },
+      }),
+    );
+    const queryClient = createQueryClient();
+    const harness = createHistoryHarness(queryClient);
+    let refresh: Promise<void> | undefined;
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.diffData.loadedScopesByScope.target &&
+          reads.includes("history") &&
+          queryClient.isFetching() === 0,
+      );
+      reads.length = 0;
+      holdFetch = true;
+      await harness.run((state) => {
+        refresh = state.refreshWorktree("hard");
+      });
+      await harness.waitFor(() => reads.includes("fetch") && reads.includes("local"));
+      // Flush Query notifications while the fetch stays pending.
+      await harness.run(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(reads.toSorted()).toEqual(["fetch", "local"]);
+      await harness.run(async () => {
+        fetchGate.resolve();
+        await refresh;
+      });
+      // The fetch moves the upstream branch, so local changes read again for its counts.
+      expect(reads.slice(2).toSorted()).toEqual(["history", "local", "status:target"]);
+    } finally {
+      fetchGate.resolve();
+      await refresh?.catch(() => undefined);
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("a hard refresh reports a local read failure after the fetch ends", async () => {
+    const fetchGate = createDeferred<void>();
+    let holdFetch = false;
+    let localFails = false;
+    let localReads = 0;
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/release",
+          }),
+          gitFetchRemote: async () => {
+            if (holdFetch) await fetchGate.promise;
+            return { outcome: "skipped_no_remote", output: "" };
+          },
+          gitGetLocalChanges: async () => {
+            localReads += 1;
+            if (localFails) throw new Error("Early local read denied");
+            return toLocalChanges(taskStatus("HEAD", "uncommitted"));
+          },
+          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") =>
+            taskStatus(target, scope),
+          gitGetHistoryPage: async () => ({ outcome: "no_commits" }),
+        },
+      }),
+    );
+    const queryClient = createQueryClient();
+    const harness = createHistoryHarness(queryClient);
+    let refresh: Promise<void> | undefined;
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.diffData.loadedScopesByScope.target && queryClient.isFetching() === 0,
+      );
+      const readsBefore = localReads;
+      holdFetch = true;
+      localFails = true;
+      await harness.run((state) => {
+        refresh = state.refreshWorktree("hard");
+      });
+      await harness.waitFor(() => localReads > readsBefore);
+      // The local read fails while the fetch waits. Bun fails the test on an unhandled rejection.
+      await harness.run(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+
+      await harness.run(async () => {
+        fetchGate.resolve();
+        await refresh;
+      });
+      expect(harness.getLatest().manualRefresh.refreshError).toBe("Early local read denied");
+      // The read after the fetch gives the result. It fails again here.
+      expect(localReads).toBe(readsBefore + 2);
+    } finally {
+      fetchGate.resolve();
+      await refresh;
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("a hard refresh reports a failed History read, and a soft refresh leaves it to History", async () => {
+    let historyError: Error | null = null;
+    let historyReads = 0;
+    configureShellBridge(
+      createGitBridge({
+        client: {
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/release",
+          }),
+          gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
+          gitGetLocalChanges: async () => toLocalChanges(taskStatus("HEAD", "uncommitted")),
+          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") =>
+            taskStatus(target, scope),
+          gitGetHistoryPage: async () => {
+            historyReads += 1;
+            if (historyError) throw historyError;
+            return { outcome: "no_commits" };
+          },
+        },
+      }),
+    );
+    const queryClient = createQueryClient();
+    const harness = createHistoryHarness(queryClient);
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.diffData.loadedScopesByScope.target &&
+          historyReads > 0 &&
+          queryClient.isFetching() === 0,
+      );
+      historyError = new Error("History cannot read the target.");
+
+      await harness.run(async (state) => {
+        await state.refreshWorktree("hard");
+      });
+      expect(harness.getLatest().manualRefresh.refreshError).toBe(
+        "History cannot read the target.",
+      );
+      const readsBeforeSoft = historyReads;
+      await harness.run(async (state) => {
+        await state.refreshWorktree("soft");
+      });
+      expect(historyReads).toBeGreaterThan(readsBeforeSoft);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
 });
+
+/** A snapshot hook with an open History tab, which keeps its History read active. */
+function createHistoryHarness(queryClient: QueryClient) {
+  return createSharedHookHarness(
+    (args: HookArgs) => {
+      const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(args);
+      const targetReference = snapshot.comparison?.resolvedTarget ?? null;
+      const workingDir = snapshot.worktree.path;
+      useInfiniteQuery({
+        ...gitHistoryQueryOptions({
+          repoPath: "/repo",
+          workingDir: workingDir ?? "",
+          checkout: { name: "feature/task-24", detached: false },
+          targetReference: targetReference ?? "",
+        }),
+        enabled: targetReference !== null && workingDir !== null,
+      });
+      return snapshot;
+    },
+    createBaseArgs({
+      selectedView: createSelectedView({
+        selectedTask: createTaskCardFixture({
+          id: "task-24",
+          targetBranch: { branch: "release", remote: "origin" },
+        }),
+      }),
+    }),
+    { queryClient },
+  );
+}
 
 function taskStatus(target: string, scope: "target" | "uncommitted"): GitWorktreeStatus {
   return {
@@ -1186,6 +1508,10 @@ const readStatus = mock(
   async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
     taskStatus(target, scope),
 );
+const readLocalChanges = mock(
+  async (_repo: string, _workingDir?: string, _readContext?: GitReadContext) =>
+    toLocalChanges(taskStatus("HEAD", "uncommitted")),
+);
 
 function createGitBridge({ client = {} }: Parameters<typeof createShellBridgeFixture>[0] = {}) {
   return createShellBridgeFixture({
@@ -1199,16 +1525,7 @@ function createGitBridge({ client = {} }: Parameters<typeof createShellBridgeFix
           : `refs/heads/${target.branch}`,
       }),
       gitGetWorktreeStatus: readStatus,
-      gitGetWorktreeStatusSummary: async (_repo, target, scope = "uncommitted") => {
-        const full = taskStatus(target, scope);
-        return {
-          currentBranch: full.currentBranch,
-          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-          targetAheadBehind: full.targetAheadBehind,
-          upstreamAheadBehind: full.upstreamAheadBehind,
-          snapshot: full.snapshot,
-        };
-      },
+      gitGetLocalChanges: readLocalChanges,
       ...client,
     },
   });

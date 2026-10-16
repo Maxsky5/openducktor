@@ -66,12 +66,13 @@ process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
 
 const { afterAll, afterEach, beforeAll } = await import("bun:test");
 if (usesWorkerTempDirectory) {
+  // Creating the worker temp tree again can exceed the 1000 ms test budget on a loaded Windows runner.
   beforeAll((): void => {
     mkdirSync(configDir, { recursive: true });
     if (workerTmpDir !== null) {
       mkdirSync(workerTmpDir, { recursive: true });
     }
-  });
+  }, 5_000);
 }
 // Removing a worker temp tree can exceed the 1000 ms test budget on a loaded Windows runner.
 afterAll((): void => {

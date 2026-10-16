@@ -1,4 +1,4 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import {
   memo,
   type ReactElement,
@@ -24,6 +24,7 @@ import { buildFileTree, buildListRows, type FileListRow, flattenFileTree } from 
 import { type FileSearchMatch, searchFiles } from "./file-list-search";
 import type { FileListViewMode } from "./file-list-view-preference";
 import { rowKeyAttributes, useFileListScrollAnchor } from "./use-file-list-scroll-anchor";
+import { type GitFileRowActions, runningFileAction } from "./git-file-row-actions";
 import type { FileListState } from "./use-file-list-state";
 import {
   EMPTY_FILE_DIFF_ANNOTATION_STATE,
@@ -35,41 +36,42 @@ import {
 export const FileDiffList = memo(function FileDiffList({
   fileDiffs,
   diffScope,
+  listKey,
+  listLabel,
   ownerKey,
   commentPlaceholder,
+  commentsByFile,
   conflictedFiles,
   diffStyle,
-  setDiffStyle,
   viewMode,
-  onViewModeChange,
+  matches,
   listState,
   expandedFiles,
   onToggleFile,
+  onViewFile,
   preloadLimit,
-  canResetFiles,
-  isResetDisabled,
-  resetDisabledReason,
-  onRequestFileReset,
-  onRequestHunkReset,
+  rowActions,
+  changingKey,
 }: FileDiffListProps): ReactElement {
   const { query } = listState;
-  const { matches, rows, totals } = useFileListRows({ fileDiffs, viewMode, listState });
+  const rows = useFileListRows({ matches, viewMode, listState });
   // Preload the files that the list shows, in their order. A search or a closed directory hides the others.
   const shownFileDiffs = useMemo(
     () => rows.flatMap((row) => (row.kind === "file" ? [row.diff] : [])),
     [rows],
   );
   const inlineCommentDrafts = useInlineCommentDraftStore((store) =>
-    ownerKey === null
+    ownerKey === null || commentsByFile
       ? EMPTY_INLINE_COMMENTS
       : (store.draftsByOwner[ownerKey] ?? EMPTY_INLINE_COMMENTS),
   );
-  const inlineCommentsByFile = useMemo(
+  const scopeComments = useMemo(
     () => groupInlineCommentsByFile(inlineCommentDrafts, diffScope),
     [diffScope, inlineCommentDrafts],
   );
+  const inlineCommentsByFile = commentsByFile ?? scopeComments;
   const reserveConflictSlot = conflictedFiles.size > 0;
-  const scopeKey = JSON.stringify([ownerKey, diffScope]);
+  const scopeKey = JSON.stringify([ownerKey, listKey]);
   const { editorStateByFile, onAnnotationAction } = useFileEditorStates(scopeKey, fileDiffs);
 
   const { listRef, rowHeight, onMeasureRow, onRowsRendered, onScroll } = useFileListScrollAnchor({
@@ -89,12 +91,10 @@ export const FileDiffList = memo(function FileDiffList({
     diffStyle,
     expandedFiles,
     onToggleFile,
+    onViewFile,
     onToggleDirectory: listState.toggleDirectory,
-    canResetFiles,
-    isResetDisabled,
-    resetDisabledReason,
-    onRequestFileReset,
-    onRequestHunkReset,
+    rowActions,
+    changingKey,
     inlineCommentsByFile,
     reserveConflictSlot,
     editorStateByFile,
@@ -104,20 +104,7 @@ export const FileDiffList = memo(function FileDiffList({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
-      <FileListHeader
-        fileCount={fileDiffs.length}
-        matchCount={query === "" ? null : matches.length}
-        totalAdditions={totals.additions}
-        totalDeletions={totals.deletions}
-        viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
-        diffStyle={diffStyle}
-        onDiffStyleChange={setDiffStyle}
-        searchText={listState.searchText}
-        onSearchTextChange={listState.setSearchText}
-      />
-
+    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-1 flex-col overflow-hidden">
       <DiffPreloadQueue
         fileDiffs={shownFileDiffs}
         expandedFiles={expandedFiles}
@@ -133,7 +120,7 @@ export const FileDiffList = memo(function FileDiffList({
         </p>
       ) : (
         <List
-          aria-label="Changed files"
+          aria-label={listLabel}
           tabIndex={0}
           className="h-0 min-h-0 flex-1 overflow-x-hidden"
           defaultHeight={400}
@@ -174,24 +161,29 @@ const groupInlineCommentsByFile = (
 };
 
 type FileDiffListProps = {
-  fileDiffs: FileDiff[];
+  fileDiffs: GitFileDiff[];
+  /** The comment scope of the files. */
   diffScope: DiffScope;
+  /** Identifies this list for row sizes and comment editors, for example one local group. */
+  listKey: string;
+  listLabel: string;
   ownerKey: string | null;
   commentPlaceholder?: string | undefined;
+  /** Comments placed by the parent. Without it, the list shows every comment of the scope. */
+  commentsByFile?: ReadonlyMap<string, InlineCommentDraft[]> | undefined;
   conflictedFiles: ReadonlySet<string>;
   diffStyle: PierreDiffStyle;
-  setDiffStyle: (style: PierreDiffStyle) => void;
   viewMode: FileListViewMode;
-  onViewModeChange: (viewMode: FileListViewMode) => void;
+  /** The files that the search shows. The parent searches once for its toolbar and this list. */
+  matches: FileSearchMatch[];
   listState: FileListState;
   expandedFiles: ReadonlySet<string>;
   onToggleFile: (filePath: string) => void;
+  onViewFile: ((filePath: string) => void) | null;
   preloadLimit: number;
-  canResetFiles: boolean;
-  isResetDisabled: boolean;
-  resetDisabledReason: string | null;
-  onRequestFileReset?: ((filePath: string) => void) | undefined;
-  onRequestHunkReset?: ((filePath: string, hunkIndex: number) => void) | undefined;
+  rowActions: GitFileRowActions | null;
+  /** The key of the change that runs now, or null. Its row shows the change as busy. */
+  changingKey: string | null;
 };
 
 type FileEditorState = { diffText: string; state: FileDiffAnnotationState };
@@ -205,7 +197,7 @@ type FileEditorStates = {
   onAnnotationAction: FileAnnotationDispatch;
 };
 
-function useFileEditorStates(scopeKey: string, fileDiffs: FileDiff[]): FileEditorStates {
+function useFileEditorStates(scopeKey: string, fileDiffs: GitFileDiff[]): FileEditorStates {
   const [editors, setEditors] = useState(() => ({
     scopeKey,
     entries: new Map<string, FileEditorState>(),
@@ -256,15 +248,13 @@ type FileListRowProps = Pick<
   | "diffStyle"
   | "expandedFiles"
   | "onToggleFile"
-  | "canResetFiles"
-  | "isResetDisabled"
-  | "resetDisabledReason"
-  | "onRequestFileReset"
-  | "onRequestHunkReset"
+  | "onViewFile"
+  | "rowActions"
+  | "changingKey"
 > & {
   rows: readonly FileListRow[];
   onToggleDirectory: FileListState["toggleDirectory"];
-  inlineCommentsByFile: Map<string, InlineCommentDraft[]>;
+  inlineCommentsByFile: ReadonlyMap<string, InlineCommentDraft[]>;
   reserveConflictSlot: boolean;
   editorStateByFile: Map<string, FileEditorState>;
   onAnnotationAction: FileAnnotationDispatch;
@@ -285,12 +275,10 @@ function FileListRowView({
   diffStyle,
   expandedFiles,
   onToggleFile,
+  onViewFile,
   onToggleDirectory,
-  canResetFiles,
-  isResetDisabled,
-  resetDisabledReason,
-  onRequestFileReset,
-  onRequestHunkReset,
+  rowActions,
+  changingKey,
   inlineCommentsByFile,
   reserveConflictSlot,
   editorStateByFile,
@@ -330,6 +318,7 @@ function FileListRowView({
   } else {
     const { diff } = row;
     const editor = editorStateByFile.get(diff.file);
+    const isExpanded = expandedFiles.has(diff.file);
     content = (
       <FileDiffEntryWithMemo
         row={row}
@@ -345,14 +334,17 @@ function FileListRowView({
         viewState={{
           isConflicted: conflictedFiles.has(diff.file),
           reserveConflictSlot,
-          isExpanded: expandedFiles.has(diff.file),
+          isExpanded,
         }}
         onToggle={onToggleFile}
+        onViewFile={onViewFile}
         diffStyle={diffStyle}
-        resetState={{ canReset: canResetFiles, isResetDisabled }}
-        resetDisabledReason={resetDisabledReason}
-        onRequestFileReset={onRequestFileReset}
-        onRequestHunkReset={onRequestHunkReset}
+        rowActions={rowActions}
+        runningAction={
+          rowActions ? runningFileAction(rowActions.group, diff.file, changingKey) : null
+        }
+        // Only an open diff shows chunk actions, so a closed row does not draw again.
+        isChangeRunning={rowActions !== null && changingKey !== null && isExpanded}
       />
     );
   }
@@ -377,34 +369,59 @@ const listRowKey = (index: number, { rows }: FileListRowProps): string => {
   return row.key;
 };
 
-type FileListRows = {
-  matches: FileSearchMatch[];
-  rows: readonly FileListRow[];
-  totals: { additions: number; deletions: number };
-};
-
 function useFileListRows({
-  fileDiffs,
+  matches,
   viewMode,
-  listState: { query, closedDirectories },
-}: Pick<FileDiffListProps, "fileDiffs" | "viewMode" | "listState">): FileListRows {
-  const matches = useMemo(() => searchFiles(fileDiffs, query), [fileDiffs, query]);
+  listState: { closedDirectories },
+}: Pick<FileDiffListProps, "matches" | "viewMode" | "listState">): readonly FileListRow[] {
   const tree = useMemo(
     () => (viewMode === "tree" ? buildFileTree(matches) : null),
     [matches, viewMode],
   );
-  const rows = useMemo<readonly FileListRow[]>(
+  return useMemo<readonly FileListRow[]>(
     () => (tree ? flattenFileTree(tree, closedDirectories) : buildListRows(matches)),
     [closedDirectories, matches, tree],
   );
-  const totals = useMemo(() => {
+}
+
+/**
+ * A file list with its own toolbar: search, line counts, view mode, and diff style. A grouped
+ * list, such as the local changes, shows one shared toolbar and uses `FileDiffList` directly.
+ */
+export const FileDiffListWithHeader = memo(function FileDiffListWithHeader({
+  setDiffStyle,
+  onViewModeChange,
+  ...props
+}: Omit<FileDiffListProps, "matches"> & {
+  setDiffStyle: (style: PierreDiffStyle) => void;
+  onViewModeChange: (viewMode: FileListViewMode) => void;
+}): ReactElement {
+  const { fileDiffs, listState } = props;
+  const search = useMemo(() => {
+    const matches = searchFiles(fileDiffs, listState.query);
     let additions = 0;
     let deletions = 0;
     for (const { diff } of matches) {
       additions += diff.additions;
       deletions += diff.deletions;
     }
-    return { additions, deletions };
-  }, [matches]);
-  return { matches, rows, totals };
-}
+    return { matches, additions, deletions };
+  }, [fileDiffs, listState.query]);
+  return (
+    <div className="flex h-full min-h-0 w-0 min-w-full max-w-full flex-col overflow-hidden">
+      <FileListHeader
+        fileCount={fileDiffs.length}
+        matchCount={listState.query === "" ? null : search.matches.length}
+        totalAdditions={search.additions}
+        totalDeletions={search.deletions}
+        viewMode={props.viewMode}
+        onViewModeChange={onViewModeChange}
+        diffStyle={props.diffStyle}
+        onDiffStyleChange={setDiffStyle}
+        searchText={listState.searchText}
+        onSearchTextChange={listState.setSearchText}
+      />
+      <FileDiffList {...props} matches={search.matches} />
+    </div>
+  );
+});

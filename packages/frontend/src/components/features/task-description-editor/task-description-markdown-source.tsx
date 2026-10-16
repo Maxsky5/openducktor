@@ -60,7 +60,7 @@ export function TaskDescriptionMarkdownSource({
   };
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
+    <div className="overflow-hidden rounded-md border border-input bg-card shadow-sm transition-[border-color,box-shadow] focus-within:field-focus">
       {onUpload ? (
         <div className="flex items-center border-b border-border bg-muted/30 p-1.5">
           <Button
@@ -91,6 +91,7 @@ export function TaskDescriptionMarkdownSource({
         </div>
       ) : null}
       <Textarea
+        embedded
         disabled={disabled}
         ref={textareaRef}
         id="task-description"
@@ -98,7 +99,7 @@ export function TaskDescriptionMarkdownSource({
         rows={12}
         value={markdown}
         placeholder="Problem context, scope, and expected output."
-        className="min-h-64 resize-y rounded-none border-0 font-sans text-sm shadow-none focus-visible:ring-0"
+        className="min-h-64 resize-y font-sans text-sm"
         onChange={(event) => {
           onEdit();
           onChange(event.currentTarget.value);

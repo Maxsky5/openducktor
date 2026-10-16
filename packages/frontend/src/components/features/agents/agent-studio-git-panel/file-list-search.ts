@@ -1,10 +1,10 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 
 /** A highlighted span of text. `end` is exclusive. */
 export type HighlightRange = { start: number; end: number };
 
 export type FileSearchMatch = {
-  diff: FileDiff;
+  diff: GitFileDiff;
   /** Matched characters as ranges of `diff.file`. */
   ranges: readonly HighlightRange[];
 };
@@ -25,7 +25,7 @@ export function toSearchQuery(text: string): string {
 }
 
 /** Keeps the files whose path matches the query, in their input order. */
-export function searchFiles(fileDiffs: readonly FileDiff[], query: string): FileSearchMatch[] {
+export function searchFiles(fileDiffs: readonly GitFileDiff[], query: string): FileSearchMatch[] {
   if (query.length === 0) {
     return fileDiffs.map((diff) => ({ diff, ranges: NO_HIGHLIGHTS }));
   }

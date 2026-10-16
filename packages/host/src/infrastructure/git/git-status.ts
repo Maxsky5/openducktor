@@ -7,7 +7,13 @@ import type {
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { GitFileStatus } from "../../ports/git-port";
-import { type GitCommandRunner, runGit, runGitAllowFailure } from "./git-command-runner";
+import {
+  GIT_OUTPUT_ENCODING_FIELD,
+  type GitCommandRunner,
+  runGit,
+  runGitAllowFailure,
+  runGitStrictUtf8,
+} from "./git-command-runner";
 
 const unmergedStatusPairs = new Set(["DD", "AU", "UD", "UA", "DU", "AA", "UU"]);
 
@@ -72,7 +78,7 @@ export const parseAheadBehind = (output: string): CommitsAheadBehind => {
   }
   return { ahead, behind };
 };
-const porcelainCharToStatus = (value: string): string => {
+export const porcelainCharToStatus = (value: string): string => {
   switch (value) {
     case "M":
       return "modified";
@@ -93,69 +99,74 @@ const porcelainCharToStatus = (value: string): string => {
   }
 };
 
-const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
+export const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
   const pair = `${index}${worktree}`;
   return unmergedStatusPairs.has(pair);
 };
 
-const parseStatusRecord = (line: string): GitFileStatus[] => {
+/** One porcelain v1 record with both status columns. */
+export type PorcelainEntry = {
+  index: string;
+  worktree: string;
+  path: string;
+  originalPath?: string;
+};
+
+const parsePorcelainRecord = (line: string): PorcelainEntry[] => {
   if (line.length < 4) {
     return [];
   }
   const index = line.at(0) ?? "";
   const worktree = line.at(1) ?? "";
   const filePath = line.slice(3);
-  if (index === "?" && worktree === "?") {
-    const path = filePath.endsWith("/") ? filePath.slice(0, -1) : filePath;
-    return [{ path, status: "untracked", staged: false }];
-  }
-  if (index === "!" && worktree === "!") {
-    return [{ path: filePath, status: "ignored", staged: false }];
-  }
-  if (isUnmergedStatusPair(index, worktree)) {
-    return [{ path: filePath, status: "unmerged", staged: true }];
-  }
-  if (worktree === "D" || worktree === "T") {
-    return [{ path: filePath, status: porcelainCharToStatus(worktree), staged: false }];
-  }
-  if (index !== " " && worktree === " ") {
-    return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
-  }
-  if (index === " " && worktree !== " ") {
-    return [{ path: filePath, status: porcelainCharToStatus(worktree), staged: false }];
-  }
-  return [{ path: filePath, status: porcelainCharToStatus(index), staged: true }];
+  // Git ends an untracked nested repository path with a slash.
+  const untracked = index === "?" && worktree === "?";
+  const path = untracked && filePath.endsWith("/") ? filePath.slice(0, -1) : filePath;
+  return [{ index, worktree, path }];
 };
 
-const parseStatusPorcelain = (output: string): GitFileStatus[] => {
+export const parsePorcelainEntries = (output: string): PorcelainEntry[] => {
   if (!output.includes("\0")) {
-    return output.split(/\r?\n/).flatMap(parseStatusRecord);
+    return output.split(/\r?\n/).flatMap(parsePorcelainRecord);
   }
 
   const records = output.split("\0");
-  const statuses: GitFileStatus[] = [];
+  const entries: PorcelainEntry[] = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index] ?? "";
-    const indexStatus = record.at(0);
-    const worktreeStatus = record.at(1);
-    const hasOriginalPath =
-      indexStatus === "R" ||
-      indexStatus === "C" ||
-      worktreeStatus === "R" ||
-      worktreeStatus === "C";
-    const parsedStatuses = parseStatusRecord(record);
-    if (hasOriginalPath) {
-      const originalPath = records[index + 1] ?? "";
-      statuses.push(
-        ...parsedStatuses.map((status) => (originalPath ? { ...status, originalPath } : status)),
-      );
-      index += 1;
+    const parsed = parsePorcelainRecord(record);
+    if (!"RC".includes(record.at(0) ?? " ") && !"RC".includes(record.at(1) ?? " ")) {
+      entries.push(...parsed);
       continue;
     }
-    statuses.push(...parsedStatuses);
+    const originalPath = records[index + 1] ?? "";
+    entries.push(...parsed.map((entry) => (originalPath ? { ...entry, originalPath } : entry)));
+    index += 1;
   }
-  return statuses;
+  return entries;
 };
+
+/** The status of one entry, as the HEAD worktree status shows it. */
+export const statusFromEntry = ({
+  index,
+  worktree,
+  path,
+  originalPath,
+}: PorcelainEntry): GitFileStatus => {
+  const status = (value: string, staged: boolean): GitFileStatus =>
+    originalPath ? { path, status: value, staged, originalPath } : { path, status: value, staged };
+  if (index === "?" && worktree === "?") return status("untracked", false);
+  if (index === "!" && worktree === "!") return status("ignored", false);
+  if (isUnmergedStatusPair(index, worktree)) return status("unmerged", true);
+  if (worktree === "D" || worktree === "T") return status(porcelainCharToStatus(worktree), false);
+  if (index !== " " && worktree === " ") return status(porcelainCharToStatus(index), true);
+  if (index === " " && worktree !== " ") return status(porcelainCharToStatus(worktree), false);
+  return status(porcelainCharToStatus(index), true);
+};
+
+/** One status for each changed path, as the HEAD worktree status shows it. */
+const parseStatusPorcelain = (output: string): GitFileStatus[] =>
+  parsePorcelainEntries(output).map(statusFromEntry);
 export const fileStatusCounts = (fileStatuses: FileStatus[]): GitFileStatusCounts => {
   const total = fileStatuses.length;
   const staged = fileStatuses.filter((status) => status.staged).length;
@@ -184,13 +195,50 @@ export const getCurrentBranchUnchecked = (runner: GitCommandRunner, workingDirec
       revision,
     };
   });
-export const getStatusUnchecked = (runner: GitCommandRunner, workingDirectory: string) =>
+/**
+ * Rename detection does not follow `status.renames`, so the status and the diff reads of the local
+ * changes pair the same rename paths. A file action on a rename then changes both of its paths.
+ */
+const STATUS_PORCELAIN_ARGS = [
+  "status",
+  "--porcelain=v1",
+  "-z",
+  "--untracked-files=all",
+  "--find-renames",
+];
+const readStatusPorcelain = (runner: GitCommandRunner, workingDirectory: string) =>
+  runGit(runner, workingDirectory, STATUS_PORCELAIN_ARGS);
+
+/**
+ * The status read of the local changes. Their actions send the listed paths back to Git, and a
+ * name that is not UTF-8 text would come back as another path. So that name fails here with the
+ * step to take.
+ */
+export const readLocalChangesStatusPorcelain = (
+  runner: GitCommandRunner,
+  workingDirectory: string,
+) =>
+  runGitStrictUtf8(runner, workingDirectory, STATUS_PORCELAIN_ARGS).pipe(
+    Effect.catchIf(
+      (error) => error instanceof HostValidationError && error.field === GIT_OUTPUT_ENCODING_FIELD,
+      () =>
+        Effect.fail(
+          new HostValidationError({
+            message: `Git lists a file in ${workingDirectory} whose name is not UTF-8 text. Rename the file to a UTF-8 name, then refresh.`,
+            field: "fileName",
+          }),
+        ),
+    ),
+  );
+/** Commits must not stage or record a path that still has an unresolved conflict. */
+export const requireNoUnmergedPaths = (runner: GitCommandRunner, workingDirectory: string) =>
   Effect.gen(function* () {
-    const output = yield* runGit(runner, workingDirectory, [
-      "status",
-      "--porcelain=v1",
-      "-z",
-      "--untracked-files=all",
-    ]);
-    return parseStatusPorcelain(output);
+    const statuses = parseStatusPorcelain(yield* readStatusPorcelain(runner, workingDirectory));
+    if (statuses.some((status) => status.status === "unmerged")) {
+      return yield* Effect.fail(
+        new HostValidationError({ message: "Resolve the conflicted files before you commit." }),
+      );
+    }
   });
+export const getStatusUnchecked = (runner: GitCommandRunner, workingDirectory: string) =>
+  Effect.map(readStatusPorcelain(runner, workingDirectory), parseStatusPorcelain);

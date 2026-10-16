@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
-import { toScopeSnapshot, toScopeSummaryFields } from "./normalization";
+import type { GitWorktreeStatus } from "@openducktor/contracts";
+import { toScopeSnapshot } from "./normalization";
 
 const createStatus = (overrides: Partial<GitWorktreeStatus> = {}): GitWorktreeStatus => ({
   currentBranch: { name: "feature/task-10", detached: false },
@@ -51,7 +51,7 @@ describe("diff-normalization", () => {
       conflictedFiles: ["src/main.ts"],
     });
   });
-  test("normalizes dirty worktree snapshots without querying or scheduled refresh state", () => {
+  test("normalizes dirty worktree snapshots", () => {
     const snapshot = toScopeSnapshot(createStatus());
 
     expect(snapshot).toMatchObject({
@@ -71,39 +71,38 @@ describe("diff-normalization", () => {
     expect(snapshot.fileDiffs[0]?.file).toBe("src/main.ts");
   });
 
-  test("normalizes summary payloads without file-level diff data", () => {
-    const summary: GitWorktreeStatusSummary = {
-      currentBranch: { name: "feature/task-10", detached: false },
-      fileStatusCounts: {
-        total: 4,
-        staged: 1,
-        unstaged: 3,
+  test.each([
+    {
+      // An unpublished branch keeps the count of commits that its first push sends.
+      upstream: { outcome: "untracked" as const, ahead: 3 },
+      expected: {
+        upstreamAheadBehind: { ahead: 3, behind: 0 },
+        upstreamStatus: "untracked",
+        upstreamError: null,
       },
-      targetAheadBehind: { ahead: 2, behind: 1 },
-      upstreamAheadBehind: { outcome: "untracked", ahead: 2 },
-      snapshot: {
-        effectiveWorkingDir: "/repo",
-        targetBranch: "origin/main",
-        diffScope: "target",
-        observedAtMs: 1731000000100,
-        hashVersion: 1,
-        statusHash: "status-2",
-        diffHash: "diff-2",
+    },
+    {
+      upstream: { outcome: "tracking" as const, ahead: 0, behind: 4 },
+      expected: {
+        upstreamAheadBehind: { ahead: 0, behind: 4 },
+        upstreamStatus: "tracking",
+        upstreamError: null,
       },
-    };
+    },
+    {
+      upstream: { outcome: "error" as const, message: "Upstream lookup failed." },
+      expected: {
+        upstreamAheadBehind: null,
+        upstreamStatus: "error",
+        upstreamError: "Upstream lookup failed.",
+      },
+    },
+  ])(
+    "keeps $upstream.outcome upstream counts apart from comparison counts",
+    ({ upstream, expected }) => {
+      const snapshot = toScopeSnapshot(createStatus({ upstreamAheadBehind: upstream }));
 
-    expect(toScopeSummaryFields(summary)).toEqual({
-      branch: "feature/task-10",
-      gitConflict: null,
-      uncommittedFileCount: 4,
-      commitsAheadBehind: { ahead: 2, behind: 1 },
-      upstreamAheadBehind: null,
-      upstreamStatus: "untracked",
-      upstreamError: null,
-      error: null,
-      hashVersion: 1,
-      statusHash: "status-2",
-      diffHash: "diff-2",
-    });
-  });
+      expect(snapshot).toMatchObject({ ...expected, commitsAheadBehind: { ahead: 1, behind: 0 } });
+    },
+  );
 });

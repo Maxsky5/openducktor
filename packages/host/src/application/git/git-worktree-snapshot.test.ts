@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { gitWorktreeStatusSnapshotSchema, type FileDiff } from "@openducktor/contracts";
+import { gitWorktreeStatusSnapshotSchema, type GitFileDiff } from "@openducktor/contracts";
 import type { GitWorktreeStatusData } from "../../ports/git-port";
 import {
   createWorktreeSnapshot,
   hashWorktreeDiffPayload,
-  hashWorktreeDiffSummaryPayload,
   hashWorktreeStatusPayload,
-  validateResetSnapshotMatches,
 } from "./git-worktree-snapshot";
 
 // Independent BigInt oracle for the original FNV-1a wire algorithm.
@@ -16,7 +14,7 @@ const referenceHash = (bytes: Uint8Array): string => {
   return hash.toString(16).padStart(16, "0");
 };
 
-const fileDiff = (overrides: Partial<FileDiff> = {}): FileDiff => ({
+const fileDiff = (overrides: Partial<GitFileDiff> = {}): GitFileDiff => ({
   file: "file.ts",
   type: "modified",
   additions: 1,
@@ -51,7 +49,6 @@ describe("worktree snapshot hashing", () => {
     const snapshot = snapshotFor(statusData());
     expect(snapshot.hashVersion).toBe(1);
     expect(gitWorktreeStatusSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(() => validateResetSnapshotMatches(snapshot, statusData())).not.toThrow();
   });
 
   test("hashes the complete little-endian framed UTF-8 payload", () => {
@@ -135,24 +132,7 @@ describe("worktree snapshot hashing", () => {
     expect(hash("\ud800")).toBe(hash("\ufffd"));
   });
 
-  test("rejects stale content and status and incompatible versions", () => {
-    const data = statusData();
-    const snapshot = snapshotFor(data);
-    for (const hashVersion of [2, 3]) {
-      expect(() => validateResetSnapshotMatches({ ...snapshot, hashVersion }, data)).toThrow(
-        "Displayed diff is stale",
-      );
-    }
-    data.fileDiffs[0] = fileDiff({ diff: "-old\n+NEW\n" });
-    expect(() => validateResetSnapshotMatches(snapshot, data)).toThrow("Displayed diff is stale");
-    const changedStatus = statusData();
-    changedStatus.fileStatuses[0] = { path: "file.ts", status: "modified", staged: true };
-    expect(() => validateResetSnapshotMatches(snapshot, changedStatus)).toThrow(
-      "Displayed diff is stale",
-    );
-  });
-
-  test("preserves status ordering, optional names, upstream outcomes and summary fields", () => {
+  test("preserves status ordering, optional names and upstream outcomes", () => {
     const data = statusData();
     const hash = (value: GitWorktreeStatusData) => snapshotFor(value).statusHash;
     const files = [...data.fileStatuses, { path: "other", status: "added", staged: true }];
@@ -174,12 +154,5 @@ describe("worktree snapshot hashing", () => {
       }),
     );
     expect(new Set(upstreamHashes).size).toBe(3);
-    const counts = { total: 2, staged: 1, unstaged: 1 };
-    expect(hashWorktreeDiffSummaryPayload("uncommitted", data.targetAheadBehind, counts)).not.toBe(
-      hashWorktreeDiffSummaryPayload("uncommitted", data.targetAheadBehind, {
-        ...counts,
-        staged: 2,
-      }),
-    );
   });
 });

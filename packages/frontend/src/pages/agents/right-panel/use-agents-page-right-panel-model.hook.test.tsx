@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { AgentsPageRightPanelRuntime } from "../shell/agents-page-right-panel-runtime";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import type { ToolTabKind } from "@/features/session-panels";
+import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import {
   createDialogPreviewHarness,
@@ -56,7 +57,10 @@ const prefetchPullRequestReviewContextMock = mock(
     _input: Parameters<PrefetchPullRequestReviewContext>[1],
   ) => {},
 );
-const refreshWorktreeMock = mock<BuildToolsSnapshot["refreshWorktree"]>(async () => {});
+/** Runs the file reads that the caller adds, as the coordinator does. */
+const refreshWorktreeMock = mock<BuildToolsSnapshot["refreshWorktree"]>(async (mode, withFiles) => {
+  await withFiles?.(mode, async () => {});
+});
 
 const linkedPullRequest = {
   providerId: "github",
@@ -399,7 +403,7 @@ describe("useAgentsPageRightPanelModel", () => {
       await state.refreshWorktree("soft");
     });
 
-    expect(refreshWorktreeMock).toHaveBeenCalledWith("soft");
+    expect(refreshWorktreeMock).toHaveBeenCalledWith("soft", expect.any(Function));
     expect(queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(textFileKey)?.isInvalidated).toBe(true);
 
@@ -413,7 +417,6 @@ describe("useAgentsPageRightPanelModel", () => {
     const snapshot = createSnapshot();
     snapshot.gitPanelContextMode = "worktree";
     snapshot.worktree.path = rootPath;
-    snapshot.diffData.refresh = refreshWorktreeMock;
     buildToolsSnapshotState.current = snapshot;
     const selectedFile = { rootPath, relativePath: "src/index.ts" };
     const treeKey = filesystemQueryKeys.tree(rootPath, "origin/main");
@@ -432,12 +435,61 @@ describe("useAgentsPageRightPanelModel", () => {
         await state.toolsModel.gitModel.refresh();
       });
 
-      expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
+      expect(refreshWorktreeMock).toHaveBeenCalledWith("hard", expect.any(Function));
       expect(queryClient.getQueryState(treeKey)).toBeUndefined();
       expect(queryClient.getQueryState(textKey)?.isInvalidated).toBe(true);
     } finally {
       await harness.unmount();
       queryClient.clear();
+    }
+  });
+
+  test("the Git panel opens a file preview from the task worktree root", async () => {
+    const rootPath = "/repo/.worktrees/task-1";
+    const snapshot = createSnapshot();
+    snapshot.gitPanelContextMode = "worktree";
+    snapshot.worktree.path = rootPath;
+    buildToolsSnapshotState.current = snapshot;
+    const onSelectFile = mock((_file: TaskExecutionSelectedFile) => {});
+    const harness = createHookHarness(
+      useAgentsPageRightPanelModel,
+      createHookArgs({ panel: rightPanel("diffs", true), onSelectFile }),
+    );
+    try {
+      await harness.mount();
+      harness.getLatest().toolsModel.gitModel.onViewFile?.("src/index.ts");
+      expect(onSelectFile.mock.calls).toEqual([[{ rootPath, relativePath: "src/index.ts" }]]);
+
+      buildToolsSnapshotState.current = {
+        ...snapshot,
+        worktree: { ...snapshot.worktree, path: null, isResolving: true },
+      };
+      await harness.update(createHookArgs({ panel: rightPanel("diffs", true), onSelectFile }));
+      // Without a root, the panel offers no file preview.
+      expect(harness.getLatest().toolsModel.gitModel.onViewFile).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("the Git panel shows the manual Refresh state of the shown context", async () => {
+    buildToolsSnapshotState.current = {
+      ...createSnapshot(),
+      manualRefresh: {
+        refresh: async () => {},
+        isRefreshing: true,
+        refreshError: "remote unavailable",
+      },
+    };
+    const harness = createHookHarness(useAgentsPageRightPanelModel, createHookArgs());
+    try {
+      await harness.mount();
+      expect(harness.getLatest().toolsModel.gitModel).toMatchObject({
+        isRefreshing: true,
+        refreshError: "remote unavailable",
+      });
+    } finally {
+      await harness.unmount();
     }
   });
 
@@ -540,7 +592,7 @@ for (const outcome of [
       });
       if (outcome === "saved") {
         expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
-        expect(refreshWorktreeMock).toHaveBeenCalledWith("soft");
+        expect(refreshWorktreeMock).toHaveBeenCalledWith("soft", expect.any(Function));
       } else expect(refreshWorktreeMock).not.toHaveBeenCalled();
     } finally {
       h.dispose();

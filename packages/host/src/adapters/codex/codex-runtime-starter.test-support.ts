@@ -308,6 +308,11 @@ export const waitFor = async (
   throw new Error("Timed out waiting for condition.");
 };
 
+/** Real fixture processes start and stop slowly while the parallel test suite loads the CPU. */
+export const PROCESS_WAIT_MS = 10_000;
+/** A test that waits on several fixture processes needs room for each wait. */
+export const PROCESS_TEST_TIMEOUT_MS = 40_000;
+
 export const processIsAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);

@@ -562,9 +562,6 @@ const createBuildStartGitPort = ({
     switchBranch() {
       return Effect.die(new Error("unexpected switch branch"));
     },
-    resetWorktreeSelection() {
-      return Effect.die(new Error("unexpected reset"));
-    },
     commitsAheadBehind() {
       return Effect.sync(() => {
         return { ahead: 0, behind: 0 };
@@ -727,9 +724,6 @@ const createDirectMergeGitPort = ({
     },
     switchBranch() {
       return Effect.die(new Error("unexpected switch branch"));
-    },
-    resetWorktreeSelection() {
-      return Effect.die(new Error("unexpected reset"));
     },
     restoreWorktreeToReference(workingDirectory, reference) {
       return Effect.sync(() => {

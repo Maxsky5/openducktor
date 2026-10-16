@@ -1,81 +1,67 @@
-import { Undo2 } from "lucide-react";
-import {
-  type ComponentProps,
-  type Dispatch,
-  memo,
-  type ReactElement,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { GitChangeGroup } from "@openducktor/contracts";
+import { memo, type ReactElement, useCallback, useId, useMemo, useState } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { collectUnmergedFilePaths, type DiffScope } from "@/features/agent-studio-git";
-import {
-  createGitConflictActionsModel,
-  GitConflictDialog,
-  GitConflictStrip,
-} from "@/features/git-conflict-resolution";
-import { toInlineCommentDraftOwnerKey } from "@/state/use-inline-comment-draft-store";
+import { applyPendingChanges } from "@/features/agent-studio-git";
+import { GitConflictStrip } from "@/features/git-conflict-resolution";
 import { CommitComposer } from "./commit-composer";
-import { INLINE_CODE_CLASS_NAME, PRELOAD_DIFF_LIMIT } from "./constants";
-import { EmptyDiffState } from "./empty-diff-state";
-import { FileDiffList } from "./file-diff-list";
-import { useFileListViewModeStore } from "./file-list-view-preference";
-import { ForcePushDialog } from "./force-push-dialog";
-import { GitConfirmationDialog } from "./git-confirmation-dialog";
+import type { GitPanelTab } from "./constants";
+import { AgentStudioGitPanelDialogs } from "./git-panel-dialogs";
+import { getGitInfoHeaderProps } from "./git-panel-header-props";
+import { AgentStudioGitTabContent } from "./git-panel-tab-content";
+import {
+  gitPanelContextKey,
+  useGitPanelViewField,
+  useGitPanelViewUpdate,
+} from "./git-panel-view-store";
 import { GitInfoHeader } from "./git-info-header";
-import { PullRebaseDialog } from "./pull-rebase-dialog";
-import type { AgentStudioGitPanelModel } from "./types";
-import { useFileListState } from "./use-file-list-state";
+import type { AgentStudioGitPanelModel, GitPanelView } from "./types";
+import { useExpandedFileSelection } from "./use-expanded-file-selection";
+import { useGitConflictPanel } from "./use-git-conflict-panel";
+import { usePanelFileLists } from "./use-panel-file-lists";
 
-type OptimisticDiffScopeChange = {
-  modelScopeAtRequest: DiffScope;
-  requestedScope: DiffScope;
-};
+/** Shows Stage and Unstage requests at once. The Git result replaces them when it arrives. */
+function withPendingChanges(model: AgentStudioGitPanelModel): AgentStudioGitPanelModel {
+  const local = model.scopeStatesByScope.uncommitted;
+  const pending = model.pendingChanges ?? [];
+  if (!local.localChanges || pending.length === 0) return model;
+  return {
+    ...model,
+    scopeStatesByScope: {
+      ...model.scopeStatesByScope,
+      uncommitted: { ...local, localChanges: applyPendingChanges(local.localChanges, pending) },
+    },
+  };
+}
 
 export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
-  model,
+  model: source,
 }: {
   model: AgentStudioGitPanelModel;
 }): ReactElement {
-  const expandedSelection = useExpandedFileSelection();
-  const { diffScope, handleDiffScopeChange } = useOptimisticDiffScope(
-    model,
-    expandedSelection.clear,
+  const model = useMemo(() => withPendingChanges(source), [source]);
+  const contextKey = gitPanelContextKey(model);
+  const updateView = useGitPanelViewUpdate(contextKey);
+  const activeTab = useGitPanelViewField(contextKey, "selectedTab");
+  const collapsedGroups = useGitPanelViewField(contextKey, "collapsedGroups");
+  const expandedSelection = useExpandedFileSelection(contextKey);
+  const onTabChange = useCallback(
+    (tab: GitPanelTab): void => updateView(() => ({ selectedTab: tab })),
+    [updateView],
+  );
+  // The toggle reads the current view, so it stays one callback and two quick toggles both count.
+  const onToggleGroup = useCallback(
+    (group: GitChangeGroup) =>
+      updateView(({ collapsedGroups: current }) => ({
+        collapsedGroups: current.includes(group)
+          ? current.filter((entry) => entry !== group)
+          : [...current, group],
+      })),
+    [updateView],
   );
   const [diffStyle, setDiffStyle] = useState<PierreDiffStyle>("unified");
   const conflict = useGitConflictPanel(model);
-  const displayedScopeState = model.scopeStatesByScope[diffScope];
-  const displayedScopeLoaded = model.loadedScopesByScope[diffScope];
-  const displayedFileDiffs = displayedScopeState.fileDiffs;
-  const expandedFiles = useMemo(
-    () => pruneExpandedFiles(expandedSelection.files, displayedFileDiffs),
-    [displayedFileDiffs, expandedSelection.files],
-  );
-  const displayedFileStatuses = displayedScopeState.fileStatuses;
-  const displayedUncommittedFileCount = displayedScopeState.uncommittedFileCount;
-  const displayedError = displayedScopeState.error;
-  const displayedIsInitialLoading = !displayedScopeLoaded;
-  const hasUncommittedFiles = displayedUncommittedFileCount > 0;
-  const hasFiles = displayedFileDiffs.length > 0;
-  const pendingReset = model.pendingReset ?? null;
-  const canResetFiles = diffScope === "uncommitted" && model.requestFileReset != null;
-  const isResetDisabled = model.isResetDisabled ?? true;
-  const resetDisabledReason = model.resetDisabledReason ?? null;
-  const conflictedFiles = useMemo(
-    () => new Set(collectUnmergedFilePaths(displayedFileStatuses)),
-    [displayedFileStatuses],
-  );
-
-  const preloadLimit = PRELOAD_DIFF_LIMIT;
-
-  const resetDialog = getResetDialog(pendingReset);
+  const lists = usePanelFileLists(model);
 
   return (
     <TooltipProvider>
@@ -83,61 +69,24 @@ export const AgentStudioGitPanel = memo(function AgentStudioGitPanel({
         <AgentStudioGitPanelContent
           model={model}
           view={{
+            contextKey,
+            activeTab,
+            onTabChange,
             conflict,
-            diffScope,
-            displayedScopeState,
-            displayedError,
-            displayedFileDiffs,
-            displayedUncommittedFileCount,
-            displayedIsInitialLoading,
-            expandedFiles,
+            expandedFiles: expandedSelection.files,
             onToggleFile: expandedSelection.toggle,
-            handleDiffScopeChange,
-            conflictedFiles,
+            collapsedGroups,
+            onToggleGroup,
             diffStyle,
             setDiffStyle,
-            preloadLimit,
-            canResetFiles,
-            isResetDisabled,
-            resetDisabledReason,
-            hasFiles,
-            hasUncommittedFiles,
+            lists,
           }}
         />
-        <AgentStudioGitPanelDialogs
-          model={model}
-          conflict={conflict}
-          pendingReset={pendingReset}
-          resetDialog={resetDialog}
-        />
+        <AgentStudioGitPanelDialogs model={model} conflict={conflict} />
       </div>
     </TooltipProvider>
   );
 });
-
-type GitPanelScopeState = AgentStudioGitPanelModel["scopeStatesByScope"][DiffScope];
-type GitPanelConflict = ReturnType<typeof useGitConflictPanel>;
-type GitPanelView = {
-  conflict: GitPanelConflict;
-  diffScope: DiffScope;
-  displayedScopeState: GitPanelScopeState;
-  displayedError: string | null;
-  displayedFileDiffs: GitPanelScopeState["fileDiffs"];
-  displayedUncommittedFileCount: number;
-  displayedIsInitialLoading: boolean;
-  expandedFiles: Set<string>;
-  onToggleFile: (filePath: string) => void;
-  handleDiffScopeChange: (scope: DiffScope) => void;
-  conflictedFiles: Set<string>;
-  diffStyle: PierreDiffStyle;
-  setDiffStyle: Dispatch<SetStateAction<PierreDiffStyle>>;
-  preloadLimit: number;
-  canResetFiles: boolean;
-  isResetDisabled: boolean;
-  resetDisabledReason: string | null;
-  hasFiles: boolean;
-  hasUncommittedFiles: boolean;
-};
 
 function AgentStudioGitPanelContent({
   model,
@@ -147,47 +96,94 @@ function AgentStudioGitPanelContent({
   view: GitPanelView;
 }): ReactElement {
   const diffPanelId = `${useId()}-diff`;
+  const local = model.scopeStatesByScope.uncommitted.localChanges;
+  const { refresh } = model;
+  // The panel shows refresh failures. Keep a read failure out of the app error boundary.
+  const onRefresh = useCallback(() => void refresh().catch(() => {}), [refresh]);
   return (
     <>
-      <AgentStudioGitPanelHeader model={model} view={view} diffPanelId={diffPanelId} />
+      <GitInfoHeader
+        key={model.subjectKey}
+        {...getGitInfoHeaderProps(model, view, onRefresh)}
+        diffPanelId={diffPanelId}
+      />
+      <PanelNotices model={model} view={view} />
       <div
         id={diffPanelId}
         role="tabpanel"
-        aria-labelledby={`${diffPanelId}-tab-${view.diffScope}`}
+        aria-labelledby={`${diffPanelId}-tab-${view.activeTab}`}
+        aria-busy={model.isLoading || undefined}
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
-        <AgentStudioGitDiff model={model} view={view} />
+        <AgentStudioGitTabContent model={model} view={view} />
       </div>
-      <AgentStudioGitCommit model={model} view={view} />
+      {view.activeTab === "uncommitted" ? (
+        <CommitComposer
+          contextKey={view.contextKey}
+          stagedFileCount={local?.staged.fileStatuses.length ?? 0}
+          changedFileCount={changedPathCount(local)}
+          hasConflicts={(local?.conflicted.fileStatuses.length ?? 0) > 0}
+          committingMode={model.committingMode ?? null}
+          blockedReason={writeBlockedReason(model)}
+          commitError={model.commitError ?? null}
+          commit={model.commit ?? null}
+        />
+      ) : null}
     </>
   );
 }
 
-function AgentStudioGitPanelHeader({
+/** Paths that Commit all would stage. Conflicts stay out of this count. */
+function changedPathCount(
+  local: AgentStudioGitPanelModel["scopeStatesByScope"]["uncommitted"]["localChanges"],
+): number {
+  if (!local) return 0;
+  const paths = new Set<string>();
+  for (const entry of [...local.unstaged.fileStatuses, ...local.staged.fileStatuses]) {
+    paths.add(entry.path);
+  }
+  return paths.size;
+}
+
+/** Why a commit cannot start now. Other actions in flight and conflict locks block it. */
+function writeBlockedReason(model: AgentStudioGitPanelModel): string | null {
+  if (model.isGitActionsLocked) return model.gitActionsLockReason ?? "Git actions are disabled.";
+  if (model.isPushing) return "Wait for the push to finish.";
+  if (model.isRebasing) return "Wait for the rebase or pull to finish.";
+  if (model.isChanging) return "Wait for the Git change to finish.";
+  if (!model.scopeStatesByScope.uncommitted.localChanges) {
+    return "Local changes are unavailable. Refresh and try again.";
+  }
+  return null;
+}
+
+function PanelNotices({
   model,
   view,
-  diffPanelId,
 }: {
   model: AgentStudioGitPanelModel;
   view: GitPanelView;
-  diffPanelId: string;
 }): ReactElement {
-  const headerProps = getGitInfoHeaderProps(model, view);
+  const scopeError =
+    view.activeTab === "history" ? null : model.scopeStatesByScope[view.activeTab].error;
   return (
     <>
-      <GitInfoHeader key={model.subjectKey} {...headerProps} diffPanelId={diffPanelId} />
-      {model.resetError ? (
-        <div
+      {model.changeError ? (
+        <p
           role="alert"
-          className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+          data-testid="agent-studio-git-change-error"
         >
-          {model.resetError}
-        </div>
+          {model.changeError}
+        </p>
       ) : null}
-      {view.displayedError ? (
-        <div className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {view.displayedError}
-        </div>
+      {scopeError ? (
+        <p
+          role="alert"
+          className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+        >
+          {scopeError}
+        </p>
       ) : null}
       {view.conflict.active && view.conflict.stripActions ? (
         <GitConflictStrip
@@ -198,391 +194,4 @@ function AgentStudioGitPanelHeader({
       ) : null}
     </>
   );
-}
-
-function getGitInfoHeaderProps(
-  model: AgentStudioGitPanelModel,
-  view: GitPanelView,
-): ComponentProps<typeof GitInfoHeader> {
-  const props: ComponentProps<typeof GitInfoHeader> = {
-    contextMode: model.contextMode ?? "worktree",
-    comparisonUnavailableReason: model.comparisonUnavailableReason ?? null,
-    comparisonPending: model.comparisonPending ?? false,
-    branchKnown: model.branchKnown ?? true,
-    comparisonReference: model.comparisonReference ?? null,
-    pullRequest: model.pullRequest ?? null,
-    branch: model.branch,
-    targetBranch: model.targetBranch,
-    diffScope: view.diffScope,
-    uncommittedFileCount: view.displayedUncommittedFileCount,
-    commitsAheadBehind: model.commitsAheadBehind,
-    upstreamAheadBehind: view.displayedScopeState.upstreamAheadBehind ?? null,
-    upstreamStatus: view.displayedScopeState.upstreamStatus,
-    upstreamError: view.displayedScopeState.upstreamError ?? null,
-    isLoading: model.isLoading,
-    isCommitting: model.isCommitting ?? false,
-    isPushing: model.isPushing ?? false,
-    isRebasing: model.isRebasing ?? false,
-    isResetting: model.isResetting ?? false,
-    isDetectingPullRequest: model.isDetectingPullRequest ?? false,
-    detectPullRequestDisabledReason: model.detectPullRequestDisabledReason ?? null,
-    isGitActionsLocked: model.isGitActionsLocked ?? false,
-    gitActionsLockReason: model.gitActionsLockReason ?? null,
-    showLockReasonBanner: !view.conflict.hasConflict && (model.showLockReasonBanner ?? true),
-    pushError: model.pushError ?? null,
-    rebaseError: model.rebaseError ?? null,
-    pushBranch: model.pushBranch ?? null,
-    rebaseOntoTarget: model.rebaseOntoTarget ?? null,
-    pullFromUpstream: model.pullFromUpstream ?? null,
-    onDetectPullRequest: model.onDetectPullRequest ?? null,
-    targetBranchEditable: model.targetBranchEditable,
-    targetBranchHelpText: model.targetBranchHelpText,
-    targetBranchesPending: model.targetBranchesPending,
-    targetBranchesError: model.targetBranchesError,
-    retryTargetBranches: model.retryTargetBranches,
-    targetBranchOptions: model.targetBranchOptions ?? [],
-    targetBranchSelectionValue: model.targetBranchSelectionValue ?? "",
-    setDiffScope: view.handleDiffScopeChange,
-    // Git and file queries show their own errors. Keep a read failure out of the app error boundary.
-    onRefresh: () => void model.refresh().catch(() => {}),
-  };
-  if (model.onUpdateTargetBranch) {
-    props.onUpdateTargetBranch = model.onUpdateTargetBranch;
-  }
-  if (model.repositoryBranchControl) {
-    props.repositoryBranchControl = model.repositoryBranchControl;
-  }
-  return props;
-}
-
-function AgentStudioGitDiff({
-  model,
-  view,
-}: {
-  model: AgentStudioGitPanelModel;
-  view: GitPanelView;
-}): ReactElement {
-  const commentOwnerKey = useMemo(
-    () => (model.commentOwner ? toInlineCommentDraftOwnerKey(model.commentOwner) : null),
-    [model.commentOwner],
-  );
-  const viewMode = useFileListViewModeStore((store) => store.viewMode);
-  const setViewMode = useFileListViewModeStore((store) => store.setViewMode);
-  // This component stays mounted while a scope has no files, so the search text stays too.
-  const listState = useFileListState({
-    subjectKey: model.subjectKey,
-    diffScope: view.diffScope,
-    fileDiffs: view.displayedFileDiffs,
-  });
-
-  if (view.hasFiles) {
-    return (
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <FileDiffList
-          fileDiffs={view.displayedFileDiffs}
-          diffScope={view.diffScope}
-          ownerKey={commentOwnerKey}
-          commentPlaceholder={model.commentPlaceholder}
-          conflictedFiles={view.conflictedFiles}
-          diffStyle={view.diffStyle}
-          setDiffStyle={view.setDiffStyle}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          listState={listState}
-          expandedFiles={view.expandedFiles}
-          onToggleFile={view.onToggleFile}
-          preloadLimit={view.preloadLimit}
-          canResetFiles={view.canResetFiles}
-          isResetDisabled={view.isResetDisabled}
-          resetDisabledReason={view.resetDisabledReason}
-          onRequestFileReset={model.requestFileReset}
-          onRequestHunkReset={model.requestHunkReset}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <ScrollArea className="min-h-0 flex-1">
-      <EmptyDiffState
-        targetBranch={model.targetBranch}
-        isLoading={view.displayedIsInitialLoading}
-        contextMode={model.contextMode ?? "worktree"}
-        diffScope={view.diffScope}
-        upstreamStatus={view.displayedScopeState.upstreamStatus}
-      />
-    </ScrollArea>
-  );
-}
-
-function AgentStudioGitCommit({
-  model,
-  view,
-}: {
-  model: AgentStudioGitPanelModel;
-  view: GitPanelView;
-}): ReactElement | null {
-  if (view.diffScope !== "uncommitted") {
-    return null;
-  }
-  return (
-    <CommitComposer
-      hasUncommittedFiles={view.hasUncommittedFiles}
-      uncommittedFileCount={view.displayedUncommittedFileCount}
-      isCommitting={model.isCommitting ?? false}
-      isPushing={model.isPushing ?? false}
-      isRebasing={model.isRebasing ?? false}
-      isResetting={model.isResetting ?? false}
-      isGitActionsLocked={model.isGitActionsLocked ?? false}
-      gitActionsLockReason={model.gitActionsLockReason ?? null}
-      commitError={model.commitError ?? null}
-      commitAll={model.commitAll ?? null}
-    />
-  );
-}
-
-type PendingReset = NonNullable<AgentStudioGitPanelModel["pendingReset"]>;
-
-function AgentStudioGitPanelDialogs({
-  model,
-  conflict,
-  pendingReset,
-  resetDialog,
-}: {
-  model: AgentStudioGitPanelModel;
-  conflict: GitPanelConflict;
-  pendingReset: PendingReset | null;
-  resetDialog: ReturnType<typeof getResetDialog>;
-}): ReactElement {
-  const confirmDisabled = [
-    model.isCommitting,
-    model.isPushing,
-    model.isRebasing,
-    model.isResetting,
-    model.isHandlingGitConflict,
-    model.isGitActionsLocked,
-  ].some(Boolean);
-  return (
-    <>
-      {conflict.modalActions ? (
-        <GitConflictDialog
-          conflict={conflict.active}
-          open={conflict.hasConflict && conflict.isModalOpen}
-          onOpenChange={conflict.setModalOpen}
-          actions={conflict.modalActions}
-        />
-      ) : null}
-      <ForcePushDialog
-        pendingForcePush={model.pendingForcePush ?? null}
-        confirmDisabled={confirmDisabled}
-        isPushing={model.isPushing ?? false}
-        onCancel={() => model.cancelForcePush?.()}
-        onConfirm={() => void model.confirmForcePush?.()}
-      />
-      <PullRebaseDialog
-        pendingPullRebase={model.pendingPullRebase ?? null}
-        confirmDisabled={confirmDisabled}
-        isRebasing={model.isRebasing ?? false}
-        onCancel={() => model.cancelPullRebase?.()}
-        onConfirm={() => void model.confirmPullRebase?.()}
-      />
-      <GitConfirmationDialog
-        open={pendingReset != null}
-        onOpenChange={(open) => {
-          if (model.isResetting) {
-            return;
-          }
-          if (!open) {
-            model.cancelReset?.();
-          }
-        }}
-        title={resetDialog.title}
-        description={resetDialog.description}
-        closeLabel="Keep changes"
-        closeDisabled={model.isResetting ?? false}
-        onClose={() => model.cancelReset?.()}
-        closeTestId="agent-studio-git-cancel-reset-button"
-        confirmLabel={pendingReset?.kind === "hunk" ? "Reset hunk" : "Reset file"}
-        confirmPendingLabel={pendingReset?.kind === "hunk" ? "Resetting hunk…" : "Resetting file…"}
-        confirmPending={model.isResetting ?? false}
-        confirmDisabled={confirmDisabled}
-        onConfirm={() => void model.confirmReset?.()}
-        confirmTestId="agent-studio-git-confirm-reset-button"
-        confirmIcon={Undo2}
-        contentTestId="agent-studio-git-reset-modal"
-      >
-        {resetDialog.body}
-      </GitConfirmationDialog>
-    </>
-  );
-}
-
-function getResetDialog(pendingReset: PendingReset | null) {
-  const isHunk = pendingReset?.kind === "hunk";
-  const title = isHunk ? "Confirm hunk reset" : "Confirm file reset";
-  const description = isHunk ? (
-    <>
-      This discards the selected uncommitted diff hunk in{" "}
-      <code className={INLINE_CODE_CLASS_NAME}>{pendingReset.filePath}</code> and restores it to
-      <code className={INLINE_CODE_CLASS_NAME}> HEAD</code>.
-    </>
-  ) : (
-    <>
-      This discards all local uncommitted changes in{" "}
-      <code className={INLINE_CODE_CLASS_NAME}>{pendingReset?.filePath ?? ""}</code> and restores
-      the file to <code className={INLINE_CODE_CLASS_NAME}>HEAD</code>.
-    </>
-  );
-  const body = pendingReset ? (
-    <div
-      className="rounded-xl border border-border bg-muted/50 p-4"
-      data-testid="agent-studio-git-reset-safety-note"
-    >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        Reset target
-      </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm leading-6 text-muted-foreground">
-        <code className={INLINE_CODE_CLASS_NAME}>{pendingReset.filePath}</code>
-        {isHunk ? <span>Hunk {pendingReset.hunkIndex + 1}</span> : <span>Entire file</span>}
-      </div>
-    </div>
-  ) : null;
-  return { body, description, title };
-}
-
-function pruneExpandedFiles(
-  files: Set<string>,
-  diffs: GitPanelScopeState["fileDiffs"],
-): Set<string> {
-  if (files.size === 0) {
-    return files;
-  }
-  const displayedPaths = new Set(diffs.map((diff) => diff.file));
-  const shownFiles = new Set([...files].filter((file) => displayedPaths.has(file)));
-  return shownFiles.size === files.size ? files : shownFiles;
-}
-
-function useExpandedFileSelection() {
-  const [files, setFiles] = useState<Set<string>>(new Set());
-  const clear = useCallback(() => {
-    setFiles((current) => (current.size === 0 ? current : new Set<string>()));
-  }, []);
-  const toggle = useCallback((filePath: string): void => {
-    setFiles((current) => {
-      const next = new Set(current);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-      } else {
-        next.add(filePath);
-      }
-      return next;
-    });
-  }, []);
-  return { clear, files, toggle };
-}
-
-function useOptimisticDiffScope(model: AgentStudioGitPanelModel, clearFiles: () => void) {
-  const [change, setChange] = useState<OptimisticDiffScopeChange | null>(null);
-  const acknowledged =
-    change !== null &&
-    (model.diffScope === change.requestedScope || model.diffScope !== change.modelScopeAtRequest);
-  if (acknowledged) {
-    setChange(null);
-  }
-  let diffScope = model.diffScope;
-  if (!acknowledged && change) {
-    diffScope = change.requestedScope;
-  }
-  const handleDiffScopeChange = useCallback(
-    (scope: DiffScope): void => {
-      if (scope === diffScope) {
-        return;
-      }
-      setChange({ modelScopeAtRequest: model.diffScope, requestedScope: scope });
-      clearFiles();
-      model.setDiffScope(scope);
-    },
-    [clearFiles, diffScope, model],
-  );
-  return { diffScope, handleDiffScopeChange };
-}
-
-function useGitConflictPanel(model: AgentStudioGitPanelModel) {
-  const {
-    abortGitConflict,
-    askBuilderToResolveGitConflict: askForHelp,
-    gitConflict,
-    gitConflictAction,
-    gitConflictAutoOpenNonce,
-    gitConflictCloseNonce,
-    isHandlingGitConflict,
-  } = model;
-  const active = gitConflict ?? null;
-  const hasConflict = active != null;
-  const [isModalOpen, setModalOpen] = useState(false);
-  const initializedRef = useRef(false);
-  const previousAutoOpenNonceRef = useRef(0);
-  const previousCloseNonceRef = useRef(0);
-  const autoOpenNonce = gitConflictAutoOpenNonce ?? 0;
-  const closeNonce = gitConflictCloseNonce ?? 0;
-  const closeAndAsk = useCallback((): void => {
-    setModalOpen(false);
-    void askForHelp?.();
-  }, [askForHelp]);
-  const { stripActions, modalActions } = useMemo(() => {
-    if (!active) return { stripActions: null, modalActions: null };
-    const options = {
-      operation: active.operation,
-      recipientLabel: model.conflictRecipientLabel,
-      blockedReason: model.conflictAssistanceBlockedReason,
-      isStarting: model.conflictAssistanceIsStarting,
-      isHandlingConflict: isHandlingGitConflict ?? false,
-      conflictAction: gitConflictAction,
-      onAbort: () => void abortGitConflict?.(),
-      onAsk: askForHelp ? () => void askForHelp() : undefined,
-    };
-    return {
-      stripActions: createGitConflictActionsModel(options),
-      modalActions: createGitConflictActionsModel({
-        ...options,
-        onAsk: askForHelp ? closeAndAsk : undefined,
-      }),
-    };
-  }, [
-    active,
-    abortGitConflict,
-    askForHelp,
-    closeAndAsk,
-    gitConflictAction,
-    isHandlingGitConflict,
-    model.conflictRecipientLabel,
-    model.conflictAssistanceBlockedReason,
-    model.conflictAssistanceIsStarting,
-  ]);
-
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      previousAutoOpenNonceRef.current = autoOpenNonce;
-      previousCloseNonceRef.current = closeNonce;
-      return;
-    }
-    let nextOpen: boolean | null = null;
-    if (closeNonce !== previousCloseNonceRef.current) {
-      previousCloseNonceRef.current = closeNonce;
-      nextOpen = false;
-    }
-    if (autoOpenNonce !== previousAutoOpenNonceRef.current) {
-      previousAutoOpenNonceRef.current = autoOpenNonce;
-      nextOpen = true;
-    }
-    if (!hasConflict) {
-      nextOpen = false;
-    }
-    if (nextOpen !== null) {
-      setModalOpen(nextOpen);
-    }
-  }, [autoOpenNonce, closeNonce, hasConflict]);
-
-  return { active, hasConflict, isModalOpen, modalActions, setModalOpen, stripActions };
 }

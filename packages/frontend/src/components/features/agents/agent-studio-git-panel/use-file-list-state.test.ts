@@ -1,19 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import { act, renderHook } from "@testing-library/react";
-import type { DiffScope } from "@/features/agent-studio-git";
 import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { useFileListState } from "./use-file-list-state";
+import { useFileListSearch, useFileListState } from "./use-file-list-state";
 
 enableReactActEnvironment();
 
 type StateProps = {
   subjectKey: string;
-  diffScope: DiffScope;
-  fileDiffs: readonly FileDiff[];
+  listKey: string;
+  fileDiffs: readonly GitFileDiff[];
 };
 
-const fileDiffs = (...files: string[]): FileDiff[] =>
+const fileDiffs = (...files: string[]): GitFileDiff[] =>
   files.map((file) => ({
     file,
     type: "modified",
@@ -22,14 +21,17 @@ const fileDiffs = (...files: string[]): FileDiff[] =>
     diff: "@@ -1 +1 @@\n-old\n+new\n",
   }));
 
+const useListState = ({ subjectKey, listKey, fileDiffs }: StateProps) =>
+  useFileListState({ subjectKey, listKey, fileDiffs, search: useFileListSearch(subjectKey) });
+
 const renderListState = (initialProps: Partial<StateProps> = {}) => {
   const props: StateProps = {
     subjectKey: "task-1",
-    diffScope: "uncommitted",
+    listKey: "unstaged",
     fileDiffs: fileDiffs("src/lib/a.ts", "src/main.ts", "docs/guide.md"),
     ...initialProps,
   };
-  const view = renderHook((hookProps: StateProps) => useFileListState(hookProps), {
+  const view = renderHook((hookProps: StateProps) => useListState(hookProps), {
     initialProps: props,
   });
   return {
@@ -90,16 +92,53 @@ describe("useFileListState", () => {
     expect([...listState.current().closedDirectories]).toEqual(["src/lib"]);
   });
 
-  test("keeps the search text and opens all directories when the diff scope changes", () => {
+  test("keeps the search text and opens all directories when the list key changes", () => {
     const listState = renderListState();
     listState.act((state) => state.toggleDirectory({ path: "src/lib", chainPaths: ["src/lib"] }));
     listState.act((state) => state.setSearchText("main"));
 
-    listState.rerender({ diffScope: "target" });
+    listState.rerender({ listKey: "target" });
 
     expect(listState.current().searchText).toBe("main");
     listState.act((state) => state.setSearchText(""));
     expect(listState.current().closedDirectories.size).toBe(0);
+  });
+
+  test("shares one search between lists and keeps the directories of each list apart", () => {
+    const files = fileDiffs("src/lib/a.ts", "src/main.ts");
+    const view = renderHook(() => {
+      const search = useFileListSearch("task-1");
+      return {
+        unstaged: useFileListState({
+          subjectKey: "task-1",
+          listKey: "unstaged",
+          fileDiffs: files,
+          search,
+        }),
+        staged: useFileListState({
+          subjectKey: "task-1",
+          listKey: "staged",
+          fileDiffs: files,
+          search,
+        }),
+      };
+    });
+
+    act(() =>
+      view.result.current.unstaged.toggleDirectory({ path: "src/lib", chainPaths: ["src/lib"] }),
+    );
+    expect([...view.result.current.unstaged.closedDirectories]).toEqual(["src/lib"]);
+    expect(view.result.current.staged.closedDirectories.size).toBe(0);
+
+    act(() => view.result.current.staged.setSearchText("main"));
+    expect(view.result.current.unstaged.searchText).toBe("main");
+    expect(view.result.current.unstaged.query).toBe("main");
+    expect(view.result.current.staged.query).toBe("main");
+    expect(view.result.current.unstaged.closedDirectories.size).toBe(0);
+
+    act(() => view.result.current.unstaged.setSearchText(""));
+    expect([...view.result.current.unstaged.closedDirectories]).toEqual(["src/lib"]);
+    expect(view.result.current.staged.closedDirectories.size).toBe(0);
   });
 
   test("clears the search text and opens all directories for a different task or session", () => {

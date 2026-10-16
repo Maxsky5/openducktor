@@ -332,6 +332,10 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     gitPullBranch: gitClient.gitPullBranch.bind(gitClient),
     gitFetchRemote: gitClient.gitFetchRemote.bind(gitClient),
     gitCommitAll: gitClient.gitCommitAll.bind(gitClient),
+    gitCommitStaged: gitClient.gitCommitStaged.bind(gitClient),
+    gitChangeSelection: gitClient.gitChangeSelection.bind(gitClient),
+    gitGetLocalChanges: gitClient.gitGetLocalChanges.bind(gitClient),
+    gitGetHistoryPage: gitClient.gitGetHistoryPage.bind(gitClient),
     gitRebaseBranch: gitClient.gitRebaseBranch.bind(gitClient),
     gitRebaseAbort: gitClient.gitRebaseAbort.bind(gitClient),
     gitAbortConflict: gitClient.gitAbortConflict.bind(gitClient),
@@ -339,8 +343,6 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     gitGetDiff: gitClient.gitGetDiff.bind(gitClient),
     gitCommitsAheadBehind: gitClient.gitCommitsAheadBehind.bind(gitClient),
     gitGetWorktreeStatus: gitClient.gitGetWorktreeStatus.bind(gitClient),
-    gitGetWorktreeStatusSummary: gitClient.gitGetWorktreeStatusSummary.bind(gitClient),
-    gitResetWorktreeSelection: gitClient.gitResetWorktreeSelection.bind(gitClient),
   } satisfies HostClientApi;
   for (const methodName of Object.keys(hostClient)) {
     Object.defineProperty(hostClient, methodName, { enumerable: false });

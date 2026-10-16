@@ -15,10 +15,9 @@ import {
   stubTools,
   waitFor,
   writeCodex,
+  PROCESS_TEST_TIMEOUT_MS,
+  PROCESS_WAIT_MS,
 } from "./codex-runtime-starter.test-support";
-
-/** Process trees can take longer to exit while the full suite runs in parallel. */
-const PROCESS_EXIT_TIMEOUT_MS = 3_000;
 
 describe("Codex runtime lifecycle", () => {
   test.each([
@@ -68,11 +67,11 @@ describe("Codex runtime lifecycle", () => {
         } else {
           await writeFile(fatalMessagePath, line);
         }
-        await waitFor(() => exits.length === 1);
+        await waitFor(() => exits.length === 1, PROCESS_WAIT_MS);
         // The OS reaps the process tree asynchronously after the exit report.
         await waitFor(
           () => !processIsAlive(pid) && childPids.every((child) => !processIsAlive(child)),
-          PROCESS_EXIT_TIMEOUT_MS,
+          PROCESS_WAIT_MS,
         );
         expect(exits[0]).toContain(message);
         await rm(fatalMessagePath, { force: true });
@@ -95,10 +94,7 @@ describe("Codex runtime lifecycle", () => {
         ).resolves.toEqual({ data: [], nextCursor: null });
         await expect(Effect.runPromise(replacement.stop())).resolves.toBeUndefined();
         // The OS reaps the stopped process tree asynchronously.
-        await waitFor(
-          () => childPids.every((child) => !processIsAlive(child)),
-          PROCESS_EXIT_TIMEOUT_MS,
-        );
+        await waitFor(() => childPids.every((child) => !processIsAlive(child)), PROCESS_WAIT_MS);
         expect(exits).toHaveLength(1);
       } finally {
         for (const handle of handles) await Effect.runPromise(handle.stop().pipe(Effect.ignore));
@@ -108,6 +104,7 @@ describe("Codex runtime lifecycle", () => {
         await removeTestDirectory(root);
       }
     },
+    PROCESS_TEST_TIMEOUT_MS,
   );
 
   test.each([
@@ -171,7 +168,7 @@ describe("Codex runtime lifecycle", () => {
         );
         const pid = Number(await readFile(runtimePidPath, "utf8"));
         await writeFile(fatalMessagePath, line);
-        await waitFor(() => cleanupCount === 1);
+        await waitFor(() => cleanupCount === 1, PROCESS_WAIT_MS);
         expect(processIsAlive(pid)).toBe(true);
         expect(releaseCount).toBe(1);
         expect(cleanupCount).toBe(1);
@@ -188,7 +185,7 @@ describe("Codex runtime lifecycle", () => {
         expect(exits[0]).toContain(message);
         allowCleanup();
         const [firstResult, secondResult] = await Promise.all([firstStop, secondStop]);
-        await waitFor(() => !processIsAlive(pid), PROCESS_EXIT_TIMEOUT_MS);
+        await waitFor(() => !processIsAlive(pid), PROCESS_WAIT_MS);
         if (cleanupFails) {
           if (firstResult._tag !== "Failure" || secondResult._tag !== "Failure") {
             throw new Error("Both stop callers must receive the cleanup failure.");
@@ -196,7 +193,7 @@ describe("Codex runtime lifecycle", () => {
           expect(firstResult.failure).toEqual(secondResult.failure);
           expect(firstResult.failure.message).toContain("cleanup failed after child close");
           // A failed cleanup is reported with its cause.
-          await waitFor(() => cleanupFailures.length === 1);
+          await waitFor(() => cleanupFailures.length === 1, PROCESS_WAIT_MS);
           expect(cleanupFailures[0]).toContain("cleanup failed after child close");
           expect(exits).toHaveLength(1);
         } else {
@@ -216,7 +213,7 @@ describe("Codex runtime lifecycle", () => {
           expect(exits).toHaveLength(1);
           expect(cleanupFailures).toHaveLength(1);
         }
-        await waitFor(() => !processIsAlive(pid), PROCESS_EXIT_TIMEOUT_MS);
+        await waitFor(() => !processIsAlive(pid), PROCESS_WAIT_MS);
         await expect(
           Effect.runPromise(
             codexAppServer.request({
@@ -232,5 +229,6 @@ describe("Codex runtime lifecycle", () => {
         await removeTestDirectory(root);
       }
     },
+    PROCESS_TEST_TIMEOUT_MS,
   );
 });

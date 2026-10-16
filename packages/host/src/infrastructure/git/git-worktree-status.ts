@@ -59,6 +59,7 @@ export const buildWorktreeStatusData = (
       runner,
       workingDirectory,
       upstreamTarget,
+      currentBranch.revision,
     );
     const gitConflict = yield* loadRebaseConflictContext(
       runner,
@@ -104,6 +105,7 @@ export const buildWorktreeStatusSummaryData = (
       runner,
       workingDirectory,
       upstreamTarget,
+      currentBranch.revision,
     );
     const gitConflict = yield* loadRebaseConflictContext(
       runner,

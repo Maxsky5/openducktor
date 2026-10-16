@@ -18,8 +18,8 @@ import { normalizeProcessEnvironment } from "../process/process-environment";
 const execFileAsync = promisify(execFile);
 const failedGitCommandSchema = z
   .object({
-    stdout: z.string().optional(),
-    stderr: z.string().optional(),
+    stdout: z.union([z.string(), z.instanceof(Buffer)]).optional(),
+    stderr: z.union([z.string(), z.instanceof(Buffer).transform(String)]).optional(),
     code: z.union([z.number(), z.string().transform(() => null)]).optional(),
   })
   .passthrough();
@@ -36,6 +36,11 @@ export type GitCommandRunner = (
     allowFailure?: boolean;
     stdin?: string;
     onStarted?: (() => void) | undefined;
+    /**
+     * Fails with a validation error on `GIT_OUTPUT_ENCODING_FIELD` when stdout is not UTF-8 text,
+     * where default decoding writes U+FFFD. A read with stdin or `onStarted` cannot use it.
+     */
+    strictUtf8?: boolean;
   },
 ) => Effect.Effect<
   GitCommandResult & {
@@ -52,6 +57,21 @@ const createGitEnvironment = (
   // Read commands must not rewrite the index while the file tree reads its version.
   GIT_OPTIONAL_LOCKS: "0",
 });
+/** The validation field of a strict read whose output is not UTF-8 text. */
+export const GIT_OUTPUT_ENCODING_FIELD = "gitOutputEncoding";
+const strictUtf8Decoder = new TextDecoder("utf-8", { fatal: true });
+/** A strict read gets stdout as bytes, so its decoding can reject bytes that are not UTF-8. */
+const readStdout = (stdout: string | Buffer, strict: boolean, args: string[]) =>
+  strict
+    ? Effect.try({
+        try: () => strictUtf8Decoder.decode(Buffer.from(stdout)),
+        catch: () =>
+          new HostValidationError({
+            message: `git ${args[0] ?? ""} wrote output that is not UTF-8 text.`,
+            field: GIT_OUTPUT_ENCODING_FIELD,
+          }),
+      })
+    : Effect.succeed(String(stdout));
 export type ResolveGitCommand = () => Effect.Effect<string, HostOperationErrorAggregate>;
 export type GitCommandLaunchOptions = (
   | { command: string; resolveCommand?: never }
@@ -211,6 +231,17 @@ export const createDefaultGitRunner = (
       const platform = launchOptions.platform ?? process.platform;
       const commandEnv = createGitEnvironment(readEnv(), platform);
       const command = yield* resolveCommand();
+      const spawned = options?.stdin !== undefined || options?.onStarted !== undefined;
+      if (spawned && options?.strictUtf8) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "git.spawn",
+            message:
+              "A Git read with stdin or a start callback cannot check that its output is UTF-8 text.",
+            details: { args },
+          }),
+        );
+      }
       if (options?.stdin !== undefined || options?.onStarted !== undefined) {
         return yield* runSpawnedGit(
           workingDirectory,
@@ -233,6 +264,7 @@ export const createDefaultGitRunner = (
               cwd: workingDirectory,
               env: launch.env,
               maxBuffer: 16 * 1024 * 1024,
+              encoding: options?.strictUtf8 ? "buffer" : "utf8",
               signal,
               windowsHide: launch.windowsHide,
               windowsVerbatimArguments: launch.windowsVerbatimArguments,
@@ -241,12 +273,15 @@ export const createDefaultGitRunner = (
         }),
       );
       if (exit._tag === "Success") {
-        return { ok: true, stdout: exit.success.stdout, stderr: exit.success.stderr, exitCode: 0 };
+        const stdout = yield* readStdout(exit.success.stdout, options?.strictUtf8 === true, args);
+        return { ok: true, stdout, stderr: String(exit.success.stderr), exitCode: 0 };
       }
       if (options?.allowFailure) {
         const failed = exit.failure;
         const parsedFailure = failedGitCommandSchema.safeParse(failed);
-        const stdout = parsedFailure.success ? (parsedFailure.data.stdout ?? "") : "";
+        const stdout = parsedFailure.success
+          ? yield* readStdout(parsedFailure.data.stdout ?? "", options.strictUtf8 === true, args)
+          : "";
         const stderr = parsedFailure.success
           ? (parsedFailure.data.stderr ?? String(failed))
           : String(failed);
@@ -285,6 +320,16 @@ export const combineOptionalOutput = (stdout: string, stderr: string): string =>
 export const runGit = (runner: GitCommandRunner, workingDirectory: string, args: string[]) =>
   Effect.gen(function* () {
     const result = yield* runner(workingDirectory, args);
+    return result.stdout;
+  });
+/** Reads output that a write applies again, so a byte that is not UTF-8 fails the read. */
+export const runGitStrictUtf8 = (
+  runner: GitCommandRunner,
+  workingDirectory: string,
+  args: string[],
+) =>
+  Effect.gen(function* () {
+    const result = yield* runner(workingDirectory, args, { strictUtf8: true });
     return result.stdout;
   });
 export const runGitAllowFailure = (

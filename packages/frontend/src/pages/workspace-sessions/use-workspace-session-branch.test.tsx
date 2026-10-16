@@ -171,7 +171,7 @@ test.each([
   { name: "repository", isWorktree: false, workingDirectory: "/repo" },
   { name: "worktree", isWorktree: true, workingDirectory: "/repo/worktree" },
 ])(
-  "$name detached branch keys follow the commit after a manual read",
+  "$name detached branch keys stay after a commit, and the checkout shows the new commit",
   async ({ isWorktree, workingDirectory }) => {
     let revision = "first";
     configureShellBridge(
@@ -200,7 +200,7 @@ test.each([
       },
     );
     try {
-      expect(view.result.current.branchKey).toBe("detached:first");
+      expect(view.result.current.branchKey).toBe("detached");
       await waitFor(
         () =>
           expect(
@@ -211,11 +211,13 @@ test.each([
       );
       revision = "second";
       await act(async () => {
-        expect(await view.result.current.readBranch()).toBe("detached:second");
+        expect(await view.result.current.readBranch()).toBe("detached");
       });
-      await waitFor(() => expect(view.result.current.branchKey).toBe("detached:second"), {
+      // The Git reads keep their keys and data, and the checkout shows the new commit.
+      await waitFor(() => expect(view.result.current.currentBranch?.revision).toBe("second"), {
         timeout: 500,
       });
+      expect(view.result.current.branchKey).toBe("detached");
     } finally {
       view.unmount();
       queryClient.clear();

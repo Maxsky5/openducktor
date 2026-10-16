@@ -1,6 +1,6 @@
 import {
   commitsAheadBehindSchema,
-  fileDiffSchema,
+  gitFileDiffSchema,
   fileStatusSchema,
   gitBranchSchema,
   gitCommitAllResultSchema,
@@ -11,9 +11,7 @@ import {
   gitPushBranchResultSchema,
   gitRebaseAbortResultSchema,
   gitRebaseBranchResultSchema,
-  gitResetWorktreeSelectionResultSchema,
   gitWorktreeStatusSchema,
-  gitWorktreeStatusSummarySchema,
   gitWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
@@ -30,20 +28,21 @@ import {
   validateWorktreePathSegments,
 } from "./git-service-inputs";
 import type { GitService } from "./git-service-types";
+import { createGitLocalChangeMethods, requireCheckout } from "./git-local-change-service";
 import {
   createWorktreeSnapshot,
   hashWorktreeDiffPayload,
-  hashWorktreeDiffSummaryPayload,
   hashWorktreeStatusPayload,
-  validateResetSnapshotMatches,
 } from "./git-worktree-snapshot";
 import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
 export type { CreateGitServiceInput } from "./git-service-inputs";
 export type { GitService, GitServiceError } from "./git-service-types";
+
 export const createGitService = (input: GitPort | CreateGitServiceInput): GitService => {
   const { gitPort, settingsConfig, worktreeFiles } = normalizeCreateGitServiceInput(input);
   return {
+    ...createGitLocalChangeMethods(gitPort),
     canonicalizePath(input) {
       return gitPort.canonicalizePath(input.workingDir ?? input.repoPath);
     },
@@ -85,25 +84,20 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           input.workingDir,
         );
         const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
-        if (
-          input.target.branch === "@{upstream}" &&
-          (currentBranch.detached || !currentBranch.name)
-        ) {
-          return {
-            kind: "unavailable" as const,
-            reason: "Branch comparison is unavailable on a detached HEAD.",
-          };
-        }
         const reference =
           input.target.branch === "@{upstream}"
             ? yield* gitPort.getTrackedUpstreamReference(workingDirectory)
             : input.target.remote
               ? `refs/remotes/${input.target.remote}/${input.target.branch}`
               : `refs/heads/${input.target.branch}`;
+        // A rebase keeps the upstream of the branch that it rewrites. Another detached HEAD has none.
         if (!reference) {
           return {
             kind: "unavailable" as const,
-            reason: `Branch ${currentBranch.name} has no tracked upstream. Choose a comparison branch or set an upstream.`,
+            reason:
+              currentBranch.detached || !currentBranch.name
+                ? "Branch comparison is unavailable on a detached HEAD."
+                : `Branch ${currentBranch.name} has no tracked upstream. Choose a comparison branch or set an upstream.`,
           };
         }
         if (!(yield* gitPort.referenceExists(workingDirectory, reference))) {
@@ -136,7 +130,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
         const diffs = yield* gitPort.getDiff(workingDirectory, targetBranch);
         return yield* Effect.try({
-          try: () => diffs.map((diff) => fileDiffSchema.parse(diff)),
+          try: () => diffs.map((diff) => gitFileDiffSchema.parse(diff)),
           catch: (cause) =>
             new HostValidationError({
               message: cause instanceof Error ? cause.message : String(cause),
@@ -186,59 +180,6 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
                     gitConflict: { ...statusData.gitConflict, workingDir: workingDirectory },
                   }
                 : statusInput,
-            ),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-      });
-    },
-    getWorktreeStatusSummary(input) {
-      return Effect.gen(function* () {
-        const { repoPath, targetBranch, diffScope, workingDir } = input;
-        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
-        const summaryData = yield* gitPort.getWorktreeStatusSummaryData(
-          workingDirectory,
-          targetBranch,
-          diffScope,
-          input.readContext,
-        );
-        const observedAtMs = yield* Clock.currentTimeMillis;
-        const snapshot = createWorktreeSnapshot(
-          workingDirectory,
-          targetBranch,
-          diffScope,
-          hashWorktreeStatusPayload(
-            summaryData.currentBranch,
-            summaryData.fileStatuses,
-            summaryData.targetAheadBehind,
-            summaryData.upstreamAheadBehind,
-          ),
-          hashWorktreeDiffSummaryPayload(
-            diffScope,
-            summaryData.targetAheadBehind,
-            summaryData.fileStatusCounts,
-          ),
-          observedAtMs,
-        );
-        const summaryInput = {
-          currentBranch: summaryData.currentBranch,
-          fileStatusCounts: summaryData.fileStatusCounts,
-          targetAheadBehind: summaryData.targetAheadBehind,
-          upstreamAheadBehind: summaryData.upstreamAheadBehind,
-          snapshot,
-        };
-        return yield* Effect.try({
-          try: () =>
-            gitWorktreeStatusSummarySchema.parse(
-              summaryData.gitConflict
-                ? {
-                    ...summaryInput,
-                    gitConflict: { ...summaryData.gitConflict, workingDir: workingDirectory },
-                  }
-                : summaryInput,
             ),
           catch: (cause) =>
             new HostValidationError({
@@ -345,42 +286,6 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
         return { ok: true };
       });
     },
-    resetWorktreeSelection(input) {
-      return Effect.gen(function* () {
-        const request = input;
-        const workingDirectory = yield* resolveGitWorkingDirectory(
-          gitPort,
-          request.repoPath,
-          request.workingDir,
-        );
-        const statusData = yield* gitPort.getWorktreeStatusData(
-          workingDirectory,
-          request.targetBranch,
-          "uncommitted",
-        );
-        yield* Effect.try({
-          try: () => validateResetSnapshotMatches(request.snapshot, statusData),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-        const result = yield* gitPort.resetWorktreeSelection(
-          workingDirectory,
-          statusData.fileDiffs,
-          request.selection,
-        );
-        return yield* Effect.try({
-          try: () => gitResetWorktreeSelectionResultSchema.parse(result),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-      });
-    },
     fetchRemote(input) {
       return Effect.gen(function* () {
         const { repoPath, targetBranch, workingDir } = input;
@@ -415,6 +320,9 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
       return Effect.gen(function* () {
         const { repoPath, message, workingDir } = input;
         const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        if (input.expectedBranch) {
+          yield* requireCheckout(gitPort, workingDirectory, input.expectedBranch);
+        }
         const result = yield* gitPort.commitAll(workingDirectory, message);
         return yield* Effect.try({
           try: () => gitCommitAllResultSchema.parse(result),

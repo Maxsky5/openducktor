@@ -1,15 +1,21 @@
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
-import type { PullRequest, SystemOpenInToolId } from "@openducktor/contracts";
+import type { GitChangeGroup, PullRequest, SystemOpenInToolId } from "@openducktor/contracts";
 import type { ReactNode } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import type {
+  AgentStudioPendingDiscard,
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
-  AgentStudioPendingReset,
   DiffDataState,
+  GitChangeIntent,
+  GitCommitMode,
   GitConflict,
   GitConflictAction,
 } from "@/features/agent-studio-git";
+import type { GitPanelTab } from "./constants";
+import type { GitPanelConflict } from "./use-git-conflict-panel";
+import type { PanelFileLists } from "./use-panel-file-lists";
 
 export type AgentStudioGitPanelModel = DiffDataState & {
   /** Identifies the task or session that the panel shows. A new value clears the file search and opens all directories. */
@@ -17,21 +23,24 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   contextMode?: "repository" | "worktree";
   /** A repository-root branch switcher shown in repository mode. */
   repositoryBranchControl?: ReactNode;
-  comparisonUnavailableReason?: string | null;
-  comparisonPending?: boolean;
-  branchKnown?: boolean;
-  comparisonReference?: string | null;
+  /** The manual Refresh. Its state shows a failure, so it does not reject. */
+  refresh: () => Promise<void>;
   commentOwner?: InlineCommentOwner | null;
   commentPlaceholder?: string;
   pullRequest?: PullRequest | null;
   openInTargetPath?: string | null;
   openInDisabledReason?: string | null;
+  isRefreshing?: boolean;
+  refreshError?: string | null;
   isCommitting?: boolean;
+  committingMode?: GitCommitMode | null;
   isPushing?: boolean;
   isRebasing?: boolean;
-  isResetting?: boolean;
-  isResetDisabled?: boolean;
-  resetDisabledReason?: string | null;
+  isChanging?: boolean;
+  changingKey?: string | null;
+  /** Stage and Unstage requests that Git has not shown yet. The panel shows their result. */
+  pendingChanges?: readonly GitChangeIntent[];
+  changeDisabledReason?: string | null;
   isHandlingGitConflict?: boolean;
   gitConflictAction?: GitConflictAction;
   gitConflictAutoOpenNonce?: number;
@@ -42,21 +51,22 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   gitConflict?: GitConflict | null;
   pendingForcePush?: AgentStudioPendingForcePush | null;
   pendingPullRebase?: AgentStudioPendingPullRebase | null;
-  pendingReset?: AgentStudioPendingReset | null;
+  pendingDiscard?: AgentStudioPendingDiscard | null;
   commitError?: string | null;
   pushError?: string | null;
   rebaseError?: string | null;
+  changeError?: string | null;
   conflictRecipientLabel?: "Builder" | "agent";
   conflictAssistanceBlockedReason?: string | null;
   conflictAssistanceIsStarting?: boolean;
-  resetError?: string | null;
   isDetectingPullRequest?: boolean;
   detectPullRequestDisabledReason?: string | null;
-  commitAll?: (message: string) => Promise<boolean>;
-  requestFileReset?: (filePath: string) => void;
-  requestHunkReset?: (filePath: string, hunkIndex: number) => void;
-  confirmReset?: () => Promise<void>;
-  cancelReset?: () => void;
+  commit?: (mode: GitCommitMode, message: string) => Promise<boolean>;
+  changeSelection?: (intent: GitChangeIntent) => void;
+  /** Opens the file preview of a path in the Git working directory, or null when no preview exists. */
+  onViewFile?: ((filePath: string) => void) | null;
+  confirmDiscard?: () => Promise<void>;
+  cancelDiscard?: () => void;
   pushBranch?: () => Promise<void>;
   confirmForcePush?: () => Promise<void>;
   cancelForcePush?: () => void;
@@ -76,4 +86,19 @@ export type AgentStudioGitPanelModel = DiffDataState & {
   targetBranchOptions?: ComboboxOption[];
   targetBranchSelectionValue?: string;
   onUpdateTargetBranch?: ((selection: string) => Promise<void>) | undefined;
+};
+
+/** The view state that the panel gives its parts. It stays the same across tab changes. */
+export type GitPanelView = {
+  contextKey: string;
+  activeTab: GitPanelTab;
+  onTabChange: (tab: GitPanelTab) => void;
+  conflict: GitPanelConflict;
+  expandedFiles: ReadonlySet<string>;
+  onToggleFile: (fileKey: string) => void;
+  collapsedGroups: readonly GitChangeGroup[];
+  onToggleGroup: (group: GitChangeGroup) => void;
+  diffStyle: PierreDiffStyle;
+  setDiffStyle: (style: PierreDiffStyle) => void;
+  lists: PanelFileLists;
 };

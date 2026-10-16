@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type { FileDiff, FileStatus } from "@openducktor/contracts";
+import type { FileStatus, GitFileDiff, GitFileDiffType } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -18,6 +18,7 @@ import {
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
+import { headerLinePath, unquoteGitPath } from "./git-quoted-path";
 
 const gitOperationError = (message: string, operation: string): HostOperationError =>
   new HostOperationError({ message, operation });
@@ -32,68 +33,39 @@ type GitDiffError =
   | HostOperationErrorAggregate
   | HostResourceErrorAggregate
   | HostValidationErrorAggregate;
+/**
+ * The parser reads `a/` and `b/` paths, and `git apply` removes one path part. A `diff.noprefix` or
+ * `diff.mnemonicPrefix` setting changes the prefixes, so every patch read sets them.
+ */
+export const DIFF_PREFIX_OPTIONS = ["--src-prefix=a/", "--dst-prefix=b/"];
 const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
-const normalizeNumstatFilePath = (file: string): string => {
-  let normalized = file.trim();
-  while (true) {
-    const start = normalized.indexOf("{");
-    if (start < 0) {
-      break;
+type DiffStats = { additions: number; deletions: number };
+
+/**
+ * Reads `git diff --numstat -z`, which writes each path without quotes. A record is
+ * `<added>\t<deleted>\t<path>\0`. A rename or a copy has an empty path, then
+ * `<old path>\0<new path>\0`. A binary file counts `-` lines.
+ */
+const parseNumstat = (output: string): Map<string, DiffStats> => {
+  const stats = new Map<string, DiffStats>();
+  const fields = output.split("\0");
+  for (let index = 0; index < fields.length; index += 1) {
+    const record = /^(\d+|-)\t(\d+|-)\t(.*)$/su.exec(fields[index] ?? "");
+    if (!record) continue;
+    let file = record[3] ?? "";
+    if (file === "") {
+      file = fields[index + 2] ?? "";
+      index += 2;
     }
-    const end = normalized.indexOf("}", start);
-    if (end < 0) {
-      break;
-    }
-    const segment = normalized.slice(start + 1, end);
-    const [, replacement] = segment.split(" => ", 2);
-    if (!replacement) {
-      break;
-    }
-    normalized = `${normalized.slice(0, start)}${replacement}${normalized.slice(end + 1)}`;
-  }
-  const addedPrefix = "/dev/null => ";
-  if (normalized.startsWith(addedPrefix)) {
-    return normalized.slice(addedPrefix.length);
-  }
-  const deletedSuffix = " => /dev/null";
-  if (normalized.endsWith(deletedSuffix)) {
-    return normalized.slice(0, -deletedSuffix.length);
-  }
-  if (normalized.includes(" => ")) {
-    const parts = normalized.split(" => ");
-    return parts.at(-1) || parts.at(0) || normalized;
-  }
-  return normalized;
-};
-const parseNumstat = (
-  output: string,
-): Map<
-  string,
-  {
-    additions: number;
-    deletions: number;
-  }
-> => {
-  const stats = new Map<
-    string,
-    {
-      additions: number;
-      deletions: number;
-    }
-  >();
-  for (const line of output.split(/\r?\n/)) {
-    const parts = line.split("\t");
-    if (parts.length < 3) {
-      continue;
-    }
-    stats.set(normalizeNumstatFilePath(parts.slice(2).join("\t")), {
-      additions: Number.parseInt(parts[0] ?? "", 10) || 0,
-      deletions: Number.parseInt(parts[1] ?? "", 10) || 0,
+    stats.set(file, {
+      additions: Number.parseInt(record[1] ?? "", 10) || 0,
+      deletions: Number.parseInt(record[2] ?? "", 10) || 0,
     });
   }
   return stats;
 };
+
 export type DiffGitHeaderToken = {
   remaining: string;
   token: string;
@@ -110,7 +82,7 @@ export const parseDiffGitHeaderToken = (input: string): DiffGitHeaderToken | und
       const character = trimmed[index];
       if (character === '"' && !escaped) {
         return {
-          token: trimmed.slice(1, index),
+          token: unquoteGitPath(trimmed.slice(1, index)),
           remaining: trimmed.slice(index + 1),
         };
       }
@@ -127,14 +99,38 @@ export const parseDiffGitHeaderToken = (input: string): DiffGitHeaderToken | und
   }
   return { token: trimmed.slice(0, tokenEnd), remaining: trimmed.slice(tokenEnd) };
 };
+/**
+ * The new path of a `diff --git a/<old> b/<new>` line. Git quotes a path with special characters.
+ * A bare path can hold spaces, so a bare line without a rename is split where both halves match.
+ */
 const parseDiffGitNewPath = (line: string): string | undefined => {
   const rest = line.slice("diff --git ".length);
-  const oldPath = parseDiffGitHeaderToken(rest);
-  if (!oldPath) {
-    return undefined;
+  if (rest.startsWith('"')) {
+    const oldPath = parseDiffGitHeaderToken(rest);
+    const newPath = oldPath ? parseDiffGitHeaderToken(oldPath.remaining) : undefined;
+    return newPath?.token.startsWith("b/") ? newPath.token.slice(2) : undefined;
   }
-  const newPath = parseDiffGitHeaderToken(oldPath.remaining);
-  return newPath?.token.startsWith("b/") ? newPath.token.slice(2) : undefined;
+  const pathLength = (rest.length - "a/ b/".length) / 2;
+  const newPath = rest.slice(rest.length - pathLength);
+  return rest.startsWith("a/") &&
+    rest.slice(2 + pathLength, 5 + pathLength) === " b/" &&
+    rest.slice(2, 2 + pathLength) === newPath
+    ? newPath
+    : undefined;
+};
+
+/**
+ * The new path of one file section. The `rename to` and `copy to` lines name the new path of a
+ * rename or a copy, where the `diff --git` line holds two different paths.
+ */
+const sectionPath = (lines: string[]): string | undefined => {
+  for (const line of lines.slice(1)) {
+    if (line.startsWith("@@") || line.startsWith("--- ") || line.startsWith("Binary files ")) break;
+    for (const prefix of ["rename to ", "copy to "]) {
+      if (line.startsWith(prefix)) return headerLinePath(line.slice(prefix.length));
+    }
+  }
+  return parseDiffGitNewPath(lines[0] ?? "");
 };
 const splitDiffByFile = (
   fullDiff: string,
@@ -142,29 +138,31 @@ const splitDiffByFile = (
   file: string;
   diff: string;
 }> => {
-  const results: Array<{
-    file: string;
-    diff: string;
-  }> = [];
-  let currentFile: string | undefined;
-  let currentDiff = "";
+  const sections: string[][] = [];
   for (const line of fullDiff.split(/\r?\n/)) {
     if (line.startsWith("diff --git ")) {
-      if (currentFile) {
-        results.push({ file: currentFile, diff: currentDiff });
-      }
-      currentFile = parseDiffGitNewPath(line) ?? "";
-      currentDiff = `${line}\n`;
+      sections.push([line]);
       continue;
     }
-    currentDiff += `${line}\n`;
+    sections.at(-1)?.push(line);
   }
-  if (currentFile) {
-    results.push({ file: currentFile, diff: currentDiff });
-  }
-  return results;
+  return sections.flatMap((lines) => {
+    const file = sectionPath(lines);
+    return file ? [{ file, diff: lines.map((line) => `${line}\n`).join("") }] : [];
+  });
 };
-const inferDiffType = (diff: string): string => {
+/** A header line that names a submodule entry, which has Git file mode 160000. */
+const SUBMODULE_MODE_LINE =
+  /^(?:index \S+|new file mode|deleted file mode|old mode|new mode) 160000$/mu;
+/**
+ * A submodule with edits only inside it, on its recorded commit. Git writes no mode or index line
+ * for it, while a file diff always has an index line, so only this whole shape matches.
+ */
+const DIRTY_SUBMODULE_DIFF =
+  /^diff --git [^\n]*\n--- [^\n]*\n\+\+\+ [^\n]*\n@@ -1 \+1 @@\n-Subproject commit ([0-9a-f]+)\n\+Subproject commit \1-dirty\n*$/u;
+
+const inferDiffType = (diff: string): GitFileDiffType => {
+  if (SUBMODULE_MODE_LINE.test(diff) || DIRTY_SUBMODULE_DIFF.test(diff)) return "submodule";
   for (const line of diff.split(/\r?\n/)) {
     if (line.startsWith("new file mode")) {
       return "added";
@@ -175,6 +173,10 @@ const inferDiffType = (diff: string): string => {
     if (line.startsWith("rename from")) {
       return "renamed";
     }
+    // A copy is a new file in the index. A write reads it alone, as a whole new file.
+    if (line.startsWith("copy from")) {
+      return "added";
+    }
   }
   return "modified";
 };
@@ -182,7 +184,8 @@ const loadNoIndexDiffPayload = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
-): Effect.Effect<FileDiff, GitDiffError> =>
+  fullIndex: boolean,
+): Effect.Effect<GitFileDiff, GitDiffError> =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
@@ -190,6 +193,8 @@ const loadNoIndexDiffPayload = (
       "--numstat",
       "-z",
       "--patch",
+      ...DIFF_PREFIX_OPTIONS,
+      ...(fullIndex ? ["--full-index"] : []),
       "--",
       "/dev/null",
       filePath,
@@ -294,11 +299,13 @@ export const buildFileDiffs = (
   fileStatuses: FileStatus[],
   numstatOutput: string,
   diffOutput: string,
-): Effect.Effect<FileDiff[], GitDiffError> =>
+  /** Full object IDs let a content hash detect binary and untracked changes. */
+  options: { fullIndex?: boolean } = {},
+): Effect.Effect<GitFileDiff[], GitDiffError> =>
   Effect.gen(function* () {
     const stats = parseNumstat(numstatOutput);
     const fileDiffs = splitDiffByFile(diffOutput);
-    const results: FileDiff[] = fileDiffs.map(({ file, diff }) => {
+    const results: GitFileDiff[] = fileDiffs.map(({ file, diff }) => {
       const fileStats = stats.get(file) ?? { additions: 0, deletions: 0 };
       return {
         file,
@@ -339,7 +346,8 @@ export const buildFileDiffs = (
     }
     const untrackedDiffs = yield* Effect.forEach(
       untrackedPaths,
-      (filePath) => loadNoIndexDiffPayload(runner, workingDirectory, filePath),
+      (filePath) =>
+        loadNoIndexDiffPayload(runner, workingDirectory, filePath, options.fullIndex === true),
       { concurrency: 4 },
     );
     results.push(...untrackedDiffs);
@@ -362,6 +370,7 @@ export const loadDiffPayload = (
     const numstatResult = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
       "--numstat",
+      "-z",
       "--end-of-options",
       target,
     ]);
@@ -375,6 +384,7 @@ export const loadDiffPayload = (
     }
     const diffResult = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
+      ...DIFF_PREFIX_OPTIONS,
       "--end-of-options",
       target,
     ]);

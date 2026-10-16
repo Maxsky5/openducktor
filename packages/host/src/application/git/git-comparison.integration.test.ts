@@ -52,7 +52,8 @@ test("keeps exact comparison refs and actual upstream counts independent", async
       }),
     );
     expect(status.targetAheadBehind).toEqual({ ahead: 1, behind: 0 });
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
+    // The feature commit is on no remote, so the first push sends it.
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
     git("config", "branch.feature.remote", ".");
     git("config", "branch.feature.merge", "refs/heads/main");
     expect(await comparison({ branch: "@{upstream}" })).toEqual({
@@ -69,7 +70,7 @@ test("keeps exact comparison refs and actual upstream counts independent", async
     status = await Effect.runPromise(
       service.getWorktreeStatus({ repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" }),
     );
-    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
+    expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 1 });
     expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
     // Git owns refspec mapping, including nonstandard tracking namespaces.
     git("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/custom/*");
@@ -134,12 +135,21 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
       targetBranch: "refs/remotes/origin/main",
       diffScope: "uncommitted" as const,
     };
+    const localChangesInput = { repoPath: repo, workingDir: worktree };
     const status = await Effect.runPromise(service.getWorktreeStatus(input));
-    const summary = await Effect.runPromise(service.getWorktreeStatusSummary(input));
+    const localChanges = await Effect.runPromise(service.getLocalChanges(localChangesInput));
     expect(status.currentBranch.name).toBe("odt/new-task");
     expect(status.fileDiffs[0]?.file).toBe("base.txt");
     expect(status.upstreamAheadBehind).toEqual({ outcome: "untracked", ahead: 0 });
-    expect(summary.upstreamAheadBehind).toEqual(status.upstreamAheadBehind);
+    expect(localChanges.upstreamAheadBehind).toEqual(status.upstreamAheadBehind);
+    // A commit of the unpublished branch is on no remote, so the Push count shows it.
+    execFileSync("git", ["commit", "-am", "task change"], { cwd: worktree, stdio: "ignore" });
+    expect((await Effect.runPromise(service.getWorktreeStatus(input))).upstreamAheadBehind).toEqual(
+      { outcome: "untracked", ahead: 1 },
+    );
+    expect(
+      (await Effect.runPromise(service.getLocalChanges(localChangesInput))).upstreamAheadBehind,
+    ).toEqual({ outcome: "untracked", ahead: 1 });
     expect(
       await Effect.runPromise(
         service.getComparisonTarget({
@@ -194,8 +204,8 @@ test.each(["--merge", "--apply"] as const)(
       expect(stopped).toBe(true);
       const input = { repoPath: repo, targetBranch: "HEAD", diffScope: "uncommitted" as const };
       const full = await Effect.runPromise(service.getWorktreeStatus(input));
-      const summary = await Effect.runPromise(service.getWorktreeStatusSummary(input));
-      for (const result of [full, summary]) {
+      const localChanges = await Effect.runPromise(service.getLocalChanges({ repoPath: repo }));
+      for (const result of [full, localChanges]) {
         expect(result.gitConflict?.currentBranch).toBe("feature");
         expect(result.gitConflict?.targetBranch).toBe(onto);
         expect(result.gitConflict?.conflictedFiles).toContain("conflict.txt");

@@ -4,6 +4,7 @@ import { createWorkspaceActivityObserver } from "@/features/workspace-activity/w
 import { hostBridge } from "@/lib/host-client";
 import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
 import { createAgentSessionListLiveSync } from "@/state/queries/agent-sessions";
+import { createAgentTurnGitSync } from "@/state/queries/agent-turn-git-sync";
 import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
@@ -29,6 +30,7 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
       createWorkspaceActivityObserver({
         observe: async (input, listener) => {
           const syncLists = createAgentSessionListLiveSync(queryClient);
+          const syncGit = createAgentTurnGitSync(queryClient);
           const historyObservation = getSessionHistoryFreshnessTracker(
             queryClient,
           ).observeWorkspace(input.repoPath);
@@ -36,14 +38,17 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
             const stop = await hostBridge.observeAgentSessionLive(input, (envelope) => {
               historyObservation.recordEvent(envelope);
               syncLists(envelope);
+              syncGit.observe(envelope);
               listener(envelope);
             });
             return () => {
               historyObservation.close();
+              syncGit.dispose();
               stop();
             };
           } catch (cause) {
             historyObservation.close();
+            syncGit.dispose();
             throw cause;
           }
         },

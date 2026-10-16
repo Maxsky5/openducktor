@@ -3,7 +3,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { createDefaultGitRunner } from "./git-command-runner";
+import { createDefaultGitRunner, GIT_OUTPUT_ENCODING_FIELD } from "./git-command-runner";
 
 const withFakeGitCommand = async (run: (root: string, command: string) => Promise<void>) => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-git-runner-"));
@@ -90,3 +90,38 @@ for (const stdin of [undefined, ""]) {
     }
   });
 }
+
+test("a strict read fails on output that is not UTF-8 and keeps the replacement character", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "odt-git-utf8-"));
+  try {
+    await writeFile(path.join(root, "latin.txt"), Buffer.from("caf\xe9\n", "latin1"));
+    await writeFile(path.join(root, "text.txt"), "caf\uFFFD\n");
+    const runner = createDefaultGitRunner(() => process.env, { command: "git" });
+    const read = (file: string) =>
+      Effect.runPromise(
+        Effect.flip(
+          runner(root, ["diff", "--no-index", "--text", "--", "/dev/null", file], {
+            allowFailure: true,
+            strictUtf8: true,
+          }).pipe(Effect.flatMap((result) => Effect.fail(result))),
+        ),
+      );
+
+    // `git diff --no-index` exits 1 for a difference, and a strict read still checks stdout.
+    expect(await read("latin.txt")).toMatchObject({ field: GIT_OUTPUT_ENCODING_FIELD });
+    expect(await read("text.txt")).toMatchObject({
+      ok: false,
+      stdout: expect.stringContaining("+caf\uFFFD"),
+    });
+    expect(
+      await Effect.runPromise(
+        Effect.flip(runner(root, ["hash-object", "--stdin"], { stdin: "", strictUtf8: true })),
+      ),
+    ).toMatchObject({
+      message:
+        "A Git read with stdin or a start callback cannot check that its output is UTF-8 text.",
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

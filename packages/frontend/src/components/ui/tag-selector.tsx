@@ -104,7 +104,7 @@ export function TagSelector({
         setIsFocused(false);
       }}
     >
-      <div className="rounded-md border border-input bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
+      <div className="rounded-md border border-input bg-card p-2 shadow-sm transition-[border-color,box-shadow] focus-within:field-focus">
         <div className="flex min-h-10 flex-wrap items-center gap-2">
           {value.map((label) => (
             <TaskLabelChip
@@ -127,10 +127,11 @@ export function TagSelector({
           ))}
 
           <Input
+            embedded
             value={query}
             disabled={disabled}
             placeholder={value.length === 0 ? placeholder : "Add another label"}
-            className="h-8 min-w-[12rem] flex-1 border-0 bg-transparent px-1 py-0 shadow-none focus-visible:ring-0"
+            className="h-8 min-w-[12rem] flex-1 px-1 py-0"
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
           />

@@ -23,19 +23,19 @@ describe("useAgentStudioGitActionErrors", () => {
       commitError: "commit failed",
       pushError: "push failed",
       rebaseError: null,
-      resetError: null,
+      changeError: null,
     });
 
     await harness.run((state) => {
       state.setRebaseError("rebase failed");
-      state.setResetError("reset failed");
+      state.setChangeError("change failed");
     });
 
     expect(harness.getLatest()).toMatchObject({
       commitError: "commit failed",
       pushError: "push failed",
       rebaseError: "rebase failed",
-      resetError: "reset failed",
+      changeError: "change failed",
     });
 
     await harness.run((state) => {
@@ -46,7 +46,7 @@ describe("useAgentStudioGitActionErrors", () => {
       commitError: null,
       pushError: null,
       rebaseError: null,
-      resetError: null,
+      changeError: null,
     });
 
     await harness.run((state) => {
@@ -57,7 +57,7 @@ describe("useAgentStudioGitActionErrors", () => {
       commitError: null,
       pushError: "push failed again",
       rebaseError: null,
-      resetError: null,
+      changeError: null,
     });
 
     await harness.unmount();

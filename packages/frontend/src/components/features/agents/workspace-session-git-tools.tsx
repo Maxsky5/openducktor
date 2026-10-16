@@ -1,9 +1,11 @@
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
-import { memo, type ReactElement, type ReactNode } from "react";
+import { memo, type ReactElement, type ReactNode, useMemo } from "react";
 import type { DiffDataState } from "@/features/agent-studio-git";
+import type { ManualRefresh } from "@/features/agent-studio-git/refresh/use-git-refresh";
 import type { useAgentStudioGitActions } from "@/pages/agents/use-agent-studio-git-actions";
 import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
+import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 
 export function WorkspaceSessionGitTools({
   actions,
@@ -16,9 +18,17 @@ export function WorkspaceSessionGitTools({
   resolvedTarget,
   unavailableReason,
   workingDirectory,
-  isFetchingTarget,
-  refresh,
+  manualRefresh,
+  onSelectFile,
 }: WorkspaceSessionGitToolsProps): ReactElement {
+  // A stable callback keeps the memoized panel from drawing again on each tools update.
+  const viewFile = useMemo(
+    () =>
+      workingDirectory
+        ? (relativePath: string) => void onSelectFile({ rootPath: workingDirectory, relativePath })
+        : null,
+    [onSelectFile, workingDirectory],
+  );
   const model: AgentStudioGitPanelModel = {
     ...diffData,
     ...actions,
@@ -26,36 +36,22 @@ export function WorkspaceSessionGitTools({
     commentOwner,
     commentPlaceholder: "Add a comment for this chat",
     ...control,
-    refresh,
-    isLoading: diffData.isLoading || isFetchingTarget || !branchReady,
+    refresh: manualRefresh.refresh,
+    isRefreshing: manualRefresh.isRefreshing,
+    refreshError: manualRefresh.refreshError,
+    isLoading: diffData.isLoading || !branchReady,
     contextMode,
     repositoryBranchControl,
     targetBranch: diffData.targetBranch,
     comparisonUnavailableReason: unavailableReason,
+    // The comparison view already hides Branch changes until its comparison is ready.
     comparisonReference: resolvedTarget,
-    diffScope: resolvedTarget ? diffData.diffScope : "uncommitted",
-    commitsAheadBehind: resolvedTarget ? diffData.commitsAheadBehind : null,
-    scopeStatesByScope: resolvedTarget
-      ? diffData.scopeStatesByScope
-      : {
-          ...diffData.scopeStatesByScope,
-          target: {
-            ...diffData.scopeStatesByScope.target,
-            fileDiffs: [],
-            fileStatuses: [],
-            commitsAheadBehind: null,
-            error: null,
-          },
-        },
-    loadedScopesByScope: {
-      ...diffData.loadedScopesByScope,
-      target: resolvedTarget !== null && diffData.loadedScopesByScope.target,
-    },
     rebaseOntoTarget: resolvedTarget ? actions.rebaseOntoTarget : undefined,
     openInTargetPath: workingDirectory,
     openInDisabledReason: workingDirectory
       ? null
       : "The selected working directory is unavailable.",
+    onViewFile: viewFile,
   };
   return <GitPanel {...model} />;
 }
@@ -73,8 +69,9 @@ type WorkspaceSessionGitToolsProps = {
   resolvedTarget: string | null;
   unavailableReason: string | null;
   workingDirectory: string | null;
-  isFetchingTarget: boolean;
-  refresh: () => Promise<void>;
+  manualRefresh: ManualRefresh;
+  /** Opens the file preview, as the Files tab does. */
+  onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
 };
 
 // Keep file explorer updates from redrawing unchanged Git data.

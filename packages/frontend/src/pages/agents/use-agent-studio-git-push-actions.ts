@@ -5,6 +5,7 @@ import { host } from "@/state/operations/shared/host";
 import {
   type GitActionKind,
   type RefreshGitDiffData,
+  refreshAfterGitAction,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
 
@@ -103,7 +104,11 @@ export function useAgentStudioGitPushActions({
         toast.success(`Pushed ${pushResult.branch}`, {
           description: `Remote: ${pushResult.remote}`,
         });
-        await refreshDiffData("soft");
+        const updateFailure = await refreshAfterGitAction(
+          refreshDiffData,
+          `Pushed ${pushResult.branch}`,
+        );
+        if (updateFailure && isCurrentContext()) setPushError(updateFailure);
       } catch (error) {
         if (!isCurrentContext()) return;
         const message = toErrorMessage(

@@ -4,10 +4,9 @@ import {
   gitComparisonTargetQueryOptions,
   gitQueryKeys,
   invalidateGitWorkingDirectoryQueries,
-  loadWorktreeStatusFromQuery,
-  loadWorktreeStatusSummaryFromQuery,
   currentBranchQueryOptions,
   worktreeBranchQueryOptions,
+  worktreeStatusQueryOptions,
 } from "./git";
 
 test("comparison target reads keep the working directory and target in their query keys", async () => {
@@ -58,8 +57,8 @@ test("Git invalidation keeps other worktrees fresh", async () => {
     { branch: "main" },
     "",
   );
-  const rootStatus = gitQueryKeys.worktreeStatus("/repo", "@{upstream}", "uncommitted", "/repo");
-  const worktreeStatus = gitQueryKeys.worktreeStatus("/repo", "main", "uncommitted", "/worktree");
+  const rootStatus = gitQueryKeys.worktreeStatus("/repo", "@{upstream}", "/repo");
+  const worktreeStatus = gitQueryKeys.worktreeStatus("/repo", "main", "/worktree");
   for (const key of [rootTarget, worktreeTarget, rootStatus, worktreeStatus]) {
     client.setQueryData(key, {});
   }
@@ -85,20 +84,8 @@ test.each(["/repo", "/worktree"])(
             ...worktreeBranchQueryOptions("/repo", directory, host),
             staleTime: 0,
           });
-    const statusKey = gitQueryKeys.worktreeStatus(
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      directory,
-      "feature",
-    );
-    const otherKey = gitQueryKeys.worktreeStatus(
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      "/other",
-      "feature",
-    );
+    const statusKey = gitQueryKeys.worktreeStatus("/repo", "HEAD", directory, "feature");
+    const otherKey = gitQueryKeys.worktreeStatus("/repo", "HEAD", "/other", "feature");
     const pending = Promise.withResolvers<string>();
     try {
       await readBranch();
@@ -143,47 +130,18 @@ test("Git actions invalidate root status cached without an explicit working dire
       diffHash: "fedcba9876543210",
     },
   });
-  const host = {
-    gitGetWorktreeStatus: async () => status(),
-    gitGetWorktreeStatusSummary: async () => ({
-      ...status(),
-      fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-    }),
-  };
-  const options = { branchKey: "feature", staleTime: Infinity };
+  const host = { gitGetWorktreeStatus: async () => status() };
+  const read = () =>
+    client.fetchQuery({
+      ...worktreeStatusQueryOptions("/repo", "HEAD", null, "feature", host),
+      staleTime: Infinity,
+    });
   try {
-    await loadWorktreeStatusFromQuery(client, "/repo", "HEAD", "uncommitted", null, options, host);
-    await loadWorktreeStatusSummaryFromQuery(
-      client,
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      null,
-      options,
-      host,
-    );
+    await read();
     revision = 2;
     await invalidateGitWorkingDirectoryQueries(client, "/repo", "/repo");
-    const full = await loadWorktreeStatusFromQuery(
-      client,
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      null,
-      options,
-      host,
-    );
-    const summary = await loadWorktreeStatusSummaryFromQuery(
-      client,
-      "/repo",
-      "HEAD",
-      "uncommitted",
-      null,
-      options,
-      host,
-    );
-    expect(full.targetAheadBehind.ahead).toBe(2);
-    expect(summary.targetAheadBehind.ahead).toBe(2);
+    const status = await read();
+    expect(status.targetAheadBehind.ahead).toBe(2);
   } finally {
     client.clear();
   }

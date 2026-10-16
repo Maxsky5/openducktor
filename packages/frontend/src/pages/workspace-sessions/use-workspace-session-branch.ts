@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
+  checkoutReadIdentity,
   currentBranchQueryOptions,
   gitQueryKeys,
   invalidateCurrentBranchQuery,
@@ -128,8 +129,9 @@ function branchState(
   };
 }
 
+/** The checkout part of the Git read keys. A commit or a rebase step keeps it. */
 function branchKeyFor(branch: GitCurrentBranch | null, isWorktree: boolean): string {
-  if (isWorktree || branch?.detached) return branchIdentity(branch) ?? "unknown";
+  if (isWorktree || branch?.detached) return checkoutReadIdentity(branch) ?? "unknown";
   return branch?.name ?? "unknown";
 }
 

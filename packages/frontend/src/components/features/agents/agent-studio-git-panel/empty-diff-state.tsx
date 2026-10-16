@@ -2,6 +2,23 @@ import { FolderGit2 } from "lucide-react";
 import type { ReactElement } from "react";
 import type { DiffScope } from "@/features/agent-studio-git";
 
+/**
+ * A list whose read failed. The panel shows the error, so this state must not claim a clean
+ * result.
+ */
+export function DiffLoadFailedState({ diffScope }: { diffScope: DiffScope }): ReactElement {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 p-10 text-center" role="status">
+      <div className="flex size-12 items-center justify-center rounded-full bg-muted/60">
+        <FolderGit2 className="size-5 text-muted-foreground" />
+      </div>
+      <p className="text-sm font-medium text-muted-foreground">
+        {diffScope === "target" ? "Branch changes are unavailable" : "Changes could not load"}
+      </p>
+    </div>
+  );
+}
+
 export function EmptyDiffState({
   targetBranch,
   isLoading,
@@ -37,25 +54,15 @@ export function EmptyDiffState({
     return "No changes detected";
   })();
 
-  const description = (() => {
-    if (diffScope === "target" && targetBranch)
-      return `Changes since this branch diverged from ${targetBranch} appear here.`;
-    if (isLoading) {
-      return contextMode === "repository" && diffScope === "target"
-        ? "Collecting changes in this branch since it diverged from its tracked upstream branch."
-        : "Checking the working directory for file modifications.";
-    }
-    if (contextMode === "repository" && diffScope === "target" && upstreamStatus === "untracked") {
-      return "This branch is not tracking an upstream branch yet. Push it first to create one, then its branch changes will appear here.";
-    }
-    if (contextMode === "repository" && diffScope === "target") {
-      return "Changes in this branch since it diverged from the tracked upstream branch will appear here.";
-    }
-    if (contextMode === "repository") {
-      return "Uncommitted changes in the repository branch will appear here.";
-    }
-    return "File modifications will appear here once the agent starts editing.";
-  })();
+  // Only an action that the user can take earns a second line.
+  const description =
+    !isLoading &&
+    contextMode === "repository" &&
+    diffScope === "target" &&
+    !targetBranch &&
+    upstreamStatus === "untracked"
+      ? "Push the branch first to create its upstream."
+      : null;
 
   return (
     <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
@@ -64,7 +71,7 @@ export function EmptyDiffState({
       </div>
       <div className="space-y-1">
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground/70">{description}</p>
+        {description ? <p className="text-xs text-muted-foreground/70">{description}</p> : null}
       </div>
     </div>
   );

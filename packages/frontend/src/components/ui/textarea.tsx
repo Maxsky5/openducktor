@@ -1,13 +1,20 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
+import { FIELD_CHROME_CLASS_NAME } from "./input";
 
-function Textarea({ className, ref, ...props }: React.ComponentProps<"textarea">) {
+type TextareaProps = React.ComponentProps<"textarea"> & {
+  /** The parent draws the border and the focus, as in an editor with a toolbar. */
+  embedded?: boolean;
+};
+
+function Textarea({ className, ref, embedded = false, ...props }: TextareaProps) {
   return (
     <textarea
       ref={ref}
       data-slot="textarea"
       className={cn(
-        "min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
+        "min-h-24 w-full px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground",
+        embedded ? "bg-transparent" : FIELD_CHROME_CLASS_NAME,
         className,
       )}
       {...props}

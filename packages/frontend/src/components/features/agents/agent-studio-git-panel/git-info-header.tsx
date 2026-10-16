@@ -1,31 +1,17 @@
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  GitBranch,
-  Link2,
-  LoaderCircle,
-  RefreshCw,
-  Target,
-} from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, GitBranch } from "lucide-react";
 import { memo, type ReactElement, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  segmentedControlRootClassName,
-  segmentedControlTriggerClassName,
-} from "@/components/ui/segmented-control-classnames";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
-import { DIFF_SCOPE_OPTIONS } from "./constants";
-import {
-  GitTargetBranchControl,
-  type GitTargetBranchControlProps,
-} from "./git-target-branch-control";
+import { BRANCH_CHIP_CLASS_NAME } from "@/components/features/repository/branch-chip-classnames";
+import type { GitPanelTab } from "./constants";
+import { GitActionRow } from "./git-header-actions";
+import { headerNotices } from "./git-header-notice-items";
+import { HeaderNotice } from "./git-header-notices";
+import { getGitInfoHeaderState } from "./git-info-header-state";
+import { GitPanelTabs } from "./git-panel-tabs";
+import { GitTargetBranchChip, GitTargetBranchSelector } from "./git-target-branch-control";
 import type { AgentStudioGitPanelModel } from "./types";
 
-type GitInfoHeaderProps = Pick<
+export type GitInfoHeaderProps = Pick<
   AgentStudioGitPanelModel,
   | "targetBranchEditable"
   | "targetBranchHelpText"
@@ -44,12 +30,11 @@ type GitInfoHeaderProps = Pick<
   | "upstreamAheadBehind"
   | "upstreamStatus"
   | "upstreamError"
-  | "diffScope"
   | "isLoading"
   | "isCommitting"
   | "isPushing"
   | "isRebasing"
-  | "isResetting"
+  | "isChanging"
   | "isDetectingPullRequest"
   | "detectPullRequestDisabledReason"
   | "isGitActionsLocked"
@@ -60,8 +45,15 @@ type GitInfoHeaderProps = Pick<
   | "targetBranchOptions"
   | "targetBranchSelectionValue"
   | "onUpdateTargetBranch"
-  | "setDiffScope"
 > & {
+  activeTab: GitPanelTab;
+  onTabChange: (tab: GitPanelTab) => void;
+  /** The file count of the Uncommitted changes tab, or null for none. */
+  uncommittedTabCount: number | null;
+  /** The file count of the Branch changes tab, or null for none. */
+  targetTabCount: number | null;
+  isRefreshing: boolean;
+  refreshError: string | null;
   uncommittedFileCount: number;
   pushBranch: (() => Promise<void>) | null;
   rebaseOntoTarget: (() => Promise<void>) | null;
@@ -73,811 +65,200 @@ type GitInfoHeaderProps = Pick<
   diffPanelId?: string;
 };
 
-export const GitInfoHeader = memo(function GitInfoHeader({
-  contextMode = "worktree",
-  comparisonUnavailableReason,
-  comparisonPending,
-  branchKnown = true,
-  comparisonReference,
-  pullRequest,
-  branch,
-  targetBranch,
-  commitsAheadBehind,
-  upstreamAheadBehind,
-  upstreamStatus,
-  upstreamError,
-  diffScope,
-  uncommittedFileCount,
-  isLoading,
-  isCommitting,
-  isPushing,
-  isRebasing,
-  isResetting,
-  isDetectingPullRequest,
-  detectPullRequestDisabledReason,
-  isGitActionsLocked,
-  gitActionsLockReason,
-  showLockReasonBanner,
-  pushError,
-  rebaseError,
-  pushBranch,
-  rebaseOntoTarget,
-  pullFromUpstream,
-  onDetectPullRequest,
-  setDiffScope,
-  onRefresh,
-  targetBranchOptions = [],
-  targetBranchSelectionValue = "",
-  onUpdateTargetBranch,
-  repositoryBranchControl = null,
-  targetBranchEditable,
-  targetBranchHelpText,
-  targetBranchesPending,
-  targetBranchesError,
-  retryTargetBranches,
-  diffPanelId,
-}: GitInfoHeaderProps): ReactElement {
-  const state = getGitInfoHeaderState({
-    branchKnown,
-    contextMode,
-    pullRequest,
-    branch,
-    targetBranch,
-    commitsAheadBehind,
-    upstreamAheadBehind,
-    upstreamStatus,
-    uncommittedFileCount,
-    isLoading,
-    isCommitting,
-    isPushing,
-    isRebasing,
-    isResetting,
-    isGitActionsLocked,
-    gitActionsLockReason,
-    pushBranch,
-    rebaseOntoTarget,
-    pullFromUpstream,
-    onDetectPullRequest,
-    targetBranchOptions,
-    onUpdateTargetBranch,
-  });
-
-  const handleScopeChange = (scope: DiffScope): void => {
-    if (diffScope === scope) {
-      return;
-    }
-    setDiffScope(scope);
-  };
+export const GitInfoHeader = memo(function GitInfoHeader(props: GitInfoHeaderProps): ReactElement {
+  const view = getGitInfoHeaderView(props);
+  const { state } = view;
 
   return (
-    <div className="@container/git-header flex flex-col border-b border-border">
-      <GitBranchContextRow
-        key={String(targetBranchEditable ?? state.canEditTargetBranch)}
-        control={{
-          targetBranchHelpText,
-          targetBranchesPending,
-          targetBranchesError,
-          retryTargetBranches,
-        }}
-        currentBranchLabel={state.currentBranchLabel}
-        repositoryBranchControl={repositoryBranchControl}
-        branchState={{
-          hasTargetAhead: state.hasTargetAhead,
-          isRepositoryMode: state.isRepositoryMode,
-        }}
-        canEditTargetBranch={targetBranchEditable ?? state.canEditTargetBranch}
-        targetAheadCount={state.targetAheadCount}
-        targetBranchLabel={state.targetBranchLabel}
-        targetBranchOptions={targetBranchOptions}
-        targetBranchSelectionValue={targetBranchSelectionValue}
-        onUpdateTargetBranch={onUpdateTargetBranch}
-      />
-
+    <div className="@container/git-header flex shrink-0 flex-col">
+      {/* The checkout, the branch it compares with, and the commit counts against that branch. */}
+      <div
+        className="flex h-10 min-w-0 items-center gap-1 px-2"
+        data-testid="agent-studio-git-branch-context-row"
+      >
+        <CurrentBranch
+          label={state.currentBranchLabel}
+          repositoryBranchControl={view.repositoryBranchControl}
+        />
+        <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+        {/* The target is often short, so it keeps its name, and the current branch shortens. */}
+        <div className="flex min-w-0 max-w-[45%] shrink-0 items-center">
+          {view.canEditTargetBranch ? (
+            <GitTargetBranchSelector
+              branch={state.currentBranchLabel}
+              control={{
+                targetBranchHelpText: props.targetBranchHelpText,
+                targetBranchesPending: props.targetBranchesPending,
+                targetBranchesError: props.targetBranchesError,
+                retryTargetBranches: props.retryTargetBranches,
+              }}
+              targetBranchLabel={state.targetBranchLabel}
+              targetBranchOptions={view.targetBranchOptions}
+              targetBranchSelectionValue={view.targetBranchSelectionValue}
+              onUpdateTargetBranch={props.onUpdateTargetBranch}
+            />
+          ) : (
+            <GitTargetBranchChip label={state.targetBranchLabel} />
+          )}
+        </div>
+        {view.comparison && (view.comparison.ahead > 0 || view.comparison.behind > 0) ? (
+          <ComparisonCounts comparison={view.comparison} targetLabel={state.targetBranchLabel} />
+        ) : null}
+      </div>
       <GitActionRow
-        actionState={{
-          canPull: state.canPull,
-          canPush: state.canPush,
-          canRebase: state.canRebase,
-          canRefresh: state.canRefresh,
-          isDetectingPullRequest: Boolean(isDetectingPullRequest),
-          isLoading,
-          isPushing: Boolean(isPushing),
-          isRepositoryMode: state.isRepositoryMode,
-          showDetectPullRequest: state.showDetectPullRequest,
-          detectPullRequestDisabledReason: detectPullRequestDisabledReason ?? null,
-        }}
-        onDetectPullRequest={onDetectPullRequest}
-        onRefresh={onRefresh}
-        pullFromUpstream={pullFromUpstream}
+        actionState={view.actionState}
+        onDetectPullRequest={props.onDetectPullRequest}
+        onRefresh={props.onRefresh}
+        pullFromUpstream={props.pullFromUpstream}
         pullTooltip={state.pullTooltip}
         pushAheadCount={state.pushAheadCount}
         pushBehindCount={state.pushBehindCount}
-        pushBranch={pushBranch}
+        pushBranch={props.pushBranch}
         pushTooltip={state.pushTooltip}
         rebaseBehindCount={state.rebaseBehindCount}
-        rebaseOntoTarget={rebaseOntoTarget}
-        rebaseTooltip={`${state.rebaseTooltip}: ${comparisonReference ?? targetBranch}`}
+        rebaseOntoTarget={props.rebaseOntoTarget}
+        rebaseTooltip={view.rebaseTooltip}
       />
-
-      {showLockReasonBanner && isGitActionsLocked && gitActionsLockReason ? (
-        <div
-          className="border-y border-border bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-          data-testid="agent-studio-git-lock-reason"
-        >
-          {gitActionsLockReason}
-        </div>
-      ) : null}
-
-      {upstreamStatus === "error" ? (
-        <p role="alert" className="px-3 py-2 text-xs text-destructive">
-          Upstream status is unavailable. {upstreamError} Fetch the tracked remote or fix branch
-          tracking settings.
-        </p>
-      ) : null}
-      {comparisonUnavailableReason && !comparisonPending ? (
-        <p
-          role="status"
-          className="border-y border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
-        >
-          {comparisonUnavailableReason}
-        </p>
-      ) : null}
-      <GitDiffScopeTabs
-        diffScope={diffScope}
-        onScopeChange={handleScopeChange}
-        comparisonUnavailableReason={comparisonUnavailableReason ?? null}
-        panelId={diffPanelId}
+      {view.notices.map(({ key, ...notice }) => (
+        <HeaderNotice key={key} {...notice} />
+      ))}
+      <GitPanelTabs
+        activeTab={props.activeTab}
+        onTabChange={props.onTabChange}
+        uncommittedCount={props.uncommittedTabCount}
+        targetCount={props.targetTabCount}
+        panelId={props.diffPanelId}
       />
-      <GitInfoHeaderErrors pushError={pushError ?? null} rebaseError={rebaseError ?? null} />
     </div>
   );
 });
 
-type GitActionIconButtonProps = {
-  testId: string;
-  srLabel: string;
-  icon: typeof RefreshCw;
-  onClick: (() => void) | null;
-  disabled: boolean;
-  tooltip: string;
-  badge?:
-    | {
-        testId: string;
-        value: number;
-        toneClassName: string;
-      }
-    | undefined;
-  isSpinning?: boolean;
-  wrapTrigger?: boolean;
-};
-
-function GitActionIconButton({
-  testId,
-  srLabel,
-  icon: Icon,
-  onClick,
-  disabled,
-  tooltip,
-  badge,
-  isSpinning = false,
-  wrapTrigger = false,
-}: GitActionIconButtonProps): ReactElement {
-  const tooltipDescriptionId = `${testId}-tooltip-description`;
-  const button = (
-    <Button
-      type="button"
-      size="icon"
-      variant="ghost"
-      className="relative size-9 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-auto disabled:cursor-not-allowed"
-      onClick={onClick ?? undefined}
-      disabled={disabled}
-      data-testid={testId}
-      aria-describedby={tooltipDescriptionId}
-    >
-      <Icon className={cn("size-3.5", isSpinning ? "animate-spin" : "")} />
-      {badge ? (
-        <span
-          className={cn(
-            "pointer-events-none absolute top-1 right-1 text-[11px] leading-none font-bold tabular-nums",
-            badge.toneClassName,
-          )}
-          data-testid={badge.testId}
-        >
-          {badge.value}
-        </span>
-      ) : null}
-      <span className="sr-only">{srLabel}</span>
-    </Button>
-  );
-
-  return (
-    <>
-      <span id={tooltipDescriptionId} className="sr-only">
-        {tooltip}
-      </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {wrapTrigger ? <span className="inline-flex">{button}</span> : button}
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          <p>{tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    </>
-  );
-}
-
-type GitBranchContextRowProps = {
-  control: GitTargetBranchControlProps["control"];
-  currentBranchLabel: string;
-  repositoryBranchControl: ReactNode;
-  branchState: {
-    hasTargetAhead: boolean;
-    isRepositoryMode: boolean;
-  };
-  canEditTargetBranch: boolean;
-  targetAheadCount: number | null;
-  targetBranchLabel: string;
-  targetBranchOptions: NonNullable<GitInfoHeaderProps["targetBranchOptions"]>;
-  targetBranchSelectionValue: string;
-  onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
-};
-
-function GitBranchContextRow({
-  control,
-  currentBranchLabel,
-  repositoryBranchControl,
-  branchState,
-  canEditTargetBranch,
-  targetAheadCount,
-  targetBranchLabel,
-  targetBranchOptions,
-  targetBranchSelectionValue,
-  onUpdateTargetBranch,
-}: GitBranchContextRowProps): ReactElement {
-  const { hasTargetAhead, isRepositoryMode } = branchState;
-  return (
-    <div
-      className="my-2 grid gap-2 px-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
-      data-testid="agent-studio-git-branch-context-row"
-    >
-      <div className="rounded-lg border border-border bg-card px-3 py-2">
-        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-          Current branch
-        </p>
-        {isRepositoryMode && repositoryBranchControl ? (
-          <div className="mt-1 min-w-0">{repositoryBranchControl}</div>
-        ) : (
-          <div
-            className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
-            data-testid="agent-studio-git-current-branch-display-row"
-          >
-            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-            <span
-              className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-              title={currentBranchLabel}
-              data-testid="agent-studio-git-current-branch"
-            >
-              {currentBranchLabel}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="relative flex items-center justify-center" aria-hidden="true">
-        <span className="inline-flex size-7 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
-          <ArrowRight className="size-3.5" />
-        </span>
-        {hasTargetAhead ? (
-          <span
-            className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 text-[13px] leading-none font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
-            data-testid="agent-studio-git-target-ahead-count"
-          >
-            {targetAheadCount}
-          </span>
-        ) : null}
-      </div>
-      <GitTargetBranchControl
-        branch={currentBranchLabel}
-        control={control}
-        canEditTargetBranch={canEditTargetBranch}
-        targetBranchLabel={targetBranchLabel}
-        targetBranchOptions={targetBranchOptions}
-        targetBranchSelectionValue={targetBranchSelectionValue}
-        onUpdateTargetBranch={onUpdateTargetBranch}
-      />
-    </div>
-  );
-}
-
-type GitActionRowProps = {
-  actionState: {
-    canPull: boolean;
-    canPush: boolean;
-    canRebase: boolean;
-    canRefresh: boolean;
-    isDetectingPullRequest: boolean;
-    isLoading: boolean;
-    isPushing: boolean;
-    isRepositoryMode: boolean;
-    showDetectPullRequest: boolean;
-    detectPullRequestDisabledReason: string | null;
-  };
-  onDetectPullRequest?: (() => Promise<void> | void) | null | undefined;
-  onRefresh: () => void;
-  pullFromUpstream: (() => Promise<void>) | null;
-  pullTooltip: string;
-  pushAheadCount: number | null;
-  pushBehindCount: number | null;
-  pushBranch: (() => Promise<void>) | null;
-  pushTooltip: string;
-  rebaseBehindCount: number | null;
-  rebaseOntoTarget: (() => Promise<void>) | null;
-  rebaseTooltip: string;
-};
-
-type GitSyncActionsProps = Omit<GitActionRowProps, "actionState" | "onDetectPullRequest"> & {
-  actionState: Pick<
-    GitActionRowProps["actionState"],
-    | "canPull"
-    | "canPush"
-    | "canRebase"
-    | "canRefresh"
-    | "isLoading"
-    | "isPushing"
-    | "isRepositoryMode"
-  >;
-};
-
-function GitSyncActions({
-  actionState,
-  onRefresh,
-  pullFromUpstream,
-  pullTooltip,
-  pushAheadCount,
-  pushBehindCount,
-  pushBranch,
-  pushTooltip,
-  rebaseBehindCount,
-  rebaseOntoTarget,
-  rebaseTooltip,
-}: GitSyncActionsProps): ReactElement {
-  const { canPull, canPush, canRebase, canRefresh, isLoading, isPushing, isRepositoryMode } =
-    actionState;
-  return (
-    <div className="inline-flex items-center gap-0.5 px-1">
-      <GitActionIconButton
-        testId="agent-studio-git-refresh-button"
-        srLabel="Refresh"
-        icon={RefreshCw}
-        onClick={onRefresh}
-        disabled={!canRefresh}
-        tooltip={isLoading ? "Refreshing" : "Refresh changes"}
-        isSpinning={isLoading}
-      />
-      {isRepositoryMode ? null : (
-        <GitActionIconButton
-          testId="agent-studio-git-rebase-button"
-          srLabel="Rebase onto target"
-          icon={Target}
-          onClick={rebaseOntoTarget ? () => void rebaseOntoTarget() : null}
-          disabled={!canRebase}
-          tooltip={rebaseTooltip}
-          badge={
-            rebaseBehindCount != null && rebaseBehindCount > 0
-              ? {
-                  testId: "agent-studio-git-behind-count",
-                  value: rebaseBehindCount,
-                  toneClassName: "text-rose-600 dark:text-rose-400",
-                }
-              : undefined
-          }
-          wrapTrigger
-        />
-      )}
-      <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
-        <GitActionIconButton
-          testId="agent-studio-git-pull-button"
-          srLabel="Pull from upstream"
-          icon={ArrowDown}
-          onClick={pullFromUpstream ? () => void pullFromUpstream() : null}
-          disabled={!canPull}
-          tooltip={pullTooltip}
-          badge={
-            pushBehindCount != null && pushBehindCount > 0
-              ? {
-                  testId: "agent-studio-git-upstream-behind-count",
-                  value: pushBehindCount,
-                  toneClassName: "text-rose-600 dark:text-rose-400",
-                }
-              : undefined
-          }
-          wrapTrigger
-        />
-      </span>
-      <GitActionIconButton
-        testId="agent-studio-git-push-button"
-        srLabel="Push branch"
-        icon={isPushing ? LoaderCircle : ArrowUp}
-        onClick={pushBranch ? () => void pushBranch() : null}
-        disabled={!canPush}
-        tooltip={pushTooltip}
-        badge={
-          pushAheadCount != null && pushAheadCount > 0
-            ? {
-                testId: "agent-studio-git-ahead-count",
-                value: pushAheadCount,
-                toneClassName: "text-emerald-600 dark:text-emerald-400",
-              }
-            : undefined
-        }
-        isSpinning={isPushing}
-      />
-    </div>
-  );
-}
-
-function DetectPullRequestAction({
-  disabledReason,
-  isDetecting,
-  onDetect,
-}: {
-  disabledReason: string | null;
-  isDetecting: boolean;
-  onDetect?: (() => Promise<void> | void) | null | undefined;
-}): ReactElement {
-  const errorId = disabledReason ? "agent-studio-git-detect-pr-error" : undefined;
-  return (
-    <div className="flex flex-col items-end gap-1 px-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground hover:bg-muted hover:text-foreground"
-        onClick={() => void onDetect?.()}
-        disabled={isDetecting || disabledReason !== null}
-        aria-describedby={errorId}
-        data-testid="agent-studio-git-detect-pr-button"
-      >
-        <Link2 data-icon="inline-start" />
-        {isDetecting ? "Detecting PR" : "Detect PR"}
-      </Button>
-      {disabledReason ? (
-        <p id={errorId} className="max-w-72 text-right text-xs text-destructive">
-          {disabledReason}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function GitActionRow({ actionState, onDetectPullRequest, ...syncProps }: GitActionRowProps) {
-  return (
-    <div
-      className="flex items-center justify-between gap-2 border-y border-border py-1"
-      data-testid="agent-studio-git-action-row"
-    >
-      <GitSyncActions actionState={actionState} {...syncProps} />
-      {actionState.showDetectPullRequest ? (
-        <DetectPullRequestAction
-          disabledReason={actionState.detectPullRequestDisabledReason}
-          isDetecting={actionState.isDetectingPullRequest}
-          onDetect={onDetectPullRequest}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-type GitDiffScopeTabsProps = {
-  diffScope: DiffScope;
-  onScopeChange: (scope: DiffScope) => void;
-  comparisonUnavailableReason?: string | null;
-  panelId?: string | undefined;
-};
-
-function GitDiffScopeTabs({
-  diffScope,
-  onScopeChange,
-  comparisonUnavailableReason,
-  panelId,
-}: GitDiffScopeTabsProps): ReactElement {
-  return (
-    <div className="flex flex-col gap-1">
-      <Tabs
-        value={diffScope}
-        onValueChange={(value) => {
-          if (value === "target" || value === "uncommitted") {
-            onScopeChange(value);
-          }
-        }}
-        className="gap-0"
-      >
-        <TabsList
-          aria-label="Git diff scope"
-          className={segmentedControlRootClassName({
-            size: "sm",
-            className: "w-full rounded-none",
-          })}
-        >
-          {DIFF_SCOPE_OPTIONS.map((option) => (
-            <TabsTrigger
-              key={option.scope}
-              value={option.scope}
-              id={panelId ? `${panelId}-tab-${option.scope}` : undefined}
-              aria-controls={panelId}
-              disabled={option.scope === "target" && Boolean(comparisonUnavailableReason)}
-              title={
-                option.scope === "target" ? (comparisonUnavailableReason ?? undefined) : undefined
-              }
-              className={cn(
-                segmentedControlTriggerClassName({
-                  size: "sm",
-                  inactiveClassName: "hover:bg-background/80",
-                }),
-                "border-none bg-transparent transition-none data-[state=active]:border-transparent",
-              )}
-              data-testid={option.testId}
-            >
-              {option.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-    </div>
-  );
-}
-
-type GitInfoHeaderErrorsProps = {
-  pushError: string | null;
-  rebaseError: string | null;
-};
-
-function GitInfoHeaderErrors({
-  pushError,
-  rebaseError,
-}: GitInfoHeaderErrorsProps): ReactElement | null {
-  if (!rebaseError && !pushError) {
-    return null;
-  }
-
-  return (
-    <>
-      {rebaseError ? (
-        <p className="text-xs text-destructive" data-testid="agent-studio-git-rebase-error">
-          {rebaseError}
-        </p>
-      ) : null}
-      {pushError ? (
-        <p className="text-xs text-destructive" data-testid="agent-studio-git-push-error">
-          {pushError}
-        </p>
-      ) : null}
-    </>
-  );
-}
-
-const getRebaseTooltip = ({
-  hasUncommittedFiles,
-  isGitActionsLocked,
-  isRebasing,
-  gitActionsLockReason,
-  rebaseBehindCount,
-}: {
-  hasUncommittedFiles: boolean;
-  isGitActionsLocked: boolean;
-  isRebasing: boolean;
-  gitActionsLockReason: string | null | undefined;
-  rebaseBehindCount: number | null;
-}): string => {
-  if (isRebasing) {
-    return "Rebasing";
-  }
-  if (isGitActionsLocked) {
-    return gitActionsLockReason ?? "Git actions are disabled.";
-  }
-  if (hasUncommittedFiles) {
-    return "Commit or stash changes before rebasing";
-  }
-  if (rebaseBehindCount != null && rebaseBehindCount > 0) {
-    return `Rebase onto target (${rebaseBehindCount} behind)`;
-  }
-  return "Rebase onto target";
-};
-
-const getPullTooltip = ({
-  gitActionsLockReason,
-  hasUncommittedFiles,
-  isGitActionsLocked,
-  isRebasing,
-  isRepositoryMode,
-  pushAheadCount,
-  pushBehindCount,
-  upstreamStatus,
-}: {
-  gitActionsLockReason: string | null | undefined;
-  hasUncommittedFiles: boolean;
-  isGitActionsLocked: boolean;
-  isRebasing: boolean;
-  isRepositoryMode: boolean;
-  pushAheadCount: number | null;
-  pushBehindCount: number | null;
-  upstreamStatus: GitInfoHeaderProps["upstreamStatus"];
-}): string => {
-  if (isRebasing) {
-    return "Pulling";
-  }
-  if (isGitActionsLocked) {
-    return gitActionsLockReason ?? "Git actions are disabled.";
-  }
-  if (isRepositoryMode && upstreamStatus === "untracked") {
-    return "No upstream branch yet. Push this branch first to create it.";
-  }
-  if (hasUncommittedFiles) {
-    return "Commit or stash changes before pulling";
-  }
-  if (
-    pushAheadCount != null &&
-    pushAheadCount > 0 &&
-    pushBehindCount != null &&
-    pushBehindCount > 0
-  ) {
-    const commitSuffix = pushAheadCount === 1 ? "" : "s";
-    return `Pull with rebase (${pushBehindCount} behind; ${pushAheadCount} local commit${commitSuffix} will be rewritten)`;
-  }
-  if (pushBehindCount != null && pushBehindCount > 0) {
-    return `Pull (${pushBehindCount} behind)`;
-  }
-  return "Pull";
-};
-
-const getPushTooltip = ({
-  canPublishUntrackedBranch,
-  gitActionsLockReason,
-  hasUpstreamAhead,
-  hasUpstreamBehind,
-  isGitActionsLocked,
-  isPushing,
-  pushAheadCount,
-  pushBehindCount,
-}: {
-  canPublishUntrackedBranch: boolean;
-  gitActionsLockReason: string | null | undefined;
-  hasUpstreamAhead: boolean;
-  hasUpstreamBehind: boolean;
-  isGitActionsLocked: boolean;
-  isPushing: boolean;
-  pushAheadCount: number | null;
-  pushBehindCount: number | null;
-}): string => {
-  if (isPushing) {
-    return "Pushing";
-  }
-  if (isGitActionsLocked) {
-    return gitActionsLockReason ?? "Git actions are disabled.";
-  }
-  if (canPublishUntrackedBranch) {
-    return "Publish branch";
-  }
-  if (hasUpstreamBehind) {
-    return `Push branch (${pushBehindCount} behind; confirmation may be required)`;
-  }
-  if (hasUpstreamAhead) {
-    return `Push branch (${pushAheadCount} ahead)`;
-  }
-  return "Branch is up to date with upstream";
-};
-
-type GitInfoHeaderStateInput = {
-  branchKnown: boolean;
-  branch: GitInfoHeaderProps["branch"];
-  commitsAheadBehind: GitInfoHeaderProps["commitsAheadBehind"];
-  contextMode: GitInfoHeaderProps["contextMode"];
-  gitActionsLockReason: GitInfoHeaderProps["gitActionsLockReason"];
-  isCommitting: boolean | undefined;
-  isGitActionsLocked: boolean | undefined;
-  isLoading: boolean;
-  isPushing: boolean | undefined;
-  isRebasing: boolean | undefined;
-  isResetting: boolean | undefined;
-  onDetectPullRequest: GitInfoHeaderProps["onDetectPullRequest"];
-  onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
-  pullFromUpstream: GitInfoHeaderProps["pullFromUpstream"];
-  pullRequest: GitInfoHeaderProps["pullRequest"] | undefined;
-  pushBranch: GitInfoHeaderProps["pushBranch"];
-  rebaseOntoTarget: GitInfoHeaderProps["rebaseOntoTarget"];
-  targetBranch: string;
-  targetBranchOptions: NonNullable<GitInfoHeaderProps["targetBranchOptions"]>;
-  uncommittedFileCount: number;
-  upstreamAheadBehind: GitInfoHeaderProps["upstreamAheadBehind"];
-  upstreamStatus: GitInfoHeaderProps["upstreamStatus"];
-};
-
-const getGitInfoHeaderState = (props: GitInfoHeaderStateInput) => {
-  const isRepositoryMode = props.contextMode === "repository";
-  const trimmedTargetBranch = props.targetBranch.trim();
-  const isDetachedHead = props.branch == null || props.branch.trim().length === 0;
-  const hasTargetBranch = trimmedTargetBranch.length > 0;
-  const targetAheadCount = props.commitsAheadBehind?.ahead ?? null;
-  const rebaseBehindCount = props.commitsAheadBehind?.behind ?? null;
-  const pushAheadCount = props.upstreamAheadBehind?.ahead ?? null;
-  const pushBehindCount = props.upstreamAheadBehind?.behind ?? null;
-  const hasTargetAhead = targetAheadCount != null && targetAheadCount > 0;
-  const hasUncommittedFiles = props.uncommittedFileCount > 0;
-  const hasUpstreamAhead = pushAheadCount != null && pushAheadCount > 0;
-  const hasUpstreamBehind = pushBehindCount != null && pushBehindCount > 0;
-  const canPublishUntrackedBranch = props.upstreamStatus === "untracked";
-  const hasPushAction = canPublishUntrackedBranch || hasUpstreamAhead || hasUpstreamBehind;
-  const isCommitting = Boolean(props.isCommitting);
-  const isGitActionsLocked = Boolean(props.isGitActionsLocked);
-  const isPushing = Boolean(props.isPushing);
-  const isRebasing = Boolean(props.isRebasing);
-  const isAnyActionInFlight = isCommitting || isPushing || isRebasing || Boolean(props.isResetting);
-  const canRefresh = !props.isLoading && !isAnyActionInFlight;
-  const canRebase =
-    !isRepositoryMode &&
-    !isDetachedHead &&
-    hasTargetBranch &&
-    !hasUncommittedFiles &&
-    !isAnyActionInFlight &&
-    !isGitActionsLocked &&
-    props.rebaseOntoTarget != null;
-  const canPull =
-    !isDetachedHead &&
-    hasUpstreamBehind &&
-    !hasUncommittedFiles &&
-    !isAnyActionInFlight &&
-    !isGitActionsLocked &&
-    props.pullFromUpstream != null;
-  const canPush =
-    !isDetachedHead &&
-    hasPushAction &&
-    !isAnyActionInFlight &&
-    !isGitActionsLocked &&
-    props.pushBranch != null;
-  const tooltipState = {
+/** Everything the header shows, derived from its props outside the render function. */
+function getGitInfoHeaderView(props: GitInfoHeaderProps) {
+  const targetBranchOptions = props.targetBranchOptions ?? [];
+  const state = getGitInfoHeaderState({
+    branchKnown: props.branchKnown ?? true,
+    contextMode: props.contextMode ?? "worktree",
+    pullRequest: props.pullRequest,
+    branch: props.branch,
+    targetBranch: props.targetBranch,
+    commitsAheadBehind: props.commitsAheadBehind,
+    upstreamAheadBehind: props.upstreamAheadBehind,
+    upstreamStatus: props.upstreamStatus,
+    uncommittedFileCount: props.uncommittedFileCount,
+    isLoading: props.isLoading,
+    isRefreshing: props.isRefreshing,
+    isCommitting: props.isCommitting,
+    isPushing: props.isPushing,
+    isRebasing: props.isRebasing,
+    isChanging: props.isChanging,
+    isGitActionsLocked: props.isGitActionsLocked,
     gitActionsLockReason: props.gitActionsLockReason,
-    hasUncommittedFiles,
-    isGitActionsLocked,
-    isRebasing,
-  };
-
+    pushBranch: props.pushBranch,
+    rebaseOntoTarget: props.rebaseOntoTarget,
+    pullFromUpstream: props.pullFromUpstream,
+    onDetectPullRequest: props.onDetectPullRequest,
+    targetBranchOptions,
+    onUpdateTargetBranch: props.onUpdateTargetBranch,
+  });
+  const comparisonShown = !props.comparisonUnavailableReason && !props.comparisonPending;
+  const detectPullRequestDisabledReason = props.detectPullRequestDisabledReason ?? null;
   return {
-    canEditTargetBranch: !isRepositoryMode && props.onUpdateTargetBranch != null,
-    canPull,
-    canPush,
-    canRebase,
-    canRefresh,
-    currentBranchLabel: getBranchLabel(props),
-    hasTargetAhead,
-    isRepositoryMode,
-    pullTooltip: getPullTooltip({
-      ...tooltipState,
-      isRepositoryMode,
-      pushAheadCount,
-      pushBehindCount,
-      upstreamStatus: props.upstreamStatus,
+    state,
+    targetBranchOptions,
+    targetBranchSelectionValue: props.targetBranchSelectionValue ?? "",
+    canEditTargetBranch: props.targetBranchEditable ?? state.canEditTargetBranch,
+    repositoryBranchControl: state.isRepositoryMode
+      ? (props.repositoryBranchControl ?? null)
+      : null,
+    comparison: comparisonShown ? (props.commitsAheadBehind ?? null) : null,
+    rebaseTooltip: `${state.rebaseTooltip}: ${props.comparisonReference ?? props.targetBranch}`,
+    actionState: {
+      canPull: state.canPull,
+      canPush: state.canPush,
+      canRebase: state.canRebase,
+      canRefresh: state.canRefresh,
+      isDetectingPullRequest: Boolean(props.isDetectingPullRequest),
+      isRefreshing: props.isRefreshing || props.isLoading,
+      isPushing: Boolean(props.isPushing),
+      isRepositoryMode: state.isRepositoryMode,
+      showDetectPullRequest: state.showDetectPullRequest,
+      detectPullRequestDisabledReason,
+    },
+    notices: headerNotices({
+      detectPullRequestError: state.showDetectPullRequest ? detectPullRequestDisabledReason : null,
+      lockReason:
+        props.showLockReasonBanner && props.isGitActionsLocked
+          ? (props.gitActionsLockReason ?? null)
+          : null,
+      refreshError: props.refreshError,
+      upstreamError: props.upstreamStatus === "error" ? (props.upstreamError ?? "") : null,
+      comparisonUnavailableReason: props.comparisonPending
+        ? null
+        : (props.comparisonUnavailableReason ?? null),
+      rebaseError: props.rebaseError ?? null,
+      pushError: props.pushError ?? null,
     }),
-    pushAheadCount,
-    pushBehindCount,
-    pushTooltip: getPushTooltip({
-      canPublishUntrackedBranch,
-      gitActionsLockReason: props.gitActionsLockReason,
-      hasUpstreamAhead,
-      hasUpstreamBehind,
-      isGitActionsLocked,
-      isPushing,
-      pushAheadCount,
-      pushBehindCount,
-    }),
-    rebaseBehindCount,
-    rebaseTooltip: getRebaseTooltip({ ...tooltipState, rebaseBehindCount }),
-    showDetectPullRequest: props.pullRequest == null && props.onDetectPullRequest != null,
-    targetAheadCount,
-    targetBranchLabel: hasTargetBranch ? props.targetBranch : "No comparison target",
   };
-};
+}
 
-function getBranchLabel(props: GitInfoHeaderStateInput): string {
-  if (!props.branchKnown) return props.isLoading ? "Reading branch..." : "Branch unavailable";
-  return props.branch?.trim() ? props.branch : "Detached HEAD";
+/** The checkout. Repository sessions get a branch switcher. */
+function CurrentBranch({
+  label,
+  repositoryBranchControl,
+}: {
+  label: string;
+  repositoryBranchControl: ReactNode;
+}): ReactElement {
+  return (
+    <div className="flex min-w-0 shrink items-center">
+      {repositoryBranchControl ?? (
+        <span
+          className={cn(BRANCH_CHIP_CLASS_NAME, "cursor-default")}
+          title={`Current branch: ${label}`}
+          data-testid="agent-studio-git-current-branch-display-row"
+        >
+          <GitBranch className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="sr-only">Current branch:</span>
+          <span className="min-w-0 truncate" data-testid="agent-studio-git-current-branch">
+            {label}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ComparisonCounts({
+  comparison,
+  targetLabel,
+}: {
+  comparison: { ahead: number; behind: number };
+  targetLabel: string;
+}): ReactElement {
+  const label = `${comparison.ahead} commit${comparison.ahead === 1 ? "" : "s"} ahead of ${targetLabel}, ${comparison.behind} behind`;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 font-mono text-[11px] tabular-nums"
+      title={label}
+      aria-label={label}
+      role="img"
+      data-testid="agent-studio-git-comparison-counts"
+    >
+      <span
+        className="inline-flex items-center text-emerald-600 dark:text-emerald-400"
+        data-testid="agent-studio-git-target-ahead-count"
+      >
+        <ArrowUp className="size-3" aria-hidden="true" />
+        {comparison.ahead}
+      </span>
+      <span
+        className="inline-flex items-center text-rose-600 dark:text-rose-400"
+        data-testid="agent-studio-git-target-behind-count"
+      >
+        <ArrowDown className="size-3" aria-hidden="true" />
+        {comparison.behind}
+      </span>
+    </span>
+  );
 }

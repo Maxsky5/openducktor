@@ -1,8 +1,13 @@
-import { LoaderCircle, Pencil, Target } from "lucide-react";
+import { ChevronDown, LoaderCircle, Target } from "lucide-react";
 import { type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
+import { cn } from "@/lib/utils";
+import {
+  BRANCH_CHIP_BUTTON_CLASS_NAME,
+  BRANCH_CHIP_CLASS_NAME,
+} from "@/components/features/repository/branch-chip-classnames";
 import type { AgentStudioGitPanelModel } from "./types";
 
 type EditorState = { context: string } & (
@@ -15,28 +20,54 @@ type EditorState = { context: string } & (
     }
 );
 
-export type GitTargetBranchControlProps = {
+export type GitTargetBranchSelectorProps = {
   branch: string;
   control: Pick<
     AgentStudioGitPanelModel,
     "targetBranchHelpText" | "targetBranchesPending" | "targetBranchesError" | "retryTargetBranches"
   >;
-  canEditTargetBranch: boolean;
   targetBranchLabel: string;
   targetBranchOptions: NonNullable<AgentStudioGitPanelModel["targetBranchOptions"]>;
   targetBranchSelectionValue: string;
   onUpdateTargetBranch: AgentStudioGitPanelModel["onUpdateTargetBranch"];
 };
 
-export function GitTargetBranchControl({
+function TargetChipContent({ label, labelId }: { label: string; labelId?: string }): ReactElement {
+  return (
+    <>
+      <Target className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span id={labelId} className="sr-only">
+        Target branch:
+      </span>
+      <span className="min-w-0 truncate" data-testid="agent-studio-git-target-branch">
+        {label}
+      </span>
+    </>
+  );
+}
+
+/** The target branch when the panel cannot change it. */
+export function GitTargetBranchChip({ label }: { label: string }): ReactElement {
+  return (
+    <span
+      className={cn(BRANCH_CHIP_CLASS_NAME, "cursor-default")}
+      title={`Compare with: ${label}`}
+      data-testid="agent-studio-git-target-branch-display-row"
+    >
+      <TargetChipContent label={label} />
+    </span>
+  );
+}
+
+/** The target branch as a chip that opens the branch list to choose another target. */
+export function GitTargetBranchSelector({
   branch,
   control,
-  canEditTargetBranch,
   targetBranchLabel,
   targetBranchOptions,
   targetBranchSelectionValue,
   onUpdateTargetBranch,
-}: GitTargetBranchControlProps): ReactElement {
+}: GitTargetBranchSelectorProps): ReactElement {
   const labelId = useId();
   const context = JSON.stringify([branch, targetBranchSelectionValue]);
   const [editor, setEditor] = useState<EditorState>({
@@ -52,7 +83,7 @@ export function GitTargetBranchControl({
   useLayoutEffect(() => {
     if (saving.current?.context !== context) saving.current = null;
   }, [context]);
-  const isEditing = canEditTargetBranch && editor.context === context && editor.mode === "editing";
+  const isEditing = editor.context === context && editor.mode === "editing";
   const isSaving = isEditing ? editor.isSaving : false;
   const value = isEditing ? editor.draft : targetBranchSelectionValue;
   const disableOptions =
@@ -64,7 +95,7 @@ export function GitTargetBranchControl({
       disabled: disableOptions || option.disabled === true,
     }));
   const setOpen = (open: boolean): void => {
-    if (!canEditTargetBranch || saving.current?.context === context) {
+    if (saving.current?.context === context) {
       return;
     }
 
@@ -114,67 +145,44 @@ export function GitTargetBranchControl({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2">
-      <p
-        id={labelId}
-        className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
-      >
-        Target branch
-      </p>
-      <div
-        className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
-        data-testid="agent-studio-git-target-branch-display-row"
-      >
-        <Target className="size-3.5 shrink-0 text-muted-foreground" />
-        <span
-          className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-          title={`Compare with: ${targetBranchLabel}`}
-          data-testid="agent-studio-git-target-branch"
+    <BranchSelector
+      value={value}
+      options={options}
+      open={isEditing}
+      onOpenChange={setOpen}
+      onValueChange={select}
+      disabled={isSaving}
+      triggerAriaLabelledBy={labelId}
+      className="min-w-0 max-w-full"
+      popoverClassName="w-[min(20rem,calc(100vw-1rem))] p-0 [&_[data-slot=command-list]]:max-h-48"
+      trigger={
+        <button
+          type="button"
+          className={cn(BRANCH_CHIP_CLASS_NAME, BRANCH_CHIP_BUTTON_CLASS_NAME)}
+          title={`Compare with: ${targetBranchLabel}. Choose another target branch.`}
+          aria-label={`Target branch: ${targetBranchLabel}. Choose another target branch.`}
+          disabled={isSaving}
+          data-testid="agent-studio-git-target-branch-edit"
         >
-          {targetBranchLabel}
-        </span>
-        {canEditTargetBranch ? (
-          <BranchSelector
-            value={value}
-            options={options}
-            open={isEditing}
-            onOpenChange={setOpen}
-            onValueChange={select}
-            disabled={isSaving}
-            triggerAriaLabelledBy={labelId}
-            className="shrink-0"
-            popoverClassName="w-[min(20rem,calc(100vw-1rem))] p-0 [&_[data-slot=command-list]]:max-h-48"
-            trigger={
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-7 shrink-0"
-                aria-label="Edit target branch"
-                disabled={isSaving}
-                data-testid="agent-studio-git-target-branch-edit"
-              >
-                {isSaving ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <Pencil className="size-3.5" />
-                )}
-              </Button>
-            }
-            footer={
-              isEditing ? (
-                <GitTargetBranchEditorHelp
-                  control={control}
-                  editor={editor}
-                  select={select}
-                  cancel={() => setOpen(false)}
-                />
-              ) : null
-            }
+          <TargetChipContent label={targetBranchLabel} labelId={labelId} />
+          {isSaving ? (
+            <LoaderCircle className="size-3 shrink-0 animate-spin" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
+          )}
+        </button>
+      }
+      footer={
+        isEditing ? (
+          <GitTargetBranchEditorHelp
+            control={control}
+            editor={editor}
+            select={select}
+            cancel={() => setOpen(false)}
           />
-        ) : null}
-      </div>
-    </div>
+        ) : null
+      }
+    />
   );
 }
 
@@ -184,7 +192,7 @@ function GitTargetBranchEditorHelp({
   select,
   cancel,
 }: {
-  control: GitTargetBranchControlProps["control"];
+  control: GitTargetBranchSelectorProps["control"];
   editor: Extract<EditorState, { mode: "editing" }> | null;
   select: (value: string) => void;
   cancel: () => void;

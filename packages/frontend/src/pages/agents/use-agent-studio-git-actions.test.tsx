@@ -1,7 +1,13 @@
 import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import type { GitChangeSelectionRequest, GitLocalChanges } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import type { GitConflict } from "@/features/agent-studio-git";
+import {
+  type AgentStudioPendingDiscard,
+  type GitChangeIntent,
+  type GitConflict,
+  gitChangeIntentKey,
+} from "@/features/agent-studio-git";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
@@ -15,6 +21,7 @@ const actualSonnerModule = await import("sonner");
 type RestorableSpy = { mockRestore(): void };
 let testSpies: RestorableSpy[] = [];
 type GitCommitResult = Awaited<ReturnType<HostClient["gitCommitAll"]>>;
+type GitChangeResult = Awaited<ReturnType<HostClient["gitChangeSelection"]>>;
 type GitPushResult = Awaited<ReturnType<HostClient["gitPushBranch"]>>;
 type GitPullResult = Awaited<ReturnType<HostClient["gitPullBranch"]>>;
 type GitRebaseResult = Awaited<ReturnType<HostClient["gitRebaseBranch"]>>;
@@ -24,6 +31,11 @@ enableReactActEnvironment();
 const gitCommitAllMock = mock<HostClient["gitCommitAll"]>(async () => ({
   outcome: "committed",
   commitHash: "abc123",
+  output: "committed",
+}));
+const gitCommitStagedMock = mock<HostClient["gitCommitStaged"]>(async () => ({
+  outcome: "committed",
+  commitHash: "def456",
   output: "committed",
 }));
 const gitPushBranchMock = mock<HostClient["gitPushBranch"]>(async () => ({
@@ -47,9 +59,18 @@ const gitRebaseAbortMock = mock<HostClient["gitRebaseAbort"]>(async () => ({
   outcome: "aborted",
   output: "aborted",
 }));
-const gitResetWorktreeSelectionMock = mock<HostClient["gitResetWorktreeSelection"]>(async () => ({
-  affectedPaths: ["src/main.ts"],
-}));
+/** A Git result. Each `observedAtMs` gives its own snapshots, so a test can see which one a request used. */
+const createChangeResult = (observedAtMs = 2, affectedPaths = ["src/main.ts"]): GitChangeResult => {
+  const localChanges = createLocalChanges();
+  const hash = observedAtMs.toString(16).padStart(16, "0");
+  localChanges.unstaged.snapshot = { ...localChanges.unstaged.snapshot, statusHash: hash };
+  localChanges.staged.snapshot = { ...localChanges.staged.snapshot, diffHash: hash };
+  localChanges.snapshot = { ...localChanges.snapshot, observedAtMs };
+  return { affectedPaths, localChanges };
+};
+const gitChangeSelectionMock = mock<HostClient["gitChangeSelection"]>(async () =>
+  createChangeResult(),
+);
 const toastSuccessMock = mock(() => "toast-success");
 const toastErrorMock = mock(() => "toast-error");
 
@@ -63,17 +84,82 @@ type HookArgs = Parameters<UseAgentStudioGitActionsHook>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioGitActions, initialProps);
 
+const createExpectedBranch = () => ({ name: "feature/task-10", detached: false });
+const createUnstagedSnapshot = () => ({
+  hashVersion: 1,
+  statusHash: "0123456789abcdef",
+  diffHash: "fedcba9876543210",
+});
+const createStagedSnapshot = () => ({
+  hashVersion: 1,
+  statusHash: "1111111111111111",
+  diffHash: "2222222222222222",
+});
+
+const createLocalChanges = (): GitLocalChanges => ({
+  currentBranch: createExpectedBranch(),
+  fileStatuses: [
+    { path: "src/main.ts", status: "modified", staged: false },
+    { path: "src/new.ts", status: "untracked", staged: false },
+    { path: "src/staged.ts", status: "modified", staged: true },
+  ],
+  unstaged: {
+    fileStatuses: [
+      { path: "src/main.ts", status: "modified", staged: false },
+      { path: "src/new.ts", status: "untracked", staged: false },
+    ],
+    fileDiffs: [],
+    snapshot: createUnstagedSnapshot(),
+  },
+  staged: {
+    fileStatuses: [{ path: "src/staged.ts", status: "modified", staged: true }],
+    fileDiffs: [],
+    snapshot: createStagedSnapshot(),
+  },
+  conflicted: { fileStatuses: [], fileDiffs: [] },
+  upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+  snapshot: {
+    effectiveWorkingDir: "/repo",
+    targetBranch: "HEAD",
+    diffScope: "uncommitted",
+    observedAtMs: 1,
+    hashVersion: 1,
+    statusHash: "3333333333333333",
+    diffHash: "4444444444444444",
+  },
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   repoPath: "/repo",
   workingDir: null,
   branch: "feature/task-10",
   targetBranch: "origin/main",
-  hashVersion: 1,
-  statusHash: "0123456789abcdef",
-  diffHash: "fedcba9876543210",
+  localChanges: createLocalChanges(),
   refreshDiffData: async () => {},
+  applyLocalChanges: async () => {},
   ...overrides,
 });
+
+const createIntent = (
+  action: GitChangeIntent["action"],
+  group: GitChangeIntent["group"],
+  selection: GitChangeIntent["selection"] = { kind: "file", filePath: "src/main.ts" },
+): GitChangeIntent => ({ action, group, selection });
+
+/** The request that `createLocalChanges` content produces for one intent. */
+const createExpectedChangeRequest = (
+  intent: GitChangeIntent,
+  workingDir?: string,
+): GitChangeSelectionRequest => {
+  const request: GitChangeSelectionRequest = {
+    repoPath: "/repo",
+    expectedBranch: createExpectedBranch(),
+    snapshots: { unstaged: createUnstagedSnapshot(), staged: createStagedSnapshot() },
+    ...intent,
+  };
+  if (workingDir) request.workingDir = workingDir;
+  return request;
+};
 
 const createDetectedConflict = (overrides: Partial<GitConflict> = {}): GitConflict => ({
   operation: "rebase",
@@ -90,12 +176,13 @@ beforeEach(async () => {
     createShellBridgeFixture({
       client: {
         gitCommitAll: gitCommitAllMock,
+        gitCommitStaged: gitCommitStagedMock,
         gitPushBranch: gitPushBranchMock,
         gitPullBranch: gitPullBranchMock,
         gitRebaseBranch: gitRebaseBranchMock,
         gitAbortConflict: gitAbortConflictMock,
         gitRebaseAbort: gitRebaseAbortMock,
-        gitResetWorktreeSelection: gitResetWorktreeSelectionMock,
+        gitChangeSelection: gitChangeSelectionMock,
       },
     }),
   );
@@ -114,17 +201,23 @@ afterEach(() => {
 
 beforeEach(() => {
   gitCommitAllMock.mockClear();
+  gitCommitStagedMock.mockClear();
   gitPushBranchMock.mockClear();
   gitPullBranchMock.mockClear();
   gitRebaseBranchMock.mockClear();
   gitAbortConflictMock.mockClear();
   gitRebaseAbortMock.mockClear();
-  gitResetWorktreeSelectionMock.mockClear();
+  gitChangeSelectionMock.mockClear();
   toastSuccessMock.mockClear();
   toastErrorMock.mockClear();
   gitCommitAllMock.mockImplementation(async () => ({
     outcome: "committed",
     commitHash: "abc123",
+    output: "committed",
+  }));
+  gitCommitStagedMock.mockImplementation(async () => ({
+    outcome: "committed",
+    commitHash: "def456",
     output: "committed",
   }));
   gitPushBranchMock.mockImplementation(async () => ({
@@ -137,9 +230,7 @@ beforeEach(() => {
   gitRebaseBranchMock.mockImplementation(async () => ({ outcome: "rebased", output: "rebased" }));
   gitAbortConflictMock.mockImplementation(async () => ({ output: "aborted" }));
   gitRebaseAbortMock.mockImplementation(async () => ({ outcome: "aborted", output: "aborted" }));
-  gitResetWorktreeSelectionMock.mockImplementation(async () => ({
-    affectedPaths: ["src/main.ts"],
-  }));
+  gitChangeSelectionMock.mockImplementation(async () => createChangeResult());
 });
 
 describe("useAgentStudioGitActions", () => {
@@ -187,99 +278,219 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
-  test("tracks commit action lifecycle and rejects blank commit messages", async () => {
+  test("tracks the staged commit lifecycle and rejects blank commit messages", async () => {
     const refreshDiffData = mock(async () => {});
     const commitDeferred = createDeferred<GitCommitResult>();
-    const harness = createHookHarness(
-      createBaseArgs({
-        refreshDiffData,
-      }),
-    );
-
-    gitCommitAllMock.mockImplementationOnce(async () => commitDeferred.promise);
+    gitCommitStagedMock.mockImplementationOnce(() => commitDeferred.promise);
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+    let running: Promise<boolean> | undefined;
 
     try {
       await harness.mount();
 
+      let blankResult = true;
       await harness.run(async (state) => {
-        await state.commitAll("   ");
+        blankResult = await state.commit("staged", "   ");
       });
+      expect(blankResult).toBe(false);
       expect(harness.getLatest().commitError).toBe("Commit message cannot be empty.");
+      expect(gitCommitStagedMock).toHaveBeenCalledTimes(0);
       expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
 
       await harness.run((state) => {
-        void state.commitAll("  refine build flow  ");
+        running = state.commit("staged", "  refine build flow  ");
       });
 
-      await harness.waitFor((state) => state.isCommitting === true);
-      expect(harness.getLatest().isCommitting).toBe(true);
+      await harness.waitFor((state) => state.isCommitting);
+      expect(harness.getLatest().committingMode).toBe("staged");
+      expect(harness.getLatest().commitError).toBeNull();
       expect(harness.getLatest().isPushing).toBe(false);
       expect(harness.getLatest().isRebasing).toBe(false);
+      expect(gitCommitStagedMock).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        message: "refine build flow",
+        expectedBranch: createExpectedBranch(),
+        stagedSnapshot: createStagedSnapshot(),
+      });
+      expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
 
-      commitDeferred.resolve({ outcome: "committed", commitHash: "abc123", output: "committed" });
+      let didCommit = false;
+      await harness.run(async () => {
+        commitDeferred.resolve({ outcome: "committed", commitHash: "abc123", output: "committed" });
+        didCommit = (await running) ?? false;
+      });
 
-      await harness.waitFor((state) => state.isCommitting === false);
+      expect(didCommit).toBe(true);
+      expect(harness.getLatest().isCommitting).toBe(false);
+      expect(harness.getLatest().committingMode).toBeNull();
       expect(refreshDiffData).toHaveBeenCalledTimes(1);
       expect(refreshDiffData).toHaveBeenCalledWith("soft");
+      expect(harness.getLatest().commitError).toBeNull();
+    } finally {
+      commitDeferred.resolve({ outcome: "committed", commitHash: "abc123", output: "committed" });
+      await running;
+      await harness.unmount();
+    }
+  });
+
+  test("sends staged and Commit all requests with the expected branch", async () => {
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(
+      createBaseArgs({ refreshDiffData, workingDir: "/tmp/worktree/task-10" }),
+    );
+
+    try {
+      await harness.mount();
+
+      let stagedResult = false;
+      await harness.run(async (state) => {
+        stagedResult = await state.commit("staged", "feat: staged work");
+      });
+      expect(stagedResult).toBe(true);
+      expect(gitCommitStagedMock).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        workingDir: "/tmp/worktree/task-10",
+        message: "feat: staged work",
+        expectedBranch: createExpectedBranch(),
+        stagedSnapshot: createStagedSnapshot(),
+      });
+      expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
+
+      let allResult = false;
+      await harness.run(async (state) => {
+        allResult = await state.commit("all", "  feat: all work  ");
+      });
+      expect(allResult).toBe(true);
+      expect(gitCommitAllMock).toHaveBeenCalledWith(
+        "/repo",
+        "feat: all work",
+        "/tmp/worktree/task-10",
+        createExpectedBranch(),
+      );
+      expect(gitCommitStagedMock).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().commitError).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("returns success when the commit completes but diff refresh fails", async () => {
-    const refreshDiffData = mock(async () => {
-      throw new Error("Refresh exploded");
-    });
-    const harness = createHookHarness(
-      createBaseArgs({
-        refreshDiffData,
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      let didCommit = false;
-      await harness.run(async (state) => {
-        didCommit = await state.commitAll("feat: preserve commit success");
-      });
-
-      expect(didCommit).toBe(true);
-      expect(gitCommitAllMock).toHaveBeenCalledWith(
-        "/repo",
-        "feat: preserve commit success",
-        undefined,
-      );
-      expect(refreshDiffData).toHaveBeenCalledTimes(1);
-      expect(refreshDiffData).toHaveBeenCalledWith("soft");
-      expect(harness.getLatest().commitError).toBe("Refresh exploded");
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("clears commit loading state after commit write failure", async () => {
-    gitCommitAllMock.mockImplementationOnce(async () => {
-      throw new Error("Commit hook exploded");
-    });
-    const harness = createHookHarness(createBaseArgs());
+  test("refuses to commit while the local changes are unavailable", async () => {
+    const harness = createHookHarness(createBaseArgs({ localChanges: null }));
 
     try {
       await harness.mount();
 
       let didCommit = true;
       await harness.run(async (state) => {
-        didCommit = await state.commitAll("feat: broken commit");
+        didCommit = await state.commit("staged", "feat: no snapshot");
       });
 
       expect(didCommit).toBe(false);
-      expect(harness.getLatest().isCommitting).toBe(false);
-      expect(harness.getLatest().commitError).toBe("Commit hook exploded");
+      expect(harness.getLatest().commitError).toBe(
+        "Cannot commit because the changes are unavailable. Refresh and try again.",
+      );
+      expect(gitCommitStagedMock).toHaveBeenCalledTimes(0);
+      expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
   });
+
+  test("returns success and names the commit when only the panel refresh fails", async () => {
+    gitCommitStagedMock.mockImplementationOnce(async () => ({
+      outcome: "committed",
+      commitHash: "abc1234def5678abc1234def5678abc1234def56",
+      output: "committed",
+    }));
+    const refreshDiffData = mock(async () => {
+      throw new Error("Refresh exploded.");
+    });
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+    try {
+      await harness.mount();
+
+      let didCommit = false;
+      await harness.run(async (state) => {
+        didCommit = await state.commit("staged", "feat: preserve commit success");
+      });
+
+      expect(didCommit).toBe(true);
+      expect(gitCommitStagedMock).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
+      expect(harness.getLatest().isCommitting).toBe(false);
+      expect(harness.getLatest().commitError).toBe(
+        "Commit abc1234 succeeded, but the panel could not update: Refresh exploded. Refresh to try again.",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    ["staged", "Git found no staged changes to commit. Stage files or chunks first."],
+    ["all", "Git found no changes to commit."],
+  ] as const)("reports a %s commit that finds no changes", async (mode, expectedError) => {
+    const noChanges = async (): Promise<GitCommitResult> => ({
+      outcome: "no_changes",
+      output: "nothing to commit",
+    });
+    if (mode === "staged") gitCommitStagedMock.mockImplementationOnce(noChanges);
+    else gitCommitAllMock.mockImplementationOnce(noChanges);
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+    try {
+      await harness.mount();
+
+      let didCommit = true;
+      await harness.run(async (state) => {
+        didCommit = await state.commit(mode, "feat: nothing here");
+      });
+
+      expect(didCommit).toBe(false);
+      expect(harness.getLatest().isCommitting).toBe(false);
+      expect(harness.getLatest().commitError).toBe(expectedError);
+      expect(refreshDiffData).toHaveBeenCalledTimes(1);
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  // Commit all can stage content, and a commit hook can change files, before a commit fails.
+  test.each(["staged", "all"] as const)(
+    "clears the %s commit state and reads the changes again after a commit write failure",
+    async (mode) => {
+      const failure = async (): Promise<GitCommitResult> => {
+        throw new Error("Commit hook exploded");
+      };
+      if (mode === "staged") gitCommitStagedMock.mockImplementationOnce(failure);
+      else gitCommitAllMock.mockImplementationOnce(failure);
+      const refreshDiffData = mock(async () => {});
+      const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+      try {
+        await harness.mount();
+
+        let didCommit = true;
+        await harness.run(async (state) => {
+          didCommit = await state.commit(mode, "feat: broken commit");
+        });
+
+        expect(didCommit).toBe(false);
+        expect(harness.getLatest().isCommitting).toBe(false);
+        expect(harness.getLatest().committingMode).toBeNull();
+        expect(harness.getLatest().commitError).toBe("Commit hook exploded");
+        expect(refreshDiffData).toHaveBeenCalledTimes(1);
+        expect(refreshDiffData).toHaveBeenCalledWith("soft");
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("tracks push action lifecycle and validates missing branch errors", async () => {
     const refreshDiffData = mock(async () => {});
@@ -374,193 +585,518 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
-  test("keeps commit actions in flight until the soft refresh settles", async () => {
+  test("holds the commit operation lock until the soft refresh settles", async () => {
     const refreshDeferred = createDeferred<void>();
     const refreshDiffData = mock(async (_mode?: string) => refreshDeferred.promise);
-    const harness = createHookHarness(
-      createBaseArgs({
-        refreshDiffData,
-      }),
-    );
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+    let running: Promise<boolean> | undefined;
 
     try {
       await harness.mount();
 
       await harness.run((state) => {
-        void state.commitAll("fix: preserve disabled state");
+        running = state.commit("staged", "fix: preserve disabled state");
       });
-
-      await harness.waitFor((state) => state.isCommitting === true);
+      await harness.waitFor(() => refreshDiffData.mock.calls.length === 1);
       expect(refreshDiffData).toHaveBeenCalledWith("soft");
-      expect(harness.getLatest().isCommitting).toBe(true);
 
+      // The composer stays busy until the panel shows the new commit.
+      expect(harness.getLatest()).toMatchObject({ isCommitting: true, committingMode: "staged" });
+      let duplicateResult = true;
+      await harness.run(async (state) => {
+        duplicateResult = await state.commit("staged", "fix: duplicate");
+      });
+      expect(duplicateResult).toBe(false);
+      expect(gitCommitStagedMock).toHaveBeenCalledTimes(1);
+
+      let didCommit = false;
+      await harness.run(async () => {
+        refreshDeferred.resolve();
+        didCommit = (await running) ?? false;
+      });
+      expect(didCommit).toBe(true);
+    } finally {
       refreshDeferred.resolve();
-      await harness.waitFor((state) => state.isCommitting === false);
+      await running;
+      await harness.unmount();
+    }
+  });
+
+  test("shows the Git result of a change without a panel refresh", async () => {
+    const applyLocalChanges = mock(async (_changes: GitLocalChanges) => {});
+    const refreshDiffData = mock(async (_mode?: string) => {});
+    const harness = createHookHarness(createBaseArgs({ applyLocalChanges, refreshDiffData }));
+    const intent = createIntent("stage", "unstaged");
+
+    try {
+      await harness.mount();
+      await harness.run((state) => state.changeSelection(intent));
+      await harness.waitFor((state) => !state.isChanging);
+
+      expect(gitChangeSelectionMock).toHaveBeenCalledWith(createExpectedChangeRequest(intent));
+      expect(applyLocalChanges.mock.calls).toEqual([[createChangeResult().localChanges]]);
+      expect(refreshDiffData).not.toHaveBeenCalled();
+      expect(harness.getLatest().changeError).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("requests confirmation and resets a file with snapshot metadata", async () => {
-    const refreshDiffData = mock(async () => {});
-    const harness = createHookHarness(
-      createBaseArgs({
-        refreshDiffData,
-        workingDir: "/tmp/worktree/task-10",
-      }),
-    );
+  test("queues a change that starts during another and sends it with the returned snapshots", async () => {
+    const first = createDeferred<GitChangeResult>();
+    gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+    const harness = createHookHarness(createBaseArgs({ workingDir: "/tmp/worktree/task-10" }));
+    const chunk = createIntent("stage", "unstaged", {
+      kind: "hunk",
+      filePath: "src/main.ts",
+      hunkIndex: 1,
+    });
+    const file = createIntent("stage", "unstaged", { kind: "file", filePath: "src/new.ts" });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => state.changeSelection(chunk));
+      await harness.waitFor((state) => state.changingKey === gitChangeIntentKey(chunk));
+      expect(gitChangeSelectionMock).toHaveBeenCalledWith(
+        createExpectedChangeRequest(chunk, "/tmp/worktree/task-10"),
+      );
+
+      // A click during a change waits in the queue. Nothing blocks it.
+      expect(harness.getLatest().changeDisabledReason).toBeNull();
+      await harness.run((state) => state.changeSelection(file));
+      expect(harness.getLatest().changeError).toBeNull();
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().pendingChanges).toEqual([chunk, file]);
+
+      await harness.run(() => first.resolve(createChangeResult(7)));
+      await harness.waitFor(() => gitChangeSelectionMock.mock.calls.length === 2);
+      // The second change uses the snapshots of the first result, with no read between them.
+      expect(gitChangeSelectionMock.mock.calls[1]?.[0].snapshots).toEqual({
+        unstaged: createChangeResult(7).localChanges.unstaged.snapshot,
+        staged: createChangeResult(7).localChanges.staged.snapshot,
+      });
+      await harness.waitFor((state) => !state.isChanging);
+    } finally {
+      first.resolve(createChangeResult());
+      await harness.unmount();
+    }
+  });
+
+  describe("chunk changes", () => {
+    const MOVED_CHUNK = "This file changed after you chose the chunk. Review the chunk again.";
+    const fileDiff = (file: string, diff: string) => ({
+      file,
+      type: "modified" as const,
+      additions: 1,
+      deletions: 0,
+      diff,
+    });
+    /** Local changes whose unstaged group shows `diffs`, read at `observedAtMs`. */
+    const withUnstagedDiffs = (
+      diffs: ReturnType<typeof fileDiff>[],
+      observedAtMs = 1,
+    ): GitLocalChanges => {
+      const changes =
+        observedAtMs === 1 ? createLocalChanges() : createChangeResult(observedAtMs).localChanges;
+      changes.unstaged.fileDiffs = diffs;
+      return changes;
+    };
+    const chunkIntent = (action: "stage" | "discard", filePath: string, hunkIndex: number) =>
+      createIntent(action, "unstaged", { kind: "hunk", filePath, hunkIndex });
+
+    test("stops a queued chunk change after an earlier change moved the chunks of its file", async () => {
+      const first = createDeferred<GitChangeResult>();
+      gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+      const harness = createHookHarness(
+        createBaseArgs({ localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown")]) }),
+      );
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 0));
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 1));
+        });
+        const moved = withUnstagedDiffs([fileDiff("src/main.ts", "@@ moved")], 5);
+        await harness.run(() =>
+          first.resolve({ affectedPaths: ["src/main.ts"], localChanges: moved }),
+        );
+        await harness.waitFor((state) => !state.isChanging && state.changeError !== null);
+
+        // Chunk 1 of the new diff is another chunk, so the second change does not run.
+        expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+        expect(harness.getLatest().changeError).toBe(MOVED_CHUNK);
+        expect(harness.getLatest().pendingChanges).toEqual([
+          chunkIntent("stage", "src/main.ts", 0),
+        ]);
+      } finally {
+        first.resolve(createChangeResult());
+        await harness.unmount();
+      }
+    });
+
+    test("runs a queued chunk change of a file that the earlier change did not move", async () => {
+      const first = createDeferred<GitChangeResult>();
+      gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+      const other = fileDiff("src/other.ts", "@@ other");
+      const harness = createHookHarness(
+        createBaseArgs({
+          localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown"), other]),
+        }),
+      );
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 0));
+          state.changeSelection(chunkIntent("stage", "src/other.ts", 0));
+        });
+        const result = withUnstagedDiffs([fileDiff("src/main.ts", "@@ moved"), other], 5);
+        await harness.run(() =>
+          first.resolve({ affectedPaths: ["src/main.ts"], localChanges: result }),
+        );
+        await harness.waitFor(() => gitChangeSelectionMock.mock.calls.length === 2);
+        await harness.waitFor((state) => !state.isChanging);
+
+        expect(gitChangeSelectionMock.mock.calls[1]?.[0].selection).toEqual({
+          kind: "hunk",
+          filePath: "src/other.ts",
+          hunkIndex: 0,
+        });
+        expect(harness.getLatest().changeError).toBeNull();
+      } finally {
+        first.resolve(createChangeResult());
+        await harness.unmount();
+      }
+    });
+
+    test("does not open a chunk Discard after an earlier change moved the chunks", async () => {
+      const first = createDeferred<GitChangeResult>();
+      gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+      const harness = createHookHarness(
+        createBaseArgs({ localChanges: withUnstagedDiffs([fileDiff("src/main.ts", "@@ shown")]) }),
+      );
+      let discard: Promise<void> | undefined;
+
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          state.changeSelection(chunkIntent("stage", "src/main.ts", 0));
+          discard = Promise.resolve(
+            state.changeSelection(chunkIntent("discard", "src/main.ts", 1)),
+          );
+        });
+        const moved = withUnstagedDiffs([fileDiff("src/main.ts", "@@ moved")], 5);
+        await harness.run(async () => {
+          first.resolve({ affectedPaths: ["src/main.ts"], localChanges: moved });
+          await discard;
+        });
+
+        expect(harness.getLatest().pendingDiscard).toBeNull();
+        expect(harness.getLatest().changeError).toBe(MOVED_CHUNK);
+        expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+      } finally {
+        first.resolve(createChangeResult());
+        await harness.unmount();
+      }
+    });
+  });
+
+  test("keeps a change pending until the panel shows its Git result", async () => {
+    const args = createBaseArgs();
+    const harness = createHookHarness(args);
+    const intent = createIntent("unstage", "staged", { kind: "all" });
+
+    try {
+      await harness.mount();
+      await harness.run((state) => state.changeSelection(intent));
+      await harness.waitFor((state) => !state.isChanging);
+      // Git answered, but the shown changes are older, so the panel still shows the request.
+      expect(harness.getLatest().pendingChanges).toEqual([intent]);
+
+      await harness.update({ ...args, localChanges: createChangeResult().localChanges });
+      expect(harness.getLatest().pendingChanges).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("ends the queued changes after a failed change and reads the actual state", async () => {
+    const failure = "The unstaged changes moved. Refresh and try again.";
+    const first = createDeferred<GitChangeResult>();
+    gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+    const refreshDiffData = mock(async (_mode?: string) => {});
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.changeSelection(createIntent("stage", "unstaged"));
+        state.changeSelection(
+          createIntent("stage", "unstaged", { kind: "file", filePath: "src/new.ts" }),
+        );
+      });
+      await harness.run(() => first.reject(new Error(failure)));
+      await harness.waitFor((state) => !state.isChanging && state.changeError !== null);
+
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().pendingChanges).toEqual([]);
+      expect(harness.getLatest().changeError).toBe(failure);
+      expect(toastErrorMock).toHaveBeenCalledWith("Git change failed", { description: failure });
+      expect(refreshDiffData).toHaveBeenCalledWith("soft");
+
+      // A later change runs again and clears the error.
+      await harness.run((state) => state.changeSelection(createIntent("stage", "unstaged")));
+      await harness.waitFor((state) => !state.isChanging);
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(2);
+      expect(harness.getLatest().changeError).toBeNull();
+    } finally {
+      first.resolve(createChangeResult());
+      await harness.unmount();
+    }
+  });
+
+  test("unstages all staged changes in the repository root at once", async () => {
+    const harness = createHookHarness(createBaseArgs());
+    const intent = createIntent("unstage", "staged", { kind: "all" });
 
     try {
       await harness.mount();
 
-      await harness.run((state) => {
-        state.requestFileReset("src/main.ts");
-      });
+      await harness.run((state) => state.changeSelection(intent));
+      await harness.waitFor((state) => !state.isChanging);
 
-      expect(harness.getLatest().pendingReset).toEqual({ kind: "file", filePath: "src/main.ts" });
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+      const request = gitChangeSelectionMock.mock.calls[0]?.[0];
+      expect(request).toEqual(createExpectedChangeRequest(intent));
+      expect(request).not.toHaveProperty("workingDir");
+      expect(harness.getLatest().pendingDiscard).toBeNull();
+      expect(harness.getLatest().changeError).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
 
-      await harness.run(async (state) => {
-        await state.confirmReset();
-      });
+  test.each(["file", "hunk"] as const)(
+    "waits for confirmation before it discards a %s and sends the reviewed snapshot",
+    async (kind) => {
+      const applyLocalChanges = mock(async (_changes: GitLocalChanges) => {});
+      const original = createBaseArgs({ applyLocalChanges, workingDir: "/tmp/worktree/task-10" });
+      const harness = createHookHarness(original);
+      const selection: AgentStudioPendingDiscard["selection"] =
+        kind === "file"
+          ? { kind, filePath: "src/main.ts" }
+          : { kind, filePath: "src/main.ts", hunkIndex: 2 };
+      const intent = createIntent("discard", "unstaged", selection);
 
-      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledWith({
-        repoPath: "/repo",
-        workingDir: "/tmp/worktree/task-10",
-        targetBranch: "origin/main",
-        snapshot: {
+      try {
+        await harness.mount();
+
+        await harness.run((state) => state.changeSelection(intent));
+        expect(harness.getLatest().pendingDiscard).toMatchObject({
+          group: "unstaged",
+          selection,
+          isUntrackedFile: false,
+        });
+        expect(harness.getLatest().isChanging).toBe(false);
+        expect(harness.getLatest().pendingChanges).toEqual([]);
+        expect(gitChangeSelectionMock).toHaveBeenCalledTimes(0);
+
+        // A live refresh brings new content while the confirmation is open.
+        const movedChanges = createLocalChanges();
+        movedChanges.unstaged.snapshot = {
           hashVersion: 1,
-          statusHash: "0123456789abcdef",
-          diffHash: "fedcba9876543210",
-        },
-        selection: {
-          kind: "file",
-          filePath: "src/main.ts",
-        },
+          statusHash: "aaaaaaaaaaaaaaaa",
+          diffHash: "bbbbbbbbbbbbbbbb",
+        };
+        movedChanges.snapshot = { ...movedChanges.snapshot, observedAtMs: 5 };
+        await harness.update({ ...original, localChanges: movedChanges });
+        expect(harness.getLatest().pendingDiscard).toMatchObject({ group: "unstaged", selection });
+
+        await harness.run((state) => state.confirmDiscard());
+
+        expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+        expect(gitChangeSelectionMock).toHaveBeenCalledWith(
+          createExpectedChangeRequest(intent, "/tmp/worktree/task-10"),
+        );
+        expect(applyLocalChanges).toHaveBeenCalledTimes(1);
+        expect(harness.getLatest().pendingDiscard).toBeNull();
+        expect(harness.getLatest().isChanging).toBe(false);
+        expect(harness.getLatest().changeError).toBeNull();
+        expect(toastSuccessMock).toHaveBeenCalledWith("Changes discarded", {
+          description: "src/main.ts",
+        });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("opens a Discard confirmation after the changes before it", async () => {
+    const first = createDeferred<GitChangeResult>();
+    gitChangeSelectionMock.mockImplementationOnce(() => first.promise);
+    const harness = createHookHarness(createBaseArgs());
+    let discard: Promise<void> | undefined;
+
+    try {
+      await harness.mount();
+      await harness.run((state) => state.changeSelection(createIntent("stage", "unstaged")));
+      await harness.run((state) => {
+        discard = Promise.resolve(
+          state.changeSelection(
+            createIntent("discard", "unstaged", { kind: "file", filePath: "src/new.ts" }),
+          ),
+        );
       });
-      expect(refreshDiffData).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().pendingReset).toBeNull();
-      expect(harness.getLatest().resetError).toBeNull();
-      expect(toastSuccessMock).toHaveBeenCalledWith("File reset", {
-        description: "src/main.ts",
+      expect(harness.getLatest().pendingDiscard).toBeNull();
+
+      await harness.run(async () => {
+        first.resolve(createChangeResult(9));
+        await discard;
       });
+      await harness.waitFor((state) => state.pendingDiscard !== null);
+      // The confirmation keeps the content that Git showed after the earlier change.
+      await harness.run((state) => state.confirmDiscard());
+      expect(gitChangeSelectionMock.mock.calls[1]?.[0].snapshots.unstaged).toEqual(
+        createChangeResult(9).localChanges.unstaged.snapshot,
+      );
     } finally {
+      first.resolve(createChangeResult());
       await harness.unmount();
     }
   });
 
-  test("keeps reset blocked while git diff data is loading", async () => {
-    const harness = createHookHarness(
-      createBaseArgs({
-        isDiffDataLoading: true,
-      }),
-    );
+  test("cancels a pending discard of an untracked file without a Git call", async () => {
+    const refreshDiffData = mock(async () => {});
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
 
     try {
       await harness.mount();
 
-      expect(harness.getLatest().isResetDisabled).toBe(true);
-      expect(harness.getLatest().resetDisabledReason).toBe(
-        "Cannot reset while git diff data is loading.",
+      await harness.run((state) =>
+        state.changeSelection(
+          createIntent("discard", "unstaged", { kind: "file", filePath: "src/new.ts" }),
+        ),
       );
-
-      await harness.run((state) => {
-        state.requestFileReset("src/main.ts");
+      expect(harness.getLatest().pendingDiscard).toMatchObject({
+        group: "unstaged",
+        selection: { kind: "file", filePath: "src/new.ts" },
+        isUntrackedFile: true,
       });
 
-      expect(harness.getLatest().pendingReset).toBeNull();
-      expect(harness.getLatest().resetError).toBe("Cannot reset while git diff data is loading.");
-      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledTimes(0);
+      await harness.run((state) => state.cancelDiscard());
+      expect(harness.getLatest().pendingDiscard).toBeNull();
+
+      await harness.run((state) => state.confirmDiscard());
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(0);
+      expect(refreshDiffData).toHaveBeenCalledTimes(0);
+      expect(harness.getLatest().changeError).toBeNull();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("clears reset errors after a newer snapshot arrives", async () => {
-    gitResetWorktreeSelectionMock.mockImplementationOnce(async () => {
-      throw new Error("Displayed diff is stale. Refresh and try again.");
+  test.each<[string, Partial<HookArgs>, string]>([
+    [
+      "no repository is selected",
+      { repoPath: null },
+      "Cannot change files because no repository is selected.",
+    ],
+    [
+      "a Git conflict is unresolved",
+      { detectedConflictedFiles: ["AGENTS.md"] },
+      "Git actions are disabled while git conflicts are unresolved.",
+    ],
+    [
+      "the local changes are unavailable",
+      { localChanges: null },
+      "The changes are unavailable. Refresh and try again.",
+    ],
+  ])("blocks changes while %s", async (_case, overrides, reason) => {
+    const harness = createHookHarness(createBaseArgs(overrides));
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().changeDisabledReason).toBe(reason);
+
+      await harness.run((state) => state.changeSelection(createIntent("stage", "unstaged")));
+      expect(harness.getLatest().changeError).toBe(reason);
+      expect(harness.getLatest().isChanging).toBe(false);
+
+      await harness.run((state) => state.changeSelection(createIntent("discard", "unstaged")));
+      expect(harness.getLatest().pendingDiscard).toBeNull();
+      expect(harness.getLatest().changeError).toBe(reason);
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("reports a failed change and the failure of the read after it", async () => {
+    gitChangeSelectionMock.mockImplementationOnce(async () => {
+      throw new Error("Discard failed.");
     });
-    const harness = createHookHarness(
-      createBaseArgs({
-        worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbb",
-        statusHash: "aaaaaaaaaaaaaaaa",
-        diffHash: "bbbbbbbbbbbbbbbb",
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      await harness.run((state) => {
-        state.requestHunkReset("src/main.ts", 2);
-      });
-      await harness.run(async (state) => {
-        await state.confirmReset();
-      });
-
-      expect(harness.getLatest().resetError).toBe(
-        "Displayed diff is stale. Refresh and try again.",
-      );
-
-      await harness.update(
-        createBaseArgs({
-          worktreeStatusSnapshotKey: "1:cccccccccccccccc:dddddddddddddddd",
-          statusHash: "cccccccccccccccc",
-          diffHash: "dddddddddddddddd",
-        }),
-      );
-
-      await harness.waitFor((state) => state.resetError === null);
-      expect(harness.getLatest().pendingReset).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("keeps reset successful when only the post-reset refresh fails", async () => {
     const refreshDiffData = mock(async () => {
-      throw new Error("Refresh broke after reset");
+      throw new Error("Refresh broke.");
     });
-    const harness = createHookHarness(
-      createBaseArgs({
-        refreshDiffData,
-        workingDir: "/tmp/worktree/task-10",
-        worktreeStatusSnapshotKey: "before-reset",
-      }),
-    );
+    const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
 
     try {
       await harness.mount();
+      await harness.run((state) => state.changeSelection(createIntent("discard", "unstaged")));
+      await harness.run((state) => state.confirmDiscard());
 
-      await harness.run((state) => {
-        state.requestFileReset("src/main.ts");
-      });
-      await harness.run(async (state) => {
-        await state.confirmReset();
-      });
-
-      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().pendingReset).toBeNull();
-      expect(harness.getLatest().resetError).toBe("Refresh broke after reset");
-      expect(toastSuccessMock).toHaveBeenCalledWith("File reset", {
-        description: "src/main.ts",
-      });
-      expect(toastErrorMock).toHaveBeenCalledWith("Reset applied but refresh failed", {
-        description: "Refresh broke after reset",
-      });
-      await harness.update(
-        createBaseArgs({
-          refreshDiffData,
-          workingDir: "/tmp/worktree/task-10",
-          worktreeStatusSnapshotKey: "after-reset",
-        }),
+      expect(harness.getLatest().changeError).toBe(
+        "Discard failed. The panel could not update: Refresh broke.",
       );
-      expect(harness.getLatest().resetError).toBeNull();
+      expect(toastSuccessMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("does not show a reset refresh failure after the session changes", async () => {
+  test("does not show a late change failure after the session changes", async () => {
+    const change = createDeferred<GitChangeResult>();
+    gitChangeSelectionMock.mockImplementationOnce(() => change.promise);
+    const refreshDiffData = mock(async () => {});
+    const args = createBaseArgs({
+      contextKey: "session-a",
+      workingDir: "/repo/a",
+      refreshDiffData,
+    });
+    const harness = createHookHarness(args);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => state.changeSelection(createIntent("stage", "unstaged")));
+      await harness.waitFor((state) => state.isChanging);
+
+      await harness.update({ ...args, contextKey: "session-b", workingDir: "/repo/b" });
+      // Changes of the first directory leave the new view.
+      expect(harness.getLatest().pendingChanges).toEqual([]);
+
+      await harness.run(() => {
+        change.reject(new Error("Session A change failed."));
+      });
+      await harness.waitFor((state) => !state.isChanging);
+
+      expect(harness.getLatest().changeError).toBeNull();
+      expect(toastErrorMock).not.toHaveBeenCalled();
+      expect(refreshDiffData).not.toHaveBeenCalled();
+      expect(gitChangeSelectionMock.mock.calls[0]?.[0].workingDir).toBe("/repo/a");
+
+      await harness.update(args);
+      expect(harness.getLatest().changeError).toBeNull();
+    } finally {
+      change.resolve(createChangeResult());
+      await harness.unmount();
+    }
+  });
+
+  test("does not show a late refresh failure after the session changes", async () => {
+    gitChangeSelectionMock.mockImplementationOnce(async () => {
+      throw new Error("Session A discard failed.");
+    });
     const refresh = createDeferred<void>();
     const refreshDiffData = mock(() => refresh.promise);
     const args = createBaseArgs({
@@ -572,20 +1108,21 @@ describe("useAgentStudioGitActions", () => {
     let running: Promise<void> | undefined;
     try {
       await harness.mount();
-      await harness.run((state) => state.requestFileReset("src/main.ts"));
+      await harness.run((state) => state.changeSelection(createIntent("discard", "unstaged")));
       await harness.run((state) => {
-        running = state.confirmReset();
+        running = state.confirmDiscard();
       });
       await harness.waitFor(() => refreshDiffData.mock.calls.length === 1);
+      toastErrorMock.mockClear();
       await harness.update({ ...args, contextKey: "session-b", workingDir: "/repo/b" });
       await harness.run(async () => {
         refresh.reject(new Error("Session A refresh failed."));
         await running;
       });
-      expect(harness.getLatest().resetError).toBeNull();
+      expect(harness.getLatest().changeError).toBeNull();
       expect(toastErrorMock).not.toHaveBeenCalled();
-      expect(gitResetWorktreeSelectionMock.mock.calls[0]?.[0].workingDir).toBe("/repo/a");
-      expect(harness.getLatest().isResetting).toBe(false);
+      expect(gitChangeSelectionMock.mock.calls[0]?.[0].workingDir).toBe("/repo/a");
+      expect(harness.getLatest().isChanging).toBe(false);
     } finally {
       refresh.resolve();
       await running;
@@ -807,11 +1344,14 @@ describe("useAgentStudioGitActions", () => {
       expect(harness.getLatest().gitConflictAutoOpenNonce).toBe(0);
       expect(harness.getLatest().gitConflictCloseNonce).toBe(0);
 
+      let didCommit = true;
       await harness.run(async (state) => {
-        await state.commitAll("restore lost work");
+        didCommit = await state.commit("all", "restore lost work");
       });
 
+      expect(didCommit).toBe(false);
       expect(gitCommitAllMock).toHaveBeenCalledTimes(0);
+      expect(gitCommitStagedMock).toHaveBeenCalledTimes(0);
       expect(harness.getLatest().commitError).toBe(
         "Git actions are disabled while git conflicts are unresolved.",
       );
@@ -1466,6 +2006,36 @@ describe("useAgentStudioGitActions", () => {
     }
   });
 
+  test.each([
+    ["push", "Pushed feature/task-10", "pushError"],
+    ["pull", "The pull succeeded", "rebaseError"],
+    ["rebase", "The rebase succeeded", "rebaseError"],
+  ] as const)(
+    "keeps a confirmed %s when only the panel update fails",
+    async (action, confirmedResult, errorField) => {
+      const refreshDiffData = mock(async () => {
+        throw new Error("Local read denied");
+      });
+      const harness = createHookHarness(createBaseArgs({ refreshDiffData }));
+
+      try {
+        await harness.mount();
+        await harness.run(async (state) => {
+          if (action === "push") await state.pushBranch();
+          else if (action === "pull") await state.pullFromUpstream();
+          else await state.rebaseOntoTarget();
+        });
+
+        expect(harness.getLatest()[errorField]).toBe(
+          `${confirmedResult}, but the panel could not update: Local read denied Refresh to try again.`,
+        );
+        expect(toastErrorMock).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
   test("reports push failure through state and toast", async () => {
     gitPushBranchMock.mockImplementationOnce(async () => {
       throw new Error("Remote rejected update");
@@ -1493,16 +2063,16 @@ describe("useAgentStudioGitActions", () => {
 });
 
 test.each(["repository", "directory", "branch", "target"] as const)(
-  "keeps a reset confirmation from applying to a different %s",
+  "keeps a discard confirmation from applying to a different %s",
   async (change) => {
-    const original = createBaseArgs({
-      workingDir: "/repo/a",
-      worktreeStatusSnapshotKey: "unchanged",
-    });
+    const original = createBaseArgs({ workingDir: "/repo/a" });
     const harness = createHookHarness(original);
+    const intent = createIntent("discard", "unstaged");
     try {
       await harness.mount();
-      await harness.run((state) => state.requestFileReset("src/main.ts"));
+      await harness.run((state) => state.changeSelection(intent));
+      expect(harness.getLatest().pendingDiscard).not.toBeNull();
+
       await harness.update({
         ...original,
         repoPath: change === "repository" ? "/other" : original.repoPath,
@@ -1510,86 +2080,21 @@ test.each(["repository", "directory", "branch", "target"] as const)(
         branch: change === "branch" ? "other" : original.branch,
         targetBranch: change === "target" ? "origin/develop" : original.targetBranch,
       });
-      expect(harness.getLatest().pendingReset).toBeNull();
-      await harness.run((state) => state.confirmReset());
-      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
-      await harness.update({
-        ...original,
-        hashVersion: null,
-        statusHash: null,
-        diffHash: null,
-        worktreeStatusSnapshotKey: null,
-        isDiffDataLoading: true,
-      });
-      expect(harness.getLatest().pendingReset).toBeNull();
-      await harness.run((state) => state.confirmReset());
-      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
+      expect(harness.getLatest().pendingDiscard).toBeNull();
+      await harness.run((state) => state.confirmDiscard());
+      expect(gitChangeSelectionMock).not.toHaveBeenCalled();
+
       await harness.update(original);
-      expect(harness.getLatest().pendingReset).toBeNull();
-      await harness.run((state) => state.requestFileReset("src/main.ts"));
-      await harness.run((state) => state.confirmReset());
-      expect(gitResetWorktreeSelectionMock).toHaveBeenCalledTimes(1);
-      expect(gitResetWorktreeSelectionMock.mock.calls[0]?.[0]).toMatchObject({
-        repoPath: "/repo",
-        workingDir: "/repo/a",
-        targetBranch: "origin/main",
-        snapshot: { hashVersion: 1, statusHash: "0123456789abcdef", diffHash: "fedcba9876543210" },
-      });
-    } finally {
-      await harness.unmount();
-    }
-  },
-);
+      expect(harness.getLatest().pendingDiscard).toBeNull();
+      await harness.run((state) => state.confirmDiscard());
+      expect(gitChangeSelectionMock).not.toHaveBeenCalled();
 
-test.each(["file", "hunk"] as const)(
-  "drops a %s reset confirmation when its scope returns with new content",
-  async (kind) => {
-    const original = createBaseArgs({
-      workingDir: "/repo/a",
-      worktreeStatusSnapshotKey: "1:0123456789abcdef",
-    });
-    const harness = createHookHarness(original);
-    const selection =
-      kind === "file"
-        ? { kind, filePath: "src/main.ts" }
-        : { kind, filePath: "src/main.ts", hunkIndex: 2 };
-    try {
-      await harness.mount();
-      await harness.run((state) => {
-        if (kind === "file") state.requestFileReset("src/main.ts");
-        else state.requestHunkReset("src/main.ts", 2);
-      });
-      expect(harness.getLatest().pendingReset).toEqual(selection);
-
-      await harness.update({
-        ...original,
-        workingDir: "/repo/b",
-        statusHash: "aaaaaaaaaaaaaaaa",
-        diffHash: "bbbbbbbbbbbbbbbb",
-        worktreeStatusSnapshotKey: "1:aaaaaaaaaaaaaaaa",
-      });
-      expect(harness.getLatest().pendingReset).toBeNull();
-      await harness.run((state) => state.confirmReset());
-      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
-
-      await harness.update({
-        ...original,
-        hashVersion: null,
-        statusHash: null,
-        diffHash: null,
-        worktreeStatusSnapshotKey: null,
-        isDiffDataLoading: true,
-      });
-      expect(harness.getLatest().pendingReset).toBeNull();
-      await harness.run((state) => state.confirmReset());
-      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
-
-      // Content can change while the file status and its snapshot key stay the same.
-      await harness.update({ ...original, diffHash: "cccccccccccccccc" });
-      expect(harness.getLatest().pendingReset).toBeNull();
-      expect(harness.getLatest().resetError).toBeNull();
-      await harness.run((state) => state.confirmReset());
-      expect(gitResetWorktreeSelectionMock).not.toHaveBeenCalled();
+      await harness.run((state) => state.changeSelection(intent));
+      await harness.run((state) => state.confirmDiscard());
+      expect(gitChangeSelectionMock).toHaveBeenCalledTimes(1);
+      expect(gitChangeSelectionMock).toHaveBeenCalledWith(
+        createExpectedChangeRequest(intent, "/repo/a"),
+      );
     } finally {
       await harness.unmount();
     }
@@ -1631,28 +2136,38 @@ test.each(["repository", "directory", "branch"] as const)(
 test("drops a late commit error after the directory changes", async () => {
   const completed = createDeferred<GitCommitResult>();
   gitCommitAllMock.mockImplementationOnce(() => completed.promise);
-  const original = createBaseArgs({ workingDir: "/repo/a" });
+  const refreshDiffData = mock(async () => {});
+  const original = createBaseArgs({ workingDir: "/repo/a", refreshDiffData });
   const harness = createHookHarness(original);
+  let running: Promise<boolean> | undefined;
   try {
     await harness.mount();
     await harness.run((state) => {
-      void state.commitAll("fix: retain error");
+      running = state.commit("all", "fix: retain error");
     });
     await harness.update({ ...original, workingDir: "/repo/b" });
     expect(harness.getLatest().isCommitting).toBe(true);
+    expect(harness.getLatest().committingMode).toBe("all");
+    let duplicateResult = true;
     await harness.run(async (state) => {
-      await state.commitAll("duplicate");
+      duplicateResult = await state.commit("all", "duplicate");
     });
+    expect(duplicateResult).toBe(false);
     expect(gitCommitAllMock).toHaveBeenCalledTimes(1);
+    let didCommit = true;
     await harness.run(async () => {
       completed.reject(new Error("commit hook failed"));
+      didCommit = (await running) ?? true;
     });
-    await harness.waitFor((state) => !state.isCommitting);
+    expect(didCommit).toBe(false);
+    expect(harness.getLatest().isCommitting).toBe(false);
     expect(harness.getLatest().commitError).toBeNull();
+    expect(refreshDiffData).not.toHaveBeenCalled();
     await harness.update(original);
     expect(harness.getLatest().commitError).toBeNull();
   } finally {
     completed.resolve({ outcome: "committed", commitHash: "abc123", output: "committed" });
+    await running;
     await harness.unmount();
   }
 });

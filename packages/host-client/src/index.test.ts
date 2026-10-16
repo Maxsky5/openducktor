@@ -1665,28 +1665,6 @@ describe("HostClient", () => {
           },
         };
       }
-      if (command === "git_get_worktree_status_summary") {
-        return {
-          currentBranch: { name: "feature/task-1", detached: false },
-          fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-          targetAheadBehind: { ahead: 1, behind: 0 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-          snapshot: {
-            effectiveWorkingDir: "/tmp/wt/task-1",
-            targetBranch: "origin/main",
-            diffScope: "target",
-            observedAtMs: 1731000000000,
-            hashVersion: 1,
-            statusHash: "0123456789abcdef",
-            diffHash: "fedcba9876543210",
-          },
-        };
-      }
-      if (command === "git_reset_worktree_selection") {
-        return {
-          affectedPaths: ["src/main.ts"],
-        };
-      }
       throw new Error(`Unexpected command: ${command}`);
     });
 
@@ -1714,27 +1692,6 @@ describe("HostClient", () => {
       "target",
       "/tmp/wt/task-1",
     );
-    const worktreeStatusSummary = await client.gitGetWorktreeStatusSummary(
-      "/repo",
-      "origin/main",
-      "target",
-      "/tmp/wt/task-1",
-    );
-    const resetResult = await client.gitResetWorktreeSelection({
-      repoPath: "/repo",
-      workingDir: "/tmp/wt/task-1",
-      targetBranch: "origin/main",
-      snapshot: {
-        hashVersion: 1,
-        statusHash: "0123456789abcdef",
-        diffHash: "fedcba9876543210",
-      },
-      selection: {
-        kind: "hunk",
-        filePath: "src/main.ts",
-        hunkIndex: 1,
-      },
-    });
 
     expect(branches).toHaveLength(1);
     expect(current.detached).toBe(false);
@@ -1751,8 +1708,6 @@ describe("HostClient", () => {
     expect(pushed.remote).toBe("origin");
     expect(worktreeStatus.currentBranch.name).toBe("feature/task-1");
     expect(worktreeStatus.targetAheadBehind.ahead).toBe(1);
-    expect(worktreeStatusSummary.fileStatusCounts.total).toBe(1);
-    expect(resetResult.affectedPaths).toEqual(["src/main.ts"]);
 
     expect(calls.map((entry) => entry.command)).toEqual([
       "git_get_branches",
@@ -1767,8 +1722,6 @@ describe("HostClient", () => {
       "git_pull_branch",
       "git_push_branch",
       "git_get_worktree_status",
-      "git_get_worktree_status_summary",
-      "git_reset_worktree_selection",
     ]);
     expect(calls[2].args).toEqual({
       repoPath: "/repo",
@@ -1823,27 +1776,6 @@ describe("HostClient", () => {
       diffScope: "target",
       workingDir: "/tmp/wt/task-1",
     });
-    expect(calls[12].args).toEqual({
-      repoPath: "/repo",
-      targetBranch: "origin/main",
-      diffScope: "target",
-      workingDir: "/tmp/wt/task-1",
-    });
-    expect(calls[13].args).toEqual({
-      repoPath: "/repo",
-      workingDir: "/tmp/wt/task-1",
-      targetBranch: "origin/main",
-      snapshot: {
-        hashVersion: 1,
-        statusHash: "0123456789abcdef",
-        diffHash: "fedcba9876543210",
-      },
-      selection: {
-        kind: "hunk",
-        filePath: "src/main.ts",
-        hunkIndex: 1,
-      },
-    });
   });
 
   test("gitRemoveWorktree rejects malformed ack payloads", async () => {
@@ -1882,50 +1814,80 @@ describe("HostClient", () => {
     await expect(client.gitRebaseBranch("/repo", "origin/main")).rejects.toThrow();
   });
 
-  test("git reset worktree selection validates payloads and rejects malformed host responses", async () => {
-    let response = { affectedPaths: ["src/main.ts"] };
+  test("git change selection, staged commit, and history send parsed requests", async () => {
+    const branch = { name: "feature", detached: false, revision: "a".repeat(40) };
+    const snapshot = {
+      hashVersion: 2,
+      statusHash: "0123456789abcdef",
+      diffHash: "fedcba9876543210",
+    };
+    const localChanges = {
+      currentBranch: branch,
+      fileStatuses: [],
+      unstaged: { fileStatuses: [], fileDiffs: [], snapshot },
+      staged: { fileStatuses: [], fileDiffs: [], snapshot },
+      conflicted: { fileStatuses: [], fileDiffs: [] },
+      upstreamAheadBehind: { outcome: "untracked", ahead: 0 },
+      snapshot: {
+        effectiveWorkingDir: "/repo",
+        targetBranch: "HEAD",
+        diffScope: "uncommitted",
+        observedAtMs: 1,
+        ...snapshot,
+      },
+    };
     const { client, calls } = createClient((command) => {
-      if (command === "git_reset_worktree_selection") {
-        return response;
+      if (command === "git_change_selection") {
+        return { affectedPaths: ["src/main.ts"], localChanges };
       }
+      if (command === "git_commit_staged") return { outcome: "no_changes", output: "none" };
+      if (command === "git_commit_all") return { outcome: "no_changes", output: "none" };
+      if (command === "git_get_history_page") return { outcome: "no_commits" };
       throw new Error(`Unexpected command: ${command}`);
     });
 
     await expect(
-      client.gitResetWorktreeSelection({
+      client.gitChangeSelection({
         repoPath: "/repo",
-        targetBranch: "origin/main",
-        snapshot: {
-          hashVersion: 1,
-          statusHash: "bad-hash",
-          diffHash: "fedcba9876543210",
-        },
-        selection: {
-          kind: "file",
-          filePath: "src/main.ts",
-        },
+        expectedBranch: branch,
+        snapshots: { unstaged: snapshot, staged: snapshot },
+        action: "stage",
+        group: "staged",
+        selection: { kind: "all" },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("Stage applies only to unstaged changes.");
     expect(calls).toHaveLength(0);
 
-    response = { affectedPaths: [] };
-    await expect(
-      client.gitResetWorktreeSelection({
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        snapshot: {
-          hashVersion: 1,
-          statusHash: "0123456789abcdef",
-          diffHash: "fedcba9876543210",
-        },
-        selection: {
-          kind: "file",
-          filePath: "src/main.ts",
-        },
-      }),
-    ).rejects.toThrow();
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.command).toBe("git_reset_worktree_selection");
+    const changed = await client.gitChangeSelection({
+      repoPath: "/repo",
+      expectedBranch: branch,
+      snapshots: { unstaged: snapshot, staged: snapshot },
+      action: "discard",
+      group: "staged",
+      selection: { kind: "hunk", filePath: "src/main.ts", hunkIndex: 0 },
+    });
+    // The result keeps the local changes that Git shows after the write.
+    expect(changed.localChanges.staged.snapshot).toEqual(snapshot);
+    await client.gitCommitStaged({
+      repoPath: "/repo",
+      message: "Ship",
+      expectedBranch: branch,
+      stagedSnapshot: snapshot,
+    });
+    await client.gitCommitAll("/repo", "Ship all", "/worktree", branch);
+    await client.gitGetHistoryPage({
+      repoPath: "/repo",
+      targetReference: "refs/remotes/origin/main",
+      expectedBranch: branch,
+    });
+
+    expect(calls.map((call) => [call.command, call.args?.workingDir])).toEqual([
+      ["git_change_selection", null],
+      ["git_commit_staged", null],
+      ["git_commit_all", "/worktree"],
+      ["git_get_history_page", null],
+    ]);
+    expect(calls[2]?.args).toMatchObject({ expectedBranch: branch });
   });
 
   test("git worktree status rejects malformed hash metadata payloads", async () => {
@@ -1961,33 +1923,6 @@ describe("HostClient", () => {
 
     await expect(
       client.gitGetWorktreeStatus("/repo", "origin/main", "target", "/tmp/wt/task-1"),
-    ).rejects.toThrow();
-  });
-
-  test("git worktree status summary rejects malformed payloads", async () => {
-    const { client } = createClient((command) => {
-      if (command === "git_get_worktree_status_summary") {
-        return {
-          currentBranch: { name: "feature/task-1", detached: false },
-          fileStatusCounts: { total: -1, staged: 0, unstaged: 0 },
-          targetAheadBehind: { ahead: 1, behind: 0 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-          snapshot: {
-            effectiveWorkingDir: "/tmp/wt/task-1",
-            targetBranch: "origin/main",
-            diffScope: "target",
-            observedAtMs: 1731000000000,
-            hashVersion: 1,
-            statusHash: "0123456789abcdef",
-            diffHash: "fedcba9876543210",
-          },
-        };
-      }
-      throw new Error(`Unexpected command: ${command}`);
-    });
-
-    await expect(
-      client.gitGetWorktreeStatusSummary("/repo", "origin/main", "target", "/tmp/wt/task-1"),
     ).rejects.toThrow();
   });
 

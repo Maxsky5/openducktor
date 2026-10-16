@@ -1,21 +1,25 @@
 import type {
   CommitsAheadBehind,
-  FileDiff,
+  GitFileDiff,
   FileStatus,
   GitBranch,
+  GitChangeSelectionRequest,
+  GitChangeSelectionResult,
   GitCommitAllResult,
+  GitCommitStagedRequest,
   GitConflictAbortResult,
   GitCurrentBranch,
   GitComparisonTarget,
   GitFetchRemoteResult,
+  GitHistoryPage,
+  GitHistoryPageRequest,
+  GitLocalChanges,
+  GitLocalChangesRequest,
   GitPullBranchResult,
   GitPushBranchResult,
   GitRebaseAbortResult,
   GitRebaseBranchResult,
-  GitResetWorktreeSelectionRequest,
-  GitResetWorktreeSelectionResult,
   GitWorktreeStatus,
-  GitWorktreeStatusSummary,
   GitWorktreeSummary,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
@@ -58,13 +62,16 @@ export type GitService = {
     input: GitComparisonTargetInput,
   ): Effect.Effect<GitComparisonTarget, GitServiceError>;
   getStatus(input: GitScopeInput): Effect.Effect<FileStatus[], GitServiceError>;
-  getDiff(input: GitDiffInput): Effect.Effect<FileDiff[], GitServiceError>;
+  getDiff(input: GitDiffInput): Effect.Effect<GitFileDiff[], GitServiceError>;
   getWorktreeStatus(
     input: GitWorktreeStatusInput,
   ): Effect.Effect<GitWorktreeStatus, GitServiceError>;
-  getWorktreeStatusSummary(
-    input: GitWorktreeStatusInput,
-  ): Effect.Effect<GitWorktreeStatusSummary, GitServiceError>;
+  getLocalChanges(input: GitLocalChangesRequest): Effect.Effect<GitLocalChanges, GitServiceError>;
+  changeSelection(
+    input: GitChangeSelectionRequest,
+  ): Effect.Effect<GitChangeSelectionResult, GitServiceError>;
+  commitStaged(input: GitCommitStagedRequest): Effect.Effect<GitCommitAllResult, GitServiceError>;
+  getHistoryPage(input: GitHistoryPageRequest): Effect.Effect<GitHistoryPage, GitServiceError>;
   createWorktree(input: GitCreateWorktreeInput): Effect.Effect<GitWorktreeSummary, GitServiceError>;
   removeWorktree(input: GitRemoveWorktreeInput): Effect.Effect<
     {
@@ -73,9 +80,6 @@ export type GitService = {
     GitServiceError
   >;
   switchBranch(input: GitSwitchBranchInput): Effect.Effect<GitCurrentBranch, GitServiceError>;
-  resetWorktreeSelection(
-    input: GitResetWorktreeSelectionRequest,
-  ): Effect.Effect<GitResetWorktreeSelectionResult, GitServiceError>;
   commitsAheadBehind(
     input: GitAheadBehindInput,
   ): Effect.Effect<CommitsAheadBehind, GitServiceError>;

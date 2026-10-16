@@ -243,7 +243,6 @@ const createGit = (): GitPort => ({
       detached: false,
       revision: "def456",
     }),
-  resetWorktreeSelection: () => Effect.succeed({ affectedPaths: ["src/main.ts"] }),
   commitsAheadBehind: () => Effect.succeed({ ahead: 3, behind: 2 }),
   fetchRemote: () => Effect.succeed({ outcome: "fetched", output: "Fetched origin" }),
   pullBranch: () => Effect.succeed({ outcome: "pulled", output: "Fast-forward" }),
@@ -1106,28 +1105,16 @@ describe("createElectronHostCommandRouter", () => {
         diff: "@@ -1 +1 @@\n-old\n+new\n",
       },
     ]);
-    const worktreeStatus = await router.invoke("git_get_worktree_status", {
-      repoPath: "/repo",
-      targetBranch: "origin/main",
-      diffScope: "uncommitted",
-    });
-    expect(worktreeStatus).toMatchObject({
-      currentBranch: { name: "main" },
-      fileDiffs: [{ file: "src/main.ts" }],
-      snapshot: { targetBranch: "origin/main", diffScope: "uncommitted" },
-    });
-    if (!("snapshot" in worktreeStatus)) {
-      throw new Error("Expected git worktree status to include a reset snapshot.");
-    }
     expect(
-      await router.invoke("git_get_worktree_status_summary", {
+      await router.invoke("git_get_worktree_status", {
         repoPath: "/repo",
         targetBranch: "origin/main",
+        diffScope: "uncommitted",
       }),
     ).toMatchObject({
       currentBranch: { name: "main" },
-      fileStatusCounts: { total: 1, staged: 0, unstaged: 1 },
-      snapshot: { targetBranch: "origin/main", diffScope: "target" },
+      fileDiffs: [{ file: "src/main.ts" }],
+      snapshot: { targetBranch: "origin/main", diffScope: "uncommitted" },
     });
     expect(
       await router.invoke("git_commits_ahead_behind", {
@@ -1145,17 +1132,6 @@ describe("createElectronHostCommandRouter", () => {
       detached: false,
       revision: "def456",
     });
-    expect(
-      await router.invoke("git_reset_worktree_selection", {
-        repoPath: "/repo",
-        targetBranch: "origin/main",
-        snapshot: worktreeStatus.snapshot,
-        selection: {
-          kind: "file",
-          filePath: "src/main.ts",
-        },
-      }),
-    ).toEqual({ affectedPaths: ["src/main.ts"] });
     expect(
       await router.invoke("git_fetch_remote", {
         repoPath: "/repo",

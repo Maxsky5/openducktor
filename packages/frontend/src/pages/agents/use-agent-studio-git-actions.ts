@@ -1,31 +1,36 @@
 import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
-import type { CommitsAheadBehind } from "@openducktor/contracts";
+import type { CommitsAheadBehind, GitLocalChanges } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type {
+  AgentStudioPendingDiscard,
   AgentStudioPendingForcePush,
   AgentStudioPendingPullRebase,
-  AgentStudioPendingReset,
+  GitChangeIntent,
+  GitCommitMode,
   GitConflict,
   GitConflictAction,
   GitDiffRefresh,
 } from "@/features/agent-studio-git";
 import { useAgentStudioGitActionErrors } from "./use-agent-studio-git-action-errors";
 import { CONFLICT_LOCK_REASON, type GitActionKind } from "./use-agent-studio-git-action-utils";
+import { useAgentStudioGitChangeActions } from "./use-agent-studio-git-change-actions";
 import { useAgentStudioGitCommitActions } from "./use-agent-studio-git-commit-actions";
 import { useAgentStudioGitConflictController } from "./use-agent-studio-git-conflict-controller";
 import { useAgentStudioGitPushActions } from "./use-agent-studio-git-push-actions";
 import { useAgentStudioGitRebaseActions } from "./use-agent-studio-git-rebase-actions";
-import { useAgentStudioGitResetActions } from "./use-agent-studio-git-reset-actions";
 
 type AgentStudioGitActionState = {
   isCommitting: boolean;
+  committingMode: GitCommitMode | null;
   isPushing: boolean;
   isRebasing: boolean;
-  isResetting: boolean;
-  isResetDisabled: boolean;
-  resetDisabledReason: string | null;
+  isChanging: boolean;
+  changingKey: string | null;
+  /** Stage and Unstage requests that Git has not shown yet. The panel shows their result. */
+  pendingChanges: readonly GitChangeIntent[];
+  changeDisabledReason: string | null;
   isHandlingGitConflict: boolean;
   gitConflictAction: GitConflictAction;
   gitConflictAutoOpenNonce: number;
@@ -39,16 +44,15 @@ type AgentStudioGitActionState = {
   conflictAssistanceIsStarting: boolean;
   pendingForcePush: AgentStudioPendingForcePush | null;
   pendingPullRebase: AgentStudioPendingPullRebase | null;
-  pendingReset: AgentStudioPendingReset | null;
+  pendingDiscard: AgentStudioPendingDiscard | null;
   commitError: string | null;
   pushError: string | null;
   rebaseError: string | null;
-  resetError: string | null;
-  commitAll: (message: string) => Promise<boolean>;
-  requestFileReset: (filePath: string) => void;
-  requestHunkReset: (filePath: string, hunkIndex: number) => void;
-  confirmReset: () => Promise<void>;
-  cancelReset: () => void;
+  changeError: string | null;
+  commit: (mode: GitCommitMode, message: string) => Promise<boolean>;
+  changeSelection: (intent: GitChangeIntent) => void;
+  confirmDiscard: () => Promise<void>;
+  cancelDiscard: () => void;
   pushBranch: () => Promise<void>;
   confirmForcePush: () => Promise<void>;
   cancelForcePush: () => void;
@@ -67,16 +71,14 @@ type UseAgentStudioGitActionsInput = {
   branch: string | null;
   branchIdentityKey?: string | null;
   targetBranch: string;
-  resetTargetBranch?: string;
-  hashVersion: number | null;
-  statusHash: string | null;
-  diffHash: string | null;
+  localChanges: GitLocalChanges | null;
   upstreamAheadBehind?: CommitsAheadBehind | null;
   detectedConflict?: GitConflict | null;
   detectedConflictedFiles?: string[];
   worktreeStatusSnapshotKey?: string | null;
   refreshDiffData: GitDiffRefresh;
-  isDiffDataLoading?: boolean;
+  /** Shows the local changes that a Git change returned, in the cache of this context. */
+  applyLocalChanges: (changes: GitLocalChanges) => Promise<void>;
   onResolveGitConflict?: ResolveGitConflict | undefined;
   assistanceContextKey?: string;
   conflictRecipientLabel?: "Builder" | "agent";
@@ -91,16 +93,13 @@ export function useAgentStudioGitActions({
   branch,
   branchIdentityKey = branch,
   targetBranch,
-  resetTargetBranch = targetBranch,
-  hashVersion,
-  statusHash,
-  diffHash,
+  localChanges,
   upstreamAheadBehind = null,
   detectedConflict = null,
   detectedConflictedFiles = [],
   worktreeStatusSnapshotKey = null,
   refreshDiffData: refreshInput,
-  isDiffDataLoading = false,
+  applyLocalChanges,
   onResolveGitConflict,
   assistanceContextKey = "",
   conflictRecipientLabel = "Builder",
@@ -138,11 +137,11 @@ export function useAgentStudioGitActions({
     commitError,
     pushError,
     rebaseError,
-    resetError,
+    changeError,
     setCommitError,
     setPushError,
     setRebaseError,
-    setResetError,
+    setChangeError,
     clearActionErrors,
   } = useAgentStudioGitActionErrors(JSON.stringify([repoPath, workingDir]));
   const conflictControllerInput: Parameters<typeof useAgentStudioGitConflictController>[0] = {
@@ -199,36 +198,11 @@ export function useAgentStudioGitActions({
     [gitActionsLockReason, isGitActionsLocked, setCommitError, setPushError, setRebaseError],
   );
 
-  const {
-    isResetting,
-    isResetDisabled,
-    resetDisabledReason,
-    pendingReset,
-    requestFileReset,
-    requestHunkReset,
-    confirmReset,
-    cancelReset,
-  } = useAgentStudioGitResetActions({
+  const { committingMode, commit } = useAgentStudioGitCommitActions({
     isCurrentContext,
     repoPath,
     workingDir,
-    branchIdentityKey,
-    targetBranch: resetTargetBranch,
-    hashVersion,
-    statusHash,
-    diffHash,
-    worktreeStatusSnapshotKey,
-    isDiffDataLoading,
-    activeGitConflict,
-    refreshDiffData,
-    clearActionErrors,
-    setResetError,
-  });
-
-  const { isCommitting, commitAll } = useAgentStudioGitCommitActions({
-    isCurrentContext,
-    repoPath,
-    workingDir,
+    localChanges,
     refreshDiffData,
     clearActionErrors,
     ensureGitActionsUnlocked,
@@ -269,22 +243,51 @@ export function useAgentStudioGitActions({
     captureFreshConflict,
   });
 
+  const {
+    changingKey,
+    isChanging,
+    pendingChanges,
+    changeDisabledReason,
+    pendingDiscard,
+    changeSelection,
+    confirmDiscard,
+    cancelDiscard,
+  } = useAgentStudioGitChangeActions({
+    isCurrentContext,
+    repoPath,
+    workingDir,
+    localChanges,
+    otherActionReason: otherGitActionReason({
+      committingMode,
+      isPushing,
+      isRebasing,
+      isHandlingGitConflict,
+    }),
+    activeGitConflict,
+    refreshDiffData,
+    applyLocalChanges,
+    clearActionErrors,
+    setChangeError,
+  });
+
   useEffect(() => {
     confirmationKey.current = key;
     cancelForcePush();
     cancelPullRebase();
-    cancelReset();
+    cancelDiscard();
     clearActionErrors();
-  }, [key, cancelForcePush, cancelPullRebase, cancelReset, clearActionErrors]);
+  }, [key, cancelForcePush, cancelPullRebase, cancelDiscard, clearActionErrors]);
 
   return useMemo(
     () => ({
-      isCommitting,
+      isCommitting: committingMode !== null,
+      committingMode,
       isPushing,
       isRebasing,
-      isResetting,
-      isResetDisabled,
-      resetDisabledReason,
+      isChanging,
+      changingKey,
+      pendingChanges,
+      changeDisabledReason,
       isHandlingGitConflict,
       gitConflictAction,
       gitConflictAutoOpenNonce,
@@ -302,18 +305,19 @@ export function useAgentStudioGitActions({
       conflictAssistanceIsStarting,
       pendingForcePush: isConfirmationCurrent ? pendingForcePush : null,
       pendingPullRebase: isConfirmationCurrent ? pendingPullRebase : null,
-      pendingReset: isConfirmationCurrent ? pendingReset : null,
+      pendingDiscard: isConfirmationCurrent ? pendingDiscard : null,
       commitError,
       pushError,
       rebaseError,
-      resetError,
-      commitAll: async (message: string) => (await runAction(() => commitAll(message))) ?? false,
-      requestFileReset,
-      requestHunkReset,
-      confirmReset: async () => {
-        if (isCurrentContext() && isConfirmationCurrent) await runAction(confirmReset);
+      changeError,
+      commit: async (mode: GitCommitMode, message: string) =>
+        (await runAction(() => commit(mode, message))) ?? false,
+      // Changes run in their own queue, so a click during another change waits instead of failing.
+      changeSelection: (intent: GitChangeIntent) => void changeSelection(intent),
+      confirmDiscard: async () => {
+        if (isCurrentContext() && isConfirmationCurrent) await confirmDiscard();
       },
-      cancelReset,
+      cancelDiscard,
       pushBranch: () => runAction(pushBranch),
       confirmForcePush: async () => {
         if (isCurrentContext() && isConfirmationCurrent) await runAction(confirmForcePush);
@@ -332,12 +336,13 @@ export function useAgentStudioGitActions({
       runAction,
       isCurrentContext,
       isConfirmationCurrent,
-      isCommitting,
+      committingMode,
       isPushing,
       isRebasing,
-      isResetting,
-      isResetDisabled,
-      resetDisabledReason,
+      changingKey,
+      isChanging,
+      pendingChanges,
+      changeDisabledReason,
       isHandlingGitConflict,
       gitConflictAction,
       gitConflictAutoOpenNonce,
@@ -351,16 +356,15 @@ export function useAgentStudioGitActions({
       conflictAssistanceIsStarting,
       pendingForcePush,
       pendingPullRebase,
-      pendingReset,
+      pendingDiscard,
       commitError,
       pushError,
       rebaseError,
-      resetError,
-      commitAll,
-      requestFileReset,
-      requestHunkReset,
-      confirmReset,
-      cancelReset,
+      changeError,
+      commit,
+      changeSelection,
+      confirmDiscard,
+      cancelDiscard,
       pushBranch,
       confirmForcePush,
       cancelForcePush,
@@ -372,4 +376,18 @@ export function useAgentStudioGitActions({
       pullFromUpstream,
     ],
   );
+}
+
+/** A running commit, push, rebase, or conflict action blocks stage, unstage, and discard. */
+function otherGitActionReason(state: {
+  committingMode: GitCommitMode | null;
+  isPushing: boolean;
+  isRebasing: boolean;
+  isHandlingGitConflict: boolean;
+}): string | null {
+  if (state.committingMode !== null) return "Wait for the commit to finish.";
+  if (state.isPushing) return "Wait for the push to finish.";
+  if (state.isRebasing) return "Wait for the rebase or pull to finish.";
+  if (state.isHandlingGitConflict) return "Wait for the conflict action to finish.";
+  return null;
 }

@@ -1,5 +1,9 @@
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
-import type { RepositoryGitProviderContext, SystemOpenInToolId } from "@openducktor/contracts";
+import type {
+  GitTargetBranch,
+  RepositoryGitProviderContext,
+  SystemOpenInToolId,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import type {
@@ -13,13 +17,12 @@ import { useSessionComparisonControl } from "@/features/agent-studio-git/use-ses
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import type { AgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { withFileQueries } from "@/features/agent-studio-git/refresh/git-file-refresh";
 import type { SessionPanelModel } from "@/features/session-panels";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
-import { gitRefreshPriority } from "@/lib/git-refresh-priority";
 import { hostClient } from "@/lib/host-client";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState } from "@/state";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
 import {
   type PullRequestReviewContextQueryInput,
   prefetchPullRequestReviewContextFromQuery,
@@ -227,6 +230,15 @@ export function useAgentsPageRightPanelModel({
   const queryClient = useQueryClient();
   // A tool view is active while its tab is selected in the shown right panel.
   const { activeKind } = panel;
+  const selectedTaskId = selectedView.selectedTask?.id ?? null;
+  const applyTaskTarget = useCallback(
+    async (target: GitTargetBranch) => {
+      if (!setTaskTargetBranch || !selectedTaskId)
+        throw new Error("The task target is unavailable. Select the task again.");
+      await setTaskTargetBranch(selectedTaskId, target);
+    },
+    [selectedTaskId, setTaskTargetBranch],
+  );
   const taskTargetControl = useSessionComparisonControl({
     repoPath: activeWorkspace?.repoPath ?? "__no_repo__",
     target: buildTools.buildToolsSnapshot.comparison?.target ?? null,
@@ -234,11 +246,7 @@ export function useAgentsPageRightPanelModel({
       buildTools.buildToolsSnapshot.gitPanelContextMode === "worktree" &&
       !!setTaskTargetBranch &&
       !!selectedView.selectedTask,
-    applyTarget: async (target) => {
-      if (!setTaskTargetBranch || !selectedView.selectedTask)
-        throw new Error("The task target is unavailable. Select the task again.");
-      await setTaskTargetBranch(selectedView.selectedTask.id, target);
-    },
+    applyTarget: applyTaskTarget,
   });
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { buildToolsSnapshot, gitActions } = buildTools;
@@ -281,7 +289,7 @@ export function useAgentsPageRightPanelModel({
     contextMode: buildToolsSnapshot.gitPanelContextMode,
     targetBranch: diffData.comparisonReference ?? null,
     upstreamStatus: diffData.upstreamStatus,
-    hasLoadedRepositoryStatus: diffData.loadedScopesByScope[diffData.diffScope],
+    hasLoadedRepositoryStatus: diffData.loadedScopesByScope.uncommitted,
     targetBranchValidationError: buildToolsSnapshot.targetBranchState.validationError,
   });
   const fileExplorerBranchKey = buildToolsSnapshot.repositoryBranchIdentityKey?.startsWith(
@@ -306,6 +314,15 @@ export function useAgentsPageRightPanelModel({
       onSelectFile,
       selectedFile,
     ],
+  );
+  // The Git panel opens the same preview as the Files tab, from the same root.
+  const fileRootPath = fileExplorerRoot.rootPath;
+  const viewFile = useMemo(
+    () =>
+      fileRootPath
+        ? (relativePath: string) => void onSelectFile({ rootPath: fileRootPath, relativePath })
+        : null,
+    [fileRootPath, onSelectFile],
   );
   const hasCiChecksTab = panel.tabs.some((tab) => tab.kind === "ci_checks");
   const linkedPullRequestProviderId = selectedView.selectedTask?.pullRequest?.providerId ?? null;
@@ -355,57 +372,35 @@ export function useAgentsPageRightPanelModel({
         : null,
     [activeKind, ciReviewQueryInput, hasCiChecksTab, pullRequestReviewUnavailableReason],
   );
-  const refreshWorktree = useCallback<GitDiffRefresh>(
-    async (mode): Promise<void> => {
-      const fileQueryRoots = new Set(
+  const fileQueryRoots = useMemo(
+    () => [
+      ...new Set(
         [fileExplorerRoot.rootPath, selectedFile?.rootPath ?? null].filter(
           (rootPath): rootPath is string => rootPath !== null,
         ),
-      );
-      const refreshGit = () => refreshBuildToolsWorktree(mode);
-      if (fileQueryRoots.size === 0) {
-        await refreshGit();
-        return;
-      }
-      await Promise.all(
-        [...fileQueryRoots].map((rootPath, index) =>
-          refreshWorkspaceFileQueries(
-            queryClient,
-            rootPath,
-            mode === "soft" || mode === "scheduled" ? "incremental" : "full",
-            index === 0
-              ? {
-                  consumer: refreshBuildToolsWorktree,
-                  context: JSON.stringify([
-                    workspaceRepoPath,
-                    selectedView.taskId,
-                    diffData.worktreePath,
-                    diffData.targetBranch,
-                    diffData.diffScope,
-                    fileExplorerBranchKey,
-                  ]),
-                  priority: gitRefreshPriority(mode ?? "hard"),
-                  mayFetch: mode !== "soft",
-                  run: refreshGit,
-                }
-              : undefined,
-          ),
-        ),
-      );
-    },
-    [
-      fileExplorerRoot.rootPath,
-      queryClient,
-      refreshBuildToolsWorktree,
-      selectedFile,
-      workspaceRepoPath,
-      selectedView.taskId,
-      diffData.worktreePath,
-      diffData.targetBranch,
-      diffData.diffScope,
-      fileExplorerBranchKey,
+      ),
     ],
+    [fileExplorerRoot.rootPath, selectedFile?.rootPath],
   );
+  const withFiles = useMemo(
+    () =>
+      withFileQueries(
+        queryClient,
+        fileQueryRoots,
+        JSON.stringify([gitPanelSubjectKey, diffData.worktreePath, fileExplorerBranchKey]),
+      ),
+    [diffData.worktreePath, fileExplorerBranchKey, fileQueryRoots, gitPanelSubjectKey, queryClient],
+  );
+  const refreshWorktree = useCallback<GitDiffRefresh>(
+    (mode) => refreshBuildToolsWorktree(mode, withFiles),
+    [refreshBuildToolsWorktree, withFiles],
+  );
+  // Git feedback ends with the Git reads. File views show their own refresh and errors.
+  const refreshManually = useCallback(
+    () => refreshBuildToolsWorktree("hard", withFiles),
+    [refreshBuildToolsWorktree, withFiles],
+  );
+  const { manualRefresh } = buildToolsSnapshot;
 
   const diffModel = useMemo(() => {
     const input: BuildAgentsPageDiffModelArgs<typeof gitActions> = {
@@ -423,13 +418,19 @@ export function useAgentsPageRightPanelModel({
       ...buildAgentsPageDiffModel(input),
       ...taskTargetControl,
       rebaseOntoTarget: diffData.comparisonReference ? gitActions.rebaseOntoTarget : undefined,
-      refresh: refreshWorktree,
+      refresh: refreshManually,
+      isRefreshing: manualRefresh.isRefreshing,
+      refreshError: manualRefresh.refreshError,
+      onViewFile: viewFile,
     };
   }, [
+    viewFile,
     buildToolsSnapshot,
     diffData.comparisonReference,
     taskTargetControl,
-    refreshWorktree,
+    manualRefresh.isRefreshing,
+    manualRefresh.refreshError,
+    refreshManually,
     commentOwner,
     gitActions,
     onDetectPullRequest,

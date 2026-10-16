@@ -103,6 +103,7 @@ export function WorkspaceSessionContent({
     hasRootBranch,
     branchError,
     target,
+    targetChoice,
     targetError,
     applyTarget,
     retryTarget,
@@ -117,8 +118,8 @@ export function WorkspaceSessionContent({
     if (!actions) throw new Error("The file preview is not ready. Open the chat again.");
     return actions.onSelectFile(file);
   }, []);
-  const onFileSaved = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
-  const onToolRefresh = useCallback(() => refreshAfterChange("all"), [refreshAfterChange]);
+  const onFileSaved = refreshAfterChange;
+  const onToolRefresh = refreshAfterChange;
   const onSelectionChange = useCallback(
     (file: TaskExecutionSelectedFile | null) => onSelectedFileChange(record.id, file),
     [onSelectedFileChange, record.id],
@@ -182,6 +183,7 @@ export function WorkspaceSessionContent({
     branchError,
     applyTarget,
     target,
+    targetChoice,
     targetError,
     readBranch,
     retryTarget,

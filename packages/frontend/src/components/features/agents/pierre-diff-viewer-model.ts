@@ -9,6 +9,7 @@ import { getFiletypeFromFileName, getSingularPatch } from "@pierre/diffs";
 import { z } from "zod";
 import type {
   InlineCommentContextLine,
+  InlineCommentDraft,
   InlineCommentSide,
 } from "@/state/use-inline-comment-draft-store";
 import { selectRenderableDiff } from "./renderable-patch";
@@ -25,13 +26,13 @@ export type PierreDiffSelection = {
   language: string | null;
 };
 
-export type HunkResetAnnotationMetadata = {
-  kind: "hunk-reset";
+export type HunkActionAnnotationMetadata = {
+  kind: "hunk-actions";
   hunkIndex: number;
 };
 
-export const hunkResetAnnotationMetadataSchema = z.object({
-  kind: z.literal("hunk-reset"),
+export const hunkActionAnnotationMetadataSchema = z.object({
+  kind: z.literal("hunk-actions"),
   hunkIndex: z.number().int().nonnegative(),
 });
 
@@ -46,10 +47,10 @@ type DiffSideLine = {
   text: string;
 };
 
-const resolveHunkResetAnchor = (
+const resolveHunkActionAnchor = (
   hunk: Hunk,
   hunkIndex: number,
-): DiffLineAnnotation<HunkResetAnnotationMetadata> | null => {
+): DiffLineAnnotation<HunkActionAnnotationMetadata> | null => {
   let currentAdditionLine = hunk.additionStart;
   let currentDeletionLine = hunk.deletionStart;
   let lastAdditionLine: number | null = null;
@@ -77,7 +78,7 @@ const resolveHunkResetAnchor = (
     return {
       side: "additions",
       lineNumber: lastAdditionLine,
-      metadata: { kind: "hunk-reset", hunkIndex },
+      metadata: { kind: "hunk-actions", hunkIndex },
     };
   }
 
@@ -85,19 +86,19 @@ const resolveHunkResetAnchor = (
     return {
       side: "deletions",
       lineNumber: lastDeletionLine,
-      metadata: { kind: "hunk-reset", hunkIndex },
+      metadata: { kind: "hunk-actions", hunkIndex },
     };
   }
 
   return null;
 };
 
-export const getHunkResetAnnotations = (
+export const getHunkActionAnnotations = (
   fileDiff: FileDiffMetadata,
-): DiffLineAnnotation<HunkResetAnnotationMetadata>[] => {
-  return fileDiff.hunks.reduce<DiffLineAnnotation<HunkResetAnnotationMetadata>[]>(
+): DiffLineAnnotation<HunkActionAnnotationMetadata>[] => {
+  return fileDiff.hunks.reduce<DiffLineAnnotation<HunkActionAnnotationMetadata>[]>(
     (annotations, hunk, hunkIndex) => {
-      const annotation = resolveHunkResetAnchor(hunk, hunkIndex);
+      const annotation = resolveHunkActionAnchor(hunk, hunkIndex);
       if (annotation) {
         annotations.push(annotation);
       }
@@ -324,4 +325,44 @@ export const buildPierreDiffSelection = (
     codeContext,
     language: fileDiff.lang ?? null,
   };
+};
+
+/**
+ * The text of each line on one side of a parsed diff. The parsed diff comes from a cache, so all
+ * comments of a file share one map for each side.
+ */
+const sideTexts = new WeakMap<FileDiffMetadata, Map<SelectionSide, Map<number, string>>>();
+const sideTextByLine = (fileDiff: FileDiffMetadata, side: SelectionSide): Map<number, string> => {
+  let bySide = sideTexts.get(fileDiff);
+  if (!bySide) {
+    bySide = new Map();
+    sideTexts.set(fileDiff, bySide);
+  }
+  let textByLine = bySide.get(side);
+  if (!textByLine) {
+    textByLine = new Map(
+      buildSideLines(fileDiff, side).map((line) => [line.lineNumber, line.text]),
+    );
+    bySide.set(side, textByLine);
+  }
+  return textByLine;
+};
+
+/**
+ * True when the commented lines still hold the captured text on the same side of this diff.
+ * A comment that fails this check must not attach to other content at the same line numbers.
+ */
+export const commentMatchesDiff = (
+  patch: string,
+  filePath: string,
+  comment: Pick<InlineCommentDraft, "side" | "startLine" | "endLine" | "codeContext">,
+): boolean => {
+  const { fileDiff } = getRenderableFileDiff(patch, filePath);
+  if (fileDiff == null) return false;
+  const textByLine = sideTextByLine(fileDiff, comment.side === "old" ? "deletions" : "additions");
+  const selected = comment.codeContext.filter((line) => line.isSelected);
+  if (selected.length === 0) {
+    return textByLine.has(comment.startLine) && textByLine.has(comment.endLine);
+  }
+  return selected.every((line) => textByLine.get(line.lineNumber) === line.text);
 };

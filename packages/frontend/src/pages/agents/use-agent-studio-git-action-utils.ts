@@ -19,6 +19,22 @@ export const toErrorMessage = (cause: unknown, fallback: string): string => {
   return fallback;
 };
 
+/**
+ * Reads the panel again after Git confirmed an action. A failed read does not undo the action, so
+ * the message keeps the confirmed result and asks for Refresh. It is null when the read succeeds.
+ */
+export const refreshAfterGitAction = async (
+  refreshDiffData: RefreshGitDiffData,
+  confirmedResult: string,
+): Promise<string | null> => {
+  try {
+    await refreshDiffData("soft");
+    return null;
+  } catch (error) {
+    return `${confirmedResult}, but the panel could not update: ${toErrorMessage(error, "Unknown error.")} Refresh to try again.`;
+  }
+};
+
 export const toConflictMessage = (
   conflictedFiles: string[],
   operation: GitConflictOperation,

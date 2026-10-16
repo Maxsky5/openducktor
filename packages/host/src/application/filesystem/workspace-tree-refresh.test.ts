@@ -80,7 +80,8 @@ describe("workspace tree refresh", () => {
     });
   }, 10_000);
 
-  // Each case starts real Git processes for the stale reads and the tree refresh.
+  // Each case starts real Git processes for the stale reads and the tree refresh. A full refresh
+  // takes about 9 s on a Windows runner.
   test.each(["full", "incremental"] as const)(
     "%s refresh reads edits made after an earlier Git capture",
     async (mode) => {
@@ -140,7 +141,7 @@ describe("workspace tree refresh", () => {
         }
       });
     },
-    10_000,
+    20_000,
   );
 
   // Real Git processes and multiple inventory batches need a longer timeout.
@@ -311,7 +312,8 @@ describe("workspace tree refresh", () => {
     });
   }, 20_000);
 
-  // Real Git processes compare each refresh with an independent full read.
+  // Real Git processes compare each refresh with an independent full read. This takes about 15 s
+  // on a Windows runner.
   test("resets after index, HEAD, branch, target, and sparse-policy changes, then stops", async () => {
     await withRepository(async (root, command) => {
       const { service, refresh, entries } = treeFixture(root);
@@ -342,7 +344,7 @@ describe("workspace tree refresh", () => {
       await Effect.runPromise(service.dispose());
       await expect(refresh()).rejects.toThrow("Workspace file service has stopped");
     });
-  }, 20_000);
+  }, 30_000);
 
   test("keeps rename endpoints correct across a selected subdirectory", async () => {
     await withRepository(async (root, command) => {

@@ -1,4 +1,4 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { GitFileDiff } from "@openducktor/contracts";
 import {
   type FileSearchMatch,
   type HighlightRange,
@@ -12,7 +12,7 @@ export type RowLabel = { text: string; highlights: readonly HighlightRange[] };
 export type FileRow = {
   kind: "file";
   key: string;
-  diff: FileDiff;
+  diff: GitFileDiff;
   /** Count of directory rows above the row. Always 0 in list view. */
   depth: number;
   name: RowLabel;
@@ -102,7 +102,7 @@ export function flattenFileTree(
 }
 
 /** Returns every ancestor directory path of every file. */
-export function collectDirectoryPaths(fileDiffs: readonly FileDiff[]): Set<string> {
+export function collectDirectoryPaths(fileDiffs: readonly GitFileDiff[]): Set<string> {
   const paths = new Set<string>();
   for (const { file } of fileDiffs) {
     let slash = file.lastIndexOf("/");

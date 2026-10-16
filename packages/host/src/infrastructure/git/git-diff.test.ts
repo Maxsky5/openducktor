@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { FileStatus } from "@openducktor/contracts";
+import type { FileStatus, GitFileDiff } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import fixtures from "./fixtures/no-index-diffs.json";
 import { type GitCommandRunner } from "./git-command-runner";
@@ -61,12 +61,14 @@ describe("untracked file diffs", () => {
           const release = yield* Deferred.make<void>();
           const runner: GitCommandRunner = (_root, args) =>
             Effect.gen(function* () {
-              expect(args.slice(0, 6)).toEqual([
+              expect(args.slice(0, 8)).toEqual([
                 "diff",
                 "--no-index",
                 "--numstat",
                 "-z",
                 "--patch",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
                 "--",
               ]);
               const file = args.at(-1)!;
@@ -146,13 +148,24 @@ test("expands each directory once and deduplicates paths before loading diffs", 
         runner,
         root,
         [status("generated/"), status("generated/"), status(file)],
-        "2\t1\ttracked.txt\n",
+        "2\t1\ttracked.txt\0",
         "diff --git a/tracked.txt b/tracked.txt\n",
       ),
     );
     expect(calls).toEqual([
       ["ls-files", "--others", "--exclude-standard", "-z", "--", "generated/"],
-      ["diff", "--no-index", "--numstat", "-z", "--patch", "--", "/dev/null", file],
+      [
+        "diff",
+        "--no-index",
+        "--numstat",
+        "-z",
+        "--patch",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        "--",
+        "/dev/null",
+        file,
+      ],
     ]);
     expect(result).toEqual([
       {
@@ -171,6 +184,121 @@ test("expands each directory once and deduplicates paths before loading diffs", 
       },
     ]);
   });
+});
+
+test("reads tracked paths that Git quotes or that hold spaces", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const patch = [
+    'diff --git "a/\\303\\251.txt" "b/\\303\\251.txt"',
+    "index 111..222 100644",
+    '--- "a/\\303\\251.txt"',
+    '+++ "b/\\303\\251.txt"',
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+    "diff --git a/new file.txt b/new file.txt",
+    "index 333..444 100644",
+    "--- a/new file.txt\t",
+    "+++ b/new file.txt\t",
+    "@@ -1 +1,2 @@",
+    " old",
+    "+new",
+    "diff --git a/old name.txt b/new name.txt",
+    "similarity index 100%",
+    "rename from old name.txt",
+    "rename to new name.txt",
+    'diff --git a/plain.txt "b/tab\\tname.txt"',
+    "similarity index 100%",
+    "rename from plain.txt",
+    'rename to "tab\\tname.txt"',
+    "",
+  ].join("\n");
+  // -z writes paths without quotes. A rename record holds both paths.
+  const numstat = [
+    "1\t1\t\u00e9.txt",
+    "1\t0\tnew file.txt",
+    "0\t0\t",
+    "old name.txt",
+    "new name.txt",
+    "0\t0\t",
+    "plain.txt",
+    "tab\tname.txt",
+    "",
+  ].join("\0");
+
+  const result = await Effect.runPromise(buildFileDiffs(runner, "/repo", [], numstat, patch));
+
+  expect(
+    result.map(({ file, type, additions, deletions }) => [file, type, additions, deletions]),
+  ).toEqual([
+    ["\u00e9.txt", "modified", 1, 1],
+    ["new file.txt", "modified", 1, 0],
+    ["new name.txt", "renamed", 0, 0],
+    ["tab\tname.txt", "renamed", 0, 0],
+  ]);
+  expect(result[0]?.diff).toContain("+new");
+});
+
+test("reads a copy as a new file, because a write reads it alone", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const patch = [
+    "diff --git a/old.txt b/new.txt",
+    "similarity index 95%",
+    "copy from old.txt",
+    "copy to new.txt",
+    "index 111..222 100644",
+    "--- a/old.txt",
+    "+++ b/new.txt",
+    "@@ -1 +1,2 @@",
+    " old",
+    "+copy edit",
+    "",
+  ].join("\n");
+
+  const result = await Effect.runPromise(
+    buildFileDiffs(runner, "/repo", [], "1\t0\t\0old.txt\0new.txt\0", patch),
+  );
+
+  expect(result.map(({ file, type }) => [file, type])).toEqual([["new.txt", "added"]]);
+});
+
+test("reads edits that stay inside a submodule as a submodule change", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const oid = "0332".padEnd(40, "0");
+  const patch = [
+    "diff --git a/sub b/sub",
+    "--- a/sub",
+    "+++ b/sub",
+    "@@ -1 +1 @@",
+    `-Subproject commit ${oid}`,
+    `+Subproject commit ${oid}-dirty`,
+    "",
+  ].join("\n");
+
+  const result = await Effect.runPromise(buildFileDiffs(runner, "/repo", [], "0\t0\tsub\0", patch));
+
+  expect(result.map(({ file, type }) => [file, type])).toEqual([["sub", "submodule"]]);
+});
+
+test("reads a file whose text names a submodule commit as a file", async () => {
+  const runner: GitCommandRunner = () => Effect.die(new Error("Tracked diffs run no command."));
+  const oid = "0332".padEnd(40, "0");
+  const patch = [
+    "diff --git a/note.txt b/note.txt",
+    `index ${"1".repeat(40)}..${"2".repeat(40)} 100644`,
+    "--- a/note.txt",
+    "+++ b/note.txt",
+    "@@ -1 +1 @@",
+    `-Subproject commit ${oid}`,
+    `+Subproject commit ${oid}-dirty`,
+    "",
+  ].join("\n");
+
+  const result = await Effect.runPromise(
+    buildFileDiffs(runner, "/repo", [], "1\t1\tnote.txt\0", patch),
+  );
+
+  expect(result.map(({ file, type }) => [file, type])).toEqual([["note.txt", "modified"]]);
 });
 
 for (const [stdout, ok, message] of [
@@ -277,7 +405,7 @@ test("matches the recorded patches with real Git, including directory expansion"
       const result = await Effect.runPromise(buildFileDiffs(runner, root, [status(".")], "", ""));
       expect(result).toEqual(
         supported
-          .map((fixture) => ({
+          .map((fixture): GitFileDiff => ({
             file: fixture.file,
             type: "added",
             additions: fixture.additions,

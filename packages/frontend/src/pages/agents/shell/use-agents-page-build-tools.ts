@@ -64,16 +64,13 @@ export function useAgentsPageBuildTools({
     workingDir: diffData.worktreePath,
     branch: resolvedGitPanelBranch,
     targetBranch: diffData.comparisonReference ?? "",
-    resetTargetBranch: "HEAD",
+    localChanges: diffData.scopeStatesByScope.uncommitted.localChanges,
     detectedConflict: diffData.gitConflict ?? null,
-    hashVersion: diffData.hashVersion,
-    statusHash: diffData.statusHash,
-    diffHash: diffData.diffHash,
     upstreamAheadBehind: diffData.upstreamAheadBehind ?? null,
     detectedConflictedFiles,
     worktreeStatusSnapshotKey: diffData.statusSnapshotKey ?? null,
     refreshDiffData: buildToolsSnapshot.refreshWorktree,
-    isDiffDataLoading: diffData.isLoading,
+    applyLocalChanges: buildToolsSnapshot.applyLocalChanges,
   };
   if (onResolveGitConflict) {
     gitActionInput.onResolveGitConflict = onResolveGitConflict;

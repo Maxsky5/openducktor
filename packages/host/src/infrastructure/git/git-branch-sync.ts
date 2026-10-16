@@ -20,7 +20,11 @@ import {
   runGit,
   runGitAllowFailure,
 } from "./git-command-runner";
-import { getCurrentBranchUnchecked, getStatusUnchecked } from "./git-status";
+import {
+  getCurrentBranchUnchecked,
+  getStatusUnchecked,
+  requireNoUnmergedPaths,
+} from "./git-status";
 import {
   commitsAgainstTargetOrDefault,
   resolveUpstreamTargetConfigForBranch,
@@ -138,6 +142,8 @@ export const commitAll = (
 ): Effect.Effect<GitCommitAllResult, GitBranchSyncError> =>
   Effect.gen(function* () {
     const commitMessage = yield* requireNonEmptyEffect(message, "commit message");
+    // `git add -A` would mark a conflicted path as resolved.
+    yield* requireNoUnmergedPaths(runner, workingDirectory);
     const addResult = yield* runGitAllowFailure(runner, workingDirectory, ["add", "-A"]);
     if (!addResult.ok) {
       return yield* Effect.fail(

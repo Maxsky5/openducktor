@@ -1,4 +1,4 @@
-import { FilePlus, FileText, FileX } from "lucide-react";
+import { FilePlus, FileText, FileX, FolderGit2 } from "lucide-react";
 import type { DiffScope } from "@/features/agent-studio-git";
 import type { FileListViewMode } from "./file-list-view-preference";
 
@@ -6,28 +6,40 @@ export const FILE_STATUS_ICON = new Map<string, typeof FileText>([
   ["modified", FileText],
   ["added", FilePlus],
   ["deleted", FileX],
+  ["submodule", FolderGit2],
 ]);
 
 export const FILE_STATUS_COLOR = new Map<string, string>([
-  ["modified", "text-blue-400"],
-  ["added", "text-green-400"],
-  ["deleted", "text-red-400"],
+  ["modified", "text-blue-600 dark:text-blue-400"],
+  ["added", "text-green-600 dark:text-green-400"],
+  ["deleted", "text-red-600 dark:text-red-400"],
+  ["submodule", "text-blue-600 dark:text-blue-400"],
 ]);
 
-export const DIFF_SCOPE_OPTIONS: Array<{
-  scope: DiffScope;
-  label: string;
-  testId: string;
-}> = [
+/** The internal views of the Git panel, in display order. */
+export type GitPanelTab = DiffScope | "history";
+
+/** The file count of each list tab, or null when its tab shows no count. */
+export type GitPanelTabCounts = {
+  uncommitted: number | null;
+  target: number | null;
+};
+
+export const GIT_PANEL_TABS: Array<{ tab: GitPanelTab; label: string; testId: string }> = [
   {
-    scope: "uncommitted",
+    tab: "uncommitted",
     label: "Uncommitted changes",
     testId: "agent-studio-git-diff-scope-uncommitted",
   },
   {
-    scope: "target",
+    tab: "target",
     label: "Branch changes",
     testId: "agent-studio-git-diff-scope-target",
+  },
+  {
+    tab: "history",
+    label: "History",
+    testId: "agent-studio-git-tab-history",
   },
 ];
 

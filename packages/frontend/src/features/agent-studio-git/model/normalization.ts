@@ -1,14 +1,13 @@
-import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
-import type { GitConflict } from "../contracts";
-import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
+import type { GitLocalChanges, GitWorktreeStatus } from "@openducktor/contracts";
+import type { DiffScopeState, GitConflict } from "../contracts";
 
 type UpstreamState = Pick<
-  ScopeSummaryFields,
+  DiffScopeState,
   "upstreamAheadBehind" | "upstreamStatus" | "upstreamError" | "error"
 >;
 
 const toGitConflict = (
-  conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
+  conflict: GitWorktreeStatus["gitConflict"],
   effectiveWorkingDir: string,
 ): GitConflict | null => {
   if (!conflict) {
@@ -42,8 +41,9 @@ const toUpstreamState = (
   }
 
   if (upstreamAheadBehind.outcome === "untracked") {
+    // The first push sends the commits that no remote has, so Push shows their count.
     return {
-      upstreamAheadBehind: null,
+      upstreamAheadBehind: { ahead: upstreamAheadBehind.ahead, behind: 0 },
       upstreamStatus: "untracked",
       upstreamError: null,
       error: null,
@@ -58,12 +58,13 @@ const toUpstreamState = (
   };
 };
 
-export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
+export const toScopeSnapshot = (snapshot: GitWorktreeStatus): DiffScopeState => {
   const { upstreamAheadBehind, upstreamStatus, upstreamError, error } = toUpstreamState(
     snapshot.upstreamAheadBehind,
   );
   return {
     branch: snapshot.currentBranch.name ?? null,
+    localChanges: null,
     gitConflict: toGitConflict(snapshot.gitConflict, snapshot.snapshot.effectiveWorkingDir),
     fileDiffs: snapshot.fileDiffs,
     fileStatuses: snapshot.fileStatuses,
@@ -79,21 +80,29 @@ export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
   };
 };
 
-export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSummaryFields => {
+/** The uncommitted scope. Its file list holds every local group, so comment checks see each path. */
+export const toLocalScopeSnapshot = (changes: GitLocalChanges): DiffScopeState => {
   const { upstreamAheadBehind, upstreamStatus, upstreamError, error } = toUpstreamState(
-    summary.upstreamAheadBehind,
+    changes.upstreamAheadBehind,
   );
   return {
-    branch: summary.currentBranch.name ?? null,
-    gitConflict: toGitConflict(summary.gitConflict, summary.snapshot.effectiveWorkingDir),
-    uncommittedFileCount: summary.fileStatusCounts.total,
-    commitsAheadBehind: summary.targetAheadBehind,
+    branch: changes.currentBranch.name ?? null,
+    localChanges: changes,
+    gitConflict: toGitConflict(changes.gitConflict, changes.snapshot.effectiveWorkingDir),
+    fileDiffs: [
+      ...changes.unstaged.fileDiffs,
+      ...changes.staged.fileDiffs,
+      ...changes.conflicted.fileDiffs,
+    ],
+    fileStatuses: changes.fileStatuses,
+    uncommittedFileCount: changes.fileStatuses.length,
+    commitsAheadBehind: { ahead: 0, behind: 0 },
     upstreamAheadBehind,
     upstreamStatus,
     upstreamError: upstreamError ?? null,
     error,
-    hashVersion: summary.snapshot.hashVersion,
-    statusHash: summary.snapshot.statusHash,
-    diffHash: summary.snapshot.diffHash,
+    hashVersion: changes.snapshot.hashVersion,
+    statusHash: changes.snapshot.statusHash,
+    diffHash: changes.snapshot.diffHash,
   };
 };

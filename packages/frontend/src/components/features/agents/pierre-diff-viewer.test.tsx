@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { RenderDiffResult, RenderFileResult } from "@pierre/diffs";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
@@ -11,6 +12,7 @@ import {
 
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
 let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
+import type { PierreHunkAction } from "./pierre-diff-viewer";
 import type { PierreDiffViewerWorkerPool } from "./pierre-diff-viewer-react";
 
 type WorkerPoolMock = PierreDiffViewerWorkerPool & {
@@ -76,6 +78,23 @@ const selectionPatch = [
   "+two extra",
   " three",
   " four",
+  "",
+].join("\n");
+const twoHunkPatch = [
+  "diff --git a/src/app.ts b/src/app.ts",
+  "--- a/src/app.ts",
+  "+++ b/src/app.ts",
+  "@@ -1,3 +1,3 @@",
+  "-one",
+  "+one updated",
+  " two",
+  " three",
+  "@@ -8,3 +8,4 @@",
+  " eight",
+  "-nine",
+  "+nine updated",
+  "+ten added",
+  " eleven",
   "",
 ].join("\n");
 
@@ -161,6 +180,14 @@ beforeEach(async () => {
                   >
                     Gutter utility
                   </button>
+                  {props.lineAnnotations?.map((annotation) => (
+                    <div
+                      key={`${annotation.side}:${annotation.lineNumber}`}
+                      data-testid="pierre-line-annotation"
+                    >
+                      {props.renderAnnotation?.(annotation)}
+                    </div>
+                  ))}
                 </div>
               );
             },
@@ -637,6 +664,61 @@ describe("PierreDiffViewer", () => {
     expect(diff.parentElement?.className).not.toContain("overflow-auto");
   });
 
+  test("renders the actions of each chunk and names why they are unavailable", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+    const stage = mock((_hunkIndex: number) => {});
+    const discard = mock((_hunkIndex: number) => {});
+    const hunkActions: PierreHunkAction[] = [
+      { id: "stage", label: "Stage", icon: Plus, onSelect: stage },
+      { id: "discard", label: "Discard", icon: Undo2, variant: "destructive", onSelect: discard },
+    ];
+    const view = render(
+      <PierreDiffViewer patch={twoHunkPatch} filePath="src/app.ts" hunkActions={hunkActions} />,
+    );
+
+    expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual([
+      "Chunk 1 actions",
+      "Chunk 2 actions",
+    ]);
+    const secondChunk = within(screen.getByRole("group", { name: "Chunk 2 actions" }));
+    const discardButton = secondChunk.getByRole("button", {
+      name: "Discard chunk 2 in src/app.ts",
+    });
+    expect(discardButton.getAttribute("data-testid")).toBe("agent-studio-git-hunk-discard-button");
+    expect(discardButton.getAttribute("data-variant")).toBe("destructive");
+    expect(discardButton.getAttribute("title")).toBe("Discard in src/app.ts");
+    expect(secondChunk.getByTestId("agent-studio-git-hunk-stage-button").textContent).toBe("Stage");
+    fireEvent.click(discardButton);
+    expect(discard.mock.calls).toEqual([[1]]);
+    expect(stage).not.toHaveBeenCalled();
+
+    view.rerender(
+      <PierreDiffViewer
+        patch={twoHunkPatch}
+        filePath="src/app.ts"
+        hunkActions={hunkActions}
+        hunkActionsDisabledReason="Resolve the merge conflict first."
+      />,
+    );
+    const actionButtons = screen
+      .getAllByRole("group")
+      .flatMap((group) => within(group).getAllByRole("button"));
+    expect(actionButtons).toHaveLength(4);
+    for (const button of actionButtons) {
+      expect(button.hasAttribute("disabled")).toBe(true);
+      expect(button.getAttribute("title")).toBe("Resolve the merge conflict first.");
+    }
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Chunk 1 actions" })).getByRole("button", {
+        name: "Stage chunk 1 in src/app.ts",
+      }),
+    );
+    expect(stage).not.toHaveBeenCalled();
+
+    view.rerender(<PierreDiffViewer patch={twoHunkPatch} filePath="src/app.ts" />);
+    expect(screen.queryAllByRole("group")).toEqual([]);
+  });
+
   test("renders cached file content immediately with a worker cache key", () => {
     const { PierreFileViewer } = pierreViewerModule;
     const subscribeToStatChanges = mock(() => () => undefined);
@@ -1030,59 +1112,45 @@ describe("getRenderableFileDiff", () => {
     expect(result.fallbackPatch).toBe("Index: src/app.ts\n=====\ninvalid diff body\n");
   });
 
-  test("builds hunk reset annotations for the first and subsequent hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
-    const patch = [
-      "diff --git a/src/app.ts b/src/app.ts",
-      "--- a/src/app.ts",
-      "+++ b/src/app.ts",
-      "@@ -1,3 +1,3 @@",
-      "-one",
-      "+one updated",
-      " two",
-      " three",
-      "@@ -8,3 +8,4 @@",
-      " eight",
-      "-nine",
-      "+nine updated",
-      "+ten added",
-      " eleven",
-      "",
-    ].join("\n");
-    const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
-    const annotations = getHunkResetAnnotations(requireFileDiff(fileDiff));
+  test("builds hunk action annotations for the first and subsequent hunks", async () => {
+    const { getHunkActionAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
+    const { fileDiff } = getRenderableFileDiff(twoHunkPatch, "src/app.ts");
+    const annotations = getHunkActionAnnotations(requireFileDiff(fileDiff));
 
     expect(annotations).toEqual([
       {
         side: "additions",
         lineNumber: 1,
-        metadata: { kind: "hunk-reset", hunkIndex: 0 },
+        metadata: { kind: "hunk-actions", hunkIndex: 0 },
       },
       {
         side: "additions",
         lineNumber: 10,
-        metadata: { kind: "hunk-reset", hunkIndex: 1 },
+        metadata: { kind: "hunk-actions", hunkIndex: 1 },
       },
     ]);
   });
 
-  test("accepts only complete hunk reset annotation metadata", () => {
-    const { hunkResetAnnotationMetadataSchema } = pierreViewerModelModule;
+  test("accepts only complete hunk action annotation metadata", () => {
+    const { hunkActionAnnotationMetadataSchema } = pierreViewerModelModule;
 
     expect(
-      hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset", hunkIndex: 0 }).success,
+      hunkActionAnnotationMetadataSchema.safeParse({ kind: "hunk-actions", hunkIndex: 0 }).success,
     ).toBe(true);
-    expect(hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset" }).success).toBe(false);
+    expect(hunkActionAnnotationMetadataSchema.safeParse({ kind: "hunk-actions" }).success).toBe(
+      false,
+    );
     expect(
-      hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset", hunkIndex: -1 }).success,
+      hunkActionAnnotationMetadataSchema.safeParse({ kind: "hunk-actions", hunkIndex: -1 }).success,
     ).toBe(false);
     expect(
-      hunkResetAnnotationMetadataSchema.safeParse({ kind: "hunk-reset", hunkIndex: 1.5 }).success,
+      hunkActionAnnotationMetadataSchema.safeParse({ kind: "hunk-actions", hunkIndex: 1.5 })
+        .success,
     ).toBe(false);
   });
 
   test("falls back to deletion lines for delete-only hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
+    const { getHunkActionAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -1094,11 +1162,11 @@ describe("getRenderableFileDiff", () => {
     ].join("\n");
     const { fileDiff } = getRenderableFileDiff(patch, "src/app.ts");
 
-    expect(getHunkResetAnnotations(requireFileDiff(fileDiff))).toEqual([
+    expect(getHunkActionAnnotations(requireFileDiff(fileDiff))).toEqual([
       {
         side: "deletions",
         lineNumber: 3,
-        metadata: { kind: "hunk-reset", hunkIndex: 0 },
+        metadata: { kind: "hunk-actions", hunkIndex: 0 },
       },
     ]);
   });

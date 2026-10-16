@@ -18,10 +18,9 @@ type TestGitActions = {
   showLockReasonBanner: boolean;
 };
 
-const refreshDiff = async (_mode?: string): Promise<void> => {};
-
 const createEmptyScopeState = (): DiffDataState["scopeStatesByScope"]["target"] => ({
   branch: null,
+  localChanges: null,
   gitConflict: null,
   fileDiffs: [],
   fileStatuses: [],
@@ -39,7 +38,6 @@ const createDiffData = (): DiffDataState => ({
   branch: "main",
   worktreePath: "/repo",
   targetBranch: "origin/main",
-  diffScope: "uncommitted",
   gitConflict: null,
   scopeStatesByScope: {
     target: createEmptyScopeState(),
@@ -49,7 +47,6 @@ const createDiffData = (): DiffDataState => ({
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
   upstreamStatus: "tracking",
-  fileDiffs: [],
   fileStatuses: [],
   statusSnapshotKey: null,
   hashVersion: null,
@@ -57,9 +54,6 @@ const createDiffData = (): DiffDataState => ({
   diffHash: null,
   uncommittedFileCount: 0,
   isLoading: false,
-  error: null,
-  refresh: refreshDiff,
-  setDiffScope: () => {},
 });
 
 const createGitActions = (overrides: Partial<TestGitActions> = {}): TestGitActions => ({
