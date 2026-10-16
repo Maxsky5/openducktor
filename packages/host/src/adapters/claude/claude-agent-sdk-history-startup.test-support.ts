@@ -7,7 +7,6 @@ import {
   type ClaudeLiveHistoryContext,
 } from "./claude-agent-sdk-history-loader";
 
-// A child process keeps the SDK config and transcript fixtures out of other tests.
 const config = process.env.CLAUDE_CONFIG_DIR!;
 const project = join(config, "projects", "history-startup-fixture");
 process.env.CLAUDE_CODE_PROJECT_DIR_NAME = "history-startup-fixture";
@@ -43,7 +42,6 @@ const readHistory = async (context?: ClaudeLiveHistoryContext) => {
   }
 };
 
-// Claude writes these bookkeeping records before the first conversation entry with cwd.
 const prefix = [
   { type: "custom-title", customTitle: "Startup fixture", sessionId },
   { type: "queue-operation", operation: "dequeue", timestamp, sessionId },
