@@ -41,21 +41,7 @@ const statusCheck = (
   name: string,
 ): PullRequestReviewCheck => {
   const state = optionalString(record.state)?.toLowerCase() ?? "unknown";
-  const status = ["pending", "notset", "not_set"].includes(state)
-    ? "in_progress"
-    : ["succeeded", "failed", "error", "notapplicable", "not_applicable"].includes(state)
-      ? "completed"
-      : "unknown";
-  const conclusion =
-    state === "succeeded"
-      ? "success"
-      : ["failed", "error"].includes(state)
-        ? "failure"
-        : ["notapplicable", "not_applicable"].includes(state)
-          ? "skipped"
-          : state === "unknown"
-            ? "unknown"
-            : null;
+  const { status, conclusion } = statusState(state);
   return {
     name: `${genre}: ${name}`,
     workflow: "Azure DevOps status",
@@ -66,6 +52,29 @@ const statusCheck = (
     startedAt: timestampOrNull(record.creationDate),
     completedAt: status === "completed" ? timestampOrNull(record.updatedDate) : null,
   };
+};
+
+type CheckState = Pick<PullRequestReviewCheck, "status" | "conclusion">;
+
+const statusState = (state: string): CheckState => {
+  switch (state) {
+    case "pending":
+    case "notset":
+    case "not_set":
+      return { status: "in_progress", conclusion: null };
+    case "succeeded":
+      return { status: "completed", conclusion: "success" };
+    case "failed":
+    case "error":
+      return { status: "completed", conclusion: "failure" };
+    case "notapplicable":
+    case "not_applicable":
+      return { status: "completed", conclusion: "skipped" };
+    case "unknown":
+      return { status: "unknown", conclusion: "unknown" };
+    default:
+      return { status: "unknown", conclusion: null };
+  }
 };
 
 const BUILD_POLICY_TYPE_ID = "0609b952-1397-4640-95ec-e00a01b2c241";
@@ -176,26 +185,7 @@ const policyEvaluationCheck = (
   description: string,
 ): PullRequestReviewCheck => {
   const state = optionalString(record.status)?.toLowerCase() ?? "unknown";
-  const status =
-    state === "queued"
-      ? "queued"
-      : state === "running"
-        ? "in_progress"
-        : ["approved", "rejected", "notapplicable", "broken"].includes(state)
-          ? "completed"
-          : "unknown";
-  const conclusion =
-    state === "approved"
-      ? "success"
-      : state === "rejected"
-        ? "failure"
-        : state === "notapplicable"
-          ? "skipped"
-          : state === "broken"
-            ? "action_required"
-            : state === "unknown"
-              ? "unknown"
-              : null;
+  const { status, conclusion } = policyEvaluationState(state);
   return {
     name,
     workflow,
@@ -208,6 +198,27 @@ const policyEvaluationCheck = (
   };
 };
 
+const policyEvaluationState = (state: string): CheckState => {
+  switch (state) {
+    case "queued":
+      return { status: "queued", conclusion: null };
+    case "running":
+      return { status: "in_progress", conclusion: null };
+    case "approved":
+      return { status: "completed", conclusion: "success" };
+    case "rejected":
+      return { status: "completed", conclusion: "failure" };
+    case "notapplicable":
+      return { status: "completed", conclusion: "skipped" };
+    case "broken":
+      return { status: "completed", conclusion: "action_required" };
+    case "unknown":
+      return { status: "unknown", conclusion: "unknown" };
+    default:
+      return { status: "unknown", conclusion: null };
+  }
+};
+
 const readBuildId = (value: AzureDevOpsJson | undefined): number | null => {
   const numeric = optionalString(value) ? Number(value) : value;
   return azureDevOpsPositiveIntegerSchema.safeParse(numeric).data ?? null;
@@ -218,25 +229,8 @@ export const parseBuildCheck = (value: AzureDevOpsJson): PullRequestReviewCheck 
   const definition = requireRecord(record.definition, "build.definition");
   const statusValue = optionalString(record.status)?.toLowerCase() ?? "unknown";
   const result = optionalString(record.result)?.toLowerCase() ?? null;
-  const status = ["notstarted", "postponed"].includes(statusValue)
-    ? "queued"
-    : ["inprogress", "cancelling"].includes(statusValue)
-      ? "in_progress"
-      : statusValue === "completed"
-        ? "completed"
-        : "unknown";
-  const conclusion =
-    result === "succeeded"
-      ? "success"
-      : result === "failed"
-        ? "failure"
-        : result === "canceled"
-          ? "cancelled"
-          : result === "partiallysucceeded"
-            ? "neutral"
-            : status === "unknown"
-              ? "unknown"
-              : null;
+  const status = buildStatus(statusValue);
+  const conclusion = buildConclusion(result, status);
   return {
     name: optionalString(definition.name) ?? `Build ${String(record.id ?? "unknown")}`,
     workflow: "Azure Pipelines",
@@ -247,6 +241,39 @@ export const parseBuildCheck = (value: AzureDevOpsJson): PullRequestReviewCheck 
     startedAt: timestampOrNull(record.startTime),
     completedAt: timestampOrNull(record.finishTime),
   };
+};
+
+const buildStatus = (statusValue: string): PullRequestReviewCheck["status"] => {
+  switch (statusValue) {
+    case "notstarted":
+    case "postponed":
+      return "queued";
+    case "inprogress":
+    case "cancelling":
+      return "in_progress";
+    case "completed":
+      return "completed";
+    default:
+      return "unknown";
+  }
+};
+
+const buildConclusion = (
+  result: string | null,
+  status: PullRequestReviewCheck["status"],
+): PullRequestReviewCheck["conclusion"] => {
+  switch (result) {
+    case "succeeded":
+      return "success";
+    case "failed":
+      return "failure";
+    case "canceled":
+      return "cancelled";
+    case "partiallysucceeded":
+      return "neutral";
+    default:
+      return status === "unknown" ? "unknown" : null;
+  }
 };
 
 export const aggregateChecks = (

@@ -127,7 +127,6 @@ export const createAzureDevOpsReviewPort = ({
         },
         catch: asValidationError,
       });
-      const buildIds = currentBuildIds(ciPolicies);
       const iterationStatuses =
         iterationId === null
           ? []
@@ -136,7 +135,7 @@ export const createAzureDevOpsReviewPort = ({
               path: `git/repositories/${encodeURIComponent(repository.repositoryId)}/pullrequests/${number}/iterations/${iterationId}/statuses`,
             });
       const buildEntries = yield* Effect.all(
-        [...buildIds].map((buildId) =>
+        [...currentBuildIds(ciPolicies)].map((buildId) =>
           client
             .request(input.repoConfig, repository, {
               operation: `read build ${buildId}`,
@@ -239,6 +238,10 @@ const parseThreadActivities = (
 ): PullRequestReviewActivity[] => {
   const thread = requireRecord(value, "thread");
   const threadId = String(requirePositiveInteger(thread.id, "thread.id"));
+  const comments = Array.isArray(thread.comments) ? thread.comments : [];
+  if (threadProperty(thread, "CodeReviewThreadType") === "VoteUpdate") {
+    return voteActivities(thread, threadId, comments, pullRequestUrl);
+  }
   const isResolved = resolvedThreadStatus(optionalString(thread.status));
   const context = optionalRecord(thread.threadContext) ?? {};
   const rightStart = optionalRecord(context.rightFileStart) ?? {};
@@ -247,10 +250,6 @@ const parseThreadActivities = (
   const rightLine = azureDevOpsNumberSchema.safeParse(rightStart.line).data ?? null;
   const leftLine = azureDevOpsNumberSchema.safeParse(leftStart.line).data ?? null;
   const line = rightLine ?? leftLine;
-  const comments = Array.isArray(thread.comments) ? thread.comments : [];
-  if (threadProperty(thread, "CodeReviewThreadType") === "VoteUpdate") {
-    return voteActivities(thread, threadId, comments, pullRequestUrl);
-  }
   return comments.flatMap((commentValue) => {
     const comment = requireRecord(commentValue, "thread.comment");
     if (comment.isDeleted === true || comment.commentType === "system") {
