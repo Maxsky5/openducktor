@@ -4,7 +4,6 @@ import {
   useSyncExternalStore,
   type PropsWithChildren,
   type ReactNode,
-  type CSSProperties,
 } from "react";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
 import type { ShellBridge } from "@/lib/shell-bridge";
@@ -24,12 +23,6 @@ import {
 } from "@/components/ui/dialog";
 
 type Connection = NonNullable<ShellBridge["remoteConnection"]>;
-const connectionToastStyle: CSSProperties & Record<`--${string}`, string> = {
-  "--normal-bg": "var(--card)",
-  "--normal-text": "var(--foreground)",
-  "--normal-border": "var(--border)",
-};
-
 export function RemoteConnectionBoundary({
   connection,
   children,
@@ -57,7 +50,6 @@ export function RemoteConnectionBoundary({
         id={CONNECTION_TOASTER_ID}
         containerAriaLabel="Host connection notifications"
         className="pointer-events-auto"
-        style={connectionToastStyle}
       />
     </>
   ) : (
