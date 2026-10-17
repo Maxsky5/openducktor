@@ -226,7 +226,7 @@ export function WorkspaceSessionCreateDialog({
                         setLocation(target.kind);
                       }}
                       className={cn(
-                        "h-auto items-start justify-start gap-3 whitespace-normal p-3 text-left focus-visible:ring-input-focus",
+                        "h-auto items-start justify-start gap-3 whitespace-normal p-3 text-left",
                         location === target.kind && "border-primary bg-accent",
                       )}
                     >

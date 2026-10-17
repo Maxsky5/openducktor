@@ -208,7 +208,7 @@ function TaskDescriptionEditorSession({
             variant={
               effectiveMode === "visual" || effectiveMode === "loading" ? "secondary" : "ghost"
             }
-            className="h-8 gap-1.5 focus-visible:ring-input-focus"
+            className="h-8 gap-1.5"
             onClick={enterVisualMode}
             disabled={checkingVisual}
           >
@@ -218,7 +218,7 @@ function TaskDescriptionEditorSession({
             type="button"
             size="sm"
             variant={effectiveMode === "markdown" ? "secondary" : "ghost"}
-            className="h-8 gap-1.5 focus-visible:ring-input-focus"
+            className="h-8 gap-1.5"
             onClick={() => setMode("markdown")}
           >
             <Code2 className="size-3.5" /> Markdown

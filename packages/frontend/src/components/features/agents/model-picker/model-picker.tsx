@@ -331,7 +331,7 @@ const ModelSelectionButton = ({
       aria-pressed={selected}
       aria-description={selectionDescription || undefined}
       className={cn(
-        "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal focus-visible:ring-input-focus",
+        "relative min-h-12 min-w-0 flex-1 justify-start rounded-r-none px-3 py-2 font-normal",
         selected && "bg-accent text-accent-foreground",
       )}
       onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -935,7 +935,7 @@ export function ModelPicker({
       aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
       onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
       className={cn(
-        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-input-focus",
+        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-ring",
         readOnlyReason && "cursor-not-allowed opacity-50",
         triggerClassName,
       )}

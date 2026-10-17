@@ -73,7 +73,7 @@ export function WorkspaceSessionHeader({
                     role="img"
                     aria-label="Custom role"
                     tabIndex={0}
-                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Bot className="size-3.5" aria-hidden="true" />
                   </span>

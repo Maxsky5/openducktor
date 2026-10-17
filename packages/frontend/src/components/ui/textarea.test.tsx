@@ -7,7 +7,7 @@ describe("Textarea", () => {
   test("shows focus with a neutral border only", () => {
     const html = renderToStaticMarkup(createElement(Textarea));
 
-    expect(html).toContain("focus-visible:border-input-focus");
+    expect(html).toContain("focus-visible:border-ring");
     expect(html).not.toContain("focus-visible:ring");
     expect(html).not.toContain("focus-visible:shadow");
   });

@@ -158,7 +158,7 @@ export function KanbanColumn({
       aria-label={`${column.title} lane`}
       data-kanban-lane-id={column.id}
       className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "flex flex-col overflow-hidden rounded-2xl border shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
         KANBAN_LANE_WIDTH_CLASS,
         theme.boardSurfaceClass,
       )}

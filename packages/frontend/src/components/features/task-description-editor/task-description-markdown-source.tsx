@@ -60,7 +60,7 @@ export function TaskDescriptionMarkdownSource({
   };
 
   return (
-    <div className="overflow-hidden rounded-md border border-input bg-card shadow-sm transition-colors focus-within:border-input-focus">
+    <div className="overflow-hidden rounded-md border border-input bg-card shadow-sm transition-colors focus-within:border-ring">
       {onUpload ? (
         <div className="flex items-center border-b border-border bg-muted/30 p-1.5">
           <Button

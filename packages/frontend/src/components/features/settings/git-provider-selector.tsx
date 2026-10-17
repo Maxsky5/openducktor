@@ -47,7 +47,7 @@ export function GitProviderSelector({
               htmlFor={`git-provider-${option.value}`}
               className={cn(
                 "relative flex min-h-14 min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-input bg-card p-3 transition-colors hover:bg-accent/50",
-                "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-input-focus",
+                "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
                 selected && "border-primary shadow-sm hover:bg-card",
               )}
             >

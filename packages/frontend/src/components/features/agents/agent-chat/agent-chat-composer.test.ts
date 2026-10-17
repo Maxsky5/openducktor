@@ -245,11 +245,9 @@ describe("AgentChatComposer", () => {
       for (const trigger of triggers) {
         expect(trigger.className).toContain("!border-transparent");
         expect(trigger.className).toContain("focus-visible:ring-2");
-        expect(trigger.className).toContain("focus-visible:ring-input-focus");
+        expect(trigger.className).toContain("focus-visible:ring-ring");
         expect(trigger.className).not.toContain("focus-visible:ring-0");
       }
-      const attach = view.getByRole("button", { name: "Add attachment" });
-      expect(attach.className).toContain("focus-visible:ring-input-focus");
     } finally {
       view.unmount();
     }

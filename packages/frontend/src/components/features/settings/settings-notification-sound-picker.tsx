@@ -44,7 +44,7 @@ export function NotificationSoundPicker<Value extends string>({
           aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
-          className="w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-input-focus"
+          className="w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-ring"
         >
           <span className="truncate">{selected.label}</span>
           <ChevronsUpDown aria-hidden="true" className="text-muted-foreground" />
@@ -64,7 +64,7 @@ export function NotificationSoundPicker<Value extends string>({
                 variant="ghost"
                 aria-pressed={option.value === value}
                 className={cn(
-                  "h-8 min-w-0 flex-1 justify-start px-2 font-normal focus-visible:ring-input-focus",
+                  "h-8 min-w-0 flex-1 justify-start px-2 font-normal",
                   option.value === value && "bg-accent text-accent-foreground",
                 )}
                 onClick={() => {
@@ -82,7 +82,7 @@ export function NotificationSoundPicker<Value extends string>({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 focus-visible:ring-input-focus"
+                className="size-8"
                 aria-label={`Preview ${option.label}`}
                 disabled={option.previewCue === null}
                 onClick={() => {

@@ -642,12 +642,6 @@ test("returning to Current checkout omits all worktree options", async () => {
   });
   try {
     await selectModel(view);
-    const locations = [/Current checkout/, /New worktree/].map((name) =>
-      view.getByRole("radio", { name }),
-    );
-    for (const location of locations) {
-      expect(location.className).toContain("focus-visible:ring-input-focus");
-    }
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
     fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));

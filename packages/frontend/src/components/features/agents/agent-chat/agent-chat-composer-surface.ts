@@ -12,6 +12,5 @@ export const ACTIVE_COMPOSER_CARD_CLASS_NAME = cn(
 );
 
 // The attach button and the selectors stay quiet, so they do not compete with the draft text.
-// Their focus ring uses the neutral form control color.
 export const COMPOSER_QUIET_CONTROL_CLASS_NAME =
-  "text-muted-foreground shadow-none hover:text-foreground focus-visible:ring-input-focus data-[state=open]:text-foreground";
+  "text-muted-foreground shadow-none hover:text-foreground data-[state=open]:text-foreground";

@@ -134,7 +134,7 @@ function FolderPickerDirectoryBrowser({
                   type="button"
                   variant="ghost"
                   className={cn(
-                    "h-9 w-full justify-between gap-3 rounded-md px-3 text-left focus-visible:ring-input-focus",
+                    "h-9 w-full justify-between gap-3 rounded-md px-3 text-left",
                     !entry.isDirectory && selectedFilePath === entry.path && "bg-accent",
                   )}
                   disabled={isSubmitting}

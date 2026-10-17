@@ -268,11 +268,6 @@ describe("TaskDescriptionEditor", () => {
     const view = render(<ControlledEditor />);
     await waitFor(() => expect(view.container.querySelector(".tiptap")).not.toBeNull());
 
-    for (const name of ["Visual", "Markdown"]) {
-      expect(view.getByRole("button", { name }).className).toContain(
-        "focus-visible:ring-input-focus",
-      );
-    }
     fireEvent.click(view.getByRole("button", { name: "Markdown" }));
     const textarea = requireTextArea(view.getByRole("textbox"));
     expect(textarea.className).toContain("font-sans");

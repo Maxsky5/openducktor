@@ -88,7 +88,7 @@ export function RepoActionDialog({
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="shrink-0 focus-visible:ring-0 focus-visible:border-input-focus"
+                      className="shrink-0 focus-visible:ring-0 focus-visible:border-ring"
                       aria-label={`Icon: ${selectedIcon.label}`}
                       title="Choose icon"
                     >
@@ -114,10 +114,7 @@ export function RepoActionDialog({
                             aria-label={presentation.label}
                             aria-pressed={isSelected}
                             title={presentation.label}
-                            className={cn(
-                              "focus-visible:ring-input-focus",
-                              isSelected && "bg-accent text-accent-foreground",
-                            )}
+                            className={cn(isSelected && "bg-accent text-accent-foreground")}
                             onClick={() => {
                               updateFields({ icon });
                               setIsIconPickerOpen(false);
