@@ -92,7 +92,16 @@ export const createWorkspaceNotificationObserver = ({
       if (occurrence.task) return occurrence;
 
       const target = occurrence.navigationTarget;
-      if (!("session" in target)) return occurrence;
+      switch (target.type) {
+        case "agent_session":
+        case "pending_input":
+        case "session_error":
+          break;
+        case "notification_settings":
+        case "agent_studio_task":
+        case "kanban_task":
+          return occurrence;
+      }
 
       const sessionKey = agentSessionRefKey({
         repoPath: state.record.repoPath,
