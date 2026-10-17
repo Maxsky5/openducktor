@@ -277,8 +277,10 @@ export const createRemoteHostClient = (
             "Update the host or correct the work endpoint.",
           );
         const discovered = discoveredResult.data;
+        abort.signal.throwIfAborted();
+        // Read the admission ID after local cancellation so cleanup can release it.
         const acceptedResult = remoteNegotiationResultSchema.safeParse(
-          await json("POST", "/connections", abort.signal, hello, false),
+          await json("POST", "/connections", AbortSignal.timeout(SETUP_TIMEOUT_MS), hello, false),
         );
         if (!acceptedResult.success)
           throw remoteError(
@@ -288,7 +290,10 @@ export const createRemoteHostClient = (
           );
         const accepted = acceptedResult.data;
         if (accepted.status === "rejected") throw new RemoteConnectionError(accepted.failure);
-        abort.signal.throwIfAborted();
+        if (abort.signal.aborted) {
+          await release(accepted.connectionId);
+          abort.signal.throwIfAborted();
+        }
         connectionId = accepted.connectionId;
         if (accepted.host.hostInstanceId !== discovered.hostInstanceId)
           throw remoteError(
