@@ -41,7 +41,7 @@ import {
   codexUserInputsToDisplayParts,
 } from "./codex-user-input-display";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
-import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
+import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers/todo";
 import {
   type CodexAppServerCommandAction,
   type CodexAppServerThreadItem,
