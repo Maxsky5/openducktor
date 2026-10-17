@@ -51,12 +51,13 @@ describe("SessionPanel", () => {
     expect(screen.getByRole("button", { name: "New tab in the right panel" })).toBeDefined();
   });
 
-  test("draws no focus outline on a tab because the selected tab has its own style", () => {
+  test("rings a tab with the neutral color only for keyboard focus", () => {
     render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
     const tab = screen.getByRole("tab", { name: "Diffs" });
     expect(tab.className).toContain("outline-none");
-    expect(tab.className).not.toContain("focus-visible:ring");
+    expect(tab.className).toContain("focus-visible:ring-2 focus-visible:ring-ring");
+    expect(tab.className).not.toMatch(/(?:^|\s)focus:ring/);
   });
 
   test("offers Restart in the tab header only for the selected terminal", () => {

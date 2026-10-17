@@ -26,7 +26,11 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
   );
 }
 
-function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+function TabsTrigger({
+  className,
+  onMouseDown,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
@@ -34,6 +38,14 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
         "inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-2 py-1 text-xs font-medium text-muted-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-border data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm",
         className,
       )}
+      onMouseDown={(event) => {
+        onMouseDown?.(event);
+        // Radix focuses the tab from script on mouse down. Chromium then keeps the keyboard focus
+        // state of the field that had focus, so a click after typing would show the focus ring.
+        if (!event.defaultPrevented && event.button === 0 && !event.ctrlKey) {
+          event.currentTarget.focus({ focusVisible: false });
+        }
+      }}
       {...props}
     />
   );
