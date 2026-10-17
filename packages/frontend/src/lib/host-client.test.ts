@@ -65,7 +65,7 @@ describe("host-client", () => {
     );
   });
 
-  test("forwards task stream subscriptions and terminal failures to the active shell bridge", async () => {
+  test("forwards task frames, failures, and cancellation to the active shell bridge", async () => {
     const listener = mock(() => {});
     const terminalFailure = new Error("stream terminated");
     const onTerminalFailure = mock((cause: unknown) => {
@@ -73,15 +73,26 @@ describe("host-client", () => {
     });
     const unsubscribe = mock(() => {});
     const acknowledge = mock(async () => {});
-    const subscribeTaskStream = mock(async (_input, receivedFrame, receivedTerminalFailure) => {
-      receivedFrame({
-        type: "snapshot_required",
-        cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 },
-        reason: "buffer_gap",
-      });
-      receivedTerminalFailure?.(terminalFailure);
-      return { subscriptionId: "test-subscription", acknowledge, unsubscribe };
-    });
+    const abort = new AbortController();
+    let canceled = false;
+    const subscribeTaskStream = mock(
+      async (_input, receivedFrame, receivedTerminalFailure, signal?: AbortSignal) => {
+        signal?.addEventListener(
+          "abort",
+          () => {
+            canceled = true;
+          },
+          { once: true },
+        );
+        receivedFrame({
+          type: "snapshot_required",
+          cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 0 },
+          reason: "buffer_gap",
+        });
+        receivedTerminalFailure?.(terminalFailure);
+        return { subscriptionId: "test-subscription", acknowledge, unsubscribe };
+      },
+    );
     configureShellBridge(createTestShellBridge({ subscribeTaskStream }));
 
     const { hostBridge } = await import("./host-client");
@@ -89,6 +100,7 @@ describe("host-client", () => {
       { cursor: null },
       listener,
       onTerminalFailure,
+      abort.signal,
     );
 
     expect(listener).toHaveBeenCalledWith({
@@ -98,6 +110,8 @@ describe("host-client", () => {
     });
     expect(onTerminalFailure).toHaveBeenCalledWith(terminalFailure);
     expect(result.unsubscribe).toBe(unsubscribe);
+    abort.abort();
+    expect(canceled).toBe(true);
   });
 
   test("hostClient proxies calls to the currently configured shell client", async () => {
