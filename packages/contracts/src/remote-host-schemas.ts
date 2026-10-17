@@ -163,6 +163,7 @@ export const remoteAccessNetworksSchema = z.array(
 export const remoteAccessStateSchema = z.object({
   status: z.enum(["disabled", "starting", "available", "failed"]),
   configuration: remoteAccessConfigurationSchema.nullable(),
+  connectedClients: z.number().int().nonnegative(),
   failure: remoteFailureSchema.optional(),
 });
 export const remoteTaskLeaseSchema = z.object({

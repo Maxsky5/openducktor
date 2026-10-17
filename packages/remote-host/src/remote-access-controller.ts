@@ -52,7 +52,7 @@ export const createRemoteAccessController = (
 ): RemoteAccessController => {
   const changes = Effect.runSync(PubSub.sliding<RemoteAccessState>({ capacity: 16, replay: 1 }));
   const lane = createSerialLane();
-  let state: RemoteAccessState = { status: "disabled", configuration: null };
+  let state: RemoteAccessState = { status: "disabled", configuration: null, connectedClients: 0 };
   let server: NodeFetchServer<TerminalWebSocketData> | null = null;
   let work: ReturnType<typeof createRemoteWorkInterface> | null = null;
   let sharedWork: ReturnType<typeof createRemoteWorkInterface> | null = null;
@@ -83,7 +83,11 @@ export const createRemoteAccessController = (
       }
     });
   const disable = () =>
-    lane.run(stop().pipe(Effect.map(() => publish({ status: "disabled", configuration: null }))));
+    lane.run(
+      stop().pipe(
+        Effect.map(() => publish({ status: "disabled", configuration: null, connectedClients: 0 })),
+      ),
+    );
   return {
     readState: () => Effect.sync(() => state),
     readNetworks: () =>
@@ -140,6 +144,7 @@ export const createRemoteAccessController = (
                 });
                 publish({
                   status: "starting",
+                  connectedClients: 0,
                   configuration:
                     parsed.publicEndpoint === undefined
                       ? null
@@ -164,6 +169,10 @@ export const createRemoteAccessController = (
                       ...(options.frontendOrigins ?? []),
                       ...(parsed.webOrigins ?? []),
                     ]),
+                    onClientsChanged: (connectedClients) => {
+                      if (work === current && state.connectedClients !== connectedClients)
+                        publish({ ...state, connectedClients });
+                    },
                   });
                   work = current;
                   return current;
@@ -174,7 +183,7 @@ export const createRemoteAccessController = (
                 ) {
                   const configuration = configure(parsed.listenPort);
                   sharedWork = openWork(configuration);
-                  return publish({ status: "available", configuration });
+                  return publish({ status: "available", configuration, connectedClients: 0 });
                 }
                 sharedWork = null;
                 let current: ReturnType<typeof createRemoteWorkInterface>;
@@ -194,6 +203,7 @@ export const createRemoteAccessController = (
                         current.close();
                         publish({
                           status: "failed",
+                          connectedClients: 0,
                           configuration: state.configuration,
                           failure: toFailure(cause).failure,
                         });
@@ -205,13 +215,18 @@ export const createRemoteAccessController = (
                     }),
                   catch: toFailure,
                 });
-                return publish({ status: "available", configuration: configure(server.port) });
+                return publish({
+                  status: "available",
+                  configuration: configure(server.port),
+                  connectedClients: 0,
+                });
               }),
             );
             if (result._tag === "Success") return result.success;
             yield* stop();
             publish({
               status: "failed",
+              connectedClients: 0,
               configuration: state.configuration,
               failure: result.failure.failure,
             });
@@ -224,7 +239,7 @@ export const createRemoteAccessController = (
         Effect.gen(function* () {
           closed = true;
           yield* stop();
-          publish({ status: "disabled", configuration: null });
+          publish({ status: "disabled", configuration: null, connectedClients: 0 });
           yield* PubSub.shutdown(changes);
         }),
       ),

@@ -1,5 +1,5 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import { WebSocket } from "ws";
 import { get, type IncomingMessage } from "node:http";
 import os from "node:os";
@@ -10,6 +10,7 @@ import {
   REMOTE_TERMINAL_CONNECTION_PREFIX,
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
+  remoteNegotiationResultSchema,
   type RemoteClientHello,
 } from "@openducktor/contracts";
 import { createEffectHostCommandRouter } from "../../host/src/interface/router/host-command-router";
@@ -676,6 +677,95 @@ test("ending the listener leaves accepted HTTP work under the host command lifet
     expect(drained).toBe(true);
   } finally {
     release();
+    await f.close();
+  }
+});
+
+test("sharing status counts each live client once and clears clients on disablement", async () => {
+  const f = await fixture();
+  const controller = createRemoteAccessController(f.services, f.options);
+  const requests: AbortController[] = [];
+  const streams: Response[] = [];
+  const observed: number[] = [];
+  const observer = Effect.runFork(
+    Stream.runForEach(controller.states, (state) =>
+      Effect.sync(() => {
+        observed.push(state.connectedClients);
+      }),
+    ),
+  );
+  const count = () =>
+    Effect.runPromise(controller.readState()).then((state) => state.connectedClients);
+  const waitForCount = async (expected: number) => {
+    const deadline = Date.now() + 500;
+    while (((await count()) !== expected || observed.at(-1) !== expected) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    expect(await count()).toBe(expected);
+    expect(observed.at(-1)).toBe(expected);
+  };
+  try {
+    const port = Number(new URL(f.base).port);
+    await f.stopNetwork();
+    expect(await count()).toBe(0);
+    await Effect.runPromise(
+      controller.enable({
+        listenHost: "127.0.0.1",
+        listenPort: port,
+        publicEndpoint: f.options.publicEndpoint,
+      }),
+    );
+    const base = `http://127.0.0.1:${port}/api/remote`;
+    const connect = async () => {
+      const result = await fetch(`${base}/connections`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(hello),
+      });
+      const admission = remoteNegotiationResultSchema.parse(await result.json());
+      if (admission.status !== "accepted") throw new Error(admission.failure.message);
+      return admission.connectionId;
+    };
+    const openStream = async (id: string) => {
+      const abort = new AbortController();
+      requests.push(abort);
+      const response = await fetch(`${base}/events`, {
+        headers: { [REMOTE_CONNECTION_HEADER]: id },
+        signal: abort.signal,
+      });
+      streams.push(response);
+      expect(response.status).toBe(200);
+      return abort;
+    };
+    const first = await connect();
+    expect(await count()).toBe(0);
+    const firstStream = await openStream(first);
+    await waitForCount(1);
+    const secondStream = await openStream(first);
+    expect(await count()).toBe(1);
+    firstStream.abort();
+    expect(await count()).toBe(1);
+    const second = await connect();
+    await openStream(second);
+    await waitForCount(2);
+    secondStream.abort();
+    await waitForCount(1);
+    await openStream(first);
+    await waitForCount(2);
+    await fetch(`${base}/connections/current`, {
+      method: "DELETE",
+      headers: { [REMOTE_CONNECTION_HEADER]: first },
+    });
+    await waitForCount(1);
+    await Effect.runPromise(controller.disable());
+    await waitForCount(0);
+    expect(observed.filter((count, index) => index === 0 || observed[index - 1] !== count)).toEqual(
+      [0, 1, 2, 1, 2, 1, 0],
+    );
+  } finally {
+    for (const request of requests) request.abort();
+    for (const response of streams) await response.body?.cancel().catch(() => {});
+    await Effect.runPromise(Fiber.interrupt(observer));
+    await Effect.runPromise(controller.close());
     await f.close();
   }
 });
