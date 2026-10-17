@@ -439,11 +439,12 @@ export const createRemoteHostClient = (
     const response = await request("GET", path, combined, undefined, true, true);
     return { bytes: await readBytes(response, combined), headers: response.headers };
   };
-  /** Stop local delivery at once; host release uses its own bounded signal. */
+  /** Stop local delivery at once and finish bounded host cleanup before returning. */
   const stop = async () => {
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = null;
     const id = connectionId;
+    const attempt = pending;
     const oldOwner = owner;
     ++generation;
     owner = null;
@@ -452,6 +453,7 @@ export const createRemoteHostClient = (
     oldOwner?.abort();
     publish("idle");
     if (id) await release(id);
+    await attempt?.catch(() => {});
   };
   const release = async (id: string) => {
     const signal = AbortSignal.timeout(SETUP_TIMEOUT_MS);

@@ -200,12 +200,18 @@ test("a canceled negotiation releases its admission without disturbing the next 
   };
   const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
   const canceled = remote.connect().catch((cause: unknown) => cause);
+  let stopped = false;
   try {
     const id = await admitted.promise;
-    await remote.disconnect();
+    const stopping = remote.disconnect().then(() => {
+      stopped = true;
+    });
     await remote.connect();
+    expect(stopped).toBe(false);
     reply.resolve();
+    await stopping;
     expect(await canceled).toMatchObject({ name: "AbortError" });
+    expect(stopped).toBe(true);
     expect(released).toEqual([id]);
     expect(remote.readState().status).toBe("connected");
     expect(await remote.client.systemGetPlatform()).toBe("linux");
@@ -601,10 +607,11 @@ test.each(["view closes", "connection changes", "admission fails"])(
         view.abort(closed);
         expect(await result).toBe(closed);
       } else if (reason === "connection changes") {
-        await remote.disconnect();
-        admitted.resolve();
-        await remote.connect();
+        const stopping = remote.disconnect();
         expect(await result).toMatchObject({ name: "AbortError" });
+        admitted.resolve();
+        await stopping;
+        await remote.connect();
       } else {
         admitted.resolve();
         expect(await result).toMatchObject({ failure: { code: "protocol_mismatch" } });
