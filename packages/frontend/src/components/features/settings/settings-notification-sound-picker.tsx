@@ -82,7 +82,7 @@ export function NotificationSoundPicker<Value extends string>({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8"
+                className="size-8 focus-visible:ring-input-focus"
                 aria-label={`Preview ${option.label}`}
                 disabled={option.previewCue === null}
                 onClick={() => {

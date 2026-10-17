@@ -302,7 +302,7 @@ type AgentChatComposerFormViewProps = {
 // shows as a ring.
 const COMPOSER_SELECTOR_TRIGGER_CLASS_NAME = cn(
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
-  "!h-7 !w-auto shrink !rounded-lg !border-transparent !bg-transparent text-xs hover:!bg-muted focus-visible:ring-2 focus-visible:ring-input-focus data-[state=open]:!bg-muted",
+  "!h-7 !w-auto shrink !rounded-lg !border-transparent !bg-transparent text-xs hover:!bg-muted focus-visible:ring-2 data-[state=open]:!bg-muted",
 );
 
 const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =

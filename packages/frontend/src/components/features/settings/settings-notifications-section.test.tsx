@@ -484,6 +484,9 @@ describe("SettingsNotificationsSection", () => {
       expect(choice.className).toContain("focus-visible:ring-input-focus");
     }
     const previews = within(menu).getAllByRole("button", { name: /^Preview / });
+    for (const preview of previews) {
+      expect(preview.className).toContain("focus-visible:ring-input-focus");
+    }
     expect(previews.filter((button) => !button.hasAttribute("disabled"))).toHaveLength(11);
     for (const button of previews) {
       if (button.hasAttribute("disabled")) continue;
