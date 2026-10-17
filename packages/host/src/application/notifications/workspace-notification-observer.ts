@@ -15,6 +15,7 @@ import type { HostOperationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
 export type WorkspaceNotificationInput =
   | { type: "task"; event: ExternalTaskSyncEvent }
   | { type: "live"; envelope: AgentSessionLiveEnvelope; provenance: "baseline" | "live" }
@@ -85,12 +86,44 @@ export const createWorkspaceNotificationObserver = ({
         },
       }),
     };
+    const addWorkspaceSessionTitle = (
+      occurrence: NotificationOccurrence,
+    ): NotificationOccurrence => {
+      if (occurrence.task) return occurrence;
+
+      const target = occurrence.navigationTarget;
+      switch (target.type) {
+        case "agent_session":
+        case "pending_input":
+        case "session_error":
+          break;
+        case "notification_settings":
+        case "agent_studio_task":
+        case "kanban_task":
+          return occurrence;
+      }
+
+      const sessionKey = agentSessionRefKey({
+        repoPath: state.record.repoPath,
+        ...target.session,
+      });
+      const workspaceSession = state.workspaceOwners.get(sessionKey);
+      if (!workspaceSession) return occurrence;
+
+      return {
+        ...occurrence,
+        sessionLabel: runtimeTitle(workspaceSession) ?? "Untitled session",
+      };
+    };
+    const publishOccurrence = (
+      occurrence: NotificationOccurrence,
+    ): Effect.Effect<void, HostOperationError> =>
+      Effect.suspend(() => {
+        if (!state.active) return Effect.void;
+        return select(addWorkspaceSessionTitle(occurrence));
+      });
     const publish = (occurrences: NotificationOccurrence[]) =>
-      Effect.forEach(
-        occurrences,
-        (occurrence) => Effect.suspend(() => (state.active ? select(occurrence) : Effect.void)),
-        { discard: true },
-      );
+      Effect.forEach(occurrences, publishOccurrence, { discard: true });
     const refreshOwners = () => publish(state.projector.reconcileAssociations());
     const setWorkspaceSession = (session: WorkspaceSession) => {
       for (const [key, existing] of state.workspaceOwners) {
