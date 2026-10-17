@@ -319,7 +319,8 @@ describe("task completion recovery and reset", () => {
         await rm(directory, { recursive: true, force: true });
       }
     },
-    10000,
+    // Real Git setup, merge, revert, and recovery run dozens of processes on Windows.
+    20_000,
   );
 
   test("retained merge recovery blocks cleanup when the target loses its content", async () => {

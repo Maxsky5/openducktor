@@ -336,7 +336,8 @@ export const loadClaudeHistoryProjectionInput = async (
     dir: input.workingDirectory,
     sessionStore: store,
   });
-  if (!session || session.sessionId !== target.sessionId) {
+  // Title and queue records can exist before Claude writes a conversation entry with cwd.
+  if (!session || session.sessionId !== target.sessionId || !session.cwd) {
     throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
   }
   if (session.cwd !== input.workingDirectory) {
