@@ -14,6 +14,12 @@ export type HostSelection = {
   disconnect(): Promise<void>;
 };
 
+export function sameHostTarget(left: HostTarget, right: HostTarget): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "remote" && right.kind === "remote") return left.endpoint === right.endpoint;
+  return true;
+}
+
 export function localHostLabel(host: LocalHost | null): string {
   if (host === "electron") return "Desktop app host";
   if (host === "web") return "Web runner host";

@@ -375,7 +375,7 @@ try {
       await controller.dispose();
       await act(async () => {
         view?.unmount();
-        window.dispatchEvent(new Event("pagehide"));
+        await bridge.dispose?.();
       });
       bridge.notifications.dispose();
       appQueryClient.clear();

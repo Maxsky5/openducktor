@@ -2,7 +2,7 @@ import { expect, mock, spyOn, test } from "bun:test";
 import { Deferred, Effect, Stream } from "effect";
 import { browserEventCursorSchema } from "@openducktor/contracts";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
-import { BufferedHostEventStream } from "@openducktor/remote-host/typescript-host-backend-support";
+import { BufferedHostEventStream } from "@openducktor/remote-host/host-event-bus";
 import { createCombinedHostSseResponse } from "@openducktor/remote-host/combined-host-event-http-server";
 import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
 

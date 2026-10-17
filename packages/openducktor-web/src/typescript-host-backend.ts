@@ -63,12 +63,9 @@ import {
   terminalWebSocketHandler,
 } from "@openducktor/remote-host/terminals/terminal-websocket-handler";
 
-import {
-  allowedOriginsForFrontendOrigin,
-  BufferedHostEventBus,
-  stopTypescriptHostBackendServices,
-  validateWebFrontendOriginEffect,
-} from "@openducktor/remote-host/typescript-host-backend-support";
+import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
+import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
+import { stopHostBackend } from "./host-backend-lifecycle";
 
 export type TypescriptHostBackendOptions = {
   port: number;
@@ -846,10 +843,10 @@ export const startTypescriptHostBackendEffect = ({
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
   Effect.gen(function* () {
     const appSessionCookieName = resolveAppSessionCookieName(mcpBridgeDiscoveryMode, processEnv);
-    const validatedFrontendOrigin = yield* validateWebFrontendOriginEffect(frontendOrigin).pipe(
+    const validatedFrontendOrigin = yield* validateFrontendOriginEffect(frontendOrigin).pipe(
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
-    const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin, frontendPort);
+    const allowedOrigins = allowedFrontendOrigins(validatedFrontendOrigin, frontendPort);
     const allowedHostnames = allowedHostnamesFor({
       bindHost: host ?? LOCALHOST,
       externalUrl: validatedFrontendOrigin,
@@ -967,7 +964,7 @@ export const startTypescriptHostBackendEffect = ({
       stopPromise = (async () => {
         const remoteResult = await Effect.runPromise(Effect.result(remoteAccess.close()));
         await Effect.runPromise(commandLifetime.drain());
-        await stopTypescriptHostBackendServices({
+        await stopHostBackend({
           disposeHost: () => hostCommandRouter.dispose(),
           logger,
           resolveExited,

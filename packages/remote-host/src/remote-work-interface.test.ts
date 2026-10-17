@@ -19,7 +19,7 @@ import {
   makeService,
   removeFakeShell,
 } from "../../host/src/application/terminals/test-support/terminal-service-harness";
-import { BufferedHostEventBus } from "./typescript-host-backend-support";
+import { BufferedHostEventBus } from "./host-event-bus";
 import { createRemoteWorkInterface } from "./remote-work-interface";
 import { startNodeFetchServer } from "./node-fetch-server";
 import { terminalWebSocketHandler } from "./terminals/terminal-websocket-handler";

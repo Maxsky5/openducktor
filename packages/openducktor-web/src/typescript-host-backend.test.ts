@@ -39,12 +39,9 @@ import {
   type TaskEventLeaseManager,
 } from "@openducktor/remote-host/task-event-leases";
 import { writeTaskFrameSseEvent } from "@openducktor/remote-host/task-event-sse";
-import {
-  allowedOriginsForFrontendOrigin,
-  BufferedHostEventBus,
-  stopTypescriptHostBackendServices,
-  validateWebFrontendOrigin,
-} from "@openducktor/remote-host/typescript-host-backend-support";
+import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
+import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
+import { stopHostBackend } from "./host-backend-lifecycle";
 import type { TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
@@ -462,7 +459,7 @@ describe("TypeScript web host backend", () => {
             bindHost,
             externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
           }),
-          allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+          allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
           appSessionCookieName: APP_SESSION_COOKIE_NAME,
           appToken: APP_TOKEN,
           controlToken: CONTROL_TOKEN,
@@ -776,18 +773,22 @@ describe("TypeScript web host backend", () => {
   });
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
-    expect(() => validateWebFrontendOrigin("ftp://127.0.0.1:1420")).toThrow(
+    expect(() => Effect.runSync(validateFrontendOriginEffect("ftp://127.0.0.1:1420"))).toThrow(
       "browser frontend origin must use http or https",
     );
-    expect(() => validateWebFrontendOrigin("http://user:pass@127.0.0.1:1420")).toThrow(
-      "browser frontend origin must not include credentials",
-    );
+    expect(() =>
+      Effect.runSync(validateFrontendOriginEffect("http://user:pass@127.0.0.1:1420")),
+    ).toThrow("browser frontend origin must not include credentials");
   });
 
   test("accepts remote and https browser frontend origins for network deployments", () => {
-    expect(validateWebFrontendOrigin("http://100.64.0.1:1420")).toBe("http://100.64.0.1:1420");
-    expect(validateWebFrontendOrigin("https://machine.ts.net:443")).toBe("https://machine.ts.net");
-    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:1420")).toEqual(
+    expect(Effect.runSync(validateFrontendOriginEffect("http://100.64.0.1:1420"))).toBe(
+      "http://100.64.0.1:1420",
+    );
+    expect(Effect.runSync(validateFrontendOriginEffect("https://machine.ts.net:443"))).toBe(
+      "https://machine.ts.net",
+    );
+    expect(allowedFrontendOrigins("http://100.64.0.1:1420")).toEqual(
       new Set([
         "http://100.64.0.1:1420",
         "http://127.0.0.1:1420",
@@ -795,7 +796,7 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:1420",
       ]),
     );
-    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net")).toEqual(
+    expect(allowedFrontendOrigins("https://machine.ts.net")).toEqual(
       new Set([
         "https://machine.ts.net",
         "http://127.0.0.1:443",
@@ -803,7 +804,7 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:443",
       ]),
     );
-    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net", 1420)).toEqual(
+    expect(allowedFrontendOrigins("https://machine.ts.net", 1420)).toEqual(
       new Set([
         "https://machine.ts.net",
         "http://127.0.0.1:1420",
@@ -811,7 +812,7 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:1420",
       ]),
     );
-    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:80")).toEqual(
+    expect(allowedFrontendOrigins("http://100.64.0.1:80")).toEqual(
       new Set(["http://100.64.0.1", "http://127.0.0.1", "http://localhost", "http://[::1]"]),
     );
   });
@@ -825,7 +826,7 @@ describe("TypeScript web host backend", () => {
     const configured = new URL(frontendOrigin);
     const canonical = new URL(frontendOrigin);
     canonical.hostname = "machine.ts.net";
-    const allowedOrigins = allowedOriginsForFrontendOrigin(frontendOrigin, 1420);
+    const allowedOrigins = allowedFrontendOrigins(frontendOrigin, 1420);
     expect(allowedOrigins).toEqual(
       new Set([
         configured.origin,
@@ -1460,7 +1461,7 @@ describe("TypeScript web host backend", () => {
     const resolvedExitCodes: number[] = [];
 
     await expect(
-      stopTypescriptHostBackendServices({
+      stopHostBackend({
         disposeHost: () => Effect.void,
         logger: testLogger,
         resolveExited: (exitCode) => {
@@ -1478,7 +1479,7 @@ describe("TypeScript web host backend", () => {
     const resolvedExitCodes: number[] = [];
 
     await expect(
-      stopTypescriptHostBackendServices({
+      stopHostBackend({
         disposeHost: () => Effect.void,
         logger: testLogger,
         resolveExited: (exitCode) => {
@@ -1503,7 +1504,7 @@ describe("TypeScript web host backend", () => {
     let stopCalls = 0;
 
     await expect(
-      stopTypescriptHostBackendServices({
+      stopHostBackend({
         disposeHost: () => Effect.fail(new Error("host disposal failed")),
         logger: {
           error: () => Effect.fail(persistenceError),
@@ -1694,7 +1695,7 @@ describe("TypeScript web host backend", () => {
     const disposeStarted = createDeferred();
     const disposeReleased = createDeferred();
     let invokeCalls = 0;
-    const teardown = stopTypescriptHostBackendServices({
+    const teardown = stopHostBackend({
       disposeHost: () =>
         Effect.promise(async () => {
           disposeStarted.resolve();
@@ -1782,7 +1783,7 @@ describe("TypeScript web host backend", () => {
         return stopPromise;
       }
       shutdownStarted = true;
-      stopPromise = stopTypescriptHostBackendServices({
+      stopPromise = stopHostBackend({
         disposeHost: () =>
           Effect.promise(async () => {
             disposeStarted.resolve();
@@ -1893,7 +1894,7 @@ describe("TypeScript web host backend", () => {
         bindHost: "127.0.0.1",
         externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
       }),
-      allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+      allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
       appSessionCookieName: APP_SESSION_COOKIE_NAME,
       appToken: APP_TOKEN,
       controlToken: CONTROL_TOKEN,
@@ -1932,7 +1933,7 @@ describe("TypeScript web host backend", () => {
       disposeStarted = resolve;
     });
 
-    const stopPromise = stopTypescriptHostBackendServices({
+    const stopPromise = stopHostBackend({
       disposeHost: () =>
         Effect.promise(async () => {
           calls.push("dispose-started");
