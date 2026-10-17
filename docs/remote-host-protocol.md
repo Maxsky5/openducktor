@@ -259,7 +259,9 @@ Host commands use the connection's cancellation signal and have no fixed client 
 The host sends the command response when work completes.
 The client reports state and event listener errors without stopping connection or event delivery.
 Established streams remain event-driven.
-Changing browser tabs keeps the live host connection and work state. A page placed in the browser's back/forward cache releases its connection and restores it when visible again.
+Changing browser tabs keeps the live host connection and work state. One page owner pauses a remote connection in the browser's back/forward cache and resumes it when visible. Notification owners stay alive during that pause.
+
+A cached page reloads if the selected host changed or its previous client was released. Local clients release their owners on cache entry and rebuild on history restore. Leaving the page closes the client and its notification owners.
 Transport loss cancels old-generation handles and permits active reconnect with exponential backoff capped at 15 seconds, or manual `retry()`.
 `setActive(false)` and `disconnect()` cancel attempts.
 Permanent endpoint, protocol, capability, TLS, and synchronization failures require correction and explicit retry.

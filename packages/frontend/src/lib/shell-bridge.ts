@@ -140,6 +140,7 @@ export type NotificationBridge = {
 
 export type ShellBridge = HostBridge & {
   dispose?: () => Promise<void>;
+  setActive?: (active: boolean) => void;
   remoteAccess?: import("@openducktor/contracts").RemoteAccessBridge;
   remoteConnection?: Pick<
     import("@openducktor/host-client/remote").RemoteHostClient,

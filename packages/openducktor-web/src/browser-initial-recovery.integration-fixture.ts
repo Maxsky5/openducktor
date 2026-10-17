@@ -290,7 +290,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
     stopState();
     stopOwner();
     owner.stop();
-    page.dispatchEvent(new Event("pagehide"));
+    await bridge.dispose?.();
     bridge.notifications.dispose();
     await appQueryClient.cancelQueries();
     appQueryClient.clear();

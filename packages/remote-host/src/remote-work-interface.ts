@@ -26,7 +26,7 @@ import { localAttachmentPreviewResponse } from "./local-attachment-preview";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
 import { createTaskEventLeaseManager } from "./task-event-leases";
 import { createTaskEventSseResponse, writeTaskFrameSseEvent } from "./task-event-sse";
-import { type BufferedHostEventBus } from "./typescript-host-backend-support";
+import { type BufferedHostEventBus } from "./host-event-bus";
 import { type NodeFetchServer } from "./node-fetch-server";
 import {
   createSocketData,

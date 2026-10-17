@@ -6,7 +6,7 @@ import { createEffectHostCommandRouter } from "../../host/src/interface/router/h
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import { readSse } from "../../host-client/src/remote/sse";
-import { BufferedHostEventBus } from "./typescript-host-backend-support";
+import { BufferedHostEventBus } from "./host-event-bus";
 import { createRemoteWorkInterface, type RemoteHostServices } from "./remote-work-interface";
 import { startNodeFetchServer } from "./node-fetch-server";
 

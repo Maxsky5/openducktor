@@ -20,10 +20,11 @@ import {
   removeFakeShell,
 } from "../../host/src/application/terminals/test-support/terminal-service-harness";
 import { createRemoteWorkInterface } from "@openducktor/remote-host";
-import { BufferedHostEventBus } from "@openducktor/remote-host/typescript-host-backend-support";
+import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
 import { startNodeFetchServer } from "@openducktor/remote-host/node-fetch-server";
 import { terminalWebSocketHandler } from "@openducktor/remote-host/terminals/terminal-websocket-handler";
 import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
+import { watchClientPage } from "@openducktor/frontend/lib/client-page";
 import { createBrowserRemoteTransport } from "@openducktor/frontend/lib/remote/transport";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 
@@ -155,6 +156,7 @@ const connect = async () => {
     transport: createBrowserRemoteTransport(),
     notifications: createBrowserNotificationBridge({ scope: endpoint }),
   });
+  watchClientPage(bridge, () => false);
   bridges.push(bridge);
   await connected(bridge);
   return bridge;

@@ -178,7 +178,7 @@ test.each(["restored", "lost", "failure"])(
     } finally {
       socketSetup.resolve();
       await controller?.dispose();
-      page.dispatchEvent(new Event("pagehide"));
+      await bridge?.dispose?.();
       bridge?.notifications.dispose();
       await Bun.sleep(0);
       if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);

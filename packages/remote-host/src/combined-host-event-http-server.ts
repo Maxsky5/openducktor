@@ -7,7 +7,7 @@ import {
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import { Effect, Fiber, Stream } from "effect";
 import { WebHostRequestError } from "./effect/web-errors";
-import type { BufferedHostEventStream } from "./typescript-host-backend-support";
+import type { BufferedHostEventStream } from "./host-event-bus";
 
 export const createCombinedHostSseResponse = (
   request: Request,

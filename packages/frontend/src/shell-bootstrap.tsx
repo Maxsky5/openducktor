@@ -6,6 +6,7 @@ import { AppCrashShell } from "./components/errors/app-crash-shell";
 import { applyThemeToDocument } from "./components/layout/theme-dom";
 import { readSystemAppearance, resolveThemePreference } from "./components/layout/theme-preference";
 import { appQueryClient } from "./lib/query-client";
+import { watchClientPage } from "./lib/client-page";
 import { configureShellBridge, getShellBridge, type ShellBridge } from "./lib/shell-bridge";
 import {
   type OpenDucktorShellBootstrapOptions,
@@ -22,6 +23,7 @@ import {
   hostLocation,
   parseHostEndpoint,
   readHostTarget,
+  sameHostTarget,
   saveHostTarget,
   type HostSelection,
   type HostTarget,
@@ -83,10 +85,6 @@ async function bootstrapHostClient(
   await options.prepare?.();
   const element = resolveRootElement(options, (id) => document.getElementById(id));
   const root = createRoot(element);
-  // A cached page must not resume owners that an explicit host switch already released.
-  window.addEventListener("pageshow", (event) => {
-    if (event.persisted) window.location.reload();
-  });
   const location = new URL(window.location.href);
   const localAvailable = hosts.localHost !== null;
   let target: HostTarget;
@@ -98,19 +96,25 @@ async function bootstrapHostClient(
     error = cause instanceof Error ? cause.message : String(cause);
   }
   let bridge: ShellBridge | undefined;
+  let leavePage: () => Promise<void>;
+  const watchPage = (bridge?: ShellBridge) =>
+    watchClientPage(bridge, () => {
+      try {
+        return !sameHostTarget(
+          target,
+          readHostTarget(location, localAvailable, hosts.defaultEndpoint),
+        );
+      } catch {
+        // Startup shows the saved-host error. A cached document must return through that check.
+        return true;
+      }
+    });
   const move = async (next: HostTarget) => {
-    if (target.kind === "local" && next.kind === "local") return;
-    if (
-      target.kind === "remote" &&
-      next.kind === "remote" &&
-      target.endpoint === parseHostEndpoint(next.endpoint, location.protocol)
-    )
-      return;
+    if (sameHostTarget(target, next)) return;
     saveHostTarget(next, location.protocol);
     const url = hostLocation(location, next);
     await appQueryClient.cancelQueries();
-    await bridge?.dispose?.();
-    bridge?.notifications.dispose();
+    await leavePage();
     window.history.replaceState(null, "", url);
     if (hosts.navigate) await hosts.navigate();
     else window.location.reload();
@@ -120,12 +124,17 @@ async function bootstrapHostClient(
     localHost: hosts.localHost,
     select: async (endpoint) => {
       if (endpoint === null && !localAvailable) throw new Error("This client has no local host.");
-      await move(endpoint === null ? { kind: "local" } : { kind: "remote", endpoint });
+      await move(
+        endpoint === null
+          ? { kind: "local" }
+          : { kind: "remote", endpoint: parseHostEndpoint(endpoint, location.protocol) },
+      );
     },
     disconnect: () => move({ kind: "picker" }),
   };
   applyThemeToDocument(resolveThemePreference("system", readSystemAppearance()));
   if (target.kind === "picker") {
+    leavePage = watchPage();
     root.render(
       <StrictMode>
         <StartupSplashLifecycle />
@@ -156,7 +165,7 @@ async function bootstrapHostClient(
   if (!bridge) throw new Error("The local host connection is unavailable.");
   if (local && bridge.notifications !== local.notifications) local.notifications.dispose();
   configureBridge(bridge);
-  window.addEventListener("pagehide", () => bridge?.notifications.dispose(), { once: true });
+  leavePage = watchPage(bridge);
   const loadTheme = async () => {
     try {
       const snapshot = await loadSettingsSnapshotFromQuery(appQueryClient);

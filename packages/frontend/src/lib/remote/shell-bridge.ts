@@ -117,21 +117,11 @@ export const createRemoteShellBridge = ({
   };
   // Admission starts before mounting. View owners add their synchronization work as they mount.
   void remote.connect().catch((cause) => console.error("Remote browser connection failed", cause));
-  window.addEventListener("pagehide", (event) => {
-    if (event.persisted) remote.setActive(false);
-    else void remote.disconnect();
-  });
-  window.addEventListener("pageshow", (event) => {
-    if (event.persisted) remote.setActive(!document.hidden);
-  });
-  document.addEventListener("visibilitychange", () => {
-    // Resume cached pages on return. Hidden tabs keep their live connection.
-    if (!document.hidden && remote.readState().status === "idle") remote.setActive(true);
-  });
   return {
     client: remote.client,
     remoteConnection: remote,
     dispose: () => remote.disconnect(),
+    setActive: (active) => remote.setActive(active),
     capabilities: { canOpenExternalUrls: true, canPreviewLocalAttachments: true },
     notifications: notificationBridge,
     appUpdates: createDisabledAppUpdateBridge({
