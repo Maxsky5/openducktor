@@ -1,7 +1,11 @@
 import path from "node:path";
 import { createArtifactRuntimeDistribution, type HostRuntimeDistribution } from "@openducktor/host";
 import { Effect } from "effect";
-import { errorMessage, runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
+import {
+  errorMessage,
+  runWebSyncBoundary,
+  WebValidationError,
+} from "@openducktor/remote-host/effect/web-errors";
 
 export type ResolveWebRuntimeDistributionInput = {
   packageRoot: string;

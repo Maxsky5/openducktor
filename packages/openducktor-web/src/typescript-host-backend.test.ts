@@ -1,6 +1,7 @@
-import { liveSessionStreamEventName } from "./host-event-stream-name";
+import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
 import { get, type IncomingMessage } from "node:http";
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
+import * as host from "@openducktor/host";
 import { TERMINAL_PROTOCOL_SUBPROTOCOL, type HostEventEnvelope } from "@openducktor/contracts";
 import {
   RuntimeQueryError,
@@ -21,8 +22,11 @@ import { createTaskEventStream } from "../../host/src/events/task-event-stream";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import type { HostCommandHandlerError } from "../../host/src/interface/router/host-command-router";
 import type { WebLogger } from "./logger";
-import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
-import { allowedHostnamesFor, parseHostEffect } from "./http-origin";
+import {
+  startNodeFetchServer,
+  type NodeFetchServer,
+} from "@openducktor/remote-host/node-fetch-server";
+import { allowedHostnamesFor, parseHostEffect } from "@openducktor/remote-host/http-origin";
 import { validateLauncherNetworkOptionsEffect } from "./launcher";
 import {
   buildBackendUrl,
@@ -30,14 +34,14 @@ import {
   readinessHostForBind,
   waitForBackend,
 } from "./launcher-support";
-import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
-import { writeTaskFrameSseEvent } from "./task-event-http-server";
 import {
-  allowedOriginsForFrontendOrigin,
-  BufferedHostEventBus,
-  stopTypescriptHostBackendServices,
-  validateWebFrontendOrigin,
-} from "./typescript-host-backend-support";
+  createTaskEventLeaseManager,
+  type TaskEventLeaseManager,
+} from "@openducktor/remote-host/task-event-leases";
+import { writeTaskFrameSseEvent } from "@openducktor/remote-host/task-event-sse";
+import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
+import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
+import { stopHostBackend } from "./host-backend-lifecycle";
 import type { TaskEventStreamFrame } from "@openducktor/contracts";
 
 const nativeResponse = await Bun.fetch("data:,");
@@ -48,8 +52,10 @@ Object.defineProperty(globalThis, "Response", {
 
 const { handleHostFetch, handleTypescriptHostBackendRequest, resolveAppSessionCookieName } =
   await import("./typescript-host-backend");
+const { startTypescriptHostBackend } = await import("./typescript-host-backend");
 
-const { terminalWebSocketHandler } = await import("./terminals/terminal-websocket-handler");
+const { terminalWebSocketHandler } =
+  await import("@openducktor/remote-host/terminals/terminal-websocket-handler");
 
 const APP_TOKEN = "app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
@@ -151,6 +157,7 @@ const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
 
 const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   ...createTestHostCommandRouter(),
+  hostInstanceId: "test-host",
   taskAssetReadService: missingTaskAssetReadService,
   notificationStream: {
     publishOccurrence: () => {},
@@ -165,6 +172,7 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
       subscriptionId: "test-subscription",
       resume: () => {},
       replay: () => {},
+      replayBoundary: { epoch: "test-epoch", sequence: 0 },
       unsubscribe: () => {},
     }),
   },
@@ -280,11 +288,164 @@ describe("TypeScript web host backend", () => {
   const TERMINAL_UPGRADE_FRONTEND_ORIGIN = "http://127.0.0.1:1420";
   const TERMINAL_UPGRADE_BASE_PATH = "/api";
 
+  test("keeps operator CORS, authorization, and HTTP cookies private under an HTTPS network frontend", async () => {
+    const router = spyOn(host, "createNodeEffectHostCommandRouter").mockReturnValue(
+      Effect.succeed(createTestNodeHostCommandRouter()),
+    );
+    const failures: unknown[] = [];
+    const frontendOrigin = "http://127.0.0.1:1420";
+    const backend = await startTypescriptHostBackend({
+      port: 0,
+      host: "127.0.0.1",
+      frontendOrigin,
+      remoteFrontendOrigin: "https://machine.ts.net",
+      appToken: APP_TOKEN,
+      controlToken: CONTROL_TOKEN,
+      configDirScope: "test",
+      mcpBridgeDiscoveryMode: "production",
+      runtimeDistribution: { mode: "source", workspaceRoot: "/repo" },
+      deferRemoteStartup: true,
+      logger: testLogger,
+      onBackgroundFailure: (failure) => failures.push(failure),
+    });
+    try {
+      const base = `http://127.0.0.1:${backend.port}`;
+      const checkHealth = async () => {
+        const response = await Bun.fetch(`${base}/health`);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ ok: true });
+      };
+      await checkHealth();
+      const preflight = await Bun.fetch(`${base}/remote-access`, {
+        method: "OPTIONS",
+        headers: {
+          origin: frontendOrigin,
+          "access-control-request-headers": "x-openducktor-app-token",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(frontendOrigin);
+      expect(preflight.headers.get("access-control-allow-headers")).toContain(
+        "x-openducktor-app-token",
+      );
+      const state = await Bun.fetch(`${base}/remote-access`, {
+        headers: { origin: frontendOrigin, "x-openducktor-app-token": APP_TOKEN },
+      });
+      expect(state.status).toBe(200);
+      expect(state.headers.get("access-control-allow-origin")).toBe(frontendOrigin);
+      expect(state.headers.get("access-control-allow-credentials")).toBe("true");
+      expect(await state.json()).toMatchObject({ status: "disabled" });
+      const networkChoices = await Bun.fetch(`${base}/remote-access/networks`, {
+        headers: { origin: frontendOrigin, "x-openducktor-app-token": APP_TOKEN },
+      });
+      expect(networkChoices.status).toBe(200);
+      expect(networkChoices.headers.get("cache-control")).toBe("no-store");
+      expect(Array.isArray(await networkChoices.json())).toBe(true);
+      for (const headers of [
+        { origin: frontendOrigin },
+        { origin: "https://machine.ts.net", "x-openducktor-app-token": APP_TOKEN },
+      ]) {
+        const refused = await Bun.fetch(`${base}/remote-access/networks`, { headers });
+        expect(refused.status).toBe(headers.origin === frontendOrigin ? 401 : 403);
+      }
+      const unauthorized = await Bun.fetch(`${base}/remote-access`, {
+        headers: { origin: frontendOrigin },
+      });
+      expect(unauthorized.status).toBe(401);
+      expect(unauthorized.headers.get("access-control-allow-origin")).toBe(frontendOrigin);
+      const network = await Bun.fetch(`${base}/remote-access`, {
+        headers: { origin: "https://machine.ts.net", "x-openducktor-app-token": APP_TOKEN },
+      });
+      expect(network.status).toBe(403);
+      const session = await Bun.fetch(`${base}/session`, {
+        method: "POST",
+        headers: { origin: frontendOrigin, "x-openducktor-app-token": APP_TOKEN },
+      });
+      expect(session.status).toBe(200);
+      expect(session.headers.get("set-cookie")).toContain("HttpOnly; SameSite=Strict");
+      expect(session.headers.get("set-cookie")).not.toContain("Secure");
+      const enabled = await Effect.runPromise(
+        backend.remoteAccess.enable({
+          listenHost: "127.0.0.1",
+          listenPort: backend.port,
+          publicEndpoint: "https://machine.ts.net/api/remote",
+        }),
+      );
+      expect(enabled.status).toBe("available");
+      await checkHealth();
+      expect((await Bun.fetch(`${base}/api/remote`)).status).toBe(200);
+      const negotiation = await Bun.fetch(`${base}/api/remote/connections`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          appVersion: "test",
+          supportedProtocolVersions: [1],
+          requiredCapabilities: [],
+          optionalCapabilities: [],
+        }),
+      });
+      const connection = await negotiation.json();
+      const remoteWork = await Bun.fetch(`${base}/invoke/system_get_platform`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-connection-id": connection.connectionId,
+        },
+        body: "{}",
+      });
+      expect(remoteWork.status).toBe(200);
+      const invalidAdmission = await Bun.fetch(`${base}/invoke/system_get_platform`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-openducktor-connection-id": "expired",
+          "x-openducktor-app-token": APP_TOKEN,
+        },
+        body: "{}",
+      });
+      expect(invalidAdmission.status).toBe(409);
+      const privateWork = () =>
+        Bun.fetch(`${base}/invoke/system_get_platform`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-openducktor-app-token": APP_TOKEN },
+          body: "{}",
+        });
+      expect((await privateWork()).status).toBe(200);
+      const privateState = await Bun.fetch(`${base}/remote-access`, {
+        headers: {
+          cookie: session.headers.get("set-cookie")!.split(";")[0]!,
+          origin: frontendOrigin,
+        },
+      });
+      expect(privateState.status).toBe(200);
+      const sharedPreflight = await Bun.fetch(`${base}/remote-access`, {
+        method: "OPTIONS",
+        headers: {
+          origin: frontendOrigin,
+          "access-control-request-headers": "x-openducktor-app-token",
+        },
+      });
+      expect(sharedPreflight.headers.get("access-control-allow-headers")).toContain(
+        "x-openducktor-app-token",
+      );
+      await Effect.runPromise(backend.remoteAccess.disable());
+      await checkHealth();
+      expect((await Bun.fetch(`${base}/api/remote`)).status).toBe(503);
+      expect((await privateWork()).status).toBe(200);
+      expect(failures).toEqual([]);
+    } finally {
+      await backend.stop();
+      router.mockRestore();
+    }
+  });
+
   const createTerminalUpgradeTestServer = (
     basePath = TERMINAL_UPGRADE_BASE_PATH,
     bindHost = "127.0.0.1",
   ): Promise<
-    NodeFetchServer<import("./terminals/terminal-websocket-handler").TerminalWebSocketData>
+    NodeFetchServer<
+      import("@openducktor/remote-host/terminals/terminal-websocket-handler").TerminalWebSocketData
+    >
   > =>
     startNodeFetchServer({
       hostname: bindHost,
@@ -298,7 +459,7 @@ describe("TypeScript web host backend", () => {
             bindHost,
             externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
           }),
-          allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+          allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
           appSessionCookieName: APP_SESSION_COOKIE_NAME,
           appToken: APP_TOKEN,
           controlToken: CONTROL_TOKEN,
@@ -612,18 +773,22 @@ describe("TypeScript web host backend", () => {
   });
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
-    expect(() => validateWebFrontendOrigin("ftp://127.0.0.1:1420")).toThrow(
+    expect(() => Effect.runSync(validateFrontendOriginEffect("ftp://127.0.0.1:1420"))).toThrow(
       "browser frontend origin must use http or https",
     );
-    expect(() => validateWebFrontendOrigin("http://user:pass@127.0.0.1:1420")).toThrow(
-      "browser frontend origin must not include credentials",
-    );
+    expect(() =>
+      Effect.runSync(validateFrontendOriginEffect("http://user:pass@127.0.0.1:1420")),
+    ).toThrow("browser frontend origin must not include credentials");
   });
 
   test("accepts remote and https browser frontend origins for network deployments", () => {
-    expect(validateWebFrontendOrigin("http://100.64.0.1:1420")).toBe("http://100.64.0.1:1420");
-    expect(validateWebFrontendOrigin("https://machine.ts.net:443")).toBe("https://machine.ts.net");
-    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:1420")).toEqual(
+    expect(Effect.runSync(validateFrontendOriginEffect("http://100.64.0.1:1420"))).toBe(
+      "http://100.64.0.1:1420",
+    );
+    expect(Effect.runSync(validateFrontendOriginEffect("https://machine.ts.net:443"))).toBe(
+      "https://machine.ts.net",
+    );
+    expect(allowedFrontendOrigins("http://100.64.0.1:1420")).toEqual(
       new Set([
         "http://100.64.0.1:1420",
         "http://127.0.0.1:1420",
@@ -631,7 +796,7 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:1420",
       ]),
     );
-    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net")).toEqual(
+    expect(allowedFrontendOrigins("https://machine.ts.net")).toEqual(
       new Set([
         "https://machine.ts.net",
         "http://127.0.0.1:443",
@@ -639,7 +804,7 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:443",
       ]),
     );
-    expect(allowedOriginsForFrontendOrigin("https://machine.ts.net", 1420)).toEqual(
+    expect(allowedFrontendOrigins("https://machine.ts.net", 1420)).toEqual(
       new Set([
         "https://machine.ts.net",
         "http://127.0.0.1:1420",
@@ -647,7 +812,7 @@ describe("TypeScript web host backend", () => {
         "http://[::1]:1420",
       ]),
     );
-    expect(allowedOriginsForFrontendOrigin("http://100.64.0.1:80")).toEqual(
+    expect(allowedFrontendOrigins("http://100.64.0.1:80")).toEqual(
       new Set(["http://100.64.0.1", "http://127.0.0.1", "http://localhost", "http://[::1]"]),
     );
   });
@@ -661,7 +826,7 @@ describe("TypeScript web host backend", () => {
     const configured = new URL(frontendOrigin);
     const canonical = new URL(frontendOrigin);
     canonical.hostname = "machine.ts.net";
-    const allowedOrigins = allowedOriginsForFrontendOrigin(frontendOrigin, 1420);
+    const allowedOrigins = allowedFrontendOrigins(frontendOrigin, 1420);
     expect(allowedOrigins).toEqual(
       new Set([
         configured.origin,
@@ -1296,7 +1461,7 @@ describe("TypeScript web host backend", () => {
     const resolvedExitCodes: number[] = [];
 
     await expect(
-      stopTypescriptHostBackendServices({
+      stopHostBackend({
         disposeHost: () => Effect.void,
         logger: testLogger,
         resolveExited: (exitCode) => {
@@ -1314,7 +1479,7 @@ describe("TypeScript web host backend", () => {
     const resolvedExitCodes: number[] = [];
 
     await expect(
-      stopTypescriptHostBackendServices({
+      stopHostBackend({
         disposeHost: () => Effect.void,
         logger: testLogger,
         resolveExited: (exitCode) => {
@@ -1339,7 +1504,7 @@ describe("TypeScript web host backend", () => {
     let stopCalls = 0;
 
     await expect(
-      stopTypescriptHostBackendServices({
+      stopHostBackend({
         disposeHost: () => Effect.fail(new Error("host disposal failed")),
         logger: {
           error: () => Effect.fail(persistenceError),
@@ -1530,7 +1695,7 @@ describe("TypeScript web host backend", () => {
     const disposeStarted = createDeferred();
     const disposeReleased = createDeferred();
     let invokeCalls = 0;
-    const teardown = stopTypescriptHostBackendServices({
+    const teardown = stopHostBackend({
       disposeHost: () =>
         Effect.promise(async () => {
           disposeStarted.resolve();
@@ -1618,7 +1783,7 @@ describe("TypeScript web host backend", () => {
         return stopPromise;
       }
       shutdownStarted = true;
-      stopPromise = stopTypescriptHostBackendServices({
+      stopPromise = stopHostBackend({
         disposeHost: () =>
           Effect.promise(async () => {
             disposeStarted.resolve();
@@ -1729,7 +1894,7 @@ describe("TypeScript web host backend", () => {
         bindHost: "127.0.0.1",
         externalUrl: TERMINAL_UPGRADE_FRONTEND_ORIGIN,
       }),
-      allowedOrigins: allowedOriginsForFrontendOrigin(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
+      allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
       appSessionCookieName: APP_SESSION_COOKIE_NAME,
       appToken: APP_TOKEN,
       controlToken: CONTROL_TOKEN,
@@ -1768,7 +1933,7 @@ describe("TypeScript web host backend", () => {
       disposeStarted = resolve;
     });
 
-    const stopPromise = stopTypescriptHostBackendServices({
+    const stopPromise = stopHostBackend({
       disposeHost: () =>
         Effect.promise(async () => {
           calls.push("dispose-started");

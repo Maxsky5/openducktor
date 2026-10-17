@@ -57,7 +57,7 @@ export const createTaskEventLeaseManager = ({
     try {
       reportDeliveryFailure({ cause, subscriptionId: lease.subscriptionId });
     } catch {
-      // Host task publication must never be affected by delivery reporting.
+      // Delivery reporting must not stop host task publication.
     }
   };
 

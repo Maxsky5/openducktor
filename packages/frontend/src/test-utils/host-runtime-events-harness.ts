@@ -36,7 +36,7 @@ export const startHostRuntimeEventsHarness = ({
   owner.start();
   const emit: RuntimeChangeListener = (event) => {
     if (!listener) throw new Error("The host runtime status owner has not subscribed.");
-    listener(event);
+    return listener(event);
   };
   return { owner, emit };
 };

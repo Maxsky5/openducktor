@@ -1,3 +1,4 @@
+import { getHostStorage } from "@/lib/host-storage";
 import { toast } from "sonner";
 import { z } from "zod";
 import { create } from "zustand";
@@ -49,7 +50,7 @@ type RecentItemsRead = { items: RecentItem[]; error: string | null };
 
 export const readRecentItems = (): RecentItemsRead => {
   try {
-    const saved = globalThis.localStorage.getItem(RECENT_ITEMS_STORAGE_KEY);
+    const saved = getHostStorage().getItem(RECENT_ITEMS_STORAGE_KEY);
     if (saved === null) return { items: [], error: null };
     const parsed = recentItemsSchema.safeParse(JSON.parse(saved));
     if (!parsed.success) {
@@ -74,10 +75,9 @@ type RecentItemsStore = {
 
 /** One device-local Recent list for the command palette. */
 export const useRecentItemsStore = create<RecentItemsStore>()((set, get) => {
-  const { items, error } = readRecentItems();
   return {
-    items,
-    loadError: error,
+    items: [],
+    loadError: null,
     record: (target) => {
       const current = get().items;
       const [first] = current;
@@ -85,7 +85,7 @@ export const useRecentItemsStore = create<RecentItemsStore>()((set, get) => {
       const next = addRecentItem(current, target, Date.now());
       set({ items: next });
       try {
-        globalThis.localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(next));
+        getHostStorage().setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(next));
       } catch (cause) {
         toast.error("Could not save recent tasks and chats.", {
           description: `Allow local storage for this app. ${errorMessage(cause)}`,
@@ -94,6 +94,12 @@ export const useRecentItemsStore = create<RecentItemsStore>()((set, get) => {
     },
   };
 });
+
+/** Read only after the shell selects the host that owns this list. */
+export const loadRecentItems = (): void => {
+  const { items, error } = readRecentItems();
+  useRecentItemsStore.setState({ items, loadError: error });
+};
 
 export const recordRecentItem = (target: RecentItemTarget): void =>
   useRecentItemsStore.getState().record(target);

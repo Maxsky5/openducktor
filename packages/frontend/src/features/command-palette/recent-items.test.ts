@@ -1,12 +1,72 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { RECENT_ITEMS_STORAGE_KEY, RECENT_ITEMS_STORED_LIMIT } from "./constants";
-import { addRecentItem, readRecentItems, type RecentItem } from "./recent-items";
+import {
+  addRecentItem,
+  loadRecentItems,
+  readRecentItems,
+  useRecentItemsStore,
+  type RecentItem,
+} from "./recent-items";
+import {
+  configureShellBridge,
+  createUnavailableShellBridge,
+  getShellBridge,
+} from "@/lib/shell-bridge";
+import { createRemoteHostClient } from "@openducktor/host-client/remote";
+import { getHostStorage } from "@/lib/host-storage";
 
 afterEach(() => {
   globalThis.localStorage.removeItem(RECENT_ITEMS_STORAGE_KEY);
 });
 
 describe("recent items", () => {
+  test("loads the selected host's list without copying local history into remote work", () => {
+    const previousBridge = getShellBridge();
+    const previousItems = useRecentItemsStore.getState();
+    const local: RecentItem[] = [
+      { kind: "task", workspaceId: "local", taskId: "local-task", openedAt: 1 },
+    ];
+    globalThis.localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(local));
+    const remote = createRemoteHostClient(
+      "https://host.example",
+      {
+        appVersion: "test",
+        supportedProtocolVersions: [1],
+        requiredCapabilities: [],
+        optionalCapabilities: [],
+      },
+      {
+        request: async () => {
+          throw new Error("No request expected.");
+        },
+        openTerminal: async () => {
+          throw new Error("No terminal expected.");
+        },
+      },
+      async () => {},
+    );
+    configureShellBridge({ ...createUnavailableShellBridge(), remoteConnection: remote });
+    const remoteStorage = getHostStorage();
+    const saved = remoteStorage.getItem(RECENT_ITEMS_STORAGE_KEY);
+    try {
+      remoteStorage.removeItem(RECENT_ITEMS_STORAGE_KEY);
+      loadRecentItems();
+      expect(useRecentItemsStore.getState().items).toEqual([]);
+      useRecentItemsStore
+        .getState()
+        .record({ kind: "task", workspaceId: "remote", taskId: "remote-task" });
+      expect(useRecentItemsStore.getState().items).toMatchObject([{ workspaceId: "remote" }]);
+      expect(JSON.parse(globalThis.localStorage.getItem(RECENT_ITEMS_STORAGE_KEY)!)).toEqual(local);
+      configureShellBridge(createUnavailableShellBridge());
+      loadRecentItems();
+      expect(useRecentItemsStore.getState().items).toEqual(local);
+    } finally {
+      if (saved === null) remoteStorage.removeItem(RECENT_ITEMS_STORAGE_KEY);
+      else remoteStorage.setItem(RECENT_ITEMS_STORAGE_KEY, saved);
+      configureShellBridge(previousBridge);
+      useRecentItemsStore.setState(previousItems);
+    }
+  });
   test("puts the opened item first and drops its older copy", () => {
     const items: RecentItem[] = [
       { kind: "task", workspaceId: "w1", taskId: "T-1", openedAt: 2 },

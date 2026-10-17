@@ -35,6 +35,7 @@ type ElectronNotificationWindow = {
   focus(): void;
   webContents: {
     isDestroyed(): boolean;
+    getURL(): string;
     send(channel: string, event: ReturnType<typeof notificationClickEventSchema.parse>): void;
   };
 };
@@ -54,6 +55,7 @@ export const createElectronNotificationService = ({
 }: CreateElectronNotificationServiceOptions) => {
   const retainedNotifications = new Map<ElectronNotificationInstance, () => void>();
   let latestFailureMessage: string | undefined;
+  let generation = 0;
 
   const getCapability = (): NotificationOsCapability => {
     const capability: NotificationOsCapability = {
@@ -69,9 +71,15 @@ export const createElectronNotificationService = ({
     return capability;
   };
 
-  const focusAndRoute = (request: NotificationOsDeliveryRequest): void => {
+  const focusAndRoute = (
+    request: NotificationOsDeliveryRequest,
+    source: string | undefined,
+  ): void => {
     const window = getWindows().find(
-      (candidate) => !candidate.isDestroyed() && !candidate.webContents.isDestroyed(),
+      (candidate) =>
+        !candidate.isDestroyed() &&
+        !candidate.webContents.isDestroyed() &&
+        candidate.webContents.getURL().split("#")[0] === source,
     );
     if (!window) {
       return;
@@ -93,6 +101,11 @@ export const createElectronNotificationService = ({
     rawRequest: NotificationOsDeliveryRequest,
   ): Promise<NotificationDeliveryResult> => {
     const request = notificationOsDeliveryRequestSchema.parse(rawRequest);
+    const owner = generation;
+    const source = getWindows()
+      .find((candidate) => !candidate.isDestroyed() && !candidate.webContents.isDestroyed())
+      ?.webContents.getURL()
+      .split("#")[0];
     if (!Notification.isSupported()) {
       return {
         status: "unsupported",
@@ -152,7 +165,8 @@ export const createElectronNotificationService = ({
         });
         native.on("click", () => {
           retainedNotifications.delete(native);
-          focusAndRoute(request);
+          if (owner !== generation) return;
+          focusAndRoute(request, source);
         });
         native.on("close", (event) => {
           if (event?.reason === "timedOut") return;
@@ -186,6 +200,7 @@ export const createElectronNotificationService = ({
     isAppFocused: () => getWindows().some((window) => !window.isDestroyed() && window.isFocused()),
     show,
     dispose(): void {
+      generation += 1;
       for (const [notification, settle] of retainedNotifications) {
         settle();
         notification.close();

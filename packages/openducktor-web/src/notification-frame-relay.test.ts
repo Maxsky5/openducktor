@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import type { NotificationStreamFrame } from "@openducktor/contracts";
-import { createNotificationFrameRelay } from "./notification-frame-relay";
+import { createNotificationFrameRelay } from "@openducktor/frontend/lib/remote/notification-frame-relay";
 const epoch = "11111111-1111-4111-8111-111111111111";
 const attached = (): NotificationStreamFrame => ({
   type: "attached",

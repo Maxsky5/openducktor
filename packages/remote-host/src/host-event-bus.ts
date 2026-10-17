@@ -3,23 +3,9 @@ import {
   type HostEventEnvelope,
   parseHostEventChannel,
 } from "@openducktor/contracts";
-import { hostEventStreamEventName } from "./host-event-stream-name";
 import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "@openducktor/host";
-import { Cause, Effect } from "effect";
-import {
-  causeToWebBoundaryError,
-  combineWebErrors,
-  errorMessage,
-  runWebBoundary,
-  runWebSyncBoundary,
-  toWebOperationError,
-  type WebError,
-  WebOperationError,
-  WebResourceError,
-  WebValidationError,
-} from "./effect/web-errors";
-import { type WebLogger, writeWebLogEffect } from "./logger";
-import { parseHttpOriginEffect, portOfHttpOrigin } from "./http-origin";
+import { hostEventStreamEventName } from "./host-event-stream-name";
+import { WebResourceError } from "./effect/web-errors";
 
 export type BufferedHostEvent = {
   id: number;
@@ -35,13 +21,6 @@ export type BufferedHostEventReplay = {
 export type BufferedHostEventDeliveryReporter = {
   report(failure: { channel: HostEventChannel; cause: unknown }): void;
 };
-type StopTypescriptHostBackendServicesInput = {
-  disposeHost: () => Effect.Effect<void, unknown>;
-  logger: WebLogger;
-  resolveExited: (exitCode: number) => void;
-  stopServer: () => void | Promise<void>;
-};
-
 type ReplayBuffer = {
   events: BufferedHostEvent[];
   bytes: number;
@@ -206,93 +185,3 @@ export class BufferedHostEventBus implements HostEventBusPort {
     }
   }
 }
-
-export const validateWebFrontendOriginEffect = (
-  origin: string,
-): Effect.Effect<string, WebValidationError> =>
-  Effect.gen(function* () {
-    const trimmed = origin.trim();
-    if (!trimmed) {
-      return yield* new WebValidationError({
-        field: "frontendOrigin",
-        message: "browser frontend origin cannot be empty",
-      });
-    }
-
-    const parsed = yield* parseHttpOriginEffect(trimmed, "browser frontend origin", {
-      field: "frontendOrigin",
-    });
-    return parsed.origin;
-  });
-
-export const validateWebFrontendOrigin = (origin: string): string =>
-  runWebSyncBoundary(validateWebFrontendOriginEffect(origin));
-
-export const allowedOriginsForFrontendOrigin = (
-  frontendOrigin: string,
-  frontendPort?: number,
-): Set<string> => {
-  const parsed = new URL(frontendOrigin);
-  const port = String(frontendPort ?? Number(portOfHttpOrigin(parsed)));
-  const loopbackOrigins = ["127.0.0.1", "localhost", "[::1]"].map(
-    (host) => new URL(`http://${host}:${port}`).origin,
-  );
-  const origins = new Set([parsed.origin, ...loopbackOrigins]);
-  parsed.hostname = parsed.hostname.replace(/\.$/u, "");
-  origins.add(parsed.origin);
-  return origins;
-};
-
-export const stopTypescriptHostBackendServicesEffect = ({
-  disposeHost,
-  logger,
-  resolveExited,
-  stopServer,
-}: StopTypescriptHostBackendServicesInput): Effect.Effect<void, WebError> =>
-  Effect.gen(function* () {
-    let exitCode = 0;
-    const failures: WebError[] = [];
-    const disposeExit = yield* Effect.exit(disposeHost());
-    if (disposeExit._tag === "Failure") {
-      exitCode = 1;
-      failures.push(
-        toWebOperationError(causeToWebBoundaryError(disposeExit.cause), "web.host.dispose"),
-      );
-      const logResult = yield* Effect.result(
-        writeWebLogEffect(logger, "error", Cause.pretty(disposeExit.cause)),
-      );
-      if (logResult._tag === "Failure") {
-        failures.push(logResult.failure);
-      }
-    }
-    const stopServerResult = yield* Effect.result(
-      Effect.tryPromise({
-        try: async () => {
-          await stopServer();
-        },
-        catch: (cause) =>
-          new WebOperationError({
-            operation: "web.host.stop-server",
-            message: errorMessage(cause),
-            cause,
-          }),
-      }),
-    );
-    if (stopServerResult._tag === "Failure") {
-      exitCode = 1;
-      failures.push(stopServerResult.failure);
-    }
-    resolveExited(exitCode);
-    const failure = combineWebErrors(
-      "web.host.shutdown",
-      "OpenDucktor TypeScript host shutdown failed.",
-      failures,
-    );
-    if (failure) {
-      return yield* failure;
-    }
-  });
-
-export const stopTypescriptHostBackendServices = (
-  input: StopTypescriptHostBackendServicesInput,
-): Promise<void> => runWebBoundary(stopTypescriptHostBackendServicesEffect(input));

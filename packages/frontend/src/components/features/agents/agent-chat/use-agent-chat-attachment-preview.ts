@@ -1,6 +1,8 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
-import { useCallback, useEffect, useReducer, useRef } from "react";
-import { resolveLocalAttachmentPreviewSrc } from "@/lib/local-attachment-files";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { errorMessage } from "@/lib/errors";
+import { resolveLocalAttachmentPreview } from "@/lib/local-attachment-files";
+import { useResourceSource } from "@/lib/use-resource-source";
 import { isPreviewableAttachmentKind } from "./agent-chat-attachments";
 
 export type AgentChatAttachmentPreviewTarget = {
@@ -26,69 +28,8 @@ export type AgentChatAttachmentPreviewState = {
   markPreviewUnavailable: (failingSrc?: string) => void;
 };
 
-export const readAttachmentPreviewLoadFailureMessage = (attachmentName: string): string => {
-  return `Attachment preview is unavailable because "${attachmentName}" could not be read from its original local path.`;
-};
-
-type AttachmentPreviewReducerState = {
-  dialogOpen: boolean;
-  resolvedPreviewSrc: string | null;
-  objectPreviewUrl: string | null;
-  previewError: string | null;
-  isResolvingPreview: boolean;
-};
-
-type AttachmentPreviewAction =
-  | { type: "dialogChanged"; open: boolean }
-  | { type: "objectPreviewChanged"; url: string | null }
-  | { type: "previewUnavailable"; error: string }
-  | { type: "previewResolvedFromObject"; url: string | null }
-  | { type: "previewMissingPath" }
-  | { type: "previewResolveStarted" }
-  | { type: "previewResolveSucceeded"; src: string }
-  | { type: "previewResolveFailed"; error: string }
-  | { type: "previewResolveFinished" };
-
-const attachmentPreviewReducer = (
-  state: AttachmentPreviewReducerState,
-  action: AttachmentPreviewAction,
-): AttachmentPreviewReducerState => {
-  switch (action.type) {
-    case "dialogChanged":
-      return { ...state, dialogOpen: action.open };
-    case "objectPreviewChanged":
-      return { ...state, objectPreviewUrl: action.url };
-    case "previewUnavailable":
-      return {
-        ...state,
-        dialogOpen: false,
-        resolvedPreviewSrc: null,
-        previewError: action.error,
-      };
-    case "previewResolvedFromObject":
-      return {
-        ...state,
-        resolvedPreviewSrc: action.url,
-        previewError: null,
-        isResolvingPreview: false,
-      };
-    case "previewMissingPath":
-      return {
-        ...state,
-        resolvedPreviewSrc: null,
-        previewError: "Attachment preview is unavailable because the local file path is missing.",
-        isResolvingPreview: false,
-      };
-    case "previewResolveStarted":
-      return { ...state, isResolvingPreview: true, previewError: null };
-    case "previewResolveSucceeded":
-      return { ...state, resolvedPreviewSrc: action.src };
-    case "previewResolveFailed":
-      return { ...state, resolvedPreviewSrc: null, previewError: action.error };
-    case "previewResolveFinished":
-      return { ...state, isResolvingPreview: false };
-  }
-};
+type FileSource = { file: File; src: string };
+type PreviewFailure = { id: string; src: string | null; message: string };
 
 export const useAgentChatAttachmentPreview = ({
   attachment,
@@ -97,116 +38,70 @@ export const useAgentChatAttachmentPreview = ({
   attachment: AgentChatAttachmentPreviewTarget;
   externalError?: string | null;
 }): AgentChatAttachmentPreviewState => {
-  const [state, dispatch] = useReducer(attachmentPreviewReducer, {
-    dialogOpen: false,
-    resolvedPreviewSrc: null,
-    objectPreviewUrl: null,
-    previewError: null,
-    isResolvingPreview: false,
-  });
-  const { dialogOpen, resolvedPreviewSrc, objectPreviewUrl, previewError, isResolvingPreview } =
-    state;
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [fileSource, setFileSource] = useState<FileSource | null>(null);
+  const [failure, setFailure] = useState<PreviewFailure | null>(null);
   const previewable =
     isPreviewableAttachmentKind(attachment.kind) && attachment.localPreviewAvailable !== false;
-  const latestPreviewSrcRef = useRef<string | null>(null);
-  const setDialogOpen = useCallback((open: boolean): void => {
-    dispatch({ type: "dialogChanged", open });
-  }, []);
-
+  const resource = useResourceSource(
+    ["attachment-preview", attachment.path ?? ""],
+    previewable && !attachment.file && attachment.path
+      ? (signal) => resolveLocalAttachmentPreview(attachment.path!, signal)
+      : undefined,
+  );
   useEffect(() => {
     if (!attachment.file || !previewable) {
-      dispatch({ type: "objectPreviewChanged", url: null });
+      setFileSource(null);
       return;
     }
-
-    const nextUrl = URL.createObjectURL(attachment.file);
-    dispatch({ type: "objectPreviewChanged", url: nextUrl });
-    return () => {
-      URL.revokeObjectURL(nextUrl);
-    };
+    const file = attachment.file;
+    const src = URL.createObjectURL(file);
+    setFileSource({ file, src });
+    return () => URL.revokeObjectURL(src);
   }, [attachment.file, previewable]);
 
-  useEffect(() => {
-    latestPreviewSrcRef.current = resolvedPreviewSrc ?? objectPreviewUrl;
-  }, [objectPreviewUrl, resolvedPreviewSrc]);
-
-  const markPreviewUnavailable: (failingSrc?: string) => void = useCallback(
-    (failingSrc?: string) => {
-      if (failingSrc && latestPreviewSrcRef.current && failingSrc !== latestPreviewSrcRef.current) {
-        return;
-      }
-      dispatch({
-        type: "previewUnavailable",
-        error: readAttachmentPreviewLoadFailureMessage(attachment.name),
-      });
-    },
-    [attachment.name],
+  const { src: resolvedPreviewSrc, error: previewError } = previewSource(
+    attachment,
+    fileSource,
+    resource,
+    failure,
   );
-
+  const latestPreviewSrc = useRef<string | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    if (!previewable || objectPreviewUrl) {
-      dispatch({ type: "previewResolvedFromObject", url: objectPreviewUrl ?? null });
-      return;
-    }
-    if (!attachment.path) {
-      dispatch({ type: "previewMissingPath" });
-      return;
-    }
-
-    dispatch({ type: "previewResolveStarted" });
-    void resolveLocalAttachmentPreviewSrc(attachment.path)
-      .then((src) => {
-        if (cancelled) {
-          return;
-        }
-        dispatch({ type: "previewResolveSucceeded", src });
-      })
-      .catch((resolveError) => {
-        if (cancelled) {
-          return;
-        }
-        dispatch({
-          type: "previewResolveFailed",
-          error: resolveError instanceof Error ? resolveError.message : String(resolveError),
-        });
-      })
-      .finally(() => {
-        if (!cancelled) {
-          dispatch({ type: "previewResolveFinished" });
-        }
+    latestPreviewSrc.current = resolvedPreviewSrc;
+  }, [resolvedPreviewSrc]);
+  const markPreviewUnavailable = useCallback(
+    (failingSrc?: string) => {
+      if (failingSrc && latestPreviewSrc.current && failingSrc !== latestPreviewSrc.current) return;
+      setFailure({
+        id: attachment.id,
+        src: latestPreviewSrc.current,
+        message: readAttachmentPreviewLoadFailureMessage(attachment.name),
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [attachment.path, objectPreviewUrl, previewable]);
-
-  const effectiveError = externalError ?? previewError;
-  const canOpenPreview = previewable && Boolean(resolvedPreviewSrc) && !previewError;
+      setDialogOpen(false);
+    },
+    [attachment.id, attachment.name],
+  );
+  const isResolvingPreview =
+    previewable && (attachment.file ? resolvedPreviewSrc === null : resource.isLoading);
   const showResolvedPreview = Boolean(resolvedPreviewSrc) && !previewError;
-
   const requestPreviewOpen = useCallback((): string | null => {
-    if (isResolvingPreview) {
+    if (isResolvingPreview) return null;
+    if (showResolvedPreview) {
+      setDialogOpen(true);
       return null;
     }
-    if (canOpenPreview) {
-      dispatch({ type: "dialogChanged", open: true });
-      return null;
-    }
-
     return (
       previewError ??
       "The attachment preview is not available because the local file could not be resolved."
     );
-  }, [canOpenPreview, isResolvingPreview, previewError]);
-
+  }, [isResolvingPreview, showResolvedPreview, previewError]);
   return {
     dialogOpen,
     setDialogOpen,
-    resolvedPreviewSrc,
+    resolvedPreviewSrc: previewError ? null : resolvedPreviewSrc,
     previewError,
-    effectiveError,
+    effectiveError: externalError ?? previewError,
     isResolvingPreview,
     previewable,
     showResolvedPreview,
@@ -214,3 +109,24 @@ export const useAgentChatAttachmentPreview = ({
     markPreviewUnavailable,
   };
 };
+
+export const readAttachmentPreviewLoadFailureMessage = (attachmentName: string): string =>
+  `Attachment preview is unavailable because "${attachmentName}" could not be read from its original local path.`;
+
+function previewSource(
+  attachment: AgentChatAttachmentPreviewTarget,
+  fileSource: FileSource | null,
+  resource: Pick<ReturnType<typeof useResourceSource>, "src" | "error">,
+  failure: PreviewFailure | null,
+) {
+  const previewable =
+    isPreviewableAttachmentKind(attachment.kind) && attachment.localPreviewAvailable !== false;
+  let src = resource.src;
+  if (!previewable) src = null;
+  else if (attachment.file) src = fileSource?.file === attachment.file ? fileSource.src : null;
+  let error = resource.error ? errorMessage(resource.error) : null;
+  if (previewable && !attachment.file && !attachment.path)
+    error = "Attachment preview is unavailable because the local file path is missing.";
+  if (failure?.id === attachment.id && failure.src === src) error = failure.message;
+  return { src, error };
+}

@@ -4,7 +4,7 @@ import {
   combineWebErrors,
   runWebBoundary,
   type WebError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 import type { FrontendServer } from "./launcher-support";
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import type { TypescriptHostBackend } from "./typescript-host-backend";

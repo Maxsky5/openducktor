@@ -1,3 +1,12 @@
+import {
+  BufferedHostEventBus,
+  createRemoteAccessController,
+  enableRemoteAccessFromEnvironment,
+  type RemoteAccessController,
+} from "@openducktor/remote-host";
+import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
+import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
+import { registerElectronNativeThemeIpc } from "./electron-native-theme-ipc";
 import { registerElectronNotificationStreamIpc } from "./electron-notification-stream-ipc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,13 +19,10 @@ import {
   appUpdateCheckInputSchema,
   appUpdateCommandResultSchema,
   appUpdateStateSchema,
-  settingsSnapshotSchema,
-  themePreferenceSchema,
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
   checkStartupSettingsEffect,
-  createHostEventBus,
   findInvalidSettingsFileError,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
@@ -65,7 +71,7 @@ import { prepareElectronDevelopmentInstanceEffect } from "./electron-development
 import { registerElectronEditorClipboardIpc } from "./electron-editor-clipboard-ipc";
 import { createElectronEffectHostCommandRouter } from "./electron-host";
 import { forwardElectronHostEvent } from "./electron-host-event-forwarding";
-import { runElectronHostInvoke } from "./electron-host-invoke";
+import { createElectronHostInvoke, runElectronHostInvoke } from "./electron-host-invoke";
 import { registerElectronHostInvokeHandler } from "./electron-host-invoke-handler";
 import {
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -171,13 +177,14 @@ const reportElectronNonFatalFailure = (message: string, cause: unknown): void =>
     process.stderr.write(`OpenDucktor Electron error reporting failed: ${errorMessage(cause)}\n`);
   });
 };
-const hostEventBus = createHostEventBus({
+const hostEventBus = new BufferedHostEventBus({
   report: ({ channel, cause }) =>
     reportElectronNonFatalFailure(
       `OpenDucktor host event delivery failed for channel '${channel}'.`,
       cause,
     ),
 });
+let remoteAccess: RemoteAccessController | null = null;
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
 let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
@@ -340,12 +347,30 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
         ),
     });
     const runtimeDistribution = yield* resolveRuntimeDistributionEffect();
-    const hostCommandRouter = yield* createElectronHostCommandRouter(runtimeDistribution).pipe(
+    const router = yield* createElectronHostCommandRouter(runtimeDistribution).pipe(
       Effect.mapError((cause) =>
         mapStartupPreparationError(cause, "electron.main.create-host-router", errorMessage(cause)),
       ),
     );
+    const hostCommandRouter = {
+      ...router,
+      invoke: createElectronHostInvoke(router, electronMainRuntimeBindings, nativeTheme),
+    };
     activeHostCommandRouter = hostCommandRouter;
+    remoteAccess = createRemoteAccessController(
+      { ...hostCommandRouter, eventBus: hostEventBus },
+      {
+        shell: "electron",
+        appVersion: currentVersion,
+        logger: {
+          info: electronMainLogger.info,
+          error: (message) => electronMainLogger.error(message),
+          success: electronMainLogger.info,
+        },
+        reportFailure: (cause) => reportElectronNonFatalFailure("Remote transport failed", cause),
+      },
+    );
+    yield* enableRemoteAccessFromEnvironment(remoteAccess, process.env);
     return { hostCommandRouter };
   });
 
@@ -711,7 +736,17 @@ const registerIpcHandlers = (
       ),
     shutdownController.isHostShutdownStarted,
   );
+  if (remoteAccess)
+    registerElectronRemoteAccessIpc(
+      ipcMain,
+      remoteAccess,
+      shutdownController.isHostShutdownStarted,
+    );
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
+  registerElectronNativeThemeIpc(ipcMain, nativeTheme, shutdownController.isHostShutdownStarted);
+  registerElectronHostSelectionIpc(ipcMain, shutdownController.isHostShutdownStarted, () =>
+    activeNotificationRuntime?.dispose(),
+  );
   registerElectronTaskStreamIpc({
     ipcMain,
     reportDeliveryFailure: ({ cause, subscriptionId }) =>
@@ -734,17 +769,7 @@ const registerIpcHandlers = (
     isHostShutdownStarted: shutdownController.isHostShutdownStarted,
     invoke: async (command, args) => {
       const operation = hostCommandRouter.invoke(command, args);
-      const result = await runElectronHostInvoke(operation, (effect) =>
-        electronMainRuntimeBindings.runHostCommand(command, effect),
-      );
-      if (result.ok) {
-        if (command === "workspace_get_settings_snapshot") {
-          nativeTheme.themeSource = settingsSnapshotSchema.parse(result.value).theme;
-        } else if (command === "set_theme") {
-          nativeTheme.themeSource = themePreferenceSchema.unwrap().parse(args?.theme);
-        }
-      }
-      return result;
+      return runElectronHostInvoke(operation);
     },
   });
 
@@ -812,7 +837,18 @@ const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLi
   if (!activeHostCommandRouter) {
     return Effect.void;
   }
-  return disposeHostEffect(activeHostCommandRouter, reason);
+  const host = activeHostCommandRouter;
+  return Effect.gen(function* () {
+    const remoteResult = yield* Effect.result(remoteAccess ? remoteAccess.close() : Effect.void);
+    const hostResult = yield* Effect.result(disposeHostEffect(host, reason));
+    if (remoteResult._tag === "Failure")
+      return yield* new ElectronLifecycleError({
+        operation: "remote.close",
+        message: remoteResult.failure.message,
+        cause: remoteResult.failure,
+      });
+    if (hostResult._tag === "Failure") return yield* hostResult.failure;
+  });
 };
 
 const disposeActiveAppUpdateService = async (): Promise<void> => {

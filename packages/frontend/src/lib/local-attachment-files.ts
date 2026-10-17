@@ -2,6 +2,7 @@ import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { hostClient } from "@/lib/host-client";
 import { readFileAsBase64 } from "./read-file-as-base64";
 import { getShellBridge } from "./shell-bridge";
+import type { ResourceData } from "@/types/resource-source";
 
 export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
   if (file.size > LOCAL_ATTACHMENT_BYTE_LIMIT) {
@@ -18,14 +19,18 @@ export const stageLocalAttachmentFile = async (file: File): Promise<string> => {
   return staged.path;
 };
 
-export const resolveLocalAttachmentPreviewSrc = async (path: string): Promise<string> => {
+export const resolveLocalAttachmentPreview = async (
+  path: string,
+  signal: AbortSignal,
+): Promise<ResourceData> => {
+  signal.throwIfAborted();
   const trimmedPath = path.trim();
   if (trimmedPath.length === 0) {
     throw new Error("Attachment preview is unavailable because the local file path is missing.");
   }
   if (trimmedPath.startsWith("data:")) {
-    return trimmedPath;
+    return { kind: "url", src: trimmedPath };
   }
 
-  return getShellBridge().resolveLocalAttachmentPreviewSrc(trimmedPath);
+  return getShellBridge().resolveLocalAttachmentPreview(trimmedPath, signal);
 };

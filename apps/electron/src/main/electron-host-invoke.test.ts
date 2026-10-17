@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { CodexSessionHistoryError, TaskAssetError, TerminalServiceError } from "@openducktor/host";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { AgentSessionMessageAcceptedError } from "../../../../packages/host/src/ports/agent-session-send-error";
-import { runElectronHostInvoke } from "./electron-host-invoke";
-import { RuntimeQueryError } from "@openducktor/host";
+import { createElectronHostInvoke, runElectronHostInvoke } from "./electron-host-invoke";
+import {
+  HostOperationError,
+  RuntimeQueryError,
+  hostInvokeFailureFromError,
+} from "@openducktor/host";
+
+import { createElectronMainRuntimeBindings } from "./electron-main-runtime-bindings";
+import { DEFAULT_AGENT_RUNTIMES, settingsSnapshotSchema } from "@openducktor/contracts";
+import { createEffectHostCommandRouter } from "../../../../packages/host/src/interface/router/host-command-router";
 
 describe("runElectronHostInvoke", () => {
   test("preserves runtime query identity and diagnostics across Electron IPC", async () => {
@@ -169,3 +177,88 @@ describe("runElectronHostInvoke", () => {
     });
   });
 });
+
+test.each(["set_theme", "workspace_get_settings_snapshot"] as const)(
+  "%s updates the native theme after success",
+  async (command) => {
+    const nativeTheme = { themeSource: "light" } satisfies Parameters<
+      typeof createElectronHostInvoke
+    >[2];
+    const snapshot = settingsSnapshotSchema.parse({
+      theme: "dark",
+      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    });
+    let failure: HostOperationError | null = null;
+    const router = createEffectHostCommandRouter({
+      handlers: {
+        set_theme: () => (failure ? Effect.fail(failure) : Effect.void),
+        workspace_get_settings_snapshot: () =>
+          failure ? Effect.fail(failure) : Effect.succeed(snapshot),
+      },
+    });
+    const bindings = createElectronMainRuntimeBindings({
+      error: () => Effect.void,
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    });
+    const invoke = createElectronHostInvoke(router, bindings, nativeTheme);
+    try {
+      await Effect.runPromise(invoke(command, { theme: "dark" }));
+      expect(nativeTheme.themeSource).toBe("dark");
+      failure = new HostOperationError({
+        operation: command,
+        message: "Settings could not be saved.",
+      });
+      await expect(Effect.runPromise(invoke(command, { theme: "system" }))).rejects.toBe(failure);
+      expect(nativeTheme.themeSource).toBe("dark");
+    } finally {
+      await bindings.drainHostCommands();
+    }
+  },
+);
+
+test.each([false, true])(
+  "commands preserve partial outcomes and logging failures (logging fails: %s)",
+  async (loggingFails) => {
+    const commandFailure = new TaskAssetError({
+      operation: "create",
+      code: "partial_state",
+      taskId: "task-1",
+      assetIds: ["550e8400-e29b-41d4-a716-446655440000"],
+      failedPhase: "compensate_create",
+      durableState: "created_partial",
+      retryAllowed: false,
+      message: "Refresh before continuing.",
+    });
+    const persistenceFailure = new Error("Log write failed.");
+    const bindings = createElectronMainRuntimeBindings({
+      error: () => (loggingFails ? Effect.fail(persistenceFailure) : Effect.void),
+      info: () => Effect.void,
+      warn: () => Effect.void,
+    });
+    const invoke = createElectronHostInvoke(
+      { invoke: () => Effect.fail(commandFailure) },
+      bindings,
+      { themeSource: "system" },
+    );
+    const result = await Effect.runPromiseExit(invoke("task_asset_create"));
+    if (!Exit.isFailure(result)) throw new Error("Expected command failure.");
+    const failure = Cause.findErrorOption(result.cause);
+    if (Option.isNone(failure)) throw new Error("Expected a typed command failure.");
+    const cause = failure.value;
+    if (loggingFails) {
+      expect(cause).not.toBe(commandFailure);
+      expect(cause).toMatchObject({
+        message: expect.stringContaining("could not be persisted"),
+        cause: { details: { commandFailure, persistenceFailure } },
+      });
+    } else {
+      expect(cause).toBe(commandFailure);
+    }
+    expect(hostInvokeFailureFromError(cause)).toMatchObject({
+      kind: "task_asset",
+      taskAssetFailure: { code: "partial_state", retryAllowed: false, taskId: "task-1" },
+    });
+    await bindings.drainHostCommands();
+  },
+);

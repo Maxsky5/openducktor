@@ -92,6 +92,7 @@ export const useSettingsModalPromptValidation = ({
 
   const settingsSectionErrorCountById = {
     general: 0,
+    "remote-access": 0,
     git: 0,
     runtimes: 0,
     repositories: promptValidationState.repoTotalErrorCount,

@@ -2,6 +2,8 @@ import { Bell, Check, Cpu, FolderGit2, Route } from "lucide-react";
 import { type ReactElement, type ReactNode, useLayoutEffect, useRef } from "react";
 import { OpenDucktorMark } from "@/components/layout/openducktor-mark";
 import { ThemePicker } from "@/components/layout/theme-picker";
+import { useTheme } from "@/components/layout/theme-provider";
+import { HostSwitcher } from "@/components/layout/host-connection";
 import { getAppVersion } from "@/lib/app-version";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +49,7 @@ export function OnboardingLayout({
   children,
 }: OnboardingLayoutProps): ReactElement {
   const currentStageIndex = ONBOARDING_STAGES.findIndex((item) => item.id === stage);
+  const { themePreference, setThemePreference } = useTheme();
   const scrollContainerRef = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
@@ -79,11 +82,17 @@ export function OnboardingLayout({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <HostSwitcher />
             {headerActions}
             <span id={themeLabelId} className="sr-only">
               Theme
             </span>
-            <ThemePicker triggerAriaLabelledBy={themeLabelId} triggerClassName="w-44" />
+            <ThemePicker
+              value={themePreference}
+              onValueChange={setThemePreference}
+              triggerAriaLabelledBy={themeLabelId}
+              triggerClassName="w-44"
+            />
           </div>
         </header>
 

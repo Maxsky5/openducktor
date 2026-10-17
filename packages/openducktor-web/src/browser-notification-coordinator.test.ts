@@ -366,6 +366,36 @@ describe("FakeLockManager", () => {
 });
 
 describe("browser notification coordinator", () => {
+  test("different hosts deliver equal occurrence IDs and track focus separately", async () => {
+    const locks = new FakeLockManager();
+    const makeHost = (scope: string, focused: boolean) =>
+      createBrowserNotificationCoordinator({
+        scope,
+        locks,
+        createChannel: () => new FakeBroadcastHub().createChannel(),
+        focusDocument: { hasFocus: () => focused },
+        focusWindow: new FakeFocusWindow(),
+      });
+    const first = makeHost("https://first.test/remote", true);
+    const second = makeHost("https://second.test/remote", false);
+    try {
+      await waitFor(() => first.isExternalDeliveryOwner() && second.isExternalDeliveryOwner());
+      const settings = createDefaultNotificationSettings();
+      await first.publishOccurrence(occurrence, settings);
+      const other = { ...occurrence, repositoryLabel: "Other host" };
+      expect((await second.publishOccurrence(other, settings)).occurrence.repositoryLabel).toBe(
+        "Other host",
+      );
+      expect(await first.claimExternalDelivery(occurrence.occurrenceId)).toBe(true);
+      expect(await second.claimExternalDelivery(occurrence.occurrenceId)).toBe(true);
+      expect(await first.isAnyTabFocused()).toBe(true);
+      expect(await second.isAnyTabFocused()).toBe(false);
+    } finally {
+      first.dispose();
+      second.dispose();
+    }
+  });
+
   test.each(["createChannel", "locks", "focusDocument", "focusWindow"] as const)(
     "reports missing %s during external delivery while keeping local delivery",
     async (missing) => {

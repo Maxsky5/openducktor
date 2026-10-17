@@ -40,6 +40,7 @@
     "@openducktor/frontend": "workspace:*",
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
+    "@openducktor/remote-host": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.4",
     "@types/semver": "^7.7.1",

@@ -89,6 +89,14 @@ bun run browser:dev
 
 The browser command starts the TypeScript host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must use the shell bridge instead of importing shell internals directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
 
+Run the standalone frontend without starting a host:
+
+```sh
+bun run browser:client
+```
+
+This command opens at `http://127.0.0.1:1421`. It does not load a default host or `/openducktor-config.json`. On the first visit, it shows the host connection screen. Later visits restore the host saved in this browser. To test a connection, keep `bun run browser:dev` running in another terminal, enable Settings, Remote control there, and paste its host address into the standalone frontend. The address needs no `/remote` suffix.
+
 To connect a standalone external MCP client, copy the instance ID from the dev-server output:
 
 ```sh

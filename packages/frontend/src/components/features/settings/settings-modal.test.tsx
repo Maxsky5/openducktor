@@ -76,6 +76,19 @@ for (const shared of [true, false]) {
   }, 2000);
 }
 
+test("a client without a local host hides Remote control and keeps the settings footer", async () => {
+  const settings = renderSettings(true);
+  try {
+    const content = await settings.open();
+    expect(content.queryByRole("button", { name: "Remote control" })).toBeNull();
+    expect(content.getByRole("button", { name: "Save Settings" })).toBeDefined();
+    await settings.close(content);
+    expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
+  } finally {
+    settings.unmount();
+  }
+});
+
 test("shared settings remembers the section opened by a deep link", async () => {
   const settings = renderSettings(true);
   try {

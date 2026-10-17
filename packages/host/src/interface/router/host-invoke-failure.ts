@@ -1,4 +1,8 @@
-import type { AgentSessionResumeFailure, HostInvokeFailure } from "@openducktor/contracts";
+import {
+  hostInvokeFailureSchema,
+  type AgentSessionResumeFailure,
+  type HostInvokeFailure,
+} from "@openducktor/contracts";
 import { RuntimeQueryError } from "../../ports/runtime-query-error";
 import {
   AgentSessionMessageAcceptedError,
@@ -12,7 +16,11 @@ import {
 } from "../../application/terminals/terminal-service";
 import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset-error";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
-import { HostValidationError, readRuntimeOperationFailure } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  readRuntimeOperationFailure,
+} from "../../effect/host-errors";
 import { SessionOperationError } from "../../ports/session-operation-error";
 import { WorkflowIntentRejectedError } from "../../ports/workflow-intent-rejected-error";
 
@@ -20,6 +28,9 @@ export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | 
   if (cause instanceof SessionOperationError)
     return { kind: "session_operation", observation: cause.observation };
   if (cause instanceof WorkflowIntentRejectedError) return { kind: "workflow_intent_rejected" };
+  if (cause instanceof HostOperationError && cause.details?.hostInvokeFailure !== undefined) {
+    return hostInvokeFailureSchema.parse(cause.details.hostInvokeFailure);
+  }
   if (cause instanceof AgentSessionCommandAcceptedError) return cause.failure;
   if (cause instanceof RuntimeQueryError) {
     return { kind: "runtime_query", runtimeQueryFailure: cause.failure };
