@@ -111,30 +111,40 @@ export function RemoteAccessForm({
             a network above.
           </p>
         ) : null}
-        <Collapsible open={advanced} onOpenChange={setAdvanced} className="border-t border-border">
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-auto w-full justify-start py-3 focus-visible:ring-inset"
-            >
-              <ChevronDown data-icon="inline-start" /> Advanced
+        <div>
+          <Collapsible
+            open={advanced}
+            onOpenChange={setAdvanced}
+            className="border-t border-border"
+          >
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto w-full justify-start rounded-none py-4 focus-visible:ring-inset"
+              >
+                <ChevronDown
+                  data-icon="inline-start"
+                  className={advanced ? "rotate-180" : undefined}
+                />{" "}
+                Advanced
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pb-4 pt-3">
+              <AdvancedSettings id={id} fields={fields} onChange={onChange} invalid={invalid} />
+            </CollapsibleContent>
+          </Collapsible>
+          {error ? (
+            <p role="alert" className="py-4 text-sm text-destructive-surface-foreground">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
+            <Button type="submit" disabled={status === "available" && !changed}>
+              {pending ? "Updating remote control..." : label}
             </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3">
-            <AdvancedSettings id={id} fields={fields} onChange={onChange} invalid={invalid} />
-          </CollapsibleContent>
-        </Collapsible>
-        {error ? (
-          <p role="alert" className="text-sm text-destructive-surface-foreground">
-            {error}
-          </p>
-        ) : null}
-        <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
-          <Button type="submit" disabled={status === "available" && !changed}>
-            {pending ? "Updating remote control..." : label}
-          </Button>
+          </div>
         </div>
       </fieldset>
     </form>
