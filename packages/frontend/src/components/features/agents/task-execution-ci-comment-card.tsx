@@ -193,18 +193,11 @@ type CommentDisclosureState = {
   isResolved: boolean | null;
 };
 
-export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCard({
-  comment,
-  isBot,
-  isBodyReady = true,
-}: TaskExecutionCiCommentCardProps): ReactElement {
-  const showThreadBadge = comment.isResolved !== null;
-  const isReview = comment.source === "review";
-  const reviewPresentation = isReview ? REVIEW_OUTCOME_PRESENTATION[comment.reviewOutcome] : null;
-  const activityName = isReview ? "review" : "comment";
-  const location = commentLocationLabel(comment);
-  const author = comment.author ?? "Unknown author";
-  const activityTimestamp = comment.createdAt ?? comment.updatedAt;
+/**
+ * Opens an unresolved comment and closes a resolved one. A new comment or a change in its resolution
+ * resets the choice. The body loads once the user opens the comment.
+ */
+function useCommentDisclosure(comment: PullRequestReviewActivity) {
   const [disclosure, setDisclosure] = useState<CommentDisclosureState>(() => ({
     commentId: comment.id,
     hasRequestedBody: false,
@@ -217,18 +210,8 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
   const hasRequestedBody = disclosureIsCurrent
     ? disclosure.hasRequestedBody
     : disclosure.commentId === comment.id && comment.isResolved !== true;
-  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
-  const avatarUrl = comment.authorAvatarUrl;
-  const showAvatar = avatarUrl !== null && avatarUrl !== failedAvatarUrl;
 
-  const openComment = (): void => {
-    if (!comment.url) {
-      return;
-    }
-    openReviewUrl(comment.url, `Failed to open ${activityName}`);
-  };
-
-  const toggleComment = (): void => {
+  const toggle = (): void => {
     setDisclosure({
       commentId: comment.id,
       hasRequestedBody: hasRequestedBody || !isOpen,
@@ -236,6 +219,118 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
       isResolved: comment.isResolved,
     });
   };
+
+  return { isOpen, hasRequestedBody, toggle };
+}
+
+function CiCommentAvatar({
+  author,
+  avatarUrl,
+}: {
+  author: string;
+  avatarUrl: string | null;
+}): ReactElement {
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const showAvatar = avatarUrl !== null && avatarUrl !== failedAvatarUrl;
+
+  return (
+    <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
+      {showAvatar ? (
+        <img
+          src={avatarUrl}
+          alt={`${author} avatar`}
+          width={28}
+          height={28}
+          loading="lazy"
+          decoding="async"
+          className="size-full object-cover"
+          onError={() => {
+            setFailedAvatarUrl(avatarUrl);
+          }}
+        />
+      ) : (
+        <MessageSquare
+          className="size-3.5"
+          aria-hidden="true"
+          data-testid="ci-comment-avatar-fallback"
+        />
+      )}
+    </div>
+  );
+}
+
+function CiCommentThreadRow({
+  isResolved,
+  location,
+}: {
+  isResolved: boolean | null;
+  location: string | null;
+}): ReactElement | null {
+  if (isResolved === null && !location) {
+    return null;
+  }
+  return (
+    <div className="mt-1 flex min-w-0 items-center gap-2">
+      {isResolved !== null ? (
+        <Badge
+          variant={isResolved ? "success" : "warning"}
+          className="shrink-0 px-2 py-0 text-[10px]"
+        >
+          {isResolved ? "Resolved" : "Unresolved"}
+        </Badge>
+      ) : null}
+      {location ? (
+        <span
+          dir="rtl"
+          className="min-w-0 truncate text-left font-mono text-[11px] text-muted-foreground"
+          title={location}
+        >
+          <span dir="ltr">{location}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function CiCommentOpenButton({
+  url,
+  activityName,
+  author,
+}: {
+  url: string;
+  activityName: string;
+  author: string;
+}): ReactElement {
+  return (
+    <div className="flex items-center pr-3">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => openReviewUrl(url, `Failed to open ${activityName}`)}
+            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Open ${activityName} from ${author}`}
+          >
+            <ExternalLink className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Open {activityName}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
+export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCard({
+  comment,
+  isBot,
+  isBodyReady = true,
+}: TaskExecutionCiCommentCardProps): ReactElement {
+  const isReview = comment.source === "review";
+  const reviewPresentation = isReview ? REVIEW_OUTCOME_PRESENTATION[comment.reviewOutcome] : null;
+  const activityName = isReview ? "review" : "comment";
+  const author = comment.author ?? "Unknown author";
+  const activityTimestamp = comment.createdAt ?? comment.updatedAt;
+  const { isOpen, hasRequestedBody, toggle } = useCommentDisclosure(comment);
 
   return (
     <article className="min-w-0 overflow-hidden rounded-md border border-border bg-card [--diffs-gap-block:0px] [contain-intrinsic-size:auto_80px] [content-visibility:auto]">
@@ -246,30 +341,9 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
           aria-expanded={isOpen}
           aria-label={`${isOpen ? "Collapse" : "Expand"} ${activityName} from ${author}`}
           data-state={isOpen ? "open" : "closed"}
-          onClick={toggleComment}
+          onClick={toggle}
         >
-          <div className="relative flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-            {showAvatar ? (
-              <img
-                src={avatarUrl}
-                alt={`${author} avatar`}
-                width={28}
-                height={28}
-                loading="lazy"
-                decoding="async"
-                className="size-full object-cover"
-                onError={() => {
-                  setFailedAvatarUrl(avatarUrl);
-                }}
-              />
-            ) : (
-              <MessageSquare
-                className="size-3.5"
-                aria-hidden="true"
-                data-testid="ci-comment-avatar-fallback"
-              />
-            )}
-          </div>
+          <CiCommentAvatar author={author} avatarUrl={comment.authorAvatarUrl} />
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate text-sm font-semibold text-foreground">{author}</span>
@@ -292,46 +366,15 @@ export const TaskExecutionCiCommentCard = memo(function TaskExecutionCiCommentCa
                 </span>
               ) : null}
             </div>
-            {showThreadBadge || location ? (
-              <div className="mt-1 flex min-w-0 items-center gap-2">
-                {showThreadBadge ? (
-                  <Badge
-                    variant={comment.isResolved === true ? "success" : "warning"}
-                    className="shrink-0 px-2 py-0 text-[10px]"
-                  >
-                    {comment.isResolved === true ? "Resolved" : "Unresolved"}
-                  </Badge>
-                ) : null}
-                {location ? (
-                  <span
-                    dir="rtl"
-                    className="min-w-0 truncate text-left font-mono text-[11px] text-muted-foreground"
-                    title={location}
-                  >
-                    <span dir="ltr">{location}</span>
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
+            <CiCommentThreadRow
+              isResolved={comment.isResolved}
+              location={commentLocationLabel(comment)}
+            />
           </div>
           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/comment:rotate-90" />
         </button>
         {comment.url ? (
-          <div className="flex items-center pr-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={openComment}
-                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
-                  aria-label={`Open ${activityName} from ${author}`}
-                >
-                  <ExternalLink className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Open {activityName}</TooltipContent>
-            </Tooltip>
-          </div>
+          <CiCommentOpenButton url={comment.url} activityName={activityName} author={author} />
         ) : null}
       </header>
       {isOpen && (isBodyReady || hasRequestedBody) ? (

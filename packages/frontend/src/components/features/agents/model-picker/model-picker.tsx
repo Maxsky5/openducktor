@@ -935,7 +935,7 @@ export function ModelPicker({
       aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
       onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
       className={cn(
-        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal",
+        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-ring",
         readOnlyReason && "cursor-not-allowed opacity-50",
         triggerClassName,
       )}

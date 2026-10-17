@@ -31,7 +31,9 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Apply semantic tokens with `className` at the use site.
 - Keep base shadcn components free of feature-specific hardcoded colors.
 - Make each new UI element work in light and dark themes.
-- Give a focused text field the `field-focus` utility: an accent border and a soft glow from the `--field-focus-border` and `--field-focus-glow` tokens. `Input` and `Textarea` apply it. A field inside a group that draws the border, such as an input with an attached button, uses `embedded` and puts `focus-within:field-focus` or `has-[input:focus-visible]:field-focus` on the group.
+- Show focus with the neutral `ring` color only. Do not use the primary color, an opacity modifier, or a glow.
+- Give a focused field or select trigger with an input border the `border-ring` border and no ring. `Input`, `Textarea`, and the default `Combobox` trigger apply it. A `Button` select trigger also needs `focus-visible:ring-0`. A field inside a group that draws the border, such as an input with an attached button, uses `embedded` and puts `focus-within:border-ring` or `has-[input:focus-visible]:border-ring` on the group.
+- Give every other focused control a 2px `ring-ring` ring. `Button`, `Checkbox`, `RadioGroupItem`, `Switch`, `Slider`, and segmented items apply it. A checked fill or a selected border hides a border change.
 - Use `warning-surface-hover` and `warning-surface-selected` for interactive warning surfaces. Use the matching `info-surface-hover` and `info-surface-selected` tokens for information surfaces. These tokens keep the base state color across hover and selection in both themes.
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
 - Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.

@@ -51,6 +51,15 @@ describe("SessionPanel", () => {
     expect(screen.getByRole("button", { name: "New tab in the right panel" })).toBeDefined();
   });
 
+  test("rings a tab with the neutral color only for keyboard focus", () => {
+    render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
+
+    const tab = screen.getByRole("tab", { name: "Diffs" });
+    expect(tab.className).toContain("outline-none");
+    expect(tab.className).toContain("focus-visible:ring-2 focus-visible:ring-ring");
+    expect(tab.className).not.toMatch(/(?:^|\s)focus:ring/);
+  });
+
   test("offers Restart in the tab header only for the selected terminal", () => {
     const store = createTerminalActivityStore();
     for (const message of [

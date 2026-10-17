@@ -45,7 +45,7 @@ function Slider({
           {...(ariaLabel
             ? { "aria-label": values.length > 1 ? `${ariaLabel} ${index + 1}` : ariaLabel }
             : {})}
-          className="relative block size-4 shrink-0 select-none rounded-full border border-ring bg-background ring-ring/50 transition-[color,box-shadow] after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
+          className="relative block size-4 shrink-0 select-none rounded-full border border-ring bg-background ring-ring/50 transition-[color,box-shadow] after:absolute after:-inset-2 hover:ring-3 active:ring-3 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

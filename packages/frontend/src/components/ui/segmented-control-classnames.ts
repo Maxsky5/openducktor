@@ -15,7 +15,7 @@ const segmentedControlRootVariants = cva("inline-flex items-center bg-muted p-1"
 });
 
 const segmentedControlItemVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex cursor-pointer items-center justify-center font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       grow: {

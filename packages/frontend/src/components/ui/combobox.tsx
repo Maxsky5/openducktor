@@ -341,7 +341,7 @@ export function Combobox({
             aria-labelledby={triggerAriaLabelledBy}
             aria-describedby={triggerAriaDescribedBy}
             className={cn(
-              "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent",
+              "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent focus-visible:ring-0 focus-visible:border-ring",
               triggerClassName,
             )}
           >

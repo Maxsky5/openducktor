@@ -324,7 +324,7 @@ function TaskLabelOverflowIndicator({ hiddenLabels }: { hiddenLabels: string[] }
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="inline-flex h-6 shrink-0 items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex h-6 shrink-0 items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Show ${hiddenLabels.length} more labels`}
             aria-describedby={hiddenLabelsDescriptionId}
             data-testid="kanban-task-label-overflow"
@@ -403,7 +403,7 @@ function CompactTaskMeta({
               type="button"
               data-kanban-control="type"
               className={cn(
-                "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 issueTypeStyle.iconClassName,
               )}
               aria-label={`Issue type: ${issueTypeStyle.label}`}
@@ -420,7 +420,7 @@ function CompactTaskMeta({
               type="button"
               data-kanban-control="priority"
               className={cn(
-                "size-2.5 shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                "size-2.5 shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 priorityStyle.dotClassName,
               )}
               aria-label={`Priority: ${priorityStyle.hint}`}
@@ -436,7 +436,7 @@ function CompactTaskMeta({
         type="button"
         data-kanban-control="details"
         aria-label={`Open details for ${task.title}`}
-        className="min-w-0 flex-1 cursor-pointer rounded-sm text-left text-sm font-medium text-foreground outline-none after:absolute after:-inset-px after:z-1 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring/40"
+        className="min-w-0 flex-1 cursor-pointer rounded-sm text-left text-sm font-medium text-foreground outline-none after:absolute after:-inset-px after:z-1 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring"
         title={task.title}
         onClick={() => onOpenDetails(task.id)}
       >
@@ -459,7 +459,7 @@ function NormalTaskIdentity({
       data-kanban-control="details"
       aria-label={`Open details for ${task.title}`}
       title={task.title}
-      className="mb-2 block w-full cursor-pointer rounded-md text-left outline-none after:absolute after:-inset-px after:z-1 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring/40"
+      className="mb-2 block w-full cursor-pointer rounded-md text-left outline-none after:absolute after:-inset-px after:z-1 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-ring"
       onClick={() => onOpenDetails(task.id)}
     >
       <span className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground">

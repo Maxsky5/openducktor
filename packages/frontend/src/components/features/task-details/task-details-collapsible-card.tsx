@@ -42,7 +42,7 @@ export function TaskDetailsCollapsibleCard({
       }}
       className="rounded-xl border border-border/90 bg-card shadow-sm"
     >
-      <div className="group flex w-full items-center rounded-md p-4 transition hover:bg-muted focus-within:ring-2 focus-within:ring-ring/40">
+      <div className="group flex w-full items-center rounded-md p-4 transition hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
         <CollapsibleTrigger asChild>
           <button
             type="button"

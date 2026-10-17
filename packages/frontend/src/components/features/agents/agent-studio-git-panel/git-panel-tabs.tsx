@@ -45,7 +45,7 @@ export function GitPanelTabs({
               id={panelId ? `${panelId}-tab-${option.tab}` : undefined}
               aria-controls={panelId}
               className={cn(
-                "relative h-full flex-none cursor-pointer gap-1.5 rounded-none border-0 px-2.5 text-xs transition-none",
+                "relative h-full flex-none cursor-pointer gap-1.5 rounded-none border-0 px-2.5 text-xs outline-none transition-none",
                 "after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent",
                 "hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:after:bg-primary",
                 "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",

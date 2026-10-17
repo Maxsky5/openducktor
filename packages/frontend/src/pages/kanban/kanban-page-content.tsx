@@ -87,7 +87,7 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
         )
           focusRef.current = null;
       }}
-      className="relative min-h-0 min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="relative min-h-0 min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-busy={isBoardLoading}
     >
       <div

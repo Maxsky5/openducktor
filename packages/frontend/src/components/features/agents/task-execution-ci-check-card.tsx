@@ -77,7 +77,7 @@ export function TaskExecutionCiCheckCard({
         {check.url ? (
           <a
             href={check.url}
-            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Open ${check.name} check`}
             onClick={openCheckLink}
             onAuxClick={openCheckLinkFromAuxiliaryClick}
