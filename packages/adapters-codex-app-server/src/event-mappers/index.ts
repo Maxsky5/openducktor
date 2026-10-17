@@ -16,7 +16,7 @@ import {
 import { createSubagentMapper } from "./subagents";
 import { todoMapper } from "./todo";
 
-export { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./todo";
+export { type CodexTodoUpdate, todoMapper } from "./todo";
 
 export const createCodexEventMappers = (
   subagents: CodexSubagentLinkState,
