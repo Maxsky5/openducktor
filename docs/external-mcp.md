@@ -102,6 +102,8 @@ Workflow tools on the same server:
 
 Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task`, `odt_search_tasks`, and `odt_update_task` in their startup workspace and omit `workspaceId`. `odt_update_task` is the only task-bound tool that may target a task other than the session task.
 
+Builder sessions can call `odt_set_spec` and `odt_set_plan` for their session task. See [document actions](task-workflow-actions.md#document-actions) for revision and approval rules.
+
 ## List workspaces
 
 Call `odt_get_workspaces` when the process has no default workspace or when the client needs canonical workspace IDs. The tool takes no input.

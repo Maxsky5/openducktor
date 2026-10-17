@@ -26,24 +26,6 @@ type WorkflowDocumentTarget = {
   inputKey: "markdown" | "reportMarkdown";
 };
 
-const shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady = ({
-  loadedSession,
-  workflowAliasMetadataReady,
-  previousWorkflowAliasMetadataReady,
-}: {
-  loadedSession: AgentSessionState | null;
-  workflowAliasMetadataReady: boolean;
-  previousWorkflowAliasMetadataReady: boolean;
-}): boolean => {
-  return Boolean(
-    loadedSession &&
-    isWorkflowAgentSession(loadedSession) &&
-    loadedSession.sessionAssociation.role !== "build" &&
-    workflowAliasMetadataReady &&
-    !previousWorkflowAliasMetadataReady,
-  );
-};
-
 const resolveWorkflowDocumentTarget = (
   normalizedTool: string | null,
   docs: {
@@ -109,8 +91,6 @@ export function useAgentStudioDocuments({
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
   const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
-  const workflowAliasMetadataReadyRef = useRef(workflowAliasMetadataReady);
-  workflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
   useEffect(() => {
     void documentContextKey;
@@ -122,7 +102,7 @@ export function useAgentStudioDocuments({
     documentToolEvents.clear();
     previousSessionKeyRef.current = null;
     previousMessagesRef.current = null;
-    previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReadyRef.current;
+    previousWorkflowAliasMetadataReadyRef.current = false;
   }, [documentContextKey]);
 
   useEffect(() => {
@@ -130,11 +110,10 @@ export function useAgentStudioDocuments({
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
 
     if (
-      shouldReplayWorkflowDocumentMessagesAfterAliasMetadataReady({
-        loadedSession,
-        workflowAliasMetadataReady,
-        previousWorkflowAliasMetadataReady,
-      })
+      loadedSession &&
+      isWorkflowAgentSession(loadedSession) &&
+      workflowAliasMetadataReady &&
+      !previousWorkflowAliasMetadataReady
     ) {
       previousMessagesRef.current = null;
     }
@@ -142,15 +121,6 @@ export function useAgentStudioDocuments({
 
   useEffect(() => {
     if (!loadedSession || !selectedSessionKey || !taskId || !workspaceRepoPath) {
-      return;
-    }
-
-    if (
-      isWorkflowAgentSession(loadedSession) &&
-      loadedSession.sessionAssociation.role === "build"
-    ) {
-      previousSessionKeyRef.current = selectedSessionKey;
-      previousMessagesRef.current = loadedSession.messages;
       return;
     }
 
@@ -197,7 +167,7 @@ export function useAgentStudioDocuments({
       let effectiveUpdatedAtTimestamp = target.state.updatedAt
         ? parseTimestamp(target.state.updatedAt)
         : null;
-      if (hasInputMarkdown) {
+      if (hasInputMarkdown && (completionInfo !== null || !target.state.markdown.trim())) {
         const shouldApplyOptimisticDocument =
           target.state.markdown.trim() !== inputMarkdown.trim() ||
           (completionInfo !== null &&

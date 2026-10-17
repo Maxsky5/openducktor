@@ -43,6 +43,8 @@ Session startup accepts any branch or detached HEAD in that worktree. It keeps t
 
 `set_plan` writes or revises the implementation plan. A `feature` or `epic` can use it from `spec_ready` or any later active status. A `task` or `bug` can also use it from `open`. Valid planning before a build moves the task to `ready_for_dev`. A later edit changes only the document.
 
+Builder can revise the spec with `odt_set_spec` and the plan with `odt_set_plan` when implementation findings require document changes. Builder must get user approval before changing required scope, design contracts, or security posture. Each call saves the complete Markdown document for the session task. Revisions from `in_progress`, `blocked`, `ai_review`, or `human_review` keep the task status unchanged.
+
 For an epic, `subtasks` means replace the direct child proposal. Replacement is allowed only when all current direct children are `open`, `spec_ready`, or `ready_for_dev`. If `subtasks` is absent, keep the current children.
 
 ## Direct merge

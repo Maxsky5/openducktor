@@ -45,8 +45,13 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
           allowed: true,
         },
         { permission: "odt_create_task", mutation: "mutating" as const, allowed: true },
+        ...["odt_set_spec", "odt_set_plan"].map((permission) => ({
+          permission,
+          mutation: "mutating" as const,
+          allowed: role === "build" || permittedWrite[role] === permission,
+        })),
         {
-          permission: role === "build" ? "odt_set_plan" : "odt_build_completed",
+          permission: role === "build" ? "odt_qa_approved" : "odt_build_completed",
           mutation: "mutating" as const,
           allowed: false,
         },

@@ -236,43 +236,47 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
-  test("applies optimistic updates from completed workflow tool messages", async () => {
-    setTaskDocumentsState({
-      specDoc: createDocumentState({
-        markdown: "# Old spec",
-        updatedAt: "2026-02-22T08:00:00.000Z",
-      }),
-    });
-
-    const loadedSession = createAgentSessionFixture({
-      runtimeKind: "opencode",
-      externalSessionId: "session-1",
-      messages: [
-        createCompletedToolMessage({
-          tool: "odt_set_spec",
-          toolType: "workflow",
-          input: { markdown: "# Updated spec" },
-          output: "completed 2026-02-22T09:00:00.000Z",
+  test.each(["spec", "build"] as const)(
+    "applies completed spec updates from %s sessions",
+    async (role) => {
+      setTaskDocumentsState({
+        specDoc: createDocumentState({
+          markdown: "# Old spec",
+          updatedAt: "2026-02-22T08:00:00.000Z",
         }),
-      ],
-    });
-
-    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
-
-    try {
-      await harness.mount();
-
-      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
-      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
-        markdown: "# Updated spec",
-        updatedAt: "2026-02-22T09:00:00.000Z",
       });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
-      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
-    } finally {
-      await harness.unmount();
-    }
-  });
+
+      const loadedSession = createAgentSessionFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "session-1",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+        messages: [
+          createCompletedToolMessage({
+            tool: "odt_set_spec",
+            toolType: "workflow",
+            input: { markdown: "# Updated spec" },
+            output: "completed 2026-02-22T09:00:00.000Z",
+          }),
+        ],
+      });
+
+      const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
+
+      try {
+        await harness.mount();
+
+        expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+        expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
+          markdown: "# Updated spec",
+          updatedAt: "2026-02-22T09:00:00.000Z",
+        });
+        expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+        expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("applies optimistic updates from trusted runtime workflow aliases", async () => {
     setTaskDocumentsState({
@@ -338,60 +342,64 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
-  test("reprocesses mounted runtime aliases after runtime definitions hydrate", async () => {
-    setTaskDocumentsState({
-      specDoc: createDocumentState({
-        markdown: "# Old spec",
-        updatedAt: "2026-02-22T08:00:00.000Z",
-      }),
-    });
-
-    const loadedSession = createAgentSessionFixture({
-      runtimeKind: "opencode",
-      externalSessionId: "session-hydrated-aliases",
-      messages: [
-        createCompletedToolMessage({
-          tool: "openducktor_odt_set_spec",
-          toolType: "workflow",
-          input: { markdown: "# Updated spec after hydration" },
-          output: "completed 2026-02-22T09:00:00.000Z",
+  test.each(["spec", "build"] as const)(
+    "reprocesses %s runtime aliases after runtime definitions hydrate",
+    async (role) => {
+      setTaskDocumentsState({
+        specDoc: createDocumentState({
+          markdown: "# Old spec",
+          updatedAt: "2026-02-22T08:00:00.000Z",
         }),
-      ],
-    });
-    const hookArgs = createArgsForSelectedSession(loadedSession);
-    const runtimeDefinitionsContextRef = {
-      current: createRuntimeDefinitionsContextValue({
-        runtimeDefinitions: [],
-        isLoadingRuntimeDefinitions: true,
-      }),
-    };
-    const harness = createHookHarness(hookArgs, { runtimeDefinitionsContextRef });
-
-    try {
-      await harness.mount();
-
-      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
-      expect(reloadDocumentMock).not.toHaveBeenCalled();
-
-      runtimeDefinitionsContextRef.current = createRuntimeDefinitionsContextValue({
-        ...runtimeDefinitionsContextRef.current,
-        runtimeDefinitions: createDefaultRuntimeDefinitions(),
-        isLoadingRuntimeDefinitions: false,
       });
 
-      await harness.update(hookArgs);
-
-      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
-      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
-        markdown: "# Updated spec after hydration",
-        updatedAt: "2026-02-22T09:00:00.000Z",
+      const loadedSession = createAgentSessionFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "session-hydrated-aliases",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+        messages: [
+          createCompletedToolMessage({
+            tool: "openducktor_odt_set_spec",
+            toolType: "workflow",
+            input: { markdown: "# Updated spec after hydration" },
+            output: "completed 2026-02-22T09:00:00.000Z",
+          }),
+        ],
       });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
-      expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
-    } finally {
-      await harness.unmount();
-    }
-  });
+      const hookArgs = createArgsForSelectedSession(loadedSession);
+      const runtimeDefinitionsContextRef = {
+        current: createRuntimeDefinitionsContextValue({
+          runtimeDefinitions: [],
+          isLoadingRuntimeDefinitions: true,
+        }),
+      };
+      const harness = createHookHarness(hookArgs, { runtimeDefinitionsContextRef });
+
+      try {
+        await harness.mount();
+
+        expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
+        expect(reloadDocumentMock).not.toHaveBeenCalled();
+
+        runtimeDefinitionsContextRef.current = createRuntimeDefinitionsContextValue({
+          ...runtimeDefinitionsContextRef.current,
+          runtimeDefinitions: createDefaultRuntimeDefinitions(),
+          isLoadingRuntimeDefinitions: false,
+        });
+
+        await harness.update(hookArgs);
+
+        expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+        expect(applyDocumentUpdateMock).toHaveBeenCalledWith("spec", {
+          markdown: "# Updated spec after hydration",
+          updatedAt: "2026-02-22T09:00:00.000Z",
+        });
+        expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+        expect(reloadDocumentMock).toHaveBeenCalledWith("spec");
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("reloads section when completion timestamp is unavailable", async () => {
     setTaskDocumentsState({
@@ -416,37 +424,68 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
-  test("reuses optimistic update when completion timestamp is unavailable", async () => {
+  test.each(["planner", "build"] as const)(
+    "applies %s plan updates when completion timestamp is unavailable",
+    async (role) => {
+      setTaskDocumentsState({
+        planDoc: createDocumentState({
+          markdown: "",
+          updatedAt: null,
+          isLoading: false,
+        }),
+      });
+
+      const loadedSession = createAgentSessionFixture({
+        externalSessionId: "session-3",
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
+        messages: [
+          createCompletedToolMessage({
+            tool: "odt_set_plan",
+            toolType: "workflow",
+            input: { markdown: "# Saved plan" },
+            output: "done",
+          }),
+        ],
+      });
+
+      const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
+
+      try {
+        await harness.mount();
+        expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+        expect(applyDocumentUpdateMock).toHaveBeenCalledWith("plan", {
+          markdown: "# Saved plan",
+          updatedAt: null,
+        });
+        expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+        expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("keeps saved documents when Builder history has no completion timestamp", async () => {
     setTaskDocumentsState({
       planDoc: createDocumentState({
-        markdown: "",
-        updatedAt: null,
-        isLoading: false,
+        markdown: "# Latest plan",
+        updatedAt: "2026-02-22T09:00:00.000Z",
       }),
     });
-
-    const loadedSession = createAgentSessionFixture({
-      externalSessionId: "session-3",
+    const session = createAgentSessionFixture({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
       messages: [
         createCompletedToolMessage({
           tool: "odt_set_plan",
-          toolType: "workflow",
-          input: { markdown: "# Saved plan" },
+          input: { markdown: "# Old plan" },
           output: "done",
         }),
       ],
     });
-
-    const harness = createHookHarness(createArgsForSelectedSession(loadedSession));
-
+    const harness = createHookHarness(createArgsForSelectedSession(session));
     try {
       await harness.mount();
-      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
-      expect(applyDocumentUpdateMock).toHaveBeenCalledWith("plan", {
-        markdown: "# Saved plan",
-        updatedAt: null,
-      });
-      expect(reloadDocumentMock).toHaveBeenCalledTimes(1);
+      expect(applyDocumentUpdateMock).not.toHaveBeenCalled();
       expect(reloadDocumentMock).toHaveBeenCalledWith("plan");
     } finally {
       await harness.unmount();
