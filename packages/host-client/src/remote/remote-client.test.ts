@@ -174,6 +174,48 @@ test.each(["recovery read", "host restart"])(
   },
 );
 
+test("a canceled negotiation releases its admission without disturbing the next connection", async () => {
+  const f = fixture();
+  f.setMutation(async () => json("linux"));
+  const admitted = latch<string>();
+  const reply = latch<void>();
+  const released: string[] = [];
+  const request = f.transport.request;
+  let first = true;
+  f.transport.request = async (...args) => {
+    if (args[0] === "DELETE") released.push(args[2][REMOTE_CONNECTION_HEADER]!);
+    const response = await request(...args);
+    if (!args[1].endsWith("/connections") || !first) return response;
+    first = false;
+    return {
+      ...response,
+      body: (async function* () {
+        for await (const chunk of response.body) {
+          admitted.resolve(JSON.parse(new TextDecoder().decode(chunk)).connectionId);
+          await reply.promise;
+          yield chunk;
+        }
+      })(),
+    };
+  };
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  const canceled = remote.connect().catch((cause: unknown) => cause);
+  try {
+    const id = await admitted.promise;
+    await remote.disconnect();
+    await remote.connect();
+    reply.resolve();
+    expect(await canceled).toMatchObject({ name: "AbortError" });
+    expect(released).toEqual([id]);
+    expect(remote.readState().status).toBe("connected");
+    expect(await remote.client.systemGetPlatform()).toBe("linux");
+  } finally {
+    reply.resolve();
+    await canceled;
+    await remote.disconnect();
+  }
+});
+
 test("a file transfer can outlast its completed setup deadline", async () => {
   const f = fixture();
   const started = latch<void>();
