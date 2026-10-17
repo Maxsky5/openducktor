@@ -393,6 +393,99 @@ test("two browsers add no notification baseline reads and share ordered committe
     await Effect.runPromise(h.service.dispose());
   }
 });
+test.each(["baseline", "committed", "deferred"] as const)(
+  "workspace notifications use saved titles from %s associations and later renames",
+  async (source) => {
+    const session = {
+      ...association(),
+      generatedTitle: "Generated title",
+      manualTitle: "Manual title",
+    };
+    const h = harness({ baseline: [snapshot()] });
+    h.listActive.mockImplementation(({ repoPath }) =>
+      Effect.succeed(repoPath === "/alpha" && source === "baseline" ? [session] : []),
+    );
+    try {
+      await Effect.runPromise(h.service.initialize());
+      await flush();
+      if (source === "committed") h.service.acceptWorkspaceSession("alpha", session);
+      h.service.acceptLive(
+        { type: "session_upsert", session: snapshot({ pendingQuestions: [question("title")] }) },
+        "live",
+      );
+      await flush();
+      if (source === "deferred") {
+        expect(occurrences(h.frames)).toEqual([]);
+        h.service.acceptWorkspaceSession("alpha", session);
+        await flush();
+      }
+      h.service.acceptWorkspaceSession("alpha", { ...session, manualTitle: null });
+      h.service.acceptLive(
+        {
+          type: "session_upsert",
+          session: snapshot({
+            pendingApprovals: [
+              { requestId: "title", requestType: "permission_grant", title: "Read files" },
+            ],
+          }),
+        },
+        "live",
+      );
+      await flush();
+      h.service.acceptWorkspaceSession("alpha", { ...session, manualTitle: "Renamed ".repeat(30) });
+      h.service.acceptLive(
+        {
+          type: "transcript_event",
+          event: {
+            type: "session_idle",
+            sessionRef: ref(),
+            externalSessionId: "root",
+            timestamp: "2026-09-01T00:01:00Z",
+          },
+        },
+        "live",
+      );
+      await flush();
+      h.service.acceptWorkspaceSession("alpha", {
+        ...session,
+        manualTitle: null,
+        generatedTitle: null,
+      });
+      h.service.acceptLive(
+        { type: "session_upsert", session: snapshot({ executionEpisodeId: "next" }) },
+        "live",
+      );
+      h.service.acceptLive(
+        {
+          type: "transcript_event",
+          event: {
+            type: "session_error",
+            sessionRef: ref(),
+            externalSessionId: "root",
+            timestamp: "2026-09-01T00:02:00Z",
+            message: "Session failed",
+          },
+        },
+        "live",
+      );
+      await flush();
+      expect(
+        occurrences(h.frames).map(({ selected: { occurrence } }) => [
+          occurrence.kind,
+          occurrence.sessionLabel,
+        ]),
+      ).toEqual([
+        ["agent.question_asked", "Manual title"],
+        ["agent.permission_requested", "Generated title"],
+        ["agent.session_idle", "Renamed ".repeat(15).trimEnd()],
+        ["agent.session_error", "Untitled session"],
+      ]);
+      expect(JSON.stringify(occurrences(h.frames))).not.toContain("Native title");
+    } finally {
+      await Effect.runPromise(h.service.dispose());
+    }
+  },
+);
 test.each(["baseline", "committed"] as const)(
   "workflow session notifications use %s task labels without leaking task records",
   async (source) => {

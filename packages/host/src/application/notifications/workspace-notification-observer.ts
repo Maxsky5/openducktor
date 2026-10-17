@@ -15,6 +15,7 @@ import type { HostOperationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
 export type WorkspaceNotificationInput =
   | { type: "task"; event: ExternalTaskSyncEvent }
   | { type: "live"; envelope: AgentSessionLiveEnvelope; provenance: "baseline" | "live" }
@@ -88,7 +89,22 @@ export const createWorkspaceNotificationObserver = ({
     const publish = (occurrences: NotificationOccurrence[]) =>
       Effect.forEach(
         occurrences,
-        (occurrence) => Effect.suspend(() => (state.active ? select(occurrence) : Effect.void)),
+        (occurrence) =>
+          Effect.suspend(() => {
+            if (!state.active) return Effect.void;
+            const target = occurrence.navigationTarget;
+            const session =
+              !occurrence.task && "session" in target
+                ? state.workspaceOwners.get(
+                    agentSessionRefKey({ repoPath: state.record.repoPath, ...target.session }),
+                  )
+                : undefined;
+            return select(
+              session
+                ? { ...occurrence, sessionLabel: runtimeTitle(session) ?? "Untitled session" }
+                : occurrence,
+            );
+          }),
         { discard: true },
       );
     const refreshOwners = () => publish(state.projector.reconcileAssociations());
