@@ -198,6 +198,8 @@ export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor 
       },
     },
   };
+  // Claude history reports the resolved model ID, not the alias of the catalog entry.
+  if (model.resolvedModel) descriptor.resolvedModelId = model.resolvedModel;
   // Claude omits this flag for models without fast mode.
   if (model.supportsFastMode === true) descriptor.speedLevels = [CLAUDE_FAST_SPEED_LEVEL];
   return descriptor;

@@ -67,6 +67,17 @@ describe("toClaudeModelDescriptor", () => {
     expect(toClaudeModelDescriptor(model).speedLevels).toEqual(speedLevels);
   });
 
+  test("keeps the resolved model of an alias", () => {
+    const descriptor = toClaudeModelDescriptor({
+      value: "opus",
+      resolvedModel: "claude-opus-5-5",
+      displayName: "Opus 5.5",
+      description: "Opus",
+    } satisfies ModelInfo);
+
+    expect(descriptor).toMatchObject({ modelId: "opus", resolvedModelId: "claude-opus-5-5" });
+  });
+
   test("leaves variants empty when the SDK does not expose effort levels", () => {
     const descriptor = toClaudeModelDescriptor({
       value: "claude-haiku-4-5-20251001",

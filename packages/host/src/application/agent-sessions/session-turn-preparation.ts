@@ -13,6 +13,7 @@ import {
   isSameSelection,
   resolveModelSelectionPolicy,
   findCatalogModel,
+  findTurnCatalogModel,
   readAttachmentValidationError,
 } from "@openducktor/core";
 import { Effect } from "effect";
@@ -45,11 +46,10 @@ export const createSessionTurnPreparation = (deps: {
   const validateAttachments = (
     parts: Readonly<AgentSessionControlSendInput["parts"]>,
     catalog: AgentModelCatalog,
-    selected: Pick<AgentSessionModelSelection, "providerId" | "modelId"> | null,
+    model: AgentModelCatalog["models"][number] | null,
     modelLabel = "The selected model",
   ) =>
     Effect.gen(function* () {
-      const model = selected ? findCatalogModel(catalog, selected) : null;
       for (const part of parts) {
         if (part.kind !== "attachment") continue;
         if (!catalog.runtime?.capabilities.promptInput.supportsAttachments)
@@ -128,7 +128,12 @@ export const createSessionTurnPreparation = (deps: {
             message:
               "The model of the running turn is unknown. Queue the message until its attachment support can be checked.",
           });
-        yield* validateAttachments(parts, catalog, turnModel, "The model of the running turn");
+        yield* validateAttachments(
+          parts,
+          catalog,
+          findTurnCatalogModel(catalog, turnModel),
+          "The model of the running turn",
+        );
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-steering"))),
     promptOverrides: (
       target: AgentMessageTarget,
@@ -219,7 +224,11 @@ export const createSessionTurnPreparation = (deps: {
                 "This runtime cannot apply this variant to a live session. Select a permitted variant or start a new session.",
             });
         }
-        yield* validateAttachments(parts, catalog, decision.selection);
+        yield* validateAttachments(
+          parts,
+          catalog,
+          decision.selection ? findCatalogModel(catalog, decision.selection) : null,
+        );
         return decision;
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-model"))),
   };
