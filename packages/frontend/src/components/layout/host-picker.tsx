@@ -1,11 +1,13 @@
 import { useId, useState, type FormEvent } from "react";
-import { LoaderCircle, Monitor, Server, Unplug } from "lucide-react";
+import { Laptop, LoaderCircle, Server, Unplug } from "lucide-react";
+import { RemoteAddress } from "@/components/features/remote-control/remote-address";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { localHostLabel, parseHostEndpoint, type HostSelection } from "@/lib/host-location";
 import { cn } from "@/lib/utils";
+import { useRemoteAccess } from "@/state/remote-access-provider";
 
 type Action = "connect" | "local" | "disconnect";
 
@@ -106,17 +108,27 @@ export function HostPicker({
 
 function SelectedHost({ selection }: { selection: HostSelection }) {
   const { target } = selection;
-  const Icon = target.kind === "remote" ? Server : Monitor;
+  const { state } = useRemoteAccess();
+  const Icon = target.kind === "remote" ? Server : Laptop;
   return (
-    <dl className="flex items-center gap-3">
-      <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <div className="flex min-w-0 flex-col gap-1">
-        <dt className="text-xs text-muted-foreground">Selected host</dt>
-        <dd className="break-all text-sm font-medium">
-          {target.kind === "remote" ? target.endpoint : localHostLabel(selection.localHost)}
-        </dd>
-      </div>
-    </dl>
+    <>
+      <dl className="flex items-center gap-3">
+        <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="flex min-w-0 flex-col gap-1">
+          <dt className="text-xs text-muted-foreground">Selected host</dt>
+          <dd className="break-all text-sm font-medium">
+            {target.kind === "remote" ? target.endpoint : localHostLabel(selection.localHost)}
+          </dd>
+        </div>
+      </dl>
+      {target.kind === "local" && state?.status === "available" && state.configuration ? (
+        <RemoteAddress
+          key={state.configuration.publicEndpoint}
+          endpoint={state.configuration.publicEndpoint}
+          connectedClients={state.connectedClients}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -140,7 +152,7 @@ function HostActions({
           {pending === "local" ? (
             <LoaderCircle data-icon="inline-start" className="animate-spin" />
           ) : (
-            <Monitor data-icon="inline-start" />
+            <Laptop data-icon="inline-start" />
           )}
           {pending === "local"
             ? "Switching…"

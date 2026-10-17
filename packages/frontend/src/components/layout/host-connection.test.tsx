@@ -1,15 +1,21 @@
 import { expect, mock, test } from "bun:test";
 import { act } from "react";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
 import type { RemoteAccessBridge, RemoteAccessState } from "@openducktor/contracts";
 import { QueryProvider } from "@/lib/query-provider";
-import { RemoteAccessProvider } from "@/state/remote-access-provider";
+import { ShellStateProvider } from "@/state/app-state-provider";
 import { SettingsRemoteAccessSection } from "../features/settings/settings-remote-access-section";
 import { HostConnectionProvider, HostSwitcher } from "./host-connection";
 
-test("the rail tracks local sharing and live clients through the same subscription as Settings", async () => {
+test("the rail, host modal, and Settings share live client counts and host addresses", async () => {
   let publish = (_state: RemoteAccessState) => {};
+  const configuration = {
+    listenHost: "192.168.1.9",
+    listenPort: 14328,
+    publicEndpoint: "http://192.168.1.9:14328",
+    webOrigins: [],
+  };
   const snapshot = Promise.withResolvers<RemoteAccessState>();
   const stop = mock(() => {});
   const bridge: RemoteAccessBridge = {
@@ -34,7 +40,7 @@ test("the rail tracks local sharing and live clients through the same subscripti
   };
   const content = (settings: boolean, remote: boolean) => (
     <QueryProvider useIsolatedClient>
-      <RemoteAccessProvider bridge={bridge}>
+      <ShellStateProvider remoteAccess={bridge}>
         <HostConnectionProvider
           selection={
             remote
@@ -46,21 +52,29 @@ test("the rail tracks local sharing and live clients through the same subscripti
           <HostSwitcher />
           {settings ? <SettingsRemoteAccessSection /> : null}
         </HostConnectionProvider>
-      </RemoteAccessProvider>
+      </ShellStateProvider>
     </QueryProvider>
   );
   const view = render(content(false, false));
   const control = await view.findByRole("button", { name: "Host connection: Web runner host" });
   await act(async () => {
-    publish({ status: "available", configuration: null, connectedClients: 0 });
+    publish({ status: "available", configuration, connectedClients: 0 });
   });
   expect(control.getAttribute("aria-label")).toContain(
     "Remote control is on. No clients connected.",
   );
   expect(control.textContent).toBe("");
+  fireEvent.click(control);
+  const dialog = view.getByRole("dialog", { name: "Host connection" });
+  expect(within(dialog).getByRole("status").textContent).toBe("No clients connected");
+  const address = within(dialog).getByLabelText("Host address");
+  if (!(address instanceof HTMLInputElement)) throw new Error("Expected a host address input.");
+  expect(address.value).toBe(configuration.publicEndpoint);
+  expect(within(dialog).getByRole("button", { name: "Copy address" })).toBeDefined();
   await act(async () => {
-    publish({ status: "available", configuration: null, connectedClients: 2 });
+    publish({ status: "available", configuration, connectedClients: 2 });
   });
+  expect(within(dialog).getByRole("status").textContent).toBe("2 clients connected");
   expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
   expect(control.getAttribute("title")).toBe(control.getAttribute("aria-label"));
   expect(control.textContent).toBe("");
@@ -69,22 +83,49 @@ test("the rail tracks local sharing and live clients through the same subscripti
     await snapshot.promise;
   });
   expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
+  const showQr = within(dialog).getByRole("button", { name: "Show QR code" });
+  showQr.focus();
+  fireEvent.click(showQr);
+  const qr = await view.findByRole("dialog", { name: "Host address" });
+  expect(
+    within(qr).getByRole("img", { name: `Host address QR code: ${configuration.publicEndpoint}` }),
+  ).toBeDefined();
+  fireEvent.click(within(qr).getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(view.getByRole("dialog", { name: "Host connection" })).toBeDefined(), {
+    timeout: 500,
+  });
+  await waitFor(() => expect(document.activeElement === showQr).toBe(true), { timeout: 500 });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   view.rerender(content(true, false));
   await view.findByText("On");
   expect(bridge.subscribeState).toHaveBeenCalledTimes(1);
   await act(async () => {
-    publish({ status: "available", configuration: null, connectedClients: 1 });
+    publish({ status: "available", configuration, connectedClients: 1 });
   });
   expect(control.getAttribute("aria-label")).toContain("1 client connected.");
   view.rerender(content(false, true));
   const remote = view.getByRole("button", { name: "Host connection: host.test" });
   expect(remote.textContent).toBe("");
+  fireEvent.click(remote);
+  expect(
+    within(view.getByRole("dialog", { name: "Host connection" })).queryByRole("button", {
+      name: "Copy address",
+    }),
+  ).toBeNull();
   view.rerender(content(false, false));
+  expect(
+    within(view.getByRole("dialog", { name: "Host connection" })).getByRole("status").textContent,
+  ).toBe("1 client connected");
   await act(async () => {
     publish({ status: "disabled", configuration: null, connectedClients: 0 });
   });
   expect(control.getAttribute("aria-label")).toBe("Host connection: Web runner host");
   expect(control.textContent).toBe("");
+  expect(
+    within(view.getByRole("dialog", { name: "Host connection" })).queryByRole("button", {
+      name: "Copy address",
+    }),
+  ).toBeNull();
   view.unmount();
   expect(stop).toHaveBeenCalledTimes(1);
 });
