@@ -613,14 +613,21 @@ test("task readiness waits for the captured snapshot acknowledgement and invalid
   }
 });
 
-test.each([false, true])(
-  "canceled task setup releases its lease (cleanup fails: %s)",
-  async (cleanupFails) => {
+test.each([
+  ["lease creation", false],
+  ["lease creation", true],
+  ["stream attach", false],
+  ["stream attach", true],
+] as const)(
+  "canceling %s releases its lease or reports a failed cleanup",
+  async (stage, cleanupFails) => {
     const f = fixture();
     const request = f.transport.request;
     const opening = latch<void>();
+    const receipt = latch<void>();
     const cleanupFailure = new Error("Lease deletion failed.");
     f.transport.request = async (method, url, headers, signal, body) => {
+      signal.throwIfAborted();
       if (url.endsWith("/stream")) {
         opening.resolve();
         await new Promise<never>((_resolve, reject) =>
@@ -628,6 +635,16 @@ test.each([false, true])(
         );
       }
       const response = await request(method, url, headers, signal, body);
+      if (stage === "lease creation" && url.endsWith("/task-events/subscriptions")) {
+        opening.resolve();
+        return {
+          ...response,
+          body: (async function* () {
+            await receipt.promise;
+            yield* response.body;
+          })(),
+        };
+      }
       if (method === "DELETE" && url.includes("/task-events/subscriptions/")) {
         expect(signal.aborted).toBe(false);
         if (cleanupFails) throw cleanupFailure;
@@ -647,6 +664,7 @@ test.each([false, true])(
       void setup.catch(() => {});
       await opening.promise;
       abort.abort();
+      receipt.resolve();
       const result = await setup.catch((cause: unknown) => cause);
       if (cleanupFails) {
         expect(result).toBeInstanceOf(AggregateError);
@@ -660,10 +678,46 @@ test.each([false, true])(
       expect(remote.readState().status).toBe("connected");
     } finally {
       abort.abort();
+      receipt.resolve();
       await remote.disconnect();
     }
   },
 );
+
+test("failed terminal attempts do not report another close when the host disconnects", async () => {
+  const f = fixture();
+  const failure = new Error("The WebSocket endpoint is unavailable.");
+  f.transport.openTerminal = async () => {
+    throw failure;
+  };
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  let closed = 0;
+  try {
+    await remote.connect();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await remote
+        .connectTerminal(
+          new AbortController().signal,
+          () => {},
+          () => {
+            closed += 1;
+          },
+        )
+        .catch((cause: unknown) => cause);
+      expect(result).toBe(failure);
+      expect(remote.readState().status).toBe("connected");
+    }
+    await remote.disconnect();
+    expect(closed).toBe(0);
+  } finally {
+    await remote.disconnect();
+  }
+});
 
 test.each([200, 503])(
   "a stalled HTTP %s response body fails within the setup deadline",

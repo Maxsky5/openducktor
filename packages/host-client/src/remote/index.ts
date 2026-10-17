@@ -498,8 +498,10 @@ export const createRemoteHostClient = (
     async subscribeTaskStream(input, onFrame, requestSignal) {
       const { generation: current, signal: hostSignal } = currentConnection();
       const signal = requestSignal ? AbortSignal.any([requestSignal, hostSignal]) : hostSignal;
+      signal.throwIfAborted();
+      // Read the lease ID even if the view closes so cleanup can release it.
       const lease = remoteTaskLeaseSchema.parse(
-        await json("POST", "/task-events/subscriptions", signal, input),
+        await json("POST", "/task-events/subscriptions", hostSignal, input),
       );
       const local = new AbortController();
       const combined = AbortSignal.any([signal, local.signal]);
@@ -650,6 +652,9 @@ export const createRemoteHostClient = (
             socket.close();
           },
         };
+      } catch (cause) {
+        connection.signal.removeEventListener("abort", hostLost);
+        throw cause;
       } finally {
         clearTimeout(timer);
       }
