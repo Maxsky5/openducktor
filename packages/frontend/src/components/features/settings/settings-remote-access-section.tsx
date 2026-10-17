@@ -11,7 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Radio } from "lucide-react";
-import { remoteAccessQueryKey, useRemoteAccess } from "@/state/remote-access-provider";
+import { useRemoteAccess } from "@/state/remote-access-provider";
+import {
+  remoteAccessNetworksQueryOptions,
+  remoteAccessQueryKey,
+} from "@/state/queries/remote-access";
 import { RemoteAccessForm } from "./settings-remote-access-form";
 import { RemoteAddress } from "./settings-remote-address";
 
@@ -134,11 +138,7 @@ function useRemoteAccessControls(bridge: RemoteAccessBridge) {
   const { state, error: stateError } = useRemoteAccess();
   const [draft, setDraft] = useState<RemoteAccessEnableInput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const networks = useQuery({
-    queryKey: ["shell", "remote-access", "networks"],
-    queryFn: () => bridge.readNetworks(),
-    staleTime: 0,
-  });
+  const networks = useQuery(remoteAccessNetworksQueryOptions(bridge));
   const { status, configuration, failure } = state ?? {};
   const saved = draftFrom(configuration, networks.data ?? []);
   const fields = draft ?? saved;
