@@ -8,7 +8,6 @@ import {
   isPlainObject,
   parseCodexJsonObjectString,
 } from "../codex-app-server-shared";
-import { codexItemTypeMatches } from "../codex-app-server-transcript";
 import type {
   CodexCanonicalTodoUpdateEvent,
   CodexCanonicalToolEvent,
@@ -346,13 +345,13 @@ export const todoMapper: CodexEventMapper<CodexTodoMapperState> & {
   },
 
   fromCompletedItem(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult {
-    return codexItemTypeMatches(item, "dynamicToolCall")
+    return item.type === "dynamicToolCall"
       ? completedDynamicToolCallEvents(item, ctx)
       : emptyCodexMappingResult();
   },
 
   fromThreadItemObject(item: CodexTimedThreadItem, ctx: CodexMappingContext): CodexMappingResult {
-    if (codexItemTypeMatches(item, "plan")) {
+    if (item.type === "plan") {
       return planItemEvents(item, ctx);
     }
     return this.fromCompletedItem(item, ctx);
