@@ -7,7 +7,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { Monitor, MonitorUp, Server } from "lucide-react";
+import { Laptop, Server } from "lucide-react";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
 import type { RemoteAccessState } from "@openducktor/contracts";
 import { Button } from "@/components/ui/button";
@@ -106,21 +106,15 @@ export function HostSwitcher() {
 }
 
 function LocalHostIcon({ state }: { state: RemoteAccessState | undefined }) {
-  if (state?.status !== "available") return <Monitor aria-hidden="true" />;
-  const clients = state.connectedClients;
+  const sharing = state?.status === "available";
   return (
     <span
       aria-hidden="true"
-      className={cn(
-        "inline-flex text-info-surface-foreground",
-        clients > 0 && "text-emerald-700 dark:text-emerald-400",
-      )}
+      className={cn("relative inline-flex", sharing && "text-primary dark:text-violet-300")}
     >
-      <MonitorUp className="size-4" />
-      {clients > 0 ? (
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-700 px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-sidebar dark:bg-emerald-400 dark:text-emerald-950">
-          {clients}
-        </span>
+      <Laptop className="size-5" />
+      {sharing && state.connectedClients > 0 ? (
+        <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-current" />
       ) : null}
     </span>
   );
