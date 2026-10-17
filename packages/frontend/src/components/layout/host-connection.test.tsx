@@ -62,12 +62,13 @@ test("the rail tracks local sharing and live clients through the same subscripti
     publish({ status: "available", configuration: null, connectedClients: 2 });
   });
   expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
-  expect(control.textContent).toBe("2");
+  expect(control.getAttribute("title")).toBe(control.getAttribute("aria-label"));
+  expect(control.textContent).toBe("");
   await act(async () => {
     snapshot.resolve({ status: "disabled", configuration: null, connectedClients: 0 });
     await snapshot.promise;
   });
-  expect(control.textContent).toBe("2");
+  expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
   view.rerender(content(true, false));
   await view.findByText("On");
   expect(bridge.subscribeState).toHaveBeenCalledTimes(1);
