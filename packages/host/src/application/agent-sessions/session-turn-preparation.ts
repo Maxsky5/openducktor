@@ -13,7 +13,6 @@ import {
   isSameSelection,
   resolveModelSelectionPolicy,
   findCatalogModel,
-  findTurnCatalogModel,
   readAttachmentValidationError,
 } from "@openducktor/core";
 import { Effect } from "effect";
@@ -50,7 +49,7 @@ export const createSessionTurnPreparation = (deps: {
     modelLabel = "The selected model",
   ) =>
     Effect.gen(function* () {
-      const model = selected ? findTurnCatalogModel(catalog, selected) : null;
+      const model = selected ? findCatalogModel(catalog, selected) : null;
       for (const part of parts) {
         if (part.kind !== "attachment") continue;
         if (!catalog.runtime?.capabilities.promptInput.supportsAttachments)

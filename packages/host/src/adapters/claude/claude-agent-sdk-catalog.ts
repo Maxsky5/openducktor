@@ -164,23 +164,56 @@ const readClaudeCatalogSurfaces = async ({
   };
 };
 
+/** The SDK row that points to the session default model. It names no model of its own. */
+const CLAUDE_DEFAULT_MODEL_ALIAS = "default";
+
+/**
+ * Lists one entry for each model that Claude runs. Claude reports each turn with that model ID, so
+ * an alias row, such as `opus`, only adds its alias to the entry of the model that it points to.
+ */
 const toClaudeModelCatalog = (
   models: ModelInfo[],
   speedAvailability: AgentSpeedAvailability | undefined,
-): AgentModelCatalog => ({
-  runtime: CLAUDE_RUNTIME_DESCRIPTOR,
-  speedAvailability,
-  models: models.map((model) => toClaudeModelDescriptor(model)),
-  defaultModelsByProvider: models[0] ? { claude: models[0].value } : {},
-  profiles: [],
-});
+): AgentModelCatalog => {
+  const defaultRow = models.find((model) => model.value === CLAUDE_DEFAULT_MODEL_ALIAS);
+  const rows = defaultRow
+    ? [...models.filter((model) => model !== defaultRow), defaultRow]
+    : models;
+  const descriptors = new Map<string, AgentModelDescriptor>();
+  for (const row of rows) {
+    const descriptor = toClaudeModelDescriptor(row);
+    const listed = descriptors.get(descriptor.modelId);
+    if (!listed) descriptors.set(descriptor.modelId, descriptor);
+    else if (descriptor.aliases)
+      listed.aliases = [...(listed.aliases ?? []), ...descriptor.aliases];
+  }
+  const defaultModelId = defaultRow
+    ? readClaudeModelId(defaultRow)
+    : descriptors.keys().next().value;
+  return {
+    runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+    speedAvailability,
+    models: [...descriptors.values()],
+    defaultModelsByProvider: defaultModelId ? { claude: defaultModelId } : {},
+    profiles: [],
+  };
+};
+
+const readClaudeModelId = (model: ModelInfo): string => {
+  if (!model.resolvedModel)
+    throw new Error(
+      `Claude did not report the model ID of '${model.value}'. Update Claude Code, then refresh the model catalog.`,
+    );
+  return model.resolvedModel;
+};
 
 export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor => {
+  const modelId = readClaudeModelId(model);
   const descriptor: AgentModelDescriptor = {
-    id: model.value,
+    id: modelId,
     providerId: "claude",
     providerName: "Claude",
-    modelId: model.value,
+    modelId,
     modelName: model.displayName,
     variants: [...(model.supportedEffortLevels ?? [])],
     liveSessionUpdates: {
@@ -198,8 +231,7 @@ export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor 
       },
     },
   };
-  // Claude history reports the resolved model ID, not the alias of the catalog entry.
-  if (model.resolvedModel) descriptor.resolvedModelId = model.resolvedModel;
+  if (model.value !== modelId) descriptor.aliases = [model.value];
   // Claude omits this flag for models without fast mode.
   if (model.supportsFastMode === true) descriptor.speedLevels = [CLAUDE_FAST_SPEED_LEVEL];
   return descriptor;

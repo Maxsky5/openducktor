@@ -1,14 +1,7 @@
-import {
-  getSessionInfo,
-  getSessionMessages,
-  listSessions,
-  query,
-} from "@anthropic-ai/claude-agent-sdk";
-import { findTurnCatalogModel, type SessionRef } from "@openducktor/core";
+import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
+import { type SessionRef } from "@openducktor/core";
 import { z } from "zod";
 import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
-import { loadClaudeModelCatalog } from "./claude-agent-sdk-catalog";
-import type { CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
 
 const metadata = (
   row: Awaited<ReturnType<typeof listSessions>>[number],
@@ -50,25 +43,15 @@ export const getClaudeSessionMetadata = async (
   return value;
 };
 
-/** Reads the model of the latest turn. Claude reports a resolved ID, so map it to the catalog entry. */
 export const readClaudeSessionModel = async (
   ref: SessionRef,
-  runtime: Pick<CreateClaudeAgentSdkServiceInput, "claudeExecutablePath" | "processEnv">,
 ): Promise<AgentSessionModelSelection | null> => {
   const messages = await getSessionMessages(ref.externalSessionId, { dir: ref.workingDirectory });
   for (const entry of messages.toReversed()) {
     if (entry.type !== "assistant") continue;
     const { model: modelId } = z.object({ model: z.string().optional() }).parse(entry.message);
-    if (!modelId || modelId === "<synthetic>") continue;
-    const reported = { runtimeKind: "claude" as const, providerId: "claude", modelId };
-    const catalog = await loadClaudeModelCatalog(
-      ref.workingDirectory,
-      runtime.processEnv,
-      runtime.claudeExecutablePath,
-      query,
-    );
-    const model = findTurnCatalogModel(catalog, reported);
-    return model ? { ...reported, modelId: model.modelId } : reported;
+    if (modelId && modelId !== "<synthetic>")
+      return { runtimeKind: "claude", providerId: "claude", modelId };
   }
   return null;
 };

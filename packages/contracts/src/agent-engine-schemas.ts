@@ -37,9 +37,9 @@ export const agentModelDescriptorSchema = z
     providerId: nonEmptyStringSchema,
     providerName: nonEmptyStringSchema,
     modelId: nonEmptyStringSchema,
-    /** The model ID that the runtime reports for a turn of an alias entry, such as `opus`. */
-    resolvedModelId: nonEmptyStringSchema.optional(),
     modelName: nonEmptyStringSchema,
+    /** Runtime aliases, such as `opus`, that point to this model. A saved alias converts to `modelId`. */
+    aliases: z.array(nonEmptyStringSchema).optional(),
     variants: z.array(z.string()),
     speedLevels: z.array(agentSpeedLevelSchema).optional(),
     contextWindow: z.number().int().positive().optional(),

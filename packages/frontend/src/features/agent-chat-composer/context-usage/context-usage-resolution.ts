@@ -1,5 +1,4 @@
 import type { AgentModelCatalog } from "@openducktor/core";
-import { findTurnCatalogModel } from "@/lib/model-catalog-selection";
 import type { AgentSessionContextUsage } from "@/types/agent-orchestrator";
 
 export type AgentStudioContextUsage = {
@@ -7,6 +6,39 @@ export type AgentStudioContextUsage = {
   contextWindow: number;
   outputLimit?: number;
 } | null;
+
+type CatalogModelDescriptor = AgentModelCatalog["models"][number];
+
+const toModelDescriptorKey = (providerId: string, modelId: string): string =>
+  `${providerId}::${modelId}`;
+
+const resolveContextUsageDescriptor = ({
+  liveContextUsage,
+  modelDescriptorByKey,
+}: {
+  liveContextUsage: AgentSessionContextUsage;
+  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
+}): CatalogModelDescriptor | undefined => {
+  if (!liveContextUsage.providerId || !liveContextUsage.modelId) {
+    return undefined;
+  }
+  return modelDescriptorByKey.get(
+    toModelDescriptorKey(liveContextUsage.providerId, liveContextUsage.modelId),
+  );
+};
+
+export const indexModelDescriptorsByProviderAndModel = (
+  catalog: AgentModelCatalog | null,
+): Map<string, CatalogModelDescriptor> => {
+  const map = new Map<string, CatalogModelDescriptor>();
+  if (!catalog) {
+    return map;
+  }
+  for (const descriptor of catalog.models) {
+    map.set(toModelDescriptorKey(descriptor.providerId, descriptor.modelId), descriptor);
+  }
+  return map;
+};
 
 const pickPositiveNumber = (...values: Array<number | undefined>): number | undefined => {
   for (const value of values) {
@@ -19,14 +51,14 @@ const pickPositiveNumber = (...values: Array<number | undefined>): number | unde
 
 export type ExtractLatestSessionContextUsageInput = {
   liveContextUsage?: AgentSessionContextUsage | null;
-  catalog: AgentModelCatalog | null;
+  modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
   fallbackOutputLimit?: number;
 };
 
 export const extractLatestSessionContextUsage = ({
   liveContextUsage,
-  catalog,
+  modelDescriptorByKey,
   fallbackContextWindow,
   fallbackOutputLimit,
 }: ExtractLatestSessionContextUsageInput): AgentStudioContextUsage => {
@@ -34,11 +66,10 @@ export const extractLatestSessionContextUsage = ({
     return null;
   }
 
-  const { providerId, modelId } = liveContextUsage;
-  const modelDescriptor =
-    catalog && providerId && modelId
-      ? findTurnCatalogModel(catalog, { providerId, modelId })
-      : null;
+  const modelDescriptor = resolveContextUsageDescriptor({
+    liveContextUsage,
+    modelDescriptorByKey,
+  });
   const contextWindow = pickPositiveNumber(
     liveContextUsage.contextWindow,
     modelDescriptor?.contextWindow,

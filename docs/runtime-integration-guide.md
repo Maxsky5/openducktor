@@ -190,10 +190,6 @@ A runtime without steering can still use the host queue. See [Queue and steering
 
 If `attachmentSupport` is absent, the runtime did not provide model attachment data. The composer rejects an unsupported kind or MIME type.
 
-A runtime can report a different model ID for a turn of an alias entry. For example, the Claude entry `opus` reports `claude-opus-5-5`. Set `resolvedModelId` on such an entry.
-
-`findTurnCatalogModel` finds a reported model in the catalog by `modelId`, then by `resolvedModelId`. Use it for each model that a turn reports. The steer attachment check, the model labels, the context limits, and the Claude session import use it.
-
 An attachment part has an ID, local path, name, kind, and optional MIME type. In a browser, the frontend asks the host to stage the `File`, then sends the staged path.
 
 Encode each attachment in the runtime's native prompt form. Keep the staged path in the encoded part so a later history read can restore the local preview.
@@ -333,6 +329,8 @@ OpenCode catalog reads register their repository and working directory with the 
 For a repository that is not yet a workspace, `agent_runtime_preview_models` reads Claude, Codex, or OpenCode models through a short-lived native session or process. The host checks the Git path, does not connect the OpenDucktor MCP bridge, and closes the session or process after the read. Keep this preview out of the host runtime registry and use a separate frontend query key.
 
 Keep names that the runtime accepts. A bad catalog entry fails that catalog request and names the entry. It does not block history or session reads.
+
+Use the model ID that the runtime reports for a turn as `AgentModelDescriptor.modelId`. History, steering checks, labels, and imports then match the catalog exactly. List each model once. Put each runtime alias that points to the model, such as the Claude `opus` row, in `aliases`. `coerceVisibleSelectionToCatalog` converts a saved alias to the current `modelId`, and the next send saves the converted selection. The Claude `default` row points to the session default model, so it sets `defaultModelsByProvider` and lists no model of its own. A Claude row without `resolvedModel` fails the catalog read with an update action.
 
 Claude tool availability uses optional `toolAvailability` maps in the default and role policy fields. A missing default map disables `Artifact`, `ArtifactComments`, and `ArtifactData`. An explicit map replaces these initial choices; omitted keys and `true` values add no exclusion. A missing role map inherits defaults, an explicit role map replaces them, and an empty role map enables all tools by preference. Removing the role's field restores inheritance without changing its other policy fields. These maps use config version `4`; old data remains readable, but older app versions can reject the new field.
 

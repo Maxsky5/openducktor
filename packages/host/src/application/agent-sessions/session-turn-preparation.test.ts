@@ -159,18 +159,18 @@ describe("authoritative turn preparation", () => {
     });
   });
 
-  describe("steering content", () => {
+  describe("Claude models", () => {
     const claudeTarget: AgentMessageTarget = { ...target, runtimeKind: "claude" };
     const claudeCatalog = agentModelCatalogSchema.parse({
       runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
       models: [
         {
-          id: "opus",
+          id: "claude-opus-5-5",
           providerId: "claude",
           providerName: "Claude",
-          modelId: "opus",
-          resolvedModelId: "claude-opus-5-5",
+          modelId: "claude-opus-5-5",
           modelName: "Opus 5.5",
+          aliases: ["opus"],
           variants: [],
           attachmentSupport: {
             image: true,
@@ -180,8 +180,17 @@ describe("authoritative turn preparation", () => {
             mimeTypes: { image: ["image/png"] },
           },
         },
+        {
+          id: "claude-haiku-5-5",
+          providerId: "claude",
+          providerName: "Claude",
+          modelId: "claude-haiku-5-5",
+          modelName: "Haiku 5.5",
+          aliases: ["haiku", "default"],
+          variants: [],
+        },
       ],
-      defaultModelsByProvider: { claude: "opus" },
+      defaultModelsByProvider: { claude: "claude-haiku-5-5" },
     });
     const imagePart = {
       kind: "attachment" as const,
@@ -214,14 +223,14 @@ describe("authoritative turn preparation", () => {
         },
       ]);
 
-    test("accepts an attachment when the turn reports the resolved model of an alias", async () => {
+    test("accepts a steer attachment that suits the model that the turn reports", async () => {
       const { preparation, setCatalog } = setup(turnHistory("claude-opus-5-5"));
       setCatalog(claudeCatalog);
 
       await Effect.runPromise(preparation.steeringContent(claudeTarget, [imagePart]));
     });
 
-    test("rejects an attachment when the catalog lacks the model of the turn", async () => {
+    test("rejects a steer attachment when the catalog lacks the model of the turn", async () => {
       const { preparation, setCatalog } = setup(turnHistory("claude-unknown"));
       setCatalog(claudeCatalog);
 
@@ -236,6 +245,21 @@ describe("authoritative turn preparation", () => {
             "image.png: The model of the running turn does not expose attachment capability data.",
         },
       });
+    });
+
+    test("converts a saved alias to the model that it points to", async () => {
+      const { preparation, setCatalog } = setup();
+      setCatalog(claudeCatalog);
+
+      expect(
+        await Effect.runPromise(
+          preparation.model(claudeTarget, {
+            runtimeKind: "claude",
+            providerId: "claude",
+            modelId: "opus",
+          }),
+        ),
+      ).toMatchObject({ kind: "repair", selection: { modelId: "claude-opus-5-5" } });
     });
   });
 });

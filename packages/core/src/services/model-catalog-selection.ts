@@ -29,24 +29,6 @@ export const findCatalogModel = (
   );
 };
 
-/**
- * Finds the catalog entry of a model that a turn reported. A runtime can report the resolved
- * model ID of an alias entry, so an entry also matches by its `resolvedModelId`.
- */
-export const findTurnCatalogModel = (
-  catalog: AgentModelCatalog,
-  reported: Pick<AgentModelSelection, "providerId" | "modelId">,
-): CatalogModel | null => {
-  return (
-    findCatalogModel(catalog, reported) ??
-    catalog.models.find(
-      (model) =>
-        model.providerId === reported.providerId && model.resolvedModelId === reported.modelId,
-    ) ??
-    null
-  );
-};
-
 export const pickCatalogDefaultModel = (catalog: AgentModelCatalog): CatalogModel | null => {
   for (const model of catalog.models) {
     if (catalog.defaultModelsByProvider[model.providerId] === model.modelId) {
