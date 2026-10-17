@@ -17,7 +17,7 @@ import {
   remoteAccessQueryKey,
 } from "@/state/queries/remote-access";
 import { RemoteAccessForm } from "./settings-remote-access-form";
-import { RemoteAddress } from "./settings-remote-address";
+import { RemoteAddress } from "../remote-control/remote-address";
 
 const labels = { disabled: "Off", starting: "Starting", available: "On", failed: "Failed" };
 export function SettingsRemoteAccessSection() {
@@ -43,9 +43,8 @@ function RemoteAccessControls({ bridge }: { bridge: RemoteAccessBridge }) {
   const id = useId();
   const [editing, setEditing] = useState(false);
   const { state, message, form } = useRemoteAccessControls(bridge);
-  const { status, configuration, failure } = state ?? {};
+  const { status, failure } = state ?? {};
   const unavailable = failure?.code === "function_unavailable";
-  const endpoint = status === "available" ? configuration?.publicEndpoint : undefined;
   return (
     <section aria-labelledby={`${id}-title`} className="grid gap-4">
       <SharingStatus
@@ -54,7 +53,13 @@ function RemoteAccessControls({ bridge }: { bridge: RemoteAccessBridge }) {
         pending={form.pending}
         onDisable={() => form.onAction(null)}
       />
-      {endpoint ? <RemoteAddress key={endpoint} endpoint={endpoint} /> : null}
+      {state?.status === "available" && state.configuration ? (
+        <RemoteAddress
+          key={state.configuration.publicEndpoint}
+          endpoint={state.configuration.publicEndpoint}
+          connectedClients={state.connectedClients}
+        />
+      ) : null}
       {!unavailable && status ? (
         <Collapsible
           open={status !== "available" || editing}

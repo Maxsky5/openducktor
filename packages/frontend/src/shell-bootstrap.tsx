@@ -6,6 +6,7 @@ import { AppCrashShell } from "./components/errors/app-crash-shell";
 import { applyThemeToDocument } from "./components/layout/theme-dom";
 import { readSystemAppearance, resolveThemePreference } from "./components/layout/theme-preference";
 import { appQueryClient } from "./lib/query-client";
+import { QueryProvider } from "./lib/query-provider";
 import { watchClientPage } from "./lib/client-page";
 import { configureShellBridge, getShellBridge, type ShellBridge } from "./lib/shell-bridge";
 import {
@@ -15,6 +16,7 @@ import {
 } from "./shell-bootstrap-workflow";
 import { dismissOpenDucktorStartupSplash } from "./startup-splash/runtime";
 import { loadSettingsSnapshotFromQuery } from "./state/queries/workspace";
+import { ShellStateProvider } from "./state/app-state-provider";
 import { HostConnectionProvider } from "./components/layout/host-connection";
 import { HostConnectionPage } from "./components/layout/host-connection-page";
 import { HostPicker } from "./components/layout/host-picker";
@@ -52,9 +54,13 @@ const renderOpenDucktorShellApp = (rootElement: HTMLElement, routerMode: ShellRo
     <StrictMode>
       <StartupSplashLifecycle />
       <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
-        <RemoteConnectionBoundary connection={getShellBridge().remoteConnection}>
-          <App routerMode={routerMode} />
-        </RemoteConnectionBoundary>
+        <QueryProvider>
+          <ShellStateProvider remoteAccess={getShellBridge().remoteAccess}>
+            <RemoteConnectionBoundary connection={getShellBridge().remoteConnection}>
+              <App routerMode={routerMode} />
+            </RemoteConnectionBoundary>
+          </ShellStateProvider>
+        </QueryProvider>
       </AppCrashShell>
     </StrictMode>,
   );
@@ -181,9 +187,13 @@ async function bootstrapHostClient(
     <StrictMode>
       <StartupSplashLifecycle />
       <AppCrashShell kanbanLocation={kanbanLocationForRouter(mode)}>
-        <HostConnectionProvider selection={selection} connection={bridge.remoteConnection}>
-          <App routerMode={mode} />
-        </HostConnectionProvider>
+        <QueryProvider>
+          <ShellStateProvider remoteAccess={bridge.remoteAccess}>
+            <HostConnectionProvider selection={selection} connection={bridge.remoteConnection}>
+              <App routerMode={mode} />
+            </HostConnectionProvider>
+          </ShellStateProvider>
+        </QueryProvider>
       </AppCrashShell>
     </StrictMode>,
   );

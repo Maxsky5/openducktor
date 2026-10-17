@@ -110,11 +110,11 @@ function LocalHostIcon({ state }: { state: RemoteAccessState | undefined }) {
   return (
     <span
       aria-hidden="true"
-      className={cn("relative inline-flex", sharing && "text-primary dark:text-violet-300")}
+      className={cn("relative inline-flex", sharing && "text-status-running-foreground")}
     >
       <Laptop className="size-5" />
       {sharing && state.connectedClients > 0 ? (
-        <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-current" />
+        <span className="absolute -right-1 -top-1 size-1.5 rounded-full bg-status-running" />
       ) : null}
     </span>
   );

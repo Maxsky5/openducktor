@@ -54,10 +54,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { workspaceComparisonChoices } from "./workspace-comparison-choices";
 import { RemoteAccessProvider } from "./remote-access-provider";
 
-export function AppStateProvider({
+export function ShellStateProvider({
   children,
   remoteAccess,
-}: PropsWithChildren<{ remoteAccess?: RemoteAccessBridge | undefined }>): ReactElement {
+}: PropsWithChildren<{ remoteAccess: RemoteAccessBridge | undefined }>): ReactElement {
+  return <RemoteAccessProvider bridge={remoteAccess}>{children}</RemoteAccessProvider>;
+}
+
+export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   workspaceComparisonChoices(useQueryClient());
   const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
 
@@ -78,11 +82,7 @@ export function AppStateProvider({
                         <AgentStudioStateProvider agentEngine={agentEngine}>
                           <AppLifecycleStateProvider>
                             <TerminalActivityProvider>
-                              <AutopilotProvider>
-                                <RemoteAccessProvider bridge={remoteAccess}>
-                                  {children}
-                                </RemoteAccessProvider>
-                              </AutopilotProvider>
+                              <AutopilotProvider>{children}</AutopilotProvider>
                             </TerminalActivityProvider>
                           </AppLifecycleStateProvider>
                         </AgentStudioStateProvider>
