@@ -1,5 +1,9 @@
 import { type PropsWithChildren, type ReactElement, useMemo, useSyncExternalStore } from "react";
-import type { AgentMessageQueueSnapshot, AgentSessionLiveRef } from "@openducktor/contracts";
+import type {
+  AgentMessageQueueSnapshot,
+  AgentSessionLiveRef,
+  RemoteAccessBridge,
+} from "@openducktor/contracts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
@@ -48,8 +52,12 @@ import { TerminalActivityProvider } from "./providers/terminal-activity-provider
 
 import { useQueryClient } from "@tanstack/react-query";
 import { workspaceComparisonChoices } from "./workspace-comparison-choices";
+import { RemoteAccessProvider } from "./remote-access-provider";
 
-export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
+export function AppStateProvider({
+  children,
+  remoteAccess,
+}: PropsWithChildren<{ remoteAccess?: RemoteAccessBridge | undefined }>): ReactElement {
   workspaceComparisonChoices(useQueryClient());
   const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
 
@@ -70,7 +78,11 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
                         <AgentStudioStateProvider agentEngine={agentEngine}>
                           <AppLifecycleStateProvider>
                             <TerminalActivityProvider>
-                              <AutopilotProvider>{children}</AutopilotProvider>
+                              <AutopilotProvider>
+                                <RemoteAccessProvider bridge={remoteAccess}>
+                                  {children}
+                                </RemoteAccessProvider>
+                              </AutopilotProvider>
                             </TerminalActivityProvider>
                           </AppLifecycleStateProvider>
                         </AgentStudioStateProvider>
