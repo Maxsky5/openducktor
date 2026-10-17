@@ -2,7 +2,91 @@ import { expect, mock, test } from "bun:test";
 import { act } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
+import type { RemoteAccessBridge, RemoteAccessState } from "@openducktor/contracts";
+import { QueryProvider } from "@/lib/query-provider";
+import { RemoteAccessProvider } from "@/state/remote-access-provider";
+import { SettingsRemoteAccessSection } from "../features/settings/settings-remote-access-section";
 import { HostConnectionProvider, HostSwitcher } from "./host-connection";
+
+test("the rail tracks local sharing and live clients through the same subscription as Settings", async () => {
+  let publish = (_state: RemoteAccessState) => {};
+  const snapshot = Promise.withResolvers<RemoteAccessState>();
+  const stop = mock(() => {});
+  const bridge: RemoteAccessBridge = {
+    readState: () => snapshot.promise,
+    readNetworks: async () => [],
+    enable: async () => {
+      throw new Error("This test uses the live state stream.");
+    },
+    disable: async () => {
+      throw new Error("This test uses the live state stream.");
+    },
+    subscribeState: mock(async (listener: (state: RemoteAccessState) => void) => {
+      publish = listener;
+      return stop;
+    }),
+  };
+  const selection = {
+    target: { kind: "local" } as const,
+    localHost: "web" as const,
+    select: async () => {},
+    disconnect: async () => {},
+  };
+  const content = (settings: boolean, remote: boolean) => (
+    <QueryProvider useIsolatedClient>
+      <RemoteAccessProvider bridge={bridge}>
+        <HostConnectionProvider
+          selection={
+            remote
+              ? { ...selection, target: { kind: "remote", endpoint: "https://host.test" } }
+              : selection
+          }
+          connection={undefined}
+        >
+          <HostSwitcher />
+          {settings ? <SettingsRemoteAccessSection /> : null}
+        </HostConnectionProvider>
+      </RemoteAccessProvider>
+    </QueryProvider>
+  );
+  const view = render(content(false, false));
+  const control = await view.findByRole("button", { name: "Host connection: Web runner host" });
+  await act(async () => {
+    publish({ status: "available", configuration: null, connectedClients: 0 });
+  });
+  expect(control.getAttribute("aria-label")).toContain(
+    "Remote control is on. No clients connected.",
+  );
+  expect(control.textContent).toBe("");
+  await act(async () => {
+    publish({ status: "available", configuration: null, connectedClients: 2 });
+  });
+  expect(control.getAttribute("aria-label")).toContain("2 clients connected.");
+  expect(control.textContent).toBe("2");
+  await act(async () => {
+    snapshot.resolve({ status: "disabled", configuration: null, connectedClients: 0 });
+    await snapshot.promise;
+  });
+  expect(control.textContent).toBe("2");
+  view.rerender(content(true, false));
+  await view.findByText("On");
+  expect(bridge.subscribeState).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    publish({ status: "available", configuration: null, connectedClients: 1 });
+  });
+  expect(control.getAttribute("aria-label")).toContain("1 client connected.");
+  view.rerender(content(false, true));
+  const remote = view.getByRole("button", { name: "Host connection: host.test" });
+  expect(remote.textContent).toBe("");
+  view.rerender(content(false, false));
+  await act(async () => {
+    publish({ status: "disabled", configuration: null, connectedClients: 0 });
+  });
+  expect(control.getAttribute("aria-label")).toBe("Host connection: Web runner host");
+  expect(control.textContent).toBe("");
+  view.unmount();
+  expect(stop).toHaveBeenCalledTimes(1);
+});
 
 test("keeps all host actions in the modal footer", () => {
   const view = render(

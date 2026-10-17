@@ -17,6 +17,8 @@ import {
 } from "@/components/layout/workspace-preview-transition-guard";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/lib/query-provider";
+import { getShellBridge } from "@/lib/shell-bridge";
+import { RemoteAccessProvider } from "@/state/remote-access-provider";
 import { loadNotFoundPage } from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { LegacySessionsRedirect } from "@/pages/sessions/legacy-sessions-redirect";
@@ -63,17 +65,19 @@ function withRouteFallback(element: ReactElement, fallback?: ReactElement): Reac
 function AppProviders(): ReactElement {
   return (
     <QueryProvider>
-      <ThemeProvider>
-        <AppStateProvider>
-          <WorkspacePreviewTransitionGuardProvider>
-            <ApplicationOverlays>
-              <WorkspacePreviewRouteGuard />
-              <Outlet />
-              <Toaster />
-            </ApplicationOverlays>
-          </WorkspacePreviewTransitionGuardProvider>
-        </AppStateProvider>
-      </ThemeProvider>
+      <RemoteAccessProvider bridge={getShellBridge().remoteAccess}>
+        <ThemeProvider>
+          <AppStateProvider>
+            <WorkspacePreviewTransitionGuardProvider>
+              <ApplicationOverlays>
+                <WorkspacePreviewRouteGuard />
+                <Outlet />
+                <Toaster />
+              </ApplicationOverlays>
+            </WorkspacePreviewTransitionGuardProvider>
+          </AppStateProvider>
+        </ThemeProvider>
+      </RemoteAccessProvider>
     </QueryProvider>
   );
 }

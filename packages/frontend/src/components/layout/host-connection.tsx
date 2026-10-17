@@ -7,8 +7,9 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { Monitor, Server } from "lucide-react";
+import { Monitor, MonitorUp, Server } from "lucide-react";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
+import type { RemoteAccessState } from "@openducktor/contracts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,6 +20,8 @@ import {
 } from "@/components/ui/dialog";
 import { localHostLabel, type HostSelection } from "@/lib/host-location";
 import type { ShellBridge } from "@/lib/shell-bridge";
+import { useRemoteAccess } from "@/state/remote-access-provider";
+import { cn } from "@/lib/utils";
 import { HostPicker } from "./host-picker";
 import { HostRetryButton } from "./host-retry-button";
 import { HostConnectionPage } from "./host-connection-page";
@@ -78,26 +81,61 @@ export function HostConnectionProvider({
 
 export function HostSwitcher() {
   const host = useContext(HostContext);
+  const { state, error } = useRemoteAccess();
   if (!host) return null;
   const target = host.selection.target;
   const name =
     target.kind === "remote"
       ? new URL(target.endpoint).host
       : localHostLabel(host.selection.localHost);
-  const Icon = target.kind === "remote" ? Server : Monitor;
+  const local = target.kind === "local";
+  const label = `Host connection: ${name}${local ? sharingDescription(state, error) : ""}`;
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
-      className="size-9 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-      aria-label={`Host connection: ${name}`}
-      title={`Host connection: ${name}`}
+      className="relative size-9 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+      aria-label={label}
+      title={label}
       onClick={host.choose}
     >
-      <Icon aria-hidden="true" />
+      {local ? <LocalHostIcon state={state} /> : <Server aria-hidden="true" />}
     </Button>
   );
+}
+
+function LocalHostIcon({ state }: { state: RemoteAccessState | undefined }) {
+  if (state?.status !== "available") return <Monitor aria-hidden="true" />;
+  const clients = state.connectedClients;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "inline-flex text-primary",
+        clients > 0 && "text-emerald-700 dark:text-emerald-400",
+      )}
+    >
+      <MonitorUp className="size-4" />
+      {clients > 0 ? (
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-700 px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-sidebar dark:bg-emerald-400 dark:text-emerald-950">
+          {clients}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function sharingDescription(state: RemoteAccessState | undefined, error: string | undefined) {
+  if (error || state?.status === "failed")
+    return ". Remote control status unavailable. Check Remote control settings.";
+  if (state?.status !== "available") return "";
+  const clients = state.connectedClients;
+  const description =
+    clients === 0
+      ? "No clients connected."
+      : `${clients} ${clients === 1 ? "client" : "clients"} connected.`;
+  return `. Remote control is on. ${description}`;
 }
 
 function ConnectionProgress({

@@ -65,6 +65,7 @@ export const createRemoteWorkInterface = (
     frontendOrigins?: ReadonlySet<string>;
     logger: WebLogger;
     reportFailure(cause: unknown): void;
+    onClientsChanged?(count: number): void;
   },
 ) => {
   const descriptor: RemoteHostDescriptor = {
@@ -95,6 +96,10 @@ export const createRemoteWorkInterface = (
     reportDeliveryFailure: ({ cause }) => options.reportFailure(cause),
   });
   let closed = false;
+  const clientsChanged = () =>
+    options.onClientsChanged?.(
+      [...connections.values()].filter((connection) => connection.activeStreams > 0).length,
+    );
   const release = (id: string) => {
     const connection = connections.get(id);
     if (!connection) return;
@@ -105,6 +110,7 @@ export const createRemoteWorkInterface = (
       const lease = leases.get(leaseId);
       if (lease) leases.delete(lease);
     }
+    clientsChanged();
   };
   const armExpiry = (id: string, connection: Connection) => {
     if (connection.expiry) clearTimeout(connection.expiry);
@@ -121,9 +127,11 @@ export const createRemoteWorkInterface = (
       signal.removeEventListener("abort", detach);
       connection.activeStreams -= 1;
       if (connections.get(id) === connection) armExpiry(id, connection);
+      clientsChanged();
     };
     signal.addEventListener("abort", detach, { once: true });
     if (signal.aborted) detach();
+    else clientsChanged();
   };
   const close = () => {
     closed = true;

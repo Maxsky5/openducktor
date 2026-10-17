@@ -1,5 +1,4 @@
 import type { ReactElement } from "react";
-import { getShellBridge } from "@/lib/shell-bridge";
 import { SettingsRemoteAccessSection } from "./settings-remote-access-section";
 import { AgentRuntimesSection } from "./settings-agent-runtimes-section";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
@@ -109,7 +108,7 @@ export function SettingsModalContent({
   }
 
   if (section === "remote-access") {
-    return <SettingsRemoteAccessSection bridge={getShellBridge().remoteAccess} />;
+    return <SettingsRemoteAccessSection />;
   }
 
   if (section === "custom-agent-roles") {

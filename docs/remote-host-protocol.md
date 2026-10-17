@@ -54,6 +54,7 @@ The default address is the listener origin, such as `http://192.168.1.9:14328`. 
 Copy the address into a compatible OpenDucktor client, or show its QR code in a separate dialog.
 A browser opened at the host address shows its descriptor as JSON. To use the full app, open a standalone web client and paste the host address into its picker.
 The On status means the listener started; it does not prove that a phone can reach it.
+The local host icon changes when remote control is on and shows a client count when external clients connect. Each client with a live event, task, or terminal stream counts once. Disconnecting its last stream clears it from the count. Operator status updates use the existing live status subscription.
 Advanced contains an optional fixed port, local listen address, and public host address.
 Choose a fixed port only when a firewall or proxy mapping needs one.
 An explicit public host address requires a fixed port.

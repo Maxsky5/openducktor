@@ -6,6 +6,7 @@ import type {
   RemoteAccessConfiguration,
 } from "@openducktor/contracts";
 import { QueryProvider } from "@/lib/query-provider";
+import { RemoteAccessProvider } from "@/state/remote-access-provider";
 import { SettingsRemoteAccessSection } from "./settings-remote-access-section";
 
 const configuration: RemoteAccessConfiguration = {
@@ -16,19 +17,21 @@ const configuration: RemoteAccessConfiguration = {
 const bridge = (initial: RemoteAccessState): RemoteAccessBridge => ({
   readState: async () => initial,
   readNetworks: async () => [{ name: "en0", address: "192.168.1.9" }],
-  enable: async () => ({ status: "available", configuration }),
-  disable: async () => ({ status: "disabled", configuration: null }),
+  enable: async () => ({ status: "available", configuration, connectedClients: 0 }),
+  disable: async () => ({ status: "disabled", configuration: null, connectedClients: 0 }),
   subscribeState: async () => () => {},
 });
 const show = (operator: RemoteAccessBridge) =>
   render(
     <QueryProvider useIsolatedClient>
-      <SettingsRemoteAccessSection bridge={operator} />
+      <RemoteAccessProvider bridge={operator}>
+        <SettingsRemoteAccessSection />
+      </RemoteAccessProvider>
     </QueryProvider>,
   );
 
 test("enables a detected network without typing a port or URL and stops sharing", async () => {
-  const operator = bridge({ status: "disabled", configuration: null });
+  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
   const enable = mock(operator.enable);
   const disable = mock(operator.disable);
   operator.enable = enable;
@@ -57,7 +60,7 @@ test("enables a detected network without typing a port or URL and stops sharing"
 });
 
 test("requires a choice when the computer has more than one network", async () => {
-  const operator = bridge({ status: "disabled", configuration: null });
+  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
   operator.readNetworks = async () => [
     { name: "en0", address: "192.168.1.9" },
     { name: "vpn", address: "100.64.0.1" },
@@ -82,7 +85,7 @@ test.each(["65536", ""])("keeps Advanced settings and rejects invalid port %s", 
     listenPort: 14328,
     publicEndpoint: "https://machine.test/api/remote",
   };
-  const operator = bridge({ status: "available", configuration: manual });
+  const operator = bridge({ status: "available", configuration: manual, connectedClients: 0 });
   const enable = mock(operator.enable);
   operator.enable = enable;
   show(operator);
@@ -105,7 +108,7 @@ test.each(["65536", ""])("keeps Advanced settings and rejects invalid port %s", 
 });
 
 test("requires a fixed port for a proxy so its forwarding target stays known", async () => {
-  const operator = bridge({ status: "disabled", configuration: null });
+  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
   const enable = mock(operator.enable);
   operator.enable = enable;
   show(operator);
@@ -135,7 +138,11 @@ test.each([
   ["fd00:0:0:0:0:0:0:2", "http://[fd00:0:0:0:0:0:0:2]:51541"],
 ])("keeps automatic setup when reopening host %s", async (listenHost, publicEndpoint) => {
   show(
-    bridge({ status: "available", configuration: { listenHost, listenPort: 0, publicEndpoint } }),
+    bridge({
+      status: "available",
+      connectedClients: 0,
+      configuration: { listenHost, listenPort: 0, publicEndpoint },
+    }),
   );
   fireEvent.click(await screen.findByRole("button", { name: "Connection settings" }));
   expect(screen.queryByLabelText("Public host address") === null).toBe(true);
@@ -152,7 +159,7 @@ test.each([
 });
 
 test("shows network read failures and listener failures with a next action", async () => {
-  const operator = bridge({ status: "disabled", configuration: null });
+  const operator = bridge({ status: "disabled", configuration: null, connectedClients: 0 });
   operator.readNetworks = async () => {
     throw new Error("Could not read networks. Check the network connection.");
   };
@@ -162,6 +169,7 @@ test("shows network read failures and listener failures with a next action", asy
   operator.enable = async () => ({
     status: "failed",
     configuration: null,
+    connectedClients: 0,
     failure: {
       code: "unavailable",
       message: "Could not open this network.",

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type RemoteAccessState,
@@ -11,16 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Radio } from "lucide-react";
+import { remoteAccessQueryKey, useRemoteAccess } from "@/state/remote-access-provider";
 import { RemoteAccessForm } from "./settings-remote-access-form";
 import { RemoteAddress } from "./settings-remote-address";
 
-const REMOTE_ACCESS_QUERY_KEY = ["shell", "remote-access"] as const;
 const labels = { disabled: "Off", starting: "Starting", available: "On", failed: "Failed" };
-export function SettingsRemoteAccessSection({
-  bridge,
-}: {
-  bridge: RemoteAccessBridge | undefined;
-}) {
+export function SettingsRemoteAccessSection() {
+  const { bridge } = useRemoteAccess();
   return (
     <div className="grid gap-4 p-4">
       <div className="flex flex-col gap-2">
@@ -134,28 +131,25 @@ function SharingStatus({
 
 function useRemoteAccessControls(bridge: RemoteAccessBridge) {
   const queryClient = useQueryClient();
+  const { state, error: stateError } = useRemoteAccess();
   const [draft, setDraft] = useState<RemoteAccessEnableInput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [liveState, setLiveState] = useRemoteAccessLiveState(bridge, setError);
-  const query = useQuery({ queryKey: REMOTE_ACCESS_QUERY_KEY, queryFn: () => bridge.readState() });
   const networks = useQuery({
     queryKey: ["shell", "remote-access", "networks"],
     queryFn: () => bridge.readNetworks(),
     staleTime: 0,
   });
-  const state = liveState ?? query.data;
   const { status, configuration, failure } = state ?? {};
   const saved = draftFrom(configuration, networks.data ?? []);
   const fields = draft ?? saved;
   const failureMessage = failure ? `${failure.message} ${failure.nextAction}` : undefined;
-  const message = error ?? query.error?.message ?? networks.error?.message ?? failureMessage;
+  const message = error ?? stateError ?? networks.error?.message ?? failureMessage;
   const action = useMutation({
     mutationFn: (configuration: RemoteAccessEnableInput | null) =>
       configuration ? bridge.enable(configuration) : bridge.disable(),
-    onMutate: () => queryClient.cancelQueries({ queryKey: REMOTE_ACCESS_QUERY_KEY, exact: true }),
+    onMutate: () => queryClient.cancelQueries({ queryKey: remoteAccessQueryKey, exact: true }),
     onSuccess: (next) => {
-      queryClient.setQueryData(REMOTE_ACCESS_QUERY_KEY, next);
-      setLiveState(next);
+      queryClient.setQueryData(remoteAccessQueryKey, next);
       if (next.status !== "failed") setDraft(null);
       setError(null);
     },
@@ -203,28 +197,4 @@ function draftFrom(
     (configuration.listenPort === 0 || Number(url.port || 80) === configuration.listenPort);
   const { publicEndpoint, ...fields } = configuration;
   return direct ? fields : { ...fields, publicEndpoint };
-}
-
-function useRemoteAccessLiveState(bridge: RemoteAccessBridge, onError: (message: string) => void) {
-  const [liveState, setLiveState] = useState<RemoteAccessState | null>(null);
-  useEffect(() => {
-    let closed = false;
-    let stop: (() => void) | null = null;
-    bridge
-      .subscribeState((state) => {
-        if (!closed) setLiveState(state);
-      })
-      .then((unsubscribe) => {
-        if (closed) unsubscribe();
-        else stop = unsubscribe;
-      })
-      .catch((cause) => {
-        if (!closed) onError(cause instanceof Error ? cause.message : String(cause));
-      });
-    return () => {
-      closed = true;
-      stop?.();
-    };
-  }, [bridge, onError]);
-  return [liveState, setLiveState] as const;
 }

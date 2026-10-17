@@ -51,6 +51,7 @@ export const createBrowserRemoteAccessBridge = (): RemoteAccessBridge => {
         listener({
           status: "failed",
           configuration: null,
+          connectedClients: 0,
           failure: {
             code: "transport_failure",
             message: "Remote operator status stream was lost.",
