@@ -111,13 +111,14 @@ export function RemoteAccessForm({
             a network above.
           </p>
         ) : null}
-        <Collapsible
-          open={advanced}
-          onOpenChange={setAdvanced}
-          className="border-t border-border pt-3"
-        >
+        <Collapsible open={advanced} onOpenChange={setAdvanced} className="border-t border-border">
           <CollapsibleTrigger asChild>
-            <Button type="button" variant="ghost" size="sm">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-auto w-full justify-start py-3 focus-visible:ring-inset"
+            >
               <ChevronDown data-icon="inline-start" /> Advanced
             </Button>
           </CollapsibleTrigger>
