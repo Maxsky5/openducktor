@@ -1,6 +1,7 @@
 import * as todos from "./claude-agent-sdk-todos";
 import * as sessionFactory from "./claude-agent-sdk-session-factory";
 import * as nativeSessions from "./claude-session-metadata";
+import * as claudeCatalog from "./claude-agent-sdk-catalog";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
@@ -177,10 +178,26 @@ describe("createClaudeAgentSdkService", () => {
       title: "Native title",
       updatedAt: 1,
     });
-    const model = spyOn(nativeSessions, "readClaudeSessionModel").mockResolvedValue({
-      runtimeKind: "claude",
-      providerId: "claude",
-      modelId: "native-claude",
+    const history = spyOn(realClaudeSdk, "getSessionMessages").mockResolvedValue([
+      {
+        type: "assistant",
+        uuid: "assistant-1",
+        session_id: "session-1",
+        message: { model: "claude-opus-5-5" },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+    ]);
+    const catalog = spyOn(claudeCatalog, "loadClaudeModelCatalog").mockResolvedValue({
+      models: [
+        claudeCatalog.toClaudeModelDescriptor({
+          value: "opus",
+          resolvedModel: "claude-opus-5-5",
+          displayName: "Opus 5.5",
+          description: "Opus",
+        }),
+      ],
+      defaultModelsByProvider: { claude: "opus" },
     });
     const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
     const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
@@ -207,7 +224,11 @@ describe("createClaudeAgentSdkService", () => {
     });
     try {
       const source = await Effect.runPromise(service.inspectSessionForImport(ref, "runtime"));
-      expect(source.selectedModel?.modelId).toBe("native-claude");
+      expect(source.selectedModel).toEqual({
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "opus",
+      });
       expect(create).not.toHaveBeenCalled();
       expect(store.get(ref.externalSessionId)).toBeUndefined();
       await Effect.runPromise(source.attach);
@@ -215,7 +236,8 @@ describe("createClaudeAgentSdkService", () => {
       expect(store.get(ref.externalSessionId)).toBeDefined();
     } finally {
       metadata.mockRestore();
-      model.mockRestore();
+      history.mockRestore();
+      catalog.mockRestore();
       loadTodos.mockRestore();
       create.mockRestore();
       service.dispose();

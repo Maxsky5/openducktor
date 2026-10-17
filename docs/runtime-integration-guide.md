@@ -190,7 +190,9 @@ A runtime without steering can still use the host queue. See [Queue and steering
 
 If `attachmentSupport` is absent, the runtime did not provide model attachment data. The composer rejects an unsupported kind or MIME type.
 
-A steer must suit the model of the running turn. The host finds that model in the catalog by `modelId` or by `resolvedModelId`. Set `resolvedModelId` when the runtime reports a different model ID for a turn of an alias entry. For example, the Claude entry `opus` reports `claude-opus-5-5`.
+A runtime can report a different model ID for a turn of an alias entry. For example, the Claude entry `opus` reports `claude-opus-5-5`. Set `resolvedModelId` on such an entry.
+
+`findTurnCatalogModel` finds a reported model in the catalog by `modelId`, then by `resolvedModelId`. Use it for each model that a turn reports. The steer attachment check, the model labels, the context limits, and the Claude session import use it.
 
 An attachment part has an ID, local path, name, kind, and optional MIME type. In a browser, the frontend asks the host to stage the `File`, then sends the staged path.
 

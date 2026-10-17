@@ -5,7 +5,6 @@ import {
   type AgentStudioContextUsage,
   type ExtractLatestSessionContextUsageInput,
   extractLatestSessionContextUsage,
-  indexModelDescriptorsByProviderAndModel,
 } from "./context-usage-resolution";
 
 export const useSelectedSessionContextUsage = ({
@@ -17,16 +16,12 @@ export const useSelectedSessionContextUsage = ({
   sessionModelCatalog: AgentModelCatalog | null;
   selectedModelEntry: AgentModelCatalog["models"][number] | null;
 }): AgentStudioContextUsage => {
-  const selectedSessionModelDescriptorByKey = useMemo(() => {
-    return indexModelDescriptorsByProviderAndModel(sessionModelCatalog ?? null);
-  }, [sessionModelCatalog]);
-
   return useMemo<AgentStudioContextUsage>(() => {
     const fallbackContextWindow = selectedModelEntry?.contextWindow ?? null;
     const fallbackOutputLimit = selectedModelEntry?.outputLimit ?? null;
     const contextUsageInput: ExtractLatestSessionContextUsageInput = {
       liveContextUsage: selectedSession?.contextUsage ?? null,
-      modelDescriptorByKey: selectedSessionModelDescriptorByKey,
+      catalog: sessionModelCatalog,
     };
     if (fallbackContextWindow !== null) {
       contextUsageInput.fallbackContextWindow = fallbackContextWindow;
@@ -37,7 +32,7 @@ export const useSelectedSessionContextUsage = ({
     return extractLatestSessionContextUsage(contextUsageInput);
   }, [
     selectedSession,
-    selectedSessionModelDescriptorByKey,
+    sessionModelCatalog,
     selectedModelEntry?.contextWindow,
     selectedModelEntry?.outputLimit,
   ]);

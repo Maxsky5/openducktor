@@ -275,7 +275,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         getClaudeSessionMetadata(input),
       );
       const selectedModel = yield* fromPromise("claudeRuntime.readSessionModel", () =>
-        readClaudeSessionModel(input),
+        readClaudeSessionModel(input, this.input),
       );
       return {
         metadata,

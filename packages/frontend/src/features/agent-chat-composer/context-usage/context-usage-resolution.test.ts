@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import {
-  extractLatestSessionContextUsage,
-  indexModelDescriptorsByProviderAndModel,
-} from "./context-usage-resolution";
+import { extractLatestSessionContextUsage } from "./context-usage-resolution";
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -25,13 +22,6 @@ const CATALOG: AgentModelCatalog = {
 };
 
 describe("context-usage-resolution", () => {
-  test("indexes model descriptors by provider and model id", () => {
-    const lookup = indexModelDescriptorsByProviderAndModel(CATALOG);
-
-    expect(lookup.get("openai::gpt-5")?.id).toBe("openai/gpt-5");
-    expect(indexModelDescriptorsByProviderAndModel(null).size).toBe(0);
-  });
-
   test("uses the latest host-owned live context usage", () => {
     expect(
       extractLatestSessionContextUsage({
@@ -40,7 +30,7 @@ describe("context-usage-resolution", () => {
           contextWindow: 150_000,
           outputLimit: 4_096,
         },
-        modelDescriptorByKey: indexModelDescriptorsByProviderAndModel(CATALOG),
+        catalog: CATALOG,
       }),
     ).toEqual({ totalTokens: 44, contextWindow: 150_000, outputLimit: 4_096 });
   });
@@ -53,7 +43,26 @@ describe("context-usage-resolution", () => {
           providerId: "openai",
           modelId: "gpt-5",
         },
-        modelDescriptorByKey: indexModelDescriptorsByProviderAndModel(CATALOG),
+        catalog: CATALOG,
+      }),
+    ).toEqual({ totalTokens: 44, contextWindow: 200_000, outputLimit: 8_192 });
+  });
+
+  test("resolves missing limits from a resolved model ID of an alias entry", () => {
+    expect(
+      extractLatestSessionContextUsage({
+        liveContextUsage: {
+          totalTokens: 44,
+          providerId: "openai",
+          modelId: "gpt-5-2026-08-01",
+        },
+        catalog: {
+          ...CATALOG,
+          models: CATALOG.models.map((model) => ({
+            ...model,
+            resolvedModelId: "gpt-5-2026-08-01",
+          })),
+        },
       }),
     ).toEqual({ totalTokens: 44, contextWindow: 200_000, outputLimit: 8_192 });
   });
@@ -62,7 +71,7 @@ describe("context-usage-resolution", () => {
     expect(
       extractLatestSessionContextUsage({
         liveContextUsage: { totalTokens: 31 },
-        modelDescriptorByKey: new Map(),
+        catalog: null,
         fallbackContextWindow: 100_000,
         fallbackOutputLimit: 4_096,
       }),
@@ -72,7 +81,7 @@ describe("context-usage-resolution", () => {
   test("does not derive usage from transcript history", () => {
     expect(
       extractLatestSessionContextUsage({
-        modelDescriptorByKey: indexModelDescriptorsByProviderAndModel(CATALOG),
+        catalog: CATALOG,
         fallbackContextWindow: 100_000,
       }),
     ).toBeNull();

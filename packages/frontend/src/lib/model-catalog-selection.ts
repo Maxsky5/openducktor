@@ -1,5 +1,6 @@
 export {
   findCatalogModel,
+  findTurnCatalogModel,
   pickCatalogDefaultModel,
   normalizeCatalogVariant,
   STANDARD_SPEED,
