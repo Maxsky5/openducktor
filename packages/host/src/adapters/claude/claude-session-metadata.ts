@@ -50,7 +50,7 @@ export const getClaudeSessionMetadata = async (
   return value;
 };
 
-/** Reads the model of the latest turn as a catalog selection, such as `opus`. */
+/** Reads the model of the latest turn. Claude reports a resolved ID, so map it to the catalog entry. */
 export const readClaudeSessionModel = async (
   ref: SessionRef,
   runtime: Pick<CreateClaudeAgentSdkServiceInput, "claudeExecutablePath" | "processEnv">,
@@ -61,7 +61,6 @@ export const readClaudeSessionModel = async (
     const { model: modelId } = z.object({ model: z.string().optional() }).parse(entry.message);
     if (!modelId || modelId === "<synthetic>") continue;
     const reported = { runtimeKind: "claude" as const, providerId: "claude", modelId };
-    // Claude history reports the resolved model ID, not the ID of the catalog entry.
     const catalog = await loadClaudeModelCatalog(
       ref.workingDirectory,
       runtime.processEnv,

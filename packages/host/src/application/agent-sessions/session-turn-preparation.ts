@@ -46,10 +46,11 @@ export const createSessionTurnPreparation = (deps: {
   const validateAttachments = (
     parts: Readonly<AgentSessionControlSendInput["parts"]>,
     catalog: AgentModelCatalog,
-    model: AgentModelCatalog["models"][number] | null,
+    selected: Pick<AgentSessionModelSelection, "providerId" | "modelId"> | null,
     modelLabel = "The selected model",
   ) =>
     Effect.gen(function* () {
+      const model = selected ? findTurnCatalogModel(catalog, selected) : null;
       for (const part of parts) {
         if (part.kind !== "attachment") continue;
         if (!catalog.runtime?.capabilities.promptInput.supportsAttachments)
@@ -128,12 +129,7 @@ export const createSessionTurnPreparation = (deps: {
             message:
               "The model of the running turn is unknown. Queue the message until its attachment support can be checked.",
           });
-        yield* validateAttachments(
-          parts,
-          catalog,
-          findTurnCatalogModel(catalog, turnModel),
-          "The model of the running turn",
-        );
+        yield* validateAttachments(parts, catalog, turnModel, "The model of the running turn");
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-steering"))),
     promptOverrides: (
       target: AgentMessageTarget,
@@ -224,11 +220,7 @@ export const createSessionTurnPreparation = (deps: {
                 "This runtime cannot apply this variant to a live session. Select a permitted variant or start a new session.",
             });
         }
-        yield* validateAttachments(
-          parts,
-          catalog,
-          decision.selection ? findCatalogModel(catalog, decision.selection) : null,
-        );
+        yield* validateAttachments(parts, catalog, decision.selection);
         return decision;
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-model"))),
   };

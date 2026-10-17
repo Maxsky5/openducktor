@@ -37,7 +37,7 @@ export const agentModelDescriptorSchema = z
     providerId: nonEmptyStringSchema,
     providerName: nonEmptyStringSchema,
     modelId: nonEmptyStringSchema,
-    /** The model ID that the runtime reports for a turn of an alias, such as `opus`. */
+    /** The model ID that the runtime reports for a turn of an alias entry, such as `opus`. */
     resolvedModelId: nonEmptyStringSchema.optional(),
     modelName: nonEmptyStringSchema,
     variants: z.array(z.string()),
