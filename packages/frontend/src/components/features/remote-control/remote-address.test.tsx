@@ -1,4 +1,6 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
+import { act } from "react";
+import * as QRCode from "qrcode";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   Dialog,
@@ -27,25 +29,39 @@ test("copies the host address and confirms success", async () => {
 });
 
 test("opens QR inside the host dialog and returns focus when it closes", async () => {
-  render(
-    <Dialog defaultOpen>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Host connection</DialogTitle>
-          <DialogDescription>Choose the host for this window.</DialogDescription>
-        </DialogHeader>
-        <RemoteAddress endpoint={endpoint} connectedClients={0} />
-      </DialogContent>
-    </Dialog>,
-  );
-  const showQr = screen.getByRole("button", { name: "Show QR code" });
-  showQr.focus();
-  fireEvent.click(showQr);
-  const qr = await screen.findByRole("img", { name: `Host address QR code: ${endpoint}` });
-  expect(qr.closest('[role="dialog"]')).not.toBeNull();
-  expect(qr.getAttribute("src")).toStartWith("data:image/png;base64,");
-  const dialog = screen.getByRole("dialog", { name: "Host address" });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-  await waitFor(() => expect(document.activeElement === showQr).toBe(true), { timeout: 500 });
-  expect(screen.getByRole("dialog", { name: "Host connection" })).toBeDefined();
+  const image = Promise.withResolvers<string>();
+  const imageUrl =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII=";
+  const encode = spyOn(QRCode, "toDataURL").mockImplementation(() => image.promise);
+  try {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Host connection</DialogTitle>
+            <DialogDescription>Choose the host for this window.</DialogDescription>
+          </DialogHeader>
+          <RemoteAddress endpoint={endpoint} connectedClients={0} />
+        </DialogContent>
+      </Dialog>,
+    );
+    const showQr = screen.getByRole("button", { name: "Show QR code" });
+    showQr.focus();
+    fireEvent.click(showQr);
+    await screen.findByRole("button", { name: "Creating QR code..." });
+    expect(screen.queryByRole("dialog", { name: "Host address" })).toBeNull();
+    await act(async () => {
+      image.resolve(imageUrl);
+    });
+    const qr = await screen.findByRole("img", { name: `Host address QR code: ${endpoint}` });
+    expect(qr.closest('[role="dialog"]')).not.toBeNull();
+    expect(qr.getAttribute("src")).toBe(imageUrl);
+    const dialog = screen.getByRole("dialog", { name: "Host address" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement === showQr).toBe(true), { timeout: 500 });
+    expect(screen.getByRole("dialog", { name: "Host connection" })).toBeDefined();
+  } finally {
+    image.resolve(imageUrl);
+    encode.mockRestore();
+  }
 });
