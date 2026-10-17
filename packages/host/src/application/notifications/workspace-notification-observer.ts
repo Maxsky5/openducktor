@@ -86,25 +86,35 @@ export const createWorkspaceNotificationObserver = ({
         },
       }),
     };
+    const addWorkspaceSessionTitle = (
+      occurrence: NotificationOccurrence,
+    ): NotificationOccurrence => {
+      if (occurrence.task) return occurrence;
+
+      const target = occurrence.navigationTarget;
+      if (!("session" in target)) return occurrence;
+
+      const sessionKey = agentSessionRefKey({
+        repoPath: state.record.repoPath,
+        ...target.session,
+      });
+      const workspaceSession = state.workspaceOwners.get(sessionKey);
+      if (!workspaceSession) return occurrence;
+
+      return {
+        ...occurrence,
+        sessionLabel: runtimeTitle(workspaceSession) ?? "Untitled session",
+      };
+    };
+    const publishOccurrence = (
+      occurrence: NotificationOccurrence,
+    ): Effect.Effect<void, HostOperationError> =>
+      Effect.suspend(() => {
+        if (!state.active) return Effect.void;
+        return select(addWorkspaceSessionTitle(occurrence));
+      });
     const publish = (occurrences: NotificationOccurrence[]) =>
-      Effect.forEach(
-        occurrences,
-        (occurrence) =>
-          Effect.suspend(() => {
-            if (!state.active) return Effect.void;
-            const target = occurrence.navigationTarget;
-            if (occurrence.task || !("session" in target)) return select(occurrence);
-            const session = state.workspaceOwners.get(
-              agentSessionRefKey({ repoPath: state.record.repoPath, ...target.session }),
-            );
-            return select(
-              session
-                ? { ...occurrence, sessionLabel: runtimeTitle(session) ?? "Untitled session" }
-                : occurrence,
-            );
-          }),
-        { discard: true },
-      );
+      Effect.forEach(occurrences, publishOccurrence, { discard: true });
     const refreshOwners = () => publish(state.projector.reconcileAssociations());
     const setWorkspaceSession = (session: WorkspaceSession) => {
       for (const [key, existing] of state.workspaceOwners) {
