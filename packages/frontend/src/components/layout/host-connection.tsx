@@ -112,7 +112,7 @@ function LocalHostIcon({ state }: { state: RemoteAccessState | undefined }) {
     <span
       aria-hidden="true"
       className={cn(
-        "inline-flex text-primary",
+        "inline-flex text-info-surface-foreground",
         clients > 0 && "text-emerald-700 dark:text-emerald-400",
       )}
     >

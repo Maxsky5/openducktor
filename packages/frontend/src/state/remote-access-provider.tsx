@@ -6,10 +6,10 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { skipToken, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { RemoteAccessBridge, RemoteAccessState } from "@openducktor/contracts";
+import { remoteAccessStateQueryOptions } from "./queries/remote-access";
 
-export const remoteAccessQueryKey = ["shell", "remote-access"] as const;
 const RemoteAccessContext = createContext<{
   bridge: RemoteAccessBridge | undefined;
   state: RemoteAccessState | undefined;
@@ -23,12 +23,7 @@ export function RemoteAccessProvider({
 }: PropsWithChildren<{ bridge: RemoteAccessBridge | undefined }>) {
   const [liveState, setLiveState] = useState<RemoteAccessState>();
   const [error, setError] = useState<string>();
-  const query = useQuery({
-    queryKey: remoteAccessQueryKey,
-    queryFn: bridge ? () => bridge.readState() : skipToken,
-    enabled: bridge !== undefined,
-    staleTime: Infinity,
-  });
+  const query = useQuery(remoteAccessStateQueryOptions(bridge));
   useEffect(() => {
     if (!bridge) return;
     let closed = false;
