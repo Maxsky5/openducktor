@@ -93,12 +93,10 @@ export const createWorkspaceNotificationObserver = ({
           Effect.suspend(() => {
             if (!state.active) return Effect.void;
             const target = occurrence.navigationTarget;
-            const session =
-              !occurrence.task && "session" in target
-                ? state.workspaceOwners.get(
-                    agentSessionRefKey({ repoPath: state.record.repoPath, ...target.session }),
-                  )
-                : undefined;
+            if (occurrence.task || !("session" in target)) return select(occurrence);
+            const session = state.workspaceOwners.get(
+              agentSessionRefKey({ repoPath: state.record.repoPath, ...target.session }),
+            );
             return select(
               session
                 ? { ...occurrence, sessionLabel: runtimeTitle(session) ?? "Untitled session" }
