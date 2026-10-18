@@ -96,9 +96,10 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
       const reads = await Promise.allSettled(
         workspaceIds.map((workspaceId) =>
           queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then((state) => {
-            if (listedWorkspaceIdsRef.current.has(workspaceId))
+            if (listedWorkspaceIdsRef.current.has(workspaceId)) {
               for (const outcome of state.outcomes)
                 presenter.present(outcome, { workspaceSelected });
+            }
             presenter.presentFailure(state.failure);
           }),
         ),
@@ -177,12 +178,12 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   // The selection effect reads the selected workspace.
   useEffect(() => {
     if (!subscribed) return;
-    const read = readWorkspaceIdsRef.current;
+    const readWorkspaceIds = readWorkspaceIdsRef.current;
     const unread = openWorkspaceIds.filter(
-      (workspaceId) => workspaceId !== activeWorkspaceId && !read.has(workspaceId),
+      (workspaceId) => workspaceId !== activeWorkspaceId && !readWorkspaceIds.has(workspaceId),
     );
     if (unread.length === 0) return;
-    for (const workspaceId of unread) read.add(workspaceId);
+    for (const workspaceId of unread) readWorkspaceIds.add(workspaceId);
     void readHeldOutcomes(unread, { workspaceSelected: false }).catch(reportHeldOutcomeFailure);
   }, [activeWorkspaceId, openWorkspaceIds, readHeldOutcomes, subscribed]);
 
