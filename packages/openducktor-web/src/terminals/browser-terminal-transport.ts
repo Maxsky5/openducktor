@@ -2,7 +2,7 @@ import { TERMINAL_PROTOCOL_SUBPROTOCOL, type TerminalFailure } from "@openduckto
 import type { TerminalBridge } from "@openducktor/frontend";
 import { Effect } from "effect";
 import { getBrowserBackendUrlEffect } from "../browser-config";
-import { runWebBoundary } from "../effect/web-errors";
+import { runWebBoundary } from "@openducktor/remote-host/effect/web-errors";
 import { ensureLocalHostSessionDedupedEffect } from "../local-host-transport";
 
 const terminalSocketUrl = (baseUrl: string): string => {

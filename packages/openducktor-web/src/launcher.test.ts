@@ -1,3 +1,4 @@
+import { remoteAccessFixture } from "./remote-access-test-fixture";
 import { describe, expect, spyOn, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
@@ -9,7 +10,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { parseCliArgs } from "./cli";
-import { WebOperationError } from "./effect/web-errors";
+import { WebOperationError } from "@openducktor/remote-host/effect/web-errors";
 import {
   buildWebLauncherBaseEnv,
   logDuplicateWebTerminationNotice,
@@ -45,7 +46,7 @@ import {
   isRequestHostAllowed,
   LOCALHOST,
   parseHostEffect,
-} from "./http-origin";
+} from "@openducktor/remote-host/http-origin";
 import type { WebLogger } from "./logger";
 import { withViteTestServer } from "./vite-test-server";
 
@@ -199,9 +200,9 @@ describe("launcher internals", () => {
   test.each(["0.0.0.0", "[::]", "[::ffff:0.0.0.0]"])(
     "accepts wildcard bind %s with a non-wildcard mapped external origin",
     async (host) => {
-      const externalUrl = "http://[::ffff:100.64.0.1]:1420";
+      const externalUrl = "https://[::ffff:100.64.0.1]:1420";
       const parsed = parseCliArgs(["--host", host, "--external-url", externalUrl]);
-      expect(parsed.externalUrl).toBe("http://[::ffff:6440:1]:1420");
+      expect(parsed.externalUrl).toBe("https://[::ffff:6440:1]:1420");
       for (const url of [externalUrl, parsed.externalUrl]) {
         await Effect.runPromise(
           validateLauncherNetworkOptionsEffect({
@@ -374,7 +375,7 @@ describe("launcher internals", () => {
       validateLauncherNetworkOptionsEffect({
         basePath: undefined,
         bindHost: "0.0.0.0",
-        externalUrl: "http://100.64.0.1:1420",
+        externalUrl: "https://100.64.0.1:1420",
       }),
     );
   });
@@ -711,8 +712,8 @@ describe("launcher internals", () => {
     );
 
     expect(requests).toEqual([
-      { url: "http://127.0.0.1:14327/health", method: undefined, token: null },
-      { url: "http://127.0.0.1:14327/health", method: undefined, token: null },
+      { url: "http://127.0.0.1:14327/health", method: undefined, token: "app-token" },
+      { url: "http://127.0.0.1:14327/health", method: undefined, token: "app-token" },
       {
         url: "http://127.0.0.1:14327/session",
         method: "POST",
@@ -793,6 +794,7 @@ describe("launcher internals", () => {
       resolveExited = resolve;
     });
     const hostBackend = {
+      remoteAccess: remoteAccessFixture(),
       exited,
       port: 14327,
       stop: async () => {
@@ -1179,7 +1181,12 @@ describe("launcher internals", () => {
       stopLauncherServices(
         {
           frontendServer: null,
-          hostBackend: { exited: Promise.resolve(7), port: 14327, stop: async () => {} },
+          hostBackend: {
+            remoteAccess: remoteAccessFixture(),
+            exited: Promise.resolve(7),
+            port: 14327,
+            stop: async () => {},
+          },
           logger: testLogger,
         },
         { closeServer: async () => {}, stopHost: async () => {} },
@@ -1201,6 +1208,7 @@ describe("launcher internals", () => {
         {
           frontendServer: null,
           hostBackend: {
+            remoteAccess: remoteAccessFixture(),
             get exited() {
               calls.push("read exit");
               return Promise.resolve(0);
@@ -1233,6 +1241,7 @@ describe("launcher internals", () => {
     let exitReads = 0;
     const exited = new Promise<number>(() => {});
     const hostBackend = {
+      remoteAccess: remoteAccessFixture(),
       get exited() {
         exitReads += 1;
         return exited;
@@ -1282,6 +1291,7 @@ describe("launcher internals", () => {
     const frontendFailure = new Error("frontend close failed");
     const hostFailure = new Error("host stop failed");
     const hostBackend = {
+      remoteAccess: remoteAccessFixture(),
       exited: new Promise<number>(() => {}),
       port: 14327,
       stop: async () => {},
@@ -1315,6 +1325,7 @@ describe("launcher internals", () => {
     const frontendFailure = new Error("frontend close failed");
     const hostExitFailure = new Error("host background logging failed");
     const hostBackend = {
+      remoteAccess: remoteAccessFixture(),
       exited: Promise.reject(hostExitFailure),
       port: 14327,
       stop: async () => {},
@@ -1349,6 +1360,7 @@ describe("launcher internals", () => {
     const frontendFailure = new Error("frontend close failed");
     const persistenceFailure = new Error("log append failed");
     const hostBackend = {
+      remoteAccess: remoteAccessFixture(),
       exited: Promise.resolve(0),
       port: 14327,
       stop: async () => {},
@@ -1423,7 +1435,7 @@ describe("launcher internals", () => {
 
   test("builds runtime config JSON for the browser shell", () => {
     expect(buildBrowserRuntimeConfigJson("http://127.0.0.1:14327", "app-token")).toBe(
-      '{"backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n',
+      '{"mode":"local","backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n',
     );
   });
 
@@ -1660,6 +1672,7 @@ describe("startWebLauncherHostBackendEffect", () => {
     const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
       Effect.succeed({
         port: 23456,
+        remoteAccess: remoteAccessFixture(),
         exited: Promise.resolve(0),
         stop: async () => {},
       }),
@@ -1692,6 +1705,7 @@ describe("startWebLauncherHostBackendEffect", () => {
     const startHost = spyOn(backend, "startTypescriptHostBackendEffect").mockReturnValue(
       Effect.succeed({
         port: 23456,
+        remoteAccess: remoteAccessFixture(),
         exited: Promise.resolve(0),
         stop: async () => {},
       }),

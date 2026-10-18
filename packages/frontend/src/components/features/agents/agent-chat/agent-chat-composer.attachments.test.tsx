@@ -1,3 +1,4 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { useAgentStudioSendTarget } from "@/pages/agents/session-actions/use-agent-studio-send-target";
@@ -12,7 +13,8 @@ import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fi
 import { agentStudioChatDraftScopeKey } from "@/pages/agents/agent-studio-chat-draft";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { RenderOptions } from "@testing-library/react";
+import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import {
@@ -35,6 +37,9 @@ import {
   createMemoryStorage,
   typeIntoComposer,
 } from "./agent-chat-composer-test-helpers";
+
+const render = (element: ReactNode, options?: RenderOptions) =>
+  renderView(element, { wrapper: IsolatedQueryWrapper, ...options });
 
 const sessionIdentity = (
   externalSessionId: string,
@@ -729,13 +734,15 @@ describe("AgentChatComposer attachments", () => {
 /** The contexts that the shared send hook reads. */
 function SendProviders({ children }: { children: ReactNode }) {
   return (
-    <AgentOperationsContext value={createAgentOperationsFixture()}>
-      <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
-        <AgentMessageQueuesContext value={createAgentMessageQueuesStore()}>
-          {children}
-        </AgentMessageQueuesContext>
-      </HostRuntimeStatusContext>
-    </AgentOperationsContext>
+    <IsolatedQueryWrapper>
+      <AgentOperationsContext value={createAgentOperationsFixture()}>
+        <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+          <AgentMessageQueuesContext value={createAgentMessageQueuesStore()}>
+            {children}
+          </AgentMessageQueuesContext>
+        </HostRuntimeStatusContext>
+      </AgentOperationsContext>
+    </IsolatedQueryWrapper>
   );
 }
 

@@ -1,10 +1,12 @@
 import { THEME_PREFERENCE_VALUES, type ThemePreference } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
-import { useTheme } from "@/components/layout/theme-provider";
 import { Combobox } from "@/components/ui/combobox";
 
 type ThemePickerProps = {
+  trigger?: ReactElement;
+  value: ThemePreference;
+  onValueChange(preference: ThemePreference): void;
   disabled?: boolean;
   triggerAriaLabelledBy?: string;
   triggerAriaDescribedBy?: string;
@@ -18,24 +20,27 @@ const isThemePreference = (value: string): value is ThemePreference =>
   THEME_PREFERENCE_VALUES.some((candidate) => candidate === value);
 
 export function ThemePicker({
+  trigger,
+  value,
+  onValueChange,
   disabled = false,
   triggerAriaLabelledBy,
   triggerAriaDescribedBy,
   triggerClassName,
 }: ThemePickerProps): ReactElement {
-  const { themePreference, setThemePreference } = useTheme();
-
-  const handleChange = (value: string): void => {
-    if (value === themePreference || !isThemePreference(value)) {
+  const handleChange = (nextValue: string): void => {
+    if (nextValue === value || !isThemePreference(nextValue)) {
       return;
     }
 
-    setThemePreference(value);
+    onValueChange(nextValue);
   };
 
   return (
     <Combobox
-      value={themePreference}
+      {...(trigger ? { trigger } : {})}
+      className="min-w-44"
+      value={value}
       options={themePreferenceOptions}
       disabled={disabled}
       searchable={false}

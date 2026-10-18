@@ -1,3 +1,4 @@
+import { getHostStorage } from "@/lib/host-storage";
 import { create } from "zustand";
 import type { InlineCommentOwner } from "@/types/inline-comment-owner";
 import type { DiffScope } from "@/features/agent-studio-git";
@@ -487,10 +488,10 @@ const getStorage = (): InlineCommentDraftStorage => {
   if (storageOverride) {
     return storageOverride;
   }
-  if (globalThis.localStorage === undefined) {
+  if (getHostStorage() === undefined) {
     throw new Error("Git diff comment persistence is unavailable because localStorage is missing.");
   }
-  return globalThis.localStorage;
+  return getHostStorage();
 };
 
 const reportPersistenceError = (cause: unknown): void => {

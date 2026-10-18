@@ -1,3 +1,4 @@
+import { createBrowserRemoteAccessBridge } from "./browser-remote-access-bridge";
 import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 import {
   createDisabledAppUpdateBridge,
@@ -13,7 +14,7 @@ import {
   WebDependencyError,
   type WebError,
   WebValidationError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 import {
   buildLocalAttachmentPreviewUrl,
   buildTaskAssetUrl,
@@ -80,6 +81,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
   const client = createLocalHostClient();
 
   return {
+    remoteAccess: createBrowserRemoteAccessBridge(),
     client,
     subscribeWorkspaceSessionUpdates: subscribeLocalHostWorkspaceSessionUpdates,
     appUpdates: createDisabledAppUpdateBridge({
@@ -101,13 +103,22 @@ export const createBrowserShellBridge = (): ShellBridge => {
     subscribeNotificationStream: subscribeLocalHostNotificationStream,
     subscribeTaskStream: subscribeLocalHostTaskStream,
     openExternalUrl: (url) => runWebBoundary(openExternalUrlEffect(url)),
-    resolveLocalAttachmentPreviewSrc: (path) =>
-      runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path)),
-    resolveTaskAssetSrc: (context) =>
+    resolveLocalAttachmentPreview: async (path, signal) => {
+      signal.throwIfAborted();
+      const src = await runWebBoundary(resolveLocalAttachmentPreviewSrcEffect(client, path));
+      signal.throwIfAborted();
+      return { kind: "url", src };
+    },
+    resolveTaskAssetSource: (context, signal) =>
       runWebBoundary(
         Effect.gen(function* () {
+          signal.throwIfAborted();
           yield* ensureLocalHostSessionDedupedEffect();
-          return buildTaskAssetUrl(yield* getBrowserBackendUrlEffect(), context);
+          signal.throwIfAborted();
+          return {
+            kind: "url" as const,
+            src: buildTaskAssetUrl(yield* getBrowserBackendUrlEffect(), context),
+          };
         }),
       ),
     terminals: createBrowserTerminalBridge(),

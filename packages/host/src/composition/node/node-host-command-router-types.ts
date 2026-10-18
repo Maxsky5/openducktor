@@ -29,6 +29,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
 export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly taskAssetReadService: TaskAssetReadService;
   readonly notificationStream: import("../../application/notifications/notification-stream").NotificationStream;
+  readonly hostInstanceId: string;
   readonly taskEventStream: import("../../events/task-event-stream").TaskEventStreamPort;
   readonly terminalService: import("../../application/terminals/terminal-service").TerminalService;
 };

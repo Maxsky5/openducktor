@@ -32,6 +32,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -48,6 +49,7 @@ import {
 } from "../features/repository/workspace-lifecycle-dialogs";
 import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
 import { WorkspaceTile } from "./workspace-tile";
+import { HostSwitcher } from "./host-connection";
 import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
 import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
 
@@ -225,6 +227,7 @@ export function WorkspaceRail({
 }: {
   onOpenRepositoryModal: () => void;
 }): ReactElement {
+  const { openSettings } = useSettingsModal();
   const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const {
     workspaces,
@@ -402,6 +405,13 @@ export function WorkspaceRail({
               <Plus className="size-5" />
             </Button>
           </div>
+        </div>
+        <div className="flex shrink-0 justify-center px-2 py-2">
+          <HostSwitcher
+            onOpenSettings={() =>
+              openSettings({ deepLink: { kind: "global", section: "remote-access" } })
+            }
+          />
         </div>
       </aside>
       {lifecycleRequest?.action === "close" ? (

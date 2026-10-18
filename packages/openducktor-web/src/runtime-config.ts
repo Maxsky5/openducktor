@@ -6,13 +6,14 @@ import {
   runWebBoundary,
   WebDependencyError,
   WebValidationError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 
 export const RUNTIME_CONFIG_PATH = "/openducktor-config.json";
 
 const browserRuntimeConfigSchema: z.ZodType<BrowserRuntimeConfig> = z.object({
   backendUrl: z.string(),
-  appToken: z.string(),
+  appToken: z.string().optional(),
+  mode: z.enum(["local", "remote"]).default("local"),
 });
 
 export const loadBrowserRuntimeConfigEffect = (
@@ -49,7 +50,10 @@ export const loadBrowserRuntimeConfigEffect = (
         }),
     });
     const parsedConfig = browserRuntimeConfigSchema.safeParse(config);
-    if (!parsedConfig.success) {
+    if (
+      !parsedConfig.success ||
+      (parsedConfig.data.mode === "local" && !parsedConfig.data.appToken)
+    ) {
       return yield* new WebValidationError({
         message: `OpenDucktor web runtime config from ${RUNTIME_CONFIG_PATH} is missing backendUrl or appToken.`,
         details: { path: RUNTIME_CONFIG_PATH },

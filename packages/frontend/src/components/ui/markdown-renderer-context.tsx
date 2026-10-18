@@ -3,11 +3,12 @@ import {
   TASK_ASSET_URI_PREFIX,
   type TaskAssetRenderContext,
 } from "@openducktor/contracts";
-import { createElement, isValidElement, useEffect, useState, type ReactNode } from "react";
+import { createElement, isValidElement, useState, type ReactNode } from "react";
 import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import { errorMessage } from "@/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
+import { useResourceSource } from "@/lib/use-resource-source";
 import { MarkdownMermaid } from "./markdown-mermaid";
 
 export const TASK_DESCRIPTION_URL_TRANSFORM: UrlTransform = (url, _key, node) => {
@@ -32,74 +33,63 @@ function TaskAssetImage({
   alt,
   className,
   context,
-  resolveTaskAssetSrc,
+  resolveTaskAssetSource,
   src,
   title,
 }: {
   alt?: string;
   className?: string;
   context: Omit<TaskAssetRenderContext, "assetId">;
-  resolveTaskAssetSrc: ShellBridge["resolveTaskAssetSrc"];
+  resolveTaskAssetSource: ShellBridge["resolveTaskAssetSource"];
   src: string;
   title?: string;
 }) {
   const assetId = parseTaskAssetUri(src);
   const { scope, taskId, workspaceId } = context;
-  const [state, setState] = useState<
-    { status: "loading" } | { status: "ready"; src: string } | { status: "error"; message: string }
-  >({ status: "loading" });
-
-  useEffect(() => {
-    let active = true;
-    if (!assetId) {
-      setState({ status: "error", message: "The task asset reference is invalid." });
-      return () => {
-        active = false;
-      };
-    }
-    setState({ status: "loading" });
-    void resolveTaskAssetSrc({ workspaceId, taskId, scope, assetId })
-      .then((resolvedSrc) => {
-        if (active) setState({ status: "ready", src: resolvedSrc });
-      })
-      .catch((cause: unknown) => {
-        if (active) setState({ status: "error", message: errorMessage(cause) });
-      });
-    return () => {
-      active = false;
-    };
-  }, [assetId, resolveTaskAssetSrc, scope, taskId, workspaceId]);
-
-  if (state.status === "loading") {
+  const resource = useResourceSource(
+    ["task-asset", workspaceId, taskId, scope, assetId ?? src],
+    assetId
+      ? (signal) => resolveTaskAssetSource({ workspaceId, taskId, scope, assetId }, signal)
+      : undefined,
+  );
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (resource.error) {
+    return (
+      <TaskAssetAlert>Image could not be loaded: {errorMessage(resource.error)}</TaskAssetAlert>
+    );
+  }
+  if (resource.src !== null && failedSrc === resource.src) {
+    return (
+      <TaskAssetAlert>
+        Image could not be loaded: The task asset response failed to load.
+      </TaskAssetAlert>
+    );
+  }
+  if (resource.src === null) {
     return (
       <span className="my-2 block rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
         Loading image…
       </span>
     );
   }
-  if (state.status === "error") {
-    return <TaskAssetAlert>Image could not be loaded: {state.message}</TaskAssetAlert>;
-  }
   return (
     <img
-      src={state.src}
+      src={resource.src}
       alt={alt ?? ""}
       title={title}
       className={className}
-      onError={() =>
-        setState({ status: "error", message: "The task asset response failed to load." })
-      }
+      onError={() => setFailedSrc(resource.src)}
     />
   );
 }
 
 export const createTaskDescriptionComponents = ({
   components,
-  resolveTaskAssetSrc,
+  resolveTaskAssetSource,
   taskAssetContext,
 }: {
   components: Components;
-  resolveTaskAssetSrc?: ShellBridge["resolveTaskAssetSrc"];
+  resolveTaskAssetSource?: ShellBridge["resolveTaskAssetSource"];
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
 }): Components => ({
   ...components,
@@ -120,11 +110,11 @@ export const createTaskDescriptionComponents = ({
   },
   img: ({ alt, className, src, title, ...props }) => {
     if (src?.startsWith(TASK_ASSET_URI_PREFIX)) {
-      if (parseTaskAssetUri(src) && taskAssetContext && resolveTaskAssetSrc) {
+      if (parseTaskAssetUri(src) && taskAssetContext && resolveTaskAssetSource) {
         return (
           <TaskAssetImage
             context={taskAssetContext}
-            resolveTaskAssetSrc={resolveTaskAssetSrc}
+            resolveTaskAssetSource={resolveTaskAssetSource}
             src={src}
             {...(alt === undefined ? {} : { alt })}
             {...(className === undefined ? {} : { className })}

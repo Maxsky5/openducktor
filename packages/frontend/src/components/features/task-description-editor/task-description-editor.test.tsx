@@ -1,8 +1,17 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ReactNode } from "react";
 import { beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
-import { act, fireEvent, render, waitFor as testingLibraryWaitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render as renderView,
+  waitFor as testingLibraryWaitFor,
+} from "@testing-library/react";
 import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
 import TaskDescriptionEditor from "./task-description-editor";
+
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
 
 const EDITOR_WAIT_TIMEOUT_MS = 3_000;
 const waitFor = <Result,>(callback: () => Result): Promise<Result> =>

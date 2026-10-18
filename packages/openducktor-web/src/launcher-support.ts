@@ -11,9 +11,14 @@ import {
   WebDependencyError,
   type WebError,
   WebOperationError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
-import { formatHost, isLoopbackHost, isRemoteExternalOrigin, LOCALHOST } from "./http-origin";
+import {
+  formatHost,
+  isLoopbackHost,
+  isRemoteExternalOrigin,
+  LOCALHOST,
+} from "@openducktor/remote-host/http-origin";
 import type { TypescriptHostBackend } from "./typescript-host-backend";
 
 interface LauncherEarlyExitRef {
@@ -176,7 +181,11 @@ const verifyBackendReadinessEffect = (
 ): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
     const healthResponse = yield* Effect.tryPromise({
-      try: () => fetchImpl(`${backendUrl}/health`, signal ? { signal } : undefined),
+      try: () =>
+        fetchImpl(`${backendUrl}/health`, {
+          headers: { [APP_TOKEN_HEADER]: appToken },
+          ...(signal !== undefined && { signal }),
+        }),
       catch: (cause) =>
         new WebDependencyError({
           dependency: "typescript-host-backend",
@@ -380,7 +389,7 @@ export const waitForBackend = (
   runWebBoundary(waitForBackendEffect(backendUrl, appToken, timeoutMs, hostProcess, dependencies));
 
 export const buildBrowserRuntimeConfigJson = (backendUrl: string, appToken: string): string =>
-  `${JSON.stringify({ backendUrl, appToken })}\n`;
+  `${JSON.stringify({ mode: "local", backendUrl, appToken })}\n`;
 
 export const resolveStaticAssetPath = (staticRoot: string, requestPath: string): string | null => {
   let decodedPath: string;

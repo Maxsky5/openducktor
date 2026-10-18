@@ -2,7 +2,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanDirectory, runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
-import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
+import {
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+} from "@openducktor/remote-host/effect/web-errors";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
@@ -37,6 +41,7 @@ export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError>
         }),
     });
     yield* runBuildCommandEffect("Web shell build", ["bun", "run", "build:web-shell"]);
+    yield* runBuildCommandEffect("Standalone web client build", ["bun", "run", "build:client"]);
     yield* runBuildCommandEffect("Web CLI build", ["bun", "run", "build:cli"]);
     yield* runBuildCommandEffect("Web MCP entrypoint build", ["bun", "run", "build:mcp"]);
   });

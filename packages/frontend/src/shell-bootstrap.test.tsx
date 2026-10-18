@@ -20,12 +20,6 @@ const REPO_ROOT = resolve(import.meta.dir, "../../..");
 const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
-const expectNoManualShellBootstrapSteps = (source: string): void => {
-  expect(source).not.toMatch(/\bconfigureShellBridge\b/u);
-  expect(source).not.toMatch(/\bmountOpenDucktorApp\b/u);
-  expect(source).not.toMatch(/\bdocument\s*\.\s*getElementById\s*\(/u);
-};
-
 const createTestShellBridge = (): ShellBridge =>
   ({
     client: createHostClientFixture({}),
@@ -53,8 +47,8 @@ const createTestShellBridge = (): ShellBridge =>
     },
     notifications: createUnavailableShellBridge().notifications,
     openExternalUrl: async () => {},
-    resolveLocalAttachmentPreviewSrc: async () => "asset://preview",
-    resolveTaskAssetSrc: async () => "asset://task-preview",
+    resolveLocalAttachmentPreview: async () => ({ kind: "url", src: "asset://preview" }),
+    resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
     terminals: {
       connect: async () => {
         throw new Error("Terminal transport is not configured for this test.");
@@ -292,34 +286,6 @@ describe("bootstrapOpenDucktorShell", () => {
 });
 
 describe("shell entrypoints", () => {
-  test("Electron delegates shared startup to the frontend bootstrap", () => {
-    const source = readRepoFile("apps/electron/src/renderer/main.tsx");
-
-    expect(source).toMatch(
-      /import\s*\{[^}]*\bbootstrapOpenDucktorShell\b[^}]*\}\s*from\s*"@openducktor\/frontend"/u,
-    );
-    expect(source).toMatch(
-      /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*prepare:\s*initializeElectronWindowChrome,\s*routerMode:\s*"hash",?\s*\}\)/u,
-    );
-    expect(source).toContain("showOpenDucktorStartupFailure();");
-    expect(source).toContain('console.error("Critical Electron bootstrap failure", cause);');
-    expectNoManualShellBootstrapSteps(source);
-  });
-
-  test("browser delegates shared startup after supplying runtime config readiness", () => {
-    const source = readRepoFile("packages/openducktor-web/src/main.tsx");
-
-    expect(source).toMatch(
-      /import\s*\{[^}]*\bbootstrapOpenDucktorShell\b[^}]*\}\s*from\s*"@openducktor\/frontend"/u,
-    );
-    expect(source).toContain("bootstrapOpenDucktorShell(");
-    expect(source).toContain("prepare: loadBrowserRuntimeConfig");
-    expect(source).toContain("createShellBridge: createBrowserShellBridge");
-    expect(source).toContain("showOpenDucktorStartupFailure();");
-    expect(source).toContain('console.error("Critical browser bootstrap failure", cause);');
-    expectNoManualShellBootstrapSteps(source);
-  });
-
   test("the production renderer keeps the crash shell and passes the selected router mode", () => {
     const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
 

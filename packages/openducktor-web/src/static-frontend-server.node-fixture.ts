@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { gunzipSync } from "node:zlib";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
-import { runWebBoundary } from "./effect/web-errors";
+import { runWebBoundary } from "@openducktor/remote-host/effect/web-errors";
 import { request as httpRequest } from "./node-http-test-client";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { startStaticFrontendServerEffect } from "./static-frontend-server";

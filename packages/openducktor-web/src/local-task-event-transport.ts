@@ -17,7 +17,7 @@ import {
   WebDependencyError,
   type WebError,
   type WebHostRequestError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 import { z } from "zod";
 
 const APP_TOKEN_HEADER = "x-openducktor-app-token";

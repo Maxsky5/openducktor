@@ -2,9 +2,9 @@ import { expect, mock, spyOn, test } from "bun:test";
 import { Deferred, Effect, Stream } from "effect";
 import { browserEventCursorSchema } from "@openducktor/contracts";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
-import { BufferedHostEventStream } from "./typescript-host-backend-support";
-import { createCombinedHostSseResponse } from "./combined-host-event-http-server";
-import { liveSessionStreamEventName } from "./host-event-stream-name";
+import { BufferedHostEventStream } from "@openducktor/remote-host/host-event-bus";
+import { createCombinedHostSseResponse } from "@openducktor/remote-host/combined-host-event-http-server";
+import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
 
 const decode = (value: Uint8Array | undefined) => new TextDecoder().decode(value);
 const readCursor = (text: string) => {

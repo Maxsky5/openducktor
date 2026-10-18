@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { markExecutable, runCommand } from "@openducktor/build-tools";
 import { Effect } from "effect";
-import { errorMessage, runWebBoundary, WebDependencyError } from "../src/effect/web-errors";
+import {
+  errorMessage,
+  runWebBoundary,
+  WebDependencyError,
+} from "@openducktor/remote-host/effect/web-errors";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");

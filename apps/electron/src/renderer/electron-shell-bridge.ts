@@ -1,9 +1,16 @@
-import { hostInvokeFailureSchema } from "@openducktor/contracts";
+import {
+  hostInvokeFailureSchema,
+  themePreferenceSchema,
+  type HostEventPayload,
+  type ThemePreference,
+} from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
+import { observeShellEventResult } from "@openducktor/frontend/lib/shell-bridge";
 import {
   createAgentSessionLiveAttachment,
   createHostClient,
   HostInvokeError,
+  type HostClient,
 } from "@openducktor/host-client";
 import {
   type OpenDucktorElectronApi,
@@ -15,6 +22,24 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
+
+export function withElectronNativeTheme(
+  client: HostClient,
+  applyTheme: (theme: ThemePreference) => Promise<void>,
+): HostClient {
+  return {
+    ...client,
+    async workspaceGetSettingsSnapshot() {
+      const snapshot = await client.workspaceGetSettingsSnapshot();
+      await applyTheme(snapshot.theme);
+      return snapshot;
+    },
+    async setTheme(theme) {
+      await client.setTheme(theme);
+      await applyTheme(themePreferenceSchema.unwrap().parse(theme));
+    },
+  };
+}
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
   constructor() {
@@ -40,7 +65,9 @@ const subscribeElectronEvent =
     channel: typeof RUN_EVENT_CHANNEL,
   ): ShellBridge["subscribeRunEvents"] =>
   async (listener) =>
-    electronApi.subscribe(channel, listener);
+    electronApi.subscribe(channel, (payload: HostEventPayload<typeof RUN_EVENT_CHANNEL>) =>
+      observeShellEventResult(listener(payload)),
+    );
 
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
@@ -56,11 +83,20 @@ export const createElectronShellBridge = (): ShellBridge => {
   });
 
   return {
+    remoteAccess: electronApi.remoteAccess,
     client,
     subscribeWorkspaceSessionUpdates: async (listener) =>
-      electronApi.subscribe("openducktor://workspace-session-updated", listener),
+      electronApi.subscribe(
+        "openducktor://workspace-session-updated",
+        (payload: HostEventPayload<"openducktor://workspace-session-updated">) =>
+          observeShellEventResult(listener(payload)),
+      ),
     subscribeRuntimeChanges: async (listener) =>
-      electronApi.subscribe(RUNTIME_CHANGED_EVENT_CHANNEL, listener),
+      electronApi.subscribe(
+        RUNTIME_CHANGED_EVENT_CHANNEL,
+        (payload: HostEventPayload<typeof RUNTIME_CHANGED_EVENT_CHANNEL>) =>
+          observeShellEventResult(listener(payload)),
+      ),
     capabilities: {
       canOpenExternalUrls: true,
       canPreviewLocalAttachments: true,
@@ -112,8 +148,16 @@ export const createElectronShellBridge = (): ShellBridge => {
         }),
     },
     openExternalUrl: (url) => electronApi.openExternalUrl(url),
-    resolveLocalAttachmentPreviewSrc: (path) => electronApi.resolveLocalAttachmentPreviewSrc(path),
-    resolveTaskAssetSrc: async (context) => createElectronTaskAssetUrl(context),
+    resolveLocalAttachmentPreview: async (path, signal) => {
+      signal.throwIfAborted();
+      const src = await electronApi.resolveLocalAttachmentPreviewSrc(path);
+      signal.throwIfAborted();
+      return { kind: "url", src };
+    },
+    resolveTaskAssetSource: async (context, signal) => {
+      signal.throwIfAborted();
+      return { kind: "url", src: createElectronTaskAssetUrl(context) };
+    },
     editorClipboard: {
       readText(type) {
         if (type === undefined) return electronApi.editorClipboard.readText();

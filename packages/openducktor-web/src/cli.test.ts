@@ -36,6 +36,7 @@ describe("web CLI argument parsing", () => {
     expect(parseCliArgs(["--port", "1421", "--backend-port", "14328"])).toMatchObject({
       frontendPort: 1421,
       backendPort: 14328,
+      remotePort: 14328,
     });
   });
 
@@ -53,6 +54,7 @@ describe("web CLI argument parsing", () => {
       host: "100.64.0.1",
       externalUrl: "http://100.64.0.1:1420",
       backendPort: 14328,
+      remotePort: 14328,
     });
   });
 

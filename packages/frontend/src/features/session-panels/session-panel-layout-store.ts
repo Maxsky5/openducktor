@@ -1,3 +1,4 @@
+import { getHostStorage } from "@/lib/host-storage";
 import { toast } from "sonner";
 import { z } from "zod";
 import { errorMessage } from "@/lib/errors";
@@ -99,7 +100,7 @@ const storedOwner = (owner: SessionPanelOwner): StoredOwner => ({
 
 const readEntry = (owner: SessionPanelOwner): StoreEntry => {
   try {
-    const saved = globalThis.localStorage.getItem(sessionPanelLayoutStorageKey(owner));
+    const saved = getHostStorage().getItem(sessionPanelLayoutStorageKey(owner));
     if (saved === null) {
       return {
         owner,
@@ -176,7 +177,7 @@ export const updateSessionPanelLayout = (
   const record = JSON.stringify(toPersistedLayout(layout));
   if (record !== entry.savedRecord) {
     try {
-      globalThis.localStorage.setItem(sessionPanelLayoutStorageKey(owner), record);
+      getHostStorage().setItem(sessionPanelLayoutStorageKey(owner), record);
       entry.savedRecord = record;
     } catch (error) {
       console.error("[session-panels] Failed to save the panel layout.", { owner, error });
@@ -208,7 +209,7 @@ let pruneErrorShown = false;
 
 const removeStaleRecords = (input: SessionPanelLayoutPruneInput): void => {
   try {
-    const storage = globalThis.localStorage;
+    const storage = getHostStorage();
     const staleKeys: string[] = [];
     for (let index = 0; index < storage.length; index += 1) {
       const key = storage.key(index);

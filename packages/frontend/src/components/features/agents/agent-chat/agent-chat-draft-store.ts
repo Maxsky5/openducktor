@@ -1,3 +1,4 @@
+import { getHostStorage } from "@/lib/host-storage";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import { scheduleTask, type ScheduleTask } from "@/lib/scheduling";
 import {
@@ -61,10 +62,10 @@ const getDraftStorage = (): DraftStorage => {
   if (storageOverride) {
     return storageOverride;
   }
-  if (globalThis.localStorage === undefined) {
+  if (getHostStorage() === undefined) {
     throw new Error("Chat draft persistence is unavailable because localStorage is missing.");
   }
-  return globalThis.localStorage;
+  return getHostStorage();
 };
 
 const reportPersistenceError = (cause: unknown): void => {

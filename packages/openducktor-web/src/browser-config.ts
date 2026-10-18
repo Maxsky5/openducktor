@@ -1,13 +1,13 @@
 import { Effect } from "effect";
 import { z } from "zod";
-import { runWebSyncBoundary, WebValidationError } from "./effect/web-errors";
+import { runWebSyncBoundary, WebValidationError } from "@openducktor/remote-host/effect/web-errors";
 import {
   formatHost,
   isLoopbackHost,
   LOOPBACK_HOSTS,
   parseHttpOriginEffect,
   portOfHttpOrigin,
-} from "./http-origin";
+} from "@openducktor/remote-host/http-origin";
 
 type BrowserEnvValues = {
   VITE_ODT_BROWSER_AUTH_TOKEN?: string;
@@ -16,8 +16,9 @@ type BrowserEnvValues = {
 type BrowserEnv = BrowserEnvValues | undefined;
 type BrowserEnvKey = keyof BrowserEnvValues;
 export type BrowserRuntimeConfig = {
+  mode?: "local" | "remote" | undefined;
   backendUrl?: string;
-  appToken?: string;
+  appToken?: string | undefined;
 };
 
 let browserRuntimeConfig: BrowserRuntimeConfig | undefined;
@@ -186,3 +187,5 @@ export const getBrowserAuthTokenEffect = (
 
 export const getBrowserAuthToken = (env: BrowserEnv = readBrowserEnv()): string =>
   runWebSyncBoundary(getBrowserAuthTokenEffect(env));
+
+export const isRemoteBrowserMode = (): boolean => browserRuntimeConfig?.mode === "remote";

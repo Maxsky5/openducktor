@@ -1,11 +1,15 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { host } from "@/state/operations/shared/host";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
+
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
 
 afterEach(() => {
   configureShellBridge(createUnavailableShellBridge());
@@ -59,10 +63,13 @@ describe("TaskDescriptionImageNode", () => {
   });
 
   test("does not resolve the same durable image again when its context object is recreated", async () => {
-    const resolveTaskAssetSrc = mock(async () => "openducktor-task-asset://resolved");
+    const resolveTaskAssetSource = mock(async () => ({
+      kind: "url" as const,
+      src: "openducktor-task-asset://resolved",
+    }));
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc,
+      resolveTaskAssetSource,
     });
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const props = {
@@ -83,7 +90,7 @@ describe("TaskDescriptionImageNode", () => {
       </TaskDescriptionImageContext.Provider>,
     );
 
-    await waitFor(() => expect(resolveTaskAssetSrc).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(resolveTaskAssetSource).toHaveBeenCalledTimes(1));
     view.rerender(
       <TaskDescriptionImageContext.Provider
         value={{ previews: new Map(), renderContext: { ...context } }}
@@ -95,13 +102,16 @@ describe("TaskDescriptionImageNode", () => {
       await Promise.resolve();
     });
 
-    expect(resolveTaskAssetSrc).toHaveBeenCalledTimes(1);
+    expect(resolveTaskAssetSource).toHaveBeenCalledTimes(1);
   });
 
   test("shows the image error state when a resolved asset response fails to load", async () => {
     configureShellBridge({
       ...createUnavailableShellBridge(),
-      resolveTaskAssetSrc: async () => "openducktor-task-asset://missing",
+      resolveTaskAssetSource: async () => ({
+        kind: "url",
+        src: "openducktor-task-asset://missing",
+      }),
     });
     const props = {
       node: {

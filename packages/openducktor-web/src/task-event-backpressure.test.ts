@@ -4,8 +4,9 @@ import { taskEventStreamFrameSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { task } from "../../host/src/application/tasks/sync/task-sync-service.test-support";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
-import { createTaskEventLeaseManager } from "./task-event-leases";
-import { routeTaskEventHttpRequest, writeTaskFrameSseEvent } from "./task-event-http-server";
+import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
+import { routeTaskEventHttpRequest } from "./task-event-http-server";
+import { writeTaskFrameSseEvent } from "@openducktor/remote-host/task-event-sse";
 
 const epoch = "fc49d1f9-708c-4198-b56b-f1437b2bbcea";
 const subscriptionId = "05e77c20-ebf2-4e7f-a880-9c95c24627ee";

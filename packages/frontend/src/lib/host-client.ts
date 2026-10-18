@@ -74,8 +74,8 @@ export const hostBridge: HostBridge = {
     getShellBridge().observeAgentSessionLive(input, listener),
   subscribeNotificationStream: (input, onFrame, onFailure) =>
     getShellBridge().subscribeNotificationStream(input, onFrame, onFailure),
-  subscribeTaskStream: (input, onFrame, onTerminalFailure) =>
-    getShellBridge().subscribeTaskStream(input, onFrame, onTerminalFailure),
+  subscribeTaskStream: (input, onFrame, onTerminalFailure, signal) =>
+    getShellBridge().subscribeTaskStream(input, onFrame, onTerminalFailure, signal),
 };
 
 export const hostClient = hostClientProxy;

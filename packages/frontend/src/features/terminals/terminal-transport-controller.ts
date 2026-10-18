@@ -16,6 +16,7 @@ import {
   type TerminalFrameListener,
 } from "./terminal-transport-channel-registry";
 import { createTerminalActivityStore } from "./terminal-activity-store";
+import { TERMINAL_RECOVERY_TIMEOUT_MS } from "./constants";
 
 export type { TerminalFrameListener } from "./terminal-transport-channel-registry";
 
@@ -50,6 +51,15 @@ export const createTerminalTransportController = (
   const terminalChannels = createTerminalTransportChannelRegistry();
   const activity = createTerminalActivityStore();
   const activityListeners = new Set<() => void>();
+  // Each attach captures a finite snapshot boundary. Later output does not extend recovery.
+  const recoveries = new Map<
+    string,
+    { boundary: number | null; lost: boolean; failure: Error | null }
+  >();
+  const recoveryListeners = new Set<() => void>();
+  const notifyRecovery = () => {
+    for (const listener of recoveryListeners) listener();
+  };
   let connectionState: TerminalConnectionState = { status: "disconnected" };
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempt = 0;
@@ -104,8 +114,9 @@ export const createTerminalTransportController = (
     operation: () => Promise<void>,
   ): Promise<void> => terminalChannels.enqueue(terminalId, operation);
 
-  const attach = (terminalId: string): Promise<void> =>
-    enqueueTerminalOperation(terminalId, () =>
+  const attach = (terminalId: string): Promise<void> => {
+    recoveries.set(terminalId, { boundary: null, lost: false, failure: null });
+    return enqueueTerminalOperation(terminalId, () =>
       send({
         version: TERMINAL_PROTOCOL_VERSION,
         type: "attach",
@@ -113,6 +124,7 @@ export const createTerminalTransportController = (
         lastConsumedSequence: terminalChannels.lastConsumedSequence(terminalId),
       }),
     );
+  };
   const handleFrame = (frame: Uint8Array): void => {
     const decoded = decodeTerminalProtocolFrame(frame);
     if (isTerminalClientMessage(decoded.message)) {
@@ -133,6 +145,22 @@ export const createTerminalTransportController = (
     }
     for (const listener of terminalChannels.listeners(decoded.message.terminalId ?? "")) {
       listener(decoded.message, decoded.payload);
+    }
+    const recovery = recoveries.get(decoded.message.terminalId ?? "");
+    if (recovery) {
+      if (decoded.message.type === "snapshot")
+        recovery.boundary = decoded.message.snapshotSequenceEnd;
+      else if (decoded.message.type === "terminal_forgotten") recovery.lost = true;
+      else if (decoded.message.type === "protocol_error") {
+        if (["terminal_forgotten", "terminal_not_found"].includes(decoded.message.failure.code))
+          recovery.lost = true;
+        else recovery.failure = new Error(decoded.message.failure.message);
+      } else if (decoded.message.type === "output_overflow") {
+        recovery.failure = new Error(
+          "Terminal output overflowed. Close this tab and create a new terminal.",
+        );
+      }
+      notifyRecovery();
     }
   };
 
@@ -157,6 +185,8 @@ export const createTerminalTransportController = (
     const failedConnection = activeConnection();
     connectionGeneration += 1;
     connectionState = { status: "disconnected" };
+    recoveries.clear();
+    notifyRecovery();
     activity.disconnected(failure?.message ?? (cause instanceof Error ? cause.message : undefined));
     onStateChange("disconnected");
     if (failure) onProtocolFailure(failure);
@@ -234,6 +264,63 @@ export const createTerminalTransportController = (
   };
 
   const connect = (): Promise<void> => establishConnection(true);
+  const stopRecovery = bridge.subscribeRecovery?.((signal) => {
+    const required = terminalChannels.activeTerminalIds();
+    if (required.length === 0) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      let established = false;
+      const finish = (cause?: unknown) => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", aborted);
+        recoveryListeners.delete(check);
+        if (cause !== undefined) reject(cause);
+        else resolve();
+      };
+      const aborted = () => finish(signal.reason);
+      const check = () => {
+        if (!established) return;
+        if (connectionState.status !== "connected") {
+          finish(new Error("Terminal transport disconnected during recovery."));
+          return;
+        }
+        for (const terminalId of required) {
+          if (terminalChannels.listeners(terminalId).size === 0) continue;
+          const recovery = recoveries.get(terminalId);
+          if (recovery?.failure) {
+            finish(recovery.failure);
+            return;
+          }
+          if (recovery?.lost) continue;
+          if (
+            recovery?.boundary === null ||
+            recovery === undefined ||
+            (terminalChannels.lastConsumedSequence(terminalId) ?? 0) < recovery.boundary
+          )
+            return;
+        }
+        finish();
+      };
+      const timer = setTimeout(
+        () =>
+          finish(
+            new Error(
+              "Terminal restoration timed out. Check the host and WebSocket proxy, then retry.",
+            ),
+          ),
+        TERMINAL_RECOVERY_TIMEOUT_MS,
+      );
+      recoveryListeners.add(check);
+      signal.addEventListener("abort", aborted, { once: true });
+      if (signal.aborted) {
+        aborted();
+        return;
+      }
+      void establishConnection(false).then(() => {
+        established = true;
+        check();
+      }, finish);
+    });
+  });
   const reportTransportFailure = (cause: unknown): void => {
     transitionToDisconnected({ cause });
   };
@@ -280,6 +367,10 @@ export const createTerminalTransportController = (
           terminalId,
           listener,
         );
+        if (lastListenerRemoved) {
+          recoveries.delete(terminalId);
+          notifyRecovery();
+        }
         if (lastListenerRemoved && connectionState.status === "connected" && !wasClosing) {
           void enqueueTerminalOperation(terminalId, () =>
             send({
@@ -323,6 +414,7 @@ export const createTerminalTransportController = (
           sequenceEnd,
         }),
       );
+      notifyRecovery();
     },
     async closeTerminal<Result extends { closed: boolean }>(
       terminalId: string,
@@ -346,11 +438,14 @@ export const createTerminalTransportController = (
       terminalChannels.releaseEmulator(terminalId);
     },
     async dispose(): Promise<void> {
+      stopRecovery?.();
       connectionGeneration += 1;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = null;
       const connectionToClose = activeConnection();
       connectionState = { status: "disposed" };
+      notifyRecovery();
+      recoveries.clear();
       terminalChannels.clear();
       activity.clear();
       activityListeners.clear();

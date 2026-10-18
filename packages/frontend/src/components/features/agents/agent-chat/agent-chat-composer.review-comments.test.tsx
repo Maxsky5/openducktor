@@ -1,5 +1,7 @@
+import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
 import { createAgentStudioChatDraftPersistence } from "@/pages/agents/agent-studio-chat-draft";
 import { createWorkspaceSessionChatDraftPersistence } from "@/pages/workspace-sessions/workspace-session-chat-draft";
@@ -29,6 +31,8 @@ import {
   setAgentChatDraftAttachmentStagerForTests,
   setAgentChatDraftStorageForTests,
 } from "./agent-chat-draft-store";
+
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
 
 describe("AgentChatComposer review comments", () => {
   afterEach(() => {

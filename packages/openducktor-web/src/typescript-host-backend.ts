@@ -1,7 +1,13 @@
-import { createCombinedHostSseResponse } from "./combined-host-event-http-server";
-import { createReadStream, type Stats } from "node:fs";
-import { stat } from "node:fs/promises";
-import path from "node:path";
+import { createHostCommandLifetime } from "@openducktor/remote-host/host-command-lifetime";
+import {
+  createRemoteAccessController,
+  enableRemoteAccessFromEnvironment,
+  type RemoteAccessController,
+} from "@openducktor/remote-host";
+import { handleRemoteAccessHttp } from "./remote-access-http";
+import webPackage from "../package.json";
+import { localAttachmentPreviewResponse } from "@openducktor/remote-host/local-attachment-preview";
+import { createCombinedHostSseResponse } from "@openducktor/remote-host/combined-host-event-http-server";
 import {
   failureKindSchema,
   type HostInvokeFailure,
@@ -12,8 +18,6 @@ import {
 import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
-  createSerialGate,
-  createSerialLane,
   type EffectHostCommandRouter,
   type EffectNodeHostCommandRouter,
   type HostRuntimeDistribution,
@@ -26,7 +30,6 @@ import {
 } from "@openducktor/host";
 import { createNodePtyPort } from "@openducktor/host/node-pty";
 import { Cause, Effect } from "effect";
-import { lookup as lookupMimeType } from "mime-types";
 import { z } from "zod";
 import {
   causeToWebBoundaryError,
@@ -36,34 +39,39 @@ import {
   type WebHostCommandErrorDetails,
   WebHostRequestError,
   WebOperationError,
-} from "./effect/web-errors";
+} from "@openducktor/remote-host/effect/web-errors";
 import { type WebLogger, writeWebLogEffect } from "./logger";
-import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
-import { nodeReadableStream } from "./node-readable-stream";
-import { allowedHostnamesFor, isRequestHostAllowed } from "./http-origin";
-import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
+import {
+  startNodeFetchServer,
+  type NodeFetchServer,
+} from "@openducktor/remote-host/node-fetch-server";
+import { allowedHostnamesFor, isRequestHostAllowed } from "@openducktor/remote-host/http-origin";
+import { routeTaskAssetHttpRequest } from "@openducktor/remote-host/task-asset-http-server";
+import { writeTaskFrameSseEvent } from "@openducktor/remote-host/task-event-sse";
 import {
   routeTaskEventHttpRequest,
   TASK_EVENT_STREAM_TOKEN_HEADER,
   type WebRequestBody,
-  writeTaskFrameSseEvent,
 } from "./task-event-http-server";
-import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
+import {
+  createTaskEventLeaseManager,
+  type TaskEventLeaseManager,
+} from "@openducktor/remote-host/task-event-leases";
 import {
   type TerminalWebSocketData,
+  createSocketData,
   terminalWebSocketHandler,
-} from "./terminals/terminal-websocket-handler";
+} from "@openducktor/remote-host/terminals/terminal-websocket-handler";
 
-import {
-  allowedOriginsForFrontendOrigin,
-  BufferedHostEventBus,
-  stopTypescriptHostBackendServices,
-  validateWebFrontendOriginEffect,
-} from "./typescript-host-backend-support";
+import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
+import { allowedFrontendOrigins, validateFrontendOriginEffect } from "./frontend-origin";
+import { stopHostBackend } from "./host-backend-lifecycle";
 
 export type TypescriptHostBackendOptions = {
   port: number;
+  deferRemoteStartup?: boolean;
   frontendOrigin: string;
+  remoteFrontendOrigin?: string;
   frontendPort?: number;
   controlToken: string;
   appToken: string;
@@ -103,11 +111,10 @@ export type TypescriptHostBackend = {
   exited: Promise<number>;
   port: number;
   stop(): Promise<void>;
+  remoteAccess: RemoteAccessController;
 };
 
-type RequestTimeoutController = {
-  timeout(request: Request, seconds: number): void;
-};
+type RequestTimeoutController = Pick<NodeFetchServer<unknown>, "timeout">;
 type TypescriptHostBackendServer = NodeFetchServer<TerminalWebSocketData>;
 
 const LOCALHOST = "127.0.0.1";
@@ -185,21 +192,12 @@ const tryUpgradeTerminalWebSocket = ({
     };
   }
   const upgraded = server.upgrade({
-    data: {
+    data: createSocketData({
       connectionId: globalThis.crypto.randomUUID(),
       terminalService: hostCommandRouter.terminalService,
-      clientSession: null,
-      backpressured: false,
-      inFlightBytes: 0,
-      pendingBytes: 0,
-      pendingFrames: [],
-      drainWaiters: new Set(),
-      attachPermit: createSerialLane(),
-      messageGate: createSerialGate(),
-      closed: false,
       logger,
       onBackgroundFailure,
-    },
+    }),
   });
   return {
     handled: true,
@@ -424,11 +422,6 @@ const validateAppCookieOrHeader = (
     "Invalid OpenDucktor web host app token.",
   );
 
-const isWithinDirectory = (directory: string, candidate: string): boolean => {
-  const relative = path.relative(directory, candidate);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-};
-
 const rejectWebHostRequest = (
   message: string,
   status: number,
@@ -437,7 +430,6 @@ const rejectWebHostRequest = (
   Effect.fail(
     new WebHostRequestError(failureKind ? { failureKind, message, status } : { message, status }),
   );
-
 const webHostRequestErrorResponse = (
   error: WebHostRequestError,
   corsHeaders: HeadersInit,
@@ -451,7 +443,6 @@ const webHostRequestErrorResponse = (
     hostInvokeFailure,
   );
 };
-
 const webRequestJsonValueSchema = z.json();
 const webRequestBodySchema = z.record(z.string(), webRequestJsonValueSchema);
 
@@ -474,75 +465,6 @@ const parseJsonObjectBody = (
     return body.data;
   });
 
-const statLocalAttachmentPreview = (
-  requestedPath: string,
-): Effect.Effect<Stats, WebHostRequestError> =>
-  Effect.tryPromise({
-    try: () => stat(requestedPath),
-    catch: (error) =>
-      new WebHostRequestError({
-        message: `Failed to stat local attachment preview: ${errorMessage(error)}`,
-        status: 404,
-      }),
-  });
-
-const localAttachmentPreviewResponse = (
-  request: Request,
-  localAttachmentPort: ReturnType<typeof createLocalAttachmentAdapter>,
-  corsHeaders: HeadersInit,
-): Effect.Effect<Response, WebHostRequestError> =>
-  Effect.gen(function* () {
-    const requestUrl = new URL(request.url);
-    const requestedPath = requestUrl.searchParams.get("path");
-    if (!requestedPath) {
-      return yield* rejectWebHostRequest("Local attachment preview path is required.", 400);
-    }
-
-    const canonicalDirectory = yield* localAttachmentPort
-      .canonicalizePath(localAttachmentPort.stageDirectory())
-      .pipe(
-        Effect.mapError(
-          (error) =>
-            new WebHostRequestError({
-              message: `Failed to resolve local attachment preview directory: ${errorMessage(error)}`,
-              status: 500,
-            }),
-        ),
-      );
-    const canonicalPath = yield* localAttachmentPort.canonicalizePath(requestedPath).pipe(
-      Effect.mapError(
-        (error) =>
-          new WebHostRequestError({
-            message: `Failed to resolve local attachment preview path: ${errorMessage(error)}`,
-            status: 500,
-          }),
-      ),
-    );
-    if (!isWithinDirectory(canonicalDirectory, canonicalPath)) {
-      return yield* rejectWebHostRequest(
-        "Local attachment preview is only available for staged attachment files.",
-        403,
-      );
-    }
-
-    const metadata = yield* statLocalAttachmentPreview(canonicalPath);
-    if (!metadata.isFile()) {
-      return yield* rejectWebHostRequest(
-        "Local attachment preview path must reference a file",
-        400,
-      );
-    }
-
-    const file = nodeReadableStream(createReadStream(canonicalPath));
-    return new Response(file, {
-      headers: {
-        ...corsHeaders,
-        "cache-control": "no-store, private",
-        "content-type": lookupMimeType(canonicalPath) || "application/octet-stream",
-      },
-    });
-  });
-
 const routeCorsRequest = ({
   appSessionCookieName,
   appToken,
@@ -558,6 +480,7 @@ const routeCorsRequest = ({
   request,
   requestTimeouts,
   requestTimeoutSource,
+  remoteAccess,
   sessionCookieSecure,
   shutdownStarted,
   isHostShutdownStarted,
@@ -578,6 +501,7 @@ const routeCorsRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   requestTimeoutSource?: Request | undefined;
+  remoteAccess?: RemoteAccessController;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   isHostShutdownStarted: () => boolean;
@@ -628,6 +552,26 @@ const routeCorsRequest = ({
         }, 10);
       });
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
+    }
+
+    if (remoteAccess && requestUrl.pathname.startsWith("/remote-access")) {
+      yield* validateAppCookieOrHeader(request, appToken, appSessionCookieName);
+      if (shutdownStarted) {
+        return yield* rejectWebHostRequest("The host is shutting down. Reopen OpenDucktor.", 503);
+      }
+      if (requestUrl.pathname === "/remote-access/events")
+        requestTimeouts?.timeout(requestTimeoutSource ?? request, 0);
+      const response = yield* Effect.tryPromise({
+        try: () => handleRemoteAccessHttp(request, remoteAccess),
+        catch: (cause) =>
+          new WebHostRequestError({
+            message: errorMessage(cause),
+            status: cause instanceof z.ZodError || cause instanceof SyntaxError ? 400 : 500,
+            cause,
+          }),
+      });
+      new Headers(corsHeaders).forEach((value, name) => response.headers.set(name, value));
+      return response;
     }
 
     const taskEventContext: Parameters<typeof routeTaskEventHttpRequest>[0] = {
@@ -751,6 +695,7 @@ export const handleTypescriptHostBackendRequest = ({
   request,
   requestTimeouts,
   requestTimeoutSource,
+  remoteAccess,
   sessionCookieSecure,
   shutdownStarted,
   isHostShutdownStarted,
@@ -771,6 +716,7 @@ export const handleTypescriptHostBackendRequest = ({
   request: Request;
   requestTimeouts?: RequestTimeoutController | undefined;
   requestTimeoutSource?: Request | undefined;
+  remoteAccess?: RemoteAccessController;
   sessionCookieSecure: boolean;
   shutdownStarted: boolean;
   isHostShutdownStarted: () => boolean;
@@ -807,6 +753,7 @@ export const handleTypescriptHostBackendRequest = ({
       stop,
     };
     if (notificationStream) routeInput.notificationStream = notificationStream;
+    if (remoteAccess) routeInput.remoteAccess = remoteAccess;
     if (taskEventLeaseManager) {
       routeInput.taskEventLeaseManager = taskEventLeaseManager;
     }
@@ -879,6 +826,7 @@ export const handleHostFetch = (
 export const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
+  remoteFrontendOrigin,
   frontendPort,
   controlToken,
   appToken,
@@ -891,13 +839,14 @@ export const startTypescriptHostBackendEffect = ({
   processEnv,
   providedToolPaths,
   runtimeDistribution,
+  deferRemoteStartup,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebOperationError> =>
   Effect.gen(function* () {
     const appSessionCookieName = resolveAppSessionCookieName(mcpBridgeDiscoveryMode, processEnv);
-    const validatedFrontendOrigin = yield* validateWebFrontendOriginEffect(frontendOrigin).pipe(
+    const validatedFrontendOrigin = yield* validateFrontendOriginEffect(frontendOrigin).pipe(
       Effect.mapError((cause) => toWebOperationError(cause, "web.host.validate-frontend-origin")),
     );
-    const allowedOrigins = allowedOriginsForFrontendOrigin(validatedFrontendOrigin, frontendPort);
+    const allowedOrigins = allowedFrontendOrigins(validatedFrontendOrigin, frontendPort);
     const allowedHostnames = allowedHostnamesFor({
       bindHost: host ?? LOCALHOST,
       externalUrl: validatedFrontendOrigin,
@@ -957,9 +906,44 @@ export const startTypescriptHostBackendEffect = ({
     if (providedToolPaths) {
       routerInput.providedToolPaths = providedToolPaths;
     }
-    const hostCommandRouter: EffectNodeHostCommandRouter = yield* createNodeEffectHostCommandRouter(
+    const originalRouter: EffectNodeHostCommandRouter = yield* createNodeEffectHostCommandRouter(
       routerInput,
     ).pipe(Effect.mapError((cause) => toWebOperationError(cause, "web.host.create-host-router")));
+    const commandLifetime = createHostCommandLifetime(originalRouter);
+    const hostCommandRouter: EffectNodeHostCommandRouter = {
+      ...originalRouter,
+      invoke: commandLifetime.invoke,
+    };
+    const remoteFrontendOrigins = new Set(allowedOrigins);
+    if (remoteFrontendOrigin !== undefined)
+      remoteFrontendOrigins.add(new URL(remoteFrontendOrigin).origin);
+    const remoteAccess = createRemoteAccessController(
+      { ...hostCommandRouter, eventBus },
+      {
+        shell: "web",
+        appVersion: webPackage.version,
+        frontendOrigins: remoteFrontendOrigins,
+        sharedListener: {
+          listenHost: host ?? LOCALHOST,
+          listenPort: () => server.port,
+          isPrivateRequest: (request) =>
+            (request.method === "GET" &&
+              new URL(stripBasePath(basePath, request.url)).pathname === "/health") ||
+            request.headers.has(APP_TOKEN_HEADER) ||
+            request.headers.has(CONTROL_TOKEN_HEADER) ||
+            readCookie(request, appSessionCookieName) !== null ||
+            (request.method === "OPTIONS" &&
+              (request.headers.get("access-control-request-headers") ?? "")
+                .split(",")
+                .some((header) =>
+                  [APP_TOKEN_HEADER, CONTROL_TOKEN_HEADER].includes(header.trim().toLowerCase()),
+                )),
+        },
+        logger,
+        reportFailure: (cause) =>
+          scheduleNonFatalWebEventFailure(logger, "Remote transport failed", cause),
+      },
+    );
     const taskEventLeaseManager = createTaskEventLeaseManager({
       encodeFrame: writeTaskFrameSseEvent,
       reportDeliveryFailure: ({ cause, subscriptionId }) =>
@@ -977,12 +961,17 @@ export const startTypescriptHostBackendEffect = ({
       }
       beginShutdown();
       taskEventLeaseManager.dispose();
-      stopPromise = stopTypescriptHostBackendServices({
-        disposeHost: () => hostCommandRouter.dispose(),
-        logger,
-        resolveExited,
-        stopServer: () => server.stop(true),
-      });
+      stopPromise = (async () => {
+        const remoteResult = await Effect.runPromise(Effect.result(remoteAccess.close()));
+        await Effect.runPromise(commandLifetime.drain());
+        await stopHostBackend({
+          disposeHost: () => hostCommandRouter.dispose(),
+          logger,
+          resolveExited,
+          stopServer: () => server.stop(true),
+        });
+        if (remoteResult._tag === "Failure") throw remoteResult.failure;
+      })();
       return stopPromise;
     };
 
@@ -1019,6 +1008,8 @@ export const startTypescriptHostBackendEffect = ({
               port,
               onError: onBackgroundFailure,
               fetch(request, server) {
+                const remote = remoteAccess.handleSharedRequest(request, server);
+                if (remote !== null) return remote;
                 return handleHostFetch({
                   allowedHostnames,
                   allowedOrigins,
@@ -1030,6 +1021,7 @@ export const startTypescriptHostBackendEffect = ({
                   taskAssetReadService: hostCommandRouter.taskAssetReadService,
                   notificationStream: hostCommandRouter.notificationStream,
                   taskEventLeaseManager,
+                  remoteAccess,
                   localAttachments,
                   logger,
                   basePath,
@@ -1062,7 +1054,10 @@ export const startTypescriptHostBackendEffect = ({
           Effect.onInterrupt(cleanupStartedServerEffect),
         );
 
+        if (!deferRemoteStartup)
+          yield* enableRemoteAccessFromEnvironment(remoteAccess, processEnv ?? process.env);
         return {
+          remoteAccess,
           exited,
           port: server.port,
           stop,

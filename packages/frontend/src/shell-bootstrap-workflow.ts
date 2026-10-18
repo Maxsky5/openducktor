@@ -1,10 +1,17 @@
 import type { ThemePreference } from "@openducktor/contracts";
+import type { LocalHost } from "./lib/host-location";
 import type { ShellBridge } from "./lib/shell-bridge";
 
 const DEFAULT_ROOT_ID = "root";
 
 export type OpenDucktorShellBootstrapOptions = {
   createShellBridge: () => ShellBridge;
+  hosts?: {
+    localHost: LocalHost | null;
+    defaultEndpoint?: string | undefined;
+    createRemoteBridge: (endpoint: string, local: ShellBridge | undefined) => ShellBridge;
+    navigate?: () => Promise<void>;
+  };
   prepare?: () => void | Promise<void>;
   rootElement?: HTMLElement | null | undefined;
   rootId?: string;
@@ -26,7 +33,7 @@ const rootMissingMessage = (rootId: string): string =>
 const explicitNullRootMessage = (): string =>
   "OpenDucktor bootstrap rootElement was explicitly set to null. Omit rootElement to use the shell root lookup, or pass an HTMLElement.";
 
-const resolveRootElement = (
+export const resolveRootElement = (
   options: OpenDucktorShellBootstrapOptions,
   getRootById: ShellBootstrapDependencies["getRootById"],
 ): HTMLElement => {

@@ -7,7 +7,7 @@ import {
 import type { EffectNodeHostCommandRouter } from "@openducktor/host";
 import { Effect, Fiber, Stream } from "effect";
 import { WebHostRequestError } from "./effect/web-errors";
-import type { BufferedHostEventStream } from "./typescript-host-backend-support";
+import type { BufferedHostEventStream } from "./host-event-bus";
 
 export const createCombinedHostSseResponse = (
   request: Request,
@@ -42,14 +42,25 @@ export const createCombinedHostSseResponse = (
       let stopHost: (() => void) | null = null;
       let stopNotifications: (() => void) | null = null;
       const stop = () => {
+        request.signal.removeEventListener("abort", abort);
         closed = true;
         stopHost?.();
         stopNotifications?.();
       };
+      let abort = () => {};
       const encoder = new TextEncoder();
       const body = new ReadableStream<Uint8Array>(
         {
           start(controller) {
+            abort = () => {
+              stop();
+              controller.close();
+            };
+            request.signal.addEventListener("abort", abort, { once: true });
+            if (request.signal.aborted) {
+              abort();
+              return;
+            }
             const fail = (cause: unknown) => {
               if (closed) return;
               stop();

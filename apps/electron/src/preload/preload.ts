@@ -1,3 +1,15 @@
+import {
+  remoteAccessStateSchema,
+  remoteAccessEnableInputSchema,
+  remoteAccessNetworksSchema,
+  themePreferenceSchema,
+} from "@openducktor/contracts";
+import {
+  ELECTRON_REMOTE_ACCESS_CHANNEL,
+  ELECTRON_REMOTE_ACCESS_STATE_CHANNEL,
+  ELECTRON_HOST_SELECT_CHANNEL,
+  ELECTRON_NATIVE_THEME_CHANNEL,
+} from "../shared/electron-bridge-contract";
 import { createElectronNotificationStreamApi } from "./electron-notification-stream-ipc";
 import {
   appPlatformSchema,
@@ -153,9 +165,41 @@ const notifications: OpenDucktorElectronNotificationApi = {
 
 const electronApi: OpenDucktorElectronApi = {
   platform: appPlatformSchema.parse(process.platform),
+  selectHost: () => ipcRenderer.invoke(ELECTRON_HOST_SELECT_CHANNEL),
+  setNativeTheme: (theme) =>
+    ipcRenderer.invoke(ELECTRON_NATIVE_THEME_CHANNEL, themePreferenceSchema.unwrap().parse(theme)),
   invoke: invokeHost,
   subscribe(...subscription) {
     return subscribeElectronHostEvent(ipcRenderer, ...subscription);
+  },
+  remoteAccess: {
+    readNetworks: async () =>
+      remoteAccessNetworksSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "networks" }),
+      ),
+    readState: async () =>
+      remoteAccessStateSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "read" }),
+      ),
+    enable: async (input) =>
+      remoteAccessStateSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, {
+          action: "enable",
+          input: remoteAccessEnableInputSchema.parse(input),
+        }),
+      ),
+    disable: async () =>
+      remoteAccessStateSchema.parse(
+        await ipcRenderer.invoke(ELECTRON_REMOTE_ACCESS_CHANNEL, { action: "disable" }),
+      ),
+    subscribeState: async (listener) => {
+      const receive = (
+        _event: Electron.IpcRendererEvent,
+        value: import("@openducktor/contracts").RemoteAccessState,
+      ) => listener(remoteAccessStateSchema.parse(value));
+      ipcRenderer.on(ELECTRON_REMOTE_ACCESS_STATE_CHANNEL, receive);
+      return () => ipcRenderer.off(ELECTRON_REMOTE_ACCESS_STATE_CHANNEL, receive);
+    },
   },
   appUpdates,
   notifications,

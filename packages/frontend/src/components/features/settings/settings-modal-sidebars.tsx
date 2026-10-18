@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { REPOSITORY_SECTIONS, SETTINGS_SECTIONS } from "./settings-modal-constants";
+import { getShellBridge } from "@/lib/shell-bridge";
 
 type SettingsSidebarProps = {
   section: SettingsSectionId;
@@ -24,6 +25,7 @@ export function SettingsSidebar({
     <aside className="border-r border-border bg-muted/50 p-3">
       <div className="space-y-1">
         {SETTINGS_SECTIONS.map((entry) => {
+          if (entry.id === "remote-access" && !getShellBridge().remoteAccess) return null;
           const Icon = entry.icon;
           const sectionErrorCount = errorCountById[entry.id] ?? 0;
           return (
