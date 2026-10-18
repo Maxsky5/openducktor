@@ -18,7 +18,7 @@ Thanks for contributing. This project is public, but it is still early and the c
 
 ## Quick Start
 
-1. Install the core tooling: Bun `1.4.2`, Node.js `24.14` or later, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode`, `codex`, or `claude`).
+1. Install the core tooling: Bun `1.4.3`, Node.js `24.14` or later, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode`, `codex`, or `claude`).
 2. Install workspace dependencies from the repository root:
 
 ```sh
@@ -42,7 +42,7 @@ Useful alternative:
 
 Core tooling:
 
-- Bun `1.4.2`
+- Bun `1.4.3`
 - Node.js `24.14` or later
 - Xcode Command Line Tools
 - `git`
@@ -116,6 +116,8 @@ bun run build
 ```
 
 Use `bun run format` to apply Oxfmt formatting across the repository. The `format:check` command is intentionally repo-wide and runs before linting in both CI and the local pre-commit hook. Oxfmt honors Git ignore files, so generated outputs such as `dist`, `build`, `coverage`, and `.vite` are excluded from this gate. Oxlint checks JavaScript and TypeScript files in one repo-wide process; Oxfmt checks supported data and style files such as JSON and CSS. Neither tool checks SVG files.
+
+`bun run typecheck` runs `bun check -p tsconfig.json` in each standalone TypeScript workspace and both configurations in MCP. The marketing website keeps `astro check --minimumFailingSeverity warning` and its local TypeScript 6 dependency. TypeScript `7.0.2` remains available for declaration builds and editors. See [Type checking](docs/typechecking.md) for configuration coverage, Bun compiler limits, cache behavior, and upgrade checks.
 
 Useful focused commands:
 

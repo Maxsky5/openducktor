@@ -5,7 +5,7 @@
   "scripts": {
     "build": "bun run typecheck",
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check -p tsconfig.json"
   },
   "devDependencies": {
     "@oxlint/plugins": "1.87.0"
