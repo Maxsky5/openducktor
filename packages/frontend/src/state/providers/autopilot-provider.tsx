@@ -166,7 +166,6 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     };
   }, [host, presenter, queryClient, readHeldOutcomes]);
 
-  // This effect runs first, so the next effect does not read the selected workspace again.
   useEffect(() => {
     if (!subscribed || !activeWorkspaceId) return;
     readWorkspaceIdsRef.current.add(activeWorkspaceId);
@@ -175,14 +174,17 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     );
   }, [activeWorkspaceId, readHeldOutcomes, subscribed]);
 
+  // The selection effect reads the selected workspace.
   useEffect(() => {
     if (!subscribed) return;
     const read = readWorkspaceIdsRef.current;
-    const unread = openWorkspaceIds.filter((workspaceId) => !read.has(workspaceId));
+    const unread = openWorkspaceIds.filter(
+      (workspaceId) => workspaceId !== activeWorkspaceId && !read.has(workspaceId),
+    );
     if (unread.length === 0) return;
     for (const workspaceId of unread) read.add(workspaceId);
     void readHeldOutcomes(unread, { workspaceSelected: false }).catch(reportHeldOutcomeFailure);
-  }, [openWorkspaceIds, readHeldOutcomes, subscribed]);
+  }, [activeWorkspaceId, openWorkspaceIds, readHeldOutcomes, subscribed]);
 
   useEffect(() => {
     presenter.keepWorkspaces(listedWorkspaceIds);
