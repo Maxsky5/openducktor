@@ -46,10 +46,6 @@ export const pickDefaultVisibleSelectionForCatalog = (
   return selection;
 };
 
-/**
- * A selection saved before a runtime listed full model IDs can hold an alias, such as `opus`.
- * The coerced selection then holds the ID of the model that the alias points to now.
- */
 const findCatalogModelByAlias = (
   catalog: AgentModelCatalog,
   selection: Pick<AgentModelSelection, "providerId" | "modelId">,

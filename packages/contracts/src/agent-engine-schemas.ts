@@ -38,7 +38,6 @@ export const agentModelDescriptorSchema = z
     providerName: nonEmptyStringSchema,
     modelId: nonEmptyStringSchema,
     modelName: nonEmptyStringSchema,
-    /** Runtime aliases, such as `opus`, that point to this model. A saved alias converts to `modelId`. */
     aliases: z.array(nonEmptyStringSchema).optional(),
     variants: z.array(z.string()),
     speedLevels: z.array(agentSpeedLevelSchema).optional(),

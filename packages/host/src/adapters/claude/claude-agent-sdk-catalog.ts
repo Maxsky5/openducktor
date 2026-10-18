@@ -164,39 +164,38 @@ const readClaudeCatalogSurfaces = async ({
   };
 };
 
-/** The SDK row that points to the session default model. It names no model of its own. */
 const CLAUDE_DEFAULT_MODEL_ALIAS = "default";
 
-/**
- * Lists one entry for each model that Claude runs. Claude reports each turn with that model ID, so
- * an alias row, such as `opus`, only adds its alias to the entry of the model that it points to.
- */
 const toClaudeModelCatalog = (
   models: ModelInfo[],
   speedAvailability: AgentSpeedAvailability | undefined,
 ): AgentModelCatalog => {
   const defaultRow = models.find((model) => model.value === CLAUDE_DEFAULT_MODEL_ALIAS);
-  const rows = defaultRow
-    ? [...models.filter((model) => model !== defaultRow), defaultRow]
-    : models;
-  const descriptors = new Map<string, AgentModelDescriptor>();
-  for (const row of rows) {
-    const descriptor = toClaudeModelDescriptor(row);
-    const listed = descriptors.get(descriptor.modelId);
-    if (!listed) descriptors.set(descriptor.modelId, descriptor);
-    else if (descriptor.aliases)
-      listed.aliases = [...(listed.aliases ?? []), ...descriptor.aliases];
-  }
-  const defaultModelId = defaultRow
-    ? readClaudeModelId(defaultRow)
-    : descriptors.keys().next().value;
+  const namedRows = models.filter((model) => model !== defaultRow);
+  const descriptors = mergeRowsByModelId(defaultRow ? [...namedRows, defaultRow] : namedRows);
+  const defaultModelId = defaultRow ? readClaudeModelId(defaultRow) : descriptors[0]?.modelId;
   return {
     runtime: CLAUDE_RUNTIME_DESCRIPTOR,
     speedAvailability,
-    models: [...descriptors.values()],
+    models: descriptors,
     defaultModelsByProvider: defaultModelId ? { claude: defaultModelId } : {},
     profiles: [],
   };
+};
+
+const mergeRowsByModelId = (rows: ModelInfo[]): AgentModelDescriptor[] => {
+  const descriptors = new Map<string, AgentModelDescriptor>();
+  for (const row of rows) {
+    const descriptor = toClaudeModelDescriptor(row);
+    const first = descriptors.get(descriptor.modelId);
+    if (!first) {
+      descriptors.set(descriptor.modelId, descriptor);
+      continue;
+    }
+    const aliases = [...(first.aliases ?? []), ...(descriptor.aliases ?? [])];
+    if (aliases.length > 0) descriptors.set(descriptor.modelId, { ...first, aliases });
+  }
+  return [...descriptors.values()];
 };
 
 const readClaudeModelId = (model: ModelInfo): string => {
