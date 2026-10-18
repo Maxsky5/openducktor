@@ -3,7 +3,7 @@ import {
   TASK_ASSET_URI_PREFIX,
   type TaskAssetRenderContext,
 } from "@openducktor/contracts";
-import { createElement, isValidElement, useState, type ReactNode } from "react";
+import { createElement, isValidElement, useMemo, useState, type ReactNode } from "react";
 import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { useResourceSource } from "@/lib/use-resource-source";
 import { MarkdownMermaid } from "./markdown-mermaid";
 
-export const TASK_DESCRIPTION_URL_TRANSFORM: UrlTransform = (url, _key, node) => {
+/** The default URL rule, which also keeps task asset images. */
+export const RICH_MARKDOWN_URL_TRANSFORM: UrlTransform = (url, _key, node) => {
   if (node.tagName === "img" && url.startsWith(TASK_ASSET_URI_PREFIX)) {
     return url;
   }
@@ -83,15 +84,31 @@ function TaskAssetImage({
   );
 }
 
-export const createTaskDescriptionComponents = ({
-  components,
-  resolveTaskAssetSource,
-  taskAssetContext,
-}: {
-  components: Components;
-  resolveTaskAssetSource?: ShellBridge["resolveTaskAssetSource"];
-  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
-}): Components => ({
+/** What a Markdown view needs to show task asset images. */
+export type TaskAssetOptions = {
+  resolveTaskAssetSource?: ShellBridge["resolveTaskAssetSource"] | undefined;
+  taskAssetContext?: Omit<TaskAssetRenderContext, "assetId"> | undefined;
+};
+
+/**
+ * Adds Mermaid diagrams and task asset images to `components`. react-markdown uses each component
+ * as an element type. A new set on each render remounts every code block, diagram, and image, so
+ * keep one set while the inputs stay the same.
+ */
+export const useRichMarkdownComponents = (
+  components: Components,
+  { resolveTaskAssetSource, taskAssetContext }: TaskAssetOptions = {},
+): Components =>
+  useMemo(
+    () => createRichMarkdownComponents(components, resolveTaskAssetSource, taskAssetContext),
+    [components, resolveTaskAssetSource, taskAssetContext],
+  );
+
+const createRichMarkdownComponents = (
+  components: Components,
+  resolveTaskAssetSource: ShellBridge["resolveTaskAssetSource"] | undefined,
+  taskAssetContext: Omit<TaskAssetRenderContext, "assetId"> | undefined,
+): Components => ({
   ...components,
   code: ({ className, children, ...props }) => {
     if (className === "language-mermaid") {

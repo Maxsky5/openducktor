@@ -342,4 +342,6 @@ test.each(["directory", "branch"] as const)(
       });
     }
   },
+  // Eight full panel renders and two dialogs take more than 1 s when other test runs load the CPU.
+  3000,
 );

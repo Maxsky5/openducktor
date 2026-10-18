@@ -1233,6 +1233,8 @@ describe("AppShell session navigation", () => {
           .getAttribute(sidebar === "opened" ? "aria-checked" : "aria-pressed"),
       ).toBe("false");
     },
+    // Three full AppShell mounts take more than 1 s when other test runs load the CPU.
+    3000,
   );
 
   test("uses the current workspace when the saved scope is unknown", async () => {

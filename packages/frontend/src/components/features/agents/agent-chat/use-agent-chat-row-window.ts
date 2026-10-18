@@ -34,6 +34,9 @@ type RowRange = {
 type SessionRowRange = {
   sessionKey: string | null;
   range: RowRange;
+  /** Keys of the first and last rows in the range, so that the range can follow rows that move. */
+  firstRowKey: string | null;
+  lastRowKey: string | null;
 };
 
 // A mounted row, with its index among the mounted rows and its distance from the viewport top.
@@ -81,6 +84,45 @@ const clampRange = (range: RowRange, rowCount: number): RowRange => {
 const areRangesEqual = (left: RowRange, right: RowRange): boolean =>
   left.startRow === right.startRow && left.endRowExclusive === right.endRowExclusive;
 
+const sessionRowRange = (
+  sessionKey: string | null,
+  range: RowRange,
+  rows: AgentChatTranscriptRow[],
+): SessionRowRange => ({
+  sessionKey,
+  range,
+  firstRowKey: rows[range.startRow]?.key ?? null,
+  lastRowKey: rows[range.endRowExclusive - 1]?.key ?? null,
+});
+
+const findRowIndex = (
+  rows: AgentChatTranscriptRow[],
+  rowKey: string,
+  expectedIndex: number,
+): number | null => {
+  if (rows[expectedIndex]?.key === rowKey) return expectedIndex;
+  const index = rows.findIndex((row) => row.key === rowKey);
+  return index < 0 ? null : index;
+};
+
+/**
+ * Rows can move before the layout effects set a new range, for example when the transcript inserts
+ * a row inside the window or prepends history. The range follows its first and last rows, so no
+ * mounted row leaves the window for one render and mounts again. A range whose edge row is gone
+ * keeps its indexes in a new object, so that the layout effect stores its new edge rows.
+ */
+const followRangeRows = (
+  { range, firstRowKey, lastRowKey }: SessionRowRange,
+  rows: AgentChatTranscriptRow[],
+): RowRange => {
+  if (firstRowKey === null || lastRowKey === null) return range;
+  const startRow = findRowIndex(rows, firstRowKey, range.startRow);
+  const lastRow = findRowIndex(rows, lastRowKey, range.endRowExclusive - 1);
+  if (startRow === null || lastRow === null) return { ...range };
+  if (startRow === range.startRow && lastRow + 1 === range.endRowExclusive) return range;
+  return { startRow, endRowExclusive: lastRow + 1 };
+};
+
 const rowCountForRange = (range: RowRange): number =>
   Math.max(0, range.endRowExclusive - range.startRow);
 
@@ -127,16 +169,14 @@ export function useAgentChatRowWindow({
   isFollowingLatestWindow,
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
-  const [sessionRange, setSessionRange] = useState<SessionRowRange>(() => ({
-    sessionKey: displayedSessionKey,
-    range: latestRange(rows.length),
-  }));
+  const [sessionRange, setSessionRange] = useState<SessionRowRange>(() =>
+    sessionRowRange(displayedSessionKey, latestRange(rows.length), rows),
+  );
   const didSessionChange = sessionRange.sessionKey !== displayedSessionKey;
-  const range = didSessionChange ? latestRange(rows.length) : sessionRange.range;
+  const range = didSessionChange ? latestRange(rows.length) : followRangeRows(sessionRange, rows);
   const rangeRef = useRef(range);
   const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousRowsLengthRef = useRef(rows.length);
-  const previousFirstVisibleRowKeyRef = useRef(rows[range.startRow]?.key ?? null);
   // A row that stays mounted while rows mount or unmount above it, to keep it in place.
   const pendingRowAnchorRef = useRef<RowAnchor | null>(null);
   const shouldTrimBottomAfterPrependRef = useRef(false);
@@ -152,19 +192,21 @@ export function useAgentChatRowWindow({
     rangeRef.current = nextRange;
     pendingLatestResetRef.current = shouldResetForTranscriptLoad && rows.length === 0;
     previousRowsLengthRef.current = rows.length;
-    previousFirstVisibleRowKeyRef.current = rows[nextRange.startRow]?.key ?? null;
-    setSessionRange({ sessionKey: displayedSessionKey, range: nextRange });
+    setSessionRange(sessionRowRange(displayedSessionKey, nextRange, rows));
   }, [didSessionChange, displayedSessionKey, rows, shouldResetForTranscriptLoad]);
 
   const setRange = useCallback(
     (nextRange: RowRange) => {
       const clampedRange = clampRange(nextRange, rows.length);
       rangeRef.current = clampedRange;
-      previousFirstVisibleRowKeyRef.current = rows[clampedRange.startRow]?.key ?? null;
+      const next = sessionRowRange(displayedSessionKey, clampedRange, rows);
       setSessionRange((current) =>
-        current.sessionKey === displayedSessionKey && areRangesEqual(current.range, clampedRange)
+        current.sessionKey === next.sessionKey &&
+        areRangesEqual(current.range, next.range) &&
+        current.firstRowKey === next.firstRowKey &&
+        current.lastRowKey === next.lastRowKey
           ? current
-          : { sessionKey: displayedSessionKey, range: clampedRange },
+          : next,
       );
     },
     [displayedSessionKey, rows],
@@ -314,7 +356,6 @@ export function useAgentChatRowWindow({
   useLayoutEffect(() => {
     const previousRowsLength = previousRowsLengthRef.current;
     const previousRange = rangeRef.current;
-    const previousFirstVisibleRowKey = previousFirstVisibleRowKeyRef.current;
     previousRowsLengthRef.current = rows.length;
 
     if (didSessionChange) {
@@ -327,26 +368,13 @@ export function useAgentChatRowWindow({
       return;
     }
 
-    if (rows.length !== previousRowsLength) {
-      if (isFollowingLatestWindow() && previousRange.endRowExclusive === previousRowsLength) {
-        setRange(latestRange(rows.length));
-        return;
-      }
-
-      if (previousFirstVisibleRowKey) {
-        const nextFirstVisibleIndex = rows.findIndex(
-          (row) => row.key === previousFirstVisibleRowKey,
-        );
-        if (nextFirstVisibleIndex >= 0) {
-          const previousWindowSize = previousRange.endRowExclusive - previousRange.startRow;
-          const nextRange = {
-            startRow: nextFirstVisibleIndex,
-            endRowExclusive: Math.min(rows.length, nextFirstVisibleIndex + previousWindowSize),
-          };
-          setRange(nextRange);
-          return;
-        }
-      }
+    if (
+      rows.length !== previousRowsLength &&
+      isFollowingLatestWindow() &&
+      previousRange.endRowExclusive === previousRowsLength
+    ) {
+      setRange(latestRange(rows.length));
+      return;
     }
 
     if (rows.length > 0 && previousRange.startRow >= rows.length) {
@@ -354,8 +382,11 @@ export function useAgentChatRowWindow({
       return;
     }
 
-    previousFirstVisibleRowKeyRef.current = rows[rangeRef.current.startRow]?.key ?? null;
-  }, [didSessionChange, isFollowingLatestWindow, rows, rows.length, setRange]);
+    if (range !== sessionRange.range) {
+      // Keep the range that followed its moved rows, with the keys of its new edge rows.
+      setRange(range);
+    }
+  }, [didSessionChange, isFollowingLatestWindow, range, rows, sessionRange.range, setRange]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;

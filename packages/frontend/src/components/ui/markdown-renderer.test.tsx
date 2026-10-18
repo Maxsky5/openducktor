@@ -1,3 +1,4 @@
+import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
@@ -14,7 +15,7 @@ import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedMarkdownWrapper });
 
 const renderMarkdownLink = (href: string, label: string) => {
   return render(
@@ -761,6 +762,38 @@ describe("rich task description rendering", () => {
       renderSpy.mockRestore();
     }
   }, 4000);
+
+  // The Mermaid and math renderers load lazily, which can take more than 1 s in a full test run.
+  test.each([
+    ["Markdown", "Before"],
+    ["Markdown with math", "Before $x$"],
+  ])(
+    "keeps a Mermaid diagram mounted when the text around it in %s changes",
+    async (_, intro) => {
+      const renderModule = await import("./markdown-mermaid-render");
+      const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+      );
+      const diagram = "```mermaid\ngraph TD\n  A --> B\n```";
+
+      try {
+        const view = render(<MarkdownRenderer markdown={`${intro}\n\n${diagram}\n\nAfter`} />);
+        await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
+          timeout: 3000,
+        });
+        const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+
+        view.rerender(<MarkdownRenderer markdown={`${intro}\n\n${diagram}\n\nAfter more text`} />);
+
+        expect(view.getByText("After more text")).toBeTruthy();
+        expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+        expect(renderSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        renderSpy.mockRestore();
+      }
+    },
+    4000,
+  );
 
   test("commits math and Mermaid through the same prepared render", async () => {
     const view = render(

@@ -249,13 +249,13 @@ describe("agent-orchestrator session event batching rules", () => {
       },
     ] satisfies QueuedSessionEvent[]);
 
-    now += 100;
+    now += 40;
     const second = prepareQueuedEvents(batcher, [
       {
         type: "assistant_message",
         externalSessionId: "session-1",
         messageId: "assistant-1",
-        timestamp: "2026-02-22T08:00:01.100Z",
+        timestamp: "2026-02-22T08:00:01.040Z",
         message: "Final answer 2",
       },
     ] satisfies QueuedSessionEvent[]);
@@ -286,7 +286,7 @@ describe("agent-orchestrator session event batching rules", () => {
       },
     ] satisfies QueuedSessionEvent[]);
 
-    now += 100;
+    now += 40;
     const second = prepareQueuedEvents(batcher, [
       {
         type: "assistant_part",
@@ -305,7 +305,7 @@ describe("agent-orchestrator session event batching rules", () => {
     expect(first.readyEvents).toHaveLength(1);
     expect(second.readyEvents).toHaveLength(0);
     expect(second.deferredEvents).toHaveLength(1);
-    expect(second.nextDelayMs).toBe(400);
+    expect(second.nextDelayMs).toBe(60);
   });
 
   test("dedupes tool part updates in the central reducer", async () => {
