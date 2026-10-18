@@ -21,7 +21,7 @@ import {
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
 import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const comparePrimaryTaskSession = (

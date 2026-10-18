@@ -11,16 +11,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
-import { invalidateRepoBranchesQuery } from "@/state/queries/git";
-import { invalidateTerminalList } from "@/state/queries/terminals";
-import { host } from "@/state/operations/host";
-import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { invalidateRepoBranchesQuery } from "@openducktor/frontend-core/queries/git";
+import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
+import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   updateWorkspaceSessionQueries,
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
-} from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function WorkspaceSessionHistoryDialog({
   workspaceId,
@@ -33,6 +33,7 @@ export function WorkspaceSessionHistoryDialog({
   onClose: () => void;
   onCloseAutoFocus?: (event: Event) => void;
 }) {
+  const host = useHostClient();
   const queryClient = useQueryClient();
   const archived = useQuery(workspaceSessionListQueryOptions(workspaceId, true));
   const [filter, setFilter] = useState("");

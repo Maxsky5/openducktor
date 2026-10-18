@@ -4,8 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { type PropsWithChildren, type ReactElement, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { QueryProvider } from "@/lib/query-provider";
-import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { pullRequestReviewQueryKeys } from "@openducktor/frontend-core/queries/pull-request-review";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
@@ -228,7 +228,7 @@ const renderCiPerformanceHarness = ({
   initialTabId: TaskExecutionPanelModel["activeTabId"];
 }) =>
   render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ThemeProvider defaultTheme="light">
         <SeedCiPerformanceContext context={createLoadedCiContext(comments)}>
           <CommandPaletteTestContext>

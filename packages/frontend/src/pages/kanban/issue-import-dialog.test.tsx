@@ -8,7 +8,6 @@ import {
   type RepositoryGitProviderContext,
   type SourceIssue,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   fireEvent,
@@ -20,9 +19,14 @@ import {
 } from "@testing-library/react";
 import { toast } from "sonner";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
-import { createQueryClient } from "@/lib/query-client";
-import { host } from "@/state/operations/shared/host";
-import { invalidateRepoIssueItemsQueries, issueItemsQueryKeys } from "@/state/queries/issue-items";
+import type { HostClient } from "@openducktor/host-client";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  invalidateRepoIssueItemsQueries,
+  issueItemsQueryKeys,
+} from "@openducktor/frontend-core/queries/issue-items";
 import { enableReactActEnvironment } from "../agents/agent-studio-test-utils";
 import { IssueImportDialog } from "./issue-import-dialog";
 import { useIssueSelectionState } from "./issue-import-dialog-state";
@@ -102,16 +106,12 @@ const replaceReviewLabel = (title: string, oldLabel: string, newLabel: string): 
   addReviewLabel(title, newLabel);
 };
 
-const originalList = host.issueItemsList;
-const originalGet = host.issueItemGet;
-const originalImport = host.issueItemsImport;
-const originalImageGet = host.issueImageGet;
+// Host commands for connections that the current test creates. Each test starts with none.
+let host: Partial<HostClient> = {};
+const connectHost = (): ClientConnection => createTestClientConnection({ client: host });
 
 afterEach(() => {
-  host.issueItemsList = originalList;
-  host.issueItemGet = originalGet;
-  host.issueItemsImport = originalImport;
-  host.issueImageGet = originalImageGet;
+  host = {};
 });
 
 describe("Issue import dialog", () => {
@@ -124,7 +124,7 @@ describe("Issue import dialog", () => {
     }));
     host.issueItemsList = list;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog
             open
@@ -141,7 +141,7 @@ describe("Issue import dialog", () => {
             }}
           />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     expect(await screen.findByRole("checkbox", { name: "Select Issue 1" })).toBeDefined();
@@ -178,7 +178,7 @@ describe("Issue import dialog", () => {
     const success = spyOn(toast, "success").mockImplementation(() => "toast-id");
     try {
       const view = render(
-        <QueryClientProvider client={createQueryClient()}>
+        <ClientConnectionProvider connection={connectHost()}>
           <SettingsModalProvider>
             <IssueImportDialog
               open
@@ -187,7 +187,7 @@ describe("Issue import dialog", () => {
               provider={provider}
             />
           </SettingsModalProvider>
-        </QueryClientProvider>,
+        </ClientConnectionProvider>,
       );
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
       fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 2" }));
@@ -215,10 +215,11 @@ describe("Issue import dialog", () => {
     host.issueItemsImport = importItems;
     const onOpenChange = mock((_open: boolean) => {});
     const success = spyOn(toast, "success").mockImplementation(() => "toast-id");
-    const queryClient = createQueryClient();
+    const connection = connectHost();
+    const queryClient = connection.queryClient;
     try {
       const view = render(
-        <QueryClientProvider client={queryClient}>
+        <ClientConnectionProvider connection={connection}>
           <SettingsModalProvider>
             <IssueImportDialog
               open
@@ -227,7 +228,7 @@ describe("Issue import dialog", () => {
               provider={provider}
             />
           </SettingsModalProvider>
-        </QueryClientProvider>,
+        </ClientConnectionProvider>,
       );
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
       fireEvent.click(screen.getByRole("checkbox", { name: "Select Issue 2" }));
@@ -262,11 +263,11 @@ describe("Issue import dialog", () => {
     }));
     host.issueImageGet = imageGet;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 132" }));
     fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
@@ -304,7 +305,7 @@ describe("Issue import dialog", () => {
       },
     };
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog
             open
@@ -313,7 +314,7 @@ describe("Issue import dialog", () => {
             provider={browseProvider}
           />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     expect(await screen.findByRole("checkbox", { name: "Select Issue 1" })).toBeDefined();
@@ -330,11 +331,11 @@ describe("Issue import dialog", () => {
       incompleteResults: false,
     });
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     const checkbox = await screen.findByRole("checkbox", { name: "Select Issue 1" });
@@ -352,11 +353,11 @@ describe("Issue import dialog", () => {
       incompleteResults: false,
     });
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     const linkedCheckbox = await screen.findByRole<HTMLButtonElement>("checkbox", {
@@ -389,11 +390,11 @@ describe("Issue import dialog", () => {
       incompleteResults: false,
     });
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -433,9 +434,9 @@ describe("Issue import dialog", () => {
         incompleteResults: false,
       }));
       host.issueItemsList = list;
-      const queryClient = createQueryClient();
+      const connection = connectHost();
       const renderDialog = (current: NonNullable<RepositoryGitProviderContext>) => (
-        <QueryClientProvider client={queryClient}>
+        <ClientConnectionProvider connection={connection}>
           <SettingsModalProvider>
             <IssueImportDialog
               key={JSON.stringify(current.config)}
@@ -445,7 +446,7 @@ describe("Issue import dialog", () => {
               provider={current}
             />
           </SettingsModalProvider>
-        </QueryClientProvider>
+        </ClientConnectionProvider>
       );
       const view = render(renderDialog(scenario.original));
       expect(await screen.findByRole("checkbox", { name: "Select Issue 1" })).toBeDefined();
@@ -470,11 +471,11 @@ describe("Issue import dialog", () => {
     }));
     host.issueItemsImport = importItems;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -509,11 +510,11 @@ describe("Issue import dialog", () => {
     host.issueItemsList = list;
     host.issueItemsImport = importItems;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -539,11 +540,11 @@ describe("Issue import dialog", () => {
     const importItems = mock(async (_input: IssueItemsImportInput) => ({ results: [] }));
     host.issueItemsImport = importItems;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -585,11 +586,11 @@ describe("Issue import dialog", () => {
         incompleteResults: false,
       });
       const view = render(
-        <QueryClientProvider client={createQueryClient()}>
+        <ClientConnectionProvider connection={connectHost()}>
           <SettingsModalProvider>
             <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
           </SettingsModalProvider>
-        </QueryClientProvider>,
+        </ClientConnectionProvider>,
       );
 
       fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -620,9 +621,9 @@ describe("Issue import dialog", () => {
       searchSupported: true,
       incompleteResults: false,
     });
-    const queryClient = createQueryClient();
+    const connection = connectHost();
     const renderDialog = (open: boolean) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <SettingsModalProvider>
           <IssueImportDialog
             open={open}
@@ -631,7 +632,7 @@ describe("Issue import dialog", () => {
             provider={provider}
           />
         </SettingsModalProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(renderDialog(true));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -666,11 +667,11 @@ describe("Issue import dialog", () => {
     );
     host.issueItemsImport = importItems;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -710,11 +711,11 @@ describe("Issue import dialog", () => {
         finishImport = resolve;
       });
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -736,11 +737,11 @@ describe("Issue import dialog", () => {
       incompleteResults: false,
     });
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -775,7 +776,7 @@ describe("Issue import dialog", () => {
     host.issueItemsImport = importItems;
 
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog
             open
@@ -784,7 +785,7 @@ describe("Issue import dialog", () => {
             provider={provider}
           />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -850,11 +851,11 @@ describe("Issue import dialog", () => {
     host.issueItemGet = get;
     host.issueItemsImport = importItems;
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -903,11 +904,11 @@ describe("Issue import dialog", () => {
       throw new Error("Issue 1 is closed. Remove it from the selection.");
     };
     const view = render(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={connectHost()}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Review Tasks" }));
@@ -932,13 +933,14 @@ describe("Issue import dialog", () => {
       };
     };
     host.issueItemsImport = mock(async () => ({ results: [] }));
-    const queryClient = createQueryClient();
+    const connection = connectHost();
+    const queryClient = connection.queryClient;
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <SettingsModalProvider>
           <IssueImportDialog open onOpenChange={() => {}} repoPath="/repo" provider={provider} />
         </SettingsModalProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Issue 1" }));
@@ -968,9 +970,10 @@ describe("Issue import dialog", () => {
       incompleteResults: false,
     }));
     host.issueItemsList = list;
-    const queryClient = createQueryClient();
+    const connection = connectHost();
+    const queryClient = connection.queryClient;
     const dialog = (open: boolean) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <SettingsModalProvider>
           <IssueImportDialog
             open={open}
@@ -979,7 +982,7 @@ describe("Issue import dialog", () => {
             provider={azureProvider}
           />
         </SettingsModalProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(dialog(true));
     await screen.findByTitle("Linked to Task TASK-1");

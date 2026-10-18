@@ -1,33 +1,26 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { useCallback, useMemo } from "react";
-import type { host } from "@/state/operations/host";
 import {
   repositoryGitProviderContextQueryOptions,
   repositoryGitProviderContextQueryOptionsOrSkip,
-} from "@/state/queries/git-provider-context";
-import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
+} from "@openducktor/frontend-core/queries/git-provider-context";
+import {
+  repoConfigQueryOptions,
+  toRepoSettingsInput,
+} from "@openducktor/frontend-core/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
-
-type RepoConfigQueryHost = Pick<
-  typeof host,
-  "workspaceGetGitProviderContext" | "workspaceGetRepoConfig"
->;
 
 const INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY = "__inactive_workspace__";
 
 export function useAgentStudioRepoSettings(args: {
   activeWorkspaceId: string | null;
   activeRepoPath: string | null;
-  hostClient?: RepoConfigQueryHost;
 }) {
-  const { activeRepoPath, activeWorkspaceId, hostClient } = args;
+  const { activeRepoPath, activeWorkspaceId } = args;
   const queryClient = useQueryClient();
   const repoConfigQuery = useQuery({
-    ...repoConfigQueryOptions(
-      activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY,
-      hostClient,
-    ),
+    ...repoConfigQueryOptions(activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY),
     enabled: activeWorkspaceId !== null,
   });
   const repoConfig = repoConfigQuery.data;
@@ -35,13 +28,13 @@ export function useAgentStudioRepoSettings(args: {
     if (activeWorkspaceId === null)
       throw new Error("Select a workspace before loading repository settings.");
     const config = await queryClient.fetchQuery({
-      ...repoConfigQueryOptions(activeWorkspaceId, hostClient),
+      ...repoConfigQueryOptions(activeWorkspaceId),
       staleTime: 0,
     });
     return toRepoSettingsInput(config);
-  }, [activeWorkspaceId, hostClient, queryClient]);
+  }, [activeWorkspaceId, queryClient]);
   const providerContextQuery = useQuery(
-    repositoryGitProviderContextQueryOptionsOrSkip(activeRepoPath, hostClient),
+    repositoryGitProviderContextQueryOptionsOrSkip(activeRepoPath),
   );
   const repoSettings = useMemo(
     () => (activeWorkspaceId !== null && repoConfig ? toRepoSettingsInput(repoConfig) : null),
@@ -56,10 +49,10 @@ export function useAgentStudioRepoSettings(args: {
       return Promise.reject(new Error("Select a repository before loading Git provider context."));
     }
     return queryClient.fetchQuery({
-      ...repositoryGitProviderContextQueryOptions(activeRepoPath, hostClient),
+      ...repositoryGitProviderContextQueryOptions(activeRepoPath),
       staleTime: 0,
     });
-  }, [activeRepoPath, hostClient, queryClient]);
+  }, [activeRepoPath, queryClient]);
   const retryGitProviderContext = useCallback((): void => {
     void refetchGitProviderContext();
   }, [refetchGitProviderContext]);

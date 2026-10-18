@@ -26,10 +26,10 @@ import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspac
 import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
 import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { errorMessage } from "@/lib/errors";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
-import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
+import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,

@@ -10,19 +10,16 @@ import type { ReactElement } from "react";
 import { act } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   type AgentChatDraftSessionIdentity,
   toAgentChatDraftStorageKey,
   writeAgentChatDraftToStorage,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
-import {
-  resetAgentChatDraftStoreForTests,
-  setAgentChatDraftStorageForTests,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
-import { QueryProvider } from "@/lib/query-provider";
-import { hostClient } from "@/lib/host-client";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+} from "@openducktor/frontend-core/drafts/agent-chat-draft-storage";
+import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createGitProviderContextFixture,
   createSettingsSnapshotFixture,
@@ -156,69 +153,44 @@ const createDraftIdentity = (externalSessionId: string): AgentChatDraftSessionId
 });
 
 let restoreDependencySpies = new Array<() => void>();
+// Host commands for the connection of the next mounted harness.
+let hostClientFakes: Partial<HostClient> = {};
 
 const registerDependencySpies = (): void => {
-  const originalTaskApprovalContextGet = hostClient.taskApprovalContextGet;
-  const originalTaskDirectMerge = hostClient.taskDirectMerge;
-  const originalTaskDirectMergeComplete = hostClient.taskDirectMergeComplete;
-  const originalTaskPullRequestUpsert = hostClient.taskPullRequestUpsert;
-  const originalGitPushBranch = hostClient.gitPushBranch;
-  const originalGitAbortConflict = hostClient.gitAbortConflict;
-  const originalAgentSessionsList = hostClient.agentSessionsList;
-  const originalAgentSessionsListForTasks = hostClient.agentSessionsListForTasks;
-  const originalSpecGet = hostClient.specGet;
-  const originalPlanGet = hostClient.planGet;
-  const originalQaGetReport = hostClient.qaGetReport;
-  const originalWorkspaceGetRepoConfig = hostClient.workspaceGetRepoConfig;
-  const originalWorkspaceGetSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
-
-  hostClient.taskApprovalContextGet = taskApprovalContextGetMock;
-  hostClient.taskDirectMerge = taskDirectMergeMock;
-  hostClient.taskDirectMergeComplete = taskDirectMergeCompleteMock;
-  hostClient.taskPullRequestUpsert = taskPullRequestUpsertMock;
-  hostClient.gitPushBranch = gitPushBranchMock;
-  hostClient.gitAbortConflict = gitAbortConflictMock;
-  hostClient.agentSessionsList = agentSessionsListMock;
-  hostClient.agentSessionsListForTasks = agentSessionsListForTasksMock;
-  hostClient.specGet = async () => ({ markdown: "", updatedAt: null });
-  hostClient.planGet = async () => ({ markdown: "", updatedAt: null });
-  hostClient.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-  hostClient.workspaceGetRepoConfig = async () => ({
-    workspaceId: "workspace-repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
-    branchPrefix: "odt/",
-    defaultTargetBranch: { remote: "origin", branch: "main" },
-    git: {},
-    hooks: { postComplete: [] },
-    actions: { items: [], defaultActionId: null },
-    promptOverrides: {},
-    worktreeCopyPaths: [],
-    agentStudioState: { openTaskIds: [] },
-    agentDefaults: {},
-  });
-  hostClient.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+  hostClientFakes = {
+    taskApprovalContextGet: taskApprovalContextGetMock,
+    taskDirectMerge: taskDirectMergeMock,
+    taskDirectMergeComplete: taskDirectMergeCompleteMock,
+    taskPullRequestUpsert: taskPullRequestUpsertMock,
+    gitPushBranch: gitPushBranchMock,
+    gitAbortConflict: gitAbortConflictMock,
+    agentSessionsList: agentSessionsListMock,
+    agentSessionsListForTasks: agentSessionsListForTasksMock,
+    specGet: async () => ({ markdown: "", updatedAt: null }),
+    planGet: async () => ({ markdown: "", updatedAt: null }),
+    qaGetReport: async () => ({ markdown: "", updatedAt: null }),
+    workspaceGetRepoConfig: async () => ({
+      workspaceId: "workspace-repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      branchPrefix: "odt/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {},
+      hooks: { postComplete: [] },
+      actions: { items: [], defaultActionId: null },
+      promptOverrides: {},
+      worktreeCopyPaths: [],
+      agentStudioState: { openTaskIds: [] },
+      agentDefaults: {},
+    }),
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  };
 
   const toastLoadingSpy = spyOn(toast, "loading").mockImplementation(toastLoadingMock);
   const toastSuccessSpy = spyOn(toast, "success").mockImplementation(toastSuccessMock);
   const toastErrorSpy = spyOn(toast, "error").mockImplementation(toastErrorMock);
 
   restoreDependencySpies = [
-    () => {
-      hostClient.taskApprovalContextGet = originalTaskApprovalContextGet;
-      hostClient.taskDirectMerge = originalTaskDirectMerge;
-      hostClient.taskDirectMergeComplete = originalTaskDirectMergeComplete;
-      hostClient.taskPullRequestUpsert = originalTaskPullRequestUpsert;
-      hostClient.gitPushBranch = originalGitPushBranch;
-      hostClient.gitAbortConflict = originalGitAbortConflict;
-      hostClient.agentSessionsList = originalAgentSessionsList;
-      hostClient.agentSessionsListForTasks = originalAgentSessionsListForTasks;
-      hostClient.specGet = originalSpecGet;
-      hostClient.planGet = originalPlanGet;
-      hostClient.qaGetReport = originalQaGetReport;
-      hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    },
     () => toastLoadingSpy.mockRestore(),
     () => toastSuccessSpy.mockRestore(),
     () => toastErrorSpy.mockRestore(),
@@ -242,9 +214,16 @@ function createDeferred<TValue>() {
   };
 }
 
-const mountApprovalHarness = async (Harness: () => ReactElement | null) => {
+const mountApprovalHarness = async (
+  Harness: () => ReactElement | null,
+  options: { storage?: ClientStorage } = {},
+) => {
+  const connection = createTestClientConnection({
+    client: hostClientFakes,
+    storage: options.storage ?? createMemoryStorage(),
+  });
   const harness = createSharedHookHarness(Harness, undefined, {
-    wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+    wrapper: ({ children }) => <QueryProvider connection={connection}>{children}</QueryProvider>,
   });
   await harness.mount();
   return harness;
@@ -400,7 +379,6 @@ const latestToastAction = () =>
 
 describe("useTaskApprovalFlow", () => {
   beforeEach(() => {
-    resetAgentChatDraftStoreForTests();
     registerDependencySpies();
     latestHarnessValue = null;
     toastLoadingMock.mockClear();
@@ -1478,7 +1456,6 @@ describe("useTaskApprovalFlow", () => {
     );
 
     const storage = createMemoryStorage();
-    setAgentChatDraftStorageForTests(storage);
     const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "pending direct merge draft");
 
@@ -1498,7 +1475,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    const harness = await mountApprovalHarness(Harness);
+    const harness = await mountApprovalHarness(Harness, { storage });
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");
@@ -1559,7 +1536,6 @@ describe("useTaskApprovalFlow", () => {
   test("closes after direct merge without offering a push step for local-only target branches", async () => {
     const refreshTasksMock = mock(async () => {});
     const storage = createMemoryStorage();
-    setAgentChatDraftStorageForTests(storage);
     const draftIdentity = createDraftIdentity("builder-session");
     writeTestDraft(storage, draftIdentity, "direct merge draft");
     taskApprovalContextGetMock.mockResolvedValueOnce(
@@ -1585,7 +1561,7 @@ describe("useTaskApprovalFlow", () => {
       return null;
     };
 
-    const harness = await mountApprovalHarness(Harness);
+    const harness = await mountApprovalHarness(Harness, { storage });
 
     await act(async () => {
       latestHarnessValue?.openTaskApproval("TASK-1");

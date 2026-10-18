@@ -4,7 +4,7 @@ import {
   type NotificationOccurrence,
   type NotificationSettings,
 } from "@openducktor/contracts";
-import { createNotificationRuntime } from "../../frontend/src/features/notifications/notification-runtime";
+import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 import { createBrowserNotificationCoordinator } from "./browser-notification-coordinator";
 

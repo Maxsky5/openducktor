@@ -1,8 +1,6 @@
 import { useCallback } from "react";
-import {
-  type AddInlineCommentDraftInput,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+import { type AddInlineCommentDraftInput } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
 
 type OwnerScopedCommentActions = {
   addComment: (input: AddInlineCommentDraftInput) => void;

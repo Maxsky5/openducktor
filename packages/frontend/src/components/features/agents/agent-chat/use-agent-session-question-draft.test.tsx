@@ -1,7 +1,7 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { QUESTION_SUMMARY_TAB_ID, useQuestionDraft } from "./use-agent-session-question-draft";
 
 enableReactActEnvironment();

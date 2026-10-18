@@ -5,7 +5,7 @@ import {
   type AgentSlashCommand,
   BLOCKED_ON_INPUT_REASON,
 } from "@openducktor/core";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { toReusablePromptSlashCommand } from "./agent-chat-reusable-prompts";
 import {
   draftSteerBlockedReason,

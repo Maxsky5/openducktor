@@ -1,4 +1,4 @@
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 
 export type AgentChatDraftPersistence = {
   /** Equivalent adapter wrappers must share this key; different persistence targets must not. */

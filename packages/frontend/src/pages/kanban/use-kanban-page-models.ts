@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { TASK_SESSION_HISTORY_ERROR_TOAST_ID } from "@/features/task-workflow/use-task-details-historical-sessions";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useTasksState, useWorkspaceState } from "@/state";
-import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
+import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
-import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { showsHorizontalScrollbars } from "@/lib/horizontal-scrollbars";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { KanbanPageModels } from "./kanban-page-model-types";
 import { useKanbanBoardFilterModel } from "./use-kanban-board-filter-model";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
@@ -25,20 +25,11 @@ export const isKanbanForegroundLoading = (args: {
   hasActiveWorkspace: boolean;
   isForegroundLoadingTasks: boolean;
   isSettingsPending: boolean;
-  isScrollbarPlatformUnresolved: boolean;
   doneVisibleDays: number | undefined;
   isKanbanPending: boolean;
 }): boolean => {
-  if (
-    args.isForegroundLoadingTasks ||
-    !args.hasActiveWorkspace ||
-    args.isSettingsPending ||
-    args.isScrollbarPlatformUnresolved
-  ) {
-    return (
-      args.isForegroundLoadingTasks ||
-      (args.hasActiveWorkspace && (args.isSettingsPending || args.isScrollbarPlatformUnresolved))
-    );
+  if (args.isForegroundLoadingTasks || !args.hasActiveWorkspace || args.isSettingsPending) {
+    return args.isForegroundLoadingTasks || (args.hasActiveWorkspace && args.isSettingsPending);
   }
 
   return args.doneVisibleDays !== undefined && args.isKanbanPending;
@@ -61,7 +52,6 @@ export function useKanbanPageModels({
     tasks,
   } = useTasksState();
   const reportedSettingsErrorRef = useRef<string | null>(null);
-  const reportedPlatformErrorRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const settingsSnapshotQuery = useQuery(settingsSnapshotQueryOptions());
   const taskCardViewState = useKanbanTaskCardView();
@@ -87,31 +77,10 @@ export function useKanbanPageModels({
       description,
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
-  const canResolveHorizontalScrollbarVisibility =
-    workspaceRepoPath !== null &&
-    !settingsSnapshotQuery.isPending &&
-    !settingsSnapshotQuery.isError;
-  const horizontalScrollbarState = useHorizontalScrollbarVisibility({
-    enabled: canResolveHorizontalScrollbarVisibility,
-    visibility: horizontalScrollbarVisibility,
-  });
-  useEffect(() => {
-    const platformError = horizontalScrollbarState.platformError;
-    if (!platformError) {
-      reportedPlatformErrorRef.current = null;
-      return;
-    }
-
-    const description = errorMessage(platformError);
-    if (reportedPlatformErrorRef.current === description) {
-      return;
-    }
-
-    reportedPlatformErrorRef.current = description;
-    toast.error("Failed to resolve horizontal scrollbar default", {
-      description,
-    });
-  }, [horizontalScrollbarState.platformError]);
+  const showHorizontalScrollbars =
+    workspaceRepoPath !== null && !settingsSnapshotQuery.isPending && !settingsSnapshotQuery.isError
+      ? showsHorizontalScrollbars(horizontalScrollbarVisibility)
+      : null;
 
   const kanbanTasks =
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
@@ -152,7 +121,6 @@ export function useKanbanPageModels({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
     isSettingsPending: settingsSnapshotQuery.isPending,
-    isScrollbarPlatformUnresolved: horizontalScrollbarState.isResolvingPlatformDefault,
     doneVisibleDays,
     isKanbanPending: false,
   });
@@ -166,7 +134,7 @@ export function useKanbanPageModels({
     isSwitchingWorkspace,
     emptyColumnDisplay,
     taskCardView: taskCardViewState.taskCardView ?? DEFAULT_KANBAN_SETTINGS.taskCardView,
-    showHorizontalScrollbars: horizontalScrollbarState.showHorizontalScrollbars,
+    showHorizontalScrollbars,
     tasks: matchingTasks,
     hasLoadedTasks: kanbanTasks.length > 0,
     filter,

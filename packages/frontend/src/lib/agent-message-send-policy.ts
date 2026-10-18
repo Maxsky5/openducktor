@@ -1,9 +1,9 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import type { RuntimeReadinessSnapshot } from "./runtime-readiness";
-import { isAgentSessionBlockedOnInput } from "./agent-session-waiting-input";
-import { deriveLoadedAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
+import type { RuntimeReadinessSnapshot } from "@openducktor/frontend-core/lib/runtime-readiness";
+import { isAgentSessionBlockedOnInput } from "@openducktor/frontend-core/lib/agent-session-waiting-input";
+import { deriveLoadedAgentSessionTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 
 /** A chat whose runtime definition is missing cannot send or steer. */
 export const MISSING_RUNTIME_REASON =

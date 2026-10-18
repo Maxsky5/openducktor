@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   NOTIFICATION_KIND_DESCRIPTIONS,
   NOTIFICATION_KIND_LABELS,
-} from "@/features/notifications/catalogue";
+} from "@openducktor/frontend-core/notifications/catalogue";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { useNotificationTestControls } from "@/state/notifications/use-notification-test-controls";
 import { NotificationPermissionNotice } from "./notification-permission-notice";

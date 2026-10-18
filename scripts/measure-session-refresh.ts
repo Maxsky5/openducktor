@@ -20,8 +20,8 @@ import type {
   TaskAgentSessions,
 } from "@openducktor/contracts";
 import { createSqliteTaskStoreHarness } from "../packages/host/src/adapters/sqlite/sqlite-task-store-test-support";
-import * as after from "../packages/frontend/src/state/queries/agent-session-view-sync";
-import * as afterQueries from "../packages/frontend/src/state/queries/agent-sessions";
+import * as after from "../packages/frontend-core/src/queries/agent-session-view-sync";
+import * as afterQueries from "../packages/frontend-core/src/queries/agent-sessions";
 
 const root = path.resolve(import.meta.dir, "..");
 const baselineCommit = process.env.SESSION_REFRESH_BASELINE;

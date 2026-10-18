@@ -9,4 +9,4 @@ export {
   type SessionLaunchAction,
   type SessionLaunchActionId,
   sessionLaunchActionIds,
-} from "@/lib/session-launch-actions";
+} from "@openducktor/frontend-core/lib/session-launch-actions";

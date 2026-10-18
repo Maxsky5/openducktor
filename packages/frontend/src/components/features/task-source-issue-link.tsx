@@ -3,7 +3,7 @@ import { ExternalLink, CircleDot } from "lucide-react";
 import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { badgeVariants } from "@/components/ui/badge-variants";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 

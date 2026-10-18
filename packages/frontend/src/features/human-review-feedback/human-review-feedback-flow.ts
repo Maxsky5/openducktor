@@ -4,9 +4,9 @@ import type {
   SessionStartExistingSessionOption,
 } from "@/features/session-start";
 import { buildReusableSessionOptions } from "@/features/session-start";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
 export const HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE = "Feedback message is required.";

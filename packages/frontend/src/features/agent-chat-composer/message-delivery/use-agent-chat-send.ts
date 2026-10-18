@@ -9,7 +9,7 @@ import type {
   AgentChatComposerModel,
   AgentChatMessageQueueModel,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { steersRunningTurn } from "@/components/features/agents/agent-chat/agent-chat-steering";
 import {
@@ -19,17 +19,19 @@ import {
 import { MISSING_RUNTIME_REASON } from "@/lib/agent-message-send-policy";
 import type { AsyncActivityTracker } from "@/lib/use-async-activity-tracker";
 import { useAgentMessageQueue, useAgentOperations } from "@/state/app-state-provider";
-import { useHostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type {
   AgentChatMessage,
   AgentMessageSendOptions,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   type AgentChatSendDraftInput,
+  createAgentChatSendAttachmentStager,
   resolveAgentChatSendDraftParts,
 } from "./agent-chat-send-draft";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 /** Where a send goes: to an existing session, or into the launch of a new session. */
 export type AgentChatResolvedTarget =
@@ -109,6 +111,11 @@ export function useAgentChatSend({
   sendAgentMessage,
   target,
 }: UseAgentChatSendArgs): AgentChatSend {
+  const { stageAttachment } = useClientConnection();
+  const stageSendAttachment = useMemo(
+    () => createAgentChatSendAttachmentStager(stageAttachment),
+    [stageAttachment],
+  );
   const { manageAgentMessageQueue } = useAgentOperations();
   const { statusByKind } = useHostRuntimeStatusContext();
   const sessionRef = useMemo(
@@ -152,6 +159,7 @@ export function useAgentChatSend({
           reusablePrompts,
           modelDescriptor: findModelEntry(modelCatalog, entry.model ?? null),
           supportsAttachments,
+          stageAttachment: stageSendAttachment,
         });
         if (!parts) {
           throw new Error("The edited message is empty or has content that this chat cannot send.");
@@ -165,6 +173,7 @@ export function useAgentChatSend({
     queue,
     reusablePrompts,
     identity,
+    stageSendAttachment,
     supportsAttachments,
   ]);
 
@@ -189,6 +198,7 @@ export function useAgentChatSend({
             ? runningTurnModel
             : selectedModelDescriptor,
           supportsAttachments,
+          stageAttachment: stageSendAttachment,
         });
         if (!parts || !isCurrentRecipient()) return false;
         const resolved = await target.resolve(parts);
@@ -223,6 +233,7 @@ export function useAgentChatSend({
       runningTurnModel,
       selectedModelDescriptor,
       sendAgentMessage,
+      stageSendAttachment,
       supportsAttachments,
       target,
     ],

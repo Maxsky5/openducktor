@@ -30,10 +30,13 @@ import {
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
-import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  matchesAgentSessionIdentity,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";

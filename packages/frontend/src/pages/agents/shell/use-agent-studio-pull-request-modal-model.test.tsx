@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioPullRequestModalModel } from "./use-agent-studio-pull-request-modal-model";
 

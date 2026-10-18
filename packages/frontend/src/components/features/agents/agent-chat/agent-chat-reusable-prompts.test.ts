@@ -3,7 +3,7 @@ import {
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   resolveReusablePromptDraftToUserMessageParts,
   toReusablePromptSlashCommand,

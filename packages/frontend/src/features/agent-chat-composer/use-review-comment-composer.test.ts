@@ -3,12 +3,12 @@ import {
   createEmptyComposerDraft,
   createSlashCommandSegment,
   draftToSerializedText,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type {
   InlineCommentDraft,
   InlineCommentDraftSnapshot,
-} from "@/state/use-inline-comment-draft-store";
-import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
+} from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import { type ReviewCommentStore, sendReviewComments } from "./use-review-comment-composer";
 
 const OWNER = toInlineCommentDraftStorageKey({ workspaceId: "workspace-1", taskId: "task-1" });

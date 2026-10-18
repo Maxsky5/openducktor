@@ -1,4 +1,6 @@
 import type { TerminalSummary } from "@openducktor/contracts";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostClient } from "@openducktor/host-client";
 import { render } from "@testing-library/react";
 import { type ReactNode, useLayoutEffect, useMemo } from "react";
 import {
@@ -8,7 +10,7 @@ import {
   useSessionPanels,
 } from "@/features/session-panels";
 import type { TerminalSessionsModel, TerminalTab } from "@/features/terminals";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useAgentStudioTerminals } from "./use-agent-studio-terminals";
 
@@ -28,7 +30,17 @@ export const requireTab = (tab: TerminalTab | undefined): TerminalTab => {
   return tab;
 };
 
-export type TerminalTestDependencies = NonNullable<Parameters<typeof useAgentStudioTerminals>[1]>;
+type AgentStudioTerminalDependencies = NonNullable<Parameters<typeof useAgentStudioTerminals>[1]>;
+
+/**
+ * The fake host of a terminal test. The harness gives the host reads to the test connection, and
+ * the terminal commands and the terminal bridge to the hook.
+ */
+export type TerminalTestDependencies = {
+  hostClient: AgentStudioTerminalDependencies["hostClient"] &
+    Pick<HostClient, "systemGetPlatform" | "taskWorktreeGet" | "terminalList">;
+  terminalBridge: AgentStudioTerminalDependencies["terminalBridge"];
+};
 
 export const createTerminalTestDependencies = (): TerminalTestDependencies => {
   const unavailable = createUnavailableShellBridge();
@@ -73,6 +85,14 @@ export function renderTaskTerminalPanels(
   dependencies: TerminalTestDependencies,
   initial: Partial<HarnessProps> = {},
 ) {
+  const { systemGetPlatform, taskWorktreeGet, terminalList, ...commands } = dependencies.hostClient;
+  const connection = createTestClientConnection({
+    client: { systemGetPlatform, taskWorktreeGet, terminalList },
+  });
+  const hookDependencies: AgentStudioTerminalDependencies = {
+    hostClient: commands,
+    terminalBridge: dependencies.terminalBridge,
+  };
   let latest: TaskTerminalPanels | null = null;
   let props: HarnessProps = {
     workspaceId: `workspace-${globalThis.crypto.randomUUID()}`,
@@ -84,7 +104,7 @@ export function renderTaskTerminalPanels(
   function Harness({ workspaceId, taskId, taskVersion, mountedTaskIds, children }: HarnessProps) {
     const terminals = useAgentStudioTerminals(
       { workspaceId, repoPath: "/repo", taskId, taskVersion, mountedTaskIds },
-      dependencies,
+      hookDependencies,
     );
     const owner = useMemo(
       () => ({ kind: "task" as const, workspaceId, taskId }),
@@ -107,7 +127,7 @@ export function renderTaskTerminalPanels(
     return children ? <>{children(latest)}</> : null;
   }
   const element = () => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <Harness {...props} />
     </QueryProvider>
   );

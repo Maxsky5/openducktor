@@ -9,7 +9,7 @@ import {
   skippedLocalChangesQueryOptions,
   skippedWorktreeStatusQueryOptions,
   worktreeStatusQueryOptions,
-} from "@/state/queries/git";
+} from "@openducktor/frontend-core/queries/git";
 import type { DiffScope, DiffScopeState } from "../contracts";
 import { toLocalScopeSnapshot, toScopeSnapshot } from "../model/normalization";
 import { createEmptyScopeState, toFailedScopeState } from "../model/scope-state";

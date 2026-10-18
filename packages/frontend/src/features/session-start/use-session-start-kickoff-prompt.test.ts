@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useSessionStartKickoffPrompt } from "./use-session-start-kickoff-prompt";
 
 type PromptRequest = Parameters<typeof useSessionStartKickoffPrompt>[0];

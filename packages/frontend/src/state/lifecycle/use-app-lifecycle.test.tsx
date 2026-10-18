@@ -4,16 +4,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import { type PropsWithChildren, StrictMode, useMemo } from "react";
 import { toast } from "sonner";
-import { QueryProvider } from "@/lib/query-provider";
-import { type RepoTaskData, taskQueryKeys } from "@/state/queries/tasks";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { type RepoTaskData, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import {
   createTaskViewSync,
   type TaskSnapshotResult,
   type TaskViewSync,
-} from "@/state/queries/task-view-sync";
-import { boardEvent, eventCursor } from "@/state/queries/task-view-sync.test-support";
-import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+} from "@openducktor/frontend-core/queries/task-view-sync";
+import {
+  boardEvent,
+  eventCursor,
+} from "@openducktor/frontend-core/queries/task-view-sync.test-support";
+import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -69,7 +72,7 @@ describe("useAppLifecycle task stream", () => {
       (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
       initialArgs,
       {
-        wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+        wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
       },
     );
     try {
@@ -106,7 +109,7 @@ describe("useAppLifecycle task stream", () => {
       (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
       initialArgs,
       {
-        wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+        wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
       },
     );
 
@@ -148,7 +151,7 @@ describe("useAppLifecycle task stream", () => {
       (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
       initialArgs,
       {
-        wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+        wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
       },
     );
 
@@ -206,7 +209,7 @@ describe("useAppLifecycle task stream", () => {
       (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
       initialArgs,
       {
-        wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+        wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
       },
     );
 
@@ -248,7 +251,7 @@ describe("useAppLifecycle task stream", () => {
       taskStreamControllerFactory: factory,
     };
     const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
-      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
     });
 
     try {
@@ -342,7 +345,7 @@ describe("useAppLifecycle task stream", () => {
       taskStreamControllerFactory: factory,
     };
     const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
-      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
     });
 
     try {
@@ -376,7 +379,7 @@ describe("useAppLifecycle task stream", () => {
       taskStreamControllerFactory: factory,
     };
     const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
-      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
     });
 
     try {
@@ -404,7 +407,7 @@ describe("useAppLifecycle task stream", () => {
       return null;
     };
     const harness = createHookHarness(Harness, undefined, {
-      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
     });
 
     await harness.mount();
@@ -437,7 +440,7 @@ describe("useAppLifecycle task stream", () => {
       return null;
     };
     const harness = createHookHarness(Harness, undefined, {
-      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
     });
 
     try {
@@ -473,7 +476,7 @@ describe("useAppLifecycle task stream", () => {
     const harness = createHookHarness(
       (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
       initialArgs,
-      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+      { wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider> },
     );
 
     try {
@@ -512,7 +515,7 @@ describe("useAppLifecycle task stream", () => {
       taskStreamControllerFactory: factory,
     };
     const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
-      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+      wrapper: ({ children }) => <QueryProvider>{children}</QueryProvider>,
     });
 
     try {
@@ -583,7 +586,7 @@ describe("useAppLifecycle task stream", () => {
     const harness = createHookHarness(Harness, undefined, {
       wrapper: ({ children }) => (
         <StrictMode>
-          <QueryProvider useIsolatedClient>{children}</QueryProvider>
+          <QueryProvider>{children}</QueryProvider>
         </StrictMode>
       ),
     });

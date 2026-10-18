@@ -1,15 +1,19 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentModelFavorite, SettingsSnapshot } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import { host } from "@/state/operations/shared/host";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { HostClient } from "@openducktor/host-client";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useAgentModelFavorites } from "./use-agent-model-favorites";
 
-const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-  <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
-);
+const createHostWrapper = (client: Partial<HostClient>) => {
+  const connection = createTestClientConnection({ client });
+  return ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider connection={connection}>{children}</QueryProvider>
+  );
+};
 
 const favorite: AgentModelFavorite = {
   runtimeKind: "opencode",
@@ -36,8 +40,7 @@ describe("useAgentModelFavorites", () => {
       { ...favorite, modelId: "gpt-latest" },
       { ...favorite, modelId: "gpt-default" },
     ];
-    const original = host.workspaceGetSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = mock(async () =>
+    const workspaceGetSettingsSnapshot = mock(async () =>
       createSettingsSnapshotFixture({ agentModelFavorites: [...savedAliases, concurrentFavorite] }),
     );
     const saveAgentModelFavorites = mock(async (favorites: AgentModelFavorite[]) =>
@@ -46,7 +49,7 @@ describe("useAgentModelFavorites", () => {
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites },
-      { wrapper },
+      { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
     try {
       await harness.mount();
@@ -58,18 +61,18 @@ describe("useAgentModelFavorites", () => {
       expect(saveAgentModelFavorites).toHaveBeenCalledWith([concurrentFavorite]);
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   });
 
   test("keeps its result stable between changes and updates it after saving", async () => {
-    const original = host.workspaceGetSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
+    const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());
     const args = {
       saveAgentModelFavorites: async (favorites: AgentModelFavorite[]) =>
         createSettingsSnapshotFixture({ agentModelFavorites: favorites }),
     };
-    const harness = createHookHarness(useAgentModelFavorites, args, { wrapper });
+    const harness = createHookHarness(useAgentModelFavorites, args, {
+      wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }),
+    });
     try {
       await harness.mount();
       await harness.waitFor((state) => state.favorites !== null, 2000);
@@ -88,7 +91,6 @@ describe("useAgentModelFavorites", () => {
       expect(harness.getLatest()).toBe(saved);
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   }, 5000);
 
@@ -98,8 +100,7 @@ describe("useAgentModelFavorites", () => {
       agentModelFavorites: [favorite],
     });
     const firstWrite = createDeferred<SettingsSnapshot>();
-    const original = host.workspaceGetSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
+    const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     let saveAttempt = 0;
     const saveAgentModelFavorites = mock(
       async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
@@ -113,7 +114,7 @@ describe("useAgentModelFavorites", () => {
     const harness = createHookHarness(
       useTwoAgentModelFavorites,
       { saveAgentModelFavorites },
-      { wrapper },
+      { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
 
     try {
@@ -143,19 +144,17 @@ describe("useAgentModelFavorites", () => {
       expect(harness.getLatest().second.favorites).toEqual([concurrentFavorite]);
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   });
 
   test("does not turn a settings read failure into an empty favorites list", async () => {
-    const original = host.workspaceGetSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = mock(async () => {
+    const workspaceGetSettingsSnapshot = mock(async () => {
       throw new Error("Settings unavailable");
     });
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites: mock(async () => createSettingsSnapshotFixture()) },
-      { wrapper },
+      { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
 
     try {
@@ -170,15 +169,13 @@ describe("useAgentModelFavorites", () => {
       );
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   });
 
   test("blocks favorite writes while a cached settings refetch has failed", async () => {
     const initialSnapshot = createSettingsSnapshotFixture({ agentModelFavorites: [favorite] });
-    const original = host.workspaceGetSettingsSnapshot;
     let readShouldFail = false;
-    host.workspaceGetSettingsSnapshot = mock(async () => {
+    const workspaceGetSettingsSnapshot = mock(async () => {
       if (readShouldFail) {
         throw new Error("Settings refetch failed");
       }
@@ -188,7 +185,7 @@ describe("useAgentModelFavorites", () => {
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites },
-      { wrapper },
+      { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
 
     try {
@@ -215,15 +212,13 @@ describe("useAgentModelFavorites", () => {
       await harness.waitFor(() => saveAgentModelFavorites.mock.calls.length === 1, 2000);
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   });
 
   test("keeps persisted favorites after a failed write and retries the same change", async () => {
     const initialSnapshot = createSettingsSnapshotFixture();
     const savedSnapshot = createSettingsSnapshotFixture({ agentModelFavorites: [favorite] });
-    const original = host.workspaceGetSettingsSnapshot;
-    host.workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
+    const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     let attempts = 0;
     const saveAgentModelFavorites = mock(
       async (favorites: AgentModelFavorite[]): Promise<SettingsSnapshot> => {
@@ -238,7 +233,7 @@ describe("useAgentModelFavorites", () => {
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites },
-      { wrapper },
+      { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
 
     try {
@@ -255,7 +250,6 @@ describe("useAgentModelFavorites", () => {
       expect(saveAgentModelFavorites).toHaveBeenCalledTimes(2);
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   });
 
@@ -267,9 +261,8 @@ describe("useAgentModelFavorites", () => {
     const savedSnapshot = createSettingsSnapshotFixture({
       agentModelFavorites: [concurrentFavorite, favorite],
     });
-    const original = host.workspaceGetSettingsSnapshot;
     let settingsRead: "initial" | "failed" | "revalidated" = "initial";
-    host.workspaceGetSettingsSnapshot = mock(async () => {
+    const workspaceGetSettingsSnapshot = mock(async () => {
       if (settingsRead === "failed") {
         throw new Error("Settings refetch failed");
       }
@@ -289,7 +282,7 @@ describe("useAgentModelFavorites", () => {
     const harness = createHookHarness(
       useAgentModelFavorites,
       { saveAgentModelFavorites },
-      { wrapper },
+      { wrapper: createHostWrapper({ workspaceGetSettingsSnapshot }) },
     );
 
     try {
@@ -315,7 +308,6 @@ describe("useAgentModelFavorites", () => {
       expect(saveAgentModelFavorites).toHaveBeenCalledTimes(2);
     } finally {
       await harness.unmount();
-      host.workspaceGetSettingsSnapshot = original;
     }
   });
 });

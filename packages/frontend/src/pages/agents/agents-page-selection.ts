@@ -6,18 +6,24 @@ export {
 
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
+import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
   agentSessionIdentityKey,
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
-} from "@/lib/agent-session-identity";
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import {
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { isWorkflowAgentSession } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/workflow-session";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export { toRightPanelStorageKey } from "./query-sync/agent-studio-navigation";

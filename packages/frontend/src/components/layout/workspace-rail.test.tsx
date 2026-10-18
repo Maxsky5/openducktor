@@ -3,7 +3,7 @@ import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
+import type { WorkspaceActivityState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import { createWorkspaceActivityObserverStub } from "@/test-utils/shared-test-fixtures";

@@ -1,13 +1,13 @@
 import type { GitTargetBranch, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useWorkspaceBranchState } from "@/state/app-state-provider";
-import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
-import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
-import { useWorkspaceComparisonChoice } from "@/state/workspace-comparison-choices";
+import { workspaceSessionWorkingDirectory } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
+import { invalidateGitWorkingDirectoryQueries } from "@openducktor/frontend-core/queries/git";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { useWorkspaceComparisonChoice } from "@openducktor/frontend-core/queries/workspace-comparison-choices";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 

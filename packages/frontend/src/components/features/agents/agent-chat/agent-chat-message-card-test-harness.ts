@@ -1,4 +1,4 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { type ComponentProps, createElement } from "react";
 import { renderToReadableStream } from "react-dom/server";
@@ -74,7 +74,7 @@ export const createMessageCardElement = ({
     : card;
 
   return createElement(
-    IsolatedQueryWrapper,
+    QueryProvider,
     null,
     createElement(AgentChatSettingsProvider, { value: chatSettings }, cardWithTranscriptContext),
   );

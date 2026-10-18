@@ -29,7 +29,10 @@ Bun can interleave test files in one process. A file-wide module mock or process
 - Use an injected fake when a test only checks one dependency input.
 - Do not mutate `host`, a shared query client, an exported adapter, or another module singleton when a local seam can replace it.
 - Restore an unavoidable singleton mutation in `finally` or `afterEach`.
-- Give each TanStack Query test its own query client through `QueryProvider` with `useIsolatedClient`.
+- Give each TanStack Query test its own query client through `QueryProvider` from `@/test-utils/query-provider`, which creates a test client connection.
+- Supply host fakes with `createTestClientConnection({ client: { ... } })` from `@openducktor/frontend-core/test-support/test-client-connection`. Do not mutate a shared host client.
+- Pass `scheduleTask: () => () => {}` to `createTestClientConnection` to stop automatic draft writes. The test then calls `flush()` itself.
+- Frontend stores that keep host state read `ClientConnection` storage. Seed or check that state through `createTestClientConnection({ storage })`.
 - Provide the smallest required context providers for hooks and components.
 - Give each fixture new nested objects and arrays.
 
@@ -41,6 +44,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 
 - The root `bun run test` and CI run workspace suites in sequence.
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
+- `packages/frontend-core` runs with `bun test --parallel`, so each file has its own global. Its tests run without DOM globals. A test file that renders React or reads browser APIs imports `test-support/dom-environment` first. Keep pure tests without it, so they prove that the package runs without a DOM.
 - The host suite uses two workers to limit process load on Windows CI.
 - The SQLite task-store test helper uses disposable files with WAL and foreign keys. It disables synchronous disk flushes before running production migrations. Tests that check production connection setup use `openSqliteTaskStoreConnection` directly.
 - `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.

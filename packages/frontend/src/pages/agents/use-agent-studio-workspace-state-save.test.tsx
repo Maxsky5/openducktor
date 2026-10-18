@@ -4,11 +4,9 @@ import type {
   WorkspaceAgentStudioState,
   WorkspaceAgentStudioStateAction,
 } from "@openducktor/contracts";
-import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { createQueryClient } from "@/lib/query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useSessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import {
   createHookHarness as createSharedHookHarness,
   createDeferred,
@@ -53,11 +51,12 @@ const asApplyHost = (
   },
 });
 
-const wrapper = ({ children }: PropsWithChildren): ReactElement =>
-  createElement(QueryProvider, { useIsolatedClient: true }, children);
+type ApplyHost = ReturnType<typeof asApplyHost>;
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioWorkspaceStateSave, initialProps, { wrapper });
+const createHookHarness = (initialProps: HookArgs, hostClient: ApplyHost) =>
+  createSharedHookHarness(useAgentStudioWorkspaceStateSave, initialProps, {
+    connection: createTestClientConnection({ client: hostClient }),
+  });
 
 const useTaskNavigationPersistence = (props: HookArgs) => {
   const persistence = useAgentStudioWorkspaceStateSave(props);
@@ -74,13 +73,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
   test("does not rewrite the loaded snapshot", async () => {
     const state = { openTaskIds: ["task-1"] };
     const workspaceReplaceAgentStudioState = mock(async () => createRepoConfig(state));
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState: state,
-      state,
-      enabled: true,
-      hostClient: asApplyHost(workspaceReplaceAgentStudioState),
-    });
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState: state,
+        state,
+        enabled: true,
+      },
+      asApplyHost(workspaceReplaceAgentStudioState),
+    );
 
     await harness.mount();
     await Promise.resolve();
@@ -98,13 +99,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       async (_workspaceId: string, state: WorkspaceAgentStudioState) => createRepoConfig(state),
     );
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState,
-      state: loadedState,
-      enabled: true,
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState,
+        state: loadedState,
+        enabled: true,
+      },
       hostClient,
-    });
+    );
 
     await harness.mount();
     await harness.update({
@@ -112,7 +115,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState,
       state: nextState,
       enabled: true,
-      hostClient,
     });
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
 
@@ -133,13 +135,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       },
     );
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState,
-      state: pendingState,
-      enabled: true,
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState,
+        state: pendingState,
+        enabled: true,
+      },
       hostClient,
-    });
+    );
 
     await harness.mount();
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
@@ -148,7 +152,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState,
       state: loadedState,
       enabled: true,
-      hostClient,
     });
     await harness.run(async () => {
       pendingSave.resolve(createRepoConfig(pendingState));
@@ -170,8 +173,10 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       async (_workspaceId: string, state: WorkspaceAgentStudioState) =>
         state.openTaskIds.at(-1) === "task-2" ? pendingSave.promise : nextSave.promise,
     );
-    const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection({
+      client: asApplyHost(workspaceReplaceAgentStudioState),
+    });
+    const queryClient = connection.queryClient;
     const queryKey = workspaceQueryKeys.repoConfig("repo-a");
     queryClient.setQueryData(queryKey, createRepoConfig(loadedState));
     const harness = createSharedHookHarness(
@@ -181,9 +186,8 @@ describe("useAgentStudioWorkspaceStateSave", () => {
         loadedState,
         state: pendingState,
         enabled: true,
-        hostClient,
       },
-      { queryClient },
+      { connection },
     );
 
     await harness.mount();
@@ -193,7 +197,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState,
       state: nextState,
       enabled: true,
-      hostClient,
     });
     await harness.run(async () => {
       pendingSave.resolve(createRepoConfig(pendingState));
@@ -226,13 +229,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       return createRepoConfig(nextState);
     });
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState,
-      state: nextState,
-      enabled: true,
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState,
+        state: nextState,
+        enabled: true,
+      },
       hostClient,
-    });
+    );
 
     await harness.mount();
     await harness.waitFor((result) => result.saveError?.message === "write failed");
@@ -259,13 +264,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       return nextSave.promise;
     });
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState,
-      state: failedState,
-      enabled: true,
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState,
+        state: failedState,
+        enabled: true,
+      },
       hostClient,
-    });
+    );
 
     await harness.mount();
     await harness.waitFor((result) => result.saveError?.message === "obsolete write failed");
@@ -274,7 +281,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState,
       state: nextState,
       enabled: true,
-      hostClient,
     });
 
     expect(harness.getLatest().saveError).toBeNull();
@@ -300,13 +306,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       },
     );
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState: workspaceAState,
-      state: workspaceANextState,
-      enabled: true,
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState: workspaceAState,
+        state: workspaceANextState,
+        enabled: true,
+      },
       hostClient,
-    });
+    );
 
     await harness.mount();
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
@@ -315,7 +323,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState: workspaceBState,
       state: workspaceBState,
       enabled: true,
-      hostClient,
     });
     await harness.run(async () => {
       workspaceASave.resolve(createRepoConfig(workspaceANextState));
@@ -326,7 +333,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState: workspaceBState,
       state: workspaceBState,
       enabled: true,
-      hostClient,
     });
 
     expect(workspaceReplaceAgentStudioState).toHaveBeenCalledTimes(1);
@@ -345,13 +351,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       return writeCount === 1 ? workspaceASave.promise : createRepoConfig(workspaceANextState);
     });
     const hostClient = asApplyHost(workspaceReplaceAgentStudioState);
-    const harness = createHookHarness({
-      workspaceId: "repo-a",
-      loadedState: workspaceAState,
-      state: workspaceANextState,
-      enabled: true,
+    const harness = createHookHarness(
+      {
+        workspaceId: "repo-a",
+        loadedState: workspaceAState,
+        state: workspaceANextState,
+        enabled: true,
+      },
       hostClient,
-    });
+    );
 
     await harness.mount();
     await harness.waitFor(() => workspaceReplaceAgentStudioState.mock.calls.length === 1);
@@ -360,7 +368,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState: workspaceBState,
       state: workspaceBState,
       enabled: true,
-      hostClient,
     });
     await harness.run(async () => {
       workspaceASave.reject(new Error("workspace A failed"));
@@ -374,7 +381,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
       loadedState: workspaceAState,
       state: workspaceANextState,
       enabled: true,
-      hostClient,
     });
 
     expect(harness.getLatest().saveError?.message).toBe("workspace A failed");
@@ -404,13 +410,15 @@ describe("useAgentStudioWorkspaceStateSave", () => {
         return { ...createRepoConfig(state), workspaceId: "repo-b" };
       });
       const hostClient = asApplyHost(write);
-      const harness = createHookHarness({
-        workspaceId: "repo-a",
-        loadedState: workspaceAState,
-        state: workspaceANextState,
-        enabled: true,
+      const harness = createHookHarness(
+        {
+          workspaceId: "repo-a",
+          loadedState: workspaceAState,
+          state: workspaceANextState,
+          enabled: true,
+        },
         hostClient,
-      });
+      );
       const failFirstSave = () =>
         harness.run(async () => {
           firstASave.reject(new Error("older A write failed"));
@@ -429,7 +437,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
           loadedState: workspaceBState,
           state: workspaceBNextState,
           enabled: true,
-          hostClient,
         });
         await harness.waitFor(() => writesB === 1);
         await harness.update({
@@ -437,7 +444,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
           loadedState: workspaceAState,
           state: workspaceANextState,
           enabled: true,
-          hostClient,
         });
         if (failureTime === "after returning") {
           await failFirstSave();
@@ -486,8 +492,8 @@ describe("useAgentStudioWorkspaceStateSave", () => {
         }
         return { ...createRepoConfig(state), workspaceId: "repo-b" };
       });
-      const hostClient = asApplyHost(write);
-      const queryClient = createQueryClient();
+      const connection = createTestClientConnection({ client: asApplyHost(write) });
+      const queryClient = connection.queryClient;
       const harness = createSharedHookHarness(
         useTaskNavigationPersistence,
         {
@@ -495,9 +501,8 @@ describe("useAgentStudioWorkspaceStateSave", () => {
           loadedState: workspaceAState,
           state: workspaceANextState,
           enabled: true,
-          hostClient,
         },
-        { queryClient },
+        { connection },
       );
 
       try {
@@ -517,7 +522,6 @@ describe("useAgentStudioWorkspaceStateSave", () => {
           loadedState: workspaceBState,
           state: workspaceBNextState,
           enabled: true,
-          hostClient,
         });
         await harness.waitFor(
           (result) => result.navigationPersistenceError?.message === "B write denied",

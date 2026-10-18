@@ -1,6 +1,6 @@
 import type { RepoConfig, TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { buildAgentStudioReadState } from "./agent-studio-workspace-state";
 
 export type AgentStudioWorkspaceStateLoadModel = {

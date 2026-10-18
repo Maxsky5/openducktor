@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { gitRefreshPriority } from "@/lib/git-refresh-priority";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import type { GitFileRefresh } from "./git-refresh-coordinator";
 
 /** The file refresh batch merges the Git jobs of one panel context. */

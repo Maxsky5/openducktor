@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RepoAction, TerminalSummary } from "@openducktor/contracts";
 import { act, fireEvent, renderHook } from "@testing-library/react";
-import { useCallback, useMemo, useState } from "react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import type { TerminalSessionsModel, TerminalTab } from "@/features/terminals";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { createTerminalSessionsFixture } from "@/test-utils/session-panel-fixtures";
@@ -11,34 +14,32 @@ import {
   type SessionPanelSelectionKey,
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
-import {
-  pruneSessionPanelLayouts,
-  sessionPanelLayoutStorageKey,
-} from "./session-panel-layout-store";
+import { sessionPanelLayoutStorageKey } from "./session-panel-layout-store";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "./use-right-panel-open";
 import { useSessionPanels } from "./use-session-panels";
 
 const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);
-const workspaceIds = new Set<string>();
 const NO_TERMINAL_TABS: TerminalTab[] = [];
 
 type SelectionProps = { selectionKey: SessionPanelSelectionKey };
 
-const newTaskOwner = (): SessionPanelOwner => {
-  const workspaceId = `workspace-${globalThis.crypto.randomUUID()}`;
-  workspaceIds.add(workspaceId);
-  return { kind: "task", workspaceId, taskId: "task-1" };
-};
+const newTaskOwner = (): SessionPanelOwner => ({
+  kind: "task",
+  workspaceId: `workspace-${globalThis.crypto.randomUUID()}`,
+  taskId: "task-1",
+});
+
+// Each test gets its own connection, so it starts with no saved panel layouts.
+let connection: ClientConnection;
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
+);
+
+beforeEach(() => {
+  connection = createTestClientConnection();
+});
 
 afterEach(() => {
-  // The hook of the test is still mounted, so the store update runs in act.
-  act(() => {
-    for (const workspaceId of workspaceIds) {
-      pruneSessionPanelLayouts({ kind: "tasks", workspaceId, ids: new Set() });
-      pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set() });
-    }
-  });
-  workspaceIds.clear();
   localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
 });
 
@@ -103,7 +104,7 @@ const renderPanels = (
         terminals,
       });
     },
-    { initialProps: { overrides: initialOverrides } },
+    { initialProps: { overrides: initialOverrides }, wrapper },
   );
   return {
     ...view,
@@ -236,7 +237,7 @@ describe("useSessionPanels", () => {
           unavailableKinds: WITHOUT_CI_CHECKS,
           terminals: terminalsFor(owner),
         }),
-      { initialProps: { owner: first } },
+      { initialProps: { owner: first }, wrapper },
     );
     const entryId = entryIdOf(view.result.current.bottom.tabs, "terminal");
     act(() => view.result.current.onMove(entryId, "right"));
@@ -274,7 +275,7 @@ describe("useSessionPanels", () => {
         const shownTerminal = panels.bottom.tabs.find((entry) => entry.kind === "terminal");
         if (shownTerminal) answers.push(panels.canMove(shownTerminal.id, "right"));
       },
-      { initialProps: { tabs: NO_TERMINAL_TABS } },
+      { initialProps: { tabs: NO_TERMINAL_TABS }, wrapper },
     );
 
     view.rerender({ tabs: [tab] });
@@ -289,7 +290,7 @@ describe("useSessionPanels", () => {
     const view = renderHook(
       ({ selectionKey }: SelectionProps) =>
         useSessionPanels({ owner, selectionKey, unavailableKinds: WITHOUT_CI_CHECKS, terminals }),
-      { initialProps: builder },
+      { initialProps: builder, wrapper },
     );
     act(() => view.result.current.right.onSelect("files"));
 
@@ -500,7 +501,7 @@ describe("useSessionPanels", () => {
   test("tells the user once when it cannot restore a saved layout", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
       const owner = newTaskOwner();
-      localStorage.setItem(sessionPanelLayoutStorageKey(owner), "{not json");
+      connection.storage.setItem(sessionPanelLayoutStorageKey(owner), "{not json");
 
       const view = renderPanels(owner, {});
       view.setTerminals({});

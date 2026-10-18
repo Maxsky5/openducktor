@@ -8,10 +8,10 @@ import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
-import { toTranscriptAttachment } from "./agent-chat-attachments";
+import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import {

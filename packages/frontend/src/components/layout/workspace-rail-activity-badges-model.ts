@@ -1,4 +1,4 @@
-import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
+import type { WorkspaceActivityState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 
 const WORKSPACE_ACTIVITY_LABELS = {
   inputRequired: "Sessions waiting for input",

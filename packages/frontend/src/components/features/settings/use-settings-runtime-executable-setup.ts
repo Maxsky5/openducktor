@@ -1,16 +1,16 @@
 import { type AgentRuntimes, knownRuntimeKindValues } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { replaceRuntimeExecutablePaths } from "@/state/operations/runtime-executables/runtime-executable-draft";
 import {
   runtimeDiscoveryQueryOptions,
   writeRuntimeExecutableValidationCache,
-} from "@/state/queries/runtime";
+} from "@openducktor/frontend-core/queries/runtime";
 import {
   type RuntimeExecutableValidationState,
   useRuntimeExecutableValidation,
-} from "@/state/queries/use-runtime-executable-validation";
+} from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 
 type UpdateAgentRuntimes = (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
 

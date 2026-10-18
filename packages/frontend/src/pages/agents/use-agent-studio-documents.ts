@@ -2,15 +2,18 @@ import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { z } from "zod";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   findFirstChangedSessionMessageIndex,
   forEachSessionMessageFrom,
-} from "@/state/operations/agent-orchestrator/support/messages";
-import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { isWorkflowAgentSession } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/workflow-session";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { extractCompletionTimestamp, parseTimestamp } from "./agents-page-selection";
 
 type UseAgentStudioDocumentsArgs = {

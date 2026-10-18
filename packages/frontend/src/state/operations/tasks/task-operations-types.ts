@@ -7,7 +7,7 @@ import type {
   TaskUpdatePatch,
 } from "@openducktor/contracts";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
-import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
+import type { AgentSessionReadPort } from "@openducktor/frontend-core/queries/agent-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskPullRequestOperations } from "@/types/task-pull-request";
 

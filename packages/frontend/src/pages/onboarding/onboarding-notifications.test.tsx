@@ -5,7 +5,7 @@ import {
   type SettingsSnapshotSaveInput,
 } from "@openducktor/contracts";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
-import { host } from "@/state/operations/host";
+import type { HostClient } from "@openducktor/host-client";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import {
   createCheck,
@@ -37,49 +37,39 @@ const enterNotificationsStage = async (): Promise<void> => {
 
 describe("onboarding notifications", () => {
   test("shows the complete notification settings without a duplicate Skip action", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterNotificationsStage();
+    renderOnboarding({ client, runtimes });
+    await enterNotificationsStage();
 
-      expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
-      expect(screen.getAllByRole("switch", { name: /^Enable / })).toHaveLength(
-        NOTIFICATION_KIND_VALUES.length,
-      );
-      expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
-      expect(
-        screen.getByRole("radiogroup", { name: "Delivery for Permission Prompt" }),
-      ).toBeTruthy();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+    expect(screen.getAllByRole("switch", { name: /^Enable / })).toHaveLength(
+      NOTIFICATION_KIND_VALUES.length,
+    );
+    expect(screen.getByRole("slider", { name: "Volume" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "Delivery for Permission Prompt" })).toBeTruthy();
   });
 
   test("saves notification changes before opening the workspace step", async () => {
     const saveSettingsSnapshot = mock(async (_snapshot: SettingsSnapshotSaveInput) =>
       savedSettingsResult(),
     );
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterNotificationsStage();
-      await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterNotificationsStage();
+    await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
 
-      fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
-      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
 
-      await screen.findByRole("heading", { name: "Open your first workspace" });
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
-      const savedSnapshot = saveSettingsSnapshot.mock.calls[1]?.[0];
-      expect(savedSnapshot?.notifications.kinds["agent.session_idle"].enabled).toBe(true);
-      expect(savedSnapshot?.agentRuntimes).toEqual(runtimes);
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await screen.findByRole("heading", { name: "Open your first workspace" });
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
+    const savedSnapshot = saveSettingsSnapshot.mock.calls[1]?.[0];
+    expect(savedSnapshot?.notifications.kinds["agent.session_idle"].enabled).toBe(true);
+    expect(savedSnapshot?.agentRuntimes).toEqual(runtimes);
     // This flow renders onboarding stages and waits for settings updates.
   }, 2_500);
 
@@ -90,29 +80,25 @@ describe("onboarding notifications", () => {
       if (saveCalls === 2) throw new Error("Notification settings write failed");
       return savedSettingsResult();
     });
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterNotificationsStage();
-      fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-      });
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterNotificationsStage();
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    });
 
-      const saveError = screen.getByText("Notification settings write failed");
-      expect(screen.getByRole("heading", { name: "Configure notifications" })).toBeTruthy();
-      expect(document.activeElement).toBe(saveError);
+    const saveError = screen.getByText("Notification settings write failed");
+    expect(screen.getByRole("heading", { name: "Configure notifications" })).toBeTruthy();
+    expect(document.activeElement).toBe(saveError);
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
-      });
-      expect(screen.getByRole("heading", { name: "Open your first workspace" })).toBeTruthy();
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(3);
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
+    });
+    expect(screen.getByRole("heading", { name: "Open your first workspace" })).toBeTruthy();
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(3);
     // This flow renders onboarding stages and waits for settings updates.
   }, 2_500);
 
@@ -124,31 +110,27 @@ describe("onboarding notifications", () => {
       if (saveCalls === 2) await pendingSave.promise;
       return savedSettingsResult();
     });
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterNotificationsStage();
-      fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterNotificationsStage();
+    fireEvent.click(screen.getByRole("switch", { name: "Enable Agent Session Idle" }));
 
-      const continueButton = screen.getByRole("button", { name: "Continue to workspace" });
-      fireEvent.click(continueButton);
-      fireEvent.click(continueButton);
-      await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2));
+    const continueButton = screen.getByRole("button", { name: "Continue to workspace" });
+    fireEvent.click(continueButton);
+    fireEvent.click(continueButton);
+    await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2));
 
-      expect(screen.getByText("Saving notifications...", { selector: "span" })).toBeTruthy();
-      expect(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Saving notifications..." }).disabled,
-      ).toBe(true);
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(true);
+    expect(screen.getByText("Saving notifications...", { selector: "span" })).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Saving notifications..." }).disabled,
+    ).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Back" }).disabled).toBe(true);
 
-      await act(async () => pendingSave.resolve());
-      await screen.findByRole("heading", { name: "Open your first workspace" });
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await act(async () => pendingSave.resolve());
+    await screen.findByRole("heading", { name: "Open your first workspace" });
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
     // This flow renders onboarding stages and waits for settings updates.
   }, 2_500);
 });

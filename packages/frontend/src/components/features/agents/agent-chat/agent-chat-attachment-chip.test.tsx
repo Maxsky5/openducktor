@@ -1,4 +1,4 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { QueryProvider } from "@/test-utils/query-provider";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
@@ -10,7 +10,7 @@ import {
 } from "@/lib/shell-bridge";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
+const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
 
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;

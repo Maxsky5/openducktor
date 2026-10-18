@@ -1,4 +1,4 @@
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import { memo, type ReactElement, type ReactNode, useMemo } from "react";
 import type { DiffDataState } from "@/features/agent-studio-git";
 import type { ManualRefresh } from "@/features/agent-studio-git/refresh/use-git-refresh";

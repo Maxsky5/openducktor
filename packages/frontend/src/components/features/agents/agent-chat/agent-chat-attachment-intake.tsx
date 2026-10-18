@@ -1,7 +1,8 @@
 import type { ReactElement } from "react";
 import { toast } from "sonner";
-import { buildComposerAttachmentFromFile, readAttachmentFileName } from "./agent-chat-attachments";
-import type { AgentChatComposerAttachment } from "./agent-chat-composer-draft";
+import { readAttachmentFileName } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import { buildComposerAttachmentFromFile } from "./agent-chat-attachment-files";
+import type { AgentChatComposerAttachment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 
 const truncateAttachmentDisplayName = (name: string, maxLength = 80): string => {
   if (name.length <= maxLength) {

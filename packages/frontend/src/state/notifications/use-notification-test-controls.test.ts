@@ -4,10 +4,10 @@ import {
   type NotificationOsCapability,
 } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
-import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
-import { QueryProvider } from "@/lib/query-provider";
-import type { NotificationBridge } from "@/lib/shell-bridge";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { NotificationContext, type NotificationContextValue } from "./notification-context";
 import {
   describeNotificationOsCapability,
@@ -84,7 +84,7 @@ test.each([
     const wrapper = ({ children }: PropsWithChildren) =>
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(NotificationContext.Provider, { value: context }, children),
       );
     const harness = createHookHarness(useNotificationTestControls, settings, { wrapper });

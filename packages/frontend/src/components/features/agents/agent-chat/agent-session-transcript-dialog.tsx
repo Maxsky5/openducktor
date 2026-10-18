@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DiffWorkerProvider } from "@/contexts/DiffWorkerProvider";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { UseTaskExecutionFilePreviewControllerResult } from "../file-preview/use-task-execution-file-preview-controller";
 import { TaskExecutionSelectedFilePreview } from "../task-execution-file-preview";
 import { ChatFileLinkProvider } from "./agent-chat-file-link-provider";

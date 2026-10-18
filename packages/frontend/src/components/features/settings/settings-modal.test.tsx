@@ -1,18 +1,18 @@
 import { expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR, knownRuntimeKindValues } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { useState, type PropsWithChildren, type ReactElement } from "react";
-import { createQueryClient } from "@/lib/query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { IssueImportDialog } from "@/pages/kanban/issue-import-dialog";
 import {
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
-import { repoBranchesQueryOptions } from "@/state/queries/git";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
+import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
 import {
   createChecksStateFixture,
   createGitProviderContextFixture,
@@ -161,7 +161,8 @@ function renderSettings(shared: boolean) {
     },
   });
   const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection();
+  const { queryClient } = connection;
   for (const workspace of Object.values(snapshot.workspaces)) {
     queryClient.setQueryData(repoBranchesQueryOptions(workspace.repoPath).queryKey, []);
   }
@@ -258,7 +259,7 @@ function renderSettings(shared: boolean) {
   );
   function Wrapper({ children }: PropsWithChildren) {
     return (
-      <QueryClientProvider client={queryClient}>
+      <QueryProvider connection={connection}>
         <WorkspaceStateContext.Provider value={workspaceState}>
           <ChecksStateContext.Provider value={checksState}>
             <RuntimeDefinitionsContext.Provider value={runtimeState}>
@@ -268,7 +269,7 @@ function renderSettings(shared: boolean) {
             </RuntimeDefinitionsContext.Provider>
           </ChecksStateContext.Provider>
         </WorkspaceStateContext.Provider>
-      </QueryClientProvider>
+      </QueryProvider>
     );
   }
   const view = render(

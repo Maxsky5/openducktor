@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { Activity } from "react";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { MediaPreviewDialog } from "./media-preview-dialog";
 
 enableReactActEnvironment();

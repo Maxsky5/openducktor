@@ -21,14 +21,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
-import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
-import { workspaceSessionExternalQueryOptions } from "@/state/queries/workspace-session-import";
+import { updateWorkspaceSessionQueries } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { workspaceSessionExternalQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-import";
 import { useMountedRef } from "./use-mounted-ref";
 import { WorkspaceSessionImportSearch } from "./workspace-session-import-search";
 import { WorkspaceSessionImportResults } from "./workspace-session-import-results";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type Props = {
   workspaceId: string;
@@ -128,6 +128,7 @@ function RuntimeSessionResults({
   onImported,
   setPending,
 }: Props & { runtimeKind: RuntimeKind; setPending: (pending: boolean) => void }) {
+  const host = useHostClient();
   const [catalogRequestId, setCatalogRequestId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [search, setSearch] = useState("");
@@ -153,7 +154,7 @@ function RuntimeSessionResults({
           setReleaseError(errorMessage(error));
         });
     };
-  }, [workspaceId, attempt]);
+  }, [host, workspaceId, attempt]);
   const cursor = cursors[page];
   const queryInput: WorkspaceSessionExternalListInput | null = catalogRequestId
     ? {

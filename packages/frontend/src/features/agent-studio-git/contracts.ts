@@ -8,8 +8,9 @@ import type {
   GitCurrentBranch,
   GitLocalChanges,
 } from "@openducktor/contracts";
+import type { DiffScope } from "@openducktor/frontend-core/types/diff-scope";
 
-export type DiffScope = "target" | "uncommitted";
+export type { DiffScope };
 
 /** `hard` is the manual Refresh. `soft` follows a change. `scheduled` follows a return to the app. */
 export type GitDiffRefreshMode = "hard" | "soft" | "scheduled";

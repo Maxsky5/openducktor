@@ -8,7 +8,7 @@ import type {
   RunSessionStartWorkflow,
 } from "@/features/session-start";
 import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
 type StartKanbanSessionFlowInput = {

@@ -1,16 +1,16 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentSkillReference } from "@openducktor/core";
 import { useMemo } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { RuntimeReadiness } from "@/lib/use-runtime-readiness";
-import { resolveAgentPendingInputParticipants } from "@/state/agent-session-pending-input-participants";
-import type { AgentSessionPendingInputSummary } from "@/state/agent-session-snapshots";
+import { resolveAgentPendingInputParticipants } from "@openducktor/frontend-core/sessions/agent-session-pending-input-participants";
+import type { AgentSessionPendingInputSummary } from "@openducktor/frontend-core/sessions/agent-session-snapshots";
 import { useAgentActivitySnapshot } from "@/state/app-state-provider";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type {
   AgentChatTranscriptNoticeAction,

@@ -6,9 +6,12 @@ import {
   type SessionStartWorkflowResult,
   startSessionWorkflow,
 } from "@/features/session-start/session-start-workflow";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { WorkflowLaunchResult } from "@openducktor/contracts";
 import type { AgentUserMessagePart } from "@openducktor/core";
 import {

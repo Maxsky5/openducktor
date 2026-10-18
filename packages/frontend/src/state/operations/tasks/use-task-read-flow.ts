@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
-import { getProductionTaskViewSync } from "@/state/queries/task-view-sync";
+import { getProductionTaskViewSync } from "@openducktor/frontend-core/queries/task-view-sync";
 import { getTaskReadLoadingState } from "./task-read-loading-state";
 import { useTaskQueryReadModel } from "./use-task-query-read-model";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";

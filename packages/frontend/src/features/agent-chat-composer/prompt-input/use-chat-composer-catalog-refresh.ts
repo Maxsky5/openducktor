@@ -1,6 +1,6 @@
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useCallback } from "react";
-import { useRefreshStaleRuntimeCatalog } from "@/state/queries/use-runtime-catalog-query";
+import { useRefreshStaleRuntimeCatalog } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 type UseChatComposerCatalogRefreshArgs = {

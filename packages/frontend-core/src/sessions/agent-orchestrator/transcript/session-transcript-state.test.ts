@@ -1,0 +1,388 @@
+import { describe, expect, test } from "bun:test";
+import type { RuntimeReadinessState } from "../../../lib/runtime-readiness";
+import {
+  type AgentSessionFixtureOverrides,
+  createAgentSessionFixture,
+} from "../../../test-support/shared-test-fixtures";
+import type { AgentSessionState } from "../../../types/agent-orchestrator";
+import {
+  failedAgentSessionReadModelLoadState,
+  loadingAgentSessionReadModelLoadState,
+  readyAgentSessionReadModelLoadState,
+} from "../../../types/agent-session-read-model";
+import {
+  deriveLoadedAgentSessionTranscriptState,
+  derivePendingSelectedSessionTranscriptState,
+  deriveRuntimeBoundTranscriptEmptyState,
+  deriveRuntimeBoundTranscriptLoadingState,
+  deriveSessionlessTaskTranscriptState,
+} from "./session-transcript-state";
+
+type CreateSessionOverrides = AgentSessionFixtureOverrides;
+
+const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
+  return createAgentSessionFixture(
+    {
+      externalSessionId: "external-1",
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+      historyLoadState: "not_requested",
+    },
+    overrides,
+  );
+};
+
+const deriveLoadedTranscriptStateForSession = ({
+  session,
+  runtimeReadinessState,
+}: {
+  session: AgentSessionState;
+  runtimeReadinessState: RuntimeReadinessState;
+}) =>
+  deriveLoadedAgentSessionTranscriptState({
+    session,
+    runtimeReadinessState,
+  });
+
+const historyFailure = {
+  code: "invalid_runtime_response" as const,
+  summary: "Codex returned invalid conversation history.",
+  detail: "Codex thread/turns/list response data[0] must be an object",
+  diagnosticId: "diagnostic-1",
+  method: "thread/turns/list",
+  pageCursor: null,
+};
+
+describe("deriveLoadedAgentSessionTranscriptState", () => {
+  test("shows the history loader instead of a partial live tail before history is requested", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        historyLoadState: "not_requested",
+        messages: [
+          {
+            id: "tail-1",
+            role: "assistant",
+            content: "recent output only",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
+  });
+
+  test("keeps a transcript visible after a prior history failure", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        historyLoadState: "failed",
+        historyLoadFailure: historyFailure,
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "still visible",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible", historyFailure });
+  });
+
+  test("keeps a loaded transcript visible with its gap recovery failure", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        historyLoadState: "loaded",
+        historyLoadFailure: historyFailure,
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "still visible",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible", historyFailure });
+  });
+
+  test("surfaces cold history failures when there is no transcript to render", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        historyLoadState: "failed",
+        historyLoadFailure: historyFailure,
+        messages: [],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({
+      kind: "failed",
+      message: historyFailure.summary,
+      historyFailure,
+    });
+  });
+
+  test("renders running sessions immediately without view readiness loading", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        status: "running",
+        historyLoadState: "loaded",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "already loaded",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible" });
+  });
+
+  test("renders running planner sessions immediately when durable runtime context is available", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+        status: "running",
+        historyLoadState: "loaded",
+        runtimeKind: "opencode",
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "already loaded",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible" });
+  });
+
+  test("loads a cold running session transcript before rendering it", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        status: "running",
+        historyLoadState: "not_requested",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
+  });
+
+  test("keeps a cold running session in loading state while history is in flight", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        status: "running",
+        historyLoadState: "loading",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
+  });
+
+  test("shows the history loader instead of a partial live tail while history is loading", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        status: "running",
+        historyLoadState: "loading",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "already visible",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
+  });
+
+  test("keeps a local outbound send visible while pending", () => {
+    const transcriptState = deriveLoadedTranscriptStateForSession({
+      session: createSession({
+        status: "running",
+        historyLoadState: "loaded",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        pendingUserMessageStartedAt: 123,
+        messages: [
+          {
+            id: "message-1",
+            role: "user",
+            content: "new turn",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "visible" });
+  });
+});
+
+describe("runtime-bound transcript state", () => {
+  test("waits for runtime readiness before surfacing runtime-backed empty states", () => {
+    const transcriptState = deriveRuntimeBoundTranscriptEmptyState({
+      reason: "sessionless",
+      runtimeReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("surfaces runtime-backed empty states after runtime readiness", () => {
+    const transcriptState = deriveRuntimeBoundTranscriptEmptyState({
+      reason: "sessionless",
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
+  });
+
+  test("waits for runtime readiness before surfacing history loading", () => {
+    const transcriptState = deriveRuntimeBoundTranscriptLoadingState({
+      reason: "history",
+      runtimeReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("surfaces history loading once runtime is ready", () => {
+    const transcriptState = deriveRuntimeBoundTranscriptLoadingState({
+      reason: "history",
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "history" });
+  });
+
+  test("surfaces preparing loading once runtime is ready", () => {
+    const transcriptState = deriveRuntimeBoundTranscriptLoadingState({
+      reason: "preparing",
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+});
+
+describe("read-model-bound transcript state", () => {
+  test("keeps selected sessions waiting on runtime readiness before preparing", () => {
+    const transcriptState = derivePendingSelectedSessionTranscriptState({
+      readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
+      runtimeReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("shows selected-session preparation once runtime is ready", () => {
+    const transcriptState = derivePendingSelectedSessionTranscriptState({
+      readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
+  test("surfaces selected-session read-model failures", () => {
+    const transcriptState = derivePendingSelectedSessionTranscriptState({
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        "/tmp/repo",
+        "Session read failed",
+        "live-stream",
+      ),
+      runtimeReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "failed", message: "Session read failed" });
+  });
+
+  test("keeps sessionless tasks waiting on runtime while the read model loads", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: loadingAgentSessionReadModelLoadState("/tmp/repo"),
+      runtimeReadinessState: "checking",
+    });
+
+    expect(transcriptState).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("shows sessionless task preparation while the ready runtime read model loads", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: loadingAgentSessionReadModelLoadState("/tmp/repo"),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "session_loading", reason: "preparing" });
+  });
+
+  test("shows sessionless empty state after the read model is ready", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: readyAgentSessionReadModelLoadState("/tmp/repo"),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "empty", reason: "sessionless" });
+  });
+
+  test("surfaces sessionless task read-model failures", () => {
+    const transcriptState = deriveSessionlessTaskTranscriptState({
+      readModelLoadState: failedAgentSessionReadModelLoadState(
+        "/tmp/repo",
+        "Session list failed",
+        "live-stream",
+      ),
+      runtimeReadinessState: "ready",
+    });
+
+    expect(transcriptState).toEqual({ kind: "failed", message: "Session list failed" });
+  });
+});

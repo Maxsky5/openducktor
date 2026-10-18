@@ -1,20 +1,20 @@
 import { describe, expect, mock, test } from "bun:test";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
 import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
@@ -81,7 +81,7 @@ const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
 });
 
 const IsolatedProviders = ({ children }: PropsWithChildren) => (
-  <QueryProvider useIsolatedClient>
+  <QueryProvider>
     <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
       {children}
     </WorkspaceStateContext.Provider>
@@ -839,13 +839,14 @@ describe("TaskDetailsSheet", () => {
       },
     });
     const actions = createTaskWorkflowActionsValue();
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(agentSessionQueryKeys.list("/repo-a", "TASK-1"), []);
 
     const { unmount } = render(
       createElement(
-        QueryClientProvider,
-        { client: queryClient },
+        ClientConnectionProvider,
+        { connection },
         createElement(
           WorkspaceStateContext.Provider,
           { value: createWorkspaceStateValue() },

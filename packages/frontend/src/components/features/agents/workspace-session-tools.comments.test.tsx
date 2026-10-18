@@ -1,21 +1,14 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { GitWorktreeStatus } from "@openducktor/contracts";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { readInlineCommentDraftsFromStorage } from "@/state/inline-comment-draft-storage";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import {
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
-  toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { readInlineCommentDraftsFromStorage } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
 import { useWorkspaceSessionTools } from "./use-workspace-session-tools";
@@ -58,7 +51,7 @@ function ToolsOwner({
   return isVisible ? filesContent : null;
 }
 
-afterEach(resetInlineCommentDraftStoreForTests);
+const stopDraftTimers = () => () => {};
 
 for (const contextMode of ["repository", "worktree"] as const) {
   test.each(
@@ -68,30 +61,13 @@ for (const contextMode of ["repository", "worktree"] as const) {
   )(
     `validates restored ${contextMode} $diffScope comments after a full read with tools $tools`,
     async ({ diffScope, tools }) => {
-      resetInlineCommentDraftStoreForTests();
-      const values = new Map<string, string>();
-      const storage = {
-        get length() {
-          return values.size;
-        },
-        key: (index: number) => Array.from(values.keys())[index] ?? null,
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => {
-          values.set(key, value);
-        },
-        removeItem: (key: string) => {
-          values.delete(key);
-        },
-      };
+      const storage = createMemoryClientStorage();
       const ownerKey = toInlineCommentDraftOwnerKey(commentOwner);
       if (ownerKey === null) throw new Error("Expected a workspace comment owner.");
-      const setStorage = () => {
-        setInlineCommentDraftStorageForTests(storage);
-        setInlineCommentDraftScheduleTaskForTests(() => () => {});
-      };
-      setStorage();
+      // An earlier app session saved the comments.
+      const earlierSession = createTestClientConnection({ storage, scheduleTask: stopDraftTimers });
       for (const filePath of ["src/missing.ts", "src/present.ts"]) {
-        useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+        earlierSession.drafts.inlineComments.getState().addDraft(ownerKey, {
           filePath,
           diffScope,
           startLine: 1,
@@ -101,10 +77,8 @@ for (const contextMode of ["repository", "worktree"] as const) {
           codeContext: [],
         });
       }
-      useInlineCommentDraftStore.getState().flush();
-      resetInlineCommentDraftStoreForTests();
-      setStorage();
-      useInlineCommentDraftStore.getState().hydrate(ownerKey);
+      earlierSession.drafts.inlineComments.getState().flush();
+      await earlierSession.dispose();
       const workingDirectory = contextMode === "repository" ? "/repo" : "/repo/worktree";
       const status = (scope: "uncommitted" | "target"): GitWorktreeStatus => ({
         currentBranch: { name: "feature", detached: false },
@@ -128,30 +102,32 @@ for (const contextMode of ["repository", "worktree"] as const) {
       const read = mock(async (_repo: string, _target: string, scope: "uncommitted" | "target") =>
         scope === diffScope ? completed.promise : status(scope),
       );
-      configureShellBridge(
-        createShellBridgeFixture({
-          client: {
-            gitGetComparisonTarget: async () => ({ kind: "available", reference: "origin/main" }),
-            gitGetWorktreeStatus: read,
-            // Local changes use the uncommitted status fixture, so `read` records both scopes.
-            gitGetLocalChanges: async (repo) =>
-              toLocalChanges(await read(repo, "HEAD", "uncommitted")),
-          },
-        }),
-      );
-      const queryClient = createQueryClient();
+      const connection = createTestClientConnection({
+        storage,
+        scheduleTask: stopDraftTimers,
+        client: {
+          gitGetComparisonTarget: async () => ({ kind: "available", reference: "origin/main" }),
+          gitGetWorktreeStatus: read,
+          // Local changes use the uncommitted status fixture, so `read` records both scopes.
+          gitGetLocalChanges: async (repo) =>
+            toLocalChanges(await read(repo, "HEAD", "uncommitted")),
+        },
+      });
+      const comments = connection.drafts.inlineComments;
+      comments.getState().hydrate(ownerKey);
+      const queryClient = connection.queryClient;
       queryClient.setQueryData(
         settingsSnapshotQueryOptions().queryKey,
         createSettingsSnapshotFixture(),
       );
       const panel = (isVisible: boolean) => (
-        <QueryClientProvider client={queryClient}>
+        <ClientConnectionProvider connection={connection}>
           <ThemeProvider>
             <SettingsModalProvider>
               <ToolsOwner {...{ isVisible, contextMode, workingDirectory }} />
             </SettingsModalProvider>
           </ThemeProvider>
-        </QueryClientProvider>
+        </ClientConnectionProvider>
       );
       const view = render(panel(true));
       try {
@@ -159,7 +135,7 @@ for (const contextMode of ["repository", "worktree"] as const) {
         await waitFor(() =>
           expect(read.mock.calls.some((call) => call[2] === diffScope)).toBe(true),
         );
-        expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(2);
+        expect(comments.getState().getDraftCount(ownerKey)).toBe(2);
         expect(screen.queryByTestId("agent-studio-git-pull-button")).toBeNull();
         if (tools === "closed") {
           view.rerender(panel(false));
@@ -169,7 +145,7 @@ for (const contextMode of ["repository", "worktree"] as const) {
         await act(async () => completed.resolve(status(diffScope)));
         await waitFor(() =>
           expect(
-            useInlineCommentDraftStore
+            comments
               .getState()
               .getPendingDrafts(ownerKey)
               .map((draft) => draft.filePath),
@@ -183,10 +159,8 @@ for (const contextMode of ["repository", "worktree"] as const) {
         completed.resolve(status(diffScope));
         await act(async () => {
           view.unmount();
-          await queryClient.cancelQueries();
-          queryClient.clear();
+          await connection.dispose();
         });
-        configureShellBridge(createUnavailableShellBridge());
       }
     },
   );

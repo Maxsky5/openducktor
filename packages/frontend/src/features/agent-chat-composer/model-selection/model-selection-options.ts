@@ -1,7 +1,7 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { toPrimaryAgentOptions } from "@/components/features/agents";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
 
 type ModelSelectionOptions = {

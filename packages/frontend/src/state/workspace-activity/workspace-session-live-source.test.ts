@@ -3,8 +3,8 @@ import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshotEnvelope,
 } from "@openducktor/contracts";
-import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
-import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
+import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
+import { createWorkspaceActivityObserver } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
 import { createWorkspaceSessionLiveSource } from "./workspace-session-live-source";
 
 const input = { repoPath: "/repo" };

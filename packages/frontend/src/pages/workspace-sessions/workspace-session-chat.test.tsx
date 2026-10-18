@@ -15,13 +15,22 @@ import { useIsFetching } from "@tanstack/react-query";
 import * as messageContent from "@/components/features/agents/agent-chat/agent-chat-message-card-content";
 import { buildMessage } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import * as modelPickerModel from "@/components/features/agents/model-picker/model-picker-model";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
-import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { HostClient } from "@openducktor/host-client";
+import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
+import { createBrowserAttachmentStager } from "@/lib/local-attachment-files";
+import {
+  createTestClientConnection,
+  type TestClientConnectionOptions,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createAgentMessageQueuesStore } from "@openducktor/frontend-core/sessions/agent-message-queues-store";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import {
+  RuntimeDefinitionsContext,
+  type RuntimeDefinitionsContextValue,
+} from "@/state/app-state-contexts";
 import {
   AgentMessageQueuesContext,
   AgentOperationsContext,
@@ -29,11 +38,8 @@ import {
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
   HostRuntimeStatusContext,
-  RuntimeDefinitionsContext,
-  type RuntimeDefinitionsContextValue,
-} from "@/state/app-state-contexts";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import {
   createAgentSessionFixture,
   createHostRuntimeStatusContextValue,
@@ -44,7 +50,7 @@ import type {
   AgentOperationsContextValue,
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
 import {
@@ -52,14 +58,14 @@ import {
   buildQuestionRequest,
 } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
-import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { typeIntoComposer } from "@/components/features/agents/agent-chat/agent-chat-composer-test-helpers";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
 import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
-import { createComposerAttachment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { createComposerAttachment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 
 function QueryStatus() {
   const pending = useIsFetching();
@@ -135,20 +141,26 @@ test.each(["local_repo_root", "local_worktree"] as const)(
         },
       }),
     );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-          workspaceSessionLaunch: launch,
-        },
-      }),
-    );
     const ownerKey = toInlineCommentDraftStorageKey({
       workspaceId: workspace.workspaceId,
       workspaceSessionId: entry.id,
     });
+    const { Harness, connection } = createWorkspaceChatHarness({
+      workspace,
+      entry,
+      session,
+      store,
+      scenario: "draft",
+      counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
+      client: { workspaceSessionLaunch: launch },
+      sendAgentMessage: async (identity, parts) => {
+        sends.push([identity, parts]);
+        return createAgentMessageSendReceipt(identity);
+      },
+    });
+    const inlineComments = connection.drafts.inlineComments;
     for (const diffScope of ["uncommitted", "target"] as const) {
-      useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+      inlineComments.getState().addDraft(ownerKey, {
         filePath: "draft.ts",
         diffScope,
         side: "new",
@@ -159,18 +171,6 @@ test.each(["local_repo_root", "local_worktree"] as const)(
         language: "ts",
       });
     }
-    const { Harness } = createWorkspaceChatHarness({
-      workspace,
-      entry,
-      session,
-      store,
-      scenario: "draft",
-      counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
-      sendAgentMessage: async (identity, parts) => {
-        sends.push([identity, parts]);
-        return createAgentMessageSendReceipt(identity);
-      },
-    });
     const view = render(<Harness />);
     try {
       const send = await view.findByRole("button", { name: "Send message" });
@@ -192,15 +192,9 @@ test.each(["local_repo_root", "local_worktree"] as const)(
       expect(launch.mock.calls[0]?.[0].parts[0]).toMatchObject({
         text: expect.stringContaining("Review target"),
       });
-      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+      expect(inlineComments.getState().getDraftCount(ownerKey)).toBe(0);
     } finally {
       view.unmount();
-      for (const draft of useInlineCommentDraftStore.getState().draftsByOwner[ownerKey] ?? []) {
-        useInlineCommentDraftStore.getState().removeDraft(ownerKey, draft.id);
-      }
-      useInlineCommentDraftStore.getState().flush();
-      createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, entry.id).clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   5000,
@@ -227,6 +221,8 @@ const createWorkspaceChatHarness = ({
   store,
   scenario,
   counters,
+  client,
+  stageAttachment,
   sendAgentMessage = async () => {
     throw new Error("Unexpected message send");
   },
@@ -237,8 +233,18 @@ const createWorkspaceChatHarness = ({
   store: ReturnType<typeof createAgentSessionsStore>;
   scenario: WorkspaceChatScenario;
   counters: WorkspaceChatCounters;
+  client?: Partial<HostClient>;
+  stageAttachment?: AttachmentStager | undefined;
   sendAgentMessage?: AgentOperationsContextValue["sendAgentMessage"];
 }) => {
+  const connectionOptions: TestClientConnectionOptions = {
+    client: {
+      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      ...client,
+    },
+  };
+  if (stageAttachment) connectionOptions.stageAttachment = stageAttachment;
+  const connection = createTestClientConnection(connectionOptions);
   const operations = createAgentOperationsFixture({
     readSessionTodos: async () => {
       counters.runtimeReads += 1;
@@ -310,7 +316,7 @@ const createWorkspaceChatHarness = ({
       },
     };
     return (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <QueryStatus />
         <RuntimeDefinitionsContext value={definitions}>
           <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
@@ -351,6 +357,7 @@ const createWorkspaceChatHarness = ({
 
   return {
     Harness,
+    connection,
     operations,
     definitions,
     observationRetries: () => observationRetries,
@@ -362,6 +369,7 @@ const createWorkspaceChatHarness = ({
 const createPresentationScenario = (
   runtimeKind: WorkspaceSession["runtimeKind"] = "opencode",
   messages: AgentSessionState["messages"]["items"] = [],
+  stageAttachment?: AttachmentStager,
 ) => {
   const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
   const entry: WorkspaceSession = {
@@ -403,6 +411,7 @@ const createPresentationScenario = (
       store,
       scenario: "streaming",
       counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
+      stageAttachment,
     }),
   };
 };
@@ -481,11 +490,6 @@ test.each(["model", "effort", "profile"] as const)(
         />
       );
     }
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-      }),
-    );
     const view = render(
       <Harness>
         <Chat />
@@ -573,8 +577,6 @@ test.each(["model", "effort", "profile"] as const)(
     } finally {
       save.resolve();
       view.unmount();
-      createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, entry.id).clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -607,11 +609,6 @@ test.each(["light", "dark"] as const)(
       pendingQuestions: [],
     });
     store.replaceSession(child);
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-      }),
-    );
     const view = render(<Harness />);
     try {
       await view.findByText("Running");
@@ -663,7 +660,6 @@ test.each(["light", "dark"] as const)(
     } finally {
       view.unmount();
       document.documentElement.classList.remove("dark");
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   // The full chat render waits for catalog, history, and runtime reads.
@@ -701,11 +697,6 @@ test.each(["light", "dark"] as const)(
     operations.readSessionTodos = async () => [
       { id: "todo-1", content: "Review the code", status: "pending", priority: "medium" },
     ];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-      }),
-    );
     const view = render(<Harness />);
     try {
       await view.findByLabelText("Agent todo list");
@@ -716,7 +707,6 @@ test.each(["light", "dark"] as const)(
     } finally {
       view.unmount();
       document.documentElement.classList.remove("dark");
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   // The full chat render waits for catalog, history, and runtime reads.
@@ -755,11 +745,6 @@ test("workspace Recheck disables repeat input and shows pending feedback", async
       </HostRuntimeStatusContext>
     );
   }
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
-  );
   const view = render(
     <Harness>
       <BlockedChat />
@@ -785,7 +770,6 @@ test("workspace Recheck disables repeat input and shows pending feedback", async
   } finally {
     finishRefresh();
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
   // The full chat render waits for the deferred runtime check and catalog reads.
 }, 5000);
@@ -831,11 +815,6 @@ test("a missing workspace session retries observation, keeps failure visible, an
     counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
   });
   const history = spyOn(h.operations, "loadAgentSessionHistory");
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
-  );
   const view = render(<h.Harness />);
   try {
     await view.findByText("Observation failed");
@@ -856,7 +835,6 @@ test("a missing workspace session retries observation, keeps failure visible, an
   } finally {
     view.unmount();
     history.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -918,11 +896,6 @@ test("returning to a retained chat expands requests without clearing drafts, whi
       </div>
     </Harness>
   );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
-  );
   const view = render(content(entry));
   try {
     const textarea = await view.findByPlaceholderText("Write your answer...");
@@ -956,7 +929,6 @@ test("returning to a retained chat expands requests without clearing drafts, whi
     expect(view.getByText("1/1 answered")).toBeTruthy();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
   // The full chat render includes settings queries and retained Activity transitions.
 }, 5000);
@@ -1002,7 +974,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
       baselineLoads: 0,
       revalidations: 0,
     };
-    const { Harness, completeObservation } = createWorkspaceChatHarness({
+    const { Harness, connection, completeObservation } = createWorkspaceChatHarness({
       workspace,
       entry,
       session,
@@ -1010,11 +982,6 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
       scenario,
       counters,
     });
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-      }),
-    );
     const renderCounts = new Map<string, number>();
     const OriginalMessageBody = messageContent.MessageBody;
     const body = spyOn(messageContent, "MessageBody").mockImplementation((props) => {
@@ -1023,6 +990,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
     });
     const buildPickerItems = spyOn(modelPickerModel, "buildModelPickerItems");
     const draftPersistence = createWorkspaceSessionChatDraftPersistence(
+      connection.drafts.chat,
       workspace.workspaceId,
       entry.id,
     );
@@ -1117,7 +1085,6 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
       draftPersistence.clear();
       body.mockRestore();
       buildPickerItems.mockRestore();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   5000,
@@ -1164,11 +1131,6 @@ test("workspace chat reuses its loaded transcript when the view remounts", async
     scenario: "switch-return",
     counters,
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
-  );
 
   const view = render(<Harness />);
   try {
@@ -1185,7 +1147,6 @@ test("workspace chat reuses its loaded transcript when the view remounts", async
     expect(counters.revalidations).toBe(0);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5000);
 
@@ -1217,19 +1178,17 @@ const preparationCatalog = (): AgentModelCatalog => ({
   ],
 });
 
-function createPreparationScenario(selection: AgentModelSelection = savedModel) {
-  const h = createPresentationScenario();
+function createPreparationScenario(
+  selection: AgentModelSelection = savedModel,
+  stageAttachment?: AttachmentStager,
+) {
+  const h = createPresentationScenario("opencode", [], stageAttachment);
   h.entry.selectedModel = { ...selection, runtimeKind: "opencode" };
   h.session.selectedModel = { ...selection };
   h.store.replaceSession(h.session);
   h.definitions.loadRepoRuntimeCatalog = async () => ({
     models: { status: "available", catalog: preparationCatalog() },
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
-  );
   return h;
 }
 
@@ -1242,6 +1201,7 @@ test("workspace Send waits for its first catalog with a saved model", async () =
   const send = mock(async () => null);
   h.operations.sendAgentMessage = send;
   const persistence = createWorkspaceSessionChatDraftPersistence(
+    h.connection.drafts.chat,
     h.workspace.workspaceId,
     h.entry.id,
   );
@@ -1266,22 +1226,15 @@ test("workspace Send waits for its first catalog with a saved model", async () =
   } finally {
     catalog.resolve({ models: { status: "available", catalog: preparationCatalog() } });
     view.unmount();
-    createWorkspaceSessionChatDraftPersistence(h.workspace.workspaceId, h.entry.id).clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5000);
 
 test("workspace checks a new blocking question before repairing a staged attachment send", async () => {
-  const h = createPreparationScenario({ ...savedModel, variant: "removed" });
   const staging = Promise.withResolvers<{ path: string; mime: string }>();
   const stage = mock(() => staging.promise);
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-        workspaceStageLocalAttachment: stage,
-      },
-    }),
+  const h = createPreparationScenario(
+    { ...savedModel, variant: "removed" },
+    createBrowserAttachmentStager({ workspaceStageLocalAttachment: stage }),
   );
   const update = mock(async () => {});
   const send = mock(async () => null);
@@ -1348,7 +1301,6 @@ test("workspace checks a new blocking question before repairing a staged attachm
     expect(send).not.toHaveBeenCalled();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 

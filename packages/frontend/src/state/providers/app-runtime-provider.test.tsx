@@ -6,13 +6,13 @@ import {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { HostClient } from "@openducktor/host-client";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeDefinitionsContext } from "../app-state-contexts";
-import { settingsSnapshotQueryOptions } from "../queries/workspace";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { AppRuntimeProvider } from "./app-runtime-provider";
 
 const createSettingsSnapshot = (): SettingsSnapshot =>
@@ -28,21 +28,24 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
     },
   });
 
-const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
-  createElement(
-    QueryProvider,
-    { useIsolatedClient: true },
+const createWrapper = (client: Partial<HostClient>) => {
+  const connection = createTestClientConnection({ client });
+  return ({ children }: PropsWithChildren): ReactElement =>
     createElement(
-      AppRuntimeProvider,
-      {
-        loadRepoRuntimeCatalog: async () => {
-          throw new Error("catalog loader not configured");
+      QueryProvider,
+      { connection },
+      createElement(
+        AppRuntimeProvider,
+        {
+          loadRepoRuntimeCatalog: async () => {
+            throw new Error("catalog loader not configured");
+          },
+          loadRepoRuntimeFileSearch: async () => [],
         },
-        loadRepoRuntimeFileSearch: async () => [],
-      },
-      children,
-    ),
-  );
+        children,
+      ),
+    );
+};
 
 describe("AppRuntimeProvider", () => {
   test("keeps settings snapshot failures separate from runtime definition errors", async () => {
@@ -50,14 +53,8 @@ describe("AppRuntimeProvider", () => {
     const workspaceGetSettingsSnapshot = mock(async () => {
       throw new Error("settings unavailable");
     });
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
-      }),
-    );
-
     const harness = createHookHarness(() => useRuntimeDefinitionsContext(), undefined, {
-      wrapper: createWrapper,
+      wrapper: createWrapper({ runtimeDefinitionsList, workspaceGetSettingsSnapshot }),
     });
 
     try {
@@ -70,21 +67,14 @@ describe("AppRuntimeProvider", () => {
       expect(state.availableRuntimeDefinitions).toEqual([]);
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("publishes available runtime definitions from runtime settings", async () => {
     const runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
-      }),
-    );
-
     const harness = createHookHarness(() => useRuntimeDefinitionsContext(), undefined, {
-      wrapper: createWrapper,
+      wrapper: createWrapper({ runtimeDefinitionsList, workspaceGetSettingsSnapshot }),
     });
 
     try {
@@ -97,26 +87,19 @@ describe("AppRuntimeProvider", () => {
       ]);
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("keeps runtime availability stable when only the theme setting changes", async () => {
     const runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]);
     const workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot());
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
-      }),
-    );
-
     const harness = createHookHarness(
       () => ({
         queryClient: useQueryClient(),
         runtimeDefinitions: useRuntimeDefinitionsContext(),
       }),
       undefined,
-      { wrapper: createWrapper },
+      { wrapper: createWrapper({ runtimeDefinitionsList, workspaceGetSettingsSnapshot }) },
     );
 
     try {
@@ -149,7 +132,6 @@ describe("AppRuntimeProvider", () => {
       expect(nextContext.availableRuntimeDefinitions).toBe(firstAvailableRuntimeDefinitions);
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 });

@@ -1,13 +1,12 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { AppRuntimeProvider } from "@/state/providers/app-runtime-provider";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionStartModal, type SessionStartModalModel } from "./session-start-modal";
 
@@ -426,14 +425,12 @@ describe("SessionStartModal", () => {
       }
       return createSettingsSnapshotFixture();
     });
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
-      }),
-    );
+    const connection = createTestClientConnection({
+      client: { runtimeDefinitionsList, workspaceGetSettingsSnapshot },
+    });
 
     const { unmount } = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <AppRuntimeProvider
           loadRepoRuntimeCatalog={async () => {
             throw new Error("catalog loader not configured");
@@ -463,7 +460,7 @@ describe("SessionStartModal", () => {
       expect(runtimeDefinitionsList).toHaveBeenCalledTimes(1);
     } finally {
       unmount();
-      configureShellBridge(createUnavailableShellBridge());
+      await connection.dispose();
     }
   });
 

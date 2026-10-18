@@ -2,13 +2,12 @@ import "@xterm/xterm/css/xterm.css";
 import type { AppPlatform, TerminalFailure, TerminalLifecycle } from "@openducktor/contracts";
 import { type ReactElement, useEffect, useEffectEvent, useRef, useState } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { hostClient } from "@/lib/host-client";
-import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import type { TerminalExitNotice } from "./terminal-viewport-policy";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type TerminalViewportProps = {
   terminalId: string;
@@ -33,6 +32,7 @@ export function TerminalViewport({
   onForgotten,
   onTitleChange,
 }: TerminalViewportProps): ReactElement {
+  const { host, stageAttachment } = useClientConnection();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mountRef = useRef<TerminalViewportMount | null>(null);
   const platformRef = useRef(platform);
@@ -65,9 +65,9 @@ export function TerminalViewport({
         controller,
         isActive,
         getPlatform: () => platformRef.current,
-        stageFile: stageLocalAttachmentFile,
+        stageFile: stageAttachment,
         preparePathInput: async (paths) => {
-          const response = await hostClient.terminalPreparePathInput({
+          const response = await host.client.terminalPreparePathInput({
             terminalId,
             paths: [...paths],
           });
@@ -93,7 +93,7 @@ export function TerminalViewport({
       mountRef.current = null;
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
-  }, [controller, terminalId]);
+  }, [controller, host, stageAttachment, terminalId]);
 
   useEffect(() => {
     if (!active || !isHydrated) return;

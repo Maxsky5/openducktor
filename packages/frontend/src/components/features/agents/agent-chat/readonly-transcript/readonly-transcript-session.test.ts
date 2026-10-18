@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { createSubagentMessage } from "@/state/operations/agent-orchestrator/support/subagent-messages";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { createSubagentMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/subagent-messages";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createReadonlyTranscriptSession,

@@ -1,10 +1,56 @@
-import { getHostStorage } from "@/lib/host-storage";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { toast } from "sonner";
 import { z } from "zod";
-import { create } from "zustand";
-import { errorMessage } from "@/lib/errors";
+import { useStore } from "zustand";
+import { createStore } from "zustand/vanilla";
+import { perConnection } from "@/lib/per-connection";
 import { RECENT_ITEMS_STORAGE_KEY, RECENT_ITEMS_STORED_LIMIT } from "./constants";
 import { paletteChatKey, paletteTaskKey } from "./command-palette-row-keys";
+
+export type RecentItemsStore = {
+  items: RecentItem[];
+  /** Why the saved list could not load. The list then starts empty. */
+  loadError: string | null;
+  /**
+   * Put the target first and save the list. A target that is already first changes nothing, so a
+   * repeated render does not write the storage again.
+   */
+  record: (target: RecentItemTarget) => void;
+};
+
+/**
+ * The command palette Recent list of the selected host. Each client connection reads its saved list
+ * one time.
+ */
+export const useRecentItems = <Selected>(
+  selector: (store: RecentItemsStore) => Selected,
+): Selected => useStore(storeOf(useClientConnection()), selector);
+
+const storeOf = perConnection(({ storage }) =>
+  createStore<RecentItemsStore>()((set, get) => {
+    const { items, error } = readRecentItems(storage);
+    return {
+      items,
+      loadError: error,
+      record: (target) => {
+        const current = get().items;
+        const [first] = current;
+        if (first && recentItemKey(first) === recentItemKey(target)) return;
+        const next = addRecentItem(current, target, Date.now());
+        set({ items: next });
+        try {
+          storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(next));
+        } catch (cause) {
+          toast.error("Could not save recent tasks and chats.", {
+            description: `Allow local storage for this app. ${errorMessage(cause)}`,
+          });
+        }
+      },
+    };
+  }),
+);
 
 const recentItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -48,9 +94,9 @@ export const addRecentItem = (
 
 type RecentItemsRead = { items: RecentItem[]; error: string | null };
 
-export const readRecentItems = (): RecentItemsRead => {
+export const readRecentItems = (storage: ClientStorage): RecentItemsRead => {
   try {
-    const saved = getHostStorage().getItem(RECENT_ITEMS_STORAGE_KEY);
+    const saved = storage.getItem(RECENT_ITEMS_STORAGE_KEY);
     if (saved === null) return { items: [], error: null };
     const parsed = recentItemsSchema.safeParse(JSON.parse(saved));
     if (!parsed.success) {
@@ -61,45 +107,3 @@ export const readRecentItems = (): RecentItemsRead => {
     return { items: [], error: errorMessage(error) };
   }
 };
-
-type RecentItemsStore = {
-  items: RecentItem[];
-  /** Why the saved list could not load. The list then starts empty. */
-  loadError: string | null;
-  /**
-   * Put the target first and save the list. A target that is already first changes nothing, so a
-   * repeated render does not write the storage again.
-   */
-  record: (target: RecentItemTarget) => void;
-};
-
-/** One device-local Recent list for the command palette. */
-export const useRecentItemsStore = create<RecentItemsStore>()((set, get) => {
-  return {
-    items: [],
-    loadError: null,
-    record: (target) => {
-      const current = get().items;
-      const [first] = current;
-      if (first && recentItemKey(first) === recentItemKey(target)) return;
-      const next = addRecentItem(current, target, Date.now());
-      set({ items: next });
-      try {
-        getHostStorage().setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(next));
-      } catch (cause) {
-        toast.error("Could not save recent tasks and chats.", {
-          description: `Allow local storage for this app. ${errorMessage(cause)}`,
-        });
-      }
-    },
-  };
-});
-
-/** Read only after the shell selects the host that owns this list. */
-export const loadRecentItems = (): void => {
-  const { items, error } = readRecentItems();
-  useRecentItemsStore.setState({ items, loadError: error });
-};
-
-export const recordRecentItem = (target: RecentItemTarget): void =>
-  useRecentItemsStore.getState().record(target);

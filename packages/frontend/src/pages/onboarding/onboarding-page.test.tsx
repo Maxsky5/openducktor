@@ -2,7 +2,6 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { getAppVersion } from "@/lib/app-version";
-import { hostBridge } from "@/lib/host-client";
 import { createOnboardingTestHarness } from "./onboarding-page.test-support";
 
 const { cleanup, renderOnboarding } = createOnboardingTestHarness();
@@ -42,35 +41,30 @@ describe("OnboardingPage", () => {
   });
 
   test("shows the app version and theme control in the onboarding header", async () => {
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = mock(async () => undefined);
+    const setTheme = mock(async () => undefined);
 
-    try {
-      renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES });
-      const header = screen.getByRole("banner");
-      const appVersion = getAppVersion();
+    renderOnboarding({ runtimes: DEFAULT_AGENT_RUNTIMES, client: { setTheme } });
+    const header = screen.getByRole("banner");
+    const appVersion = getAppVersion();
 
-      expect(within(header).queryByText("Local delivery workspace")).toBeNull();
-      if (appVersion) expect(within(header).getByText(appVersion)).toBeTruthy();
+    expect(within(header).queryByText("Local delivery workspace")).toBeNull();
+    if (appVersion) expect(within(header).getByText(appVersion)).toBeTruthy();
 
-      const themeTrigger = within(header).getByRole("button", { name: "Theme" });
-      await act(async () => {
-        fireEvent.click(themeTrigger);
-      });
+    const themeTrigger = within(header).getByRole("button", { name: "Theme" });
+    await act(async () => {
+      fireEvent.click(themeTrigger);
+    });
 
-      const darkOption = (await screen.findAllByText("Dark")).at(-1);
-      if (!darkOption) {
-        throw new Error("Expected the Dark theme option to be rendered");
-      }
-      await act(async () => {
-        fireEvent.click(darkOption);
-      });
-
-      await waitFor(() => expect(document.documentElement.classList.contains("dark")).toBe(true));
-      expect(hostBridge.client.setTheme).toHaveBeenCalledWith("dark");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
+    const darkOption = (await screen.findAllByText("Dark")).at(-1);
+    if (!darkOption) {
+      throw new Error("Expected the Dark theme option to be rendered");
     }
+    await act(async () => {
+      fireEvent.click(darkOption);
+    });
+
+    await waitFor(() => expect(document.documentElement.classList.contains("dark")).toBe(true));
+    expect(setTheme).toHaveBeenCalledWith("dark");
   });
 
   test("covers the full onboarding title-bar area with Electron drag regions", () => {

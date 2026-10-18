@@ -6,7 +6,7 @@ import {
   invalidateRepoBranchesQuery,
   loadCurrentBranchFromQuery,
   loadRepoBranchesFromQuery,
-} from "../../queries/git";
+} from "@openducktor/frontend-core/queries/git";
 import { createProbeGateController } from "./workspace-branch-probe-gate";
 import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
@@ -17,14 +17,12 @@ import {
   shouldProbeExternalBranchChange,
   shouldReportBranchProbeError,
 } from "./workspace-operations-model";
-import type { WorkspaceBranchProbeHostClient } from "./workspace-operations-types";
 
 type UseWorkspaceBranchProbeArgs = {
   activeRepoPath: string | null;
   isSwitchingWorkspace: boolean;
   isLoadingBranches: boolean;
   isSwitchingBranch: boolean;
-  hostClient: WorkspaceBranchProbeHostClient;
   setBranchSyncDegraded: (repoPath: string, value: boolean) => void;
 };
 
@@ -37,12 +35,11 @@ type ProbeGates = {
 const refreshBranchListForProbe = async (
   queryClient: QueryClient,
   repoPath: string,
-  hostClient: WorkspaceBranchProbeHostClient,
   isRepoActive: () => boolean,
 ): Promise<BranchProbeOutcome> => {
   try {
     await invalidateRepoBranchesQuery(queryClient, repoPath);
-    await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
+    await loadRepoBranchesFromQuery(queryClient, repoPath);
   } catch (error) {
     if (error instanceof CancelledError || !isRepoActive()) {
       return { status: "skipped" };
@@ -62,7 +59,6 @@ export function useWorkspaceBranchProbe({
   isSwitchingWorkspace,
   isLoadingBranches,
   isSwitchingBranch,
-  hostClient,
   setBranchSyncDegraded,
 }: UseWorkspaceBranchProbeArgs): void {
   const queryClient = useQueryClient();
@@ -143,7 +139,7 @@ export function useWorkspaceBranchProbe({
     try {
       await invalidateCurrentBranchQuery(queryClient, repoPath);
 
-      await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
+      await loadCurrentBranchFromQuery(queryClient, repoPath);
       if (activeRepoPathRef.current !== repoPath) {
         return { status: "skipped" };
       }
@@ -151,7 +147,6 @@ export function useWorkspaceBranchProbe({
       return refreshBranchListForProbe(
         queryClient,
         repoPath,
-        hostClient,
         () => activeRepoPathRef.current === repoPath,
       );
     } catch (error) {
@@ -170,7 +165,7 @@ export function useWorkspaceBranchProbe({
     } finally {
       probeGate.finish(probeToken);
     }
-  }, [hostClient, probeGate, queryClient]);
+  }, [probeGate, queryClient]);
 
   const syncExternalBranchChange = useCallback(async (): Promise<void> => {
     const repoPath = activeRepoPathRef.current;

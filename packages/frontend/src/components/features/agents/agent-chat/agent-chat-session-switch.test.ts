@@ -7,20 +7,21 @@ import {
 } from "@openducktor/contracts";
 import { render } from "@testing-library/react";
 import { act, createElement, useSyncExternalStore } from "react";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
-} from "@/state/app-state-contexts";
-import { createAgentSessionTranscriptEventConsumer } from "@/state/operations/agent-orchestrator/events/session-transcript-events";
-import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { applyLoadedSessionHistory } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
-import { createSessionTurnState } from "@/state/operations/agent-orchestrator/support/session-turn-state";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { createAgentSessionTranscriptEventConsumer } from "@openducktor/frontend-core/sessions/agent-orchestrator/events/session-transcript-events";
+import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { applyLoadedSessionHistory } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
+import { createSessionTurnState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-turn-state";
+import { createFeedbackFake } from "@openducktor/frontend-core/test-support/feedback-fake";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionHistoryLoadContextValue } from "@/types/state-slices";
 import { buildMessage } from "./agent-chat-test-fixtures";
 import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
@@ -43,6 +44,7 @@ test.each([
       updateSession: store.updateSession,
       updateSessionTodos: () => {},
       sessionTurnState: createSessionTurnState(),
+      feedback: createFeedbackFake(),
     },
     { batchWindowMs: 60_000 },
   );
@@ -163,6 +165,7 @@ test.each([
         updateSession: store.updateSession,
         updateSessionTodos: () => {},
         sessionTurnState: createSessionTurnState(),
+        feedback: createFeedbackFake(),
       },
       { batchWindowMs: 60_000 },
     );

@@ -8,14 +8,17 @@ import type {
   TaskDocumentKind,
   TaskExecutionDocuments,
 } from "@/components/features/agents/task-execution-document-panel";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   getAgentSessionWaitingInputPlaceholder,
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
-} from "@/lib/agent-session-waiting-input";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/lib/agent-session-waiting-input";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
   buildTaskExecutionDocuments,

@@ -2,19 +2,20 @@ import { expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { currentBranchQueryOptions, worktreeBranchQueryOptions } from "@/state/queries/git";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
+import {
+  currentBranchQueryOptions,
+  worktreeBranchQueryOptions,
+} from "@openducktor/frontend-core/queries/git";
 
 test("switching worktrees refreshes file data when both branches have the same name", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { gitGetCurrentBranch: async () => ({ name: "main", detached: false }) },
-    }),
-  );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  createTestClientConnection({
+    queryClient,
+    client: { gitGetCurrentBranch: async () => ({ name: "main", detached: false }) },
+  });
   for (const path of ["/repo/first", "/repo/second"]) {
     queryClient.setQueryData(worktreeBranchQueryOptions("/repo", path).queryKey, {
       name: "main",
@@ -47,7 +48,6 @@ test("switching worktrees refreshes file data when both branches have the same n
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -59,17 +59,16 @@ test.each([
   async ({ isWorktree, workingDirectory }) => {
     let name = "main";
     let fails = false;
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          gitGetCurrentBranch: async () => {
-            if (fails) throw new Error("Branch read failed");
-            return { name, detached: false };
-          },
-        },
-      }),
-    );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({
+      queryClient,
+      client: {
+        gitGetCurrentBranch: async () => {
+          if (fails) throw new Error("Branch read failed");
+          return { name, detached: false };
+        },
+      },
+    });
     const view = renderHook(
       () =>
         useWorkspaceSessionBranch({
@@ -110,7 +109,6 @@ test.each([
     } finally {
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -118,17 +116,16 @@ test.each([
 test("a worktree branch check keeps Git ready while the file preview waits", async () => {
   let holdRead = false;
   const release = Promise.withResolvers<void>();
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetCurrentBranch: async () => {
-          if (holdRead) await release.promise;
-          return { name: "main", detached: false };
-        },
-      },
-    }),
-  );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  createTestClientConnection({
+    queryClient,
+    client: {
+      gitGetCurrentBranch: async () => {
+        if (holdRead) await release.promise;
+        return { name: "main", detached: false };
+      },
+    },
+  });
   const view = renderHook(
     () =>
       useWorkspaceSessionBranch({
@@ -163,7 +160,6 @@ test("a worktree branch check keeps Git ready while the file preview waits", asy
     release.resolve();
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -174,12 +170,11 @@ test.each([
   "$name detached branch keys stay after a commit, and the checkout shows the new commit",
   async ({ isWorktree, workingDirectory }) => {
     let revision = "first";
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { gitGetCurrentBranch: async () => ({ detached: true, revision }) },
-      }),
-    );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    createTestClientConnection({
+      queryClient,
+      client: { gitGetCurrentBranch: async () => ({ detached: true, revision }) },
+    });
     const branchQuery = isWorktree
       ? worktreeBranchQueryOptions("/repo", workingDirectory)
       : currentBranchQueryOptions("/repo");
@@ -221,7 +216,6 @@ test.each([
     } finally {
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );

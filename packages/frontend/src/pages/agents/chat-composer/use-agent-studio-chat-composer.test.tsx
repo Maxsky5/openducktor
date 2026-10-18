@@ -17,21 +17,22 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { QueryProvider } from "@/lib/query-provider";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { HostRuntimeStatusContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   createSessionMessagesState,
   getSessionMessagesSlice,
-} from "@/state/operations/agent-orchestrator/support/messages";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import type {
   AgentChatMessage,
   AgentSessionIdentity,
   AgentSessionState,
   SessionMessagesState,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,
@@ -304,7 +305,7 @@ const createRuntimeWrapper = (
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       QueryProvider,
-      { useIsolatedClient: true },
+      null,
       createElement(
         RuntimeDefinitionsContext.Provider,
         { value: runtimeDefinitionsContext },

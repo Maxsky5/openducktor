@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   groupSessionsByTaskId,

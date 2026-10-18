@@ -1,6 +1,6 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import { z } from "zod";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 type ProbeBranchChangeParams = {
   activeWorkspaceRepoPath: string | null;

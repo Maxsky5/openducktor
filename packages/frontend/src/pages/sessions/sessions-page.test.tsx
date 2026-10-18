@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { AgentsPage } from "@/pages/agents/agents-page";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   ActiveWorkspaceContext,
   TaskSnapshotContext,
@@ -35,7 +35,7 @@ function Harness({ initiallyClosed = false }: { initiallyClosed?: boolean }): Re
     workspaces: [workspace],
   });
   return (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ActiveWorkspaceContext.Provider
         value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
       >

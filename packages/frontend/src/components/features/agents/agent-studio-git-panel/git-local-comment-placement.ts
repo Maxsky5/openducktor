@@ -1,6 +1,6 @@
 import type { GitFileDiff } from "@openducktor/contracts";
 import { commentMatchesDiff } from "@/components/features/agents/pierre-diff-viewer-model";
-import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
+import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 
 export type LocalCommentGroup = "conflicted" | "unstaged" | "staged";
 

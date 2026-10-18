@@ -1,6 +1,9 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { findRuntimeDefinition, runtimeSupportsRole } from "@/lib/agent-runtime";
+import {
+  findRuntimeDefinition,
+  runtimeSupportsRole,
+} from "@openducktor/frontend-core/lib/agent-runtime";
 import { assertRuntimeSupportsSelectedStartMode } from "@/features/session-start/session-start-validation";
 
 export const requireDirectSessionSelection = ({

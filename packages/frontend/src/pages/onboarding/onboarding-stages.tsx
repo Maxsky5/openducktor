@@ -35,7 +35,7 @@ import { SettingsNotificationsSection } from "@/components/features/settings/set
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
+import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 const SETUP_STEPS = [

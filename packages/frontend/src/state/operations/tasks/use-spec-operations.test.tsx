@@ -1,13 +1,20 @@
 import type { TaskDocumentSaveResult } from "@openducktor/contracts";
-import { boardEvent, eventCursor } from "@/state/queries/task-view-sync.test-support";
+import {
+  boardEvent,
+  eventCursor,
+} from "@openducktor/frontend-core/queries/task-view-sync.test-support";
 import { describe, expect, mock, test } from "bun:test";
 import { defaultSpecTemplateMarkdown, type TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { documentQueryKeys, taskDocumentQueryOptions } from "@/state/queries/documents";
-import type { TaskDocumentPayload } from "@/types/task-documents";
+import {
+  documentQueryKeys,
+  taskDocumentQueryOptions,
+} from "@openducktor/frontend-core/queries/documents";
+import type { TaskDocumentPayload } from "@openducktor/frontend-core/types/task-documents";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { createTaskViewSync } from "@/state/queries/task-view-sync";
-import { taskQueryKeys, type RepoTaskData } from "@/state/queries/tasks";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createTaskViewSync } from "@openducktor/frontend-core/queries/task-view-sync";
+import { taskQueryKeys, type RepoTaskData } from "@openducktor/frontend-core/queries/tasks";
 import {
   createSpecOperations,
   type SpecDocumentLoaders,
@@ -19,7 +26,12 @@ const saveResult = (updatedAt: string): TaskDocumentSaveResult => ({
   cursor: eventCursor(Date.parse(updatedAt)),
 });
 
-const createQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const createQueryClient = () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Document save guards resolve the host through the connection that owns the query client.
+  createTestClientConnection({ queryClient });
+  return queryClient;
+};
 
 const createOperations = ({
   activeRepoPath = "/repo-a",

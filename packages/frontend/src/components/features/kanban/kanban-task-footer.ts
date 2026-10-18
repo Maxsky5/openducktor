@@ -1,6 +1,9 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  agentSessionIdentityKey,
+  matchesAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { KanbanTaskActivityState, KanbanTaskSession } from "./kanban-task-activity";
 import { resolveTaskCardActions, type TaskWorkflowAction } from "./kanban-task-workflow";
 import {

@@ -1,11 +1,11 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
-import { resolvedPathQueryOptions } from "@/state/queries/filesystem";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
+import { resolvedPathQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import { ChatFileLinkContext, type ChatFileLinkOwner } from "./agent-chat-file-link-context";
-import { canonicalPathQueryOptions } from "@/state/queries/git";
+import { canonicalPathQueryOptions } from "@openducktor/frontend-core/queries/git";
 import { parseChatFileLink, resolveChatFileLink } from "./agent-chat-file-link";
 
 export function ChatFileLinkProvider({

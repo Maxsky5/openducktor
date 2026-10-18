@@ -15,7 +15,7 @@ import {
 import { gitProviderReadError, pullRequestHealthError } from "@/lib/git-provider-health";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
+import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 
 export function PullRequestSyncDialog({

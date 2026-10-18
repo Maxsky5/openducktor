@@ -7,17 +7,24 @@ import {
   type SessionStartWorkflowResult,
 } from "@/features/session-start";
 import { SessionStartWorkflowError } from "@/features/session-start/session-start-orchestration";
-import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  matchesAgentSessionIdentity,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import { normalizeWorkingDirectory } from "@openducktor/frontend-core/lib/working-directory";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
-import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentMessageSendOptions,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   conflictRequestContext,
   GitConflictRequestCancelled,
   type GitConflictAssistanceResult,
 } from "./conflict-assistance";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION } from "./constants";
+import { useQueryClient } from "@tanstack/react-query";
 
 export type StartGitConflictResolutionSessionInput = {
   taskId: string;
@@ -45,7 +52,7 @@ type UseGitConflictResolutionArgs = {
   startConflictResolutionSession: (
     input: StartGitConflictResolutionSessionInput,
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadPromptOverrides?: ((workspaceId: string) => Promise<RepoPromptOverrides>) | undefined;
 };
 
 type UseGitConflictResolutionResult = {
@@ -60,8 +67,16 @@ type UseGitConflictResolutionResult = {
 export function useGitConflictResolution({
   workspaceId,
   startConflictResolutionSession,
-  loadPromptOverrides = loadEffectivePromptOverrides,
+  loadPromptOverrides: suppliedLoadPromptOverrides,
 }: UseGitConflictResolutionArgs): UseGitConflictResolutionResult {
+  const queryClient = useQueryClient();
+  const loadPromptOverrides = useCallback(
+    (id: string) =>
+      suppliedLoadPromptOverrides
+        ? suppliedLoadPromptOverrides(id)
+        : loadEffectivePromptOverrides(id, queryClient),
+    [queryClient, suppliedLoadPromptOverrides],
+  );
   const handleResolveGitConflict = useCallback(
     async (
       conflict: GitConflict,

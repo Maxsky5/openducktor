@@ -10,10 +10,11 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { HostRuntimeStatusContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createDeferred,
   createHostRuntimeStatusContextValue,
@@ -69,7 +70,7 @@ const createHookHarness = (
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       QueryProvider,
-      { useIsolatedClient: true },
+      null,
       createElement(
         RuntimeDefinitionsContext.Provider,
         { value: runtimeDefinitionsContext },

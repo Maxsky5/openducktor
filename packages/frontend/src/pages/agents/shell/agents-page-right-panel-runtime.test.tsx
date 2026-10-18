@@ -2,8 +2,8 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { ComponentProps, PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
 
 interface QueryClientRefContract {
@@ -84,7 +84,7 @@ test("invalidates the visible file when the panel is hidden", async () => {
   );
   const unrelatedFileQueryKey = filesystemQueryKeys.textFile("/other-workspace", "src/other.ts");
   render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <SeedQueryData
         queryClientRef={queryClientRef}
         entries={[

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSkillReference, AgentUserMessageDisplayPart } from "@openducktor/core";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { withClaudeSkillMentions } from "./claude-skill-mentions";
 

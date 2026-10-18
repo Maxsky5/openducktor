@@ -3,20 +3,20 @@ import {
   agentSessionLiveSnapshotSchema,
   type AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
-import type { WorkspaceSessionLiveSnapshot } from "@/features/workspace-activity/workspace-activity-observer";
+import type { WorkspaceSessionLiveSnapshot } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
 import {
   foldWorkspaceSessionLiveFacts,
   type WorkspaceSessionLiveFacts,
   type WorkspaceSessionLiveState,
-} from "@/features/workspace-activity/workspace-activity-state";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import {
   applyWorkspaceActivityEnvelope,
   emptyWorkspaceActivityProjection,
-} from "@/features/workspace-activity/workspace-activity-projection";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createSessionReadStateStore, sessionReadStateKey } from "./session-read-state-store";
-import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
+import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
 
 const identity: AgentSessionIdentity = {
   externalSessionId: "shared-id",

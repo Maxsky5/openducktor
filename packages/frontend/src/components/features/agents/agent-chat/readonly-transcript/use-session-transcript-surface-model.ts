@@ -1,12 +1,12 @@
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession, useAgentSessionVisiblePendingInput } from "@/state/app-state-provider";
-import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
-import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
+import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
+import { useWorkspaceChatSettings } from "@openducktor/frontend-core/queries/use-workspace-chat-settings";
 import { deriveAgentChatReadiness } from "../agent-chat-readiness";
 import { resolveAgentChatRuntimePresentation } from "../agent-chat-runtime-presentation";
 import { resolveAgentChatTranscriptPresentation } from "../agent-chat-transcript-presentation";

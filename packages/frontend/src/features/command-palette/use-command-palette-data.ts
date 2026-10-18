@@ -6,20 +6,23 @@ import {
   toSessionNavigationReads,
   withRecordStreamError,
 } from "@/features/session-navigation/use-session-navigation-model";
-import type { WorkspaceSessionLiveSnapshot } from "@/features/workspace-activity/workspace-activity-observer";
+import type { WorkspaceSessionLiveSnapshot } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
 import {
   UNKNOWN_WORKSPACE_SESSION_LIVE_STATE,
   type WorkspaceSessionLiveState,
-} from "@/features/workspace-activity/workspace-activity-state";
-import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { normalizeAgentSessionTaskIds } from "@/state/queries/agent-sessions";
-import { type RepoTaskData, repoTaskDataQueryOptions } from "@/state/queries/tasks";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
+import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { normalizeAgentSessionTaskIds } from "@openducktor/frontend-core/queries/agent-sessions";
+import {
+  type RepoTaskData,
+  repoTaskDataQueryOptions,
+} from "@openducktor/frontend-core/queries/tasks";
 import {
   type AgentSessionListTarget,
   agentSessionListTargetKey,
   useAgentSessionListQueries,
-} from "@/state/queries/use-agent-session-lists";
-import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/queries/use-agent-session-lists";
+import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import {
   buildSessionNavigationModel,
   type SessionNavigationEntry,

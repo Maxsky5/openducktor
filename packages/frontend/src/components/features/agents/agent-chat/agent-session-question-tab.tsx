@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentQuestionDraftEntry } from "./agent-session-question-draft";
 
 type QuestionTabProps = {

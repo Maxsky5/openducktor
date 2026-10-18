@@ -1,46 +1,27 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import { classifySystemSlashCommandInvocation } from "@openducktor/core";
 import { toast } from "sonner";
-import { setInlineCommentDraftPersistenceErrorReporter } from "@/state/use-inline-comment-draft-store";
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import {
   type AgentChatComposerDraft,
   createSlashCommandSegment,
   createTextSegment,
   draftToSerializedText,
   resolveDraftToUserMessageParts,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { renderHook } from "@testing-library/react";
-import { act } from "react";
-import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
+import { act, createElement, type PropsWithChildren, type ReactElement } from "react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import {
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
 import { useReviewCommentComposer } from "./use-review-comment-composer";
-
-type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
-
-const createMemoryStorage = (): TestStorage => {
-  const store = new Map<string, string>();
-  return {
-    get length() {
-      return store.size;
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-  };
-};
 
 const OWNER_KEY = toInlineCommentDraftStorageKey({
   workspaceId: "workspace-1",
@@ -70,53 +51,61 @@ const buildStoredPayload = (text: string): string =>
   });
 
 describe("useReviewCommentComposer", () => {
-  let storage: TestStorage;
+  let storage: ClientStorage;
+  let connection: ClientConnection;
+  const commentDrafts = () => connection.drafts.inlineComments;
+  const wrapper = ({ children }: PropsWithChildren): ReactElement =>
+    createElement(ClientConnectionProvider, { connection }, children);
 
   beforeEach(() => {
-    resetInlineCommentDraftStoreForTests();
-    storage = createMemoryStorage();
-    setInlineCommentDraftStorageForTests(storage);
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    storage = createMemoryClientStorage();
+    connection = createTestClientConnection({ storage, scheduleTask: () => () => {} });
   });
 
-  afterEach(() => {
-    resetInlineCommentDraftStoreForTests();
+  afterEach(async () => {
+    await connection.dispose();
   });
 
   test("hydrates stored comments on mount and exposes their pending count", () => {
     storage.setItem(OWNER_KEY, buildStoredPayload("Restored instruction"));
 
-    const rendered = renderHook(() =>
-      useReviewCommentComposer({
-        owner: { kind: "task", workspaceId: "workspace-1", taskId: "task-1" },
-        onSend: async () => true,
-      }),
+    const rendered = renderHook(
+      () =>
+        useReviewCommentComposer({
+          owner: { kind: "task", workspaceId: "workspace-1", taskId: "task-1" },
+          onSend: async () => true,
+        }),
+      { wrapper },
     );
 
     expect(rendered.result.current.pendingSendItems?.count).toBe(1);
-    expect(useInlineCommentDraftStore.getState().hydratedOwners[OWNER_KEY]).toBe(true);
+    expect(commentDrafts().getState().hydratedOwners[OWNER_KEY]).toBe(true);
     rendered.unmount();
   });
 
   test("flushes pending comments on pagehide so a comment written before quitting survives", () => {
-    const rendered = renderHook(() =>
-      useReviewCommentComposer({
-        owner: { kind: "task", workspaceId: "workspace-1", taskId: "task-1" },
-        onSend: async () => true,
-      }),
+    const rendered = renderHook(
+      () =>
+        useReviewCommentComposer({
+          owner: { kind: "task", workspaceId: "workspace-1", taskId: "task-1" },
+          onSend: async () => true,
+        }),
+      { wrapper },
     );
 
     act(() => {
-      useInlineCommentDraftStore.getState().addDraft(OWNER_KEY, {
-        filePath: "packages/frontend/src/pending.ts",
-        diffScope: "uncommitted",
-        startLine: 7,
-        endLine: 7,
-        side: "new",
-        text: "Pending instruction",
-        codeContext: [{ lineNumber: 7, text: "const pending = true;", isSelected: true }],
-        language: "ts",
-      });
+      commentDrafts()
+        .getState()
+        .addDraft(OWNER_KEY, {
+          filePath: "packages/frontend/src/pending.ts",
+          diffScope: "uncommitted",
+          startLine: 7,
+          endLine: 7,
+          side: "new",
+          text: "Pending instruction",
+          codeContext: [{ lineNumber: 7, text: "const pending = true;", isSelected: true }],
+          language: "ts",
+        });
     });
     expect(storage.getItem(OWNER_KEY)).toBeNull();
 
@@ -156,23 +145,25 @@ describe("useReviewCommentComposer", () => {
     const draft = { segments: [createSlashCommandSegment(command)] };
     const sent: AgentChatComposerDraft[] = [];
     let accepted = false;
-    const view = renderHook(() =>
-      useReviewCommentComposer({
-        owner,
-        onSend: async (message) => {
-          sent.push(message);
-          if (trigger === "compact" && sent.length <= 2) {
-            const parts = await resolveDraftToUserMessageParts(message, async () => "");
-            expect(classifySystemSlashCommandInvocation(parts).kind).toBe(
-              "manual_session_compaction",
-            );
-          }
-          return accepted;
-        },
-      }),
+    const view = renderHook(
+      () =>
+        useReviewCommentComposer({
+          owner,
+          onSend: async (message) => {
+            sent.push(message);
+            if (trigger === "compact" && sent.length <= 2) {
+              const parts = await resolveDraftToUserMessageParts(message, async () => "");
+              expect(classifySystemSlashCommandInvocation(parts).kind).toBe(
+                "manual_session_compaction",
+              );
+            }
+            return accepted;
+          },
+        }),
+      { wrapper },
     );
     act(() => {
-      useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+      commentDrafts().getState().addDraft(ownerKey, {
         filePath: "src/a.ts",
         diffScope: "uncommitted",
         startLine: 1,
@@ -189,7 +180,7 @@ describe("useReviewCommentComposer", () => {
       });
       expect(sent.at(-1)).toEqual(draft);
       expect(view.result.current.pendingSendItems?.count).toBe(1);
-      expect(useInlineCommentDraftStore.getState().getPendingDrafts(ownerKey)[0]?.text).toBe(
+      expect(commentDrafts().getState().getPendingDrafts(ownerKey)[0]?.text).toBe(
         "Pending instruction",
       );
     }
@@ -237,8 +228,8 @@ describe("useReviewCommentComposer", () => {
         codeContext: [{ lineNumber: 3, text: "removed code", isSelected: true }],
         language: "ts",
       };
-      useInlineCommentDraftStore.getState().addDraft(firstKey, input);
-      useInlineCommentDraftStore
+      commentDrafts().getState().addDraft(firstKey, input);
+      commentDrafts()
         .getState()
         .addDraft(secondKey, { ...input, text: "Other workspace" });
       const accepted = Promise.withResolvers<boolean>();
@@ -251,6 +242,7 @@ describe("useReviewCommentComposer", () => {
       };
       const view = renderHook(({ owner, onSend }) => useReviewCommentComposer({ owner, onSend }), {
         initialProps: { owner: first, onSend: firstSend },
+        wrapper,
       });
       let result!: Promise<AgentChatSendResult>;
       act(() => {
@@ -266,7 +258,7 @@ describe("useReviewCommentComposer", () => {
       expect(sentText).toContain("3 | removed code");
       expect(sentText).not.toContain("Other workspace");
       act(() =>
-        useInlineCommentDraftStore
+        commentDrafts()
           .getState()
           .addDraft(firstKey, { ...input, text: "Later comment" }),
       );
@@ -277,7 +269,7 @@ describe("useReviewCommentComposer", () => {
         expect(await result).toBe(true);
       });
       expect(
-        useInlineCommentDraftStore
+        commentDrafts()
           .getState()
           .getPendingDrafts(firstKey)
           .map((draft) => draft.text),
@@ -305,25 +297,31 @@ describe("useReviewCommentComposer", () => {
       text: "Accepted note",
       codeContext: [],
     };
-    useInlineCommentDraftStore.getState().addDraft(ownerKey, input);
-    useInlineCommentDraftStore.getState().flush();
+    commentDrafts().getState().addDraft(ownerKey, input);
+    commentDrafts().getState().flush();
+    const removeItem = storage.removeItem;
     storage.removeItem = () => {
       throw new Error("Storage remove failed");
     };
-    setInlineCommentDraftPersistenceErrorReporter(() => {});
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
     const notice = spyOn(toast, "error").mockImplementation(() => "reported");
-    const view = renderHook(() => useReviewCommentComposer({ owner, onSend: async () => true }));
+    const view = renderHook(() => useReviewCommentComposer({ owner, onSend: async () => true }), {
+      wrapper,
+    });
     try {
       await act(async () => {
         expect(await view.result.current.onSend({ segments: [] }, "default")).toBe(true);
       });
-      expect(useInlineCommentDraftStore.getState().draftsByOwner[ownerKey]).toEqual([]);
+      expect(commentDrafts().getState().draftsByOwner[ownerKey]).toEqual([]);
       expect(notice).toHaveBeenCalledWith("Message sent, but the comment save failed", {
         description: "These comments are not saved for this session.",
       });
     } finally {
+      // Teardown disposes the connection, which reports a draft that it cannot save.
+      storage.removeItem = removeItem;
       view.unmount();
       notice.mockRestore();
+      consoleError.mockRestore();
     }
   });
 });

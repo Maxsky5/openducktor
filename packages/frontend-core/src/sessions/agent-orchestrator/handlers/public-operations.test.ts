@@ -1,0 +1,224 @@
+import { describe, expect, mock, test } from "bun:test";
+import { createFeedbackFake } from "../../../test-support/feedback-fake";
+import type { AgentSessionState } from "../../../types/agent-orchestrator";
+import { createSessionMessagesState } from "../support/messages";
+import { createOrchestratorPublicOperations } from "./public-operations";
+
+const SESSION_IDENTITY = {
+  externalSessionId: "session-1",
+  taskId: "task-1",
+  role: "build" as const,
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/session-1",
+};
+
+const codexRuntimePolicy = {
+  kind: "codex" as const,
+  policy: {
+    sandboxMode: "workspace-write" as const,
+    approvalPolicy: "on-request" as const,
+    approvalsReviewer: "user" as const,
+    commandNetworkAccess: false,
+    approvalsReviewerApplies: true,
+  },
+};
+
+type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["sessionActions"];
+type PublicAgentEngine = Parameters<typeof createOrchestratorPublicOperations>[0]["agentEngine"];
+
+const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
+  return {
+    sendAgentMessage: async () => null,
+    manageAgentMessageQueue: async () => {},
+    stopAgentSession: async () => {},
+    continueInterruptedTurn: async () => undefined,
+    updateAgentSessionModel: async () => {},
+    replyAgentApproval: async () => {},
+    answerAgentQuestion: async () => {},
+    ...overrides,
+  };
+};
+
+const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAgentEngine => ({
+  describeGeneratedImages: async () => {
+    throw new Error("Unexpected image metadata read");
+  },
+  beginGeneratedImageBatch: async () => {
+    throw new Error("Unexpected beginGeneratedImageBatch");
+  },
+  releaseGeneratedImageBatch: async () => {
+    throw new Error("Unexpected releaseGeneratedImageBatch");
+  },
+  readGeneratedImage: async () => {
+    throw new Error("Unexpected generated image read");
+  },
+  loadSessionTodos: async () => [],
+  loadSessionHistory: async () => [],
+  ...overrides,
+});
+
+const createPublicOperations = (
+  overrides: Partial<Parameters<typeof createOrchestratorPublicOperations>[0]> = {},
+) =>
+  createOrchestratorPublicOperations({
+    agentEngine: createAgentEngine(),
+    sessionActions: createSessionActions(),
+    loadAgentSessionHistory: async () => null,
+    ...overrides,
+    feedback: overrides.feedback ?? createFeedbackFake(),
+    loadAgentSessionContext: overrides.loadAgentSessionContext ?? (async () => undefined),
+  });
+
+describe("agent-orchestrator-public-operations", () => {
+  test("shows toast and rethrows send errors", async () => {
+    const feedback = createFeedbackFake();
+
+    const operations = createPublicOperations({
+      feedback,
+      agentEngine: createAgentEngine(),
+      sessionActions: createSessionActions({
+        sendAgentMessage: async () => {
+          throw new Error("send failed");
+        },
+      }),
+    });
+
+    await expect(
+      operations.sendAgentMessage(SESSION_IDENTITY, [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow("send failed");
+    expect(feedback.shownOf("error")).toEqual([]);
+  });
+
+  test("leaves post-start send error feedback to the notification policy", async () => {
+    const feedback = createFeedbackFake();
+    const sendAgentMessage = mock(async () => {
+      throw new Error("send failed");
+    });
+    const operations = createPublicOperations({
+      feedback,
+      agentEngine: createAgentEngine(),
+      sessionActions: createSessionActions({ sendAgentMessage }),
+    });
+
+    await expect(
+      operations.sendAgentMessage(SESSION_IDENTITY, [{ kind: "text", text: "hello" }], {
+        errorAttentionId: "launch-post-error",
+      }),
+    ).rejects.toThrow("send failed");
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      SESSION_IDENTITY,
+      [{ kind: "text", text: "hello" }],
+      { errorAttentionId: "launch-post-error" },
+    );
+    expect(feedback.shownOf("error")).toEqual([]);
+  });
+
+  test("shows toast and rethrows stop errors", async () => {
+    const feedback = createFeedbackFake();
+
+    const operations = createPublicOperations({
+      feedback,
+      agentEngine: createAgentEngine(),
+      sessionActions: createSessionActions({
+        stopAgentSession: async () => {
+          throw new Error("stop failed");
+        },
+        continueInterruptedTurn: async () => undefined,
+      }),
+    });
+
+    await expect(operations.stopAgentSession(SESSION_IDENTITY)).rejects.toThrow("stop failed");
+    expect(feedback.shownOf("error")).toEqual([
+      {
+        kind: "error",
+        message: "Failed to stop agent session",
+        options: { description: "stop failed" },
+      },
+    ]);
+  });
+
+  test("delegates session reads directly to the agent engine", async () => {
+    const loadSessionTodos = mock(async () => []);
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine({
+        loadSessionTodos,
+      }),
+      sessionActions: createSessionActions(),
+    });
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
+    };
+
+    await operations.readSessionTodos(sessionRef);
+
+    expect(loadSessionTodos).toHaveBeenCalledWith(sessionRef);
+  });
+
+  test("forwards full session history inputs without stripping transient context", async () => {
+    const readSessionHistory = mock(async () => []);
+    const operations = createPublicOperations({
+      agentEngine: createAgentEngine({
+        loadSessionHistory: readSessionHistory,
+      }),
+      sessionActions: createSessionActions(),
+    });
+
+    await operations.readSessionHistory({
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
+      systemPromptContext: {
+        systemPrompt: "Use the repository rules.",
+        startedAt: "2026-06-14T08:00:00.000Z",
+      },
+      limit: 50,
+    });
+
+    expect(readSessionHistory).toHaveBeenCalledWith({
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      runtimePolicy: codexRuntimePolicy,
+      systemPromptContext: {
+        systemPrompt: "Use the repository rules.",
+        startedAt: "2026-06-14T08:00:00.000Z",
+      },
+      limit: 50,
+    });
+  });
+
+  test("exposes store-backed session history loading as a command", async () => {
+    const loadedSession: AgentSessionState = {
+      externalSessionId: SESSION_IDENTITY.externalSessionId,
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      status: "idle",
+      runtimeStatusMessage: null,
+      startedAt: "2026-06-12T08:00:00.000Z",
+      runtimeKind: SESSION_IDENTITY.runtimeKind,
+      workingDirectory: SESSION_IDENTITY.workingDirectory,
+      livePresence: "unobserved",
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState(SESSION_IDENTITY.externalSessionId),
+      contextUsage: null,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      selectedModel: null,
+    };
+    const loadAgentSessionHistory = mock(async () => loadedSession);
+    const operations = createPublicOperations({
+      loadAgentSessionHistory,
+    });
+
+    const result = await operations.loadAgentSessionHistory(SESSION_IDENTITY);
+
+    expect(loadAgentSessionHistory).toHaveBeenCalledWith(SESSION_IDENTITY);
+    expect(result).toBe(loadedSession);
+  });
+});

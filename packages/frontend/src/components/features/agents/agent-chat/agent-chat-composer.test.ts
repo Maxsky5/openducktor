@@ -3,7 +3,9 @@ import { DEFAULT_CHAT_SETTINGS, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
 import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
@@ -424,11 +426,16 @@ describe("AgentChatComposer", () => {
       ],
       ["an idle session without queued messages", {}, "@ for files; / for commands"],
     ])("names the queue keys in the placeholder for %s", (_name, overrides, placeholder) => {
+      // The queued message list reads its edit drafts from the host connection.
       const html = renderToStaticMarkup(
-        createElement(AgentChatComposer, {
-          settings: { ...DEFAULT_CHAT_SETTINGS, steerMessagesByDefault },
-          model: { ...buildModel(), ...overrides },
-        }),
+        createElement(
+          ClientConnectionProvider,
+          { connection: createTestClientConnection() },
+          createElement(AgentChatComposer, {
+            settings: { ...DEFAULT_CHAT_SETTINGS, steerMessagesByDefault },
+            model: { ...buildModel(), ...overrides },
+          }),
+        ),
       );
 
       const card = readComposerCard(html);

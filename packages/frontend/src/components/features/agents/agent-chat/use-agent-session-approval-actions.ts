@@ -1,7 +1,13 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import type {
+  AgentApprovalRequest,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentSessionRequestState,
   removeAgentSessionRequestValue,
@@ -46,7 +52,9 @@ export function useAgentSessionApprovalActions({
     [pendingApprovals],
   );
   const pendingApprovalByRequestIdRef = useRef(pendingApprovalByRequestId);
-  pendingApprovalByRequestIdRef.current = pendingApprovalByRequestId;
+  useLayoutEffect(() => {
+    pendingApprovalByRequestIdRef.current = pendingApprovalByRequestId;
+  }, [pendingApprovalByRequestId]);
 
   const isSubmittingApprovalByRequestId = useMemo(() => {
     if (!sessionKey) {

@@ -7,7 +7,7 @@ import type {
 } from "@openducktor/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,

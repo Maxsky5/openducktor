@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -10,13 +10,11 @@ import {
   type WorkspaceSessionImportResult,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, Fragment, StrictMode, type ComponentProps } from "react";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { WorkspaceSessionImportDialog } from "./workspace-session-import-dialog";
 
 const definitions = [
@@ -73,26 +71,24 @@ const renderImport = (overrides: Partial<HostClient> = {}, strict = false) => {
   const releases: string[] = [];
   const opened: WorkspaceSession[] = [];
   let closed = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionExternalList: async (input) => {
-          calls.push(input);
-          return { catalogId: input.catalogRequestId, sessions: [row], nextCursor: null };
-        },
-        workspaceSessionExternalRelease: async (input) => {
-          releases.push(input.catalogRequestId);
-          return true;
-        },
-        workspaceSessionImport: async () => ({ session: saved, created: true, openError: null }),
-        ...overrides,
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionExternalList: async (input) => {
+        calls.push(input);
+        return { catalogId: input.catalogRequestId, sessions: [row], nextCursor: null };
       },
-    }),
-  );
-  const client = createQueryClient();
+      workspaceSessionExternalRelease: async (input) => {
+        releases.push(input.catalogRequestId);
+        return true;
+      },
+      workspaceSessionImport: async () => ({ session: saved, created: true, openError: null }),
+      ...overrides,
+    },
+  });
+  const client = connection.queryClient;
   const view = render(
     <Wrapper>
-      <QueryClientProvider client={client}>
+      <ClientConnectionProvider connection={connection}>
         <RuntimeDefinitionsContext value={context}>
           <WorkspaceSessionImportDialog
             workspaceId="workspace"
@@ -102,12 +98,11 @@ const renderImport = (overrides: Partial<HostClient> = {}, strict = false) => {
             onImported={(session) => opened.push(session)}
           />
         </RuntimeDefinitionsContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     </Wrapper>,
   );
   return { ...view, calls, releases, opened, client, closed: () => closed };
 };
-afterEach(() => configureShellBridge(createUnavailableShellBridge()));
 const choose = async (view: ReturnType<typeof renderImport>, label: string) => {
   fireEvent.click(view.getByRole("button", { name: "Runtime" }));
   fireEvent.click(await view.findByRole("option", { name: new RegExp(label) }));

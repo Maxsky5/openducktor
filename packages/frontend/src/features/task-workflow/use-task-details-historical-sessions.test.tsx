@@ -3,8 +3,11 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
-import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  type AgentSessionReadPort,
+  agentSessionQueryKeys,
+} from "@openducktor/frontend-core/queries/agent-sessions";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { useTaskDetailsHistoricalSessions } from "./use-task-details-historical-sessions";
 

@@ -11,24 +11,32 @@ import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { QueryProvider } from "@/lib/query-provider";
-import { createAgentSessionsStore, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import { QueryProvider } from "@/test-utils/query-provider";
+import {
+  createAgentSessionsStore,
+  toAgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  AgentSessionReadModelStateContext,
-  AgentSessionsContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import {
+  AgentSessionReadModelStateContext,
+  AgentSessionsContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import {
   createChatSettingsFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
@@ -387,7 +395,7 @@ function TaskChatProviders({
 }: PropsWithChildren<{ runtime: RuntimeDescriptor }>) {
   return createElement(
     QueryProvider,
-    { useIsolatedClient: true },
+    null,
     createElement(
       WorkspaceStateContext.Provider,
       { value: createWorkspaceStateFixture() },

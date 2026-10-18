@@ -2,18 +2,18 @@ import { type PropsWithChildren, type ReactElement, useState } from "react";
 import {
   type AgentMessageQueuesStore,
   createAgentMessageQueuesStore,
-} from "@/state/agent-message-queues-store";
+} from "@openducktor/frontend-core/sessions/agent-message-queues-store";
 import {
   AgentMessageQueuesContext,
   AgentOperationsContext,
   HostRuntimeStatusContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import type {
   AgentOperationsContextValue,
   HostRuntimeStatusContextValue,
 } from "@/types/state-slices";
-import { createAgentOperationsFixture } from "./agent-operations-fixture";
-import { createHostRuntimeStatusContextValue } from "./shared-test-fixtures";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
+import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 
 type AgentChatSendProvidersProps = PropsWithChildren<{
   operations?: AgentOperationsContextValue;

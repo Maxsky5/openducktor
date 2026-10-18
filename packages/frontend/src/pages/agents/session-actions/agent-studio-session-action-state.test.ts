@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { EMPTY_SELECTED_SESSION_RUNTIME_DATA } from "@/types/selected-session-runtime-data";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { EMPTY_SELECTED_SESSION_RUNTIME_DATA } from "@openducktor/frontend-core/types/selected-session-runtime-data";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 import { deriveAgentStudioSessionActionState } from "./agent-studio-session-action-state";
 

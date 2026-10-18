@@ -11,14 +11,12 @@ import { MediaPreviewDialog } from "@/components/ui/media-preview-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import {
-  useAgentOperationsContext,
-  useRuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   generatedImageMetadataQueryOptions,
   type GeneratedImageMetadataInput,
-} from "@/state/queries/agent-generated-image-metadata";
+} from "@openducktor/frontend-core/queries/agent-generated-image-metadata";
 import {
   agentGeneratedImageQueryKeys,
   type AgentGeneratedImageQueryInput,

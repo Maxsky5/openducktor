@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
   buildAgentQuestionAnswers,

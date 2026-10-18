@@ -1,15 +1,15 @@
 import type { ReusablePrompt } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentUserMessagePart } from "@openducktor/core";
-import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
+import { validateComposerAttachments } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   type AgentChatComposerAttachment,
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
   draftHasSlashCommandSegment,
   resolveDraftToUserMessageParts,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
+import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
 
 export type StageAgentChatSendAttachment = (
   attachment: AgentChatComposerAttachment,
@@ -21,29 +21,30 @@ export type AgentChatSendDraftInput = {
   /** The model that checks the attachments: the turn model for a steer, else the selected one. */
   modelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
   supportsAttachments: boolean;
-  stageAttachment?: StageAgentChatSendAttachment;
+  stageAttachment: StageAgentChatSendAttachment;
 };
 
 export type AgentChatSendDraftParts = AgentUserMessagePart[] | Promise<AgentUserMessagePart[]>;
 
-export const stageAgentChatSendAttachment = async (
-  attachment: AgentChatComposerAttachment,
-): Promise<string> => {
-  if (attachment.file) {
-    return stageLocalAttachmentFile(attachment.file);
-  }
-  if (attachment.path) {
-    return attachment.path;
-  }
-  throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
-};
+/** Stages a picked device file on the host, or keeps the host path that a draft already has. */
+export const createAgentChatSendAttachmentStager =
+  (stage: AttachmentStager): StageAgentChatSendAttachment =>
+  async (attachment) => {
+    if (attachment.file) {
+      return stage(attachment.file);
+    }
+    if (attachment.path) {
+      return attachment.path;
+    }
+    throw new Error(`Attachment "${attachment.name}" is missing local file data.`);
+  };
 
 export const resolveAgentChatSendDraftParts = ({
   draft,
   reusablePrompts,
   modelDescriptor,
   supportsAttachments,
-  stageAttachment = stageAgentChatSendAttachment,
+  stageAttachment,
 }: AgentChatSendDraftInput): AgentChatSendDraftParts | null => {
   const reusablePromptMessageParts = resolveReusablePromptDraftToUserMessageParts(
     draft,

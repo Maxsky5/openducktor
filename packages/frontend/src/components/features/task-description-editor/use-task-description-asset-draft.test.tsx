@@ -4,7 +4,7 @@ import {
   type TaskAssetStageResult,
 } from "@openducktor/contracts";
 import { act } from "@testing-library/react";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useTaskDescriptionAssetDraft } from "./use-task-description-asset-draft";
 
 const workspaceId = "9f66372b-e956-47f4-af2f-77e0df2ad4e1";

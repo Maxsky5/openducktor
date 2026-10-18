@@ -1,4 +1,4 @@
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import type {
   GitTargetBranch,
   RepositoryGitProviderContext,
@@ -20,16 +20,16 @@ import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { withFileQueries } from "@/features/agent-studio-git/refresh/git-file-refresh";
 import type { SessionPanelModel } from "@/features/session-panels";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
-import { hostClient } from "@/lib/host-client";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState } from "@/state";
 import {
   type PullRequestReviewContextQueryInput,
   prefetchPullRequestReviewContextFromQuery,
-} from "@/state/queries/pull-request-review";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/queries/pull-request-review";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentsPageBuildTools } from "../shell/use-agents-page-build-tools";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -105,7 +105,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError = null,
-  openDirectoryInTool = hostClient.systemOpenDirectoryInTool,
+  openDirectoryInTool,
 }: BuildAgentsPageDiffModelArgs<GitActions>) {
   const { diffData, gitPanelContextMode, openInTarget, resolvedGitPanelBranch } =
     buildToolsSnapshot;
@@ -122,7 +122,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
     gitProviderReadError ?? pullRequestHealthError(gitProviderContext);
   const openInTargetPath = openInTarget.path;
   const optionalModel: BuildAgentsPageDiffOptionalModel = {};
-  if (openInTargetPath) {
+  if (openInTargetPath && openDirectoryInTool) {
     optionalModel.openDirectoryInTool = (toolId) => openDirectoryInTool(openInTargetPath, toolId);
   }
   if (selectedTask && detectingPullRequestTaskIds.has(selectedTask.id)) {
@@ -228,6 +228,7 @@ export function useAgentsPageRightPanelModel({
   gitProviderReadError = null,
 }: UseAgentsPageRightPanelModelArgs) {
   const queryClient = useQueryClient();
+  const hostClient = useHostClient();
   // A tool view is active while its tab is selected in the shown right panel.
   const { activeKind } = panel;
   const selectedTaskId = selectedView.selectedTask?.id ?? null;
@@ -413,6 +414,7 @@ export function useAgentsPageRightPanelModel({
       onDetectPullRequest,
       gitProviderContext,
       gitProviderReadError,
+      openDirectoryInTool: hostClient.systemOpenDirectoryInTool,
     };
     return {
       ...buildAgentsPageDiffModel(input),
@@ -438,6 +440,7 @@ export function useAgentsPageRightPanelModel({
     gitProviderReadError,
     gitPanelSubjectKey,
     detectingPullRequestTaskIds,
+    hostClient,
     selectedView.selectedTask,
   ]);
   useGitCommentDraftValidation(diffModel);

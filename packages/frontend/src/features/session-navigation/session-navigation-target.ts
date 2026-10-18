@@ -1,6 +1,6 @@
 import { type AgentRole, runtimeKindSchema } from "@openducktor/contracts";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export const SESSIONS_PATH = "/sessions";
 

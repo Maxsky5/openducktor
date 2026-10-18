@@ -1,9 +1,12 @@
 import type { AgentRole } from "@openducktor/core";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
+import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { ActiveAgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 
 export type KanbanTaskActivityState = "idle" | "active" | "waiting_input";
 

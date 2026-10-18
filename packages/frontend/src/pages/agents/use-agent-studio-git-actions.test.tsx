@@ -1,4 +1,4 @@
-import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitChangeSelectionRequest, GitLocalChanges } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
@@ -8,8 +8,8 @@ import {
   type GitConflict,
   gitChangeIntentKey,
 } from "@/features/agent-studio-git";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -78,11 +78,12 @@ type UseAgentStudioGitActionsHook =
   (typeof import("./use-agent-studio-git-actions"))["useAgentStudioGitActions"];
 
 let useAgentStudioGitActions: UseAgentStudioGitActionsHook;
+let connection: ClientConnection;
 
 type HookArgs = Parameters<UseAgentStudioGitActionsHook>[0];
 
 const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioGitActions, initialProps);
+  createSharedHookHarness(useAgentStudioGitActions, initialProps, { connection });
 
 const createExpectedBranch = () => ({ name: "feature/task-10", detached: false });
 const createUnstagedSnapshot = () => ({
@@ -172,20 +173,18 @@ const createDetectedConflict = (overrides: Partial<GitConflict> = {}): GitConfli
 });
 
 beforeEach(async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitCommitAll: gitCommitAllMock,
-        gitCommitStaged: gitCommitStagedMock,
-        gitPushBranch: gitPushBranchMock,
-        gitPullBranch: gitPullBranchMock,
-        gitRebaseBranch: gitRebaseBranchMock,
-        gitAbortConflict: gitAbortConflictMock,
-        gitRebaseAbort: gitRebaseAbortMock,
-        gitChangeSelection: gitChangeSelectionMock,
-      },
-    }),
-  );
+  connection = createTestClientConnection({
+    client: {
+      gitCommitAll: gitCommitAllMock,
+      gitCommitStaged: gitCommitStagedMock,
+      gitPushBranch: gitPushBranchMock,
+      gitPullBranch: gitPullBranchMock,
+      gitRebaseBranch: gitRebaseBranchMock,
+      gitAbortConflict: gitAbortConflictMock,
+      gitRebaseAbort: gitRebaseAbortMock,
+      gitChangeSelection: gitChangeSelectionMock,
+    },
+  });
   testSpies = [
     spyOn(actualSonnerModule.toast, "success").mockImplementation(toastSuccessMock),
     spyOn(actualSonnerModule.toast, "error").mockImplementation(toastErrorMock),
@@ -193,10 +192,10 @@ beforeEach(async () => {
   ({ useAgentStudioGitActions } = await import("./use-agent-studio-git-actions"));
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const testSpy of testSpies) testSpy.mockRestore();
   testSpies = [];
-  configureShellBridge(createUnavailableShellBridge());
+  await connection.dispose();
 });
 
 beforeEach(() => {

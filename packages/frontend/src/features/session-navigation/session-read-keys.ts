@@ -1,5 +1,5 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
 import {
   sessionNavigationTargetKey,

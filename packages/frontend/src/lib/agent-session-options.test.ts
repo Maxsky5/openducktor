@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type AgentSessionOptionSummary,
   buildRoleSessionSequenceByIdentity,

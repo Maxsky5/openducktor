@@ -8,7 +8,7 @@ import { useCallback, useState } from "react";
 import {
   notificationOsCapabilityQueryOptions,
   notificationQueryKeys,
-} from "@/state/queries/notifications";
+} from "@openducktor/frontend-core/queries/notifications";
 import { useNotificationContext } from "./notification-context";
 
 const errorMessage = (cause: unknown): string =>

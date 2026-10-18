@@ -1,6 +1,6 @@
 import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
-import { isRepoStoreReady } from "@/lib/repo-store-health";
-import type { ObservedCheck } from "@/types/diagnostics";
+import { isRepoStoreReady } from "@openducktor/frontend-core/lib/repo-store-health";
+import type { ObservedCheck } from "@openducktor/frontend-core/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type DiagnosticsToastIssue = {

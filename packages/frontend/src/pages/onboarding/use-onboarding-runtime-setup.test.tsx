@@ -6,8 +6,8 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { host } from "@/state/operations/host";
-import { runtimeDiscoveryQueryOptions } from "@/state/queries/runtime";
+import type { HostClient } from "@openducktor/host-client";
+import { runtimeDiscoveryQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createCheck,
@@ -43,35 +43,31 @@ describe("useOnboardingRuntimeSetup", () => {
       },
     };
     const validation = createDeferred<RuntimeExecutableCheck>();
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => validation.promise);
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => validation.promise);
 
-    try {
-      renderOnboarding({ runtimes });
-      fireEvent.click(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
-      );
+    renderOnboarding({ client, runtimes });
+    fireEvent.click(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+    );
 
-      await screen.findByRole("heading", { name: "Configure coding agents" });
-      expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
-      expect(screen.queryByText("Unavailable")).toBeNull();
-      expect(screen.queryByText("Enter a path, then check it.")).toBeNull();
-      expect(screen.getAllByText("Validating saved executable path...")).toHaveLength(
-        runtimeDefinitions.length,
-      );
-      for (const input of screen.getAllByRole("textbox", { name: "Executable path" })) {
-        expect(input.getAttribute("aria-invalid")).toBe("false");
-      }
-
-      await act(async () => {
-        validation.resolve(createCheck(runtimes, true));
-      });
-      await within(opencodeSection()).findByText("Available");
-      expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
-      expect(within(opencodeSection()).queryByText("1.0.0 at /valid/opencode")).toBeNull();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
+    await screen.findByRole("heading", { name: "Configure coding agents" });
+    expect(screen.getAllByText("Checking")).toHaveLength(runtimeDefinitions.length);
+    expect(screen.queryByText("Unavailable")).toBeNull();
+    expect(screen.queryByText("Enter a path, then check it.")).toBeNull();
+    expect(screen.getAllByText("Validating saved executable path...")).toHaveLength(
+      runtimeDefinitions.length,
+    );
+    for (const input of screen.getAllByRole("textbox", { name: "Executable path" })) {
+      expect(input.getAttribute("aria-invalid")).toBe("false");
     }
+
+    await act(async () => {
+      validation.resolve(createCheck(runtimes, true));
+    });
+    await within(opencodeSection()).findByText("Available");
+    expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
+    expect(within(opencodeSection()).queryByText("1.0.0 at /valid/opencode")).toBeNull();
   });
 
   test("uses runtime brand marks and opens Browse in the configured executable directory", async () => {
@@ -85,10 +81,7 @@ describe("useOnboardingRuntimeSetup", () => {
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
-    const original = {
-      filesystemListDirectory: host.filesystemListDirectory,
-      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
-    };
+    const client: Partial<HostClient> = {};
     const filesystemListDirectory = mock(async () => ({
       currentPath: "/Users/dev/.local/bin",
       currentPathIsGitRepo: false,
@@ -96,134 +89,109 @@ describe("useOnboardingRuntimeSetup", () => {
       homePath: "/Users/dev",
       entries: [],
     }));
-    host.filesystemListDirectory = filesystemListDirectory;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
+    client.filesystemListDirectory = filesystemListDirectory;
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes, true));
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
 
-      for (const definition of runtimeDefinitions) {
-        const section = screen.getByRole("heading", { name: definition.label }).closest("section");
-        if (!section) throw new Error(`${definition.label} section is missing`);
-        const logo = section.querySelector<HTMLElement>(`[data-runtime-logo="${definition.kind}"]`);
-        expect(logo?.querySelector("svg")).toBeTruthy();
-        expect(logo?.className).not.toMatch(/\b(?:bg-|border|rounded)/);
-      }
-      expect(opencodeSection().textContent).not.toContain("OC");
-
-      await act(async () => {
-        fireEvent.click(
-          within(opencodeSection()).getByRole<HTMLButtonElement>("button", { name: "Browse" }),
-        );
-        await Promise.resolve();
-      });
-
-      await waitFor(() =>
-        expect(filesystemListDirectory).toHaveBeenCalledWith({
-          path: "/Users/dev/.local/bin",
-          includeFiles: true,
-        }),
-      );
-      await screen.findByText("/Users/dev/.local/bin");
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
-    } finally {
-      host.filesystemListDirectory = original.filesystemListDirectory;
-      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
+    for (const definition of runtimeDefinitions) {
+      const section = screen.getByRole("heading", { name: definition.label }).closest("section");
+      if (!section) throw new Error(`${definition.label} section is missing`);
+      const logo = section.querySelector<HTMLElement>(`[data-runtime-logo="${definition.kind}"]`);
+      expect(logo?.querySelector("svg")).toBeTruthy();
+      expect(logo?.className).not.toMatch(/\b(?:bg-|border|rounded)/);
     }
+    expect(opencodeSection().textContent).not.toContain("OC");
+
+    await act(async () => {
+      fireEvent.click(
+        within(opencodeSection()).getByRole<HTMLButtonElement>("button", { name: "Browse" }),
+      );
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(filesystemListDirectory).toHaveBeenCalledWith({
+        path: "/Users/dev/.local/bin",
+        includeFiles: true,
+      }),
+    );
+    await screen.findByText("/Users/dev/.local/bin");
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
   });
 
   test("shows and retries a settings snapshot failure before a draft exists", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
     let attempts = 0;
-    const original = {
-      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
-      runtimeDefinitionsList: host.runtimeDefinitionsList,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
-    host.runtimeDefinitionsList = mock(async () => runtimeDefinitions);
-    host.workspaceGetSettingsSnapshot = mock(async () => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    client.runtimeDefinitionsList = mock(async () => runtimeDefinitions);
+    client.workspaceGetSettingsSnapshot = mock(async () => {
       attempts += 1;
       if (attempts === 1) throw new Error("Settings snapshot failed");
       return snapshot;
     });
 
-    try {
-      renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
-        );
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      await screen.findByText("Settings snapshot failed");
-      expect(screen.queryByLabelText("Loading coding agent settings")).toBeNull();
-      await act(async () => {
-        fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      await waitFor(() => expect(attempts).toBe(2));
-      await screen.findByRole("heading", { name: "OpenCode" });
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
-          false,
-        ),
+    renderOnboarding({ client, runtimes, prefillSettings: false, prefillDefinitions: false });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
       );
-    } finally {
-      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
-      host.runtimeDefinitionsList = original.runtimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await screen.findByText("Settings snapshot failed");
+    expect(screen.queryByLabelText("Loading coding agent settings")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => expect(attempts).toBe(2));
+    await screen.findByRole("heading", { name: "OpenCode" });
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+        false,
+      ),
+    );
   });
 
   test("shows and retries a runtime definition failure before a draft exists", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
     let attempts = 0;
-    const original = {
-      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
-      runtimeDefinitionsList: host.runtimeDefinitionsList,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
-    host.workspaceGetSettingsSnapshot = mock(async () => snapshot);
-    host.runtimeDefinitionsList = mock(async () => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    client.workspaceGetSettingsSnapshot = mock(async () => snapshot);
+    client.runtimeDefinitionsList = mock(async () => {
       attempts += 1;
       if (attempts === 1) throw new Error("Runtime definitions failed");
       return runtimeDefinitions;
     });
 
-    try {
-      renderOnboarding({ runtimes, prefillSettings: false, prefillDefinitions: false });
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
-        );
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      await screen.findByText("Runtime definitions failed");
-      await act(async () => {
-        fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      await waitFor(() => expect(attempts).toBe(2));
-      await screen.findByRole("heading", { name: "OpenCode" });
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
-          false,
-        ),
+    renderOnboarding({ client, runtimes, prefillSettings: false, prefillDefinitions: false });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
       );
-    } finally {
-      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
-      host.runtimeDefinitionsList = original.runtimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await screen.findByText("Runtime definitions failed");
+    await act(async () => {
+      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Retry" }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => expect(attempts).toBe(2));
+    await screen.findByRole("heading", { name: "OpenCode" });
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+        false,
+      ),
+    );
   });
 
   test("keeps runtime controls available after a runtime validation request fails", async () => {
@@ -238,44 +206,34 @@ describe("useOnboardingRuntimeSetup", () => {
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
-    const original = {
-      runtimeExecutablesCheck: host.runtimeExecutablesCheck,
-      runtimeDefinitionsList: host.runtimeDefinitionsList,
-      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
-    };
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "validate" && Object.hasOwn(input.paths, "opencode")) {
         throw new Error("Runtime validation failed");
       }
       return createCheck(runtimes, true);
     });
-    host.runtimeDefinitionsList = mock(async () => runtimeDefinitions);
-    host.workspaceGetSettingsSnapshot = mock(async () => snapshot);
+    client.runtimeDefinitionsList = mock(async () => runtimeDefinitions);
+    client.workspaceGetSettingsSnapshot = mock(async () => snapshot);
 
-    try {
-      renderOnboarding({ runtimes });
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
-        );
-        await Promise.resolve();
-      });
-      await screen.findByText("Runtime validation failed");
-      expect(screen.queryByText("Coding agent setup could not load")).toBeNull();
-      expect(
-        within(opencodeSection()).getByRole<HTMLInputElement>("textbox", {
-          name: "Executable path",
-        }).disabled,
-      ).toBe(false);
-      expect(
-        within(opencodeSection()).getByRole<HTMLButtonElement>("switch", { name: "Enabled" })
-          .disabled,
-      ).toBe(false);
-    } finally {
-      host.runtimeExecutablesCheck = original.runtimeExecutablesCheck;
-      host.runtimeDefinitionsList = original.runtimeDefinitionsList;
-      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
-    }
+    renderOnboarding({ client, runtimes });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+      );
+      await Promise.resolve();
+    });
+    await screen.findByText("Runtime validation failed");
+    expect(screen.queryByText("Coding agent setup could not load")).toBeNull();
+    expect(
+      within(opencodeSection()).getByRole<HTMLInputElement>("textbox", {
+        name: "Executable path",
+      }).disabled,
+    ).toBe(false);
+    expect(
+      within(opencodeSection()).getByRole<HTMLButtonElement>("switch", { name: "Enabled" })
+        .disabled,
+    ).toBe(false);
   });
 
   test("waits for an active runtime validation before checking the latest edited path", async () => {
@@ -292,8 +250,8 @@ describe("useOnboardingRuntimeSetup", () => {
     const initialValidation = createDeferred<RuntimeExecutableCheck>();
     const latestValidation = createDeferred<RuntimeExecutableCheck>();
     const opencodePaths: string[] = [];
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes, true);
       const opencodePath = input.paths.opencode;
       if (opencodePath !== undefined) {
@@ -305,7 +263,7 @@ describe("useOnboardingRuntimeSetup", () => {
     });
 
     try {
-      renderOnboarding({ runtimes });
+      renderOnboarding({ client, runtimes });
       await act(async () => {
         fireEvent.click(
           screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
@@ -358,7 +316,6 @@ describe("useOnboardingRuntimeSetup", () => {
     } finally {
       initialValidation.resolve(createCheck(runtimes, true));
       latestValidation.resolve(createCheck(runtimes, true));
-      host.runtimeExecutablesCheck = originalCheck;
     }
     // This flow renders runtime setup and waits for validation updates.
   }, 2_500);
@@ -374,28 +331,24 @@ describe("useOnboardingRuntimeSetup", () => {
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "/broken/claude", defaults: {}, roleOverrides: {} },
     };
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "validate" && Object.hasOwn(input.paths, "claude")) {
         throw new Error("Disabled Claude validation failed");
       }
       return createCheck(runtimes, true);
     });
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
-      await within(opencodeSection()).findByText("Available");
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
+    await within(opencodeSection()).findByText("Available");
 
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
-          false,
-        ),
-      );
-      expect(screen.queryByText("Disabled Claude validation failed")).toBeNull();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+        false,
+      ),
+    );
+    expect(screen.queryByText("Disabled Claude validation failed")).toBeNull();
   });
 
   test("checks an edited enabled runtime while a disabled runtime validation is pending", async () => {
@@ -411,8 +364,8 @@ describe("useOnboardingRuntimeSetup", () => {
     };
     const claudeValidation = createDeferred<RuntimeExecutableCheck>();
     const opencodePaths: string[] = [];
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "validate" && Object.hasOwn(input.paths, "claude")) {
         return claudeValidation.promise;
       }
@@ -434,7 +387,7 @@ describe("useOnboardingRuntimeSetup", () => {
     });
 
     try {
-      renderOnboarding({ runtimes });
+      renderOnboarding({ client, runtimes });
       await enterRuntimeStage();
       await within(opencodeSection()).findByText("Available");
 
@@ -450,7 +403,6 @@ describe("useOnboardingRuntimeSetup", () => {
       await waitFor(() => expect(opencodePaths).toContain("/updated/opencode"));
     } finally {
       claudeValidation.resolve(createCheck(runtimes, true));
-      host.runtimeExecutablesCheck = originalCheck;
     }
   });
 
@@ -467,8 +419,8 @@ describe("useOnboardingRuntimeSetup", () => {
     };
     const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     let discoveryAttempts = 0;
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "discover") {
         discoveryAttempts += 1;
         if (discoveryAttempts === 1) throw new Error("Runtime discovery failed");
@@ -476,27 +428,23 @@ describe("useOnboardingRuntimeSetup", () => {
       return createCheck(runtimes, true);
     });
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterRuntimeStage();
-      await within(opencodeSection()).findByText("Available");
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterRuntimeStage();
+    await within(opencodeSection()).findByText("Available");
 
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
-        );
-      });
-      await screen.findByText("Runtime discovery failed");
-
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
-        false,
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
       );
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
-      await continueFromNotificationsToWorkspace();
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    });
+    await screen.findByText("Runtime discovery failed");
+
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+      false,
+    );
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
+    await continueFromNotificationsToWorkspace();
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     // This flow renders runtime setup and waits for validation updates.
   }, 2_500);
 
@@ -512,36 +460,32 @@ describe("useOnboardingRuntimeSetup", () => {
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
     const discovery = createDeferred<RuntimeExecutableCheck>();
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "discover") return discovery.promise;
       return createCheck(runtimes, true);
     });
 
-    try {
-      const queryClient = renderOnboarding({ runtimes });
-      await enterRuntimeStage();
+    const queryClient = renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
 
-      fireEvent.click(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
-      );
-      await waitFor(() =>
-        expect(
-          queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.fetchStatus,
-        ).toBe("fetching"),
-      );
+    fireEvent.click(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+    );
+    await waitFor(() =>
+      expect(queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.fetchStatus).toBe(
+        "fetching",
+      ),
+    );
 
-      await act(async () => {
-        discovery.resolve(createCheck(runtimes, true));
-      });
-      await waitFor(() =>
-        expect(queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.status).toBe(
-          "success",
-        ),
-      );
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await act(async () => {
+      discovery.resolve(createCheck(runtimes, true));
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryState(runtimeDiscoveryQueryOptions().queryKey)?.status).toBe(
+        "success",
+      ),
+    );
     // This flow renders runtime setup and waits for validation updates.
   }, 2_500);
 
@@ -566,8 +510,8 @@ describe("useOnboardingRuntimeSetup", () => {
       },
     };
     const discovery = createDeferred<RuntimeExecutableCheck>();
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "discover") return discovery.promise;
       const checkedRuntimes = {
         ...runtimes,
@@ -576,41 +520,37 @@ describe("useOnboardingRuntimeSetup", () => {
       return createCheck(checkedRuntimes, true);
     });
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
 
-      fireEvent.click(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
-      );
-      await screen.findByRole("button", { name: "Scanning..." });
+    fireEvent.click(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+    );
+    await screen.findByRole("button", { name: "Scanning..." });
 
-      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
-        selector: "#runtime-executable-opencode",
-      });
-      const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
-        name: "Enabled",
-      });
-      const browseButton = within(opencodeSection()).getByRole<HTMLButtonElement>("button", {
-        name: "Browse",
-      });
-      const backButton = screen.getByRole<HTMLButtonElement>("button", { name: "Back" });
+    const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
+      selector: "#runtime-executable-opencode",
+    });
+    const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
+      name: "Enabled",
+    });
+    const browseButton = within(opencodeSection()).getByRole<HTMLButtonElement>("button", {
+      name: "Browse",
+    });
+    const backButton = screen.getByRole<HTMLButtonElement>("button", { name: "Back" });
 
-      expect(pathInput.disabled).toBe(true);
-      expect(enabledSwitch.disabled).toBe(true);
-      expect(browseButton.disabled).toBe(true);
-      expect(backButton.disabled).toBe(true);
-      pathInput.focus();
-      fireEvent.keyDown(pathInput, { key: "x" });
-      enabledSwitch.click();
-      expect(pathInput.value).toBe("/valid/opencode");
-      expect(enabledSwitch.getAttribute("aria-checked")).toBe("true");
+    expect(pathInput.disabled).toBe(true);
+    expect(enabledSwitch.disabled).toBe(true);
+    expect(browseButton.disabled).toBe(true);
+    expect(backButton.disabled).toBe(true);
+    pathInput.focus();
+    fireEvent.keyDown(pathInput, { key: "x" });
+    enabledSwitch.click();
+    expect(pathInput.value).toBe("/valid/opencode");
+    expect(enabledSwitch.getAttribute("aria-checked")).toBe("true");
 
-      await act(async () => discovery.resolve(createCheck(discoveredRuntimes, true)));
-      await waitFor(() => expect(pathInput.value).toBe("/discovered/opencode"));
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await act(async () => discovery.resolve(createCheck(discoveredRuntimes, true)));
+    await waitFor(() => expect(pathInput.value).toBe("/discovered/opencode"));
   });
 
   test("publishes exact-path results returned by explicit runtime discovery", async () => {
@@ -634,8 +574,8 @@ describe("useOnboardingRuntimeSetup", () => {
       },
     };
     const requests: Array<"discover" | { opencodePath: string }> = [];
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode === "discover") {
         requests.push("discover");
         return createCheck(discoveredRuntimes, true);
@@ -653,27 +593,23 @@ describe("useOnboardingRuntimeSetup", () => {
       return createCheck(checkedRuntimes, true);
     });
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
-      requests.length = 0;
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
+    requests.length = 0;
 
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
-        );
-      });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+      );
+    });
 
-      await waitFor(() => expect(requests).toEqual(["discover"]));
-      expect(
-        screen.getByLabelText<HTMLInputElement>("Executable path", {
-          selector: "#runtime-executable-opencode",
-        }).value,
-      ).toBe("/discovered/opencode");
-      await within(opencodeSection()).findByText("Available");
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await waitFor(() => expect(requests).toEqual(["discover"]));
+    expect(
+      screen.getByLabelText<HTMLInputElement>("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }).value,
+    ).toBe("/discovered/opencode");
+    await within(opencodeSection()).findByText("Available");
   });
 
   test("shows fresh discovery status when a runtime changes at the same path", async () => {
@@ -687,32 +623,28 @@ describe("useOnboardingRuntimeSetup", () => {
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) =>
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) =>
       input.mode === "discover" ? createCheck(runtimes, true) : createCheck(runtimes, false),
     );
 
-    try {
-      renderOnboarding({ runtimes });
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
-        );
-      });
+    renderOnboarding({ client, runtimes });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Configure coding agents" }),
+      );
+    });
 
-      await screen.findByRole("heading", { name: "Configure coding agents" });
-      await within(opencodeSection()).findByText("Needs attention");
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
-        );
-      });
+    await screen.findByRole("heading", { name: "Configure coding agents" });
+    await within(opencodeSection()).findByText("Needs attention");
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Scan for coding agents" }),
+      );
+    });
 
-      await within(opencodeSection()).findByText("Available");
-      expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await within(opencodeSection()).findByText("Available");
+    expect(within(opencodeSection()).getByText("1.0.0")).toBeTruthy();
   });
 
   test("blocks Continue while a changed path is being checked and rejects the new invalid path", async () => {
@@ -734,60 +666,54 @@ describe("useOnboardingRuntimeSetup", () => {
       return createCheck(initialRuntimes, true);
     });
     const saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = runtimeExecutablesCheck;
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = runtimeExecutablesCheck;
 
-    try {
-      renderOnboarding({ runtimes: initialRuntimes, saveSettingsSnapshot });
-      await enterRuntimeStage();
-      await within(opencodeSection()).findByText("Available");
+    renderOnboarding({ client, runtimes: initialRuntimes, saveSettingsSnapshot });
+    await enterRuntimeStage();
+    await within(opencodeSection()).findByText("Available");
 
-      fireEvent.change(
-        screen.getByLabelText<HTMLInputElement>("Executable path", {
-          selector: "#runtime-executable-opencode",
-        }),
-        {
-          target: { value: "/invalid/opencode" },
-        },
-      );
+    fireEvent.change(
+      screen.getByLabelText<HTMLInputElement>("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }),
+      {
+        target: { value: "/invalid/opencode" },
+      },
+    );
 
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
-        true,
-      );
-      expect(within(opencodeSection()).queryByText("Available")).toBeNull();
-      await act(async () => {
-        invalidCheck.resolve(
-          createCheck(
-            {
-              ...initialRuntimes,
-              opencode: {
-                defaults: { rules: [] },
-                roleOverrides: {},
-                enabled: true,
-                executablePath: "/invalid/opencode",
-              },
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(true);
+    expect(within(opencodeSection()).queryByText("Available")).toBeNull();
+    await act(async () => {
+      invalidCheck.resolve(
+        createCheck(
+          {
+            ...initialRuntimes,
+            opencode: {
+              defaults: { rules: [] },
+              roleOverrides: {},
+              enabled: true,
+              executablePath: "/invalid/opencode",
             },
-            false,
-          ),
-        );
-      });
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+          },
           false,
         ),
       );
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+        false,
+      ),
+    );
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
 
-      expect(screen.getAllByText("OpenCode executable is invalid.").length).toBeGreaterThan(0);
-      expect(saveSettingsSnapshot).not.toHaveBeenCalled();
-      expect(document.activeElement).toBe(
-        screen.getByLabelText<HTMLInputElement>("Executable path", {
-          selector: "#runtime-executable-opencode",
-        }),
-      );
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    expect(screen.getAllByText("OpenCode executable is invalid.").length).toBeGreaterThan(0);
+    expect(saveSettingsSnapshot).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(
+      screen.getByLabelText<HTMLInputElement>("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }),
+    );
   });
 
   test("checks only the runtime whose executable path changed", async () => {
@@ -803,8 +729,8 @@ describe("useOnboardingRuntimeSetup", () => {
     };
     const requests: RuntimeKind[][] = [];
     const changedCheck = createDeferred<RuntimeExecutableCheck>();
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes, true);
       const kinds = runtimeDefinitions
         .map((definition) => definition.kind)
@@ -822,42 +748,38 @@ describe("useOnboardingRuntimeSetup", () => {
       };
     });
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
-      requests.length = 0;
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
+    requests.length = 0;
 
-      fireEvent.change(
-        screen.getByLabelText<HTMLInputElement>("Executable path", {
-          selector: "#runtime-executable-opencode",
-        }),
-        { target: { value: "/changed/opencode" } },
-      );
+    fireEvent.change(
+      screen.getByLabelText<HTMLInputElement>("Executable path", {
+        selector: "#runtime-executable-opencode",
+      }),
+      { target: { value: "/changed/opencode" } },
+    );
 
-      await within(opencodeSection()).findByText("Checking");
-      expect(requests).toEqual([["opencode"]]);
-      const codexSection = screen.getByRole("heading", { name: "Codex" }).closest("section");
-      if (!codexSection) throw new Error("Codex section is missing");
-      expect(within(codexSection).queryByText("Checking")).toBeNull();
+    await within(opencodeSection()).findByText("Checking");
+    expect(requests).toEqual([["opencode"]]);
+    const codexSection = screen.getByRole("heading", { name: "Codex" }).closest("section");
+    if (!codexSection) throw new Error("Codex section is missing");
+    expect(within(codexSection).queryByText("Checking")).toBeNull();
 
-      await act(async () => {
-        changedCheck.resolve({
-          runtimes: [
-            {
-              kind: "opencode",
-              path: "/changed/opencode",
-              ok: true,
-              version: "opencode 1.0.0",
-              error: null,
-            },
-          ],
-        });
+    await act(async () => {
+      changedCheck.resolve({
+        runtimes: [
+          {
+            kind: "opencode",
+            path: "/changed/opencode",
+            ok: true,
+            version: "opencode 1.0.0",
+            error: null,
+          },
+        ],
       });
-      await within(opencodeSection()).findByText("opencode 1.0.0");
-      expect(within(opencodeSection()).queryByText(/\/changed\/opencode/)).toBeNull();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    });
+    await within(opencodeSection()).findByText("opencode 1.0.0");
+    expect(within(opencodeSection()).queryByText(/\/changed\/opencode/)).toBeNull();
   });
 
   test("auto-enables a valid custom path unless the user changed the switch", async () => {
@@ -866,8 +788,8 @@ describe("useOnboardingRuntimeSetup", () => {
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
       const kinds = runtimeDefinitions
         .map((definition) => definition.kind)
@@ -887,27 +809,23 @@ describe("useOnboardingRuntimeSetup", () => {
       };
     });
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
-      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
-        selector: "#runtime-executable-opencode",
-      });
-      const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
-        name: "Enabled",
-      });
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
+    const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
+      selector: "#runtime-executable-opencode",
+    });
+    const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
+      name: "Enabled",
+    });
 
-      fireEvent.change(pathInput, { target: { value: "/custom/opencode" } });
-      await waitFor(() => expect(enabledSwitch.getAttribute("aria-checked")).toBe("true"));
-      fireEvent.click(enabledSwitch);
-      expect(enabledSwitch.getAttribute("aria-checked")).toBe("false");
-      fireEvent.change(pathInput, { target: { value: "/custom/opencode-v2" } });
-      await within(opencodeSection()).findByText("1.0.0");
-      expect(within(opencodeSection()).queryByText(/\/custom\/opencode-v2/)).toBeNull();
-      expect(enabledSwitch.getAttribute("aria-checked")).toBe("false");
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    fireEvent.change(pathInput, { target: { value: "/custom/opencode" } });
+    await waitFor(() => expect(enabledSwitch.getAttribute("aria-checked")).toBe("true"));
+    fireEvent.click(enabledSwitch);
+    expect(enabledSwitch.getAttribute("aria-checked")).toBe("false");
+    fireEvent.change(pathInput, { target: { value: "/custom/opencode-v2" } });
+    await within(opencodeSection()).findByText("1.0.0");
+    expect(within(opencodeSection()).queryByText(/\/custom\/opencode-v2/)).toBeNull();
+    expect(enabledSwitch.getAttribute("aria-checked")).toBe("false");
   });
 
   test("preserves the user-entered path when validation resolves another executable path", async () => {
@@ -916,8 +834,8 @@ describe("useOnboardingRuntimeSetup", () => {
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
     };
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async (input) => {
       if (input.mode !== "validate") return createCheck(runtimes);
       const kinds = runtimeDefinitions
         .map((definition) => definition.kind)
@@ -937,25 +855,21 @@ describe("useOnboardingRuntimeSetup", () => {
       };
     });
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
-      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
-        selector: "#runtime-executable-opencode",
-      });
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
+    const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
+      selector: "#runtime-executable-opencode",
+    });
 
-      fireEvent.change(pathInput, { target: { value: "~/.local/bin/opencode" } });
+    fireEvent.change(pathInput, { target: { value: "~/.local/bin/opencode" } });
 
-      await within(opencodeSection()).findByText("1.0.0");
-      expect(pathInput.value).toBe("~/.local/bin/opencode");
-      expect(
-        within(opencodeSection())
-          .getByRole<HTMLButtonElement>("switch", { name: "Enabled" })
-          .getAttribute("aria-checked"),
-      ).toBe("true");
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await within(opencodeSection()).findByText("1.0.0");
+    expect(pathInput.value).toBe("~/.local/bin/opencode");
+    expect(
+      within(opencodeSection())
+        .getByRole<HTMLButtonElement>("switch", { name: "Enabled" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   // This test renders and visits three onboarding stages before it checks Back navigation.
@@ -971,43 +885,39 @@ describe("useOnboardingRuntimeSetup", () => {
       if (saveCalls === 1) throw new Error("Settings write failed");
       return savedSettingsResult();
     });
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterRuntimeStage();
-      expect(screen.queryByText("Agent tools")).toBeNull();
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
-          false,
-        ),
-      );
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
-      fireEvent.click(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
-      );
-      const saveError = await screen.findByText("Settings write failed");
-      expect(screen.getByText("Configure coding agents")).toBeTruthy();
-      expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
-      expect(document.activeElement).toBe(saveError);
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterRuntimeStage();
+    expect(screen.queryByText("Agent tools")).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }).disabled).toBe(
+        false,
+      ),
+    );
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
+    await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
+    fireEvent.click(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
+    );
+    const saveError = await screen.findByText("Settings write failed");
+    expect(screen.getByText("Configure coding agents")).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
+    expect(document.activeElement).toBe(saveError);
 
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
-      fireEvent.click(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
-      );
-      await continueFromNotificationsToWorkspace();
-      expect(screen.queryByText("Repository boundary")).toBeNull();
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
-      await screen.findByRole("heading", { name: "Configure notifications" });
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
-      expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
+    await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
+    fireEvent.click(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Continue without a coding agent" }),
+    );
+    await continueFromNotificationsToWorkspace();
+    expect(screen.queryByText("Repository boundary")).toBeNull();
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
+    await screen.findByRole("heading", { name: "Configure notifications" });
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Back/ }));
+    expect(screen.getByRole("heading", { name: "Configure coding agents" })).toBeTruthy();
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(2);
     // This test renders a failed save, a retry, and two stage changes.
   }, 5_000);
 
@@ -1037,51 +947,47 @@ describe("useOnboardingRuntimeSetup", () => {
       await save.promise;
       return savedSettingsResult();
     });
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => availableCheck);
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => availableCheck);
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterRuntimeStage();
-      await waitFor(() => expect(screen.getAllByText("Available")).toHaveLength(3));
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterRuntimeStage();
+    await waitFor(() => expect(screen.getAllByText("Available")).toHaveLength(3));
 
-      const heading = screen.getByRole("heading", { name: "Configure coding agents" });
-      const stage = heading.closest('[data-slot="card"]');
-      const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
-        selector: "#runtime-executable-opencode",
-      });
-      const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
-        name: "Enabled",
-      });
-      const scanButton = screen.getByRole<HTMLButtonElement>("button", {
-        name: "Scan for coding agents",
-      });
-      const continueButton = screen.getByRole<HTMLButtonElement>("button", {
-        name: "Continue to notifications",
-      });
+    const heading = screen.getByRole("heading", { name: "Configure coding agents" });
+    const stage = heading.closest('[data-slot="card"]');
+    const pathInput = screen.getByLabelText<HTMLInputElement>("Executable path", {
+      selector: "#runtime-executable-opencode",
+    });
+    const enabledSwitch = within(opencodeSection()).getByRole<HTMLButtonElement>("switch", {
+      name: "Enabled",
+    });
+    const scanButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Scan for coding agents",
+    });
+    const continueButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Continue to notifications",
+    });
 
-      await act(async () => {
-        fireEvent.click(continueButton);
-        await Promise.resolve();
-      });
-      await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      fireEvent.click(continueButton);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1));
 
-      expect(stage?.hasAttribute("inert")).toBe(true);
-      expect(stage?.textContent?.match(/Available/g)).toHaveLength(3);
-      expect(stage?.textContent).not.toContain("Checking");
-      expect(pathInput.disabled).toBe(false);
-      expect(enabledSwitch.disabled).toBe(false);
-      expect(scanButton.disabled).toBe(false);
-      expect(continueButton.disabled).toBe(true);
-      expect(
-        screen.getByRole<HTMLButtonElement>("button", { name: "Saving coding agents..." }),
-      ).toBe(continueButton);
+    expect(stage?.hasAttribute("inert")).toBe(true);
+    expect(stage?.textContent?.match(/Available/g)).toHaveLength(3);
+    expect(stage?.textContent).not.toContain("Checking");
+    expect(pathInput.disabled).toBe(false);
+    expect(enabledSwitch.disabled).toBe(false);
+    expect(scanButton.disabled).toBe(false);
+    expect(continueButton.disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving coding agents..." })).toBe(
+      continueButton,
+    );
 
-      await act(async () => save.resolve());
-      await continueFromNotificationsToWorkspace();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await act(async () => save.resolve());
+    await continueFromNotificationsToWorkspace();
     // This test keeps three runtime cards mounted during a pending save.
   }, 5_000);
 
@@ -1092,56 +998,48 @@ describe("useOnboardingRuntimeSetup", () => {
       await save.promise;
       return savedSettingsResult();
     });
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
 
-    try {
-      renderOnboarding({ runtimes, saveSettingsSnapshot });
-      await enterRuntimeStage();
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
+    renderOnboarding({ client, runtimes, saveSettingsSnapshot });
+    await enterRuntimeStage();
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
+    await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
-      const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
-        name: "Continue without a coding agent",
-      });
-      fireEvent.click(confirmButton);
-      fireEvent.click(confirmButton);
+    const confirmButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Continue without a coding agent",
+    });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
 
-      expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving..." }).disabled).toBe(
-        true,
-      );
-      expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }).disabled).toBe(true);
+    expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving..." }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }).disabled).toBe(true);
 
-      await act(async () => save.resolve());
-      await continueFromNotificationsToWorkspace();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    await act(async () => save.resolve());
+    await continueFromNotificationsToWorkspace();
     // This test renders the confirmation dialog through a pending save.
   }, 2_500);
 
   test("keeps the no-runtime warning visible after confirmation is cancelled", async () => {
     const runtimes = DEFAULT_AGENT_RUNTIMES;
-    const originalCheck = host.runtimeExecutablesCheck;
-    host.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
+    const client: Partial<HostClient> = {};
+    client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
 
-    try {
-      renderOnboarding({ runtimes });
-      await enterRuntimeStage();
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
-      await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
+    renderOnboarding({ client, runtimes });
+    await enterRuntimeStage();
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: /Continue/ }));
+    await screen.findByRole("dialog", { name: "Continue without a coding agent?" });
 
-      fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole<HTMLButtonElement>("button", { name: "Cancel" }));
 
-      expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
-      expect(
-        screen.getByText(
-          "Agent sessions will not work until you configure and enable a valid coding agent in Settings.",
-        ),
-      ).toBeTruthy();
-    } finally {
-      host.runtimeExecutablesCheck = originalCheck;
-    }
+    expect(screen.queryByRole("dialog", { name: "Continue without a coding agent?" })).toBeNull();
+    expect(
+      screen.getByText(
+        "Agent sessions will not work until you configure and enable a valid coding agent in Settings.",
+      ),
+    ).toBeTruthy();
   });
 });

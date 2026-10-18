@@ -30,8 +30,12 @@ import {
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
 import { sessionStartModeButtonLabel } from "@/features/session-start/session-start-display";
-import { findCatalogModel, STANDARD_SPEED, withSpeed } from "@/lib/model-catalog-selection";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  findCatalogModel,
+  STANDARD_SPEED,
+  withSpeed,
+} from "@openducktor/frontend-core/lib/model-catalog-selection";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type SessionStartModalConfirmInput =
   | boolean

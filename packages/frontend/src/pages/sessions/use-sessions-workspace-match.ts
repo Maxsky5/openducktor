@@ -5,7 +5,7 @@ import {
   parseSessionsPageKind,
   SESSIONS_QUERY_KEYS,
 } from "@/features/session-navigation/session-navigation-target";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 
 export type SessionsWorkspaceMatch =

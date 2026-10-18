@@ -5,7 +5,7 @@ import {
   type NotificationOccurrence,
 } from "@openducktor/contracts";
 import { toast } from "sonner";
-import { createNotificationPolicy } from "@/features/notifications/notification-policy";
+import { createNotificationPolicy } from "@openducktor/frontend-core/notifications/notification-policy";
 import { navigateToNotificationTarget } from "@/features/notifications/notification-navigation-logic";
 import { startKanbanSessionFlow } from "@/pages/kanban/kanban-session-start-actions";
 import { buildSessionStartErrorOccurrence } from "@openducktor/core";

@@ -1,5 +1,5 @@
 import { normalizePathForComparison } from "@openducktor/path-support";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 export type AgentStudioGitPanelContextMode = "repository" | "worktree";
 

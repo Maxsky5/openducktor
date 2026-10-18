@@ -1,12 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { buildAgentStudioHeaderModel, buildRoleLabelByRole } from "./agents-page-view-model";
 
 const createTaskCard = (id: string): TaskCard => ({

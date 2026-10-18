@@ -7,7 +7,7 @@ import {
 } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useState } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   NotificationContext,
   type NotificationContextValue,
@@ -48,7 +48,7 @@ const createNotificationContext = (
 function NotificationsHarness({ context }: { context: NotificationContextValue }): ReactElement {
   const [settings, setSettings] = useState(createDefaultNotificationSettings);
   return (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <NotificationContext.Provider value={context}>
         <SettingsNotificationsSection
           notifications={settings}
@@ -87,7 +87,7 @@ describe("SettingsNotificationsSection", () => {
       (_updater: (current: NotificationSettings) => NotificationSettings) => {},
     );
     render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <NotificationContext.Provider value={createNotificationContext()}>
           <SettingsNotificationsSection
             notifications={notifications}

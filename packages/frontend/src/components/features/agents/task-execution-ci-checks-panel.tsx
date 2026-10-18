@@ -2,11 +2,11 @@ import type { PullRequestReviewContext } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { memo } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   type PullRequestReviewContextQueryInput,
   pullRequestReviewContextQueryOptions,
-} from "@/state/queries/pull-request-review";
+} from "@openducktor/frontend-core/queries/pull-request-review";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
 import {
   TaskExecutionCiPanelState,

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { runtimeExecutableResultForPath } from "@/state/operations/runtime-executables/runtime-executable-validation";
-import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
+import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 
 type RuntimeExecutablePanelProps = {
   runtimes: AgentRuntimes;

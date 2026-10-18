@@ -1,4 +1,4 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   configureShellBridge,
@@ -6,7 +6,7 @@ import {
   createUnavailableShellBridge,
   type ShellBridge,
 } from "@/lib/shell-bridge";
-import { createHookHarness as createHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   readAttachmentPreviewLoadFailureMessage,
   useAgentChatAttachmentPreview,
@@ -15,7 +15,7 @@ import {
 const createHookHarness = (
   hook: typeof useAgentChatAttachmentPreview,
   props: Parameters<typeof useAgentChatAttachmentPreview>[0],
-) => createHarness(hook, props, { wrapper: IsolatedQueryWrapper });
+) => createHarness(hook, props, { wrapper: QueryProvider });
 
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;

@@ -1,5 +1,5 @@
 import { CancelledError } from "@tanstack/react-query";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { GitDiffRefreshMode } from "../contracts";
 import type { GitPanelReads } from "../reads/use-git-panel-reads";
 import { startEarlyRead } from "./early-read";

@@ -10,7 +10,7 @@ import {
   restoreNavigationFromWorkspaceState,
 } from "./agent-studio-navigation";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type UseAgentStudioQuerySyncArgs = {
   activeWorkspaceId: string | null;

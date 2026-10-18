@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   buildSessionNavigationModel,
   type SessionNavigationModel,
@@ -23,18 +23,18 @@ import {
 import {
   normalizeAgentSessionTaskIds,
   retryAgentSessionListQueries,
-} from "@/state/queries/agent-sessions";
+} from "@openducktor/frontend-core/queries/agent-sessions";
 import {
   type AgentSessionListRead,
   type AgentSessionListTarget,
   agentSessionListTargetKey,
   useAgentSessionListQueries,
-} from "@/state/queries/use-agent-session-lists";
-import { repoTaskDataQueryOptions, taskQueryKeys } from "@/state/queries/tasks";
+} from "@openducktor/frontend-core/queries/use-agent-session-lists";
+import { repoTaskDataQueryOptions, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import {
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
-} from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useWorkspaceSessionLiveSnapshot } from "@/state/workspace-activity/workspace-activity-context";
 
 export type SessionNavigationModelResult = {

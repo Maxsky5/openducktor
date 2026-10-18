@@ -1,5 +1,5 @@
 import { type ReactElement, type ReactNode, useContext, useEffect, useState } from "react";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
 import { createTranscriptModelCache } from "./agent-chat-transcript-model-cache";
 

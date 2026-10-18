@@ -16,7 +16,7 @@ Put a reusable server read behind TanStack Query. Keep mutations, process lifecy
 
 ## Global defaults
 
-`packages/frontend/src/lib/query-client.ts` sets:
+`packages/frontend-core/src/connection/client-query-client.ts` sets:
 
 - `retry: false`
 - `refetchOnWindowFocus: false`
@@ -25,6 +25,8 @@ Put a reusable server read behind TanStack Query. Keep mutations, process lifecy
 - `gcTime: 10 * 60_000`
 
 These values stop hidden retries and surprise traffic after focus or reconnect. Each query group can replace the default stale time.
+
+Each host connection creates its own query client with `createClientQueryClient()`. A query function reads the host from its context with `connectionHost(client)`, so a cache and its reads always use the same host connection. Two hosts with identical repository paths therefore never share cache entries. Code outside a query function receives the query client or the host client as a parameter. A component or hook reads them with `useQueryClient`, `useHostClient`, or `useClientConnection`.
 
 ## Stale times
 
@@ -40,7 +42,7 @@ Invalidate these read-mostly values after a write.
 | Runtime definitions | 30 min |
 | Runtime catalog | 30 min |
 
-Query modules: `workspace.ts`, `runtime.ts`, and `runtime-catalog.ts` under `packages/frontend/src/state/queries`.
+Query modules: `workspace.ts`, `runtime.ts`, and `runtime-catalog.ts` under `packages/frontend-core/src/queries`.
 The runtime catalog keeps inactive results for 60 minutes so a modal can show cached models during a later refresh.
 
 Runtime catalog reads follow these rules:
@@ -145,7 +147,7 @@ Use `fetchQuery` for an imperative read that still needs the shared key and in-f
 
 Use `prefetchQuery` to warm the cache for a read that the user is likely to need next.
 
-Task documents use a 60 second stale time for normal views. Workflow refreshes force a new fetch through `packages/frontend/src/state/queries/documents.ts` so an external ODT write appears without polling.
+Task documents use a 60 second stale time for normal views. Workflow refreshes force a new fetch through `packages/frontend-core/src/queries/documents.ts` so an external ODT write appears without polling.
 
 ## Disabled reads
 

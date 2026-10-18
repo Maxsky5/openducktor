@@ -12,10 +12,8 @@ import {
 import { List, type RowComponentProps } from "react-window";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
 import type { DiffScope } from "@/features/agent-studio-git";
-import {
-  type InlineCommentDraft,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+import { type InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
 import { DiffPreloadQueue } from "./diff-preload-queue";
 import { FileDiffEntryWithMemo } from "./file-diff-entry";
 import { FileListDirectoryRow } from "./file-list-directory-row";

@@ -46,8 +46,8 @@ import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-req
 import {
   classifyDiagnosticsQueryError,
   taskStoreCheckQueryOptionsOrSkip,
-} from "@/state/queries/checks";
-import { repositoryGitProviderContextQueryOptionsOrSkip } from "@/state/queries/git-provider-context";
+} from "@openducktor/frontend-core/queries/checks";
+import { repositoryGitProviderContextQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/git-provider-context";
 import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 import type {
   CommandPalettePageCommand,

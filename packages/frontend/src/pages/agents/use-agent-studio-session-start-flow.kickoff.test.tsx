@@ -2,15 +2,15 @@ import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-c
 import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createChecksStateContextValue,
   createHostRuntimeStatusContextValue,
@@ -52,7 +52,7 @@ const createHookHarness = (initialProps: HookArgs) => {
       },
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(
           HostRuntimeStatusContext.Provider,
           {

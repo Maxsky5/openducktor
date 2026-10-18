@@ -3,7 +3,6 @@ import { File } from "@pierre/diffs";
 import type { EditorType } from "@pierre/diffs/edit";
 import type { HostClient } from "@openducktor/host-client";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import {
   useEffect,
@@ -14,28 +13,26 @@ import {
 } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as workers from "@/contexts/DiffWorkerProvider";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
 import {
   createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { ActiveWorkspaceContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
-  ActiveWorkspaceContext,
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
   HostRuntimeStatusContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createAgentSessionFixture,
   createHostRuntimeStatusFixture,
@@ -54,12 +51,6 @@ enableReactActEnvironment();
 export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: ReactNode) {
   const frames = createAnimationFrameTestDriver();
   frames.install();
-  const client = createQueryClient();
-  client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
-  for (const taskId of ["a", "b"])
-    client.setQueryData(taskWorktreeQueryOptions({ repoPath: "/repo", taskId }).queryKey, () => ({
-      workingDirectory: `/repo/${taskId}`,
-    }));
   const sessions = createAgentSessionsStore("/repo");
   for (const target of Object.values(dialogTargets)) {
     sessions.replaceSession(
@@ -86,17 +77,25 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
   );
   const canonicalize = mock<HostClient["gitCanonicalizePath"]>(async (path) => path);
   const resolvePath = mock<HostClient["filesystemResolvePath"]>(async (path) => path);
-  const previousBridge = getShellBridge();
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        filesystemReadTextFile: read,
-        filesystemWriteTextFile: write,
-        gitCanonicalizePath: canonicalize,
-        filesystemResolvePath: resolvePath,
-      },
-    }),
-  );
+  // The cache holds the worktrees of tasks a and b. A test supplies a read only to make it pending.
+  const worktree = mock<HostClient["taskWorktreeGet"]>(async () => {
+    throw new Error("Unexpected task worktree read");
+  });
+  const connection = createTestClientConnection({
+    client: {
+      filesystemReadTextFile: read,
+      filesystemWriteTextFile: write,
+      gitCanonicalizePath: canonicalize,
+      filesystemResolvePath: resolvePath,
+      taskWorktreeGet: worktree,
+    },
+  });
+  const client = connection.queryClient;
+  client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
+  for (const taskId of ["a", "b"])
+    client.setQueryData(taskWorktreeQueryOptions({ repoPath: "/repo", taskId }).queryKey, () => ({
+      workingDirectory: `/repo/${taskId}`,
+    }));
   let createEditor: Parameters<typeof pierre.EditProvider>[0]["createEditor"];
   const spies = [
     spyOn(workers, "DiffWorkerProvider").mockImplementation(({ children }) => <>{children}</>),
@@ -171,7 +170,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
   };
   function Providers({ children, repoPath }: PropsWithChildren<{ repoPath: string | null }>) {
     return (
-      <QueryClientProvider client={client}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <ActiveWorkspaceContext
             value={{
@@ -207,7 +206,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
             </RuntimeDefinitionsContext>
           </ActiveWorkspaceContext>
         </ThemeProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
   }
   const content = (repoPath: string | null) => (
@@ -225,6 +224,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     write,
     canonicalize,
     resolvePath,
+    worktree,
     frames,
     async open(target: AgentSessionTranscriptTarget = dialogTargets.main) {
       act(() =>
@@ -255,7 +255,6 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     dispose() {
       view.unmount();
       for (const spy of spies) spy.mockRestore();
-      configureShellBridge(previousBridge);
       client.clear();
       frames.restore();
     },

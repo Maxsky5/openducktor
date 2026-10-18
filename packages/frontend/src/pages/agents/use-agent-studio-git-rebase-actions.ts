@@ -2,7 +2,6 @@ import type { CommitsAheadBehind } from "@openducktor/contracts";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { AgentStudioPendingPullRebase, GitConflict } from "@/features/agent-studio-git";
-import { host } from "@/state/operations/shared/host";
 import {
   type GitActionKind,
   type RefreshGitDiffData,
@@ -10,6 +9,7 @@ import {
   toConflictMessage,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseAgentStudioGitRebaseActionsArgs = {
   isCurrentContext: () => boolean;
@@ -40,6 +40,7 @@ export function useAgentStudioGitRebaseActions({
   setRebaseError,
   captureFreshConflict,
 }: UseAgentStudioGitRebaseActionsArgs) {
+  const host = useHostClient();
   const [isRebasing, setIsRebasing] = useState(false);
   const scopeKey = JSON.stringify([repoPath, workingDir, branchIdentityKey]);
   const [pending, setPending] = useState<{
@@ -143,6 +144,7 @@ export function useAgentStudioGitRebaseActions({
       }
     },
     [
+      host,
       isCurrentContext,
       branch,
       captureFreshConflict,
@@ -217,6 +219,7 @@ export function useAgentStudioGitRebaseActions({
       }
     },
     [
+      host,
       isCurrentContext,
       branch,
       captureFreshConflict,

@@ -1,25 +1,25 @@
-import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
+import type { RuntimeReadinessState } from "@openducktor/frontend-core/lib/runtime-readiness";
 import type { RuntimeDescriptor, WorkspaceSession } from "@openducktor/contracts";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { canResumeInterruptedTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import {
   getAgentSessionActivityStateFromSession,
   isAgentSessionActivityWorking,
-} from "@/lib/agent-session-activity-state";
-import type { OptionalAgentSessionActivityState } from "@/types/agent-session-activity";
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import type { OptionalAgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import type {
   AgentChatMessage,
   AgentSessionIdentity,
   AgentSessionState,
-} from "@/types/agent-orchestrator";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
+import type { AgentSessionTransientFault } from "@openducktor/frontend-core/types/agent-session-transient-fault";
 import {
   deriveLoadedAgentSessionTranscriptState,
   derivePendingSelectedSessionTranscriptState,
   type AgentSessionTranscriptState,
-} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 
 export const resolveRuntimeDefinition = (
   runtimeDefinitions: readonly RuntimeDescriptor[],

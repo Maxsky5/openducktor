@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useSessionStartContext } from "./use-session-start-context";
 
 const createHarness = (initialKey: string | null) =>

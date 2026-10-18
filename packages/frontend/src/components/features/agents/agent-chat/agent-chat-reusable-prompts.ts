@@ -8,7 +8,7 @@ import {
   type AgentChatComposerDraft,
   type AgentChatComposerSegment,
   normalizeComposerDraft,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 
 const REUSABLE_PROMPT_COMMAND_ID_PREFIX = "reusable-prompt:";
 

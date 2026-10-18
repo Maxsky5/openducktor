@@ -1,7 +1,7 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import {

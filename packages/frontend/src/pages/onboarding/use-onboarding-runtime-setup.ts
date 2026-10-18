@@ -11,7 +11,7 @@ import {
 } from "@/components/features/settings/settings-save/runtime-settings-application";
 import { prepareSettingsSnapshotForSave } from "@/components/features/settings/settings-save/settings-snapshot";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { replaceRuntimeExecutablePaths } from "@/state/operations/runtime-executables/runtime-executable-draft";
 import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
@@ -19,9 +19,9 @@ import {
   runtimeDefinitionsQueryOptions,
   runtimeDiscoveryQueryOptions,
   writeRuntimeExecutableValidationCache,
-} from "@/state/queries/runtime";
-import { useRuntimeExecutableValidation } from "@/state/queries/use-runtime-executable-validation";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+} from "@openducktor/frontend-core/queries/runtime";
+import { useRuntimeExecutableValidation } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { RuntimeStageActivity } from "./onboarding-stages";
 
 const runtimeStageActivity = ({

@@ -6,12 +6,12 @@ import {
   type HostRuntimeSnapshot,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { createHostRuntimeStatusOwner } from "@/state/host-runtime/host-runtime-status-owner";
-import { hostRuntimeStatusQueryKeys } from "@/state/queries/host-runtime-status";
+import { createHostRuntimeStatusOwner } from "@openducktor/frontend-core/runtime/host-runtime-status-owner";
+import { hostRuntimeStatusQueryKeys } from "@openducktor/frontend-core/queries/host-runtime-status";
 import type { PropsWithChildren, ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import type { ScheduleTask } from "@/lib/scheduling";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { ScheduleTask } from "@openducktor/frontend-core/lib/scheduling";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createDeferred,
   createTaskStoreCheckFixture,
@@ -118,7 +118,7 @@ const createHookHarness = (initialArgs: HookHarnessArgs) => {
   };
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <QueryProvider useIsolatedClient>{children}</QueryProvider>
+    <QueryProvider>{children}</QueryProvider>
   );
 
   const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });

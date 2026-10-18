@@ -1,9 +1,12 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { RefObject } from "react";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createFileReferenceSegment, createTextSegment } from "./agent-chat-composer-draft";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import {
+  createFileReferenceSegment,
+  createTextSegment,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   type ActiveTextSelection,
   deriveTextSelectionTargetAfterInput,

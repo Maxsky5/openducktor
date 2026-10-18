@@ -1,7 +1,7 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import { isAgentSessionBlockedOnInput } from "@/lib/agent-session-waiting-input";
-import { canResumeInterruptedTurn } from "@/lib/agent-session-interrupted-turn";
+import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { isAgentSessionBlockedOnInput } from "@openducktor/frontend-core/lib/agent-session-waiting-input";
+import { canResumeInterruptedTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 
 type AgentStudioSessionActionStateArgs = {

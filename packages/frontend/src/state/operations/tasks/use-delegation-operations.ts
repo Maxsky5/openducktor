@@ -1,13 +1,16 @@
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useCallback } from "react";
 import { resolveRequiredDefaultSessionSelection } from "@/features/session-start/session-start-selection";
-import { appQueryClient } from "@/lib/query-client";
-import { loadRuntimeCatalogFromQuery } from "@/state/queries/runtime-catalog";
-import { invalidateTerminalList } from "@/state/queries/terminals";
-import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
+import { loadRuntimeCatalogFromQuery } from "@openducktor/frontend-core/queries/runtime-catalog";
+import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
+import {
+  loadRepoConfigFromQuery,
+  toRepoSettingsInput,
+} from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { host } from "../shared/host";
 import { requireActiveRepo } from "./task-operations-model";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 type RepoRuntimeCatalogLoader = (
   runtimeRef: RuntimeWorkingDirectoryRef,
@@ -28,6 +31,7 @@ export function useDelegationOperations({
   refreshTaskData,
   loadRepoRuntimeCatalog,
 }: UseDelegationOperationsArgs): UseDelegationOperationsResult {
+  const queryClient = useQueryClient();
   const delegateTask = useCallback(
     async (taskId: string): Promise<void> => {
       const repo = requireActiveRepo(activeWorkspace?.repoPath ?? null);
@@ -35,11 +39,11 @@ export function useDelegationOperations({
       if (!workspaceId) {
         throw new Error("Active workspace is required.");
       }
-      await startDelegatedBuild(repo, taskId, workspaceId, loadRepoRuntimeCatalog);
-      await invalidateTerminalList(appQueryClient, { kind: "task", repoPath: repo, taskId });
+      await startDelegatedBuild(queryClient, repo, taskId, workspaceId, loadRepoRuntimeCatalog);
+      await invalidateTerminalList(queryClient, { kind: "task", repoPath: repo, taskId });
       await refreshTaskData(repo, taskId);
     },
-    [activeWorkspace, loadRepoRuntimeCatalog, refreshTaskData],
+    [activeWorkspace, loadRepoRuntimeCatalog, queryClient, refreshTaskData],
   );
 
   return {
@@ -48,18 +52,19 @@ export function useDelegationOperations({
 }
 
 const startDelegatedBuild = async (
+  queryClient: QueryClient,
   repoPath: string,
   taskId: string,
   workspaceId: string,
   loadRepoRuntimeCatalog: RepoRuntimeCatalogLoader,
 ): Promise<void> => {
-  const repoConfig = await loadRepoConfigFromQuery(appQueryClient, workspaceId);
+  const repoConfig = await loadRepoConfigFromQuery(queryClient, workspaceId);
   const builderSelection = await resolveRequiredDefaultSessionSelection({
     role: "build",
     repoSettings: toRepoSettingsInput(repoConfig),
     repoPath,
     loadRepoRuntimeCatalog: (runtimeRef) =>
-      loadRuntimeCatalogFromQuery(appQueryClient, runtimeRef, loadRepoRuntimeCatalog),
+      loadRuntimeCatalogFromQuery(queryClient, runtimeRef, loadRepoRuntimeCatalog),
   });
-  await host.buildStart(repoPath, taskId, builderSelection.runtimeKind);
+  await connectionHost(queryClient).buildStart(repoPath, taskId, builderSelection.runtimeKind);
 };

@@ -1,12 +1,12 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   forEachSessionMessageFrom,
   getSessionMessageAt,
   getSessionMessageCount,
   isFinalAssistantChatMessage,
-} from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { isSessionSystemPromptMessage } from "@/state/operations/agent-orchestrator/support/session-prompt";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { isSessionSystemPromptMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-prompt";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";

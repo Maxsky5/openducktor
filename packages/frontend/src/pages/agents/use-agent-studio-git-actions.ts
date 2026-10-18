@@ -1,7 +1,7 @@
 import type { ResolveGitConflict } from "@/features/git-conflict-resolution/conflict-assistance";
 import type { CommitsAheadBehind, GitLocalChanges } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateGitWorkingDirectoryQueries } from "@/state/queries/git";
+import { invalidateGitWorkingDirectoryQueries } from "@openducktor/frontend-core/queries/git";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type {
   AgentStudioPendingDiscard,

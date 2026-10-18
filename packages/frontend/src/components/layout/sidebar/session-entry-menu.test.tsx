@@ -1,23 +1,23 @@
 import { expect, mock, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import { QueryClient, useQuery } from "@tanstack/react-query";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { Link, MemoryRouter, useLocation } from "react-router";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
 import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
-} from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";
-import { SessionNavigationTestProvider } from "./session-navigation-test-provider";
+import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   betaWorkspace,
   navigationModel,
@@ -83,8 +83,10 @@ const renderMenu = (
   layout: Layout,
   entries: SessionNavigationEntry[],
   selected: SessionNavigationEntry | null = null,
+  hostClient: Partial<HostClient> = {},
 ) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const connection = createTestClientConnection({ client: hostClient, queryClient: client });
   client.setQueryData(
     workspaceSessionQueryKeys.list("beta", false),
     entries.flatMap((entry) => (entry.context.kind === "workspace" ? [entry.context.session] : [])),
@@ -99,7 +101,7 @@ const renderMenu = (
       ]}
     >
       <WorkspacePreviewTransitionGuardProvider>
-        <SessionNavigationTestProvider client={client}>
+        <SessionNavigationTestProvider connection={connection}>
           <MenuHarness layout={layout} entries={entries} selected={selected} onOpen={onOpen} />
         </SessionNavigationTestProvider>
       </WorkspacePreviewTransitionGuardProvider>
@@ -184,8 +186,7 @@ test("workspace menu copies the external ID and renames in its own workspace wit
   const restoreClipboard = replaceNavigatorClipboard(async (value) => {
     copied.push(value);
   });
-  configureShellBridge(createShellBridgeFixture({ client: { workspaceSessionRename: rename } }));
-  const view = renderMenu("list", [entry]);
+  const view = renderMenu("list", [entry], null, { workspaceSessionRename: rename });
   try {
     let menu = await openMenu(view, entry.title);
     fireEvent.click(menu.getByRole("menuitem", { name: "Copy external session ID" }));
@@ -216,7 +217,6 @@ test("workspace menu copies the external ID and renames in its own workspace wit
     view.unmount();
     view.client.clear();
     restoreClipboard();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -232,10 +232,9 @@ test.each(
     const record = chatRecord(entry);
     const done = Promise.withResolvers<WorkspaceSession>();
     const archive = mock((_input: WorkspaceSessionArchiveInput) => done.promise);
-    configureShellBridge(
-      createShellBridgeFixture({ client: { workspaceSessionArchive: archive } }),
-    );
-    const view = renderMenu("list", [entry, remaining], selection === "background" ? null : entry);
+    const view = renderMenu("list", [entry, remaining], selection === "background" ? null : entry, {
+      workspaceSessionArchive: archive,
+    });
     const row = view.getByRole("button", { name: new RegExp(entry.title) });
     const openArchive = async () => {
       if (source === "menu") {
@@ -296,7 +295,6 @@ test.each(
     } finally {
       view.unmount();
       view.client.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );

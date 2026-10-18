@@ -7,22 +7,24 @@ import { useQueryClient } from "@tanstack/react-query";
 import { act, type ReactNode, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { QueryProvider } from "@/lib/query-provider";
-import { pruneSessionPanelLayouts } from "@/features/session-panels/session-panel-layout-store";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/features/session-panels/use-right-panel-open";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import type { HostClient } from "@openducktor/host-client";
 import {
-  ActiveWorkspaceContext,
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { ActiveWorkspaceContext, WorkspaceBranchStateContext } from "@/state/app-state-contexts";
+import {
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
-  WorkspaceBranchStateContext,
-} from "@/state/app-state-contexts";
-import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -33,7 +35,7 @@ import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-sel
 import {
   updateWorkspaceSessionQueries,
   workspaceSessionListQueryOptions,
-} from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
 import * as workspaceChat from "./workspace-session-chat";
 import * as sessionContent from "./workspace-session-content";
 
@@ -41,17 +43,14 @@ import * as sessionContent from "./workspace-session-content";
 // CI runner. Each test sets a 5_000 ms budget for that render.
 
 let chatStub: ReturnType<typeof spyOn<typeof workspaceChat, "WorkspaceSessionChat">>;
+// The host storage of the test. Each render of one test reads the same saved selection.
+let hostStorage: ClientStorage;
 beforeEach(() => {
   chatStub = spyOn(workspaceChat, "WorkspaceSessionChat").mockImplementation(() => <></>);
+  hostStorage = createMemoryClientStorage();
 });
 
-const testWorkspaceIds = new Set<string>();
 afterEach(() => {
-  for (const workspaceId of testWorkspaceIds) {
-    localStorage.removeItem(workspaceSessionSelectionStorageKey(workspaceId));
-    pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set() });
-  }
-  testWorkspaceIds.clear();
   chatStub.mockRestore();
   localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
 });
@@ -88,24 +87,20 @@ test.each([
   async (removeWorktree, entry) => {
     const worktree = worktreeRecord("Second");
     const requests: unknown[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
-          workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-          workspaceSessionArchivePreview: async () => ({
-            branchName: "feature/second",
-            worktreeExists: true,
-            hasUncommittedChanges: true,
-          }),
-          workspaceSessionArchive: async (input) => {
-            requests.push(input);
-            return { ...worktree, archivedAt: 2000 };
-          },
-        },
+    const hostClient: Partial<HostClient> = {
+      workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
+      workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+      workspaceSessionArchivePreview: async () => ({
+        branchName: "feature/second",
+        worktreeExists: true,
+        hasUncommittedChanges: true,
       }),
-    );
-    const view = renderSessions();
+      workspaceSessionArchive: async (input) => {
+        requests.push(input);
+        return { ...worktree, archivedAt: 2000 };
+      },
+    };
+    const view = renderSessions(hostClient);
     try {
       const trigger = await openArchive(view, "Second", entry);
       expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
@@ -155,7 +150,6 @@ test.each([
       expect(view.getByRole("heading", { name: "First", level: 2 })).toBeTruthy();
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   5_000,
@@ -163,19 +157,15 @@ test.each([
 
 test("a durable-list failure is an error rather than an empty Workspace and Retry reloads it", async () => {
   let reads = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => {
-          reads += 1;
-          if (reads === 1) throw new Error("Workspace database unavailable");
-          return [];
-        },
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  const view = renderSessions();
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => {
+      reads += 1;
+      if (reads === 1) throw new Error("Workspace database unavailable");
+      return [];
+    },
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(hostClient);
   try {
     await view.findByText(
       "Could not load chats: Workspace database unavailable",
@@ -188,7 +178,6 @@ test("a durable-list failure is an error rather than an empty Workspace and Retr
     expect(reads).toBe(2);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
@@ -210,18 +199,14 @@ test("a failed chat-list refresh keeps the selected chat and its draft mounted",
   });
   let failReads = false;
   let reads = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => {
-          reads += 1;
-          if (failReads) throw new Error("Workspace database unavailable");
-          return [sessionRecord("First")];
-        },
-        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-      },
-    }),
-  );
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => {
+      reads += 1;
+      if (failReads) throw new Error("Workspace database unavailable");
+      return [sessionRecord("First")];
+    },
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  };
   const workspaceId = crypto.randomUUID();
   function RefetchChats() {
     const client = useQueryClient();
@@ -238,7 +223,13 @@ test("a failed chat-list refresh keeps the selected chat and its draft mounted",
       </button>
     );
   }
-  const view = renderSessions(undefined, "/chats?session=First", workspaceId, <RefetchChats />);
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    "/chats?session=First",
+    workspaceId,
+    <RefetchChats />,
+  );
   try {
     const draft = await view.findByLabelText("Draft for First", {}, { timeout: 3_000 });
     fireEvent.change(draft, { target: { value: "Unsaved draft" } });
@@ -264,7 +255,6 @@ test("a failed chat-list refresh keeps the selected chat and its draft mounted",
   } finally {
     view.unmount();
     chat.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 8_000);
 
@@ -376,15 +366,12 @@ function SessionMetadataControls({ workspaceId }: { workspaceId: string }) {
 
 test("metadata updates and new drafts keep the selected conversation", async () => {
   const workspaceId = crypto.randomUUID();
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
   const view = renderSessions(
+    hostClient,
     undefined,
     "/chats?session=Second",
     workspaceId,
@@ -400,18 +387,17 @@ test("metadata updates and new drafts keep the selected conversation", async () 
     }
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 function renderSessions(
+  hostClient: Partial<HostClient>,
   runningId?: string,
   initialEntry = "/chats",
   workspaceId = crypto.randomUUID(),
   queryControls: ReactNode = null,
   previewControls: ReactNode = null,
 ) {
-  testWorkspaceIds.add(workspaceId);
   const workspace = { workspaceId, workspaceName: "A", repoPath: "/repo" };
   const store = createAgentSessionsStore("/repo");
   if (runningId) {
@@ -427,11 +413,12 @@ function renderSessions(
       }),
     );
   }
+  const connection = createTestClientConnection({ client: hostClient, storage: hostStorage });
   const view = render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <RouteControls />
       <SessionLinks />
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <ThemeProvider>
           {queryControls}
           <ActiveWorkspaceContext
@@ -522,15 +509,11 @@ function DirtyPreview({ startOpen = true }: { startOpen?: boolean }) {
 }
 
 test("chats share right panel visibility and keep their own selected tab", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  const view = renderSessions(undefined, "/chats?session=First");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(hostClient, undefined, "/chats?session=First");
   try {
     await view.findByRole("button", { name: "Hide right panel" });
     fireEvent.click(view.getByRole("button", { name: "Hide right panel" }));
@@ -558,21 +541,16 @@ test("chats share right panel visibility and keep their own selected tab", async
     expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("the right panel uses the saved panel choice", async () => {
   localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  const view = renderSessions("First");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(hostClient, "First");
   try {
     await view.findByRole("button", { name: "Show right panel" });
     expect(view.queryByRole("tablist", { name: "Right panel tabs" })).toBeNull();
@@ -581,7 +559,6 @@ test("the right panel uses the saved panel choice", async () => {
     expect(localStorage.getItem(RIGHT_PANEL_OPEN_STORAGE_KEY)).toBe("true");
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
@@ -630,15 +607,17 @@ test("an externally removed chat keeps its draft until the user leaves", async (
       );
     },
   );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    "/chats?session=First",
+    workspaceId,
+    <RemoveFirst />,
   );
-  const view = renderSessions(undefined, "/chats?session=First", workspaceId, <RemoveFirst />);
   try {
     const draft = await view.findByTestId("visible-draft");
     fireEvent.click(view.getByRole("button", { name: "Open draft" }));
@@ -662,7 +641,6 @@ test("an externally removed chat keeps its draft until the user leaves", async (
   } finally {
     view.unmount();
     content.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
@@ -729,15 +707,17 @@ test.each(["clean", "close"])(
         );
       },
     );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListActive: async () => [sessionRecord("First")],
-          workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        },
-      }),
+    const hostClient: Partial<HostClient> = {
+      workspaceSessionListActive: async () => [sessionRecord("First")],
+      workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    };
+    const view = renderSessions(
+      hostClient,
+      undefined,
+      "/chats?session=First",
+      workspaceId,
+      <RemoveLast />,
     );
-    const view = renderSessions(undefined, "/chats?session=First", workspaceId, <RemoveLast />);
     try {
       await view.findByTestId("visible-draft");
       fireEvent.click(view.getByRole("button", { name: "Open draft" }));
@@ -758,7 +738,6 @@ test.each(["clean", "close"])(
     } finally {
       view.unmount();
       content.mockRestore();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   5_000,
@@ -767,21 +746,17 @@ test.each(["clean", "close"])(
 test("session selection survives reload and Back/Forward without refetching workspace data", async () => {
   let listReads = 0;
   let settingsReads = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => {
-          listReads += 1;
-          return [sessionRecord("First"), sessionRecord("Second")];
-        },
-        workspaceGetSettingsSnapshot: () => {
-          settingsReads += 1;
-          return new Promise(() => {});
-        },
-      },
-    }),
-  );
-  let view = renderSessions(undefined, "/chats?keep=value");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => {
+      listReads += 1;
+      return [sessionRecord("First"), sessionRecord("Second")];
+    },
+    workspaceGetSettingsSnapshot: () => {
+      settingsReads += 1;
+      return new Promise(() => {});
+    },
+  };
+  let view = renderSessions(hostClient, undefined, "/chats?keep=value");
   try {
     await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
     fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
@@ -809,12 +784,11 @@ test("session selection survives reload and Back/Forward without refetching work
     expect(settingsReads).toBe(1);
     const reloadUrl = view.getByTestId("session-url").textContent ?? "";
     view.unmount();
-    view = renderSessions(undefined, reloadUrl);
+    view = renderSessions(hostClient, undefined, reloadUrl);
     await view.findByRole("heading", { name: "Second", level: 2 }, { timeout: 800 });
     expect(view.getByRole("heading", { name: "Second", level: 2 })).toBeTruthy();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
@@ -824,19 +798,15 @@ test("switching loaded chats keeps only the selected session header", async () =
       {record.id}
     </div>
   ));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [
-          sessionRecord("First"),
-          sessionRecord("Second"),
-          sessionRecord("Third"),
-        ],
-        workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
-      },
-    }),
-  );
-  const view = renderSessions(undefined, "/chats?session=First");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [
+      sessionRecord("First"),
+      sessionRecord("Second"),
+      sessionRecord("Third"),
+    ],
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  };
+  const view = renderSessions(hostClient, undefined, "/chats?session=First");
   try {
     await view.findByRole("region", { name: "Chat transcript" }, { timeout: 3_000 });
     expect(view.getAllByRole("heading", { level: 2 }).map((header) => header.textContent)).toEqual([
@@ -867,24 +837,19 @@ test("switching loaded chats keeps only the selected session header", async () =
   } finally {
     view.unmount();
     chat.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("keeps an explicit session URL while the initial list is pending", async () => {
   let resolveList!: (records: WorkspaceSession[]) => void;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: () =>
-          new Promise((resolve) => {
-            resolveList = resolve;
-          }),
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  const view = renderSessions(undefined, "/chats?session=Second");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: () =>
+      new Promise((resolve) => {
+        resolveList = resolve;
+      }),
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(hostClient, undefined, "/chats?session=Second");
   try {
     await view.findByText("Loading chats…", {}, { timeout: 800 });
     expect(view.getByTestId("session-url").textContent).toBe("/chats?session=Second");
@@ -896,20 +861,15 @@ test("keeps an explicit session URL while the initial list is pending", async ()
     expect(view.getByTestId("session-url").textContent).toBe("/chats?session=Second");
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("restores the last session on a bare session URL and keeps workspace preferences separate", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  let view = renderSessions();
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  let view = renderSessions(hostClient);
   const workspaceA = view.workspaceId;
   try {
     await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
@@ -920,47 +880,41 @@ test("restores the last session on a bare session URL and keeps workspace prefer
       { timeout: 800 },
     );
     view.unmount();
-    expect(localStorage.getItem(workspaceSessionSelectionStorageKey(workspaceA))).toBe("Second");
+    expect(hostStorage.getItem(workspaceSessionSelectionStorageKey(workspaceA))).toBe("Second");
 
-    view = renderSessions();
+    view = renderSessions(hostClient);
     const workspaceB = view.workspaceId;
     await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
     expect(view.getByRole("heading", { name: "First", level: 2 })).toBeTruthy();
     view.unmount();
-    expect(localStorage.getItem(workspaceSessionSelectionStorageKey(workspaceB))).toBe("First");
+    expect(hostStorage.getItem(workspaceSessionSelectionStorageKey(workspaceB))).toBe("First");
 
-    view = renderSessions(undefined, "/chats", workspaceA);
+    view = renderSessions(hostClient, undefined, "/chats", workspaceA);
     await view.findByRole("heading", { name: "Second", level: 2 }, { timeout: 800 });
     expect(view.getByRole("heading", { name: "Second", level: 2 })).toBeTruthy();
     view.unmount();
 
-    view = renderSessions(undefined, "/chats?session=First", workspaceA);
+    view = renderSessions(hostClient, undefined, "/chats?session=First", workspaceA);
     await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
     expect(view.getByRole("heading", { name: "First", level: 2 })).toBeTruthy();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("does not erase the saved session while the list loads and preserves unrelated query params", async () => {
   const workspaceId = crypto.randomUUID();
-  testWorkspaceIds.add(workspaceId);
   const key = workspaceSessionSelectionStorageKey(workspaceId);
-  localStorage.setItem(key, "Second");
+  hostStorage.setItem(key, "Second");
   const list = Promise.withResolvers<WorkspaceSession[]>();
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: () => list.promise,
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  const view = renderSessions(undefined, "/chats?keep=value", workspaceId);
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: () => list.promise,
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(hostClient, undefined, "/chats?keep=value", workspaceId);
   try {
     await view.findByText("Loading chats…", {}, { timeout: 800 });
-    expect(localStorage.getItem(key)).toBe("Second");
+    expect(hostStorage.getItem(key)).toBe("Second");
     expect(view.getByTestId("session-url").textContent).toBe("/chats?keep=value");
     await act(async () => list.resolve([sessionRecord("First"), sessionRecord("Second")]));
     await waitFor(
@@ -973,21 +927,16 @@ test("does not erase the saved session while the list loads and preserves unrela
     expect(view.getByRole("heading", { name: "Second", level: 2 })).toBeTruthy();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("keeps a missing session URL as unavailable and clears it after the final archive", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        workspaceSessionArchive: async () => ({ ...sessionRecord("First"), archivedAt: 2000 }),
-      },
-    }),
-  );
-  const view = renderSessions(undefined, "/chats?session=Missing&keep=value");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    workspaceSessionArchive: async () => ({ ...sessionRecord("First"), archivedAt: 2000 }),
+  };
+  const view = renderSessions(hostClient, undefined, "/chats?session=Missing&keep=value");
   try {
     await view.findByText("This chat is unavailable", {}, { timeout: 800 });
     expect(view.queryByRole("heading", { name: "First", level: 2 })).toBeNull();
@@ -1009,20 +958,15 @@ test("keeps a missing session URL as unavailable and clears it after the final a
     );
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("an activity link selects its chat while the page is already open", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-      },
-    }),
-  );
-  const view = renderSessions();
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+  };
+  const view = renderSessions(hostClient);
   try {
     await view.findByRole("heading", { name: "First", level: 2 }, { timeout: 800 });
     expect(view.getByRole("heading", { name: "First", level: 2 })).toBeTruthy();
@@ -1044,7 +988,6 @@ test("an activity link selects its chat while the page is already open", async (
     );
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
@@ -1052,26 +995,22 @@ test("a worktree archive keeps confirmation pending until the host succeeds", as
   const worktree = worktreeRecord("Second");
   const requests: WorkspaceSessionArchiveInput[] = [];
   let complete!: (record: WorkspaceSession) => void;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        workspaceSessionArchivePreview: async () => ({
-          branchName: "feature/second",
-          worktreeExists: true,
-          hasUncommittedChanges: false,
-        }),
-        workspaceSessionArchive: (input) => {
-          requests.push(input);
-          return new Promise((resolve) => {
-            complete = resolve;
-          });
-        },
-      },
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    workspaceSessionArchivePreview: async () => ({
+      branchName: "feature/second",
+      worktreeExists: true,
+      hasUncommittedChanges: false,
     }),
-  );
-  const view = renderSessions();
+    workspaceSessionArchive: (input) => {
+      requests.push(input);
+      return new Promise((resolve) => {
+        complete = resolve;
+      });
+    },
+  };
+  const view = renderSessions(hostClient);
   try {
     await openArchive(view, "Second");
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
@@ -1109,32 +1048,27 @@ test("a worktree archive keeps confirmation pending until the host succeeds", as
     );
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("a failed direct archive does not show its error in the next worktree dialog", async () => {
   const worktree = worktreeRecord("Second");
   const requests: WorkspaceSessionArchiveInput[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        workspaceSessionArchivePreview: async () => ({
-          branchName: "feature/second",
-          worktreeExists: true,
-          hasUncommittedChanges: false,
-        }),
-        workspaceSessionArchive: async (input) => {
-          requests.push(input);
-          if (input.sessionId === "First") throw new Error("Stop failed: runtime disconnected");
-          return { ...worktree, archivedAt: 2000 };
-        },
-      },
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), worktree],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    workspaceSessionArchivePreview: async () => ({
+      branchName: "feature/second",
+      worktreeExists: true,
+      hasUncommittedChanges: false,
     }),
-  );
-  const view = renderSessions();
+    workspaceSessionArchive: async (input) => {
+      requests.push(input);
+      if (input.sessionId === "First") throw new Error("Stop failed: runtime disconnected");
+      return { ...worktree, archivedAt: 2000 };
+    },
+  };
+  const view = renderSessions(hostClient);
   try {
     await openArchive(view, "First");
     fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
@@ -1181,25 +1115,20 @@ test("a failed direct archive does not show its error in the next worktree dialo
     ]);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("running archive needs confirmation and keeps the session when Stop fails", async () => {
   const requests: WorkspaceSessionArchiveInput[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        workspaceSessionArchive: async (input) => {
-          requests.push(input);
-          throw new Error("Stop failed: runtime disconnected");
-        },
-      },
-    }),
-  );
-  const view = renderSessions("Second");
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    workspaceSessionArchive: async (input) => {
+      requests.push(input);
+      throw new Error("Stop failed: runtime disconnected");
+    },
+  };
+  const view = renderSessions(hostClient, "Second");
   try {
     await openArchive(view, "Second");
     expect(view.getByRole("dialog", { name: "Archive chat" })).toBeTruthy();
@@ -1219,25 +1148,21 @@ test("running archive needs confirmation and keeps the session when Stop fails",
     expect(view.getByRole("heading", { name: "Second", level: 2, hidden: true })).toBeTruthy();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
 test("failed selected-chat archive keeps the dirty draft", async () => {
   let rejectArchive!: (reason: Error) => void;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        workspaceSessionArchive: () =>
-          new Promise((_resolve, reject) => {
-            rejectArchive = reject;
-          }),
-      },
-    }),
-  );
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    workspaceSessionArchive: () =>
+      new Promise((_resolve, reject) => {
+        rejectArchive = reject;
+      }),
+  };
   const view = renderSessions(
+    hostClient,
     undefined,
     "/chats?session=First",
     crypto.randomUUID(),
@@ -1258,7 +1183,6 @@ test("failed selected-chat archive keeps the dirty draft", async () => {
     expect(view.getByTestId("draft").textContent).toBe("draft.ts");
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);
 
@@ -1277,17 +1201,13 @@ test.each([true, false])(
         );
       },
     );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListActive: async () =>
-            hasNextChat ? [first, sessionRecord("Second")] : [first],
-          workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-          workspaceSessionArchive: () => archiveDone.promise,
-        },
-      }),
-    );
-    const view = renderSessions(undefined, "/chats?session=First");
+    const hostClient: Partial<HostClient> = {
+      workspaceSessionListActive: async () =>
+        hasNextChat ? [first, sessionRecord("Second")] : [first],
+      workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+      workspaceSessionArchive: () => archiveDone.promise,
+    };
+    const view = renderSessions(hostClient, undefined, "/chats?session=First");
     try {
       const heading = await view.findByRole(
         "heading",
@@ -1329,7 +1249,6 @@ test.each([true, false])(
     } finally {
       view.unmount();
       content.mockRestore();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -1337,21 +1256,17 @@ test.each([true, false])(
 test("an archive in flight disables repeat actions until the host succeeds", async () => {
   let complete!: (record: WorkspaceSession) => void;
   let calls = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
-        workspaceGetSettingsSnapshot: () => new Promise(() => {}),
-        workspaceSessionArchive: () => {
-          calls += 1;
-          return new Promise((resolve) => {
-            complete = resolve;
-          });
-        },
-      },
-    }),
-  );
-  const view = renderSessions();
+  const hostClient: Partial<HostClient> = {
+    workspaceSessionListActive: async () => [sessionRecord("First"), sessionRecord("Second")],
+    workspaceGetSettingsSnapshot: () => new Promise(() => {}),
+    workspaceSessionArchive: () => {
+      calls += 1;
+      return new Promise((resolve) => {
+        complete = resolve;
+      });
+    },
+  };
+  const view = renderSessions(hostClient);
   try {
     await openArchive(view, "Second");
     expect(calls).toBe(0);
@@ -1372,6 +1287,5 @@ test("an archive in flight disables repeat actions until the host succeeds", asy
     );
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5_000);

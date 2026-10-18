@@ -12,9 +12,9 @@ import {
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { revealElement } from "@/lib/reveal-element";
 import { useNotificationContext } from "@/state/notifications/notification-context";
-import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
-import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { loadAgentSessionListFromQuery } from "@openducktor/frontend-core/queries/agent-sessions";
+import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import {
   ATTENTION_ID_QUERY_KEY,
   ATTENTION_KIND_QUERY_KEY,

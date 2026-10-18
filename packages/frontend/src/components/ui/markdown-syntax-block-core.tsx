@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactElement, useEffect, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 
 export type MarkdownSyntaxBlockProps = {

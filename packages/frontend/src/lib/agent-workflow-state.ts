@@ -3,7 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import {
   isAgentSessionActivityActive,
   isAgentSessionActivityWorking,
-} from "@/lib/agent-session-activity-state";
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type {
   AgentWorkflowStepAvailability,

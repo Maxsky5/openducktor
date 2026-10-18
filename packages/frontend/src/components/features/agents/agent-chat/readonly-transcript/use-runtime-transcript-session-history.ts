@@ -9,30 +9,33 @@ import {
 } from "@openducktor/core";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
-import { useStableAgentSessionScope } from "@/lib/use-stable-agent-session-scope";
+import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { RuntimeReadinessState } from "@openducktor/frontend-core/lib/runtime-readiness";
+import { useStableAgentSessionScope } from "@openducktor/frontend-core/lib/use-stable-agent-session-scope";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
-import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
-import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
-import { resolveSessionRuntimeScope } from "@/state/operations/agent-orchestrator/support/session-runtime-scope";
+import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
+import { toRuntimeWorkingDirectoryRef } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-runtime-ref";
+import { resolveSessionRuntimeScope } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-runtime-scope";
 import {
   type AgentSessionTranscriptEmptyReason,
   type AgentSessionTranscriptState,
   deriveRuntimeBoundTranscriptLoadingState,
   deriveLoadedAgentSessionTranscriptState,
-} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import {
   runtimeSessionHistoryRefQueryOptions,
   SESSION_HISTORY_STALE_TIME_MS,
   sessionHistoryQueryOptions,
-} from "@/state/queries/agent-session-history";
-import { resolveRuntimeCatalogSurface, retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
-import { useRuntimeCatalogQuery } from "@/state/queries/use-runtime-catalog-query";
-import { skippedQueryOptions } from "@/state/queries/skipped-query";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/queries/agent-session-history";
+import {
+  resolveRuntimeCatalogSurface,
+  retryRuntimeCatalog,
+} from "@openducktor/frontend-core/queries/runtime-catalog";
+import { useRuntimeCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
+import { skippedQueryOptions } from "@openducktor/frontend-core/queries/skipped-query";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import { toAgentChatTranscriptSession } from "../agent-chat-transcript-session";

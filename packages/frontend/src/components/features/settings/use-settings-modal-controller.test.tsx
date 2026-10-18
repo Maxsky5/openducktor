@@ -14,20 +14,20 @@ import {
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { createQueryClient } from "@/lib/query-client";
+import type { HostClient } from "@openducktor/host-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import {
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
-import { repoBranchesQueryOptions } from "@/state/queries/git";
-import { autopilotQueryKeys } from "@/state/queries/autopilot";
-import { runtimeExecutableQueryOptions } from "@/state/queries/runtime";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
+import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
+import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createChecksStateFixture,
   createDeferred,
@@ -132,9 +132,15 @@ const createHookHarness = (
     runtimeDefinitionsError?: string | null;
     isLoadingRuntimeDefinitions?: boolean;
     prefillExecutableCheck?: boolean;
+    runtimeExecutablesCheck?: HostClient["runtimeExecutablesCheck"];
   },
 ) => {
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection({
+    client: options?.runtimeExecutablesCheck
+      ? { runtimeExecutablesCheck: options.runtimeExecutablesCheck }
+      : {},
+  });
+  const { queryClient } = connection;
   const initialSnapshot = settingsSnapshotFactory();
   queryClient.setQueryData(repoBranchesQueryOptions("/repo").queryKey, EMPTY_BRANCHES);
   queryClient.setQueryData(repoBranchesQueryOptions("/repo-two").queryKey, EMPTY_BRANCHES);
@@ -217,13 +223,13 @@ const createHookHarness = (
   const wrapper = ({ children }: React.PropsWithChildren): React.ReactElement => (
     <WorkspaceStateContext.Provider value={workspaceState}>
       <ChecksStateContext.Provider value={checksState}>
-        <QueryClientProvider client={queryClient}>
+        <QueryProvider connection={connection}>
           <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
             <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
               {children}
             </HostRuntimeStatusContext.Provider>
           </RuntimeDefinitionsContext.Provider>
-        </QueryClientProvider>
+        </QueryProvider>
       </ChecksStateContext.Provider>
     </WorkspaceStateContext.Provider>
   );
@@ -364,7 +370,6 @@ describe("useSettingsModalController", () => {
   });
 
   test("does not report runtime errors before initial executable validation completes", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
     settingsSnapshotFactory = () => {
       const snapshot = createSettingsSnapshot();
       return {
@@ -380,7 +385,7 @@ describe("useSettingsModalController", () => {
       };
     };
     const codexValidation = createDeferred<RuntimeExecutableCheck>();
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>
         Object.hasOwn(input.paths, candidate),
@@ -400,7 +405,10 @@ describe("useSettingsModalController", () => {
         ],
       };
     });
-    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+    const harness = createHookHarness(true, false, {
+      prefillExecutableCheck: false,
+      runtimeExecutablesCheck,
+    });
 
     try {
       await harness.mount();
@@ -430,15 +438,13 @@ describe("useSettingsModalController", () => {
       expect(harness.getLatest().runtimeAvailabilityValidationState.totalErrorCount).toBe(0);
     } finally {
       codexValidation.resolve({ runtimes: [] });
-      host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }
   });
 
   test("checks only the runtime whose executable path changed", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
     const requests: RuntimeKind[][] = [];
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode === "discover") {
         return { runtimes: [] };
       }
@@ -454,7 +460,7 @@ describe("useSettingsModalController", () => {
         })),
       };
     });
-    const harness = createHookHarness(true);
+    const harness = createHookHarness(true, false, { runtimeExecutablesCheck });
 
     try {
       await harness.mount();
@@ -471,13 +477,11 @@ describe("useSettingsModalController", () => {
 
       expect(requests).toEqual([["opencode"]]);
     } finally {
-      host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }
   });
 
   test("does not retry a cached runtime path while another path probe is running", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
     const initialPath = "/tools/opencode-a";
     const pendingPath = "/tools/opencode-b";
     const pendingValidation = createDeferred<RuntimeExecutableCheck>();
@@ -500,7 +504,7 @@ describe("useSettingsModalController", () => {
         },
       };
     };
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>
         Object.hasOwn(input.paths, candidate),
@@ -520,7 +524,10 @@ describe("useSettingsModalController", () => {
       }
       throw new Error("Initial OpenCode validation failed");
     });
-    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+    const harness = createHookHarness(true, false, {
+      prefillExecutableCheck: false,
+      runtimeExecutablesCheck,
+    });
 
     try {
       await harness.mount();
@@ -570,7 +577,6 @@ describe("useSettingsModalController", () => {
     } finally {
       pendingValidation.resolve({ runtimes: [] });
       repeatedInitialValidation.resolve({ runtimes: [] });
-      host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }
   });
@@ -657,7 +663,6 @@ describe("useSettingsModalController", () => {
   });
 
   test("fails closed when runtime executable validation cannot load", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
     const requestedKinds: RuntimeKind[] = [];
     const attemptCountByKind = {
       opencode: 0,
@@ -674,7 +679,7 @@ describe("useSettingsModalController", () => {
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
     } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");
       const kind = knownRuntimeKindValues.find((candidate) =>
         Object.hasOwn(input.paths, candidate),
@@ -687,7 +692,10 @@ describe("useSettingsModalController", () => {
         : repeatedValidationByKind[kind].promise;
     });
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+    const harness = createHookHarness(true, false, {
+      prefillExecutableCheck: false,
+      runtimeExecutablesCheck,
+    });
 
     try {
       await harness.mount();
@@ -716,7 +724,6 @@ describe("useSettingsModalController", () => {
       for (const kind of knownRuntimeKindValues) {
         repeatedValidationByKind[kind].resolve({ runtimes: [] });
       }
-      host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }
   });
@@ -771,9 +778,8 @@ describe("useSettingsModalController", () => {
   });
 
   test("does not block settings when validation fails for a disabled runtime", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
     const requestedKinds: RuntimeKind[] = [];
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       const kind = knownRuntimeKindValues.find((candidate) =>
         Object.hasOwn(input.paths, candidate),
       );
@@ -786,7 +792,10 @@ describe("useSettingsModalController", () => {
       };
     });
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+    const harness = createHookHarness(true, false, {
+      prefillExecutableCheck: false,
+      runtimeExecutablesCheck,
+    });
 
     try {
       await harness.mount();
@@ -807,16 +816,14 @@ describe("useSettingsModalController", () => {
       expect(didSave).toBe(true);
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
-      host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }
   });
 
   test("does not block settings while a disabled runtime validation is pending", async () => {
-    const originalCheck = host.runtimeExecutablesCheck;
     const claudeValidation = createDeferred<RuntimeExecutableCheck>();
     const requestedKinds: RuntimeKind[] = [];
-    host.runtimeExecutablesCheck = mock(async (input) => {
+    const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       const kind = knownRuntimeKindValues.find((candidate) =>
         Object.hasOwn(input.paths, candidate),
       );
@@ -829,7 +836,10 @@ describe("useSettingsModalController", () => {
       };
     });
     saveSettingsSnapshot = mock(async () => savedSettingsResult());
-    const harness = createHookHarness(true, false, { prefillExecutableCheck: false });
+    const harness = createHookHarness(true, false, {
+      prefillExecutableCheck: false,
+      runtimeExecutablesCheck,
+    });
 
     try {
       await harness.mount();
@@ -850,7 +860,6 @@ describe("useSettingsModalController", () => {
       expect(saveSettingsSnapshot).toHaveBeenCalledTimes(1);
     } finally {
       claudeValidation.resolve({ runtimes: [] });
-      host.runtimeExecutablesCheck = originalCheck;
       await harness.unmount();
     }
   });

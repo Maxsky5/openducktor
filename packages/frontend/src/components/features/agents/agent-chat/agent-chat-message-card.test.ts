@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
+import { historyToChatMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
 import {
   createCodexMessageCardTestProps,
   createMessageCardElement,

@@ -1,10 +1,10 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
-import { compareActiveAgentSessionActivityState } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveAgentSessionActivityState } from "@/types/agent-session-activity";
+import { compareActiveAgentSessionActivityState } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { ActiveAgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 
 export type SessionTargetOptions = {
   session: AgentSessionIdentity;

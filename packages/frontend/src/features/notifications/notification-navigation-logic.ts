@@ -9,8 +9,8 @@ import {
   buildSessionNavigationHref,
   type SessionsPageKind,
 } from "@/features/session-navigation/session-navigation-target";
-import { findWorkspaceSessionByIdentity } from "@/state/queries/agent-session-association";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { findWorkspaceSessionByIdentity } from "@openducktor/frontend-core/queries/agent-session-association";
+import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { buildKanbanTaskHref } from "@/pages/kanban/kanban-task-link";
 
 export const ATTENTION_KIND_QUERY_KEY = "attention";

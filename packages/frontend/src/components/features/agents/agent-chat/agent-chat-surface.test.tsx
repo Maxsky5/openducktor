@@ -4,11 +4,11 @@ import {
   createChatSettingsFixture,
   createAgentSessionFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
-import { upsertSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { upsertSessionMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import type { AgentChatMessageMeta } from "@/types/agent-orchestrator";
+import type { AgentChatMessageMeta } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
 import { createTranscriptModelCache } from "./agent-chat-transcript-model-cache";
 import { AgentChatSurface } from "./agent-chat";

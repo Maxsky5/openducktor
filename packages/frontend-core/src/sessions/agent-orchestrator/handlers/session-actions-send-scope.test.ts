@@ -1,0 +1,221 @@
+import { describe, expect, test } from "bun:test";
+import { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
+import type { AgentEnginePort, AgentUserMessagePart } from "@openducktor/core";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
+import { acceptedSubmitResult, acceptedUserMessage } from "./session-actions-send.test-support";
+import {
+  buildSession,
+  createSessionActions,
+  createSessionsRef,
+  getSession,
+} from "./session-actions.test-helpers";
+
+const repositorySendCases: Array<{ label: string; parts: AgentUserMessagePart[] }> = [
+  {
+    label: "text",
+    parts: [{ kind: "text", text: "hello repository" }],
+  },
+  {
+    label: "manual compaction",
+    parts: [
+      {
+        kind: "slash_command",
+        command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      },
+    ],
+  },
+];
+
+describe("agent-orchestrator/handlers/session-actions send scope", () => {
+  test.each(repositorySendCases)(
+    "routes repository $label without workflow side effects",
+    async ({ parts }) => {
+      const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+      const sendInputs: Parameters<typeof adapter.submitUserMessage>[0][] = [];
+      adapter.submitUserMessage = async (input) => {
+        sendInputs.push(input);
+        return acceptedSubmitResult(input);
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          status: "idle",
+          sessionAssociation: { kind: "repository" },
+          workingDirectory: "/tmp/repo/repository-chat",
+        }),
+      ]);
+      const actions = createSessionActions({
+        adapter,
+        sessionsRef,
+        workspaceRepoPath: "/tmp/active-workspace",
+        currentWorkspaceRepoPathRef: { current: "/tmp/active-workspace" },
+        taskRef: { current: [] },
+        loadRepoPromptOverrides: async () => {
+          throw new Error("repository sends must not load workflow prompts");
+        },
+        refreshTaskData: async () => {
+          throw new Error("repository sends must not refresh task data");
+        },
+        invalidateSessionStopQueries: async () => {
+          throw new Error("repository sends must not invalidate task queries");
+        },
+      });
+
+      await actions.sendAgentMessage(getSession(sessionsRef), parts);
+
+      expect(sendInputs).toHaveLength(1);
+      expect(sendInputs[0]).toMatchObject({
+        repoPath: "/tmp/active-workspace",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/repository-chat",
+        externalSessionId: "session-1",
+        sessionScope: { kind: "repository" },
+      });
+      expect(sendInputs[0]).not.toHaveProperty("systemPrompt");
+    },
+  );
+
+  test("rejects sends to stopped unbound sessions before runtime or workflow work", async () => {
+    const adapter = new AgentRuntimeTestAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "stopped", sessionAssociation: { kind: "unbound" } }),
+    ]);
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef,
+    });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow(
+      "Cannot send message for unbound session 'session-1'; repository or workflow context is required.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
+  test("rejects unbound sends with a clear context error", async () => {
+    const adapter = new AgentRuntimeTestAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", sessionAssociation: { kind: "unbound" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow(
+      "Cannot send message for unbound session 'session-1'; repository or workflow context is required.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
+  test("uses the requested workflow scope for an unbound child send", async () => {
+    const adapter = new AgentRuntimeTestAdapter();
+    const sendInputs: Parameters<typeof adapter.sendUserMessage>[0][] = [];
+    adapter.sendUserMessage = async (input) => {
+      sendInputs.push(input);
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", sessionAssociation: { kind: "unbound" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await actions.sendAgentMessage(
+      getSession(sessionsRef),
+      [{ kind: "text", text: "child reply" }],
+      { sessionScope: { kind: "workflow", taskId: "task-1", role: "build" } },
+    );
+
+    expect(sendInputs).toHaveLength(1);
+    expect(sendInputs[0]).toMatchObject({
+      externalSessionId: "session-1",
+      sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+    });
+    expect(getSession(sessionsRef).sessionAssociation).toEqual({ kind: "unbound" });
+  });
+
+  test("rejects a requested scope that conflicts with the registered scope", async () => {
+    const adapter = new AgentRuntimeTestAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", sessionAssociation: { kind: "repository" } }),
+    ]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "wrong scope" }], {
+        sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+      }),
+    ).rejects.toThrow(
+      "Cannot send message for session 'session-1' because its registered repository scope does not match the requested workflow scope for task 'task-1' and role 'build'.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
+  test("rejects a missing association before calling the runtime", async () => {
+    const adapter = new AgentRuntimeTestAdapter();
+    let sendCalls = 0;
+    adapter.sendUserMessage = async (input) => {
+      sendCalls += 1;
+      return acceptedUserMessage(input);
+    };
+    const malformedSession = buildSession({ status: "idle" });
+    Reflect.deleteProperty(malformedSession, "sessionAssociation");
+    const sessionsRef = createSessionsRef([malformedSession]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    await expect(
+      actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
+    ).rejects.toThrow(
+      "Cannot send message for session 'session-1' because its association is missing.",
+    );
+    expect(sendCalls).toBe(0);
+  });
+
+  test.each(["opencode", "codex", "claude"] as const)(
+    "uses the same repository send handler for %s",
+    async (runtimeKind) => {
+      const baseAdapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+      const sendInputs: Parameters<AgentEnginePort["submitUserMessage"]>[0][] = [];
+      const adapter: AgentEnginePort = {
+        ...baseAdapter,
+        submitUserMessage: async (input) => {
+          sendInputs.push(input);
+          return acceptedSubmitResult(input);
+        },
+      };
+      const sessionsRef = createSessionsRef([
+        buildSession({
+          runtimeKind,
+          sessionAssociation: { kind: "repository" },
+          status: "idle",
+        }),
+      ]);
+      const actions = createSessionActions({ adapter, sessionsRef, taskRef: { current: [] } });
+
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "runtime-neutral send" },
+      ]);
+
+      expect(sendInputs).toHaveLength(1);
+      expect(sendInputs[0]).toMatchObject({
+        runtimeKind,
+        sessionScope: { kind: "repository" },
+      });
+    },
+  );
+});

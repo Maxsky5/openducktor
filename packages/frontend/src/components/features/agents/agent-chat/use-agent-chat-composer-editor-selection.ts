@@ -6,7 +6,7 @@ import {
   createTextSegment,
   findTextSegment,
   normalizeComposerDraft,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   getCaretOffsetWithinElement,
   getClosestTextSegmentElement,

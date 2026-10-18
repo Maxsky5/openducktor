@@ -3,10 +3,10 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type {
   WorkspaceSessionLiveFacts,
   WorkspaceSessionLiveState,
-} from "@/features/workspace-activity/workspace-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import { buildPaletteTaskView } from "./command-palette-task-model";
 
 const record = (

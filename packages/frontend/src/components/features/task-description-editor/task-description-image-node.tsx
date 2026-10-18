@@ -5,7 +5,7 @@ import { z } from "zod";
 import { GithubIssueImage } from "@/components/features/issue-source/github-issue-image";
 import { isGithubIssueAttachmentUrl } from "@/components/features/issue-source/issue-image-url";
 import { Input } from "@/components/ui/input";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { useResourceSource } from "@/lib/use-resource-source";
 import { TaskDescriptionImageContext } from "./task-description-image-context";

@@ -3,11 +3,9 @@ import {
   deriveRuntimeReadiness,
   type RuntimeReadinessSnapshot,
   type RuntimeReadinessTarget,
-} from "@/lib/runtime-readiness";
-import {
-  useHostRuntimeStatusContext,
-  useRuntimeAvailabilityContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/lib/runtime-readiness";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 
 type UseRuntimeReadinessArgs = {
   hasWorkspace: boolean;

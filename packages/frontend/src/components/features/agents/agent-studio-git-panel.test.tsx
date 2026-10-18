@@ -1,11 +1,18 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { GitFileDiff, GitHistoryPage, GitHistoryPageRequest } from "@openducktor/contracts";
-import { fireEvent, type RenderResult, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  type RenderResult,
+  render as renderWithoutProviders,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { act, createElement } from "react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { GitChangeIntent, GitCommitMode } from "@/features/agent-studio-git";
-import { hostClient } from "@/lib/host-client";
-import { isApplePlatform } from "@/lib/steer-shortcut";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { isApplePlatform } from "@/lib/device-platform";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   baseModel,
@@ -1847,21 +1854,24 @@ describe("AgentStudioGitPanel", () => {
       nextOffset: null,
     };
     const readHistory = mock(async (_request: GitHistoryPageRequest) => historyPage);
-    // GitHistoryView reads through the shared host client, so the test replaces one method and restores it.
-    const originalReadHistory = hostClient.gitGetHistoryPage;
-    hostClient.gitGetHistoryPage = readHistory;
+    // GitHistoryView reads through the host of its connection.
+    const connection = createTestClientConnection({ client: { gitGetHistoryPage: readHistory } });
     let renderer: RenderResult | null = null;
     try {
       await act(async () => {
-        renderer = render(
-          createElement(AgentStudioGitPanel, {
-            model: baseModel({
-              diffScope: "uncommitted",
-              repoPath: "/repo",
-              comparisonReference: "origin/main",
-              checkout: { name: "feature/task-11", detached: false },
+        renderer = renderWithoutProviders(
+          createElement(
+            QueryProvider,
+            { connection },
+            createElement(AgentStudioGitPanel, {
+              model: baseModel({
+                diffScope: "uncommitted",
+                repoPath: "/repo",
+                comparisonReference: "origin/main",
+                checkout: { name: "feature/task-11", detached: false },
+              }),
             }),
-          }),
+          ),
         );
         await flush();
       });
@@ -1898,11 +1908,11 @@ describe("AgentStudioGitPanel", () => {
       expect(screen.queryByTestId("agent-studio-git-history")).toBeNull();
       expect(screen.getByTestId("agent-studio-git-commit-form")).toBeDefined();
     } finally {
-      hostClient.gitGetHistoryPage = originalReadHistory;
       await act(async () => {
         ensureRenderer(renderer).unmount();
         await flush();
       });
+      await connection.dispose();
     }
   });
 

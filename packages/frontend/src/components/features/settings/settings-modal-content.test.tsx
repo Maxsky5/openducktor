@@ -6,14 +6,13 @@ import {
   type RepositoryGitProviderContext,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createQueryClient } from "@/lib/query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { QueryProvider } from "@/lib/query-provider";
-import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsModalContent } from "./settings-modal-content";
 
@@ -203,14 +202,14 @@ describe("settings modal content", () => {
     const scriptsHtml = renderToStaticMarkup(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(SettingsModalContent, { ...baseProps, repositorySection: "scripts" }),
       ),
     );
     const configurationHtml = renderToStaticMarkup(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(SettingsModalContent, { ...baseProps, repositorySection: "configuration" }),
       ),
     );
@@ -267,7 +266,8 @@ describe("settings modal content", () => {
       selectedWorkspace: workspace,
       selectedRepoConfig: draftSnapshot.workspaces.repo!,
     };
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const { queryClient } = connection;
     queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, savedSnapshot);
     queryClient.setQueryData(
       repositoryGitProviderContextQueryKeys.repo("/repo"),
@@ -289,8 +289,8 @@ describe("settings modal content", () => {
 
     const html = renderToStaticMarkup(
       createElement(
-        QueryClientProvider,
-        { client: queryClient },
+        QueryProvider,
+        { connection },
         createElement(SettingsModalContent, {
           section: "repositories",
           repositorySection: "git",
@@ -324,7 +324,7 @@ describe("settings modal content", () => {
     const html = renderToStaticMarkup(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(SettingsModalContent, {
           section: "repositories",
           repositorySection: "scripts",
@@ -413,7 +413,7 @@ describe("settings modal content", () => {
     const html = renderToStaticMarkup(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(
           ThemeProvider,
           null,
@@ -491,7 +491,7 @@ describe("settings modal content", () => {
     const html = renderToStaticMarkup(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(SettingsModalContent, {
           section: "runtimes",
           repositorySection: "configuration",
@@ -582,7 +582,7 @@ describe("settings modal content", () => {
     const html = renderToStaticMarkup(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(SettingsModalContent, {
           section: "autopilot",
           repositorySection: "configuration",

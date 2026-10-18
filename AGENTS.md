@@ -36,13 +36,14 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 ## Monorepo map
 
 - `apps/electron`: Electron desktop shell, renderer startup, preload bridge, packaging, and IPC transport.
+- `packages/frontend-core`: Platform-independent client behavior for desktop, browser, and mobile: host connections, query caches, session projection, history, notification policy, recovery, and drafts.
 - `packages/frontend`: Shared React and Vite UI.
 - `packages/contracts`: Shared runtime schemas and IPC contracts.
 - `packages/core`: Core domain services and ports.
 - `packages/host`: Effect-native TypeScript host, command routing, use cases, and infrastructure adapters.
 - `packages/runtime-orchestration`: Platform-independent lifecycle of the shared agent runtimes. The host plugs in one driver for each runtime kind.
 - `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
-- `packages/host-client`: Frontend IPC adapter.
+- `packages/host-client`: Typed host client and remote protocol client.
 - `packages/openducktor-mcp`: MCP server for `odt_*` workflow tools.
 
 ## Architecture

@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { errorMessage } from "@/lib/errors";
-import { openInToolsQueryOptions } from "@/state/queries/system";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { openInToolsQueryOptions } from "@openducktor/frontend-core/queries/system";
 
 type SettingsOpenInToolProps = {
   system: SystemSettings;

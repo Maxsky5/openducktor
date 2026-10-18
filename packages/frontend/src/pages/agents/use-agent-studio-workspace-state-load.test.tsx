@@ -1,12 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, WorkspaceAgentStudioState } from "@openducktor/contracts";
-import { createQueryClient } from "@/lib/query-client";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
-} from "@/types/agent-session-read-model";
+} from "@openducktor/frontend-core/types/agent-session-read-model";
 import {
   createAgentSessionSummaryFixture,
   createDeferred,
@@ -105,16 +105,22 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       },
     };
     const queryUpdates: AgentStudioQueryUpdate[] = [];
-    const harness = createSharedHookHarness(useWorkspaceRestoreWithSelection, {
-      activeWorkspaceId: "repo-a",
-      tasks,
-      isLoadingTasks: false,
-      tasksAreCurrent: true,
-      sessions: [savedSession],
-      sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
-      hostClient: { workspaceGetRepoConfig: mock(async () => createRepoConfig(savedState)) },
-      onQueryUpdate: (update) => queryUpdates.push(update),
+    const connection = createTestClientConnection({
+      client: { workspaceGetRepoConfig: mock(async () => createRepoConfig(savedState)) },
     });
+    const harness = createSharedHookHarness(
+      useWorkspaceRestoreWithSelection,
+      {
+        activeWorkspaceId: "repo-a",
+        tasks,
+        isLoadingTasks: false,
+        tasksAreCurrent: true,
+        sessions: [savedSession],
+        sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
+        onQueryUpdate: (update) => queryUpdates.push(update),
+      },
+      { connection },
+    );
 
     await harness.mount();
     await harness.waitFor((result) => result.navigation.isWorkspaceStateLoaded);
@@ -136,8 +142,8 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       activeTask: { taskId: "task-1", role: "spec", externalSessionId: "session-old" },
     };
     const workspaceGetRepoConfig = mock(async () => createRepoConfig(cachedState));
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(
+    const connection = createTestClientConnection({ client: { workspaceGetRepoConfig } });
+    connection.queryClient.setQueryData(
       repoConfigQueryOptions("repo-a").queryKey,
       createRepoConfig(cachedState),
     );
@@ -152,9 +158,8 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
         "Session list unavailable",
         "live-stream",
       ),
-      hostClient: { workspaceGetRepoConfig },
     };
-    const harness = createSharedHookHarness(useWorkspaceRestore, hookArgs, { queryClient });
+    const harness = createSharedHookHarness(useWorkspaceRestore, hookArgs, { connection });
 
     await harness.mount();
     await harness.waitFor((result) => result.navigation.isWorkspaceStateLoaded);
@@ -205,7 +210,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       }
       return repoBRead.promise;
     });
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection({ client: { workspaceGetRepoConfig } });
     const repoAArgs: LoadHookArgs = {
       activeWorkspaceId: "repo-a",
       tasks,
@@ -217,9 +222,8 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
         "Session list unavailable",
         "live-stream",
       ),
-      hostClient: { workspaceGetRepoConfig },
     };
-    const harness = createSharedHookHarness(useWorkspaceRestore, repoAArgs, { queryClient });
+    const harness = createSharedHookHarness(useWorkspaceRestore, repoAArgs, { connection });
 
     await harness.mount();
     await harness.waitFor((result) => result.load.agentStudioState !== null);
@@ -271,7 +275,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       taskId: "task-1",
       role: "build" as const,
     };
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection({ client: { workspaceGetRepoConfig } });
     const repoAArgs: LoadHookArgs & { onQueryUpdate: (update: AgentStudioQueryUpdate) => void } = {
       activeWorkspaceId: "repo-a",
       tasks,
@@ -279,11 +283,10 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       tasksAreCurrent: true,
       sessions: [],
       sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
-      hostClient: { workspaceGetRepoConfig },
       onQueryUpdate: () => {},
     };
     const harness = createSharedHookHarness(useWorkspaceRestoreWithSelection, repoAArgs, {
-      queryClient,
+      connection,
     });
 
     await harness.mount();
@@ -318,9 +321,10 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       tasksAreCurrent: false,
       sessions: [],
       sessionReadModelLoadState: readyAgentSessionReadModelLoadState("/repo-a"),
-      hostClient: { workspaceGetRepoConfig },
     };
-    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, staleArgs);
+    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, staleArgs, {
+      connection: createTestClientConnection({ client: { workspaceGetRepoConfig } }),
+    });
     await harness.mount();
     await harness.waitFor((result) => result.loadedAgentStudioState !== null);
 
@@ -351,9 +355,10 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
         "Session list unavailable",
         "live-stream",
       ),
-      hostClient: { workspaceGetRepoConfig },
     };
-    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, failedArgs);
+    const harness = createSharedHookHarness(useAgentStudioWorkspaceStateLoad, failedArgs, {
+      connection: createTestClientConnection({ client: { workspaceGetRepoConfig } }),
+    });
 
     await harness.mount();
     await harness.waitFor((result) => !result.isLoading);

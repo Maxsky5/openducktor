@@ -3,7 +3,7 @@ import { RefreshCw } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { TaskExecutionCiChecksList } from "./task-execution-ci-checks-list";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";

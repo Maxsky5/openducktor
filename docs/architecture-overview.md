@@ -2,14 +2,15 @@
 
 Use this document to find the owner of a rule and trace a user action across packages.
 
-OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend` is the shared UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux.
+OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend-core` holds the client behavior that all clients share. `packages/frontend` is the shared browser UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux.
 
 ## Layer ownership
 
 | Layer | Main code | Owns | Does not own |
 |---|---|---|---|
 | UI | `packages/frontend/src/pages`, `packages/frontend/src/components` | Rendered state and local interaction | Workflow rules and status transitions |
-| Frontend state | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | UI state, operations, host session projection, selected history | Schemas, task mutations, source live runtime state |
+| Frontend state | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | UI state, task and workspace operations, provider composition | Schemas, task mutations, source live runtime state |
+| Frontend core | `packages/frontend-core/src/*` | Host connection lifetime, query caches, live session projection, history merge, notification policy, connection recovery, drafts | Presentation, device APIs, workflow policy, source live runtime state |
 | Contracts | `packages/contracts/src/*` | Zod schemas for tasks, sessions, workflows, host commands, and MCP data | Runtime control and workflow policy |
 | Core | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | Ports, role policy, tool mapping, prompt helpers | Shell calls and task-store adapter calls |
 | Clients and runtime adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Host client and native runtime protocols | Workflow policy and shell transport |
@@ -19,7 +20,7 @@ OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the defau
 
 ## Shell startup
 
-`packages/frontend` exports `bootstrapOpenDucktorShell(...)` and the `ShellBridge` contract. The bootstrap sets the bridge, reads settings for the theme, selects browser or hash routing, and renders the app.
+`packages/frontend` exports `bootstrapOpenDucktorShell(...)` and the `ShellBridge` contract. The bootstrap creates one `ClientConnection` for the selected host, reads settings for the theme, selects browser or hash routing, and renders the app under `ClientConnectionProvider`. A host change from a local host first saves drafts and stays on the page when a save fails. A remote host keeps its drafts in page memory, so its host change does not wait for them. Then the host change unmounts the app, disposes the connection, and reloads the document. See [the frontend core](#frontend-core).
 
 `apps/electron` supplies IPC, preload events, context isolation, renderer sandboxing, and host cleanup. `packages/openducktor-web` starts a loopback host, injects config, serves the frontend, and maps HTTP/SSE to the same bridge.
 
@@ -27,16 +28,56 @@ OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the defau
 
 - Zod schemas in `packages/contracts` define public data.
 - Effect defines host execution, typed failures, resources, and Promise conversion.
-- TanStack Query defines frontend cache keys, stale times, in-flight request deduplication, and invalidation.
+- TanStack Query defines client cache keys, stale times, in-flight request deduplication, and invalidation. Each host connection has its own query client.
 - React context and local stores hold UI state. Host runtime adapters hold the source live session state.
 
 Read [ADR 0002](adr/0002-use-effect-in-the-typescript-host.md) and [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) before you change these boundaries.
 
+## Frontend core
+
+`packages/frontend-core` (`@openducktor/frontend-core`) owns client behavior that desktop, browser, and mobile clients share. [ADR 0011](adr/0011-own-shared-client-behavior-in-a-platform-independent-package.md) records the decision.
+
+The package runs without DOM, Node, or Bun APIs. Its dependencies are contracts, core, the host client, path support, TanStack Query, React, Zod, and Zustand. `packages/frontend-core/src/platform/platform-globals.d.ts` lists the standard globals that a client platform must supply.
+
+This diagram shows how a shell builds one client connection.
+
+```mermaid
+flowchart TD
+  Shell["Shell bridge"] --> Conn["ClientConnection"]
+  Ports["Platform ports"] --> Conn
+  QC["Query client"] --> Conn
+  Conn --> Provider["ClientConnectionProvider"]
+  Provider --> Views["Views and hooks"]
+```
+
+| Area | Folder | Owns |
+|---|---|---|
+| Connection | `connection/` | `HostConnection`, `ClientConnection`, query client defaults, React provider and hooks |
+| Platform ports | `platform/` | `ClientFeedback`, `ClientStorage`, `DeviceFileReference`, `NotificationBridge`, platform globals |
+| Caches | `queries/` | Query keys, options, cache sync, and invalidation |
+| Sessions | `sessions/`, `workspace-activity/` | Session store, live projection, history, transcript, session actions |
+| Recovery | `recovery/`, `tasks/` | Remote host connection, recovery barrier, task streams, notification replay |
+| Notifications | `notifications/` | Occurrence preparation, delivery policy, failure state |
+| Drafts | `drafts/` | Chat drafts, queued-message edit drafts, inline comment drafts |
+
+Connection rules:
+
+- A `ClientConnection` binds one host connection to one query client, one device storage scope, and its draft stores. `connectionHost(queryClient)` returns the host client of the connection that owns a query client, so a late response stays in its own cache. Query options and loaders take no host override, so one cache key always reads the host of its own connection. Named session ports, such as `AgentSessionReadPort`, stay explicit.
+- Code outside React receives the connection, its query client, or its host client as a parameter. Code in React reads it with `useClientConnection`, `useHostClient`, or `useHostConnection`. Module-level tables key each entry by query client, so each entry belongs to one connection.
+- Frontend stores that keep host state, such as the command palette Recent list, session panel layouts, and the selected workspace chat, read `ClientConnection` storage. `perConnection` in `packages/frontend/src/lib/per-connection.ts` gives each connection its own store.
+- React effects under `ClientConnectionProvider` own the event subscriptions. A platform unmounts that tree before it disposes the connection. The frontend uses `releaseShellConnection` for this order.
+- `saveDrafts()` writes every unsaved draft now. It rejects with an actionable message when a draft could not be saved, and that draft stays in memory.
+- `dispose()` starts `saveDrafts()` before its first `await`, cancels local reads, clears the cache, and releases the host transport. It rejects when a step failed, including a draft save. It sends no command that stops or changes host work, so admitted host work continues. Only the draft save can stage the attachments of an unsaved draft.
+- A local host stores drafts in device storage. A remote host stores drafts in connection memory.
+- Platforms supply transient feedback, device storage, the attachment stager, the remote transport, and notification delivery adapters. A device file reference is never a host path. The stager returns the host path.
+- UI facts, such as key labels, the command palette shortcut, scrollbars, and theme, come from the device (`lib/device-platform.ts` in the frontend). Host facts, such as host paths and the host platform, come from host data. Terminal key mapping uses the host platform, because its line-editing input goes to the host shell.
+- The frontend keeps presentation, provider composition, routing, terminals, generated-image decoding, and the browser implementations of the ports.
+
 ## List tasks for the Kanban board
 
 1. `useTaskQueryReadModel` observes `repoTaskDataQueryOptions`. The initial stream snapshot fills the shared query cache. The render query reuses this data without a second request. If the stream cannot start or has not claimed the selected repository, the repository load fills the cache. Manual and event refreshes use `TaskViewSync`.
-2. `repoTaskDataQueryOptions` calls `host.tasksList(repoPath)`. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before the host builds task rows.
-3. `packages/frontend/src/lib/host-client.ts` delegates to the active shell bridge.
+2. `repoTaskDataQueryOptions` calls `tasksList(repoPath)` on the host client of the connection that owns the query client. The host reads `kanban.doneVisibleDays`, and SQLite filters old closed tasks before the host builds task rows.
+3. The host client of the connection delegates to the shell bridge transport: Electron IPC, local HTTP, or the remote work endpoint.
 4. `packages/host-client/src/task-client.ts` maps the call to `tasks_list`.
 5. The shell calls the host command router.
 6. The host resolves the workspace, opens `<config-root>/task-stores/<workspaceId>/database.sqlite`, and reads through `TaskStorePort`.
@@ -159,10 +200,10 @@ The page does not parse chat text to create a pull request.
 | Database identity | `<config-root>/task-stores/<workspaceId>/database.sqlite` | Host SQLite infrastructure |
 | Documents and durable session records | SQLite task and document rows | Host task services |
 | Live session state and reply routing | `packages/host/src/application/agent-sessions/*`, `packages/host/src/adapters/agent-sessions/*` | Host runtime adapter |
-| Renderer session view | `packages/frontend/src/state/operations/agent-orchestrator/session-read-model/*` | Frontend projection |
+| Renderer session view | `packages/frontend-core/src/sessions/agent-orchestrator/session-read-model/*` | Client projection |
 | Transcript history | Selected runtime history adapter | Runtime adapter |
 | Host execution errors | Effect and tagged errors in `packages/host/src` | Host |
-| Frontend server-read cache | Query modules under `packages/frontend/src/state/queries` | Frontend |
+| Client server-read cache | Query modules under `packages/frontend-core/src/queries` | Frontend core |
 
 ## Replaceable boundaries
 

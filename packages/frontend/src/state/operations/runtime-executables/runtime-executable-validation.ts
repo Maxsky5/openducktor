@@ -4,7 +4,7 @@ import {
   type RuntimeExecutableCheckResult,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
+import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 
 export const runtimeExecutableResultForPath = (
   kind: RuntimeKind,

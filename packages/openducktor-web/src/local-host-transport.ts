@@ -1,4 +1,4 @@
-import { createNotificationFrameRelay } from "@openducktor/frontend/lib/remote/notification-frame-relay";
+import { createNotificationFrameRelay } from "@openducktor/frontend-core/recovery/notification-frame-relay";
 import {
   notificationStreamFrameSchema,
   notificationStreamSubscribeSchema,
@@ -15,17 +15,17 @@ import {
 } from "@openducktor/contracts";
 import type { HostCommandArgs, HostCommandName } from "@openducktor/host";
 import type { AzureDevOpsConnectionUpdateListener, RunEventListener } from "@openducktor/frontend";
-import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@openducktor/frontend/lib/browser-live/constants";
+import { CONNECTION_RECONNECTED_EVENT_KIND } from "@openducktor/frontend-core/recovery/connection-control-events";
 import {
-  browserLiveReconnectedEvent,
-  browserLiveStreamWarningEvent,
-} from "@openducktor/frontend/lib/browser-live-control-events";
+  connectionReconnectedEvent,
+  connectionStreamWarningEvent,
+} from "@openducktor/frontend-core/recovery/connection-control-events";
 import {
-  observeShellEventResult,
+  logListenerFailure,
   type RuntimeChangeListener,
   type TaskStreamFrame,
   type TaskStreamSubscription,
-} from "@openducktor/frontend/lib/shell-bridge";
+} from "@openducktor/frontend-core/connection/host-connection";
 import {
   createAgentSessionLiveAttachment,
   createHostClient,
@@ -55,7 +55,7 @@ import {
 } from "@openducktor/remote-host/host-event-stream-name";
 import { subscribeLocalTaskEventStreamEffect } from "./local-task-event-transport";
 
-type BrowserSseControlEvent = ReturnType<typeof browserLiveReconnectedEvent>;
+type BrowserSseControlEvent = ReturnType<typeof connectionReconnectedEvent>;
 type BrowserSseEvent = HostEventEnvelope | BrowserSseControlEvent;
 type BrowserSseListener = (event: BrowserSseEvent) => void | Promise<void>;
 type BrowserSseListenerRegistration = {
@@ -100,7 +100,7 @@ type LocalHostRequestErrorInput = {
 };
 
 const isBrowserSseControlEvent = (event: BrowserSseEvent): event is BrowserSseControlEvent =>
-  "__openducktorBrowserLive" in event;
+  "__openducktorConnectionControl" in event;
 
 let sseChannel: BrowserSseChannel | null = null;
 let nextSseListenerId = 0;
@@ -271,7 +271,7 @@ const dispatchBrowserSseListeners = <Payload>(
 
   for (const currentListener of listeners) {
     try {
-      observeShellEventResult(currentListener(payload));
+      logListenerFailure(currentListener(payload));
     } catch (error) {
       if (!didListenerThrow) {
         firstListenerError = error;
@@ -386,7 +386,7 @@ const getSseChannelEffect = (
             .map(
               (registration) => () =>
                 registration.listener(
-                  browserLiveReconnectedEvent(
+                  connectionReconnectedEvent(
                     // A first connection has no cursor, so it cannot prove that nothing was missed.
                     !resumed || replay.hostChanged || gaps.has(registration.eventName),
                   ),
@@ -407,7 +407,7 @@ const getSseChannelEffect = (
         }
         if (hasOpened) {
           connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error after opening.`;
-          const warningPayload = browserLiveStreamWarningEvent(connectionWarning);
+          const warningPayload = connectionStreamWarningEvent(connectionWarning);
           try {
             dispatchBrowserSseListeners(snapshotControlListeners(), warningPayload);
           } finally {
@@ -418,7 +418,7 @@ const getSseChannelEffect = (
         connectionWarning = `EventSource ${HOST_EVENT_STREAM_PATH} reported an error before opening.`;
         dispatchBrowserSseListeners(
           snapshotControlListeners(),
-          browserLiveStreamWarningEvent(connectionWarning),
+          connectionStreamWarningEvent(connectionWarning),
         );
         hasReportedConnectionError = true;
       };
@@ -478,7 +478,7 @@ const subscribeSseChannelEffect = (
       ) {
         dispatchBrowserSseListeners(
           [registration.listener],
-          browserLiveStreamWarningEvent(connectionWarning),
+          connectionStreamWarningEvent(connectionWarning),
         );
       }
     });
@@ -613,7 +613,7 @@ const subscribeReadyLocalHostEventsEffect = (
   });
 
 export const subscribeLocalHostWorkspaceSessionUpdates = async (
-  listener: import("@openducktor/frontend/lib/shell-bridge").WorkspaceSessionUpdateListener,
+  listener: import("@openducktor/frontend-core/connection/host-connection").WorkspaceSessionUpdateListener,
 ): Promise<() => void> => {
   return runWebBoundary(
     subscribeReadyLocalHostEventsEffect("openducktor://workspace-session-updated", (event) => {
@@ -678,7 +678,7 @@ export const observeLocalHostAgentSessions = async (
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
           if (isBrowserSseControlEvent(event)) {
-            if (event.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND && event.missedEvents) {
+            if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND && event.missedEvents) {
               reattach();
             }
             return;
@@ -745,7 +745,7 @@ export const buildTaskAssetUrl = (
   return `${baseUrl}/task-assets/${segments.join("/")}`;
 };
 
-export const subscribeLocalHostNotificationStream: import("@openducktor/frontend/lib/shell-bridge").HostBridge["subscribeNotificationStream"] =
+export const subscribeLocalHostNotificationStream: import("@openducktor/frontend-core/connection/host-connection").HostConnection["subscribeNotificationStream"] =
   (input, onFrame, onFailure) =>
     runWebBoundary(
       Effect.gen(function* () {

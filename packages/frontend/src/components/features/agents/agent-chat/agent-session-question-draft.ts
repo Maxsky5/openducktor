@@ -1,4 +1,4 @@
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type AgentQuestionDraftEntry = {
   selectedOptionValues: string[];

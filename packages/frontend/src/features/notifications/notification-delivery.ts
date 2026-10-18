@@ -1,6 +1,5 @@
 import type {
   NotificationCue,
-  NotificationDeliveryResult,
   NotificationNavigationTarget,
   NotificationOccurrence,
 } from "@openducktor/contracts";
@@ -8,9 +7,8 @@ import { play as playCuelume, type SoundName } from "cuelume";
 import { ArrowUpRight } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
-import type { NotificationCopy } from "./notification-copy";
+import type { NotificationCopy } from "@openducktor/frontend-core/notifications/notification-copy";
 import { notificationCueSounds } from "./notification-sound";
-import type { NotificationBridge } from "@/lib/shell-bridge";
 
 type SonnerNotificationOptions = {
   id: string;
@@ -73,26 +71,6 @@ type PlayCuelume = (sound?: SoundName, options?: { volume?: number }) => void;
 export const createCuelumeNotificationSoundAdapter = (play: PlayCuelume = playCuelume) => ({
   async play(cue: NotificationCue, volumePercent: number): Promise<void> {
     play(notificationCueSounds[cue], { volume: volumePercent / 100 });
-  },
-});
-
-export const createShellOsNotificationAdapter = (
-  bridge: NotificationBridge,
-  onShown: () => void = () => {},
-) => ({
-  async deliver(
-    copy: NotificationCopy,
-    occurrence: NotificationOccurrence,
-  ): Promise<NotificationDeliveryResult> {
-    const result = await bridge.showOsNotification({
-      occurrenceId: occurrence.occurrenceId,
-      title: copy.title,
-      body: copy.body,
-      silent: true,
-      navigationTarget: occurrence.navigationTarget,
-    });
-    if (result.status === "shown") onShown();
-    return result;
   },
 });
 

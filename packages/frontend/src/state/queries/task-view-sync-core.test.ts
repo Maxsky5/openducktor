@@ -4,13 +4,22 @@ import { CancelledError, QueryClient, QueryObserver, useQueryClient } from "@tan
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { documentQueryKeys, taskDocumentQueryOptions } from "./documents";
-import { createTaskViewSync, type TaskViewSyncPorts } from "./task-view-sync";
-import { boardEvent, eventCursor } from "./task-view-sync.test-support";
-import { type RepoTaskData, taskQueryKeys } from "./tasks";
-import { workspaceQueryKeys } from "./workspace";
+import {
+  documentQueryKeys,
+  taskDocumentQueryOptions,
+} from "@openducktor/frontend-core/queries/documents";
+import {
+  createTaskViewSync,
+  type TaskViewSyncPorts,
+} from "@openducktor/frontend-core/queries/task-view-sync";
+import {
+  boardEvent,
+  eventCursor,
+} from "@openducktor/frontend-core/queries/task-view-sync.test-support";
+import { type RepoTaskData, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
@@ -53,9 +62,7 @@ const documentActions = (open = false) => {
     };
     return null;
   };
-  renderToStaticMarkup(
-    createElement(QueryProvider, { useIsolatedClient: true }, createElement(Harness)),
-  );
+  renderToStaticMarkup(createElement(QueryProvider, null, createElement(Harness)));
   if (!result.current) throw new Error("Document actions did not render");
   return result.current;
 };

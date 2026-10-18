@@ -12,16 +12,16 @@ import {
 import { resolveModelSelectionOptions } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "@/features/agent-chat-composer/use-speed-control";
-import { withSpeed } from "@/lib/model-catalog-selection";
+import { withSpeed } from "@openducktor/frontend-core/lib/model-catalog-selection";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
-import { host } from "@/state/operations/host";
-import { useRefreshStaleRuntimeCatalog } from "@/state/queries/use-runtime-catalog-query";
-import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
+import { useRefreshStaleRuntimeCatalog } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
+import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import {
   projectWorkspaceModelResources,
   type SessionModelTarget,
 } from "./workspace-session-model-resources";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 const rejectMissingSessionUpdate = (): never => {
   throw new Error("No existing session is selected.");
@@ -34,6 +34,7 @@ export function useWorkspaceSessionModelPicker(
   session?: SessionModelTarget,
   defaultSelection?: AgentModelSelection | null,
 ) {
+  const host = useHostClient();
   const { availableRuntimeDefinitions, allRuntimeDefinitions, loadRepoRuntimeCatalog } =
     useRuntimeAvailabilityContext();
   const [draftSelection, setDraftSelection] = useState<AgentModelSelection | null>(null);

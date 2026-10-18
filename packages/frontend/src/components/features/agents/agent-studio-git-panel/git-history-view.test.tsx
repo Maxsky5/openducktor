@@ -4,7 +4,6 @@ import type {
   GitHistoryPage,
   GitHistoryPageRequest,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -15,11 +14,10 @@ import {
   waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { refreshGitHistoryQueries } from "@/state/queries/git";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { refreshGitHistoryQueries } from "@openducktor/frontend-core/queries/git";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HISTORY_COLUMNS_STORAGE_KEY, useHistoryColumnsStore } from "./git-history-columns";
 import { GitHistoryView, type GitHistoryViewProps } from "./git-history-view";
@@ -71,6 +69,9 @@ const historyPage = mock(
   async (_request: GitHistoryPageRequest): Promise<GitHistoryPage> => firstPage,
 );
 
+const createHistoryConnection = () =>
+  createTestClientConnection({ client: { gitGetHistoryPage: historyPage } });
+
 /** A removed commit fades out for 200 ms before the list closes the gap. */
 const waitForFadeOut = () =>
   act(async () => {
@@ -92,7 +93,7 @@ const props = (overrides: Partial<GitHistoryViewProps> = {}): GitHistoryViewProp
 // The Git panel gives History its tooltip provider.
 const renderHistory = (overrides: Partial<GitHistoryViewProps> = {}) =>
   render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={createHistoryConnection()}>
       <TooltipProvider>
         <div style={{ height: 600 }}>
           <GitHistoryView {...props(overrides)} />
@@ -106,12 +107,10 @@ beforeEach(() => {
   useHistoryColumnsStore.getState().reset();
   historyPage.mockReset();
   historyPage.mockImplementation(async () => firstPage);
-  configureShellBridge(createShellBridgeFixture({ client: { gitGetHistoryPage: historyPage } }));
 });
 
 afterEach(() => {
   cleanup();
-  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("GitHistoryView", () => {
@@ -297,9 +296,10 @@ describe("GitHistoryView", () => {
 
   test("keeps the rows of the branch while a new commit loads, then adds it in place", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (revision: string) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView
@@ -307,7 +307,7 @@ describe("GitHistoryView", () => {
             />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree(CURRENT));
     await screen.findByText("Subject c2");
@@ -344,15 +344,16 @@ describe("GitHistoryView", () => {
 
   test("keeps the graph while the panel checks the same target again after a commit", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (overrides: Partial<GitHistoryViewProps>) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView {...props(overrides)} />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree({}));
     await screen.findByText("Subject c2");
@@ -390,9 +391,10 @@ describe("GitHistoryView", () => {
 
   test("fades out a commit that a reset removed, then closes the gap", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (revision: string) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView
@@ -400,7 +402,7 @@ describe("GitHistoryView", () => {
             />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree(CURRENT));
     await screen.findByText("Subject c2");
@@ -428,9 +430,10 @@ describe("GitHistoryView", () => {
 
   test("clears the selection of a commit that leaves, so its card does not open again", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (revision: string) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView
@@ -438,7 +441,7 @@ describe("GitHistoryView", () => {
             />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree(CURRENT));
     const details = () => screen.queryByTestId("agent-studio-git-history-details");
@@ -482,15 +485,16 @@ describe("GitHistoryView", () => {
 
   test("shows the loader for a pending check of another target", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (overrides: Partial<GitHistoryViewProps>) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView {...props(overrides)} />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree({}));
     await screen.findByText("Subject c2");
@@ -512,15 +516,16 @@ describe("GitHistoryView", () => {
 
   test("keeps the rows while a rebase detaches HEAD from the branch", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (checkout: GitHistoryViewProps["checkout"]) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView {...props({ checkout })} />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree({ name: "feature", detached: false, revision: CURRENT }));
     await screen.findByText("Subject c2");
@@ -536,9 +541,10 @@ describe("GitHistoryView", () => {
 
   test("starts without rows for another branch", async () => {
     historyPage.mockImplementation(async () => ({ ...firstPage, nextOffset: null }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     const tree = (name: string) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView
@@ -546,7 +552,7 @@ describe("GitHistoryView", () => {
             />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(tree("feature"));
     await screen.findByText("Subject c2");
@@ -623,15 +629,16 @@ describe("GitHistoryView", () => {
       if (request.page) throw new Error("History changed");
       return firstPage;
     });
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <div style={{ height: 600 }}>
             <GitHistoryView {...props()} />
           </div>
         </TooltipProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     await screen.findByText(/Older commits could not load/);
     historyPage.mockImplementation(async () => {
@@ -661,13 +668,14 @@ describe("GitHistoryView", () => {
 
   test("marks a retained no-commits result as old until Refresh succeeds", async () => {
     historyPage.mockImplementation(async () => ({ outcome: "no_commits" }));
-    const queryClient = createQueryClient();
+    const connection = createHistoryConnection();
+    const { queryClient } = connection;
     render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TooltipProvider>
           <GitHistoryView {...props()} />
         </TooltipProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     await screen.findByText("No commits yet");
     historyPage.mockImplementation(async () => {

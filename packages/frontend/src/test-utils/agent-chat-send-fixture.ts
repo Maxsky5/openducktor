@@ -5,7 +5,7 @@ import {
   useAgentChatSend,
 } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { useAgentOperations } from "@/state/app-state-provider";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type AgentChatSendArgs = Parameters<typeof useAgentChatSend>[0];
 

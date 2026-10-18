@@ -5,10 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { AgentChatComposerModel, AgentChatMessageQueueModel } from "./agent-chat.types";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
-import { clearQueuedMessageEditDraft } from "./agent-chat-queued-message-drafts";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
   type EditingQueuedMessage,
   QueuedMessageEditor,
@@ -59,6 +59,7 @@ export function AgentChatMessageQueue({
       .finally(() => setPendingAction(null));
   };
 
+  const editDrafts = useClientConnection().drafts.queuedMessageEdits;
   const entries = queue?.entries ?? [];
   const stacked = entries.filter((entry) => entry.state !== "editing");
   const edited = entries.filter((entry) => entry.state === "editing");
@@ -84,7 +85,7 @@ export function AgentChatMessageQueue({
             ? edited.map((entry) => {
                 const { submissionId, editId } = entry;
                 // An ended edit no longer needs its unsaved draft.
-                const endEdit = (): void => clearQueuedMessageEditDraft(queue.target, editId);
+                const endEdit = (): void => editDrafts.clear(queue.target, editId);
                 return (
                   <QueuedMessageEditCard
                     key={submissionId}

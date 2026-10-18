@@ -4,7 +4,7 @@ import {
   resolveBuildContinuationLaunchAction,
   resolveBuildRequestChangesLaunchAction,
 } from "@/features/session-start/session-start-launch-options";
-import { kickoffPrompt } from "./kickoff-prompts";
+import { kickoffPrompt } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/kickoff-prompts";
 
 const taskFixture: TaskCard = {
   id: "task-1",

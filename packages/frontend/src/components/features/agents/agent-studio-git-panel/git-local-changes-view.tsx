@@ -13,10 +13,8 @@ import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-v
 import { Button } from "@/components/ui/button";
 import { type GitChangeIntent, gitChangeIntentKey } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
-import {
-  type InlineCommentDraft,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+import { type InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
 import { FileDiffList } from "./file-diff-list";
 import { FileListHeader } from "./file-list-header";
 import { type FileSearchMatch, searchFiles } from "./file-list-search";

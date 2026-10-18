@@ -5,8 +5,8 @@ import type { ReactElement } from "react";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { errorMessage } from "@/lib/errors";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { RepoActionsSplitButton } from "./repo-actions-split-button";
 

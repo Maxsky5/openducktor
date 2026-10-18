@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { FileDiffListWithHeader } from "./file-diff-list";
 import {
@@ -11,6 +10,7 @@ import {
   preloaderMock,
   setupFileDiffListTests,
 } from "./file-diff-list.test-support";
+import { FileDiffListProviders } from "./file-diff-list.test-providers";
 import type { FileListViewMode } from "./file-list-view-preference";
 import { useFileListSearch, useFileListState } from "./use-file-list-state";
 
@@ -63,7 +63,7 @@ function NavigableFileDiffListHarness({
   });
 
   return (
-    <TooltipProvider>
+    <FileDiffListProviders>
       <div className="h-[400px]">
         <FileDiffListWithHeader
           fileDiffs={fileDiffs}
@@ -85,7 +85,7 @@ function NavigableFileDiffListHarness({
           changingKey={null}
         />
       </div>
-    </TooltipProvider>
+    </FileDiffListProviders>
   );
 }
 

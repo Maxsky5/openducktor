@@ -1,0 +1,1420 @@
+import { describe, expect, mock, test } from "bun:test";
+import type { AgentImageGenerationPart, RepoPromptOverrides } from "@openducktor/contracts";
+import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { HostInvokeError } from "@openducktor/host-client";
+import {
+  createAgentSessionCollection,
+  getAgentSession,
+  replaceAgentSession,
+} from "../../agent-session-collection";
+import { sessionMessagesToArray } from "../../../test-support/session-message-test-helpers";
+import { createAgentSessionFixture } from "../../../test-support/shared-test-fixtures";
+import type {
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "../../../types/agent-orchestrator";
+import type { UpdateSession } from "../events/session-event-types";
+import { upsertImageGenerationMessage } from "../support/image-generation-messages";
+import { createSessionMessagesState } from "../support/messages";
+import { createTaskCardFixture } from "../test-utils";
+import {
+  createLoadAgentSessionHistory,
+  loadSessionHistoryIntoStore,
+} from "./session-history-loader";
+import { markSessionHistoryStale } from "./session-history-freshness";
+import { createSessionHistoryReadGeneration } from "./session-history-read-generation";
+import { createWorkflowSessionHistoryPromptPolicy } from "./workflow-session-history-policy";
+
+const createTaskFixture = () =>
+  createTaskCardFixture({
+    id: "task-1",
+    title: "Implement feature",
+    description: "Build the task from the repository rules.",
+    status: "in_progress",
+    priority: 1,
+    issueType: "task",
+    aiReviewEnabled: true,
+    updatedAt: "2026-06-12T08:00:00.000Z",
+    createdAt: "2026-06-12T08:00:00.000Z",
+  });
+
+const sessionTarget = {
+  externalSessionId: "external-1",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo/worktree",
+} satisfies AgentSessionIdentity;
+
+const historyReadGeneration = createSessionHistoryReadGeneration();
+
+const createSession = (): AgentSessionState =>
+  createAgentSessionFixture({
+    externalSessionId: sessionTarget.externalSessionId,
+    sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+    runtimeKind: "opencode",
+
+    status: "running",
+    startedAt: "2026-06-12T08:00:00.000Z",
+    workingDirectory: sessionTarget.workingDirectory,
+    historyLoadState: "not_requested",
+  });
+
+const createHistoryLoadHarness = (initialSession: AgentSessionState = createSession()) => {
+  let sessionCollection = createAgentSessionCollection([initialSession]);
+  const updateSession: UpdateSession = (identity, updater) => {
+    const current = getAgentSession(sessionCollection, identity);
+    if (!current) {
+      return null;
+    }
+    const nextSession = updater(current);
+    sessionCollection = replaceAgentSession(sessionCollection, nextSession);
+    return nextSession;
+  };
+
+  return {
+    readSessionSnapshot: (identity: AgentSessionIdentity) =>
+      getAgentSession(sessionCollection, identity),
+    updateSession,
+    get session() {
+      const session = getAgentSession(sessionCollection, initialSession);
+      if (!session) {
+        throw new Error(`Expected session '${initialSession.externalSessionId}' to exist.`);
+      }
+      return session;
+    },
+  };
+};
+
+const retainedHistoryMessage: AgentSessionHistoryMessage = {
+  messageId: "retained-1",
+  role: "assistant",
+  timestamp: "2026-06-12T08:00:00.000Z",
+  text: "Retained transcript",
+  parts: [],
+};
+
+const missedHistoryMessage: AgentSessionHistoryMessage = {
+  messageId: "missed-1",
+  role: "assistant",
+  timestamp: "2026-06-12T08:00:02.000Z",
+  text: "Produced while inactive",
+  parts: [],
+};
+
+const createFinalAssistantHistoryMessage = ({
+  messageId,
+  text,
+}: {
+  messageId: string;
+  text: string;
+}): AgentSessionHistoryMessage => ({
+  messageId,
+  role: "assistant",
+  timestamp: "2026-06-12T08:00:02.000Z",
+  text,
+  parts: [
+    {
+      kind: "step",
+      messageId,
+      partId: `${messageId}-finish`,
+      phase: "finish",
+      reason: "stop",
+    },
+  ],
+});
+
+const createRetainedSessionHarness = () =>
+  createHistoryLoadHarness({
+    ...createSession(),
+    historyLoadState: "stale",
+    messages: createSessionMessagesState("external-1", [
+      {
+        id: "retained-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:00.000Z",
+        content: "Retained transcript",
+      },
+    ]),
+  });
+
+const refreshHistory = (args: Parameters<typeof loadSessionHistoryIntoStore>[0]) => {
+  args.updateSession(args.identity, markSessionHistoryStale);
+  return loadSessionHistoryIntoStore(args);
+};
+
+describe("session history loader", () => {
+  test("history reloads clear absent image media and can later restore it", async () => {
+    const harness = createHistoryLoadHarness();
+    const empty: AgentImageGenerationPart = {
+      kind: "image_generation",
+      messageId: "image",
+      partId: "image",
+      itemId: "image",
+      turnId: "turn",
+      status: "completed",
+    };
+    const available = { ...empty, output: { revision: "old" }, savedPath: "/old.png" };
+    let image: AgentImageGenerationPart = available;
+    const input = {
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async (): Promise<AgentSessionHistoryMessage[]> => [
+          {
+            messageId: "image",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "",
+            parts: [image],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    };
+    await loadSessionHistoryIntoStore(input);
+    for (const next of [
+      empty,
+      empty,
+      { ...empty, previewUnavailableReason: "Old error", savedPath: "/old.png" },
+      empty,
+      { ...available, output: { revision: "new" } },
+    ]) {
+      image = next;
+      await refreshHistory(input);
+      expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([
+        next,
+      ]);
+    }
+  });
+
+  test("repeated history reloads replace image revisions and their file paths", async () => {
+    const harness = createHistoryLoadHarness();
+    let image: AgentImageGenerationPart = {
+      kind: "image_generation",
+      messageId: "image",
+      partId: "image",
+      itemId: "image",
+      turnId: "turn",
+      status: "completed",
+      output: { revision: "first" },
+      savedPath: "/first.png",
+    };
+    const input = {
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async (): Promise<AgentSessionHistoryMessage[]> => [
+          {
+            messageId: "image",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "",
+            parts: [image],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    };
+    await loadSessionHistoryIntoStore(input);
+    expect(sessionMessagesToArray(harness.session)).toHaveLength(1);
+    image = { ...image, output: { revision: "second" }, savedPath: "/second.png" };
+    await refreshHistory(input);
+    expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([image]);
+    const { savedPath: _savedPath, ...inline } = image;
+    image = { ...inline, output: { revision: "third" } };
+    await refreshHistory(input);
+    expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([image]);
+  });
+
+  test("a history reload preserves an image revision received during the read", async () => {
+    const harness = createHistoryLoadHarness({ ...createSession(), historyLoadState: "loaded" });
+    const beforeRead: AgentImageGenerationPart = {
+      kind: "image_generation",
+      messageId: "image",
+      partId: "image",
+      itemId: "image",
+      turnId: "turn",
+      status: "completed",
+      output: { revision: "before" },
+    };
+    const timestamp = "2026-06-12T08:00:01.000Z";
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      messages: upsertImageGenerationMessage(current, beforeRead, timestamp),
+    }));
+    const live = { ...beforeRead, output: { revision: "live" } };
+    await refreshHistory({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          harness.updateSession(sessionTarget, (current) => ({
+            ...current,
+            messages: upsertImageGenerationMessage(current, live, timestamp),
+          }));
+          return [
+            {
+              messageId: "image",
+              role: "assistant" as const,
+              timestamp,
+              text: "",
+              parts: [{ ...beforeRead, savedPath: "/old.png" }],
+            },
+          ];
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    expect(sessionMessagesToArray(harness.session).map((message) => message.meta)).toEqual([live]);
+  });
+
+  test("treats a stale operation as neither applied nor failed", async () => {
+    const loadSessionHistory = mock(async () => []);
+    const harness = createHistoryLoadHarness();
+    const updateSession = mock(harness.updateSession);
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => true,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(updateSession).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("not_requested");
+  });
+
+  test("releases a loading history claim when the operation becomes stale", async () => {
+    const harness = createHistoryLoadHarness();
+    let stale = false;
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          stale = true;
+          return [];
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => stale,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("not_requested");
+  });
+
+  test("marks the session failed when history loading fails for the current repo operation", async () => {
+    const harness = createHistoryLoadHarness();
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("history unavailable");
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("failed");
+  });
+
+  test("keeps structured session history diagnostics in transient session state", async () => {
+    const harness = createHistoryLoadHarness();
+    const failure = {
+      code: "invalid_runtime_response" as const,
+      summary: "Codex returned invalid conversation history.",
+      detail: "Codex thread/turns/list response data[0] must be an object",
+      diagnosticId: "diagnostic-1",
+      method: "thread/turns/list",
+      pageCursor: null,
+    };
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new HostInvokeError("history unavailable", {
+            kind: "session_history",
+            sessionHistoryFailure: failure,
+          });
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("failed");
+    expect(harness.session.historyLoadFailure).toEqual(failure);
+  });
+
+  test("allows caller-requested history loads to retry failed sessions", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "Loaded after retry",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "failed",
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Loaded after retry",
+    ]);
+  });
+
+  test("allows caller-requested history loads to retry a failed refresh with visible messages", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-2",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:02.000Z",
+        text: "Complete transcript",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      historyLoadFailure: {
+        code: "invalid_runtime_response",
+        summary: "Codex returned invalid conversation history.",
+        detail: "Codex thread/turns/list response data[0] must be an object",
+      },
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "cached-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          content: "Cached transcript",
+        },
+      ]),
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadFailure).toBeNull();
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Cached transcript",
+      "Complete transcript",
+    ]);
+  });
+
+  test("loads selected session history directly from the current session identity", async () => {
+    const harness = createHistoryLoadHarness();
+    let receivedSystemPrompt: string | undefined;
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      workspaceRepoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async (input) => {
+          receivedSystemPrompt = input.systemPromptContext?.systemPrompt;
+          return [
+            {
+              messageId: "history-1",
+              role: "assistant",
+              timestamp: "2026-06-12T08:00:01.000Z",
+              text: "Loaded selected transcript",
+              parts: [],
+            },
+          ];
+        },
+      },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [createTaskFixture()] },
+        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      }),
+      historyReadGeneration,
+    });
+
+    await loadAgentSessionHistory(sessionTarget);
+
+    expect(receivedSystemPrompt).toContain("Task context");
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Loaded selected transcript",
+    ]);
+  });
+
+  test("fails selected history loading for an unknown session", async () => {
+    const harness = createHistoryLoadHarness();
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      workspaceRepoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("History must not load for an unknown session.");
+        },
+      },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
+        workspaceId: "workspace-1",
+        taskRef: { current: [createTaskFixture()] },
+        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+      }),
+      historyReadGeneration,
+    });
+
+    await expect(
+      loadAgentSessionHistory({
+        externalSessionId: "missing-session",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+      }),
+    ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
+  });
+
+  test("does not start a duplicate history load when another caller already marked it loading", async () => {
+    const loadSessionHistory = mock(async () => []);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loading",
+    });
+
+    const loadedSession = await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(loadedSession?.historyLoadState).toBe("loading");
+    expect(harness.session.historyLoadState).toBe("loading");
+  });
+
+  test("does not reset a loaded session when a stale caller asks for history again", async () => {
+    const loadSessionHistory = mock(async () => []);
+    const loadSystemPromptContext = mock(async () => ({
+      systemPrompt: "Should not be prepared.",
+      startedAt: "2026-06-12T08:00:00.000Z",
+    }));
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      loadSystemPromptContext,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(loadSystemPromptContext).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("loaded");
+  });
+
+  test("reloads a loaded transcript after a live-stream gap without dropping later messages", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "Recovered from history",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "live-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:02.000Z",
+          content: "Arrived after the gap",
+        },
+      ]),
+    });
+
+    await refreshHistory({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Recovered from history",
+      "Arrived after the gap",
+    ]);
+  });
+
+  test("keeps the last loaded transcript when stream-gap recovery fails", async () => {
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+      messages: createSessionMessagesState("external-1", [
+        {
+          id: "existing-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          content: "Last known transcript",
+        },
+      ]),
+    });
+
+    await refreshHistory({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("history unavailable");
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("stale");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Last known transcript",
+    ]);
+  });
+
+  test("revalidates a retained transcript without hiding it behind a loading state", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const harness = createRetainedSessionHarness();
+
+    const loadPromise = refreshHistory({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory: async () => historyPromise.promise },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("refreshing");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+    ]);
+
+    historyPromise.resolve([retainedHistoryMessage, missedHistoryMessage]);
+
+    await loadPromise;
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.historyLoadFailure).toBeNull();
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+  });
+
+  test("does not start a second retained revalidation while one is in flight", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const harness = createRetainedSessionHarness();
+    const started = Promise.withResolvers<void>();
+    const loadSessionHistory = mock(async () => {
+      started.resolve();
+      return historyPromise.promise;
+    });
+    const revalidateAgentSessionHistory = createLoadAgentSessionHistory({
+      workspaceRepoPath: "/repo",
+      adapter: { loadSessionHistory },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      loadSystemPromptContext: async () => undefined,
+      historyReadGeneration,
+    });
+
+    const firstLoad = revalidateAgentSessionHistory(sessionTarget);
+    await started.promise;
+    const skippedLoad = await revalidateAgentSessionHistory(sessionTarget);
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(skippedLoad?.historyLoadState).toBe("refreshing");
+
+    historyPromise.resolve([retainedHistoryMessage, missedHistoryMessage]);
+    await firstLoad;
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+
+    harness.updateSession(sessionTarget, markSessionHistoryStale);
+    await revalidateAgentSessionHistory(sessionTarget);
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(2);
+  });
+
+  test("discards a retained revalidation that resolves after a transcript-gap recovery", async () => {
+    const staleHistoryPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const harness = createRetainedSessionHarness();
+
+    const revalidationPromise = refreshHistory({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory: async () => staleHistoryPromise.promise },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("refreshing");
+
+    await refreshHistory({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          createFinalAssistantHistoryMessage({
+            messageId: "missed-1",
+            text: "Produced while inactive",
+          }),
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+
+    staleHistoryPromise.resolve([
+      createFinalAssistantHistoryMessage({
+        messageId: "missed-1",
+        text: "Stale revalidation text",
+      }),
+    ]);
+
+    const supersededSession = await revalidationPromise;
+
+    expect(supersededSession).not.toBeNull();
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+  });
+
+  test("discards a retained revalidation that resolves before the newer transcript-gap recovery", async () => {
+    const staleHistoryPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const recoveryHistoryPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const harness = createRetainedSessionHarness();
+
+    const revalidationPromise = refreshHistory({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory: async () => staleHistoryPromise.promise },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    const recoveryPromise = refreshHistory({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory: async () => recoveryHistoryPromise.promise },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    staleHistoryPromise.resolve([
+      createFinalAssistantHistoryMessage({
+        messageId: "missed-1",
+        text: "Stale revalidation text",
+      }),
+    ]);
+    await revalidationPromise;
+
+    expect(harness.session.historyLoadState).toBe("refreshing");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+    ]);
+
+    recoveryHistoryPromise.resolve([
+      createFinalAssistantHistoryMessage({
+        messageId: "missed-1",
+        text: "Produced while inactive",
+      }),
+    ]);
+    await recoveryPromise;
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+      "Produced while inactive",
+    ]);
+  });
+
+  test("keeps the retained transcript and records the failure when a revalidation fails", async () => {
+    const harness = createRetainedSessionHarness();
+
+    await refreshHistory({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("history unavailable");
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("stale");
+    expect(harness.session.historyLoadFailure).toMatchObject({ code: "request_failed" });
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Retained transcript",
+    ]);
+  });
+
+  test("keeps a direct question that arrives during a history read", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readStarted = Promise.withResolvers<void>();
+    const harness = createHistoryLoadHarness();
+    const loadPromise = loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          readStarted.resolve();
+          return historyPromise.promise;
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    await readStarted.promise;
+    const pendingQuestion: AgentQuestionRequest = {
+      requestId: "question-1",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Keep this pending question visible",
+          options: [],
+        },
+      ],
+    };
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      pendingQuestions: [pendingQuestion],
+    }));
+    historyPromise.resolve([]);
+    await loadPromise;
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.pendingQuestions).toEqual([pendingQuestion]);
+  });
+
+  test("removes a history question that newer history resolves", async () => {
+    const pendingQuestion: AgentQuestionRequest = {
+      requestId: "question-1",
+      blocking: false,
+      questions: [
+        {
+          header: "Confirm",
+          question: "Keep this pending question visible",
+          options: [],
+        },
+      ],
+    };
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      pendingQuestions: [pendingQuestion],
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: pendingQuestion.requestId,
+            role: "assistant",
+            timestamp: "2026-09-19T10:00:00.000Z",
+            text: "Keep this pending question visible",
+            parts: [],
+            questionRequest: pendingQuestion,
+          },
+          {
+            messageId: "answer-1",
+            role: "user",
+            timestamp: "2026-09-19T10:00:01.000Z",
+            text: "Yes",
+            displayParts: [{ kind: "text", text: "Yes" }],
+            state: "read",
+            parts: [],
+            resolvedQuestionRequestIds: [pendingQuestion.requestId],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.pendingQuestions).toEqual([]);
+  });
+
+  test("does not erase a live user message when applying a history baseline", async () => {
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "runtime-user-new",
+          role: "user",
+          content: "Resume after QA rejection",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [{ kind: "text", text: "Resume after QA rejection" }],
+          },
+        },
+      ]),
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:00.500Z",
+            text: "Previous transcript",
+            parts: [],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
+      "Resume after QA rejection",
+    ]);
+  });
+
+  test("merges selected baseline history before live messages that arrive during reload hydration", async () => {
+    let resolveHistory!: (history: AgentSessionHistoryMessage[]) => void;
+    const historyPromise = new Promise<AgentSessionHistoryMessage[]>((resolve) => {
+      resolveHistory = resolve;
+    });
+    const harness = createHistoryLoadHarness();
+
+    const loadPromise = loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => historyPromise,
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loading");
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "runtime-user-new",
+          role: "user",
+          content: "Resume after QA rejection",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [{ kind: "text", text: "Resume after QA rejection" }],
+          },
+        },
+      ]),
+    }));
+
+    resolveHistory([
+      {
+        messageId: "history-1",
+        role: "assistant",
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+
+    const loadedSession = await loadPromise;
+
+    expect(loadedSession?.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
+      "Resume after QA rejection",
+    ]);
+  });
+
+  test("does not reopen stale history after an ordinary message during the read", async () => {
+    const historyPromise = Promise.withResolvers<AgentSessionHistoryMessage[]>();
+    const readStarted = Promise.withResolvers<void>();
+    const harness = createHistoryLoadHarness();
+    const historyQuestion = {
+      requestId: "question-history",
+      blocking: false,
+      questions: [
+        {
+          header: "History",
+          question: "History question",
+          options: [
+            { label: "Yes", description: "Yes" },
+            { label: "No", description: "No" },
+          ],
+        },
+      ],
+    };
+    const liveQuestion = {
+      requestId: "question-live",
+      blocking: false,
+      questions: [
+        {
+          header: "Live",
+          question: "Live question",
+          options: [
+            { label: "Yes", description: "Yes" },
+            { label: "No", description: "No" },
+          ],
+        },
+      ],
+    };
+
+    const loadPromise = loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          readStarted.resolve();
+          return historyPromise.promise;
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+    await readStarted.promise;
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      livePresence: "present",
+      pendingQuestions: [liveQuestion],
+    }));
+
+    historyPromise.resolve([
+      {
+        messageId: historyQuestion.requestId,
+        role: "assistant",
+        timestamp: "2026-09-19T10:00:00.000Z",
+        text: "History question",
+        parts: [],
+        questionRequest: historyQuestion,
+      },
+    ]);
+    await loadPromise;
+
+    expect(harness.session.pendingQuestions).toEqual([liveQuestion]);
+  });
+
+  test("keeps a local accepted user send when baseline history confirms it", async () => {
+    let resolveHistory!: (history: AgentSessionHistoryMessage[]) => void;
+    const historyPromise = new Promise<AgentSessionHistoryMessage[]>((resolve) => {
+      resolveHistory = resolve;
+    });
+    const harness = createHistoryLoadHarness();
+
+    const loadPromise = loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => historyPromise,
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loading");
+
+    harness.updateSession(sessionTarget, (current) => ({
+      ...current,
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "accepted-user-message",
+          role: "user",
+          content: "Hi",
+          timestamp: "2026-06-12T08:00:01.123Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Hi" }],
+          },
+        },
+      ]),
+    }));
+
+    resolveHistory([
+      {
+        messageId: "runtime-user-confirmed",
+        role: "user",
+        timestamp: "2026-06-12T08:00:01.000Z",
+        text: "Hi",
+        displayParts: [{ kind: "text", text: "Hi" }],
+        state: "read",
+        parts: [],
+      },
+    ]);
+
+    const loadedSession = await loadPromise;
+    const userMessages = sessionMessagesToArray(harness.session).filter(
+      (message) => message.role === "user",
+    );
+
+    expect(loadedSession?.historyLoadState).toBe("loaded");
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toEqual(
+      expect.objectContaining({
+        id: "accepted-user-message",
+        role: "user",
+        content: "Hi",
+      }),
+    );
+  });
+
+  test("loads baseline history independently from live-session observation", async () => {
+    const harness = createHistoryLoadHarness();
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(harness.session.historyLoadState).toBe("loaded");
+  }, 500);
+
+  test("loads selected baseline history when live messages arrive during the hydration claim", async () => {
+    const loadSessionHistory = mock(async () => [
+      {
+        messageId: "history-1",
+        role: "assistant" as const,
+        timestamp: "2026-06-12T08:00:00.500Z",
+        text: "Previous transcript",
+        parts: [],
+      },
+    ]);
+    const harness = createHistoryLoadHarness();
+    let injectedLiveMessage = false;
+    const updateSession: UpdateSession = (identity, updater) =>
+      harness.updateSession(identity, (current) => {
+        if (injectedLiveMessage) {
+          return updater(current);
+        }
+
+        injectedLiveMessage = true;
+        return updater({
+          ...current,
+          messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+            {
+              id: "runtime-user-new",
+              role: "user",
+              content: "Resume after QA rejection",
+              timestamp: "2026-06-12T08:00:01.000Z",
+              meta: {
+                kind: "user",
+                state: "queued",
+                parts: [{ kind: "text", text: "Resume after QA rejection" }],
+              },
+            },
+          ]),
+        });
+      });
+
+    const loadedSession = await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(loadedSession?.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
+      "Resume after QA rejection",
+    ]);
+  });
+
+  test("does not replace live context stats with an older history baseline", async () => {
+    const liveContextUsage = {
+      totalTokens: 777,
+      contextWindow: 4_000,
+      providerId: "live-provider",
+      modelId: "live-model",
+    };
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      contextUsage: liveContextUsage,
+    });
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Previous transcript",
+            totalTokens: 123,
+            contextWindow: 1_000,
+            parts: [
+              {
+                kind: "step",
+                messageId: "history-1",
+                partId: "finish-1",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.contextUsage).toEqual(liveContextUsage);
+  });
+
+  test("does not derive missing live context from transcript history", async () => {
+    const harness = createHistoryLoadHarness();
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Previous transcript",
+            totalTokens: 123,
+            contextWindow: 1_000,
+            parts: [
+              {
+                kind: "step",
+                messageId: "history-1",
+                partId: "finish-1",
+                phase: "finish",
+                reason: "stop",
+                totalTokens: 123,
+                contextWindow: 1_000,
+              },
+            ],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.contextUsage).toBeNull();
+  });
+
+  test("passes transient prompt context to the history adapter without rendering it locally", async () => {
+    const harness = createHistoryLoadHarness();
+    let historyInput:
+      | Parameters<
+          Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
+        >[0]
+      | null = null;
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async (input) => {
+          historyInput = input;
+          return [
+            {
+              messageId: "history-1",
+              role: "assistant",
+              timestamp: "2026-06-12T08:00:01.000Z",
+              text: "Loaded from Codex history",
+              parts: [],
+            },
+          ];
+        },
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      loadSystemPromptContext: async () => ({
+        systemPrompt: "Build from current task context.",
+        startedAt: "2026-06-12T08:00:00.000Z",
+      }),
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(historyInput).toMatchObject({
+      externalSessionId: "external-1",
+      systemPromptContext: {
+        startedAt: "2026-06-12T08:00:00.000Z",
+        systemPrompt: "Build from current task context.",
+      },
+    });
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Loaded from Codex history",
+    ]);
+  });
+
+  test("keeps the runtime-owned system prompt when history provides one", async () => {
+    const harness = createHistoryLoadHarness();
+
+    await loadSessionHistoryIntoStore({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "runtime-system-1",
+            role: "system",
+            timestamp: "2026-06-12T08:00:00.000Z",
+            text: "System prompt:\n\nRuntime provided prompt.",
+            parts: [],
+          },
+        ],
+      },
+      readSessionSnapshot: harness.readSessionSnapshot,
+      updateSession: harness.updateSession,
+      identity: sessionTarget,
+      loadSystemPromptContext: async () => ({
+        systemPrompt: "Computed display prompt.",
+        startedAt: "2026-06-12T08:00:00.000Z",
+      }),
+      isStaleRepoOperation: () => false,
+      historyReadGeneration,
+    });
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "System prompt:\n\nRuntime provided prompt.",
+    ]);
+  });
+});

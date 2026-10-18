@@ -10,34 +10,6 @@ import type {
   WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import type { WorkspaceSelectionOperationsInput } from "@/types/state-slices";
-import type { host } from "../shared/host";
-
-export type WorkspaceBranchOperationsHostClient = Pick<
-  typeof host,
-  "gitGetBranches" | "gitGetCurrentBranch" | "gitSwitchBranch"
->;
-
-export type WorkspaceBranchProbeHostClient = Pick<
-  typeof host,
-  "gitGetBranches" | "gitGetCurrentBranch"
->;
-
-export type WorkspaceSelectionOperationsHostClient = Pick<
-  typeof host,
-  | "workspaceAdd"
-  | "workspaceProviderSetupCommit"
-  | "workspaceCatalogGet"
-  | "workspaceClose"
-  | "workspaceList"
-  | "workspaceRemove"
-  | "workspaceReopen"
-  | "workspaceReorder"
-  | "workspaceResolvePath"
-  | "workspaceSelect"
->;
-
-export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient &
-  WorkspaceSelectionOperationsHostClient;
 
 export type UseWorkspaceOperationsResult = {
   workspaces: WorkspaceRecord[];

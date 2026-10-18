@@ -8,18 +8,17 @@ import type {
   WorkspaceFileTreeRefreshInput,
   WorkspaceFileTreeRefreshResult,
 } from "@openducktor/contracts";
-import { CancelledError, QueryClientProvider } from "@tanstack/react-query";
+import { CancelledError } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { useWorkspaceSessionBranch } from "@/pages/workspace-sessions/use-workspace-session-branch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
@@ -37,10 +36,13 @@ afterEach(() => {
 type GitPushResult = Awaited<ReturnType<HostClient["gitPushBranch"]>>;
 const targetReference = "origin/main";
 
-const createToolsQueryClient = (settings = createSettingsSnapshotFixture()) => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settings);
-  return queryClient;
+const createToolsConnection = (
+  client: Partial<HostClient>,
+  settings = createSettingsSnapshotFixture(),
+) => {
+  const connection = createTestClientConnection({ client });
+  connection.queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settings);
+  return connection;
 };
 
 /**
@@ -165,33 +167,29 @@ function PanelHarness({
 }
 
 test("opens the file preview of a changed file from its Git row menu", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
-          ...worktreeStatus(target, scope),
-          fileDiffs: [
-            {
-              file: "draft.txt",
-              type: "modified" as const,
-              additions: 1,
-              deletions: 1,
-              diff: "@@ -1 +1 @@\n-old\n+new\n",
-            },
-          ],
-        }),
-        gitGetBranches: async () => [],
-      }),
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+      ...worktreeStatus(target, scope),
+      fileDiffs: [
+        {
+          file: "draft.txt",
+          type: "modified" as const,
+          additions: 1,
+          deletions: 1,
+          diff: "@@ -1 +1 @@\n-old\n+new\n",
+        },
+      ],
     }),
-  );
+    gitGetBranches: async () => [],
+  });
   const onSelectFile = mock((_file: TaskExecutionSelectedFile) => {});
   render(
-    <QueryClientProvider client={createToolsQueryClient()}>
+    <ClientConnectionProvider connection={createToolsConnection(toolsHost)}>
       <ThemeProvider>
         <PanelHarness onSelectFile={onSelectFile} />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
 
   const row = await screen.findByRole("button", { name: "Toggle diff for draft.txt" });
@@ -210,22 +208,19 @@ test("reuses checked Git data when workspace sessions share a directory and comp
     async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
       worktreeStatus(target, scope),
   );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitGetWorktreeStatus: status,
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const client = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitGetWorktreeStatus: status,
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const client = connection.queryClient;
   const panel = (sessionId: string) => (
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness key={sessionId} sessionId={sessionId} />
       </ThemeProvider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel("session-1"));
   try {
@@ -249,7 +244,6 @@ test("reuses checked Git data when workspace sessions share a directory and comp
   } finally {
     view.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -259,25 +253,22 @@ test("reads HEAD status while the comparison target is pending", async () => {
     () => new Promise<GitComparisonTarget>((resolve) => (finishComparison = resolve)),
   );
   const statusTargets: string[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-          statusTargets.push(targetBranch);
-          return worktreeStatus(targetBranch);
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+      statusTargets.push(targetBranch);
+      return worktreeStatus(targetBranch);
+    },
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
@@ -288,7 +279,6 @@ test("reads HEAD status while the comparison target is pending", async () => {
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -300,25 +290,22 @@ test.each(["available", "unavailable"] as const)(
       () => new Promise<GitComparisonTarget>((resolve) => (finishComparison = resolve)),
     );
     const reads: string[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: withLocalChanges({
-          gitGetComparisonTarget: comparison,
-          gitGetWorktreeStatus: async (_repo, targetBranch, diffScope = "uncommitted") => {
-            reads.push(`${diffScope}:${targetBranch}`);
-            return worktreeStatus(targetBranch, diffScope);
-          },
-          gitGetBranches: async () => [],
-        }),
-      }),
-    );
-    const queryClient = createToolsQueryClient();
+    const toolsHost: Partial<HostClient> = withLocalChanges({
+      gitGetComparisonTarget: comparison,
+      gitGetWorktreeStatus: async (_repo, targetBranch, diffScope = "uncommitted") => {
+        reads.push(`${diffScope}:${targetBranch}`);
+        return worktreeStatus(targetBranch, diffScope);
+      },
+      gitGetBranches: async () => [],
+    });
+    const connection = createToolsConnection(toolsHost);
+    const queryClient = connection.queryClient;
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <PanelHarness />
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     const branchTab = () => screen.getByTestId("agent-studio-git-diff-scope-target");
     try {
@@ -346,7 +333,6 @@ test.each(["available", "unavailable"] as const)(
     } finally {
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -360,25 +346,22 @@ test.each([
     reason: "No tracked upstream.",
   }));
   const statusTargets: string[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => {
-          statusTargets.push(targetBranch);
-          return worktreeStatus(targetBranch);
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => {
+      statusTargets.push(targetBranch);
+      return worktreeStatus(targetBranch);
+    },
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const panel = (branchKey: string, branchReady: boolean) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness branchKey={branchKey} branchReady={branchReady} />
       </ThemeProvider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel("unknown", false));
   try {
@@ -397,7 +380,6 @@ test.each([
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -434,26 +416,23 @@ test.each(["available", "unavailable", "error"] as const)(
         }),
     );
     const treeReads: WorkspaceFileTreeRefreshInput[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: withLocalChanges({
-          gitGetComparisonTarget: comparison,
-          gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-          gitGetBranches: async () => [],
-          filesystemRefreshTree: async (input) => {
-            treeReads.push(input);
-            return treeSnapshot(input);
-          },
-        }),
-      }),
-    );
-    const queryClient = createToolsQueryClient();
+    const toolsHost: Partial<HostClient> = withLocalChanges({
+      gitGetComparisonTarget: comparison,
+      gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+      gitGetBranches: async () => [],
+      filesystemRefreshTree: async (input) => {
+        treeReads.push(input);
+        return treeSnapshot(input);
+      },
+    });
+    const connection = createToolsConnection(toolsHost);
+    const queryClient = connection.queryClient;
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <PanelHarness initialTabId="files" />
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     try {
       await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
@@ -478,7 +457,6 @@ test.each(["available", "unavailable", "error"] as const)(
     } finally {
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -492,25 +470,22 @@ test.each(["repository settings", "comparison"] as const)(
       throw new Error("Could not check comparison target");
     });
     const statusTargets: string[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: withLocalChanges({
-          gitGetComparisonTarget: comparison,
-          gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-            statusTargets.push(targetBranch);
-            return worktreeStatus(targetBranch);
-          },
-          gitGetBranches: async () => [],
-        }),
-      }),
-    );
-    const queryClient = createToolsQueryClient();
+    const toolsHost: Partial<HostClient> = withLocalChanges({
+      gitGetComparisonTarget: comparison,
+      gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+        statusTargets.push(targetBranch);
+        return worktreeStatus(targetBranch);
+      },
+      gitGetBranches: async () => [],
+    });
+    const connection = createToolsConnection(toolsHost);
+    const queryClient = connection.queryClient;
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <PanelHarness contextMode="worktree" targetError={targetError} />
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     try {
       await waitFor(() => expect(statusTargets).toContain("HEAD"));
@@ -522,7 +497,6 @@ test.each(["repository settings", "comparison"] as const)(
     } finally {
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -547,19 +521,15 @@ test.each(["recovers", "fails"] as const)(
       if (outcome === "fails") throw new Error("Repository settings still unavailable");
     });
     const reportError = spyOn(toast, "error").mockImplementation(() => "toast-id");
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: withLocalChanges({
-          gitGetComparisonTarget: comparison,
-          gitFetchRemote: fetchRemote,
-          gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-            statusTargets.push(targetBranch);
-            return worktreeStatus(targetBranch);
-          },
-          gitGetBranches: async () => [],
-        }),
-      }),
-    );
+    const toolsHost: Partial<HostClient> = withLocalChanges({
+      gitGetComparisonTarget: comparison,
+      gitFetchRemote: fetchRemote,
+      gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+        statusTargets.push(targetBranch);
+        return worktreeStatus(targetBranch);
+      },
+      gitGetBranches: async () => [],
+    });
     function RetryPanel() {
       const [target, setTarget] = useState<GitTargetBranch | null>(null);
       const [targetError, setTargetError] = useState<string | null>(
@@ -578,17 +548,18 @@ test.each(["recovers", "fails"] as const)(
         />
       );
     }
-    const queryClient = createToolsQueryClient();
+    const connection = createToolsConnection(toolsHost);
+    const queryClient = connection.queryClient;
     const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
     const textKey = filesystemQueryKeys.textFile("/repo", "draft.txt");
     queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
     queryClient.setQueryData(textKey, "old text");
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <RetryPanel />
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     try {
       await waitFor(() => expect(statusTargets).toContain("HEAD"));
@@ -621,7 +592,6 @@ test.each(["recovers", "fails"] as const)(
     } finally {
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
       reportError.mockRestore();
     }
   },
@@ -635,25 +605,22 @@ test("rechecks a root chat target when its branch changes", async () => {
       : { kind: "unavailable", reason: "No tracked upstream." },
   );
   const statusTargets: string[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-          statusTargets.push(targetBranch);
-          return worktreeStatus(targetBranch);
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+      statusTargets.push(targetBranch);
+      return worktreeStatus(targetBranch);
+    },
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const panel = (branchKey: string) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness branchKey={branchKey} />
       </ThemeProvider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel("first"));
   try {
@@ -666,7 +633,6 @@ test("rechecks a root chat target when its branch changes", async () => {
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -708,14 +674,15 @@ function createHeldFetchHost() {
 
 test("manual refresh reads local changes during the fetch and again with the comparison after it", async () => {
   const host = createHeldFetchHost();
-  configureShellBridge(createShellBridgeFixture({ client: host.client }));
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = host.client;
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitForTargetScope();
@@ -741,21 +708,21 @@ test("manual refresh reads local changes during the fetch and again with the com
     host.release();
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("manual refresh shows pending before the fetch ends and joins a second click", async () => {
   const host = createHeldFetchHost();
   const readBranch = mock(async () => "feature");
-  configureShellBridge(createShellBridgeFixture({ client: host.client }));
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = host.client;
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness readBranch={readBranch} />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitForTargetScope();
@@ -784,7 +751,6 @@ test("manual refresh shows pending before the fetch ends and joins a second clic
     host.release();
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -799,35 +765,31 @@ test("manual refresh retains data when branch and comparison identity stay uncha
         finishBranchRead = resolve;
       }),
   );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetCurrentBranch: readBranch,
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitFetchRemote: async () => ({ outcome: "skipped_no_remote" as const, output: "" }),
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => {
-          if (holdNextStatusRead) {
-            holdNextStatusRead = false;
-            statusReadHeld = true;
-            await releaseStatusRead.promise;
-          }
-          return {
-            ...worktreeStatus(targetBranch),
-            fileDiffs: [
-              {
-                file: "draft.txt",
-                type: "modified" as const,
-                additions: 1,
-                deletions: 1,
-                diff: "@@ -1 +1 @@\n-old\n+new\n",
-              },
-            ],
-          };
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetCurrentBranch: readBranch,
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitFetchRemote: async () => ({ outcome: "skipped_no_remote" as const, output: "" }),
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => {
+      if (holdNextStatusRead) {
+        holdNextStatusRead = false;
+        statusReadHeld = true;
+        await releaseStatusRead.promise;
+      }
+      return {
+        ...worktreeStatus(targetBranch),
+        fileDiffs: [
+          {
+            file: "draft.txt",
+            type: "modified" as const,
+            additions: 1,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ],
+      };
+    },
+    gitGetBranches: async () => [],
+  });
   function BranchPanel() {
     const {
       rootBranch,
@@ -850,13 +812,14 @@ test("manual refresh retains data when branch and comparison identity stay uncha
       </>
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <BranchPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     const diff = await screen.findByText("draft.txt");
@@ -885,7 +848,6 @@ test("manual refresh retains data when branch and comparison identity stay uncha
     releaseStatusRead.resolve();
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -895,20 +857,16 @@ test("manual refresh waits for the fetch after a new branch and keeps its failur
   let fetches = 0;
   let finishRead!: (branch: string) => void;
   const read = mock(() => new Promise<string>((resolve) => (finishRead = resolve)));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitFetchRemote: async () => {
-          fetches += 1;
-          await fetchGate.promise;
-          throw new Error("Remote authentication failed");
-        },
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitFetchRemote: async () => {
+      fetches += 1;
+      await fetchGate.promise;
+      throw new Error("Remote authentication failed");
+    },
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
   function BranchPanel() {
     const [branchKey, setBranchKey] = useState("main");
     return (
@@ -922,13 +880,14 @@ test("manual refresh waits for the fetch after a new branch and keeps its failur
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <BranchPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   const refreshButton = () => screen.getByTestId("agent-studio-git-refresh-button");
   try {
@@ -949,7 +908,6 @@ test("manual refresh waits for the fetch after a new branch and keeps its failur
     view.unmount();
     queryClient.clear();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -957,19 +915,15 @@ test("a branch refresh ends without a fetch when another session in the director
   const fetchTargets: string[] = [];
   let finishRead!: (branch: string) => void;
   const read = mock(() => new Promise<string>((resolve) => (finishRead = resolve)));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitFetchRemote: async (_repoPath, targetBranch) => {
-          fetchTargets.push(targetBranch);
-          return { outcome: "skipped_no_remote", output: "" };
-        },
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitFetchRemote: async (_repoPath, targetBranch) => {
+      fetchTargets.push(targetBranch);
+      return { outcome: "skipped_no_remote", output: "" };
+    },
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
   let openSessionB!: () => void;
   function SessionPanel() {
     const [session, setSession] = useState<"a" | "b">("a");
@@ -988,13 +942,14 @@ test("a branch refresh ends without a fetch when another session in the director
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <SessionPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   const refreshButton = () => screen.getByTestId("agent-studio-git-refresh-button");
   try {
@@ -1013,7 +968,6 @@ test("a branch refresh ends without a fetch when another session in the director
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1021,15 +975,11 @@ test("a failed branch read stays with its own session after another session open
   const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
   let failRead!: (error: Error) => void;
   const read = mock(() => new Promise<string>((_resolve, reject) => (failRead = reject)));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
   let openSession!: (session: "a" | "b") => void;
   function SessionPanel() {
     const [session, setSession] = useState<"a" | "b">("a");
@@ -1043,13 +993,14 @@ test("a failed branch read stays with its own session after another session open
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <SessionPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   const refreshButton = () => screen.getByTestId("agent-studio-git-refresh-button");
   try {
@@ -1071,7 +1022,6 @@ test("a failed branch read stays with its own session after another session open
     view.unmount();
     queryClient.clear();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1079,15 +1029,11 @@ test("a target change in one session starts its own Refresh and hides the old fa
   const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
   const reads: Array<{ reject: (error: Error) => void }> = [];
   const read = mock(() => new Promise<string>((_resolve, reject) => reads.push({ reject })));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
   let chooseTarget!: (branch: string) => void;
   function TargetPanel() {
     const [branch, setBranch] = useState("first");
@@ -1103,13 +1049,14 @@ test("a target change in one session starts its own Refresh and hides the old fa
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <TargetPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   const refreshButton = () => screen.getByTestId("agent-studio-git-refresh-button");
   try {
@@ -1132,7 +1079,6 @@ test("a target change in one session starts its own Refresh and hides the old fa
     view.unmount();
     queryClient.clear();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1145,28 +1091,25 @@ test.each([
     const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
     let failRead!: (error: Error) => void;
     const read = mock(() => new Promise<string>((_resolve, reject) => (failRead = reject)));
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: withLocalChanges({
-          gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-          gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-          gitGetBranches: async () => [],
-        }),
-      }),
-    );
+    const toolsHost: Partial<HostClient> = withLocalChanges({
+      gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+      gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+      gitGetBranches: async () => [],
+    });
     let checkout!: (branch: string) => void;
     function CheckoutPanel() {
       const [branchKey, setBranchKey] = useState("first");
       checkout = setBranchKey;
       return <PanelHarness branchKey={branchKey} readBranch={read} />;
     }
-    const queryClient = createToolsQueryClient();
+    const connection = createToolsConnection(toolsHost);
+    const queryClient = connection.queryClient;
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <CheckoutPanel />
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     const refreshButton = () => screen.getByTestId("agent-studio-git-refresh-button");
     try {
@@ -1187,7 +1130,6 @@ test.each([
       view.unmount();
       queryClient.clear();
       report.mockRestore();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -1196,20 +1138,16 @@ test("manual refresh waits for the fetch after recovered settings and keeps its 
   const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
   const fetchGate = createDeferred<void>();
   let fetches = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitFetchRemote: async () => {
-          fetches += 1;
-          await fetchGate.promise;
-          throw new Error("Remote authentication failed");
-        },
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitFetchRemote: async () => {
+      fetches += 1;
+      await fetchGate.promise;
+      throw new Error("Remote authentication failed");
+    },
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
   function RetryPanel() {
     const [target, setTarget] = useState<GitTargetBranch | null>(null);
     const [targetError, setTargetError] = useState<string | null>(
@@ -1227,13 +1165,14 @@ test("manual refresh waits for the fetch after recovered settings and keeps its 
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <RetryPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   const refreshButton = () => screen.getByTestId("agent-studio-git-refresh-button");
   try {
@@ -1252,7 +1191,6 @@ test("manual refresh waits for the fetch after recovered settings and keeps its 
     view.unmount();
     queryClient.clear();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1260,22 +1198,18 @@ test("manual refresh reads a new branch before refreshing its comparison", async
   const calls: string[] = [];
   let finishRead!: (branch: string) => void;
   const read = mock(() => new Promise<string>((resolve) => (finishRead = resolve)));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => {
-          calls.push("comparison");
-          return { kind: "available", reference: targetReference };
-        },
-        gitFetchRemote: async () => {
-          calls.push("fetch");
-          return { outcome: "skipped_no_remote", output: "" };
-        },
-        gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => {
+      calls.push("comparison");
+      return { kind: "available", reference: targetReference };
+    },
+    gitFetchRemote: async () => {
+      calls.push("fetch");
+      return { outcome: "skipped_no_remote", output: "" };
+    },
+    gitGetWorktreeStatus: async (_repoPath, targetBranch) => worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
   function BranchPanel() {
     const [branchKey, setBranchKey] = useState("main");
     return (
@@ -1289,13 +1223,14 @@ test("manual refresh reads a new branch before refreshing its comparison", async
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <BranchPanel />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitFor(() => expect(calls).toContain("comparison"));
@@ -1312,7 +1247,6 @@ test("manual refresh reads a new branch before refreshing its comparison", async
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1338,29 +1272,25 @@ test.each(
     readStarted = true;
     await released.promise;
   };
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async (_repo, directory) => {
-          reads.push(`comparison:${directory}`);
-          await waitAt("comparison");
-          return stage === "fetch" || stage === "settings"
-            ? { kind: "unavailable", reason: "Remote target is missing." }
-            : { kind: "available", reference: targetReference };
-        },
-        gitFetchRemote: async (_repo, _target, directory) => {
-          reads.push(`fetch:${directory}`);
-          await waitAt("fetch");
-          return { outcome: "fetched", output: "" };
-        },
-        gitGetWorktreeStatus: async (_repo, target, _scope, directory) => {
-          reads.push(`status:${directory}`);
-          return worktreeStatus(target);
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async (_repo, directory) => {
+      reads.push(`comparison:${directory}`);
+      await waitAt("comparison");
+      return stage === "fetch" || stage === "settings"
+        ? { kind: "unavailable", reason: "Remote target is missing." }
+        : { kind: "available", reference: targetReference };
+    },
+    gitFetchRemote: async (_repo, _target, directory) => {
+      reads.push(`fetch:${directory}`);
+      await waitAt("fetch");
+      return { outcome: "fetched", output: "" };
+    },
+    gitGetWorktreeStatus: async (_repo, target, _scope, directory) => {
+      reads.push(`status:${directory}`);
+      return worktreeStatus(target);
+    },
+    gitGetBranches: async () => [],
+  });
   function RefreshPanel({
     isVisible,
     workingDirectory,
@@ -1393,13 +1323,14 @@ test.each(
       />
     );
   }
-  const queryClient = createToolsQueryClient();
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const panel = (isVisible = true, workingDirectory = "/repo", branch: string | null = null) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <RefreshPanel isVisible={isVisible} workingDirectory={workingDirectory} branch={branch} />
       </ThemeProvider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel());
   try {
@@ -1446,7 +1377,6 @@ test.each(
       await queryClient.cancelQueries();
       queryClient.clear();
     });
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1463,26 +1393,23 @@ test("manual refresh fetches a missing comparison target before checking it agai
       : { kind: "unavailable", reason: "No tracked upstream." },
   );
   const statusTargets: string[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitFetchRemote: fetchRemote,
-        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-          statusTargets.push(targetBranch);
-          return worktreeStatus(targetBranch);
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitFetchRemote: fetchRemote,
+    gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+      statusTargets.push(targetBranch);
+      return worktreeStatus(targetBranch);
+    },
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await screen.findByText("No tracked upstream.");
@@ -1495,7 +1422,6 @@ test("manual refresh fetches a missing comparison target before checking it agai
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1506,30 +1432,27 @@ test("a missing target fetch failure tells the user what failed", async () => {
     reason: "No tracked upstream.",
   }));
   const statusTargets: string[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitFetchRemote: async () => {
-          throw new Error("Current branch has no upstream remote");
-        },
-        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
-          statusTargets.push(targetBranch);
-          return worktreeStatus(targetBranch);
-        },
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitFetchRemote: async () => {
+      throw new Error("Current branch has no upstream remote");
+    },
+    gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) => {
+      statusTargets.push(targetBranch);
+      return worktreeStatus(targetBranch);
+    },
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const treeKey = filesystemQueryKeys.tree("/repo", null, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await screen.findByText("No tracked upstream.");
@@ -1554,7 +1477,6 @@ test("a missing target fetch failure tells the user what failed", async () => {
     view.unmount();
     queryClient.clear();
     reportError.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1563,26 +1485,23 @@ test("returning to the app rechecks the target and file tree", async () => {
     kind: "available",
     reference: targetReference,
   }));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
-        gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
-          worktreeStatus(targetBranch),
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
+    gitGetWorktreeStatus: async (_repoPath: string, targetBranch: string) =>
+      worktreeStatus(targetBranch),
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const treeKey = filesystemQueryKeys.tree("/repo", targetReference, "feature");
   queryClient.setQueryData(treeKey, { rootPath: "/repo", entries: [] });
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitFor(() => expect(comparison).toHaveBeenCalledTimes(1));
@@ -1592,7 +1511,6 @@ test("returning to the app rechecks the target and file tree", async () => {
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1631,24 +1549,21 @@ test("refresh recovers local Git and file reads when the comparison target disap
       ]);
     },
   );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
-        gitGetWorktreeStatus,
-        filesystemRefreshTree,
-        gitGetBranches: async () => [],
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
+    gitGetWorktreeStatus,
+    filesystemRefreshTree,
+    gitGetBranches: async () => [],
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitFor(() => expect(statusTargets).toContain(targetReference));
@@ -1692,7 +1607,6 @@ test("refresh recovers local Git and file reads when the comparison target disap
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1737,27 +1651,24 @@ test.each(
       kind: "available" as const,
       reference: targetReference,
     }));
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: withLocalChanges({
-          gitGetComparisonTarget: comparison,
-          gitGetWorktreeStatus: readStatus,
-          [{
-            commit: "gitCommitAll",
-            push: "gitPushBranch",
-            rebase: "gitRebaseBranch",
-            discard: "gitChangeSelection",
-          }[kind]]: operation,
-        }),
-      }),
-    );
-    const queryClient = createToolsQueryClient(createSettingsSnapshotFixture({ theme }));
+    const toolsHost: Partial<HostClient> = withLocalChanges({
+      gitGetComparisonTarget: comparison,
+      gitGetWorktreeStatus: readStatus,
+      [{
+        commit: "gitCommitAll",
+        push: "gitPushBranch",
+        rebase: "gitRebaseBranch",
+        discard: "gitChangeSelection",
+      }[kind]]: operation,
+    });
+    const connection = createToolsConnection(toolsHost, createSettingsSnapshotFixture({ theme }));
+    const queryClient = connection.queryClient;
     const panel = (isVisible: boolean) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <PanelHarness isVisible={isVisible} contextMode="worktree" />
         </ThemeProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(panel(true));
     const pushButton = () => screen.getByTestId("agent-studio-git-push-button");
@@ -1840,7 +1751,6 @@ test.each(
       completed.resolve();
       view.unmount();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
   // This full render flow opens the tools, waits for Git reads and a confirmation, and hides and
@@ -1851,25 +1761,22 @@ test.each(
 test("retains a force-push confirmation when the rejected push finishes with tools hidden", async () => {
   const completed = createDeferred<GitPushResult>();
   const push = mock(async () => completed.promise);
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitGetWorktreeStatus: async (_repo, target) => ({
-          ...worktreeStatus(target),
-          upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
-        }),
-        gitPushBranch: push,
-      }),
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitGetWorktreeStatus: async (_repo, target) => ({
+      ...worktreeStatus(target),
+      upstreamAheadBehind: { outcome: "tracking", ahead: 2, behind: 0 },
     }),
-  );
-  const queryClient = createToolsQueryClient();
+    gitPushBranch: push,
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const panel = (isVisible: boolean) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness isVisible={isVisible} />
       </ThemeProvider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel(true));
   try {
@@ -1904,7 +1811,6 @@ test("retains a force-push confirmation when the rejected push finishes with too
     completed.resolve({ outcome: "pushed", remote: "origin", branch: "feature", output: "done" });
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1920,22 +1826,19 @@ test("invalidates a completed hidden commit without reading Git until tools reop
     fileStatuses: [{ path: "draft.txt", status: "M", staged: true }],
   }));
   const comparison = mock(async () => ({ kind: "available" as const, reference: targetReference }));
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: comparison,
-        gitGetWorktreeStatus: readStatus,
-        gitCommitStaged: commit,
-      }),
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: comparison,
+    gitGetWorktreeStatus: readStatus,
+    gitCommitStaged: commit,
+  });
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const panel = (isVisible: boolean) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness isVisible={isVisible} />
       </ThemeProvider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel(true));
   try {
@@ -1976,7 +1879,6 @@ test("invalidates a completed hidden commit without reading Git until tools reop
     completed.resolve();
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -1991,34 +1893,31 @@ test("a confirmed commit keeps its result when the panel update reads fail", asy
     ...worktreeStatus(target, scope),
     fileStatuses: [{ path: "draft.txt", status: "M", staged: true }],
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
-        gitGetLocalChanges: async () => {
-          if (readsFail) throw new Error("Local read denied");
-          return toLocalChanges(stagedStatus("HEAD"));
-        },
-        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => {
-          if (readsFail) throw new Error("Branch read denied");
-          return stagedStatus(target, scope);
-        },
-        gitGetHistoryPage: async () => ({ outcome: "no_commits" }),
-        gitGetBranches: async () => [],
-        gitCommitStaged: async () => {
-          readsFail = true;
-          return commit();
-        },
-      },
-    }),
-  );
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = {
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: targetReference }),
+    gitGetLocalChanges: async () => {
+      if (readsFail) throw new Error("Local read denied");
+      return toLocalChanges(stagedStatus("HEAD"));
+    },
+    gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => {
+      if (readsFail) throw new Error("Branch read denied");
+      return stagedStatus(target, scope);
+    },
+    gitGetHistoryPage: async () => ({ outcome: "no_commits" }),
+    gitGetBranches: async () => [],
+    gitCommitStaged: async () => {
+      readsFail = true;
+      return commit();
+    },
+  };
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     const input = screen.getByTestId("agent-studio-git-commit-message-input");
@@ -2039,7 +1938,6 @@ test("a confirmed commit keeps its result when the panel update reads fail", asy
   } finally {
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -2051,14 +1949,15 @@ test("manual refresh reports a local read failure that the read after the fetch 
     if (localFails) throw new Error("Early local read denied");
     return toLocalChanges(worktreeStatus("HEAD"));
   };
-  configureShellBridge(createShellBridgeFixture({ client: host.client }));
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = host.client;
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitForTargetScope();
@@ -2083,7 +1982,6 @@ test("manual refresh reports a local read failure that the read after the fetch 
     host.release();
     view.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -2096,14 +1994,15 @@ test("a failed History read fails a manual refresh once and stays until a retry"
     if (historyFails) throw new Error("History read denied");
     return { outcome: "no_commits" };
   };
-  configureShellBridge(createShellBridgeFixture({ client: host.client }));
-  const queryClient = createToolsQueryClient();
+  const toolsHost: Partial<HostClient> = host.client;
+  const connection = createToolsConnection(toolsHost);
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitForTargetScope();
@@ -2127,44 +2026,40 @@ test("a failed History read fails a manual refresh once and stays until a retry"
     view.unmount();
     queryClient.clear();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("a failed fetch refreshes both diff tabs and reports the fetch error", async () => {
   let revision = 1;
   const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: withLocalChanges({
-        gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
-        gitGetBranches: async () => [],
-        gitFetchRemote: async () => {
-          throw new Error("Check the remote connection.");
+  const toolsHost: Partial<HostClient> = withLocalChanges({
+    gitGetComparisonTarget: async () => ({ kind: "available", reference: "refs/heads/main" }),
+    gitGetBranches: async () => [],
+    gitFetchRemote: async () => {
+      throw new Error("Check the remote connection.");
+    },
+    gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+      ...worktreeStatus(target, scope),
+      fileStatuses: [{ path: `${scope}-${revision}.txt`, status: "M", staged: false }],
+      fileDiffs: [
+        {
+          file: `${scope}-${revision}.txt`,
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: "@@ -1 +1 @@\n-before\n+after\n",
         },
-        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
-          ...worktreeStatus(target, scope),
-          fileStatuses: [{ path: `${scope}-${revision}.txt`, status: "M", staged: false }],
-          fileDiffs: [
-            {
-              file: `${scope}-${revision}.txt`,
-              type: "modified",
-              additions: 1,
-              deletions: 1,
-              diff: "@@ -1 +1 @@\n-before\n+after\n",
-            },
-          ],
-        }),
-      }),
+      ],
     }),
-  );
-  const client = createToolsQueryClient();
+  });
+  const connection = createToolsConnection(toolsHost);
+  const client = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider>
         <PanelHarness />
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await screen.findByText("uncommitted-1.txt");
@@ -2209,6 +2104,5 @@ test("a failed fetch refreshes both diff tabs and reports the fetch error", asyn
     view.unmount();
     client.clear();
     report.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });

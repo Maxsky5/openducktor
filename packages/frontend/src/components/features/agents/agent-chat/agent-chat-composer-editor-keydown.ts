@@ -10,7 +10,7 @@ import {
   type AgentChatComposerDraft,
   applyComposerDraftEdit,
   draftHasMeaningfulContent,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
 import type {
   ReferenceMenuItem,

@@ -1,13 +1,16 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createDataTransferItemFixture,
   createDataTransferItemListFixture,
   createDataTransferFixture,
   createFileListFixture,
 } from "@/test-utils/focused-fixture";
-import { type AgentChatComposerDraft, createTextSegment } from "./agent-chat-composer-draft";
+import {
+  type AgentChatComposerDraft,
+  createTextSegment,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { useAgentChatComposerEditorEvents } from "./use-agent-chat-composer-editor-events";
 import type {
   ActiveTextSelection,

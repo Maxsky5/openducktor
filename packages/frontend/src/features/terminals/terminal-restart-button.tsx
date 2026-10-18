@@ -8,7 +8,7 @@ import { Loader2, RotateCw, X } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { terminalActivityOwnerKey } from "./terminal-activity-store";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 

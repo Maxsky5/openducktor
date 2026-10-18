@@ -24,8 +24,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
-import { workspaceFilePreviewQueryOptions } from "@/state/queries/filesystem";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { workspaceFilePreviewQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import {
   isMarkdownFile,
   type TaskExecutionSelectedFile,

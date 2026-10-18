@@ -1,8 +1,8 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 
 enableReactActEnvironment();

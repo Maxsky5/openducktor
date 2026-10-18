@@ -6,12 +6,12 @@ import {
   type NotificationStreamFrame,
   type SelectedNotification,
 } from "@openducktor/contracts";
-import { createNotificationRuntime } from "./notification-runtime";
+import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import {
   createBridge,
   createDeliveryAdapters,
   workflowClosedOccurrence,
-} from "./notification-runtime.test-support";
+} from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 

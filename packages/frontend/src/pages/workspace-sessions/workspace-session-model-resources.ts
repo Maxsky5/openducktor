@@ -9,8 +9,8 @@ import {
   toModelPickerCatalogResource,
   unavailableModelPickerCatalogResource,
 } from "@/components/features/agents/model-picker";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type SessionModelTarget = {
   identity: AgentSessionIdentity | null;

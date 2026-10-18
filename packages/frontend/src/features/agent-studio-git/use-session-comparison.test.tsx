@@ -1,11 +1,10 @@
 import { expect, mock, test } from "bun:test";
-import { QueryClientProvider, useIsFetching } from "@tanstack/react-query";
+import type { HostClient } from "@openducktor/host-client";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { useIsFetching } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { hostClient } from "@/lib/host-client";
-import { createQueryClient } from "@/lib/query-client";
 import {
   sessionComparisonOptions,
   useSessionComparison,
@@ -26,16 +25,15 @@ const initial: SessionComparisonInput = {
 };
 
 test("does not restore stale comparison results after a session or target change", async () => {
-  const first =
-    Promise.withResolvers<Awaited<ReturnType<typeof hostClient.gitGetComparisonTarget>>>();
+  const first = Promise.withResolvers<Awaited<ReturnType<HostClient["gitGetComparisonTarget"]>>>();
   let calls = 0;
   const read = mock(async () =>
     ++calls === 1 ? first.promise : { kind: "available" as const, reference: "refs/heads/release" },
   );
-  configureShellBridge(createShellBridgeFixture({ client: { gitGetComparisonTarget: read } }));
-  const client = createQueryClient();
+  const connection = createTestClientConnection({ client: { gitGetComparisonTarget: read } });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(useSessionComparison, { initialProps: initial, wrapper });
   try {
@@ -60,7 +58,6 @@ test("does not restore stale comparison results after a session or target change
   } finally {
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -69,19 +66,15 @@ test("branch list failure does not invalidate a valid comparison and retry expos
     kind: "available" as const,
     reference: "refs/remotes/origin/main",
   }));
-  const branches = mock(
-    async (): Promise<Awaited<ReturnType<typeof hostClient.gitGetBranches>>> => {
-      throw new Error("Repair repository permissions.");
-    },
-  );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { gitGetComparisonTarget: read, gitGetBranches: branches },
-    }),
-  );
-  const client = createQueryClient();
+  const branches = mock(async (): Promise<Awaited<ReturnType<HostClient["gitGetBranches"]>>> => {
+    throw new Error("Repair repository permissions.");
+  });
+  const connection = createTestClientConnection({
+    client: { gitGetComparisonTarget: read, gitGetBranches: branches },
+  });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(
     () => ({
@@ -110,21 +103,20 @@ test("branch list failure does not invalidate a valid comparison and retry expos
   } finally {
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("keeps a checked comparison during a same-context check and removes it if that check fails", async () => {
   const pending =
-    Promise.withResolvers<Awaited<ReturnType<typeof hostClient.gitGetComparisonTarget>>>();
-  const read = mock<typeof hostClient.gitGetComparisonTarget>(async () => ({
+    Promise.withResolvers<Awaited<ReturnType<HostClient["gitGetComparisonTarget"]>>>();
+  const read = mock<HostClient["gitGetComparisonTarget"]>(async () => ({
     kind: "available" as const,
     reference: "refs/remotes/origin/main",
   }));
-  configureShellBridge(createShellBridgeFixture({ client: { gitGetComparisonTarget: read } }));
-  const client = createQueryClient();
+  const connection = createTestClientConnection({ client: { gitGetComparisonTarget: read } });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(
     (input: SessionComparisonInput) => ({
@@ -155,7 +147,6 @@ test("keeps a checked comparison during a same-context check and removes it if t
     await running;
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -185,20 +176,18 @@ test("the fetch step fetches the selected remote, and the check finds the moved 
     fetchedAhead = remoteAhead;
     return { outcome: "fetched" as const, output: "Fetched." };
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitFetchRemote: fetch,
-        gitGetComparisonTarget: async () => ({
-          kind: "available",
-          reference: `revision-${fetchedAhead}`,
-        }),
-      },
-    }),
-  );
-  const client = createQueryClient();
+  const connection = createTestClientConnection({
+    client: {
+      gitFetchRemote: fetch,
+      gitGetComparisonTarget: async () => ({
+        kind: "available",
+        reference: `revision-${fetchedAhead}`,
+      }),
+    },
+  });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(useSessionComparison, { initialProps: initial, wrapper });
   try {
@@ -217,16 +206,15 @@ test("the fetch step fetches the selected remote, and the check finds the moved 
   } finally {
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("reports a missing worktree without a pending comparison or host read", () => {
   const read = mock(async () => ({ kind: "available" as const, reference: "refs/heads/main" }));
-  configureShellBridge(createShellBridgeFixture({ client: { gitGetComparisonTarget: read } }));
-  const client = createQueryClient();
+  const connection = createTestClientConnection({ client: { gitGetComparisonTarget: read } });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(useSessionComparison, {
     initialProps: { ...initial, workingDirectory: null },
@@ -239,31 +227,28 @@ test("reports a missing worktree without a pending comparison or host read", () 
   } finally {
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("updates mounted branch choices after a fetch discovers a remote branch", async () => {
   let fetched = false;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetComparisonTarget: async () => ({
-          kind: "available",
-          reference: "refs/remotes/origin/main",
-        }),
-        gitGetBranches: async () =>
-          fetched ? [{ name: "origin/release", isCurrent: false, isRemote: true }] : [],
-        gitFetchRemote: async () => {
-          fetched = true;
-          return { outcome: "fetched", output: "Fetched." };
-        },
+  const connection = createTestClientConnection({
+    client: {
+      gitGetComparisonTarget: async () => ({
+        kind: "available",
+        reference: "refs/remotes/origin/main",
+      }),
+      gitGetBranches: async () =>
+        fetched ? [{ name: "origin/release", isCurrent: false, isRemote: true }] : [],
+      gitFetchRemote: async () => {
+        fetched = true;
+        return { outcome: "fetched", output: "Fetched." };
       },
-    }),
-  );
-  const client = createQueryClient();
+    },
+  });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(
     () => ({
@@ -292,24 +277,21 @@ test("updates mounted branch choices after a fetch discovers a remote branch", a
   } finally {
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("an upstream branch switch gets its own fetch, so it does not reuse the old branch's fetch", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetComparisonTarget: async () => ({
-          kind: "available",
-          reference: "refs/remotes/origin/main",
-        }),
-      },
-    }),
-  );
-  const client = createQueryClient();
+  const connection = createTestClientConnection({
+    client: {
+      gitGetComparisonTarget: async () => ({
+        kind: "available",
+        reference: "refs/remotes/origin/main",
+      }),
+    },
+  });
+  const client = connection.queryClient;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const upstream = { ...initial, target: { branch: "@{upstream}" } };
   const hook = renderHook(useSessionComparison, { initialProps: upstream, wrapper });
@@ -322,6 +304,5 @@ test("an upstream branch switch gets its own fetch, so it does not reuse the old
   } finally {
     hook.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });

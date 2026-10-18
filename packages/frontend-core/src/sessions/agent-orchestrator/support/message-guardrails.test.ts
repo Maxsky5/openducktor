@@ -1,0 +1,49 @@
+import { describe, expect, test } from "bun:test";
+import path from "node:path";
+
+// The frontend has its own guardrail for the agent pages and chat components.
+const SOURCE_DIRECTORIES = [path.resolve(import.meta.dir, "..")];
+
+const FORBIDDEN_PATTERNS = [
+  {
+    label: "direct session.messages find/findIndex",
+    regex: /\.messages\.find(?:Index)?\(/g,
+  },
+  {
+    label: "reverse-find over messages arrays",
+    regex: /messages[^\n]{0,80}\.reverse\(\)\.find\(/g,
+  },
+];
+
+describe("session message guardrails", () => {
+  test("production code uses centralized message lookups", async () => {
+    const violations: string[] = [];
+    const sourceFiles: string[] = [];
+
+    for (const directory of SOURCE_DIRECTORIES) {
+      const glob = new Bun.Glob("**/*.{ts,tsx}");
+      for await (const relativePath of glob.scan({ cwd: directory })) {
+        if (/\.test\./.test(relativePath)) {
+          continue;
+        }
+
+        sourceFiles.push(path.join(directory, relativePath));
+      }
+    }
+
+    await Promise.all(
+      sourceFiles.map(async (filePath) => {
+        const content = await Bun.file(filePath).text();
+        for (const pattern of FORBIDDEN_PATTERNS) {
+          pattern.regex.lastIndex = 0;
+          if (!pattern.regex.test(content)) {
+            continue;
+          }
+          violations.push(`${path.relative(process.cwd(), filePath)}: ${pattern.label}`);
+        }
+      }),
+    );
+
+    expect(violations).toEqual([]);
+  });
+});

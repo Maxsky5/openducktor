@@ -1,7 +1,13 @@
 import type { AgentSessionScope } from "@openducktor/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentQuestionRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import type {
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
   type AgentSessionRequestState,

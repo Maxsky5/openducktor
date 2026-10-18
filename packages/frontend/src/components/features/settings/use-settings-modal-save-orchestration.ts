@@ -15,7 +15,7 @@ import {
   type RuntimeImpactReviewState,
   useRuntimeImpactReview,
 } from "@/components/features/runtimes/runtime-impact-review";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { SettingsSaveOutcome } from "@/types/state-slices";
 import {
   getSettingsSaveBlocker,

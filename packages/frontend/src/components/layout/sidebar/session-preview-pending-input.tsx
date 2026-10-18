@@ -8,12 +8,12 @@ import { AgentSessionApprovalCard } from "@/components/features/agents/agent-cha
 import { AgentSessionQuestionCard } from "@/components/features/agents/agent-chat/agent-session-question-card";
 import { useRuntimeTranscriptInteractions } from "@/components/features/agents/agent-chat/readonly-transcript/use-runtime-transcript-interactions";
 import type { SessionPreviewPendingInput } from "@/features/session-navigation/session-preview-model";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { pendingInputIdentity } from "@/lib/pending-input-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
 import { useRequiredContext } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 /** Reuse the chat's forms and reply state, with the request's own workspace and child identity. */
 export function SessionPreviewPendingRequests({
@@ -26,6 +26,7 @@ export function SessionPreviewPendingRequests({
   runtimeDefinitions: RuntimeDescriptor[];
 }): ReactElement {
   const observer = useRequiredContext(WorkspaceActivityContext, "SessionPreviewPendingRequests");
+  const host = useHostClient();
   const [sent, setSent] = useState<ReadonlySet<string>>(() => new Set());
   const requireCurrentRequest = useCallback(
     (
@@ -72,7 +73,7 @@ export function SessionPreviewPendingRequests({
       await host.agentSessionLiveReplyApproval(reply);
       setSent((current) => new Set([...current, `approval:${pendingInputIdentity(request)}`]));
     },
-    [input.ref, requireCurrentRequest],
+    [host, input.ref, requireCurrentRequest],
   );
   const answerAgentQuestion = useCallback<AgentOperationsContextValue["answerAgentQuestion"]>(
     async (_identity, request, answers) => {
@@ -87,7 +88,7 @@ export function SessionPreviewPendingRequests({
       await host.agentSessionLiveReplyQuestion(reply);
       setSent((current) => new Set([...current, `question:${pendingInputIdentity(request)}`]));
     },
-    [input.ref, input.scope, requireCurrentRequest],
+    [host, input.ref, input.scope, requireCurrentRequest],
   );
   const definition = runtimeDefinitions.find((runtime) => runtime.kind === input.ref.runtimeKind);
   const interactions = useRuntimeTranscriptInteractions({

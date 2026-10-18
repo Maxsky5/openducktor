@@ -5,14 +5,14 @@ import {
   type NotificationOsDeliveryRequest,
   type NotificationSettings,
 } from "@openducktor/contracts";
-import type { NotificationBridge } from "@/lib/shell-bridge";
-import { createNotificationRuntime as createProductionNotificationRuntime } from "./notification-runtime";
+import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
+import { createNotificationRuntime as createProductionNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import {
   createBridge,
   createDeliveryAdapters,
   createNotificationRuntime,
   workflowClosedOccurrence,
-} from "./notification-runtime.test-support";
+} from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
 
 describe("notification publication and coordination", () => {
   test("shows the local start error once without putting it in the shared or OS payload", async () => {

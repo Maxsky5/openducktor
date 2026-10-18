@@ -3,7 +3,7 @@ import type { RenderResult } from "@testing-library/react";
 import { render } from "@testing-library/react";
 import { act, createElement, type ReactElement } from "react";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { useKanbanVirtualization } from "./use-kanban-virtualization";
 

@@ -1,8 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { renderHook } from "@testing-library/react";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { invokeStopAgentSession, useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 

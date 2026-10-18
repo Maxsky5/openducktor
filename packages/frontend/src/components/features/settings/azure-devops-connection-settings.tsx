@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import type { AzureDevOpsGitProviderFormController } from "./use-azure-devops-git-provider-form";

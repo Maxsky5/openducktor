@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
 import {
@@ -15,8 +15,8 @@ import type {
   SessionStartPostAction,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
@@ -51,7 +51,9 @@ export function useAgentStudioHumanReviewFeedbackFlow({
   const selectedTaskRef = useRef(selectedTask);
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
-  selectedTaskRef.current = selectedTask;
+  useLayoutEffect(() => {
+    selectedTaskRef.current = selectedTask;
+  }, [selectedTask]);
 
   const {
     clearHumanReviewFeedback,

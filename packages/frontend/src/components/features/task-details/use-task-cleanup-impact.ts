@@ -3,16 +3,10 @@ import { normalizePathForComparison } from "@openducktor/path-support";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import {
-  type AgentSessionReadPort,
-  agentSessionListQueryOptions,
-} from "@/state/queries/agent-sessions";
-import {
-  type TaskWorktreeQueryHost,
-  taskWorktreeQueryOptions,
-} from "@/state/queries/build-runtime";
-import { terminalListByFilterQueryOptions } from "@/state/queries/terminals";
-import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
+import { agentSessionListQueryOptions } from "@openducktor/frontend-core/queries/agent-sessions";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
+import { terminalListByFilterQueryOptions } from "@openducktor/frontend-core/queries/terminals";
+import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 
 type TaskCleanupImpact = {
   hasCanonicalWorktree: boolean;
@@ -36,12 +30,6 @@ type TaskWorktreeImpactQuerySnapshot = {
   error: unknown;
   isLoading: boolean;
   isFetching: boolean;
-};
-
-type TaskCleanupImpactReadPorts = {
-  agentSessions?: AgentSessionReadPort;
-  taskWorktrees?: TaskWorktreeQueryHost;
-  terminals?: NonNullable<Parameters<typeof terminalListByFilterQueryOptions>[0]["hostClient"]>;
 };
 
 const EMPTY_CLEANUP_IMPACT: TaskCleanupImpact = {
@@ -163,31 +151,23 @@ export const getTaskCleanupImpactFromSessionQueries = (
   };
 };
 
-export function useTaskCleanupImpact(
-  taskIds: string[],
-  enabled: boolean,
-  readPorts: TaskCleanupImpactReadPorts = {},
-): TaskCleanupImpact {
+export function useTaskCleanupImpact(taskIds: string[], enabled: boolean): TaskCleanupImpact {
   const { activeWorkspace } = useWorkspaceState();
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const queryRepoPath = workspaceRepoPath ?? "";
   const shouldLoadImpact = enabled && Boolean(workspaceRepoPath);
-  const sessionListInput: Parameters<typeof useAgentSessionLists>[0] = {
+  const sessionLists = useAgentSessionLists({
     repoPath: workspaceRepoPath,
     taskIds,
     enabled: shouldLoadImpact,
     queryClient,
-  };
-  if (readPorts.agentSessions) {
-    sessionListInput.readPort = readPorts.agentSessions;
-  }
-  const sessionLists = useAgentSessionLists(sessionListInput);
+  });
   // Observe canonical per-task state without starting reads here; useAgentSessionLists owns session loading so cold gaps stay batched.
   const taskSessionObservers = useQueries(
     {
       queries: taskIds.map((taskId) => ({
-        ...agentSessionListQueryOptions(queryRepoPath, taskId, readPorts.agentSessions),
+        ...agentSessionListQueryOptions(queryRepoPath, taskId),
         enabled: false,
       })),
     },
@@ -195,30 +175,21 @@ export function useTaskCleanupImpact(
   );
   const taskWorktreeQueries = useQueries(
     {
-      queries: taskIds.map((taskId) => {
-        const input: Parameters<typeof taskWorktreeQueryOptions>[0] = {
-          repoPath: queryRepoPath,
-          taskId,
-        };
-        if (readPorts.taskWorktrees) {
-          input.hostClient = readPorts.taskWorktrees;
-        }
-        return { ...taskWorktreeQueryOptions(input), enabled: shouldLoadImpact };
-      }),
+      queries: taskIds.map((taskId) => ({
+        ...taskWorktreeQueryOptions({ repoPath: queryRepoPath, taskId }),
+        enabled: shouldLoadImpact,
+      })),
     },
     queryClient,
   );
   const terminalQueries = useQueries(
     {
-      queries: taskIds.map((taskId) => {
-        const input: Parameters<typeof terminalListByFilterQueryOptions>[0] = {
+      queries: taskIds.map((taskId) =>
+        terminalListByFilterQueryOptions({
           filter: { kind: "task", repoPath: queryRepoPath, taskId },
-        };
-        if (readPorts.terminals) {
-          input.hostClient = readPorts.terminals;
-        }
-        return terminalListByFilterQueryOptions({ ...input, enabled: shouldLoadImpact });
-      }),
+          enabled: shouldLoadImpact,
+        }),
+      ),
     },
     queryClient,
   );

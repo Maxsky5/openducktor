@@ -1,6 +1,9 @@
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useSessionRecoveryAction } from "@/features/session-navigation/use-session-recovery-action";
 import type { AgentChatTranscriptNoticeAction } from "./agent-chat.types";
 

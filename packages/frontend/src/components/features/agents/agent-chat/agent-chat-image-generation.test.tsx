@@ -13,10 +13,10 @@ import type { PropsWithChildren } from "react";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
-  AgentOperationsContext,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
+import { AgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import * as imageWorkerClient from "@/lib/generated-images/image-worker-client";
 import { agentGeneratedImageQueryKeys } from "@/state/queries/agent-generated-images";

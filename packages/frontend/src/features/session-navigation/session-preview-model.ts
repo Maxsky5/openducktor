@@ -1,23 +1,26 @@
 import type { AgentRole, AgentSessionLiveRef, AgentSessionScope } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { AgentWorkflowStep } from "@/components/features/agents/agent-studio-header.types";
-import type { WorkspaceActivityProjection } from "@/features/workspace-activity/workspace-activity-projection";
+import type { WorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
 import {
   foldWorkspaceSessionLiveFacts,
   resolveWorkspaceSessionOwnerKey,
-} from "@/features/workspace-activity/workspace-activity-state";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { ROLE_OPTIONS } from "@/lib/agent-role-presentation";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
 import { roleWorkflowForTask } from "@/lib/task-agent-workflows";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { SessionNavigationTarget } from "./session-navigation-target";
 
 export type SessionPreviewPendingInput = {

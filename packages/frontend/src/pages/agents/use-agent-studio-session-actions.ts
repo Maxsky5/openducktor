@@ -2,8 +2,8 @@ import {
   type AgentChatSend,
   useAgentChatSend,
 } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type {
   GitBranch,
   ReusablePrompt,
@@ -14,7 +14,7 @@ import type {
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
+import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
@@ -25,8 +25,11 @@ import type {
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import { LAUNCH_ACTION_LABELS, type SessionLaunchActionId } from "@/features/session-start";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";

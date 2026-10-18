@@ -8,8 +8,8 @@ import {
 import {
   sessionMessageAt,
   sessionMessagesToArray,
-} from "@/test-utils/session-message-test-helpers";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/test-support/session-message-test-helpers";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 enableReactActEnvironment();
 

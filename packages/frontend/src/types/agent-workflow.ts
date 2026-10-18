@@ -1,4 +1,4 @@
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 
 export type AgentWorkflowStepTone =
   | "done"

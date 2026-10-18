@@ -1,3 +1,4 @@
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import assert from "node:assert/strict";
 import { spyOn } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -155,6 +156,7 @@ const connect = async () => {
     version: "test-browser",
     transport: createBrowserRemoteTransport(),
     notifications: createBrowserNotificationBridge({ scope: endpoint }),
+    queryClient: createClientQueryClient(),
   });
   watchClientPage(bridge, () => false);
   bridges.push(bridge);

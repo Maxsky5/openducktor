@@ -3,12 +3,12 @@ import type { AgentSessionScope } from "@openducktor/core";
 import {
   hasAgentSessionPendingApprovals,
   hasAgentSessionPendingQuestions,
-} from "@/lib/agent-session-waiting-input";
+} from "@openducktor/frontend-core/lib/agent-session-waiting-input";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "../use-agent-session-question-actions";

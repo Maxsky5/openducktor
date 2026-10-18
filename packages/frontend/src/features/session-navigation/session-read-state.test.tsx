@@ -4,7 +4,9 @@ import type {
   AgentSessionLiveSnapshot,
   TaskCard,
 } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMemo, useState } from "react";
 import { SessionNavigationList } from "@/components/layout/sidebar/session-navigation-list";
@@ -17,8 +19,8 @@ import {
   taskSessionEntry,
   workspaceSessionEntry,
 } from "@/components/layout/sidebar/session-navigation.test-support";
-import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { createWorkspaceActivityObserver } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   buildSessionNavigationModel,
   type SessionNavigationEntry,
@@ -36,8 +38,8 @@ import {
   usePublishVisibleSessionTarget,
   VisibleSessionTargetProvider,
 } from "./visible-session-target";
-import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
-import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 
 const observers: ReturnType<typeof createWorkspaceActivityObserver>[] = [];
@@ -119,6 +121,7 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   clients.push(client);
+  const connection = createTestClientConnection({ queryClient: client });
   type ViewProps = {
     rail?: boolean;
     scope?: string;
@@ -217,7 +220,7 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
   const runtimeStatus = createHostRuntimeStatusContextValue();
   function View(props: ViewProps) {
     return (
-      <QueryClientProvider client={client}>
+      <ClientConnectionProvider connection={connection}>
         <HostRuntimeStatusContext value={runtimeStatus}>
           <WorkspaceActivityContext value={observer}>
             <VisibleSessionTargetProvider>
@@ -229,7 +232,7 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
             </VisibleSessionTargetProvider>
           </WorkspaceActivityContext>
         </HostRuntimeStatusContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
   }
   return { View, emit, session: snapshots[0]! };

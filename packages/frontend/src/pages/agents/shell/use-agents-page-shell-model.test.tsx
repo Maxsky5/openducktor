@@ -7,22 +7,24 @@ import type { TaskExecutionSelectedFilePreviewModel } from "@/components/feature
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createAgentSessionCollection } from "@/state/agent-session-collection";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
 import {
   type AgentSessionSummary,
   createAgentSessionsStore,
   toAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
-  AgentOperationsContext,
-  AgentSessionsContext,
   ChecksStateContext,
   RuntimeDefinitionsContext,
   TasksStateContext,
   WorkspaceBranchStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
+import {
+  AgentOperationsContext,
+  AgentSessionsContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   NotificationContext,
   type NotificationContextValue,
@@ -59,7 +61,7 @@ import {
   createAgentChatModelFixture,
   createAgentStudioHeaderModelFixture,
 } from "./use-agents-page-shell-model.test-support";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
 type RepoSettingsStateContract = ReturnType<typeof repoSettingsModule.useAgentStudioRepoSettings>;
 

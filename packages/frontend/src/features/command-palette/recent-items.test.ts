@@ -1,72 +1,46 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { act, cleanup, renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { RECENT_ITEMS_STORAGE_KEY, RECENT_ITEMS_STORED_LIMIT } from "./constants";
-import {
-  addRecentItem,
-  loadRecentItems,
-  readRecentItems,
-  useRecentItemsStore,
-  type RecentItem,
-} from "./recent-items";
-import {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-} from "@/lib/shell-bridge";
-import { createRemoteHostClient } from "@openducktor/host-client/remote";
-import { getHostStorage } from "@/lib/host-storage";
+import { addRecentItem, readRecentItems, type RecentItem, useRecentItems } from "./recent-items";
 
-afterEach(() => {
-  globalThis.localStorage.removeItem(RECENT_ITEMS_STORAGE_KEY);
-});
+afterEach(cleanup);
+
+const renderRecentItems = (storage: ClientStorage) => {
+  const connection = createTestClientConnection({ storage });
+  return renderHook(() => useRecentItems((store) => store), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(ClientConnectionProvider, { connection }, children),
+  });
+};
 
 describe("recent items", () => {
-  test("loads the selected host's list without copying local history into remote work", () => {
-    const previousBridge = getShellBridge();
-    const previousItems = useRecentItemsStore.getState();
+  test("keeps the Recent list of each host connection apart", () => {
     const local: RecentItem[] = [
       { kind: "task", workspaceId: "local", taskId: "local-task", openedAt: 1 },
     ];
-    globalThis.localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(local));
-    const remote = createRemoteHostClient(
-      "https://host.example",
-      {
-        appVersion: "test",
-        supportedProtocolVersions: [1],
-        requiredCapabilities: [],
-        optionalCapabilities: [],
-      },
-      {
-        request: async () => {
-          throw new Error("No request expected.");
-        },
-        openTerminal: async () => {
-          throw new Error("No terminal expected.");
-        },
-      },
-      async () => {},
+    const localStorage = createMemoryClientStorage();
+    localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(local));
+    // The bootstrap gives a remote host connection memory storage.
+    const remote = renderRecentItems(createMemoryClientStorage());
+    const localHost = renderRecentItems(localStorage);
+
+    expect(remote.result.current.items).toEqual([]);
+    act(() =>
+      remote.result.current.record({ kind: "task", workspaceId: "remote", taskId: "remote-task" }),
     );
-    configureShellBridge({ ...createUnavailableShellBridge(), remoteConnection: remote });
-    const remoteStorage = getHostStorage();
-    const saved = remoteStorage.getItem(RECENT_ITEMS_STORAGE_KEY);
-    try {
-      remoteStorage.removeItem(RECENT_ITEMS_STORAGE_KEY);
-      loadRecentItems();
-      expect(useRecentItemsStore.getState().items).toEqual([]);
-      useRecentItemsStore
-        .getState()
-        .record({ kind: "task", workspaceId: "remote", taskId: "remote-task" });
-      expect(useRecentItemsStore.getState().items).toMatchObject([{ workspaceId: "remote" }]);
-      expect(JSON.parse(globalThis.localStorage.getItem(RECENT_ITEMS_STORAGE_KEY)!)).toEqual(local);
-      configureShellBridge(createUnavailableShellBridge());
-      loadRecentItems();
-      expect(useRecentItemsStore.getState().items).toEqual(local);
-    } finally {
-      if (saved === null) remoteStorage.removeItem(RECENT_ITEMS_STORAGE_KEY);
-      else remoteStorage.setItem(RECENT_ITEMS_STORAGE_KEY, saved);
-      configureShellBridge(previousBridge);
-      useRecentItemsStore.setState(previousItems);
-    }
+
+    expect(remote.result.current.items).toMatchObject([{ workspaceId: "remote" }]);
+    expect(localHost.result.current.items).toEqual(local);
+    expect(JSON.parse(localStorage.getItem(RECENT_ITEMS_STORAGE_KEY) ?? "null")).toEqual(local);
   });
+
   test("puts the opened item first and drops its older copy", () => {
     const items: RecentItem[] = [
       { kind: "task", workspaceId: "w1", taskId: "T-1", openedAt: 2 },
@@ -99,20 +73,21 @@ describe("recent items", () => {
   });
 
   test("reads a saved list and reports an invalid one", () => {
-    expect(readRecentItems()).toEqual({ items: [], error: null });
+    const storage = createMemoryClientStorage();
+    expect(readRecentItems(storage)).toEqual({ items: [], error: null });
 
     const saved: RecentItem[] = [{ kind: "task", workspaceId: "w1", taskId: "T-1", openedAt: 1 }];
-    globalThis.localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(saved));
-    expect(readRecentItems()).toEqual({ items: saved, error: null });
+    storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(saved));
+    expect(readRecentItems(storage)).toEqual({ items: saved, error: null });
 
-    globalThis.localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify([{ kind: "page" }]));
-    expect(readRecentItems()).toEqual({
+    storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify([{ kind: "page" }]));
+    expect(readRecentItems(storage)).toEqual({
       items: [],
       error: "The saved list of recent tasks and chats is invalid.",
     });
 
-    globalThis.localStorage.setItem(RECENT_ITEMS_STORAGE_KEY, "{");
-    expect(readRecentItems().items).toEqual([]);
-    expect(readRecentItems().error).not.toBeNull();
+    storage.setItem(RECENT_ITEMS_STORAGE_KEY, "{");
+    expect(readRecentItems(storage).items).toEqual([]);
+    expect(readRecentItems(storage).error).not.toBeNull();
   });
 });

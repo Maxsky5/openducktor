@@ -6,19 +6,22 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { inactiveRuntimeReadinessTarget } from "@/lib/runtime-readiness";
+import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { inactiveRuntimeReadinessTarget } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSession,
   useAgentSessionReadModelState,
 } from "@/state/app-state-provider";
-import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import type { SessionRuntimeDataTarget } from "@/state/operations/agent-orchestrator/support/session-runtime-data-refs";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { useSessionRuntimeData } from "@openducktor/frontend-core/sessions/agent-orchestrator/hooks/use-session-runtime-data";
+import type { SessionRuntimeDataTarget } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-runtime-data-refs";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   type AgentStudioRouteSessionResolution,

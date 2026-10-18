@@ -7,21 +7,20 @@ import {
   type RuntimeExecutableCheck,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import type { HostClient } from "@openducktor/host-client";
+import type { QueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { createQueryClient } from "@/lib/query-client";
-import {
-  HostRuntimeStatusContext,
-  RuntimeDefinitionsContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   NotificationContext,
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
-import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { runtimeDefinitionsQueryOptions } from "@openducktor/frontend-core/queries/runtime";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import {
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
@@ -101,16 +100,20 @@ export const createOnboardingTestHarness = () => {
 
   const renderOnboarding = ({
     runtimes,
+    client = {},
     saveSettingsSnapshot = mock(async () => savedSettingsResult()),
     prefillSettings = true,
     prefillDefinitions = true,
   }: {
     runtimes: AgentRuntimes;
+    /** Host commands that the onboarding page may call. */
+    client?: Partial<HostClient>;
     saveSettingsSnapshot?: WorkspaceStateContextValue["saveSettingsSnapshot"];
     prefillSettings?: boolean;
     prefillDefinitions?: boolean;
-  }): ReturnType<typeof createQueryClient> => {
-    const queryClient = createQueryClient();
+  }): QueryClient => {
+    const connection = createTestClientConnection({ client });
+    const queryClient = connection.queryClient;
     if (prefillSettings) {
       queryClient.setQueryData(
         settingsSnapshotQueryOptions().queryKey,
@@ -185,7 +188,7 @@ export const createOnboardingTestHarness = () => {
       loadRepoRuntimeFileSearch: async () => [],
     };
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <RuntimeDefinitionsContext.Provider value={runtimeContextValue}>
             <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
@@ -197,7 +200,7 @@ export const createOnboardingTestHarness = () => {
             </HostRuntimeStatusContext>
           </RuntimeDefinitionsContext.Provider>
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     mountedViews.add(view);
     return queryClient;

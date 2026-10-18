@@ -2,11 +2,11 @@ import { normalizePathSeparators, resolveAgainstWorkingDirectory } from "@opendu
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import type { MarkdownImageProps } from "../task-description-editor/task-description-image-context";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   resolvedPathQueryOptions,
   workspaceImageFileQueryOptions,
-} from "@/state/queries/filesystem";
+} from "@openducktor/frontend-core/queries/filesystem";
 import { parseChatFileLink, resolveChatFileLink } from "./agent-chat/agent-chat-file-link";
 import type { TaskExecutionSelectedFile } from "./task-execution-file-explorer-model";
 

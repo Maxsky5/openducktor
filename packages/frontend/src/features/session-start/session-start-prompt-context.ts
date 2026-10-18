@@ -4,7 +4,7 @@ import {
   type BuildAgentKickoffPromptInput,
   resolvePullRequestTarget,
 } from "@openducktor/core";
-import { effectiveTaskTargetBranch } from "@/lib/target-branch";
+import { effectiveTaskTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 
 export const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
 

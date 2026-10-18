@@ -1,4 +1,4 @@
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   getClosestTextSegmentElement,
   getComposerContentRoot,

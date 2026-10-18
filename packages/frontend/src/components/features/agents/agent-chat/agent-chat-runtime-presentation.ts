@@ -9,7 +9,7 @@ import {
   normalizeOdtToolName,
   toOdtWorkflowToolDisplayName,
 } from "@openducktor/core";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { AgentChatTaskToolName, AgentChatRuntimePresentation } from "./agent-chat.types";
 
 const resolveTaskTool = (odtTool: OdtToolName | null): AgentChatTaskToolName | null => {

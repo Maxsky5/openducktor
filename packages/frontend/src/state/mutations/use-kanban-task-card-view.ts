@@ -2,10 +2,10 @@ import type { KanbanTaskCardView, SettingsSnapshot } from "@openducktor/contract
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/host";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "./kanban-task-card-view";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type KanbanTaskCardViewState = {
   taskCardView: KanbanTaskCardView | null;
@@ -13,16 +13,10 @@ type KanbanTaskCardViewState = {
   changeTaskCardView: (taskCardView: KanbanTaskCardView) => void;
 };
 
-type KanbanTaskCardViewHost = Pick<
-  typeof host,
-  "workspaceGetSettingsSnapshot" | "workspaceUpdateKanbanTaskCardView"
->;
-
-export function useKanbanTaskCardView(
-  hostClient: KanbanTaskCardViewHost = host,
-): KanbanTaskCardViewState {
+export function useKanbanTaskCardView(): KanbanTaskCardViewState {
   const queryClient = useQueryClient();
-  const settingsOptions = settingsSnapshotQueryOptions(hostClient);
+  const hostClient = useHostClient();
+  const settingsOptions = settingsSnapshotQueryOptions();
   const settingsQuery = useQuery(settingsOptions);
   const mutation = useMutation<SettingsSnapshot, Error, KanbanTaskCardView>({
     mutationKey: KANBAN_TASK_CARD_VIEW_MUTATION_KEY,

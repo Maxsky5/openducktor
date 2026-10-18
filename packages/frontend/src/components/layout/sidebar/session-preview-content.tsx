@@ -12,14 +12,14 @@ import {
   type SessionPreviewModel,
 } from "@/features/session-navigation/session-preview-model";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { agentModelInfoParts } from "@/lib/agent-model-presentation";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 import { cn } from "@/lib/utils";
-import { runtimeDefinitionsQueryOptions } from "@/state/queries/runtime";
-import { createHostRuntimeCatalogOperations } from "@/state/operations/shared/runtime-catalog";
-import { workspaceSessionWorkingDirectory } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
+import { runtimeDefinitionsQueryOptions } from "@openducktor/frontend-core/queries/runtime";
+import { createHostRuntimeCatalogOperations } from "@openducktor/frontend-core/runtime/runtime-catalog-operations";
+import { workspaceSessionWorkingDirectory } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type {
   SessionNavigationEntry,
   SessionNavigationWorkspace,
@@ -30,8 +30,7 @@ import { SessionEntryRuntimeIcon } from "./session-navigation-parts";
 import { SessionPreviewPendingRequests } from "./session-preview-pending-input";
 import { useSessionMenu } from "./session-menu-provider";
 import { SessionPreviewCommands } from "./session-command-activity";
-
-const { loadRuntimeCatalog } = createHostRuntimeCatalogOperations();
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function SessionPreviewContent({
   entry,
@@ -218,6 +217,11 @@ function SessionPreviewModelDetails({
   entry: SessionNavigationEntry;
   model: SessionPreviewModel["model"];
 }): ReactElement {
+  const hostClient = useHostClient();
+  const { loadRuntimeCatalog } = useMemo(
+    () => createHostRuntimeCatalogOperations(hostClient),
+    [hostClient],
+  );
   let runtimeRef: RuntimeWorkingDirectoryRef | null = null;
   if (entry.target.kind === "task_session") {
     const { runtimeKind, workingDirectory } = entry.target.identity;

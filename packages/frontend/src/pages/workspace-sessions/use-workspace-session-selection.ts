@@ -1,12 +1,13 @@
-import { getHostStorage } from "@/lib/host-storage";
 import type { WorkspaceSession } from "@openducktor/contracts";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { scheduleTask } from "@openducktor/frontend-core/lib/scheduling";
+import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type SessionNavigationRecovery,
   useSessionNavigationRecovery,
 } from "@/features/session-navigation/use-session-navigation-recovery";
-import { errorMessage } from "@/lib/errors";
-import { scheduleTask } from "@/lib/scheduling";
 
 export function useWorkspaceSessionSelection({
   workspaceId,
@@ -17,10 +18,11 @@ export function useWorkspaceSessionSelection({
   sessions: WorkspaceSession[] | undefined;
   requestedSessionId: string | null | undefined;
 }): WorkspaceSessionSelection {
+  const { storage } = useClientConnection();
   const storageKey = workspaceSessionSelectionStorageKey(workspaceId);
   const [lastSelection, setLastSelection] = useState(() => ({
     workspaceId,
-    ...readSelection(storageKey),
+    ...readSelection(storage, storageKey),
   }));
   const savedSelection = useRef({ workspaceId, sessionId: lastSelection.sessionId });
   const [failure, setFailure] = useState<{
@@ -30,7 +32,7 @@ export function useWorkspaceSessionSelection({
   } | null>(null);
   let currentSelection = lastSelection;
   if (lastSelection.workspaceId !== workspaceId) {
-    currentSelection = { workspaceId, ...readSelection(storageKey) };
+    currentSelection = { workspaceId, ...readSelection(storage, storageKey) };
     setLastSelection(currentSelection);
   }
   const selected = currentSelection.error
@@ -48,7 +50,7 @@ export function useWorkspaceSessionSelection({
 
   const save = useCallback((): void => {
     try {
-      writeSelection(storageKey, selectedId);
+      writeSelection(storage, storageKey, selectedId);
       savedSelection.current = { workspaceId, sessionId: selectedId };
       setFailure((current) => (current?.workspaceId === workspaceId ? null : current));
     } catch (cause) {
@@ -58,14 +60,14 @@ export function useWorkspaceSessionSelection({
         error: cause instanceof Error ? cause : new Error(errorMessage(cause)),
       });
     }
-  }, [selectedId, storageKey, workspaceId]);
+  }, [selectedId, storage, storageKey, workspaceId]);
   const retryRead = useCallback((): void => {
-    const selection = readSelection(storageKey);
+    const selection = readSelection(storage, storageKey);
     if (selection.error === null) {
       savedSelection.current = { workspaceId, sessionId: selection.sessionId };
     }
     setLastSelection({ workspaceId, ...selection });
-  }, [storageKey, workspaceId]);
+  }, [storage, storageKey, workspaceId]);
   const recovery = useSessionNavigationRecovery({
     scopeKey: `${workspaceId}:${selectedId ?? ""}`,
     readError: currentSelection.error,
@@ -142,9 +144,9 @@ function selectSession(
 
 type SelectionRead = { sessionId: string | null; error: Error | null };
 
-const readSelection = (storageKey: string): SelectionRead => {
+const readSelection = (storage: ClientStorage, storageKey: string): SelectionRead => {
   try {
-    return { sessionId: getHostStorage().getItem(storageKey), error: null };
+    return { sessionId: storage.getItem(storageKey), error: null };
   } catch (cause) {
     return {
       sessionId: null,
@@ -156,10 +158,14 @@ const readSelection = (storageKey: string): SelectionRead => {
   }
 };
 
-const writeSelection = (storageKey: string, sessionId: string | null): void => {
+const writeSelection = (
+  storage: ClientStorage,
+  storageKey: string,
+  sessionId: string | null,
+): void => {
   try {
-    if (sessionId === null) getHostStorage().removeItem(storageKey);
-    else getHostStorage().setItem(storageKey, sessionId);
+    if (sessionId === null) storage.removeItem(storageKey);
+    else storage.setItem(storageKey, sessionId);
   } catch (cause) {
     throw new Error(
       `Failed to save workspace session selection "${storageKey}": ${errorMessage(cause)}`,

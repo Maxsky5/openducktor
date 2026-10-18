@@ -13,10 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
-import {
-  useHostRuntimeStatusContext,
-  useRuntimeAvailabilityContext,
-} from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useDiagnosticsAutoOpenOwner } from "@/state/providers/diagnostics-auto-open-provider";
 import { buildDiagnosticsPanelModel, type DiagnosticsPanelModel } from "./diagnostics-panel-model";
 import { DiagnosticsPanelSections } from "./diagnostics-panel-sections";

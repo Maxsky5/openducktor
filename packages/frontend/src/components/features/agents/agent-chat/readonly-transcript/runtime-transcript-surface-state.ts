@@ -2,7 +2,7 @@ import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
   isAgentSessionTranscriptVisible,
-} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentChatEmptyStateModel } from "../agent-chat.types";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 

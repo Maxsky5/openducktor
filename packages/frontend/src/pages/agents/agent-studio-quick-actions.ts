@@ -17,8 +17,8 @@ import {
 } from "@/features/task-workflow/task-workflow-actions";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
 import { isQaRejectedTask } from "@/lib/task-qa";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type AgentStudioQuickActionOption = {
   id: string;

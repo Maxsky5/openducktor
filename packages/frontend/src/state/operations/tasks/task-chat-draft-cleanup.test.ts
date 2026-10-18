@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import type { AgentSessionReadPort } from "../../queries/agent-sessions";
+import type { AgentSessionReadPort } from "@openducktor/frontend-core/queries/agent-sessions";
 import { createTaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 
 const session: AgentSessionRecord = {

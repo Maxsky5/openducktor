@@ -3,9 +3,9 @@ import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, type ReactNode, useEffect, useState } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
@@ -59,7 +59,7 @@ test("RepositoryConfigurationSection applies the confirmed worktree base path", 
     const [selectedRepoConfig, setSelectedRepoConfig] = useState(() => createRepoConfig());
 
     return (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <SeedFilesystemDirectory path="/tmp/worktrees" />
         <RepositoryConfigurationSection
           selectedRepoConfig={selectedRepoConfig}
@@ -107,7 +107,7 @@ test("RepositoryConfigurationSection applies the confirmed repository rebind pat
     const [selectedRepoConfig, setSelectedRepoConfig] = useState(() => createRepoConfig());
 
     return (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <SeedFilesystemDirectory path="/tmp/rebound-repo" currentPathIsGitRepo />
         <RepositoryConfigurationSection
           selectedRepoConfig={selectedRepoConfig}

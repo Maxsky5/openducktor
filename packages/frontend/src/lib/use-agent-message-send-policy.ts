@@ -1,12 +1,13 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
-import {
-  useHostRuntimeStatusContext,
-  useRuntimeAvailabilityContext,
-} from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
-import type { AgentMessageSendOptions } from "@/types/agent-orchestrator";
+import type { AgentMessageSendOptions } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { getAgentMessageSendBlockedReason } from "./agent-message-send-policy";
-import { deriveRuntimeReadiness, runtimeReadinessTargetForRuntime } from "./runtime-readiness";
+import {
+  deriveRuntimeReadiness,
+  runtimeReadinessTargetForRuntime,
+} from "@openducktor/frontend-core/lib/runtime-readiness";
 
 export function useAgentMessageSendPolicy(): NonNullable<
   AgentMessageSendOptions["assertCanSubmit"]

@@ -1,14 +1,14 @@
 import {
   notificationRouteSessionIdentity,
   notificationRouteStateSchema,
-} from "@/features/notifications/notification-route-state";
+} from "@openducktor/frontend-core/notifications/notification-route-state";
 import {
   type SessionNavigationRecovery,
   useSessionNavigationRecovery,
 } from "@/features/session-navigation/use-session-navigation-recovery";
 import { startTransition, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigationType, useSearchParams } from "react-router";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
@@ -23,7 +23,7 @@ import {
 } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
 import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useTaskPreviewTransitionGuard } from "./use-task-preview-transition-guard";

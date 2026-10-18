@@ -5,13 +5,13 @@ import type {
 } from "@openducktor/contracts";
 import { useCallback, useState } from "react";
 import type { GitCommitMode } from "@/features/agent-studio-git";
-import { host } from "@/state/operations/shared/host";
 import {
   type GitActionKind,
   type RefreshGitDiffData,
   refreshAfterGitAction,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseAgentStudioGitCommitActionsArgs = {
   isCurrentContext: () => boolean;
@@ -39,6 +39,7 @@ export function useAgentStudioGitCommitActions({
   ensureGitActionsUnlocked,
   setCommitError,
 }: UseAgentStudioGitCommitActionsArgs) {
+  const host = useHostClient();
   const [committingMode, setCommittingMode] = useState<GitCommitMode | null>(null);
 
   /** Resolves true only after Git confirms a new commit. */
@@ -103,6 +104,7 @@ export function useAgentStudioGitCommitActions({
       }
     },
     [
+      host,
       clearActionErrors,
       committingMode,
       ensureGitActionsUnlocked,

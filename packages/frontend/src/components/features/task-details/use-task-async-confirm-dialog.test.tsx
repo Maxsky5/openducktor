@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act } from "react";
-import { installReactActEnvironment } from "@/test-utils/react-act-environment";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { installReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 
 type Props = Parameters<typeof useTaskAsyncConfirmDialog>[0];

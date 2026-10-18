@@ -1,21 +1,19 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import type {
   AgentSessionRecord,
   SidebarSessionGrouping,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import type { WorkspaceSessionLiveFacts } from "@/features/workspace-activity/workspace-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import type { WorkspaceSessionLiveFacts } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
 import type { SessionNavigationWorkspace } from "@/state/read-models/session-navigation-read-model";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createTaskCardFixture,
   createWorkspaceActivityObserverStub,
@@ -75,10 +73,6 @@ const facts = (overrides: Partial<WorkspaceSessionLiveFacts>): WorkspaceSessionL
   ...overrides,
 });
 
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
-
 test("joins session sources across workspaces and changes grouping without more reads", async () => {
   const tasksByRepo = new Map([
     ["/alpha", [createTaskCardFixture({ id: "blocked", title: "Resolve CI", status: "blocked" })]],
@@ -111,19 +105,17 @@ test("joins session sources across workspaces and changes grouping without more 
     if (taskIds.includes("closed")) throw new Error("The closed task's worktree was removed.");
     return taskIds.map((taskId) => ({ taskId, agentSessions: sessionsByTask.get(taskId) ?? [] }));
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        tasksList: async (repoPath) => tasksByRepo.get(repoPath) ?? [],
-        agentSessionsListForTasks: readSessions,
-        workspaceSessionListActive: async (workspaceId) =>
-          workspaceId === "alpha"
-            ? [chat("running", "/alpha", Date.parse("2026-09-30T07:00:00.000Z"))]
-            : [chat("quiet", "/beta", Date.parse("2026-09-30T10:00:00.000Z"))],
-        agentRuntimeLoadSessionHistory: readHistory,
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async (repoPath) => tasksByRepo.get(repoPath) ?? [],
+      agentSessionsListForTasks: readSessions,
+      workspaceSessionListActive: async (workspaceId) =>
+        workspaceId === "alpha"
+          ? [chat("running", "/alpha", Date.parse("2026-09-30T07:00:00.000Z"))]
+          : [chat("quiet", "/beta", Date.parse("2026-09-30T10:00:00.000Z"))],
+      agentRuntimeLoadSessionHistory: readHistory,
+    },
+  });
   const alphaKey = (externalSessionId: string) =>
     agentSessionIdentityKey({
       externalSessionId,
@@ -145,7 +137,7 @@ test("joins session sources across workspaces and changes grouping without more 
     },
   );
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <WorkspaceActivityContext.Provider value={observer}>
         {children}
       </WorkspaceActivityContext.Provider>
@@ -196,24 +188,22 @@ test("joins session sources across workspaces and changes grouping without more 
 
 test("reports a failed batch session read and reads it again on retry", async () => {
   let batchReads = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        tasksList: async () => [createTaskCardFixture({ id: "task-1", title: "Retry me" })],
-        agentSessionsListForTasks: async (_repoPath, taskIds) => {
-          batchReads += 1;
-          if (batchReads === 1) throw new Error("Session records are locked.");
-          return taskIds.map((taskId) => ({
-            taskId,
-            agentSessions: [record("native", "/alpha", "2026-09-30T06:00:00.000Z")],
-          }));
-        },
-        workspaceSessionListActive: async () => [],
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async () => [createTaskCardFixture({ id: "task-1", title: "Retry me" })],
+      agentSessionsListForTasks: async (_repoPath, taskIds) => {
+        batchReads += 1;
+        if (batchReads === 1) throw new Error("Session records are locked.");
+        return taskIds.map((taskId) => ({
+          taskId,
+          agentSessions: [record("native", "/alpha", "2026-09-30T06:00:00.000Z")],
+        }));
       },
-    }),
-  );
+      workspaceSessionListActive: async () => [],
+    },
+  });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <WorkspaceActivityContext.Provider value={createWorkspaceActivityObserverStub()}>
         {children}
       </WorkspaceActivityContext.Provider>
@@ -239,30 +229,28 @@ test("reports a failed batch session read and reads it again on retry", async ()
 });
 
 test("keeps cached task sessions listed while the batch read of a new task fails", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        tasksList: async () => [
-          createTaskCardFixture({ id: "cached", title: "Cached task" }),
-          createTaskCardFixture({ id: "new", title: "New task" }),
-        ],
-        agentSessionsListForTasks: async () => {
-          throw new Error("Session records are locked.");
-        },
-        workspaceSessionListActive: async () => [],
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async () => [
+        createTaskCardFixture({ id: "cached", title: "Cached task" }),
+        createTaskCardFixture({ id: "new", title: "New task" }),
+      ],
+      agentSessionsListForTasks: async () => {
+        throw new Error("Session records are locked.");
       },
-    }),
-  );
-  const queryClient = createQueryClient();
+      workspaceSessionListActive: async () => [],
+    },
+  });
+  const { queryClient } = connection;
   queryClient.setQueryData(agentSessionQueryKeys.list("/alpha", "cached"), [
     record("native", "/alpha", "2026-09-30T06:00:00.000Z"),
   ]);
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <WorkspaceActivityContext.Provider value={createWorkspaceActivityObserverStub()}>
         {children}
       </WorkspaceActivityContext.Provider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const workspaces = [alpha];
 

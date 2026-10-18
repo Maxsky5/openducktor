@@ -2,10 +2,10 @@ import { createContext, useSyncExternalStore } from "react";
 import type {
   WorkspaceActivityObserver,
   WorkspaceSessionLiveSnapshot,
-} from "@/features/workspace-activity/workspace-activity-observer";
-import type { WorkspaceActivityState } from "@/features/workspace-activity/workspace-activity-state";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
+import type { WorkspaceActivityState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { useRequiredContext } from "@/state/app-state-contexts";
-import type { WorkspaceActivityProjection } from "@/features/workspace-activity/workspace-activity-projection";
+import type { WorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
 
 export const WorkspaceActivityContext = createContext<WorkspaceActivityObserver | null>(null);
 

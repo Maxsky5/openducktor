@@ -4,7 +4,7 @@
 
 Run `bun run typecheck` from the repository root. The root keeps `bun run --workspaces typecheck`, so local development, `.husky/pre-commit`, and the Linux, macOS, and Windows jobs in `.github/workflows/ci.yml` use the same workspace scripts. The MCP publish workflow also uses its workspace script. A checker failure fails the workspace runner and its caller.
 
-Each standalone workspace runs `bun check -p tsconfig.json`. MCP runs `bun check -p tsconfig.json && bun check -p tsconfig.scripts.json`. Keep the explicit project paths. The repository has no root `tsconfig.json`, and `bun check .` does not replace these checks.
+Each standalone workspace runs `bun check -p tsconfig.json`. MCP runs `bun check -p tsconfig.json && bun check -p tsconfig.scripts.json`. The frontend core runs `bun check` for its production, test, and Expo consumer configurations. Keep the explicit project paths. The repository has no root `tsconfig.json`, and `bun check .` does not replace these checks.
 
 The migration changes no TypeScript configuration. Each configuration keeps its file scope, compiler options, path aliases, ambient types, and test exclusions.
 
@@ -17,6 +17,7 @@ The migration changes no TypeScript configuration. Each configuration keeps its 
 | `packages/contracts` | `tsconfig.json` |
 | `packages/core` | `tsconfig.json` |
 | `packages/frontend` | `tsconfig.json` |
+| `packages/frontend-core` | `tsconfig.json`, `tsconfig.test.json`, `expo-compat/tsconfig.json` |
 | `packages/host` | `tsconfig.json` |
 | `packages/host-client` | `tsconfig.json` |
 | `packages/openducktor-mcp` | `tsconfig.json`, `tsconfig.scripts.json` |
@@ -26,7 +27,7 @@ The migration changes no TypeScript configuration. Each configuration keeps its 
 | `packages/runtime-orchestration` | `tsconfig.json` |
 | `tools/oxlint/anti-slop` | `tsconfig.json` |
 
-These are 16 configurations across 15 workspaces. The website adds its Astro check. `packages/host/tsconfig.build.json` remains a build configuration, separate from the host's standalone check.
+These are 19 configurations across 16 workspaces. The website adds its Astro check. `packages/host/tsconfig.build.json` remains a build configuration, separate from the host's standalone check.
 
 ## Compiler versions and limits
 

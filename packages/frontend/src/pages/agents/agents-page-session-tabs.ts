@@ -2,7 +2,7 @@ import type { AgentWorkflowState, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { firstLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type AgentSessionOptionSummary,
   buildRoleSessionSequenceByIdentity,
@@ -12,7 +12,7 @@ import {
 } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentWorkflowStepLiveSession, AgentWorkflowStepState } from "@/types/agent-workflow";
 
 export type SessionCreateOption = {

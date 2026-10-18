@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import type { TaskResetImplementationModalModel } from "./kanban-page-model-types";
 

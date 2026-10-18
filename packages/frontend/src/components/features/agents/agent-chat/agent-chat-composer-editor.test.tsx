@@ -13,7 +13,7 @@ import {
   createSlashCommandSegment,
   createSubagentReferenceSegment,
   createTextSegment,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
 import { useAgentChatLayout } from "./use-agent-chat-layout";
 

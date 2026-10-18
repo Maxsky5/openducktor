@@ -10,13 +10,13 @@ import type {
   AgentChatComposerDraft,
   AgentChatFileTriggerMatch,
   AgentChatSkillTriggerMatch,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   findTextSegment,
   readFileTriggerMatchForDraft,
   readSkillTriggerMatchForDraft,
   readSlashTriggerMatchForDraft,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   resolveTextSelectionTarget,
   type TextSelectionTarget,
@@ -236,6 +236,25 @@ export type UseAgentChatComposerEditorAutocompleteResult = {
   moveActiveSkillIndex: (direction: 1 | -1) => boolean;
 };
 
+const isSlashMenuAvailable = (context: AutocompleteAvailabilityContext): boolean =>
+  !context.disabled && context.supportsSlashCommands;
+
+const isReferenceMenuAvailable = (context: AutocompleteAvailabilityContext): boolean =>
+  !context.disabled && (context.supportsFileSearch || context.supportsSubagentReferences);
+
+const isSkillMenuAvailable = (context: AutocompleteAvailabilityContext): boolean =>
+  !context.disabled && context.supportsSkillReferences;
+
+// A menu opened under other availability settings is closed.
+const availableMenuState = <State extends { availabilityContext: AutocompleteAvailabilityContext }>(
+  state: State | null,
+  availabilityContext: AutocompleteAvailabilityContext,
+  isAvailable: (context: AutocompleteAvailabilityContext) => boolean,
+): State | null =>
+  isAvailable(availabilityContext) && state?.availabilityContext === availabilityContext
+    ? state
+    : null;
+
 export const useAgentChatComposerEditorAutocomplete = ({
   disabled,
   supportsSlashCommands,
@@ -279,24 +298,21 @@ export const useAgentChatComposerEditorAutocomplete = ({
     ],
   );
 
-  const effectiveSlashMenuState =
-    disabled ||
-    !supportsSlashCommands ||
-    slashMenuState?.availabilityContext !== availabilityContext
-      ? null
-      : slashMenuState;
-  const effectiveReferenceMenuState =
-    disabled ||
-    (!supportsFileSearch && !supportsSubagentReferences) ||
-    referenceMenuState?.availabilityContext !== availabilityContext
-      ? null
-      : referenceMenuState;
-  const effectiveSkillMenuState =
-    disabled ||
-    !supportsSkillReferences ||
-    skillMenuState?.availabilityContext !== availabilityContext
-      ? null
-      : skillMenuState;
+  const effectiveSlashMenuState = availableMenuState(
+    slashMenuState,
+    availabilityContext,
+    isSlashMenuAvailable,
+  );
+  const effectiveReferenceMenuState = availableMenuState(
+    referenceMenuState,
+    availabilityContext,
+    isReferenceMenuAvailable,
+  );
+  const effectiveSkillMenuState = availableMenuState(
+    skillMenuState,
+    availabilityContext,
+    isSkillMenuAvailable,
+  );
 
   const filteredSlashCommands = useMemo(() => {
     if (!effectiveSlashMenuState) {

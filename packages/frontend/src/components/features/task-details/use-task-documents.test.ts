@@ -1,16 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
-import { createElement } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { host } from "@/state/operations/host";
+import { createElement, type PropsWithChildren } from "react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   documentQueryKeys,
   taskDocumentQueryOptions,
   type TaskDocumentReader,
-} from "@/state/queries/documents";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import type { TaskDocumentPayload } from "@/types/task-documents";
+} from "@openducktor/frontend-core/queries/documents";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { TaskDocumentPayload } from "@openducktor/frontend-core/types/task-documents";
 import { TaskDetailsAsyncDocumentSection } from "./task-details-async-document-section";
 import { ensureTaskDocumentQueryData } from "./task-document-query-data";
 import { type TaskDocumentState, useTaskDocuments } from "./use-task-documents";
@@ -22,13 +23,17 @@ const document = (markdown: string, updatedAt = "2026-05-07T20:00:00.000Z") => (
   updatedAt,
 });
 
-const renderDocuments = () =>
+const renderDocuments = (connection: ClientConnection) =>
   renderHook(
     ({ taskId, repo }) => ({
       documents: useTaskDocuments(taskId, true, repo),
       queryClient: useQueryClient(),
     }),
-    { initialProps: { taskId: TASK_ID, repo: REPO }, wrapper: IsolatedQueryWrapper },
+    {
+      initialProps: { taskId: TASK_ID, repo: REPO },
+      wrapper: ({ children }: PropsWithChildren) =>
+        createElement(QueryProvider, { connection }, children),
+    },
   );
 type DocumentView = ReturnType<typeof renderDocuments>;
 
@@ -36,23 +41,15 @@ const withDocuments = async (
   read: TaskDocumentReader,
   run: (view: DocumentView) => Promise<void>,
 ) => {
-  const originalRead = host.taskDocumentGet;
-  // The hook has no reader override. Scope the host proxy override to this fixture.
-  host.taskDocumentGet = (repo, taskId, section) =>
-    repo.startsWith("/use-task-documents-test/")
-      ? read(repo, taskId, section)
-      : originalRead(repo, taskId, section);
+  // The hook has no reader override. The test host supplies the reads.
+  const connection = createTestClientConnection({ client: { taskDocumentGet: read } });
   let view: DocumentView | undefined;
   try {
-    view = renderDocuments();
+    view = renderDocuments(connection);
     await run(view);
   } finally {
-    try {
-      view?.unmount();
-      view?.result.current.queryClient.clear();
-    } finally {
-      host.taskDocumentGet = originalRead;
-    }
+    view?.unmount();
+    view?.result.current.queryClient.clear();
   }
 };
 
@@ -68,7 +65,7 @@ const cachedSpec = (view: DocumentView, repo = REPO, taskId = TASK_ID) =>
 
 describe("useTaskDocuments", () => {
   test("document query ensure revalidates stale cached documents on demand", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const queryKey = documentQueryKeys.plan(REPO, TASK_ID);
     const cached = document("# Cached plan");
     const fresh = document("# Fresh plan", "2026-05-07T20:05:00.000Z");

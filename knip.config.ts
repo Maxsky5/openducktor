@@ -9,6 +9,12 @@ export default {
       project: ["src/**/*.{ts,astro}", "config/**/*.ts", "scripts/**/*.ts"],
     },
     "apps/electron": electronKnipConfig,
+    "packages/frontend-core": {
+      entry: ["src/**/*.{ts,tsx}", "expo-compat/*.ts"],
+      project: ["src/**/*.{ts,tsx}", "expo-compat/*.ts"],
+      // Knip does not read the configurations that `bun check -p` receives.
+      typescript: { config: ["tsconfig.json", "tsconfig.test.json", "expo-compat/tsconfig.json"] },
+    },
     "packages/frontend": frontendKnipConfig,
     "packages/host": {
       drizzle: { config: ["drizzle.task-store.config.ts"] },

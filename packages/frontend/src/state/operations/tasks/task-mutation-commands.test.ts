@@ -2,8 +2,8 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { taskQueryKeys } from "@/state/queries/tasks";
-import { issueItemsQueryKeys } from "@/state/queries/issue-items";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { issueItemsQueryKeys } from "@openducktor/frontend-core/queries/issue-items";
 import type { TaskChatDraftCleanup } from "./task-chat-draft-cleanup";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {

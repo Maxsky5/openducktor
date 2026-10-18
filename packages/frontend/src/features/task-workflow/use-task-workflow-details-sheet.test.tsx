@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
 import { MemoryRouter, useNavigate, useSearchParams } from "react-router";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { useTaskWorkflowDetailsSheet } from "./use-task-workflow-details-sheet";
 
 enableReactActEnvironment();

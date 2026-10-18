@@ -10,7 +10,7 @@ import {
   HostInvokeError,
   HostTerminalClientError,
 } from "@openducktor/host-client";
-import { createTaskStreamController } from "../../../../packages/frontend/src/state/tasks/task-stream-controller";
+import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import type { OpenDucktorElectronApi } from "../shared/electron-bridge-contract";
 import {
@@ -271,7 +271,7 @@ describe("electron shell bridge", () => {
       dispatch();
       await flushTaskStream();
       expect(listener).toHaveBeenCalledWith(payload);
-      expect(report).toHaveBeenCalledWith("Shell event listener failed", failure);
+      expect(report).toHaveBeenCalledWith("Host event listener failed", failure);
       stop();
     } finally {
       report.mockRestore();
@@ -567,6 +567,15 @@ describe("electron shell bridge", () => {
       },
     });
   });
+});
+
+test("the remote theme client keeps every other host command", async () => {
+  const host = createHostClient(async (command, _args, schema) =>
+    schema.parse(command === "runtime_definitions_list" ? [] : undefined),
+  );
+  const client = withElectronNativeTheme(host, async () => {});
+
+  expect(await client.runtimeDefinitionsList()).toEqual([]);
 });
 
 test.each(["read", "write"])(

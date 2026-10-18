@@ -1,5 +1,8 @@
 import type { TaskStoreCheck } from "@openducktor/contracts";
-import { buildRepoStoreUnavailableDescription, isRepoStoreReady } from "@/lib/repo-store-health";
+import {
+  buildRepoStoreUnavailableDescription,
+  isRepoStoreReady,
+} from "@openducktor/frontend-core/lib/repo-store-health";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 /** The last task store check, and the message of a failed check read. */

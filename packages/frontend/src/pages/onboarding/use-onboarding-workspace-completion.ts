@@ -2,8 +2,8 @@ import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { platformQueryOptions } from "@/state/queries/system";
-import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { platformQueryOptions } from "@openducktor/frontend-core/queries/system";
+import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 
 export const useOnboardingWorkspaceCompletion = ({
   settingsSnapshot,

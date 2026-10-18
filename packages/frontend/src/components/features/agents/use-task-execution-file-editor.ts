@@ -8,11 +8,11 @@ import { HostInvokeError } from "@openducktor/host-client";
 import type { CodeViewItem, FileContents } from "@pierre/diffs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   workspaceTextFileQueryOptions,
   workspaceTextFileWriteMutationOptions,
-} from "@/state/queries/filesystem";
+} from "@openducktor/frontend-core/queries/filesystem";
 import {
   type TaskExecutionSelectedFile,
   taskExecutionSelectedFileKey,
@@ -444,7 +444,6 @@ export const useTaskExecutionFileEditor = ({
         ...workspaceTextFileQueryOptions(
           session.baseline.rootPath,
           session.baseline.relativePath,
-          undefined,
           selectedFile?.access,
         ),
         staleTime: 0,

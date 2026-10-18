@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   createAgentSessionSummaryFixture,

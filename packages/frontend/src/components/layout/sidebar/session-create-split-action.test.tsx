@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type RepositoryGitProviderContext,
@@ -10,14 +10,13 @@ import * as settingsModal from "@/components/features/settings/settings-modal";
 import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   ActiveWorkspaceContext,
   ChecksStateContext,
   TaskControlContext,
 } from "@/state/app-state-contexts";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import {
   createChecksStateFixture,
   createGitProviderContextFixture,
@@ -61,24 +60,22 @@ const renderSplitAction = ({
   refreshTaskData?: (repoPath: string) => Promise<void>;
   taskStoreCheck?: ChecksStateContextValue["taskStoreCheck"];
 }) => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceGetGitProviderContext: async () => provider,
-        workspaceGetRepoConfig: async () =>
-          repoConfigSchema.parse({
-            workspaceId: workspace.workspaceId,
-            workspaceName: workspace.workspaceName,
-            repoPath: workspace.repoPath,
-          }),
-        workspaceSessionListArchived: listArchived,
-        ...client,
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: {
+      workspaceGetGitProviderContext: async () => provider,
+      workspaceGetRepoConfig: async () =>
+        repoConfigSchema.parse({
+          workspaceId: workspace.workspaceId,
+          workspaceName: workspace.workspaceName,
+          repoPath: workspace.repoPath,
+        }),
+      workspaceSessionListArchived: listArchived,
+      ...client,
+    },
+  });
   return render(
     <MemoryRouter>
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <ActiveWorkspaceContext.Provider
           value={{ activeWorkspace: active, setActiveWorkspace: () => {} }}
         >
@@ -108,10 +105,6 @@ const renderSplitAction = ({
     </MemoryRouter>,
   );
 };
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 describe("SessionCreateSplitAction", () => {
   test("uses one compact button and creates a task only from its menu option", async () => {

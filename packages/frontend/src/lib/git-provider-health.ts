@@ -1,5 +1,5 @@
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 export const gitProviderReadError = (error: Error | null): string | null =>
   error ? `Could not load the current Git provider: ${errorMessage(error)}` : null;

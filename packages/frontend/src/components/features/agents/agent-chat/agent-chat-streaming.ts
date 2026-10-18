@@ -1,4 +1,4 @@
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export const isAssistantMessageStreaming = (message: AgentChatMessage): boolean =>
   message.role === "assistant" &&

@@ -7,9 +7,10 @@ import {
   loadPlanDocumentFromQuery,
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
-} from "../../queries/documents";
-import { host } from "../shared/host";
+} from "@openducktor/frontend-core/queries/documents";
 import { requireActiveRepo } from "./task-operations-model";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { HostClient } from "@openducktor/host-client";
 
 type UseSpecOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -28,7 +29,7 @@ type UseSpecOperationsResult = {
 type SpecDocument = { markdown: string; updatedAt: string | null };
 
 export type SpecOperationsHost = Pick<
-  typeof host,
+  HostClient,
   "setSpec" | "saveSpecDocument" | "savePlanDocument"
 >;
 
@@ -97,6 +98,7 @@ export function useSpecOperations({
   activeWorkspace,
 }: UseSpecOperationsArgs): UseSpecOperationsResult {
   const queryClient = useQueryClient();
+  const host = useHostClient();
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
 
   return useMemo(
@@ -112,6 +114,6 @@ export function useSpecOperations({
         loadQaReportDocument: (repoPath, taskId) =>
           loadQaReportDocumentFromQuery(queryClient, repoPath, taskId),
       }),
-    [activeRepoPath, queryClient],
+    [activeRepoPath, host, queryClient],
   );
 }

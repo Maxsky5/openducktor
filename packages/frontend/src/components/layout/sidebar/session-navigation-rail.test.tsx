@@ -1,4 +1,4 @@
-import { SessionNavigationTestProvider } from "./session-navigation-test-provider";
+import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";

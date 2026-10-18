@@ -1,8 +1,8 @@
-import type { WorkspaceSessionLiveSnapshot } from "@/features/workspace-activity/workspace-activity-observer";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+import type { WorkspaceSessionLiveSnapshot } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
+import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 
 /** Read marks use the same identity for a saved task or workspace conversation. */
 export const sessionReadStateKey = (workspaceId: string, identity: AgentSessionIdentity): string =>

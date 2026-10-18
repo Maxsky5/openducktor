@@ -1,10 +1,10 @@
 import { createSessionStartWorkflowRunner as createHostRunner } from "@/features/session-start/session-start-orchestration";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
@@ -18,19 +18,21 @@ import {
   createComposerAttachment,
   createSlashCommandSegment,
   createTextSegment,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { clearAppQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
-import { HostInvokeError } from "@openducktor/host-client";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { type HostClient, HostInvokeError } from "@openducktor/host-client";
+import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
   createRuntimeCatalogFixture,
@@ -41,7 +43,7 @@ import type {
   AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
@@ -224,7 +226,19 @@ const createTestRuntimeDefinitionsContextValue = () =>
     }),
   });
 
+const createSessionActionsHostClient = (): Partial<HostClient> => ({
+  workspaceGetRepoConfig: async () =>
+    repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      promptOverrides: {},
+    }),
+  workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+});
+
 const createHookWrapper = () => {
+  const connection = createTestClientConnection({ client: createSessionActionsHostClient() });
   const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -236,7 +250,7 @@ const createHookWrapper = () => {
       },
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(
           ChecksStateContext.Provider,
           { value: checksStateContextValue },
@@ -335,26 +349,6 @@ const createBaseArgs = (): HookArgs => {
 };
 
 describe("useAgentStudioSessionActions", () => {
-  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-
-  beforeEach(async () => {
-    await clearAppQueryClient();
-    host.workspaceGetRepoConfig = async () =>
-      repoConfigSchema.parse({
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        promptOverrides: {},
-      });
-    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
-  });
-
-  afterEach(() => {
-    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-  });
-
   test("shows the host reason and next action when the runtime refuses a continuation", async () => {
     const failure = new HostInvokeError("Continuation refused", {
       kind: "agent_session_resume",

@@ -1,12 +1,12 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 enableReactActEnvironment();

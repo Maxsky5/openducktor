@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
-import { recordRecentItem } from "@/features/command-palette/recent-items";
+import { useRecentItems } from "@/features/command-palette/recent-items";
 import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
-import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
 
@@ -66,10 +66,11 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   const open = task !== null;
   const shownTaskId = task?.id ?? null;
   const workspaceId = sheetProps.activeWorkspace?.workspaceId ?? null;
+  const recordRecentItem = useRecentItems((state) => state.record);
   useEffect(() => {
     if (shownTaskId && workspaceId)
       recordRecentItem({ kind: "task", workspaceId, taskId: shownTaskId });
-  }, [shownTaskId, workspaceId]);
+  }, [recordRecentItem, shownTaskId, workspaceId]);
 
   useImperativeHandle(
     ref,

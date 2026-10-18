@@ -1,6 +1,6 @@
 import type { AgentFileSearchResult, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import { repoRuntimeFileSearchQueryOptions } from "@/state/queries/runtime-catalog";
+import { repoRuntimeFileSearchQueryOptions } from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 export const createChatComposerFileSearch = ({

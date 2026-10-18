@@ -8,19 +8,17 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act, type ComponentProps } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { gitQueryKeys } from "@/state/queries/git";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import {
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
@@ -115,40 +113,38 @@ function renderCreation(
     loadRepoRuntimeCatalog: async () => createRuntimeCatalogFixture({ models: catalog }),
     loadRepoRuntimeFileSearch: async () => [],
   };
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceGetSettingsSnapshot: async () => snapshot,
-        workspaceGetRepoConfig: async () =>
-          repoConfigSchema.parse({
-            workspaceId: "a",
-            workspaceName: "A",
-            repoPath: "/repo",
-            branchPrefix: "odt",
-          }),
-        gitGetBranches: async () => [
-          { name: "main", isRemote: false, isCurrent: true, worktreePath: "/repo" },
-          {
-            name: "feature/occupied",
-            isRemote: false,
-            isCurrent: false,
-            worktreePath: "/other checkout",
-          },
-          { name: "feature/existing", isRemote: false, isCurrent: false },
-          { name: "origin/remote-only", isRemote: true, isCurrent: false },
-        ],
-        customAgentRoleList: async () => [
-          { id: "alpha", name: "Alpha", systemPrompt: "Alpha prompt" },
-          { id: "zeta", name: "Zeta", systemPrompt: "Zeta prompt" },
-        ],
-        workspaceSessionCreate: create,
-        ...clientOverrides,
-      },
-    }),
-  );
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection({
+    client: {
+      workspaceGetSettingsSnapshot: async () => snapshot,
+      workspaceGetRepoConfig: async () =>
+        repoConfigSchema.parse({
+          workspaceId: "a",
+          workspaceName: "A",
+          repoPath: "/repo",
+          branchPrefix: "odt",
+        }),
+      gitGetBranches: async () => [
+        { name: "main", isRemote: false, isCurrent: true, worktreePath: "/repo" },
+        {
+          name: "feature/occupied",
+          isRemote: false,
+          isCurrent: false,
+          worktreePath: "/other checkout",
+        },
+        { name: "feature/existing", isRemote: false, isCurrent: false },
+        { name: "origin/remote-only", isRemote: true, isCurrent: false },
+      ],
+      customAgentRoleList: async () => [
+        { id: "alpha", name: "Alpha", systemPrompt: "Alpha prompt" },
+        { id: "zeta", name: "Zeta", systemPrompt: "Zeta prompt" },
+      ],
+      workspaceSessionCreate: create,
+      ...clientOverrides,
+    },
+  });
+  const queryClient = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <QueryProvider connection={connection}>
       <WorkspaceStateContext value={workspaceState}>
         <ChecksStateContext
           value={{
@@ -171,7 +167,7 @@ function renderCreation(
           </RuntimeDefinitionsContext>
         </ChecksStateContext>
       </WorkspaceStateContext>
-    </QueryClientProvider>,
+    </QueryProvider>,
   );
   return { ...view, queryClient };
 }
@@ -210,7 +206,6 @@ test("matches the task modal width and footer surface, separates actions and dis
     expect(cancel.parentElement?.classList.contains("bg-popover")).toBe(true);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -225,7 +220,6 @@ test("omits checkout help text for both work locations", () => {
     expect(view.getByLabelText("Worktree name")).not.toBeNull();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -259,7 +253,6 @@ test("uses the task modal label-to-control gap for every form field", async () =
     );
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -303,7 +296,6 @@ test("an ordinary creation failure retains inputs, re-enables the form and does 
     expect(closed).toBe(0);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -368,7 +360,6 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     expect(closed).toBe(0);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -406,7 +397,6 @@ test("shows the repository Default Model read failure, keeps creation usable and
     expect(readAttempts).toBe(2);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -459,7 +449,6 @@ test("creates a worktree chat with one request and no confirmation step", async 
     expect(view.queryByRole("button", { name: "Create without uncommitted changes" })).toBeNull();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
   // This flow renders the create dialog and waits for host reads.
 }, 2_500);
@@ -495,7 +484,6 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
     });
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
   // This flow renders the create dialog and waits for host reads.
 }, 2_500);
@@ -547,7 +535,6 @@ test("Existing branch accepts slash-separated worktree names and submits a safe 
     });
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
   // This flow renders the create dialog and waits for host reads.
 }, 2_500);
@@ -591,7 +578,6 @@ test("blocks submission when refreshed data shows the selected branch is now che
     expect(requests).toEqual([]);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -629,7 +615,6 @@ test.each(["worktree.name", "worktree.branchName"] as const)(
       expect(requests).toHaveLength(1);
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -651,6 +636,5 @@ test("returning to Current checkout omits all worktree options", async () => {
     expect(requests[0]?.worktree).toBeUndefined();
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });

@@ -1,16 +1,19 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { QueryProvider } from "@/test-utils/query-provider";
 import type { ReactNode } from "react";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { DEFAULT_CHAT_SETTINGS, type AgentMessageSubmitMode } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
-import { isApplePlatform } from "@/lib/steer-shortcut";
+import { isApplePlatform } from "@/lib/device-platform";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
-import { type AgentChatComposerDraft, draftToSerializedText } from "./agent-chat-composer-draft";
+import {
+  type AgentChatComposerDraft,
+  draftToSerializedText,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { buildModel, typeIntoComposer } from "./agent-chat-composer-test-helpers";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
+const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
 
 const getEditorRoot = (container: HTMLElement): HTMLElement => {
   const editorRoot = container.querySelector('[contenteditable="true"]');

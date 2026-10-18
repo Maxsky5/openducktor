@@ -1,33 +1,36 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createAgentSessionCollection } from "@/state/agent-session-collection";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
 import {
   type AgentSessionSummary,
   createAgentSessionsStore,
   toAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
-} from "@/state/app-state-contexts";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   type AgentSessionFixtureOverrides,
   createHostRuntimeStatusFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
-} from "@/types/agent-session-read-model";
-import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
+} from "@openducktor/frontend-core/types/agent-session-read-model";
+import type { AgentSessionTransientFault } from "@openducktor/frontend-core/types/agent-session-transient-fault";
 import type {
   AgentOperationsContextValue,
   AgentSessionHistoryLoadContextValue,
@@ -49,7 +52,7 @@ import {
   toAgentStudioTaskSelection,
 } from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
 interface SessionReadModelLoadStateRefContract {
   current: AgentSessionReadModelLoadState;

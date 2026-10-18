@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { SpeedSelect, type SpeedControlModel } from "./speed-select";
 
 enableReactActEnvironment();

@@ -17,10 +17,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/host";
-import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { updateWorkspaceSessionQueries } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useMountedRef } from "./use-mounted-ref";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type Props = {
   open: boolean;
@@ -37,6 +37,7 @@ export function WorkspaceSessionRenameDialog({
   onClose,
   onCloseAutoFocus,
 }: Props): ReactElement {
+  const host = useHostClient();
   const queryClient = useQueryClient();
   const mounted = useMountedRef();
   const initialTitle = record.manualTitle ?? record.generatedTitle ?? "";

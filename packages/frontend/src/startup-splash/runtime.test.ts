@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { ScheduleTask } from "@/lib/scheduling";
+import type { ScheduleTask } from "@openducktor/frontend-core/lib/scheduling";
 import { dismissOpenDucktorStartupSplash, showOpenDucktorStartupFailure } from "./runtime";
 
 if (globalThis.document === undefined) {

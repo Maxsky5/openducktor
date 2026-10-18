@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
+import {
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,

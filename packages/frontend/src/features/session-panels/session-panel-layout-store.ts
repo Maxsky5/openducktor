@@ -1,7 +1,9 @@
-import { getHostStorage } from "@/lib/host-storage";
 import { toast } from "sonner";
 import { z } from "zod";
-import { errorMessage } from "@/lib/errors";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import { perConnection } from "@/lib/per-connection";
 import { isToolTabKind, TOOL_TAB_KINDS, type ToolTabKind } from "./panel-tab-kinds";
 import {
   emptySessionPanelLayout,
@@ -11,6 +13,131 @@ import {
   type SessionPanelOwner,
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
+
+/** The panel layouts of one client connection. */
+export type SessionPanelLayoutStore = {
+  subscribe: (listener: () => void) => () => void;
+  /**
+   * The layouts in memory by owner key. A new map replaces it on each change. An owner that was only
+   * read since the last change shows after the next change.
+   */
+  snapshot: () => ReadonlyMap<string, SessionPanelLayout>;
+  /** Reads the layout of an owner. The first read restores the saved layout. */
+  read: (owner: SessionPanelOwner) => SessionPanelLayout;
+  /** Returns the restore failure of an owner one time, so the app reports it once. */
+  takeReadError: (owner: SessionPanelOwner) => string | null;
+  /**
+   * Applies `change` to the layout of an owner and saves the tool tabs when they change. A save
+   * failure shows one toast for each owner. The layout stays in memory.
+   */
+  update: (
+    owner: SessionPanelOwner,
+    change: (layout: SessionPanelLayout) => SessionPanelLayout,
+  ) => void;
+  /** Removes the saved and in-memory layouts of tasks, chats, and workspaces that no longer exist. */
+  prune: (input: SessionPanelLayoutPruneInput) => void;
+};
+
+/** The panel layouts of the selected host. */
+export const useSessionPanelLayoutStore = (): SessionPanelLayoutStore =>
+  storeOf(useClientConnection());
+
+const storeOf = perConnection((connection) => createSessionPanelLayoutStore(connection.storage));
+
+/**
+ * Keeps the layouts of all owners in memory. It saves the tool tabs in `storage`, one record for
+ * each owner.
+ */
+export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPanelLayoutStore => {
+  const entries = new Map<string, StoreEntry>();
+  const listeners = new Set<() => void>();
+  let snapshot: ReadonlyMap<string, SessionPanelLayout> = new Map();
+  let pruneErrorShown = false;
+
+  const notify = (): void => {
+    snapshot = new Map([...entries].map(([ownerKey, entry]) => [ownerKey, entry.layout]));
+    for (const listener of listeners) listener();
+  };
+
+  const entryFor = (owner: SessionPanelOwner): StoreEntry => {
+    const key = sessionPanelOwnerKey(owner);
+    let entry = entries.get(key);
+    if (!entry) {
+      entry = readEntry(storage, owner);
+      entries.set(key, entry);
+    }
+    return entry;
+  };
+
+  const removeStaleRecords = (input: SessionPanelLayoutPruneInput): void => {
+    try {
+      const staleKeys: string[] = [];
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        const owner = key === null ? null : parseStorageKey(key);
+        if (key !== null && owner !== null && isStaleOwner(owner, input)) staleKeys.push(key);
+      }
+      for (const key of staleKeys) storage.removeItem(key);
+    } catch (error) {
+      console.error("[session-panels] Failed to remove old panel layouts.", { error });
+      if (pruneErrorShown) return;
+      pruneErrorShown = true;
+      toast.error("Could not remove old panel layouts", {
+        description: `${errorMessage(error)} Saved layouts of removed tasks and chats stay on this computer.`,
+      });
+    }
+  };
+
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    snapshot: () => snapshot,
+    read: (owner) => entryFor(owner).layout,
+    takeReadError: (owner) => {
+      const entry = entryFor(owner);
+      const error = entry.readError;
+      entry.readError = null;
+      return error;
+    },
+    update: (owner, change) => {
+      const entry = entryFor(owner);
+      const layout = change(entry.layout);
+      if (layout === entry.layout) return;
+      entry.layout = layout;
+      const record = JSON.stringify(toPersistedLayout(layout));
+      if (record !== entry.savedRecord) {
+        try {
+          storage.setItem(sessionPanelLayoutStorageKey(owner), record);
+          entry.savedRecord = record;
+        } catch (error) {
+          console.error("[session-panels] Failed to save the panel layout.", { owner, error });
+          if (!entry.writeErrorShown) {
+            entry.writeErrorShown = true;
+            toast.error("Could not save the panel layout", {
+              description: `${errorMessage(error)} The layout works until the app restarts.`,
+            });
+          }
+        }
+      }
+      notify();
+    },
+    prune: (input) => {
+      removeStaleRecords(input);
+      let removed = false;
+      for (const [ownerKey, entry] of entries) {
+        if (isStaleOwner(storedOwner(entry.owner), input)) {
+          entries.delete(ownerKey);
+          removed = true;
+        }
+      }
+      if (removed) notify();
+    },
+  };
+};
 
 const STORAGE_PREFIX = "openducktor:session-panel-layout:v1:";
 
@@ -64,13 +191,24 @@ type StoreEntry = {
   writeErrorShown: boolean;
 };
 
-const entries = new Map<string, StoreEntry>();
-const listeners = new Set<() => void>();
-let layoutsSnapshot: ReadonlyMap<string, SessionPanelLayout> = new Map();
-
-const notify = (): void => {
-  layoutsSnapshot = new Map([...entries].map(([ownerKey, entry]) => [ownerKey, entry.layout]));
-  for (const listener of listeners) listener();
+/** Restores the saved layout of an owner. A failed read starts an empty layout and keeps the error. */
+const readEntry = (storage: ClientStorage, owner: SessionPanelOwner): StoreEntry => {
+  const empty: StoreEntry = {
+    owner,
+    layout: emptySessionPanelLayout(),
+    savedRecord: null,
+    readError: null,
+    writeErrorShown: false,
+  };
+  try {
+    const saved = storage.getItem(sessionPanelLayoutStorageKey(owner));
+    if (saved === null) return empty;
+    const record = persistedLayoutSchema.parse(JSON.parse(saved));
+    return { ...empty, layout: fromPersistedLayout(record), savedRecord: saved };
+  } catch (error) {
+    console.error("[session-panels] Failed to read the saved panel layout.", { owner, error });
+    return { ...empty, readError: errorMessage(error) };
+  }
 };
 
 export const sessionPanelLayoutStorageKey = (owner: SessionPanelOwner): string => {
@@ -98,100 +236,6 @@ const storedOwner = (owner: SessionPanelOwner): StoredOwner => ({
   ownerId: owner.kind === "task" ? owner.taskId : owner.sessionId,
 });
 
-const readEntry = (owner: SessionPanelOwner): StoreEntry => {
-  try {
-    const saved = getHostStorage().getItem(sessionPanelLayoutStorageKey(owner));
-    if (saved === null) {
-      return {
-        owner,
-        layout: emptySessionPanelLayout(),
-        savedRecord: null,
-        readError: null,
-        writeErrorShown: false,
-      };
-    }
-    const record = persistedLayoutSchema.parse(JSON.parse(saved));
-    return {
-      owner,
-      layout: fromPersistedLayout(record),
-      savedRecord: saved,
-      readError: null,
-      writeErrorShown: false,
-    };
-  } catch (error) {
-    console.error("[session-panels] Failed to read the saved panel layout.", { owner, error });
-    return {
-      owner,
-      layout: emptySessionPanelLayout(),
-      savedRecord: null,
-      readError: errorMessage(error),
-      writeErrorShown: false,
-    };
-  }
-};
-
-const entryFor = (owner: SessionPanelOwner): StoreEntry => {
-  const key = sessionPanelOwnerKey(owner);
-  let entry = entries.get(key);
-  if (!entry) {
-    entry = readEntry(owner);
-    entries.set(key, entry);
-  }
-  return entry;
-};
-
-export const subscribeSessionPanelLayouts = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
-
-/**
- * The layouts in memory by owner key. A new map replaces it on each change. An owner that was only
- * read since the last change shows after the next change.
- */
-export const sessionPanelLayoutsSnapshot = (): ReadonlyMap<string, SessionPanelLayout> =>
-  layoutsSnapshot;
-
-/** Reads the layout of an owner. The first read restores the saved layout. */
-export const readSessionPanelLayout = (owner: SessionPanelOwner): SessionPanelLayout =>
-  entryFor(owner).layout;
-
-/** Returns the restore failure of an owner one time, so the app reports it once. */
-export const takeSessionPanelLayoutReadError = (owner: SessionPanelOwner): string | null => {
-  const entry = entryFor(owner);
-  const error = entry.readError;
-  entry.readError = null;
-  return error;
-};
-
-export const updateSessionPanelLayout = (
-  owner: SessionPanelOwner,
-  update: (layout: SessionPanelLayout) => SessionPanelLayout,
-): void => {
-  const entry = entryFor(owner);
-  const layout = update(entry.layout);
-  if (layout === entry.layout) return;
-  entry.layout = layout;
-  const record = JSON.stringify(toPersistedLayout(layout));
-  if (record !== entry.savedRecord) {
-    try {
-      getHostStorage().setItem(sessionPanelLayoutStorageKey(owner), record);
-      entry.savedRecord = record;
-    } catch (error) {
-      console.error("[session-panels] Failed to save the panel layout.", { owner, error });
-      if (!entry.writeErrorShown) {
-        entry.writeErrorShown = true;
-        toast.error("Could not save the panel layout", {
-          description: `${errorMessage(error)} The layout works until the app restarts.`,
-        });
-      }
-    }
-  }
-  notify();
-};
-
 /** One current list of owners. Each list removes the layouts of the owners that it no longer has. */
 export type SessionPanelLayoutPruneInput =
   | { kind: "workspaces"; ids: ReadonlySet<string> }
@@ -203,40 +247,4 @@ const isStaleOwner = (owner: StoredOwner, input: SessionPanelLayoutPruneInput): 
   if (owner.workspaceId !== input.workspaceId) return false;
   if (input.kind === "tasks") return owner.kind === "task" && !input.ids.has(owner.ownerId);
   return owner.kind === "chat" && !input.ids.has(owner.ownerId);
-};
-
-let pruneErrorShown = false;
-
-const removeStaleRecords = (input: SessionPanelLayoutPruneInput): void => {
-  try {
-    const storage = getHostStorage();
-    const staleKeys: string[] = [];
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index);
-      const owner = key === null ? null : parseStorageKey(key);
-      if (key !== null && owner !== null && isStaleOwner(owner, input)) staleKeys.push(key);
-    }
-    for (const key of staleKeys) storage.removeItem(key);
-  } catch (error) {
-    console.error("[session-panels] Failed to remove old panel layouts.", { error });
-    if (pruneErrorShown) return;
-    pruneErrorShown = true;
-    toast.error("Could not remove old panel layouts", {
-      description: `${errorMessage(error)} Saved layouts of removed tasks and chats stay on this computer.`,
-    });
-  }
-};
-
-/** Removes the saved and in-memory layouts of tasks, chats, and workspaces that no longer exist. */
-export const pruneSessionPanelLayouts = (input: SessionPanelLayoutPruneInput): void => {
-  removeStaleRecords(input);
-
-  let removedMemory = false;
-  for (const [ownerKey, entry] of entries) {
-    if (isStaleOwner(storedOwner(entry.owner), input)) {
-      entries.delete(ownerKey);
-      removedMemory = true;
-    }
-  }
-  if (removedMemory) notify();
 };

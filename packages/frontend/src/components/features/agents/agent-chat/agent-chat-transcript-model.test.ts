@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getSessionMessages } from "@/state/operations/agent-orchestrator/support/messages";
+import { getSessionMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import {
   buildAgentChatTranscriptModel,

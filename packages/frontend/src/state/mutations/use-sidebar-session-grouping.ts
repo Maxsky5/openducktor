@@ -6,19 +6,15 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/host";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { SIDEBAR_SESSION_GROUPING_MUTATION_KEY } from "./sidebar-session-grouping";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
-type SessionGroupingHost = Pick<
-  typeof host,
-  "workspaceGetSettingsSnapshot" | "workspaceUpdateSidebarSessionGrouping"
->;
-
-export function useSidebarSessionGrouping(hostClient: SessionGroupingHost = host) {
+export function useSidebarSessionGrouping() {
   const queryClient = useQueryClient();
-  const options = settingsSnapshotQueryOptions(hostClient);
+  const hostClient = useHostClient();
+  const options = settingsSnapshotQueryOptions();
   const settings = useQuery(options);
   const mutation = useMutation<SettingsSnapshot, Error, SidebarSessionGrouping>({
     mutationKey: SIDEBAR_SESSION_GROUPING_MUTATION_KEY,

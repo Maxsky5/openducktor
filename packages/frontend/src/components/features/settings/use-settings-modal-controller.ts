@@ -16,18 +16,18 @@ import type {
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useIsMutating, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { autopilotSettingsQueryOptions } from "@/state/queries/autopilot";
-import { errorMessage } from "@/lib/errors";
+import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { RuntimeImpactReviewState } from "@/components/features/runtimes/runtime-impact-review";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
-import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
+import { getAvailableRuntimeDefinitions } from "@openducktor/frontend-core/lib/agent-runtime";
 import {
   useRequiredContext,
   useRuntimeAvailabilityContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import { invalidEnabledRuntime } from "@/state/operations/runtime-executables/runtime-executable-validation";
-import type { RuntimeExecutableValidationState } from "@/state/queries/use-runtime-executable-validation";
+import type { RuntimeExecutableValidationState } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "@/state/mutations/agent-model-favorites";
 import { KANBAN_TASK_CARD_VIEW_MUTATION_KEY } from "@/state/mutations/kanban-task-card-view";
 import { SIDEBAR_SESSION_GROUPING_MUTATION_KEY } from "@/state/mutations/sidebar-session-grouping";
@@ -36,7 +36,7 @@ import {
   validateCustomAgentRoleDrafts,
   type CustomAgentRoleValidationState,
 } from "@/state/read-models/custom-agent-role-settings";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy";
 import { validateAzureDevOpsDraft } from "./settings-modal-save-policy";
 import type { PromptRoleTabId, SettingsSectionId } from "./settings-modal-constants";

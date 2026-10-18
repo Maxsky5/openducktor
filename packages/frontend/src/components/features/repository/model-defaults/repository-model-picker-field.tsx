@@ -10,7 +10,7 @@ import {
   selectableModelPickerCatalog,
 } from "@/components/features/agents/model-picker";
 import { Label } from "@/components/ui/label";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 
 type RepositoryModelPickerFieldProps = {
   runtimeDefinitions: RuntimeDescriptor[];

@@ -1,7 +1,10 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useCallback, useMemo, useState } from "react";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
   AgentChatInterruptedTurnResumeModel,

@@ -1,13 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { host } from "@/state/operations/host";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
-
-type AgentStudioWorkspaceStateHost = Pick<typeof host, "workspaceGetRepoConfig">;
 
 const INACTIVE_AGENT_STUDIO_WORKSPACE_ID = "__inactive_agent_studio_workspace__";
 
@@ -18,7 +15,6 @@ export function useAgentStudioWorkspaceStateLoad({
   tasksAreCurrent,
   sessions,
   sessionReadModelLoadState,
-  hostClient = host,
 }: {
   activeWorkspaceId: string | null;
   tasks: TaskCard[];
@@ -26,11 +22,9 @@ export function useAgentStudioWorkspaceStateLoad({
   tasksAreCurrent: boolean;
   sessions: AgentSessionSummary[];
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
-  hostClient?: AgentStudioWorkspaceStateHost;
 }) {
   const queryOptions = repoConfigQueryOptions(
     activeWorkspaceId ?? INACTIVE_AGENT_STUDIO_WORKSPACE_ID,
-    hostClient,
   );
   const repoConfigQuery = useQuery({
     ...queryOptions,

@@ -1,3 +1,4 @@
+import "@openducktor/frontend-core/queries/query-meta";
 import { queryOptions, skipToken } from "@tanstack/react-query";
 import type { ResourceRead } from "@/types/resource-source";
 
@@ -12,4 +13,6 @@ export const resourceSourceQueryOptions = (
     staleTime: Infinity,
     gcTime: 0,
     retry: false,
+    // A resource view reports its own failure and retries when the user asks.
+    meta: { skipHostRecovery: true },
   });

@@ -1,35 +1,40 @@
 import { expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import type { TaskWorktreeSummary, WorkflowLaunchResult } from "@openducktor/contracts";
-import {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-} from "@/lib/shell-bridge";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import type { HostClient } from "@openducktor/host-client";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   AgentOperationsContext,
   AgentSessionsContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   NotificationContext,
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
-import { terminalQueryKeys } from "@/state/queries/terminals";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
+import { terminalQueryKeys } from "@openducktor/frontend-core/queries/terminals";
 import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useSessionStartWorkflowRunner } from "./use-session-start-workflow-runner";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
+
+const createConnection = (client: Partial<HostClient>): ClientConnection =>
+  createTestClientConnection({
+    client,
+    queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  });
 
 const createWrapper = (
-  queryClient: QueryClient,
+  connection: ClientConnection,
   operations: AgentOperationsContextValue = createAgentOperationsFixture(),
 ) => {
   const workspace = createWorkspaceStateFixture({
@@ -62,7 +67,7 @@ const createWrapper = (
   };
   const store = createAgentSessionsStore("/repo");
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <WorkspaceStateContext value={workspace}>
         <AgentSessionsContext value={store}>
           <AgentOperationsContext value={operations}>
@@ -70,7 +75,7 @@ const createWrapper = (
           </AgentOperationsContext>
         </AgentSessionsContext>
       </WorkspaceStateContext>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   return wrapper;
 };
@@ -78,12 +83,8 @@ const createWrapper = (
 test.each(["completed", "failed", "disconnected"] as const)(
   "manual launch refreshes the requested worktree and task terminals: %s",
   async (result) => {
-    const originalBridge = getShellBridge();
-    const bridge = createUnavailableShellBridge();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     let worktree: TaskWorktreeSummary | null = null;
-    bridge.client.taskWorktreeGet = mock(async () => worktree);
-    bridge.client.agentSessionWorkflowLaunch = mock(
+    const agentSessionWorkflowLaunch: HostClient["agentSessionWorkflowLaunch"] = mock(
       async (request): Promise<WorkflowLaunchResult> => {
         worktree = { workingDirectory: "/repo/task-worktree" };
         if (result === "disconnected") throw new Error("Connection closed after worktree creation");
@@ -112,24 +113,23 @@ test.each(["completed", "failed", "disconnected"] as const)(
         };
       },
     );
-    const wrapper = createWrapper(queryClient);
+    const connection = createConnection({
+      taskWorktreeGet: mock(async () => worktree),
+      agentSessionWorkflowLaunch,
+    });
+    const { queryClient } = connection;
+    const wrapper = createWrapper(connection);
     const reads = [null, "old-version"].map((taskVersion) =>
-      taskWorktreeQueryOptions({
-        repoPath: "/repo",
-        taskId: "task",
-        taskVersion,
-        hostClient: bridge.client,
-      }),
+      taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "task", taskVersion }),
     );
     const otherReads = [
       { repoPath: "/repo", taskId: "other-task" },
       { repoPath: "/other-repo", taskId: "task" },
-    ].map((input) => taskWorktreeQueryOptions({ ...input, hostClient: bridge.client }));
+    ].map((input) => taskWorktreeQueryOptions(input));
     const terminalKey = terminalQueryKeys.task({ repoPath: "/repo", taskId: "task" });
     const otherTerminalKey = terminalQueryKeys.task({ repoPath: "/repo", taskId: "other-task" });
     for (const key of [terminalKey, otherTerminalKey])
       queryClient.setQueryData(key, { hostInstanceId: "host-1", terminals: [] });
-    configureShellBridge(bridge);
     let unmount: (() => void) | undefined;
     try {
       for (const read of [...reads, ...otherReads])
@@ -170,16 +170,12 @@ test.each(["completed", "failed", "disconnected"] as const)(
     } finally {
       unmount?.();
       queryClient.clear();
-      configureShellBridge(originalBridge);
     }
   },
 );
 
 test("retries an unsent first message through the agent operations send path", async () => {
-  const originalBridge = getShellBridge();
-  const bridge = createUnavailableShellBridge();
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  bridge.client.agentSessionWorkflowLaunch = mock(
+  const agentSessionWorkflowLaunch: HostClient["agentSessionWorkflowLaunch"] = mock(
     async (request): Promise<WorkflowLaunchResult> => ({
       workspaceId: request.workspaceId,
       repoPath: request.repoPath,
@@ -201,9 +197,9 @@ test("retries an unsent first message through the agent operations send path", a
   const sendAgentMessage = mock(
     async (..._args: Parameters<AgentOperationsContextValue["sendAgentMessage"]>) => null,
   );
-  configureShellBridge(bridge);
+  const connection = createConnection({ agentSessionWorkflowLaunch });
   const view = renderHook(() => useSessionStartWorkflowRunner({ workspaceId: "workspace" }), {
-    wrapper: createWrapper(queryClient, createAgentOperationsFixture({ sendAgentMessage })),
+    wrapper: createWrapper(connection, createAgentOperationsFixture({ sendAgentMessage })),
   });
   try {
     let retry: (() => Promise<void>) | undefined;
@@ -234,7 +230,6 @@ test("retries an unsent first message through the agent operations send path", a
     expect(sendAgentMessage.mock.calls[0]?.[1]).toEqual([{ kind: "text", text: "Continue" }]);
   } finally {
     view.unmount();
-    queryClient.clear();
-    configureShellBridge(originalBridge);
+    connection.queryClient.clear();
   }
 });

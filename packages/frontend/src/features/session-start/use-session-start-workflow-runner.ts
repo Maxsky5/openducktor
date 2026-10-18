@@ -1,18 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { host } from "@/state/operations/shared/host";
-import { projectWorkflowLaunch } from "@/state/operations/agent-orchestrator/session-read-model/workflow-launch-projection";
+import { projectWorkflowLaunch } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workflow-launch-projection";
 import { withWorktreeRefresh } from "./with-worktree-refresh";
 import { useMemo } from "react";
+import { useWorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   useAgentOperationsContext,
   useAgentSessionsContext,
-  useWorkspaceStateContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import {
   createSessionStartWorkflowRunner,
   type RunSessionStartWorkflow,
 } from "./session-start-orchestration";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function useSessionStartWorkflowRunner({
   workspaceId,
@@ -21,6 +21,7 @@ export function useSessionStartWorkflowRunner({
 }): RunSessionStartWorkflow {
   const store = useAgentSessionsContext();
   const queryClient = useQueryClient();
+  const host = useHostClient();
   const { activeWorkspace } = useWorkspaceStateContext();
   const { sendAgentMessage } = useAgentOperationsContext();
   const { sessionStartNotifications } = useNotificationContext();
@@ -46,6 +47,6 @@ export function useSessionStartWorkflowRunner({
           }),
         },
       }),
-    [workspaceId, repoPath, sendAgentMessage, sessionStartNotifications, store, queryClient],
+    [host, workspaceId, repoPath, sendAgentMessage, sessionStartNotifications, store, queryClient],
   );
 }

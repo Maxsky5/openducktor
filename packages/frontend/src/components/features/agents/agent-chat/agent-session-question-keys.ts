@@ -1,5 +1,5 @@
-import { pendingInputIdentity } from "@/lib/pending-input-identity";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type AgentQuestion = AgentQuestionRequest["questions"][number];
 

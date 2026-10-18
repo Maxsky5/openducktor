@@ -1,5 +1,5 @@
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { areSessionMessagesSameRevision } from "@/state/operations/agent-orchestrator/support/messages";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { areSessionMessagesSameRevision } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import type { AgentChatTranscriptModel } from "./agent-chat-transcript-model";
 

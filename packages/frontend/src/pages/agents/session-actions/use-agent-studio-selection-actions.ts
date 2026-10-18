@@ -1,7 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
   type SelectAgentStudioSelection,

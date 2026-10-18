@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { TaskExecutionCiCommentCard } from "./task-execution-ci-comment-card";
 import {
@@ -117,22 +117,6 @@ export const TaskExecutionCiCommentsList = memo(function TaskExecutionCiComments
     () => selectNextBodyBatchIds(visibleComments, readyBodyIds),
     [readyBodyIds, visibleComments],
   );
-
-  useEffect(() => {
-    const currentCommentIds = new Set(comments.map((comment) => comment.id));
-    setReadyBodyIds((current) => {
-      if (current.size === 0) {
-        return current;
-      }
-      const retainedIds = new Set<string>();
-      for (const id of current) {
-        if (currentCommentIds.has(id)) {
-          retainedIds.add(id);
-        }
-      }
-      return retainedIds.size === current.size ? current : retainedIds;
-    });
-  }, [comments]);
 
   useEffect(() => {
     if (nextBodyBatchIds.length === 0) {

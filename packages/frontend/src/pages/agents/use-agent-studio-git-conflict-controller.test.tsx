@@ -1,11 +1,11 @@
-import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createDeferred,
-  createHookHarness,
+  createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 
@@ -24,8 +24,14 @@ type UseAgentStudioGitConflictControllerHook =
   (typeof import("./use-agent-studio-git-conflict-controller"))["useAgentStudioGitConflictController"];
 
 let useAgentStudioGitConflictController: UseAgentStudioGitConflictControllerHook;
+let connection: ClientConnection;
 
 type HookArgs = Parameters<UseAgentStudioGitConflictControllerHook>[0];
+
+const createHookHarness = (
+  useHook: UseAgentStudioGitConflictControllerHook,
+  initialProps: HookArgs,
+) => createSharedHookHarness(useHook, initialProps, { connection });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isCurrentContext: () => true,
@@ -51,9 +57,7 @@ const createConflict = (overrides: Partial<GitConflict> = {}): GitConflict => ({
 });
 
 beforeEach(async () => {
-  configureShellBridge(
-    createShellBridgeFixture({ client: { gitAbortConflict: gitAbortConflictMock } }),
-  );
+  connection = createTestClientConnection({ client: { gitAbortConflict: gitAbortConflictMock } });
   testSpies = [
     spyOn(actualSonnerModule.toast, "success").mockImplementation(toastSuccessMock),
     spyOn(actualSonnerModule.toast, "error").mockImplementation(toastErrorMock),
@@ -62,10 +66,10 @@ beforeEach(async () => {
     await import("./use-agent-studio-git-conflict-controller"));
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const testSpy of testSpies) testSpy.mockRestore();
   testSpies = [];
-  configureShellBridge(createUnavailableShellBridge());
+  await connection.dispose();
 });
 
 beforeEach(() => {

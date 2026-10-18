@@ -1,4 +1,4 @@
-import { canonicalTargetBranch } from "@/lib/target-branch";
+import { canonicalTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
 
 type TaskApprovalModalHeader = {

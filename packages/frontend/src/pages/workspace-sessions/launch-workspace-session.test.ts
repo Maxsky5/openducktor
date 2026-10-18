@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionLaunchResult } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { sessionMessagesToArray } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { launchWorkspaceSession, projectWorkspaceSessionLaunch } from "./launch-workspace-session";
 
 const createRecord = (): WorkspaceSession => ({
@@ -86,19 +85,18 @@ test.each(["record", "runtime", "directory", "execution-kind"] as const)(
       };
     const store = createAgentSessionsStore("/repo");
     const client = new QueryClient();
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionLaunch: async (request) => ({
-            workspaceId: request.workspaceId,
-            repoPath: request.repoPath,
-            sessionId: request.sessionId,
-            status: "completed",
-            record: returned,
-          }),
-        },
-      }),
-    );
+    createTestClientConnection({
+      queryClient: client,
+      client: {
+        workspaceSessionLaunch: async (request) => ({
+          workspaceId: request.workspaceId,
+          repoPath: request.repoPath,
+          sessionId: request.sessionId,
+          status: "completed",
+          record: returned,
+        }),
+      },
+    });
     try {
       await expect(
         launchWorkspaceSession(
@@ -119,7 +117,6 @@ test.each(["record", "runtime", "directory", "execution-kind"] as const)(
       ).toBeUndefined();
     } finally {
       client.clear();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );

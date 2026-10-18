@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeLifecycleImpact, RuntimeRestartResult } from "@openducktor/contracts";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { startHostRuntimeEventsHarness } from "@/test-utils/host-runtime-events-harness";
 import {
   createHostRuntimeStatusContextValue,
@@ -61,30 +63,37 @@ const impactWithSession = (confirmation: string): RuntimeLifecycleImpact => ({
   ],
 });
 
-/** Renders the control under a host runtime status owner on a fake transport. */
+/**
+ * Renders the control under a host runtime status owner on a fake transport. The host connection
+ * has no commands, so only the supplied ports can restart the runtime.
+ */
 const renderControl = (
   ports: RuntimeRestartPorts,
   events = startHostRuntimeEventsHarness(),
   isLifecycleBusy = false,
 ) => {
+  const connection = createTestClientConnection();
   const view = render(
-    <HostRuntimeStatusContext.Provider
-      value={createHostRuntimeStatusContextValue({ runtimeEvents: events.owner })}
-    >
-      <RuntimeRestartControl
-        runtimeKind="opencode"
-        runtimeLabel="OpenCode"
-        actionLabel="Restart"
-        isLifecycleBusy={isLifecycleBusy}
-        ports={ports}
-      />
-    </HostRuntimeStatusContext.Provider>,
+    <ClientConnectionProvider connection={connection}>
+      <HostRuntimeStatusContext.Provider
+        value={createHostRuntimeStatusContextValue({ runtimeEvents: events.owner })}
+      >
+        <RuntimeRestartControl
+          runtimeKind="opencode"
+          runtimeLabel="OpenCode"
+          actionLabel="Restart"
+          isLifecycleBusy={isLifecycleBusy}
+          ports={ports}
+        />
+      </HostRuntimeStatusContext.Provider>
+    </ClientConnectionProvider>,
   );
   return {
     ...view,
     unmount: () => {
       view.unmount();
       events.owner.stop();
+      void connection.dispose();
     },
   };
 };
@@ -169,13 +178,17 @@ describe("RuntimeRestartControl", () => {
 
     // Without live updates the list is not current, so confirmation waits for a new read.
     act(() =>
-      events.emit({ __openducktorBrowserLive: true, kind: "stream-warning", message: "Lost." }),
+      events.emit({
+        __openducktorConnectionControl: true,
+        kind: "stream-warning",
+        message: "Lost.",
+      }),
     );
     await view.findByText(/Lost\./);
     expect((await getConfirmButton(view)).hasAttribute("disabled")).toBe(true);
     await act(async () => {
       await events.emit({
-        __openducktorBrowserLive: true,
+        __openducktorConnectionControl: true,
         kind: "reconnected",
         missedEvents: true,
       });

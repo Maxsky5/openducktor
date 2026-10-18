@@ -13,7 +13,7 @@ import {
 } from "@openducktor/contracts";
 import { type ReactElement, useId } from "react";
 import { Switch } from "@/components/ui/switch";
-import { isApplePlatform } from "@/lib/steer-shortcut";
+import { isApplePlatform } from "@/lib/device-platform";
 import {
   type SettingsSegmentedOption,
   SettingsSegmentedOptionRow,

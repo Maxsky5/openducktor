@@ -6,12 +6,12 @@ import {
   GitConflictRequestCancelled,
   type ResolveGitConflict,
 } from "@/features/git-conflict-resolution/conflict-assistance";
-import { host } from "@/state/operations/shared/host";
 import {
   CONFLICT_LOCK_REASON,
   type RefreshGitDiffData,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type ConflictState = {
   localConflict: GitConflict | null;
@@ -91,6 +91,7 @@ export function useAgentStudioGitConflictController({
   conflictRecipientLabel = "Builder",
   conflictAssistanceBlockedReason = null,
 }: UseAgentStudioGitConflictControllerArgs) {
+  const host = useHostClient();
   const [state, dispatch] = useReducer(reducer, initialState);
   const isHandlingGitConflict = state.action !== null;
   // Keep a command's conflict in the directory where it ran.
@@ -272,6 +273,7 @@ export function useAgentStudioGitConflictController({
       dispatch({ type: "finish_action" });
     }
   }, [
+    host,
     isCurrentContext,
     activeGitConflict,
     clearActionErrors,

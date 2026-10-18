@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { shouldRefreshGitPanelAfterToolCompletion } from "@/features/agent-studio-build-tools/git-panel-refresh-policy";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { forEachSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { forEachSessionMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type SeenTools = {
   sessionKey: string;

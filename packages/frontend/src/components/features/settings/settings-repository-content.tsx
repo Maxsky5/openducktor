@@ -7,9 +7,9 @@ import {
 import { azureDevOpsRepositoryKey, isAzureDevOpsRepository } from "@openducktor/core";
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { errorMessage } from "@/lib/errors";
-import { repositoryGitProviderContextQueryOptions } from "@/state/queries/git-provider-context";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
 import type { PromptRoleTabId, RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";

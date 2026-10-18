@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ChatComposerPromptInputRuntimeSource } from "./chat-composer-prompt-input-runtime";
 import { resolveChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 

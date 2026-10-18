@@ -1,26 +1,25 @@
-import { RemoteConnectionBoundary } from "./components/layout/remote-connection-boundary";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import { loadSettingsSnapshotFromQuery } from "@openducktor/frontend-core/queries/workspace";
 import { App } from "./App";
 import { AppCrashShell } from "./components/errors/app-crash-shell";
 import { applyThemeToDocument } from "./components/layout/theme-dom";
 import { readSystemAppearance, resolveThemePreference } from "./components/layout/theme-preference";
-import { appQueryClient } from "./lib/query-client";
-import { QueryProvider } from "./lib/query-provider";
 import { watchClientPage } from "./lib/client-page";
-import { configureShellBridge, getShellBridge, type ShellBridge } from "./lib/shell-bridge";
+import { createShellConnection, releaseShellConnection } from "./lib/shell-connection";
+import { configureShellBridge, type ShellBridge } from "./lib/shell-bridge";
 import {
   type OpenDucktorShellBootstrapOptions,
-  runOpenDucktorShellBootstrap,
   resolveRootElement,
 } from "./shell-bootstrap-workflow";
 import { dismissOpenDucktorStartupSplash } from "./startup-splash/runtime";
-import { loadSettingsSnapshotFromQuery } from "./state/queries/workspace";
 import { ShellStateProvider } from "./state/app-state-provider";
 import { HostConnectionProvider } from "./components/layout/host-connection";
 import { HostConnectionPage } from "./components/layout/host-connection-page";
 import { HostPicker } from "./components/layout/host-picker";
-import { loadRecentItems } from "./features/command-palette/recent-items";
 import {
   hostLocation,
   parseHostEndpoint,
@@ -49,45 +48,10 @@ const StartupSplashLifecycle = (): null => {
   return null;
 };
 
-const renderOpenDucktorShellApp = (rootElement: HTMLElement, routerMode: ShellRouterMode): void => {
-  createRoot(rootElement).render(
-    <StrictMode>
-      <StartupSplashLifecycle />
-      <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
-        <QueryProvider>
-          <ShellStateProvider remoteAccess={getShellBridge().remoteAccess}>
-            <RemoteConnectionBoundary connection={getShellBridge().remoteConnection}>
-              <App routerMode={routerMode} />
-            </RemoteConnectionBoundary>
-          </ShellStateProvider>
-        </QueryProvider>
-      </AppCrashShell>
-    </StrictMode>,
-  );
-};
-
-export const bootstrapOpenDucktorShell = (
+export async function bootstrapOpenDucktorShell(
   options: OpenDucktorShellBootstrapOptions,
-): Promise<void> =>
-  options.hosts
-    ? bootstrapHostClient(options, options.hosts)
-    : runOpenDucktorShellBootstrap(options, {
-        configureBridge,
-        getRootById: (rootId) => document.getElementById(rootId),
-        loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(appQueryClient),
-        applyTheme: (preference) =>
-          applyThemeToDocument(resolveThemePreference(preference, readSystemAppearance())),
-        renderApp: (rootElement) =>
-          renderOpenDucktorShellApp(rootElement, options.routerMode ?? DEFAULT_ROUTER_MODE),
-        reportSettingsPreloadError: (error) => {
-          console.error(SETTINGS_PRELOAD_ERROR_MESSAGE, error);
-        },
-      });
-
-async function bootstrapHostClient(
-  options: OpenDucktorShellBootstrapOptions,
-  hosts: NonNullable<OpenDucktorShellBootstrapOptions["hosts"]>,
 ): Promise<void> {
+  const { hosts } = options;
   await options.prepare?.();
   const element = resolveRootElement(options, (id) => document.getElementById(id));
   const root = createRoot(element);
@@ -101,8 +65,8 @@ async function bootstrapHostClient(
     target = { kind: "picker" };
     error = cause instanceof Error ? cause.message : String(cause);
   }
-  let bridge: ShellBridge | undefined;
   let leavePage: () => Promise<void>;
+  let saveDrafts = (): Promise<void> => Promise.resolve();
   const watchPage = (bridge?: ShellBridge) =>
     watchClientPage(bridge, () => {
       try {
@@ -117,10 +81,15 @@ async function bootstrapHostClient(
     });
   const move = async (next: HostTarget) => {
     if (sameHostTarget(target, next)) return;
+    // A local draft that cannot be saved keeps this page, so the user sees why and keeps the draft.
+    await saveDrafts();
     saveHostTarget(next, location.protocol);
     const url = hostLocation(location, next);
-    await appQueryClient.cancelQueries();
-    await leavePage();
+    // The release unmounts the app first. A release failure leaves no view to keep, so the reload
+    // still runs.
+    await leavePage().catch((cause: unknown) => {
+      console.error("Could not release the host client.", cause);
+    });
     window.history.replaceState(null, "", url);
     if (hosts.navigate) await hosts.navigate();
     else window.location.reload();
@@ -154,10 +123,12 @@ async function bootstrapHostClient(
     );
     return;
   }
+  const queryClient = createClientQueryClient();
   const local = localAvailable ? options.createShellBridge() : undefined;
+  let bridge: ShellBridge | undefined;
   if (target.kind === "local") bridge = local;
   else {
-    bridge = hosts.createRemoteBridge(target.endpoint, local);
+    bridge = hosts.createRemoteBridge(target.endpoint, local, queryClient);
     if (local) {
       bridge = {
         ...bridge,
@@ -170,11 +141,22 @@ async function bootstrapHostClient(
   }
   if (!bridge) throw new Error("The local host connection is unavailable.");
   if (local && bridge.notifications !== local.notifications) local.notifications.dispose();
-  configureBridge(bridge);
-  leavePage = watchPage(bridge);
+  // A remote host keeps its drafts, layouts, and recent items in page memory. They cannot replace
+  // the local-host data of this device.
+  const storage = target.kind === "remote" ? createMemoryClientStorage() : localStorage;
+  configureShellBridge(bridge);
+  const connection = createShellConnection(bridge, queryClient, storage);
+  leavePage = watchPage({
+    ...bridge,
+    // The release unmounts the app, then clears the client state, then closes the transport.
+    dispose: () => releaseShellConnection(connection, () => root.unmount()),
+  });
+  // A remote host keeps its drafts in page memory, and the reload clears them. So only a local
+  // draft can stop a host change.
+  if (target.kind === "local") saveDrafts = () => connection.saveDrafts();
   const loadTheme = async () => {
     try {
-      const snapshot = await loadSettingsSnapshotFromQuery(appQueryClient);
+      const snapshot = await loadSettingsSnapshotFromQuery(queryClient);
       applyThemeToDocument(resolveThemePreference(snapshot.theme, readSystemAppearance()));
     } catch (cause) {
       console.error(SETTINGS_PRELOAD_ERROR_MESSAGE, cause);
@@ -187,19 +169,14 @@ async function bootstrapHostClient(
     <StrictMode>
       <StartupSplashLifecycle />
       <AppCrashShell kanbanLocation={kanbanLocationForRouter(mode)}>
-        <QueryProvider>
+        <ClientConnectionProvider connection={connection}>
           <ShellStateProvider remoteAccess={bridge.remoteAccess}>
             <HostConnectionProvider selection={selection} connection={bridge.remoteConnection}>
               <App routerMode={mode} />
             </HostConnectionProvider>
           </ShellStateProvider>
-        </QueryProvider>
+        </ClientConnectionProvider>
       </AppCrashShell>
     </StrictMode>,
   );
-}
-
-function configureBridge(bridge: ShellBridge): void {
-  configureShellBridge(bridge);
-  loadRecentItems();
 }

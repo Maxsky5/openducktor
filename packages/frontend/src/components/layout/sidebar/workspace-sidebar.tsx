@@ -25,7 +25,7 @@ import { useSessionNavigationModel } from "@/features/session-navigation/use-ses
 import { useVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
 import { useWatchSessionBlockers } from "@/features/session-navigation/session-read-state";
 import { useMinuteClock } from "@/lib/relative-time";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useSidebarSessionGrouping } from "@/state/mutations/use-sidebar-session-grouping";

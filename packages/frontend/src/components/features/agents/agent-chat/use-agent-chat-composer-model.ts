@@ -6,10 +6,10 @@ import type {
 } from "@openducktor/core";
 import { type MutableRefObject, type RefObject, useMemo } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type { AgentChatComposerModel } from "./agent-chat.types";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 

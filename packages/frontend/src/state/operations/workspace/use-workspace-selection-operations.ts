@@ -16,8 +16,8 @@ import {
 } from "@tanstack/react-query";
 import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
@@ -29,19 +29,18 @@ import {
   workspaceQueryKeys,
   writeWorkspaceCatalogToQuery,
   writeWorkspaceListToQuery,
-} from "../../queries/workspace";
+} from "@openducktor/frontend-core/queries/workspace";
 import {
   normalizeRepoPath,
   shouldResetBranchStateForRepoChange,
 } from "./workspace-operations-model";
-import type { WorkspaceSelectionOperationsHostClient } from "./workspace-operations-types";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseWorkspaceSelectionOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
   clearTaskData: () => void;
   clearBranchData: (repoPath?: string | null) => void;
-  hostClient: WorkspaceSelectionOperationsHostClient;
 };
 
 type UseWorkspaceSelectionOperationsResult = {
@@ -160,16 +159,16 @@ export function useWorkspaceSelectionOperations({
   setActiveWorkspace,
   clearTaskData,
   clearBranchData,
-  hostClient,
 }: UseWorkspaceSelectionOperationsArgs): UseWorkspaceSelectionOperationsResult {
   const queryClient = useQueryClient();
+  const hostClient = useHostClient();
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false);
   const workspaceSwitchVersionRef = useRef(0);
   const workspaceReorderVersionRef = useRef(0);
   const workspaceLifecycleInFlightRef = useRef(false);
   const activeWorkspaceRef = useRef(activeWorkspace);
-  const workspaceListQuery = useQuery(workspaceListQueryOptions(hostClient));
-  const workspaceCatalogQuery = useQuery(workspaceCatalogQueryOptions(hostClient));
+  const workspaceListQuery = useQuery(workspaceListQueryOptions());
+  const workspaceCatalogQuery = useQuery(workspaceCatalogQueryOptions());
   const workspaces = workspaceListQuery.data ?? [];
   const closedWorkspaces = workspaceCatalogQuery.data?.closedWorkspaces ?? [];
   const incompleteRemovals = workspaceCatalogQuery.data?.incompleteRemovals ?? [];
@@ -337,11 +336,11 @@ export function useWorkspaceSelectionOperations({
 
   const refreshWorkspaces = useCallback(async (): Promise<void> => {
     const [data] = await Promise.all([
-      loadWorkspaceListFromQuery(queryClient, hostClient),
-      queryClient.fetchQuery(workspaceCatalogQueryOptions(hostClient)),
+      loadWorkspaceListFromQuery(queryClient),
+      queryClient.fetchQuery(workspaceCatalogQueryOptions()),
     ]);
     applyWorkspaceRecords(data);
-  }, [applyWorkspaceRecords, hostClient, queryClient]);
+  }, [applyWorkspaceRecords, queryClient]);
 
   const addWorkspace = useCallback(
     async (input: WorkspaceSelectionOperationsInput): Promise<WorkspaceRecord> => {

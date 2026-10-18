@@ -87,7 +87,7 @@ Browser mode for UI validation against the real backend:
 bun run browser:dev
 ```
 
-The browser command starts the TypeScript host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must use the shell bridge instead of importing shell internals directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
+The browser command starts the TypeScript host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must use the shell bridge instead of importing shell internals directly. `bun run lint` checks this boundary with oxlint `no-restricted-imports`.
 
 Run the standalone frontend without starting a host:
 

@@ -1,8 +1,8 @@
 import type { GitCheck, PathCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import type { ScheduleTask } from "@/lib/scheduling";
-import type { ObservedCheck } from "@/types/diagnostics";
+import type { ScheduleTask } from "@openducktor/frontend-core/lib/scheduling";
+import type { ObservedCheck } from "@openducktor/frontend-core/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type ChecksQueryDependencies,
@@ -12,7 +12,7 @@ import {
   pathCheckQueryOptions,
   refreshPathAndGitChecks,
   taskStoreCheckQueryOptions,
-} from "../../queries/checks";
+} from "@openducktor/frontend-core/queries/checks";
 import { buildDiagnosticsToastIssues } from "./check-diagnostics";
 import { type DiagnosticsToastApi, useDiagnosticsToasts } from "./use-check-diagnostics-effects";
 

@@ -12,22 +12,18 @@ import {
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentRuntimeCatalog } from "@openducktor/core";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, fireEvent, render, waitFor } from "@testing-library/react";
 import { act, type ComponentProps, memo, type ReactElement, type ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
-import { hostClient } from "@/lib/host-client";
-import { createQueryClient } from "@/lib/query-client";
-import { createAgentSessionCollection } from "@/state/agent-session-collection";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import type { HostClient } from "@openducktor/host-client";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  AgentOperationsContext,
-  AgentSessionReadModelStateContext,
-  AgentSessionsContext,
   ChecksStateContext,
   DelegationStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   SpecStateContext,
   TasksStateContext,
@@ -36,20 +32,28 @@ import {
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
 import {
+  AgentOperationsContext,
+  AgentSessionReadModelStateContext,
+  AgentSessionsContext,
+  HostRuntimeStatusContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import {
   NotificationContext,
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
-import { systemQueryKeys } from "@/state/queries/system";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
+import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import {
   createHostRuntimeStatusContextValue,
   createObservedCheckFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import type {
   ChecksStateContextValue,
   DelegationStateContextValue,
@@ -77,7 +81,7 @@ import type { KanbanBoardFilterModel, KanbanPageModels } from "./kanban-page-mod
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
 enableReactActEnvironment();
 
@@ -106,6 +110,8 @@ const publishSessionStartedMock = mock(() => {});
 const publishSessionErrorMock = mock(async () => true);
 const reportSessionNotificationFailureMock = mock(() => {});
 let toastSpies: Array<{ mockRestore(): void }> = [];
+// Host commands for the next rendered page. Each test starts from the session-start defaults.
+let hostClientFakes: Partial<HostClient> = {};
 const loadRepoRuntimeCatalogMock = mock(async (): Promise<AgentRuntimeCatalog> => ({
   models: {
     status: "available",
@@ -527,7 +533,7 @@ const renderPage = async (
   options: {
     seedSettingsSnapshot?: boolean;
     seedAgentSessionLists?: boolean;
-    platform?: AppPlatform | null;
+    platform?: AppPlatform;
     tasks?: TaskCard[];
   } = {},
 ): Promise<KanbanPageHarness> => {
@@ -559,16 +565,19 @@ const renderPage = async (
     await import("@/features/task-workflow/use-task-workflow-actions-controller");
   const sessionStore = createAgentSessionsStore("/repo");
   sessionStore.setSessionCollection(() => createAgentSessionCollection(renderState.sessions));
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection({ client: hostClientFakes });
+  const queryClient = connection.queryClient;
   const checksStateValue = createChecksStateValue();
   queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), renderState.repoConfig);
   if (options.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), renderState.settingsSnapshot);
   }
   queryClient.setQueryData(repositoryGitProviderContextQueryKeys.repo("/repo"), null);
-  if (options.platform !== null) {
-    queryClient.setQueryData(systemQueryKeys.platform(), options.platform ?? "darwin");
-  }
+  // The scrollbar default reads this device's platform.
+  Object.defineProperty(globalThis.navigator, "platform", {
+    configurable: true,
+    value: (options.platform ?? "darwin") === "darwin" ? "MacIntel" : "Linux x86_64",
+  });
   if (options.seedAgentSessionLists !== false) {
     for (const task of renderState.tasks) {
       queryClient.setQueryData(agentSessionQueryKeys.list("/repo", task.id), []);
@@ -603,7 +612,7 @@ const renderPage = async (
   };
 
   const renderer = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ActiveWorkspaceContext.Provider
         value={{
           activeWorkspace: activeWorkspaceFixture,
@@ -664,7 +673,7 @@ const renderPage = async (
           </WorkspaceBranchStateContext.Provider>
         </WorkspaceStateContext.Provider>
       </ActiveWorkspaceContext.Provider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
 
   return Object.assign(renderer, {
@@ -814,10 +823,9 @@ const inactiveBoardFilterModel: KanbanBoardFilterModel = {
 };
 
 const createHeaderQueryWrapper = () => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(systemQueryKeys.platform(), "darwin");
+  const connection = createTestClientConnection();
   return ({ children }: { children: ReactNode }): ReactElement => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
 };
 
@@ -833,14 +841,8 @@ describe("KanbanPage session start modal flow", () => {
       startAgentSession: startAgentSessionMock,
       sendAgentMessage: sendAgentMessageMock,
     });
-    const savedLaunch = hostClient.agentSessionWorkflowLaunch;
-    hostClient.agentSessionWorkflowLaunch = launchClient.agentSessionWorkflowLaunch;
+    hostClientFakes = { agentSessionWorkflowLaunch: launchClient.agentSessionWorkflowLaunch };
     toastSpies = [
-      {
-        mockRestore: () => {
-          hostClient.agentSessionWorkflowLaunch = savedLaunch;
-        },
-      },
       spyOn(sonnerModule.toast, "success").mockImplementation(toastSuccessMock),
       spyOn(sonnerModule.toast, "error").mockImplementation(toastErrorMock),
     ];
@@ -900,6 +902,7 @@ describe("KanbanPage session start modal flow", () => {
   afterEach(() => {
     for (const toastSpy of toastSpies) toastSpy.mockRestore();
     toastSpies = [];
+    Reflect.deleteProperty(globalThis.navigator, "platform");
   });
 
   afterAll(async () => {
@@ -1106,11 +1109,10 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest(
     "settings load failure reports an error without issuing a task-list request",
     async () => {
-      const originalLoadSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
       let renderer: KanbanPageHarness | null = null;
 
       try {
-        hostClient.workspaceGetSettingsSnapshot = async () => {
+        hostClientFakes.workspaceGetSettingsSnapshot = async () => {
           throw new Error("settings unavailable");
         };
         renderer = await renderPage({ seedSettingsSnapshot: false });
@@ -1120,7 +1122,6 @@ describe("KanbanPage session start modal flow", () => {
           description: "settings unavailable",
         });
       } finally {
-        hostClient.workspaceGetSettingsSnapshot = originalLoadSettingsSnapshot;
         await unmountPageIfRendered(renderer);
       }
     },
@@ -1149,50 +1150,22 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
-  kanbanTest("does not request platform for explicit horizontal scrollbar modes", async () => {
-    const originalSystemGetPlatform = hostClient.systemGetPlatform;
+  kanbanTest("does not read the host platform for horizontal scrollbars", async () => {
     const systemGetPlatform = mock(async () => {
-      throw new Error("platform should not be requested for explicit Appearance modes");
+      throw new Error("Scrollbars must follow this device, not the host platform.");
     });
-    currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
-      appearance: { horizontalScrollbarVisibility: "show" },
-    });
-    let renderer: KanbanPageHarness | null = null;
-
-    try {
-      hostClient.systemGetPlatform = systemGetPlatform;
-      renderer = await renderPage();
-      expect(renderer.getKanbanColumnProps()).toBeTruthy();
-      expect(systemGetPlatform).toHaveBeenCalledTimes(0);
-    } finally {
-      hostClient.systemGetPlatform = originalSystemGetPlatform;
-      await unmountPageIfRendered(renderer);
-    }
-  });
-
-  kanbanTest("reports System platform resolution failures once", async () => {
-    const originalSystemGetPlatform = hostClient.systemGetPlatform;
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture({
       appearance: { horizontalScrollbarVisibility: "system" },
     });
     let renderer: KanbanPageHarness | null = null;
 
     try {
-      hostClient.systemGetPlatform = async () => {
-        throw new Error("unsupported platform");
-      };
-      renderer = await renderPage({ platform: null });
-      await waitForMockCall(toastErrorMock);
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "Failed to resolve horizontal scrollbar default",
-        {
-          description: "unsupported platform",
-        },
-      );
+      hostClientFakes.systemGetPlatform = systemGetPlatform;
+      renderer = await renderPage({ platform: "linux" });
+      expect(renderer.getShowHorizontalScrollbars()).toBe(true);
       expect(renderer.getIsLoadingTasks()).toBe(false);
-      expect(renderer.getShowHorizontalScrollbars()).toBeNull();
+      expect(systemGetPlatform).toHaveBeenCalledTimes(0);
     } finally {
-      hostClient.systemGetPlatform = originalSystemGetPlatform;
       await unmountPageIfRendered(renderer);
     }
   });
@@ -1855,11 +1828,6 @@ describe("KanbanPage session start modal flow", () => {
     "git conflict resolution opens the exact external-session Agent Studio route",
     async () => {
       currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "human_review" });
-      const originalTaskApprovalContextGet = hostClient.taskApprovalContextGet;
-      const originalTaskDirectMerge = hostClient.taskDirectMerge;
-      const originalWorkspaceGetGitProviderContext = hostClient.workspaceGetGitProviderContext;
-      const originalWorkspaceGetRepoConfig = hostClient.workspaceGetRepoConfig;
-      const originalWorkspaceGetSettingsSnapshot = hostClient.workspaceGetSettingsSnapshot;
       const approvalContext: TaskApprovalContext = {
         taskId: "TASK-123",
         taskStatus: "human_review",
@@ -1874,11 +1842,11 @@ describe("KanbanPage session start modal flow", () => {
       let renderer: KanbanPageHarness | null = null;
 
       try {
-        hostClient.taskApprovalContextGet = async () => ({
+        hostClientFakes.taskApprovalContextGet = async () => ({
           outcome: "ready",
           approvalContext,
         });
-        hostClient.taskDirectMerge = async () => ({
+        hostClientFakes.taskDirectMerge = async () => ({
           outcome: "conflicts",
           conflict: {
             operation: "direct_merge_merge_commit",
@@ -1889,9 +1857,9 @@ describe("KanbanPage session start modal flow", () => {
             workingDir: "/repo/worktrees/conflict",
           },
         });
-        hostClient.workspaceGetGitProviderContext = async () => null;
-        hostClient.workspaceGetRepoConfig = async () => currentRepoConfigFixture;
-        hostClient.workspaceGetSettingsSnapshot = async () => currentSettingsSnapshotFixture;
+        hostClientFakes.workspaceGetGitProviderContext = async () => null;
+        hostClientFakes.workspaceGetRepoConfig = async () => currentRepoConfigFixture;
+        hostClientFakes.workspaceGetSettingsSnapshot = async () => currentSettingsSnapshotFixture;
 
         const page = await renderPage();
         renderer = page;
@@ -1942,11 +1910,6 @@ describe("KanbanPage session start modal flow", () => {
         expect(sessionExternalId).not.toContain("%2Frepo");
         expect(sessionExternalId).not.toContain("|");
       } finally {
-        hostClient.taskApprovalContextGet = originalTaskApprovalContextGet;
-        hostClient.taskDirectMerge = originalTaskDirectMerge;
-        hostClient.workspaceGetGitProviderContext = originalWorkspaceGetGitProviderContext;
-        hostClient.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-        hostClient.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
         await unmountPageIfRendered(renderer);
       }
     },

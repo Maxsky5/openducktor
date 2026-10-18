@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   type PullRequestReviewContextQueryInput,
   pullRequestReviewContextQueryOptions,
-} from "@/state/queries/pull-request-review";
+} from "@openducktor/frontend-core/queries/pull-request-review";
 import type { CiChecksIndicatorStatus } from "./task-execution-ci-presentation";
 import {
   buildCiTabIndicator,

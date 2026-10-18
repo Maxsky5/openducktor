@@ -5,7 +5,7 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import { knownRuntimeKindValues } from "@openducktor/contracts";
-import { isHostRuntimeLifecycleBusy } from "@/lib/host-runtime-status";
+import { isHostRuntimeLifecycleBusy } from "@openducktor/frontend-core/lib/host-runtime-status";
 import { buildRefreshFailedCheck, LOADING_STATUS, runtimeLabel } from "./diagnostics-check-section";
 import type {
   BuildDiagnosticsPanelModelInput,

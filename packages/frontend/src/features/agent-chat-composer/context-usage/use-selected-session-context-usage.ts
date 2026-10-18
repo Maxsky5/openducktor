@@ -1,6 +1,6 @@
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo } from "react";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentStudioContextUsage,
   type ExtractLatestSessionContextUsageInput,

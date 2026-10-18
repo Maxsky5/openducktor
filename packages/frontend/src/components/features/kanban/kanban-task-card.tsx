@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import { cn } from "@/lib/utils";

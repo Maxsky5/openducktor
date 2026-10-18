@@ -3,7 +3,7 @@ import { DEFAULT_CHAT_SETTINGS, repositoryGitProviderContextSchema } from "@open
 import {
   createSessionMessagesState,
   getSessionMessageCount,
-} from "@/state/operations/agent-orchestrator/support/messages";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
@@ -12,7 +12,7 @@ import {
   createSettingsSnapshotFixture,
   createTaskCardFixture,
   TEST_EXTERNAL_SESSION_IDS,
-} from "./shared-test-fixtures";
+} from "@/test-utils/shared-test-fixtures";
 
 type ExpectTrue<Value extends true> = Value;
 type AgentSessionFixtureUsesOnlyCanonicalAssociation = ExpectTrue<

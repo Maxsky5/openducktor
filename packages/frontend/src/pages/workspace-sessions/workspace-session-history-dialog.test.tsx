@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { WORKSPACE_SESSION_ARCHIVE_LIMIT, type WorkspaceSession } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   updateWorkspaceSessionQueries,
   workspaceSessionQueryKeys,
-} from "@/state/queries/workspace-sessions";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 
 const archivedRecord = (index: number): WorkspaceSession => ({
@@ -28,7 +27,7 @@ const archivedRecord = (index: number): WorkspaceSession => ({
 describe("Workspace Session archive refresh", () => {
   // This full render flow loads 100 archive rows and waits for two restores and list refreshes.
   test("refills the bounded archive after each restore without invalidating other lists", async () => {
-    const client = createQueryClient();
+    const client = createClientQueryClient();
     let records = Array.from({ length: WORKSPACE_SESSION_ARCHIVE_LIMIT + 1 }, (_, index) =>
       archivedRecord(index + 1),
     );
@@ -38,29 +37,28 @@ describe("Workspace Session archive refresh", () => {
     client.setQueryData(activeKey, []);
     client.setQueryData(otherKey, other);
     const reads: string[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListArchived: async (workspaceId) => {
-            reads.push(workspaceId);
-            return records.slice(0, WORKSPACE_SESSION_ARCHIVE_LIMIT);
-          },
-          workspaceSessionRestore: async ({ sessionId }) => {
-            const record = records.find((entry) => entry.id === sessionId);
-            if (!record) throw new Error("Archived session not found.");
-            records = records.filter((entry) => entry.id !== sessionId);
-            const restored = { ...record, archivedAt: null };
-            // The ordered metadata event can arrive before the mutation result.
-            updateWorkspaceSessionQueries(client, "A", restored);
-            return restored;
-          },
+    const connection = createTestClientConnection({
+      queryClient: client,
+      client: {
+        workspaceSessionListArchived: async (workspaceId) => {
+          reads.push(workspaceId);
+          return records.slice(0, WORKSPACE_SESSION_ARCHIVE_LIMIT);
         },
-      }),
-    );
+        workspaceSessionRestore: async ({ sessionId }) => {
+          const record = records.find((entry) => entry.id === sessionId);
+          if (!record) throw new Error("Archived session not found.");
+          records = records.filter((entry) => entry.id !== sessionId);
+          const restored = { ...record, archivedAt: null };
+          // The ordered metadata event can arrive before the mutation result.
+          updateWorkspaceSessionQueries(client, "A", restored);
+          return restored;
+        },
+      },
+    });
     const view = render(
-      <QueryClientProvider client={client}>
+      <ClientConnectionProvider connection={connection}>
         <WorkspaceSessionHistoryDialog workspaceId="A" repoPath="/repo" onClose={() => {}} />
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     try {
       await view.findByRole("button", { name: "Restore Chat 1" }, { timeout: 800 });
@@ -90,38 +88,36 @@ describe("Workspace Session archive refresh", () => {
       expect(client.getQueryState(otherKey)?.isInvalidated).toBe(false);
     } finally {
       view.unmount();
-      client.clear();
-      configureShellBridge(createUnavailableShellBridge());
+      await connection.dispose();
     }
   }, 5_000);
 
   test.each([0, 1])(
     "waits for refresh and exposes refresh failure without a false empty state, remaining=%s",
     async (remaining) => {
-      const client = createQueryClient();
+      const client = createClientQueryClient();
       let records = Array.from({ length: remaining + 1 }, (_, index) => archivedRecord(index + 1));
       const refresh = Promise.withResolvers<WorkspaceSession[]>();
       let reads = 0;
       let restores = 0;
-      configureShellBridge(
-        createShellBridgeFixture({
-          client: {
-            workspaceSessionListArchived: async () => {
-              reads += 1;
-              return reads === 2 ? refresh.promise : records;
-            },
-            workspaceSessionRestore: async () => {
-              restores += 1;
-              records = records.slice(1);
-              return { ...archivedRecord(1), archivedAt: null };
-            },
+      const connection = createTestClientConnection({
+        queryClient: client,
+        client: {
+          workspaceSessionListArchived: async () => {
+            reads += 1;
+            return reads === 2 ? refresh.promise : records;
           },
-        }),
-      );
+          workspaceSessionRestore: async () => {
+            restores += 1;
+            records = records.slice(1);
+            return { ...archivedRecord(1), archivedAt: null };
+          },
+        },
+      });
       const view = render(
-        <QueryClientProvider client={client}>
+        <ClientConnectionProvider connection={connection}>
           <WorkspaceSessionHistoryDialog workspaceId="A" repoPath="/repo" onClose={() => {}} />
-        </QueryClientProvider>,
+        </ClientConnectionProvider>,
       );
       try {
         fireEvent.click(
@@ -163,8 +159,7 @@ describe("Workspace Session archive refresh", () => {
         expect(restores).toBe(1);
       } finally {
         view.unmount();
-        client.clear();
-        configureShellBridge(createUnavailableShellBridge());
+        await connection.dispose();
       }
     },
   );

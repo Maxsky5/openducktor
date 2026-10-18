@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { renderHook } from "@testing-library/react";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { useWorkspaceSessionTerminals } from "./use-workspace-session-terminals";
 
 const workspace = { workspaceId: "workspace-1", workspaceName: "Repo", repoPath: "/repo" };
@@ -29,7 +29,7 @@ const chat = (overrides: Partial<WorkspaceSession> = {}): WorkspaceSession => ({
 const startBlockedReason = (selected: WorkspaceSession): string | null => {
   const view = renderHook(
     () => useWorkspaceSessionTerminals({ workspace, selected, sessions: [selected] }),
-    { wrapper: IsolatedQueryWrapper },
+    { wrapper: QueryProvider },
   );
   try {
     return view.result.current.startBlockedReason;

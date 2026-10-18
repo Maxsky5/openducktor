@@ -4,7 +4,10 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { retryRuntimeCatalog, resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
+import {
+  retryRuntimeCatalog,
+  resolveRuntimeCatalogSurface,
+} from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 

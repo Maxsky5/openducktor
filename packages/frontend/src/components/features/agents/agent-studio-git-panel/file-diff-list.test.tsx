@@ -2,28 +2,26 @@ import { describe, expect, mock, test } from "bun:test";
 import type { GitFileDiff, GitChangeGroup } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ReactElement, useMemo, useState } from "react";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   type DiffScope,
   type GitChangeIntent,
   gitChangeIntentKey,
 } from "@/features/agent-studio-git";
-import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
-import {
-  type InlineCommentDraft,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
+import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 import { FileDiffListWithHeader } from "./file-diff-list";
 import {
   COMMENTABLE_PATCH,
+  fileDiffListDrafts,
   installMeasuredRows,
   OWNER_KEY,
   preloaderMock,
   setupFileDiffListTests,
   viewerMock,
 } from "./file-diff-list.test-support";
+import { FileDiffListProviders } from "./file-diff-list.test-providers";
 import type { GitFileRowActions } from "./git-file-row-actions";
 import type { FileListState } from "./use-file-list-state";
 
@@ -125,7 +123,7 @@ function FileDiffListHarness({
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   return (
-    <TooltipProvider>
+    <FileDiffListProviders>
       <FileDiffListWithHeader
         {...LIST_VIEW_PROPS}
         changingKey={changingKey}
@@ -154,7 +152,7 @@ function FileDiffListHarness({
         preloadLimit={1}
         rowActions={rowActions}
       />
-    </TooltipProvider>
+    </FileDiffListProviders>
   );
 }
 
@@ -163,7 +161,7 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
   const [diffScope, setDiffScope] = useState<"uncommitted" | "target">("uncommitted");
 
   return (
-    <TooltipProvider>
+    <FileDiffListProviders>
       <button
         type="button"
         onClick={() => {
@@ -196,7 +194,7 @@ function ScopeSwitchFileDiffListHarness(): ReactElement {
         }}
         preloadLimit={1}
       />
-    </TooltipProvider>
+    </FileDiffListProviders>
   );
 }
 
@@ -205,7 +203,7 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
   const [ownerKey, setOwnerKey] = useState(OWNER_KEY);
 
   return (
-    <TooltipProvider>
+    <FileDiffListProviders>
       <button
         type="button"
         onClick={() =>
@@ -237,7 +235,7 @@ function OwnerSwitchFileDiffListHarness(): ReactElement {
         }}
         preloadLimit={1}
       />
-    </TooltipProvider>
+    </FileDiffListProviders>
   );
 }
 
@@ -253,7 +251,7 @@ function LargeFileDiffListHarness(): ReactElement {
   );
 
   return (
-    <TooltipProvider>
+    <FileDiffListProviders>
       <button type="button" onClick={() => setFileCount(20)}>
         Shorten list
       </button>
@@ -279,7 +277,7 @@ function LargeFileDiffListHarness(): ReactElement {
           preloadLimit={0}
         />
       </div>
-    </TooltipProvider>
+    </FileDiffListProviders>
   );
 }
 
@@ -305,7 +303,7 @@ function ResizingFileDiffListHarness({ fileCount = 20 } = {}): ReactElement {
   }, [fileCount, fileOrderChange, pathPrefix, revision]);
 
   return (
-    <TooltipProvider>
+    <FileDiffListProviders>
       <button type="button" onClick={() => setRevision((current) => current + 1)}>
         Refresh another file
       </button>
@@ -349,7 +347,7 @@ function ResizingFileDiffListHarness({ fileCount = 20 } = {}): ReactElement {
           preloadLimit={0}
         />
       </div>
-    </TooltipProvider>
+    </FileDiffListProviders>
   );
 }
 
@@ -855,7 +853,7 @@ describe("FileDiffList", () => {
         screen.getByRole("button", { name: "Comment" }).getAttribute("disabled"),
       ).not.toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+      expect(fileDiffListDrafts().getState().getDraftCount(ownerKey)).toBe(0);
       fireEvent.click(screen.getByTestId("pierre-diff-select-lines"));
       fireEvent.change(screen.getByPlaceholderText("Add a comment for this chat"), {
         target: { value: "Workspace note" },
@@ -872,16 +870,16 @@ describe("FileDiffList", () => {
         target: { value: "Saved edit" },
       });
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(useInlineCommentDraftStore.getState().getPendingDrafts(ownerKey)[0]).toMatchObject({
+      expect(fileDiffListDrafts().getState().getPendingDrafts(ownerKey)[0]).toMatchObject({
         text: "Saved edit",
         diffScope: scope,
         startLine: 2,
         endLine: 3,
         side: "new",
       });
-      expect(useInlineCommentDraftStore.getState().getDraftCount(OWNER_KEY)).toBe(0);
+      expect(fileDiffListDrafts().getState().getDraftCount(OWNER_KEY)).toBe(0);
       fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+      expect(fileDiffListDrafts().getState().getDraftCount(ownerKey)).toBe(0);
     },
   );
 
@@ -907,19 +905,19 @@ describe("FileDiffList", () => {
     expect(pendingComment.closest('[data-testid="pierre-diff-annotation"]')).not.toBeNull();
     expect(screen.queryByTestId("agent-studio-git-unplaced-comments")).toBeNull();
 
-    const sentSnapshot = useInlineCommentDraftStore
+    const sentSnapshot = fileDiffListDrafts()
       .getState()
       .getPendingDrafts(OWNER_KEY)
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
-      const submissionId = useInlineCommentDraftStore
+      const submissionId = fileDiffListDrafts()
         .getState()
         .beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
       if (!submissionId) {
         throw new Error("Expected submission id");
       }
-      useInlineCommentDraftStore.getState().completeSubmittingDrafts(submissionId);
+      fileDiffListDrafts().getState().completeSubmittingDrafts(submissionId);
     });
 
     expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
@@ -943,7 +941,7 @@ describe("FileDiffList", () => {
     );
     expect(screen.queryAllByTestId("pierre-diff-annotation")).toHaveLength(0);
     expect(screen.getByTestId("agent-studio-git-file-comment-count").textContent).toContain("1");
-    expect(useInlineCommentDraftStore.getState().getPendingDrafts(OWNER_KEY)).toHaveLength(1);
+    expect(fileDiffListDrafts().getState().getPendingDrafts(OWNER_KEY)).toHaveLength(1);
   });
 
   test("shows the comments that the parent places instead of every comment of the scope", () => {
@@ -953,7 +951,7 @@ describe("FileDiffList", () => {
     expect(screen.queryByTestId("agent-studio-git-pending-comment")).toBeNull();
     expect(screen.queryByTestId("agent-studio-git-file-comment-count")).toBeNull();
 
-    const drafts = useInlineCommentDraftStore.getState().getPendingDrafts(OWNER_KEY);
+    const drafts = fileDiffListDrafts().getState().getPendingDrafts(OWNER_KEY);
     rerender(<FileDiffListHarness commentsByFile={new Map([["src/example.ts", drafts]])} />);
 
     expect(screen.getByTestId("agent-studio-git-pending-comment").textContent).toContain(
@@ -972,13 +970,13 @@ describe("FileDiffList", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
 
-    const sentSnapshot = useInlineCommentDraftStore
+    const sentSnapshot = fileDiffListDrafts()
       .getState()
       .getPendingDrafts(OWNER_KEY)
       .map((draft) => ({ id: draft.id, revision: draft.revision }));
 
     act(() => {
-      useInlineCommentDraftStore.getState().beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
+      fileDiffListDrafts().getState().beginSubmittingDrafts(OWNER_KEY, sentSnapshot);
     });
 
     expect(screen.getByRole("button", { name: "Edit" }).getAttribute("disabled")).not.toBeNull();

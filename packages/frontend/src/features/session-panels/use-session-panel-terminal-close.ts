@@ -6,7 +6,7 @@ import {
   type TerminalTab,
   terminalTabLabel,
 } from "@/features/terminals";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { PanelId } from "./panel-tab-kinds";
 import {
   type ResolvedPanelTab,

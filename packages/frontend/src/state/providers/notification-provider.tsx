@@ -14,8 +14,8 @@ import {
   createSonnerNotificationAdapter,
   installCuelumeGestureUnlock,
 } from "@/features/notifications/notification-delivery";
-import { createNotificationRuntime } from "@/features/notifications/notification-runtime";
-import type { NotificationDispatchFailure } from "@/features/notifications/notification-policy";
+import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
+import type { NotificationDispatchFailure } from "@openducktor/frontend-core/notifications/notification-policy";
 import {
   clearCoordinationNotificationFailure,
   clearOsNotificationFailure,
@@ -25,12 +25,11 @@ import {
   type NotificationFailureState,
   recordNotificationFailure,
   selectNotificationFailure,
-} from "@/features/notifications/notification-failure-state";
+} from "@openducktor/frontend-core/notifications/notification-failure-state";
 import type {
   SessionStartNotificationInput,
   SessionStartNotificationPublisher,
 } from "@/features/session-start/session-start-orchestration";
-import { hostBridge } from "@/lib/host-client";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import {
@@ -38,10 +37,12 @@ import {
   type NotificationContextValue,
   type NotificationNavigator,
 } from "../notifications/notification-context";
+import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function NotificationProvider({ children }: PropsWithChildren): ReactElement {
   const { workspaces } = useWorkspaceStateContext();
   const shellNotifications = getShellBridge().notifications;
+  const host = useHostConnection();
   const [failureState, updateFailureState] = useReducer(
     reduceNotificationFailureState,
     undefined,
@@ -57,8 +58,8 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
     const navigate: NotificationNavigator = (target) => navigatorRef.current(target);
     return createNotificationRuntime({
       bridge: shellNotifications,
-      publishAction: hostBridge.client.notificationPublishAction,
-      subscribeStream: hostBridge.subscribeNotificationStream,
+      publishAction: host.client.notificationPublishAction,
+      subscribeStream: host.subscribeNotificationStream,
       navigate,
       inApp: createSonnerNotificationAdapter({ navigate }),
       sound: createCuelumeNotificationSoundAdapter(),
@@ -104,7 +105,7 @@ export function NotificationProvider({ children }: PropsWithChildren): ReactElem
       onSettingsRecovered: () => updateFailureState({ type: "settings-recovered" }),
       onSoundPlayed: () => updateFailureState({ type: "sound-played" }),
     });
-  }, [shellNotifications]);
+  }, [host, shellNotifications]);
 
   useEffect(() => runtime.subscribe(), [runtime]);
 

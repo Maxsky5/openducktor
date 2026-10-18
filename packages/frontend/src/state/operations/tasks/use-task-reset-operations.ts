@@ -2,23 +2,24 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { documentQueryKeys } from "@/state/queries/documents";
-import { taskStopImpactQueryKeys } from "@/state/queries/task-stop-impact";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import { documentQueryKeys } from "@openducktor/frontend-core/queries/documents";
+import { taskStopImpactQueryKeys } from "@openducktor/frontend-core/queries/task-stop-impact";
 import {
   type AgentSessionReadPort,
   refreshAgentSessionListQuery,
-} from "../../queries/agent-sessions";
-import { host } from "../shared/host";
+} from "@openducktor/frontend-core/queries/agent-sessions";
 import { requireActiveRepo } from "./task-operations-model";
 import type { UseTaskOperationsResult } from "./task-operations-types";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { HostClient } from "@openducktor/host-client";
 
 type UseTaskResetOperationsArgs = {
   activeRepoPath: string | null;
   agentSessionReadPort: AgentSessionReadPort;
   refreshTaskData: UseTaskOperationsResult["refreshTaskData"];
-  hostPort?: Pick<typeof host, "taskReset" | "taskResetImplementation">;
+  hostPort?: Pick<HostClient, "taskReset" | "taskResetImplementation">;
   notificationPort?: Pick<typeof toast, "error" | "success">;
 };
 
@@ -31,10 +32,12 @@ export function useTaskResetOperations({
   activeRepoPath,
   agentSessionReadPort,
   refreshTaskData,
-  hostPort = host,
+  hostPort: suppliedHostPort,
   notificationPort = toast,
 }: UseTaskResetOperationsArgs): TaskResetOperations {
   const queryClient = useQueryClient();
+  const host = useHostClient();
+  const hostPort = suppliedHostPort ?? host;
 
   const resetTaskImplementation = useCallback(
     async (taskId: string): Promise<void> => {

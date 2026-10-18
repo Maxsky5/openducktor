@@ -6,9 +6,8 @@ import {
 } from "@openducktor/contracts";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { WorkspaceSessionHistoryDialog } from "./workspace-session-history-dialog";
 import { WorkspaceSessionHeader } from "./workspace-session-header";
@@ -53,22 +52,20 @@ describe("Workspace Session metadata UI", () => {
                 worktreeState: "present",
               },
       };
-      configureShellBridge(
-        createShellBridgeFixture({
-          client: {
-            workspaceGetSettingsSnapshot: async () =>
-              settingsSnapshotSchema.parse({ theme: "light" }),
-            systemListOpenInTools: async () => [
-              { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
-            ],
-            systemOpenDirectoryInTool: async (path, toolId) => {
-              opened.push([path, toolId]);
-            },
+      const connection = createTestClientConnection({
+        client: {
+          workspaceGetSettingsSnapshot: async () =>
+            settingsSnapshotSchema.parse({ theme: "light" }),
+          systemListOpenInTools: async () => [
+            { toolId: "finder", iconDataUrl: "data:image/png;base64,finder" },
+          ],
+          systemOpenDirectoryInTool: async (path, toolId) => {
+            opened.push([path, toolId]);
           },
-        }),
-      );
+        },
+      });
       const view = render(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <WorkspaceSessionHeader
             workspace={{ workspaceId: "A", workspaceName: "Workspace", repoPath: "/repo" }}
             record={session}
@@ -134,14 +131,13 @@ describe("Workspace Session metadata UI", () => {
       } finally {
         view.unmount();
         restoreClipboard();
-        configureShellBridge(createUnavailableShellBridge());
       }
     },
   );
 
   test("rename separates the header, body, and footer with Cancel on the left", () => {
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <WorkspaceSessionRenameDialog
           open
           workspaceId="A"
@@ -177,18 +173,16 @@ describe("Workspace Session metadata UI", () => {
 
   test("Cancel discards a rename without saving and returns focus to session actions", async () => {
     const saved: string[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionRename: async (input) => {
-            saved.push(input.manualTitle ?? "");
-            return { ...record(), manualTitle: input.manualTitle };
-          },
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionRename: async (input) => {
+          saved.push(input.manualTitle ?? "");
+          return { ...record(), manualTitle: input.manualTitle };
         },
-      }),
-    );
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionHeader
           repoActions={null}
           viewControls={null}
@@ -217,27 +211,24 @@ describe("Workspace Session metadata UI", () => {
       expect(await view.findByDisplayValue("My session", {}, { timeout: 800 })).toBeTruthy();
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("rename locks the form until Save completes and supports the generated title", async () => {
     const saved: string[] = [];
     let finish!: (session: WorkspaceSession) => void;
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionRename: (input) => {
-            saved.push(input.manualTitle ?? "");
-            return new Promise((resolve) => {
-              finish = resolve;
-            });
-          },
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionRename: (input) => {
+          saved.push(input.manualTitle ?? "");
+          return new Promise((resolve) => {
+            finish = resolve;
+          });
         },
-      }),
-    );
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionHeader
           repoActions={null}
           viewControls={null}
@@ -273,7 +264,6 @@ describe("Workspace Session metadata UI", () => {
       });
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
@@ -289,22 +279,20 @@ describe("Workspace Session metadata UI", () => {
       executionTarget: { kind: "local_repo_root", workingDirectory: "/other/project" },
       archivedAt: 3000,
     };
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListArchived: async () => {
-            reads += 1;
-            return restored.includes(second.id) ? [first] : [first, second];
-          },
-          workspaceSessionRestore: async (input) => {
-            restored.push(input.sessionId);
-            return { ...second, archivedAt: null };
-          },
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionListArchived: async () => {
+          reads += 1;
+          return restored.includes(second.id) ? [first] : [first, second];
         },
-      }),
-    );
+        workspaceSessionRestore: async (input) => {
+          restored.push(input.sessionId);
+          return { ...second, archivedAt: null };
+        },
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionHistoryDialog
           workspaceId="filter-test"
           repoPath="/repo"
@@ -333,7 +321,6 @@ describe("Workspace Session metadata UI", () => {
       expect(reads).toBe(2);
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
   test("History is restore-only and disables restoration while the command is pending", async () => {
@@ -341,21 +328,19 @@ describe("Workspace Session metadata UI", () => {
     let archivedRecords = [archived];
     const requests: Array<{ workspaceId: string; sessionId: string }> = [];
     let finish!: (session: WorkspaceSession) => void;
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListArchived: async () => archivedRecords,
-          workspaceSessionRestore: (input) => {
-            requests.push(input);
-            return new Promise((resolve) => {
-              finish = resolve;
-            });
-          },
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionListArchived: async () => archivedRecords,
+        workspaceSessionRestore: (input) => {
+          requests.push(input);
+          return new Promise((resolve) => {
+            finish = resolve;
+          });
         },
-      }),
-    );
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionHistoryDialog workspaceId="A" repoPath="/repo" onClose={() => {}} />
       </QueryProvider>,
     );
@@ -380,27 +365,24 @@ describe("Workspace Session metadata UI", () => {
       expect(view.getByRole("searchbox", { name: "Filter archived chats" })).toBeTruthy();
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("History keeps the archived row and reports a failed restore", async () => {
     let reads = 0;
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionListArchived: async () => {
-            reads += 1;
-            return [{ ...record(), archivedAt: 2000 }];
-          },
-          workspaceSessionRestore: async () => {
-            throw new Error("Worktree directory is missing.");
-          },
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionListArchived: async () => {
+          reads += 1;
+          return [{ ...record(), archivedAt: 2000 }];
         },
-      }),
-    );
+        workspaceSessionRestore: async () => {
+          throw new Error("Worktree directory is missing.");
+        },
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionHistoryDialog workspaceId="A" repoPath="/repo" onClose={() => {}} />
       </QueryProvider>,
     );
@@ -415,25 +397,22 @@ describe("Workspace Session metadata UI", () => {
       ).toBe(false);
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 
   test("a failed rename retains the draft and permits a second save", async () => {
     const saved: string[] = [];
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionRename: async (input) => {
-            saved.push(input.manualTitle ?? "");
-            if (saved.length === 1) throw new Error("Database unavailable");
-            return { ...record(), manualTitle: input.manualTitle };
-          },
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionRename: async (input) => {
+          saved.push(input.manualTitle ?? "");
+          if (saved.length === 1) throw new Error("Database unavailable");
+          return { ...record(), manualTitle: input.manualTitle };
         },
-      }),
-    );
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionHeader
           repoActions={null}
           viewControls={null}
@@ -469,7 +448,6 @@ describe("Workspace Session metadata UI", () => {
       expect(view.queryByRole("dialog", { name: "Rename chat" })).toBeNull();
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   });
 });

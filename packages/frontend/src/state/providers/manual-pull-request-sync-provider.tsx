@@ -1,10 +1,10 @@
 import { createContext, type PropsWithChildren, type ReactElement } from "react";
-import { hostClient } from "@/lib/host-client";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useRequiredContext } from "../app-state-contexts";
 import { useManualPullRequestSync } from "../operations/use-manual-pull-request-sync";
 
 export function ManualPullRequestSyncProvider({ children }: PropsWithChildren): ReactElement {
-  const operation = useManualPullRequestSync(hostClient);
+  const operation = useManualPullRequestSync(useHostClient());
   return <ManualPullRequestSyncContext value={operation}>{children}</ManualPullRequestSyncContext>;
 }
 

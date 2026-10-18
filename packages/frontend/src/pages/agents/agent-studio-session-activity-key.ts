@@ -2,7 +2,7 @@ import type { AgentRole } from "@openducktor/core";
 import {
   type AgentSessionIdentityLike,
   agentSessionIdentityKey,
-} from "@/lib/agent-session-identity";
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 
 export type AgentStudioSessionActivityKeyParams = {
   workspaceId: string | null;

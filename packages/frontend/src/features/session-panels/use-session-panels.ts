@@ -45,13 +45,7 @@ import {
   sessionPanelOwnerKey,
   shownPanelTabs,
 } from "./session-panel-layout";
-import {
-  readSessionPanelLayout,
-  sessionPanelLayoutsSnapshot,
-  subscribeSessionPanelLayouts,
-  takeSessionPanelLayoutReadError,
-  updateSessionPanelLayout,
-} from "./session-panel-layout-store";
+import { useSessionPanelLayoutStore } from "./session-panel-layout-store";
 import {
   type LatestPanelState,
   useSessionPanelTerminalClose,
@@ -253,13 +247,14 @@ const usePanelModel = (
 
 /** Reads the layout of the owner from the store, and saves reconcile results and read errors. */
 const useOwnerLayout = (owner: SessionPanelOwner | null, context: SessionPanelContext) => {
+  const layoutStore = useSessionPanelLayoutStore();
   const ownerKey = owner ? sessionPanelOwnerKey(owner) : null;
   const readOwnerLayout = useMemo(
-    () => (owner ? () => readSessionPanelLayout(owner) : EMPTY_LAYOUT_SNAPSHOT),
-    [owner],
+    () => (owner ? () => layoutStore.read(owner) : EMPTY_LAYOUT_SNAPSHOT),
+    [layoutStore, owner],
   );
-  const storedLayout = useSyncExternalStore(subscribeSessionPanelLayouts, readOwnerLayout);
-  const layouts = useSyncExternalStore(subscribeSessionPanelLayouts, sessionPanelLayoutsSnapshot);
+  const storedLayout = useSyncExternalStore(layoutStore.subscribe, readOwnerLayout);
+  const layouts = useSyncExternalStore(layoutStore.subscribe, layoutStore.snapshot);
   const layout = useMemo(
     () => (owner ? reconcileSessionPanelLayout(storedLayout, context) : EMPTY_LAYOUT),
     [context, owner, storedLayout],
@@ -269,8 +264,8 @@ const useOwnerLayout = (owner: SessionPanelOwner | null, context: SessionPanelCo
   // after this render, such as a new terminal tab, wins, and the next render reconciles it.
   useEffect(() => {
     if (!owner || layout === storedLayout) return;
-    updateSessionPanelLayout(owner, (current) => (current === storedLayout ? layout : current));
-  }, [layout, owner, storedLayout]);
+    layoutStore.update(owner, (current) => (current === storedLayout ? layout : current));
+  }, [layout, layoutStore, owner, storedLayout]);
 
   const ownerRef = useRef(owner);
   useLayoutEffect(() => {
@@ -279,13 +274,13 @@ const useOwnerLayout = (owner: SessionPanelOwner | null, context: SessionPanelCo
   useEffect(() => {
     const current = ownerRef.current;
     if (!current || ownerKey === null) return;
-    const error = takeSessionPanelLayoutReadError(current);
+    const error = layoutStore.takeReadError(current);
     if (error) {
       toast.error("Could not restore the saved panel layout", {
         description: `${error} The default layout is shown.`,
       });
     }
-  }, [ownerKey]);
+  }, [layoutStore, ownerKey]);
 
   return { layout, layouts };
 };
@@ -300,6 +295,7 @@ export function useSessionPanels({
   unavailableKinds = NO_UNAVAILABLE_KINDS,
   terminals,
 }: SessionPanelsInput): SessionPanelsModel {
+  const layoutStore = useSessionPanelLayoutStore();
   const ownerKey = owner ? sessionPanelOwnerKey(owner) : null;
   const isOwnerTerminals = ownerKey !== null && terminals.scopeKey === ownerKey;
   const context = useMemo<SessionPanelContext>(
@@ -345,13 +341,16 @@ export function useSessionPanels({
     latest.current = latestState;
   });
 
-  const update = useCallback<SessionPanelLayoutUpdate>((mutate) => {
-    const { owner: currentOwner, context: currentContext } = latest.current;
-    if (!currentOwner) return;
-    updateSessionPanelLayout(currentOwner, (current) =>
-      mutate(reconcileSessionPanelLayout(current, currentContext), currentContext),
-    );
-  }, []);
+  const update = useCallback<SessionPanelLayoutUpdate>(
+    (mutate) => {
+      const { owner: currentOwner, context: currentContext } = latest.current;
+      if (!currentOwner) return;
+      layoutStore.update(currentOwner, (current) =>
+        mutate(reconcileSessionPanelLayout(current, currentContext), currentContext),
+      );
+    },
+    [layoutStore],
+  );
   const { closeTerminalTab, terminalClose } = useSessionPanelTerminalClose({
     ownerKey,
     latest,

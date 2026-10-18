@@ -12,12 +12,12 @@ import type {
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import {
   createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { HostRuntimeStatusMap } from "@/types/diagnostics";
+import type { HostRuntimeStatusMap } from "@openducktor/frontend-core/types/diagnostics";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createChecksStateContextValue,

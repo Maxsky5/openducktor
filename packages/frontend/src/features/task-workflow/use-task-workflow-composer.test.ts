@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { installReactActEnvironment } from "@/test-utils/react-act-environment";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { installReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createTaskCardFixture,
   createWorkspaceRecordFixture,

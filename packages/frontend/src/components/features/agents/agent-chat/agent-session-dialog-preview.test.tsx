@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import {
   createDialogPreviewHarness,
   dialogTargets,
@@ -194,12 +194,8 @@ for (const readKind of ["worktree", "file"] as const) {
       let request: Promise<unknown> | undefined;
       if (readKind === "file") h.read.mockImplementationOnce(() => pendingFile.promise);
       else {
-        const { taskWorktreeQueryOptions } = await import("@/state/queries/build-runtime");
-        const options = taskWorktreeQueryOptions({
-          repoPath: "/repo",
-          taskId: "a",
-          hostClient: { taskWorktreeGet: () => pendingWorktree.promise },
-        });
+        h.worktree.mockImplementationOnce(() => pendingWorktree.promise);
+        const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
         h.client.removeQueries({ queryKey: options.queryKey });
         request = h.client.fetchQuery(options);
       }
@@ -340,12 +336,8 @@ for (const kind of ["file", "worktree"] as const) {
     let request: Promise<unknown> | undefined;
     if (kind === "file") h.read.mockImplementationOnce(() => deferred.promise);
     else {
-      const { taskWorktreeQueryOptions } = await import("@/state/queries/build-runtime");
-      const options = taskWorktreeQueryOptions({
-        repoPath: "/repo",
-        taskId: "a",
-        hostClient: { taskWorktreeGet: () => deferred.promise },
-      });
+      h.worktree.mockImplementationOnce(() => deferred.promise);
+      const options = taskWorktreeQueryOptions({ repoPath: "/repo", taskId: "a" });
       h.client.removeQueries({ queryKey: options.queryKey });
       request = h.client.fetchQuery(options).catch(() => undefined);
     }

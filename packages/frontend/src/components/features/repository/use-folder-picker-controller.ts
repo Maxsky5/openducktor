@@ -1,8 +1,8 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useReducer } from "react";
-import { errorMessage } from "@/lib/errors";
-import { directoryListingQueryOptions } from "@/state/queries/filesystem";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { directoryListingQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 
 export type FolderPickerCommonProps = {
   title: string;
@@ -77,7 +77,7 @@ export function useFolderPickerController({
     state;
 
   const listingQuery = useQuery({
-    ...directoryListingQueryOptions(requestedPath, undefined, selectionMode === "file"),
+    ...directoryListingQueryOptions(requestedPath, selectionMode === "file"),
     enabled: open,
   });
   const listing = listingQuery.data ?? null;

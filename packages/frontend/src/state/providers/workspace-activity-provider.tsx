@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useEffect, useMemo } from "react";
-import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
-import { hostBridge, hostClient } from "@/lib/host-client";
-import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
-import { createAgentSessionListLiveSync } from "@/state/queries/agent-sessions";
-import { createAgentTurnGitSync } from "@/state/queries/agent-turn-git-sync";
-import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
+import { createWorkspaceActivityObserver } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
+import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { observeWorkspaceSessionRecords } from "@openducktor/frontend-core/queries/workspace-session-updates";
+import { createAgentSessionListLiveSync } from "@openducktor/frontend-core/queries/agent-sessions";
+import { createAgentTurnGitSync } from "@openducktor/frontend-core/queries/agent-turn-git-sync";
+import { getSessionHistoryFreshnessTracker } from "@openducktor/frontend-core/queries/agent-session-history-freshness-tracker";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
 import { createWorkspaceArchivedSessionsPort } from "../workspace-activity/archived-sessions-port";
@@ -17,6 +17,7 @@ import {
 /** Keeps one live stream per open workspace for activity and session readers. */
 export function WorkspaceActivityProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
+  const host = useHostConnection();
   const { workspaces } = useWorkspaceStateContext();
   const liveSource = useMemo(
     () =>
@@ -28,7 +29,7 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
             input.repoPath,
           );
           try {
-            const stop = await hostBridge.observeAgentSessionLive(input, (envelope) => {
+            const stop = await host.observeAgentSessionLive(input, (envelope) => {
               history.recordEvent(envelope);
               updateLists(envelope);
               git.observe(envelope);
@@ -45,9 +46,9 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
             throw cause;
           }
         },
-        (input) => hostClient.agentSessionLiveAttach(input),
+        (input) => host.client.agentSessionLiveAttach(input),
       ),
-    [queryClient],
+    [host, queryClient],
   );
 
   const archivedSessions = useMemo(

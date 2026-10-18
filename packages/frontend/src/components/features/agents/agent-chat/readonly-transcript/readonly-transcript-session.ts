@@ -1,12 +1,15 @@
-import { settleImageGenerationMessages } from "@/state/operations/agent-orchestrator/support/image-generation-settlement";
+import { settleImageGenerationMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/image-generation-settlement";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { mergeHistoryMessages } from "@/state/operations/agent-orchestrator/support/history-message-merge";
-import { haveSameMessageTimestamp } from "@/state/operations/agent-orchestrator/support/message-timestamp";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { historyToChatMessages } from "@/state/operations/agent-orchestrator/support/session-history-chat-messages";
-import { projectBackgroundQuestions } from "@/state/operations/agent-orchestrator/support/background-questions";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { mergeHistoryMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/history-message-merge";
+import { haveSameMessageTimestamp } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/message-timestamp";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { historyToChatMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
+import { projectBackgroundQuestions } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/background-questions";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "../agent-chat.types";
 import type { AgentSessionTranscriptTarget } from "../agent-session-transcript-target";
 

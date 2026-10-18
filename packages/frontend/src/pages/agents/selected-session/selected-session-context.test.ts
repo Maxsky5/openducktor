@@ -3,12 +3,15 @@ import { describe, expect, mock, test } from "bun:test";
 import { agentRoleValues } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentSessionFixtureOverrides } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,

@@ -1,6 +1,8 @@
 # Agent orchestrator module map
 
-Use this map before you change `packages/frontend/src/state/operations/agent-orchestrator`, a task session flow, or session navigation.
+Use this map before you change `packages/frontend-core/src/sessions/agent-orchestrator`, a task session flow, or session navigation.
+
+Short paths that start with `events/`, `handlers/`, `history/`, `hooks/`, `runtime/`, `session-read-model/`, `support/`, or `transcript/` are under `packages/frontend-core/src/sessions/agent-orchestrator`. Other paths without a package prefix are under `packages/frontend/src`. The frontend core owns session behavior and receives its host, query client, feedback port, and drafts from the `ClientConnection`. The frontend owns presentation and provider composition.
 
 The host owns live session truth for task and workspace sessions. SQLite owns their durable records. The renderer holds one projection of those sources. History loads only for an open transcript that needs a baseline or missed live events.
 
@@ -8,7 +10,7 @@ Pass primitive identity through these modules. Use `workspaceRepoPath` for repos
 
 ## Session store
 
-Files: `packages/frontend/src/state/agent-sessions-store.ts`, `state/workspace-agent-sessions.ts`, `state/providers/agent-studio-state-provider.tsx`, and `hooks/use-orchestrator-session-state.ts`.
+Files: `packages/frontend-core/src/sessions/agent-sessions-store.ts`, `state/workspace-agent-sessions.ts`, `state/providers/agent-studio-state-provider.tsx`, and `hooks/use-orchestrator-session-state.ts`.
 
 Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. `AgentStudioStateProvider` mounts one controller for each open workspace. Each controller keeps its own collection, read model, history loaders, turn state, and faults. Closing or removing the workspace unmounts that controller and releases its collection and queue projection.
 
@@ -28,7 +30,7 @@ Rules:
 
 ## Activity state
 
-Files: `types/agent-session-activity.ts`, `lib/agent-session-activity-state.ts`, and `lib/agent-session-waiting-input.ts`.
+Files: `packages/frontend-core/src/types/agent-session-activity.ts`, `packages/frontend-core/src/lib/agent-session-activity-state.ts`, and `packages/frontend-core/src/lib/agent-session-waiting-input.ts`.
 
 Owns `waiting_input`, `starting`, `running`, `idle`, `stopped`, and `error`.
 
@@ -66,7 +68,7 @@ This owner does not load catalogs, file status, diff, selected history, or page 
 
 ## Transcript history
 
-Files: `history/session-history-loader.ts`, `history/session-history-load-policy.ts`, `history/session-history-freshness.ts`, `history/use-selected-session-history-load.ts`, and `state/queries/agent-session-history.ts`.
+Files: `history/session-history-loader.ts`, `history/session-history-load-policy.ts`, `history/session-history-freshness.ts`, `history/use-selected-session-history-load.ts`, and `packages/frontend-core/src/queries/agent-session-history.ts`.
 
 Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
 
@@ -98,7 +100,7 @@ One command module owns session control. Task and workspace policy adapters supp
 
 ## Message queues
 
-Files: `packages/host/src/application/agent-sessions/agent-message-delivery-service.ts`, `agent-message-send-outcome.ts`, `agent-message-queue-registry.ts`, `agent-message-queue-model.ts`, `agent-message-session-conditions.ts`, `agent-session-live-change-publisher.ts`, `packages/host/src/composition/node/node-message-delivery.ts`, `state/agent-message-queues-store.ts`, `handlers/message-queue-actions.ts`, `features/agent-chat-composer/message-delivery/use-agent-chat-send.ts`, `agent-chat-send-draft.ts`, `agent-chat-message-queue.tsx`, `agent-chat-queued-message-stack.tsx`, `agent-chat-queued-message-editor.tsx`, `agent-chat-queued-message-drafts.ts`, `pages/agents/session-actions/use-agent-studio-send-target.ts`, and `lib/use-async-activity-tracker.ts`.
+Files: `packages/host/src/application/agent-sessions/agent-message-delivery-service.ts`, `agent-message-send-outcome.ts`, `agent-message-queue-registry.ts`, `agent-message-queue-model.ts`, `agent-message-session-conditions.ts`, `agent-session-live-change-publisher.ts`, `packages/host/src/composition/node/node-message-delivery.ts`, `packages/frontend-core/src/sessions/agent-message-queues-store.ts`, `handlers/message-queue-actions.ts`, `features/agent-chat-composer/message-delivery/use-agent-chat-send.ts`, `agent-chat-send-draft.ts`, `agent-chat-message-queue.tsx`, `agent-chat-queued-message-stack.tsx`, `agent-chat-queued-message-editor.tsx`, `packages/frontend-core/src/drafts/agent-chat-queued-message-drafts.ts`, `pages/agents/session-actions/use-agent-studio-send-target.ts`, and `lib/use-async-activity-tracker.ts`.
 
 The host owns each message queue, its order, its pause, and its automatic delivery. The queue lives in host memory for the app lifetime. [Queue and steering](runtime-integration-guide.md#queue-and-steering) states the adapter contract. The renderer store only projects the queue snapshots of the host.
 
@@ -118,7 +120,7 @@ The host owns each message queue, its order, its pause, and its automatic delive
 - A closed stack shows the start of the front message on one line. An open stack shows every message in full, with its attachments. A long message scrolls inside its card.
 - `agent-chat-user-message-reference-chip.tsx` owns the reference kinds of a user message and their chips. The transcript and the queue both use it, so a new reference kind needs one display change there. The queue shows the chips at a compact size.
 - An edit lifts its message out of the stack into an edit card below the stack. The edit card uses the composer surface and controls. Enter saves the edit, and Escape cancels it. The composer shows a paused queue at its top, with the Resume button.
-- The unsaved edit of a queued message stays in renderer memory, keyed by session and `editId`. Save, Cancel, and Remove clear it.
+- The unsaved edit of a queued message stays in the memory of its host connection (`connection.drafts.queuedMessageEdits`), keyed by session and `editId`. Save, Cancel, and Remove clear it.
 - By default, Enter and Send use ordinary delivery. Command+Enter on macOS or Control+Enter on Windows and Linux steers. The global Settings > Chat switch, "Steer messages by default", swaps these actions after a successful save. Task and workspace chats use the saved choice without a restart. While ordinary delivery goes to the queue, the placeholder adds the current keys after the reference keys. A blocked steer keeps the draft and shows its reason.
 - A confirmed settings save publishes its parsed Chat section into the existing settings query before the canonical refresh. A failed refresh keeps that choice and shows the error. Until the first successful settings read, new-message submission stays blocked. Stop, pending input, and explicit queue actions keep their existing rules.
 - The config remains version `4`. Valid older Chat settings default `steerMessagesByDefault` to `false`. A config written by this version includes the field. An older app with a strict Chat schema can reject that config during a downgrade.
@@ -142,7 +144,7 @@ The live module owns runtime registration and ordered publication. Its internal 
 
 ## Workspace metadata and notifications
 
-Files: `state/queries/workspace-sessions.ts`, `state/queries/workspace-session-updates.ts`, and `state/queries/agent-session-association.ts`.
+Files: `packages/frontend-core/src/queries/workspace-sessions.ts`, `packages/frontend-core/src/queries/workspace-session-updates.ts`, and `packages/frontend-core/src/queries/agent-session-association.ts`.
 
 One metadata subscription updates each shared query cache. Keep events that arrive during a record read until its cache commit. Discard a cancelled read's buffer once. Do not cancel a cold baseline or publish an incomplete baseline to apply an event.
 
@@ -152,7 +154,7 @@ The host detects shared notifications for all open workspaces. Shells deliver th
 
 ## Runtime readiness
 
-Files: `state/queries/host-runtime-status.ts`, `state/host-runtime/host-runtime-status-owner.ts`, `state/providers/host-runtime-status-provider.tsx`, `lib/runtime-readiness.ts`, `lib/use-runtime-readiness.ts`, `packages/host/src/application/runtimes/host-runtime-service.ts`, and `packages/runtime-orchestration/src`.
+Files: `packages/frontend-core/src/queries/host-runtime-status.ts`, `packages/frontend-core/src/runtime/host-runtime-status-owner.ts`, `state/providers/host-runtime-status-provider.tsx`, `packages/frontend-core/src/lib/runtime-readiness.ts`, `lib/use-runtime-readiness.ts`, `packages/host/src/application/runtimes/host-runtime-service.ts`, and `packages/runtime-orchestration/src`.
 
 Owns the host runtime status of each kind and the mapping to ready, checking, or blocked.
 
@@ -172,7 +174,7 @@ Files: `history/session-history-loader.ts`, `history/use-selected-session-histor
 
 Owns one selected session history request, its load state, transient prompt context, message projection, merge with live messages, and subagent correlation.
 
-The workspace rail's existing subscriptions also feed `state/queries/agent-session-history-freshness-tracker.ts`. It records freshness versions for cached and retained history. Workspace switches flush buffered transcript events before retaining the old collection.
+The workspace rail's existing subscriptions also feed `packages/frontend-core/src/queries/agent-session-history-freshness-tracker.ts`. It records freshness versions for cached and retained history. Workspace switches flush buffered transcript events before retaining the old collection.
 
 Rules:
 
@@ -211,7 +213,7 @@ Owns transcript event routing, per-session batching, todo event forwarding, acti
 Rules:
 
 - Live activity, pending input, context, and removal arrive as live-state messages. Only `agent-session-live-projection.ts` applies them to the Agent Studio session store. It also applies activity carried by a transcript event before transcript buffering. Transcript assembly cannot change activity.
-- `projectObservedSessionActivity` in `session-read-model/agent-session-live-projection.ts` states the observed status rule. `projectSessionSnapshotActivity` in the same file states the snapshot policy: episode carryforward, pending-input override, terminal preservation, and message reset. `projectSessionTranscriptActivity` in `session-read-model/agent-session-live-activity.ts` states the transcript rule. The workspace activity projection in `features/workspace-activity/`, which feeds the workspace rail and the session list, reuses these rules. Agent Studio also records local stop intent, which the rail does not receive, so their transcript results can differ when those inputs differ. Change each rule in its one function, not in a copy.
+- `projectObservedSessionActivity` in `session-read-model/agent-session-live-projection.ts` states the observed status rule. `projectSessionSnapshotActivity` in the same file states the snapshot policy: episode carryforward, pending-input override, terminal preservation, and message reset. `projectSessionTranscriptActivity` in `session-read-model/agent-session-live-activity.ts` states the transcript rule. The workspace activity projection in `packages/frontend-core/src/workspace-activity/`, which feeds the workspace rail and the session list, reuses these rules. Agent Studio also records local stop intent, which the rail does not receive, so their transcript results can differ when those inputs differ. Change each rule in its one function, not in a copy.
 - `SessionTranscriptEventContext.session` is the only event target. Other capability groups do not copy session identity.
 - Transcript text exists only in `session.messages`.
 - `SessionTurnMetadata` owns turn anchors. `SessionTurnTiming` owns timing.
@@ -313,7 +315,7 @@ The app shell also owns `contexts/DiffWorkerProvider.tsx`. Page and workspace sw
 
 ## Selected runtime data
 
-Files: `hooks/use-session-runtime-data.ts`, `support/session-runtime-data-refs.ts`, `types/selected-session-runtime-data.ts`, `state/queries/agent-session-todos.ts`, `state/queries/runtime-catalog.ts`, and `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`.
+Files: `hooks/use-session-runtime-data.ts`, `support/session-runtime-data-refs.ts`, `packages/frontend-core/src/types/selected-session-runtime-data.ts`, `packages/frontend-core/src/queries/agent-session-todos.ts`, `packages/frontend-core/src/queries/runtime-catalog.ts`, and `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`.
 
 Owns refs and Query reads for the selected model catalog and todos. It gates reads on runtime readiness and returns one view object with data, loading, and error.
 
@@ -370,7 +372,7 @@ Rules:
 - One layout belongs to each task, for all its role sessions, and one to each Workspace Session. Each role and each chat remembers its selected right panel tab. A role without a selection starts on its default tab. When the remembered tab closes or moves away, the panel selects its first tab, also after a restart.
 - `reconcileSessionPanelLayout` applies the rules to a layout on each input change. It keeps the position of a kind that is not available, so CI Checks gets its position back. It drops a terminal tab only when the terminal list proves that its terminal ended.
 - `canPlacePanelTab` is the one placement check for the launcher and moves. `canMovePanelTab` is the one move check for drag and drop and the move action. The launcher shows no card for a unique kind that is already open.
-- The layout store keeps the layouts of all owners for the app run and saves tool tabs in `localStorage`, one record for each owner. It does not save terminal tabs or the New tab. The sessions page removes the records of tasks, chats, and workspaces that no longer exist. It removes the records of a workspace only when the open and the closed workspace lists are both current. It reads the IDs of all tasks from `task_ids_list`, because the Kanban task list hides old closed tasks.
+- Each client connection has one layout store. It keeps the layouts of all owners while the connection lives and saves tool tabs in the connection storage, one record for each owner. It does not save terminal tabs or the New tab. The sessions page removes the records of tasks, chats, and workspaces that no longer exist. It removes the records of a workspace only when the open and the closed workspace lists are both current. It reads the IDs of all tasks from `task_ids_list`, because the Kanban task list hides old closed tasks.
 - The right panel open state is global. The bottom panel visibility belongs to the selected owner and resets when the owner changes. The bottom panel hides when it loses its last tab, by a close, a move, or a terminal list without its terminals. An empty bottom panel that the user opens stays open.
 - Each panel has one presence: `opening`, `open`, `closing`, or `closed`. A panel is visible in all states except `closed`, so its content does not change while it slides out. The Ctrl+` shortcut, an owner change, and the first render go to `open` or `closed` at once.
 - `SessionPanelSplit` places the main area and one panel. While the panel opens or closes, both change size together with the sheet motion tokens, and the panel content keeps its open size at the outer edge. The size transition is on only during that move, so a drag on the separator stays direct. The split calls `onSettled` when the move ends. It calls it at once when no transition runs, as with reduced motion or a panel that a drag made zero wide. When the user makes an open panel zero in size with its separator, the split calls `onCollapsed`, and the panel hides at once.
@@ -379,7 +381,7 @@ Rules:
 
 ## Composer
 
-Files: `pages/agents/agent-studio-chat-surface-state.ts`, `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`, `components/features/agents/model-picker/*`, `features/agent-chat-composer/context-usage/*`, `features/agent-chat-composer/model-selection/*`, `features/agent-chat-composer/prompt-input/*`, `state/queries/use-runtime-model-catalogs.ts`, and `state/mutations/use-agent-model-favorites.ts`.
+Files: `pages/agents/agent-studio-chat-surface-state.ts`, `pages/agents/chat-composer/use-agent-studio-chat-composer.ts`, `components/features/agents/model-picker/*`, `features/agent-chat-composer/context-usage/*`, `features/agent-chat-composer/model-selection/*`, `features/agent-chat-composer/prompt-input/*`, `packages/frontend-core/src/queries/use-runtime-model-catalogs.ts`, and `state/mutations/use-agent-model-favorites.ts`.
 
 Owns model choices, favorites, search, draft scope, empty and kickoff state, context display, prompt-input runtime state, and runtime catalog queries.
 
@@ -445,7 +447,7 @@ Owns read-only history, preference for an existing live session, live pending in
 
 ## Task session records
 
-Files: `state/queries/agent-sessions.ts`, `session-read-model/task-session-records.ts`, `session-read-model/use-task-session-records.ts`, `hooks/use-repo-session-read-model.ts`, and `session-read-model/agent-session-workflow-records.ts`.
+Files: `packages/frontend-core/src/queries/agent-sessions.ts`, `session-read-model/task-session-records.ts`, `session-read-model/use-task-session-records.ts`, `hooks/use-repo-session-read-model.ts`, and `session-read-model/agent-session-workflow-records.ts`.
 
 Owns per-task durable record queries and task session history for the Sessions page, the session list, Kanban, and task details.
 
@@ -531,7 +533,7 @@ Startup is complete when task records and the first host snapshot have produced 
 | Browser reconnect uses one SSE channel | `local-host-transport.test.ts` |
 | Selected transcript display state | `transcript/session-transcript-state.test.ts`, `agent-chat-thread-state.test.ts`, selected view tests |
 | Host prepares current turn context | `session-turn-preparation.test.ts`, `session-operation-owner.test.ts` |
-| Runtime status follows events by revision | `state/host-runtime/host-runtime-status-owner.test.ts` |
+| Runtime status follows events by revision | `packages/frontend-core/src/runtime/host-runtime-status-owner.test.ts` |
 | Replies use normalized refs | `handlers/session-actions-pending-input.test.ts` |
 | Read-only history and replies | Read-only transcript hook tests |
 
@@ -546,7 +548,7 @@ Task `openduckto-j9sgg` moves session projection and history reconciliation into
 - Use stored `runtimeKind` and `workingDirectory`. Missing route data is an error, not a reason to use the default runtime.
 - A missing live snapshot is not an idle event. Keep history mounted, but clear runtime-owned active state.
 - Keep runtime IDs and routes in adapters and the registry.
-- `packages/frontend/src/state/agent-runtime-services.ts` selects an adapter from required `runtimeKind`. It does not repair a missing runtime.
+- `packages/frontend-core/src/sessions/agent-runtime-services.ts` selects an adapter from required `runtimeKind`. It does not repair a missing runtime.
 - Keep live routes, pending input, and transcript streams out of task records.
 - Give each hook only the concrete state owner it needs. Do not pass a general mutable ref set.
 - Public operations call `agentEngine` reads directly. Do not add pass-through hooks.

@@ -2,10 +2,10 @@ import { describe, expect, mock, test } from "bun:test";
 import type { PullRequest, TaskPullRequestDetectResult } from "@openducktor/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createRef, type PropsWithChildren, type ReactElement } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
-import { writeWorkspaceListToQuery } from "@/state/queries/workspace";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { pullRequestReviewQueryKeys } from "@openducktor/frontend-core/queries/pull-request-review";
+import { writeWorkspaceListToQuery } from "@openducktor/frontend-core/queries/workspace";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createDeferred,
   createTaskCardFixture,
@@ -76,7 +76,7 @@ type OperationsHarnessOptions = {
 };
 
 const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
-  const queryClient = createQueryClient();
+  const queryClient = createClientQueryClient();
   const queryKey = pullRequestReviewQueryKeys.context({
     repoPath: "/repo",
     taskId: "task-1",
@@ -139,7 +139,7 @@ const createOperationsHarness = (options: OperationsHarnessOptions = {}) => {
 };
 
 const expectReviewQueryInvalidated = (
-  queryClient: ReturnType<typeof createQueryClient>,
+  queryClient: ReturnType<typeof createClientQueryClient>,
   queryKey: ReturnType<typeof pullRequestReviewQueryKeys.context>,
 ): void => {
   expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);

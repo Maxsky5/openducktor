@@ -1,12 +1,15 @@
 import type { AgentRole } from "@openducktor/core";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   buildRoleSessionSequenceByIdentity,
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@/lib/agent-session-options";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 

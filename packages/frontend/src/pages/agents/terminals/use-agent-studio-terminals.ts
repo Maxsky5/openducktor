@@ -8,18 +8,13 @@ import type {
 } from "@/features/terminals";
 import { useTerminals } from "@/features/terminals";
 import { getShellBridge } from "@/lib/shell-bridge";
-import { host } from "@/state/operations/host";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type AgentStudioTerminalDependencies = {
-  hostClient: TerminalDependencies["hostClient"] & Pick<typeof host, "taskWorktreeGet">;
+  hostClient: TerminalDependencies["hostClient"];
   terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
 };
-
-const defaultDependencies = (): AgentStudioTerminalDependencies => ({
-  hostClient: host,
-  terminalBridge: getShellBridge().terminals,
-});
 
 /** The panel layout owner key, so the panels can place the terminals of each task. */
 const terminalScopeKey = (workspaceId: string, taskId: string): string =>
@@ -39,20 +34,23 @@ export const useAgentStudioTerminals = (
     taskVersion: string | null;
     mountedTaskIds: readonly string[];
   },
-  dependencies = defaultDependencies(),
+  suppliedDependencies?: AgentStudioTerminalDependencies,
 ): TerminalSessionsModel => {
+  const hostClient = useHostClient();
+  const dependencies = suppliedDependencies ?? {
+    hostClient,
+    terminalBridge: getShellBridge().terminals,
+  };
   const enabled = workspaceId !== null && repoPath !== null && taskId !== null;
   const worktreeOptions = enabled
     ? taskWorktreeQueryOptions({
         repoPath,
         taskId,
-        hostClient: dependencies.hostClient,
         taskVersion,
       })
     : taskWorktreeQueryOptions({
         repoPath: "disabled",
         taskId: "disabled",
-        hostClient: dependencies.hostClient,
       });
   const worktreeQuery = useQuery({
     ...worktreeOptions,

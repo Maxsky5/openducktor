@@ -4,8 +4,8 @@ import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-
 import { memo, type ReactElement, type RefObject, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { pendingInputIdentity } from "@/lib/pending-input-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";

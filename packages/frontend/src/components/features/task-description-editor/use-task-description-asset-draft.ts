@@ -3,7 +3,7 @@ import {
   type TaskAssetStageResult,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 export type TaskDescriptionAssetUpload = {
   id: string;

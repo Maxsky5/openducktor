@@ -8,9 +8,9 @@ import {
   resolveModelSelectionForProfileChange,
   resolveModelSelectionForVariantChange,
 } from "@/features/model-selection/model-selection-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { STANDARD_SPEED, withSpeed } from "@/lib/model-catalog-selection";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { STANDARD_SPEED, withSpeed } from "@openducktor/frontend-core/lib/model-catalog-selection";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { reportModelUpdateError } from "./model-update-error";
 import { resolveModelSelectionPolicy } from "./model-selection-policy";
 

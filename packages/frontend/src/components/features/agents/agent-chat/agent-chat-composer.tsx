@@ -30,7 +30,7 @@ import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
 import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
-import { CHAT_ATTACHMENT_ACCEPT } from "./agent-chat-attachments";
+import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   createComposerAutofocusState,
   resolveComposerAutofocus,
@@ -40,7 +40,7 @@ import {
   appendAttachmentsToDraft,
   createEmptyComposerDraft,
   removeAttachmentFromDraft,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   AgentChatComposerEditor,
   type AgentChatComposerEditorCatalog,

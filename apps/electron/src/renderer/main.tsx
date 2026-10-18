@@ -23,7 +23,7 @@ bootstrapOpenDucktorShell({
   routerMode: "hash",
   hosts: {
     localHost: "electron",
-    createRemoteBridge: (endpoint, local) => {
+    createRemoteBridge: (endpoint, local, queryClient) => {
       const version = getAppVersion();
       if (!version || !local) throw new Error("The desktop shell is not ready.");
       const bridge = createRemoteShellBridge({
@@ -31,6 +31,7 @@ bootstrapOpenDucktorShell({
         version,
         transport: createBrowserRemoteTransport(),
         notifications: local.notifications,
+        queryClient,
       });
       return {
         ...bridge,

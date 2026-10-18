@@ -24,7 +24,7 @@ import { WorkspaceSessionRenameDialog } from "@/pages/workspace-sessions/workspa
 import { useMountedRef } from "@/pages/workspace-sessions/use-mounted-ref";
 import { useRequiredContext } from "@/state/app-state-contexts";
 import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
-import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
+import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { SessionNavigationWorkspace } from "@/state/read-models/session-navigation-read-model";
 
 type SessionMenuTarget = {

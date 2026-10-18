@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { formatTaskAssetFailure, taskAssetFailureFromError } from "./task-asset-failure-recovery";
 import { requireActiveRepo } from "./task-operations-model";
 

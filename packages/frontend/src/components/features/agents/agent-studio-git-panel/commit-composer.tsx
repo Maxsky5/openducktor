@@ -3,7 +3,7 @@ import { type KeyboardEvent, memo, type ReactElement, useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { GitCommitMode } from "@/features/agent-studio-git";
-import { isApplePlatform } from "@/lib/steer-shortcut";
+import { isApplePlatform } from "@/lib/device-platform";
 import { cn } from "@/lib/utils";
 import {
   clearSubmittedCommitMessage,

@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { useWorkspacePresence, useWorkspaceState } from "@/state/app-state-provider";
-import { repoTaskIdsQueryOptions } from "@/state/queries/tasks";
-import { workspaceSessionListQueryOptions } from "@/state/queries/workspace-sessions";
-import { pruneSessionPanelLayouts } from "./session-panel-layout-store";
+import { repoTaskIdsQueryOptions } from "@openducktor/frontend-core/queries/tasks";
+import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { useSessionPanelLayoutStore } from "./session-panel-layout-store";
 
 /**
  * Removes the saved panel layouts of tasks, chats, and workspaces that no longer exist. It waits
  * until each list that it reads is current.
  */
 export function useSessionPanelLayoutPruning(): void {
+  const layoutStore = useSessionPanelLayoutStore();
   const { workspaces, closedWorkspaces, activeWorkspace } = useWorkspaceState();
   const { workspaceRecordsAreCurrent } = useWorkspacePresence();
   const workspaceId = activeWorkspace?.workspaceId ?? null;
@@ -60,14 +61,14 @@ export function useSessionPanelLayoutPruning(): void {
   // of another list, such as a task list that does not have a new task yet.
   useEffect(() => {
     if (workspaceIds === null) return;
-    pruneSessionPanelLayouts({ kind: "workspaces", ids: workspaceIds });
-  }, [workspaceIds]);
+    layoutStore.prune({ kind: "workspaces", ids: workspaceIds });
+  }, [layoutStore, workspaceIds]);
   useEffect(() => {
     if (workspaceId === null || taskIds === null) return;
-    pruneSessionPanelLayouts({ kind: "tasks", workspaceId, ids: taskIds });
-  }, [taskIds, workspaceId]);
+    layoutStore.prune({ kind: "tasks", workspaceId, ids: taskIds });
+  }, [layoutStore, taskIds, workspaceId]);
   useEffect(() => {
     if (workspaceId === null || chatIds === null) return;
-    pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: chatIds });
-  }, [chatIds, workspaceId]);
+    layoutStore.prune({ kind: "chats", workspaceId, ids: chatIds });
+  }, [chatIds, layoutStore, workspaceId]);
 }

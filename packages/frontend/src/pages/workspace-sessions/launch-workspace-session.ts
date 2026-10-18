@@ -4,17 +4,20 @@ import type {
   WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { applyWorkspaceSessionRecords } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { applyAgentSessionLiveDelta } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
-import { host } from "@/state/operations/host";
+import type { AgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { applyWorkspaceSessionRecords } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { applyAgentSessionLiveDelta } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/agent-session-live-projection";
 import {
   workspaceSessionQueryKeys,
   updateWorkspaceSessionQueries,
-} from "@/state/queries/workspace-sessions";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
-import { upsertUserSessionMessage } from "@/state/operations/agent-orchestrator/support/messages";
-import { toUserChatMessage } from "@/state/operations/agent-orchestrator/support/user-message-event";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
+import {
+  getAgentSession,
+  replaceAgentSession,
+} from "@openducktor/frontend-core/sessions/agent-session-collection";
+import { upsertUserSessionMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { toUserChatMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/user-message-event";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 export const launchWorkspaceSession = async (
   request: WorkspaceSessionLaunchRequest,
@@ -22,7 +25,7 @@ export const launchWorkspaceSession = async (
   store: AgentSessionsStore,
   queryClient: QueryClient,
 ): Promise<WorkspaceSessionLaunchResult> => {
-  const outcome = await host.workspaceSessionLaunch(request);
+  const outcome = await connectionHost(queryClient).workspaceSessionLaunch(request);
   if (
     outcome.record &&
     (outcome.record.id !== record.id ||

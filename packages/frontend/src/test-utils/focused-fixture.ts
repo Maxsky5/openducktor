@@ -1,15 +1,8 @@
-import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
+import type { HostClient } from "@openducktor/host-client";
+import { createHostClientFixture } from "@openducktor/frontend-core/test-support/focused-fixture";
 
-export const createHostClientFixture = <Overrides extends Partial<HostClient>>(
-  overrides: Overrides,
-): HostClient =>
-  Object.assign(
-    createHostClient(async () => {
-      throw new Error("Host client method is not configured for this test.");
-    }),
-    overrides,
-  );
+export { createHostClientFixture } from "@openducktor/frontend-core/test-support/focused-fixture";
 
 type ShellBridgeFixtureOptions = {
   client?: Partial<HostClient>;

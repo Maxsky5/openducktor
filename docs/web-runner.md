@@ -97,12 +97,13 @@ Without `--base-path`, the browser reaches the host on the backend port, so the 
 ## Architecture
 
 - `packages/frontend` owns the React app, `bootstrapOpenDucktorShell`, and `ShellBridge` types.
+- `packages/frontend-core` owns the shared client behavior and the `ClientConnection` that the bootstrap creates for the selected host.
 - `apps/electron` implements the bridge with preload IPC and delegates host work to `@openducktor/host`.
 - `packages/openducktor-web` implements the bridge with HTTP calls and SSE subscriptions.
 - `packages/openducktor-web/src/typescript-host-backend.ts` owns its host and private browser backend.
 - `packages/remote-host` attaches the shared network work interface to either shell.
 
-Shared frontend code cannot import shell internals. `bun run frontend:boundary-guard` checks this rule.
+Shared frontend code cannot import shell internals. `getShellBridge()` returns `ShellPlatform`, which has no host members, so production frontend code reaches the host only through its client connection. `bun run lint` checks the import boundaries with oxlint: `no-restricted-imports` for shell imports in the shared frontend, and `architecture/allowed-imports` for the frontend core.
 
 The `/events` endpoint authenticates the host session and streams the shared event bus for all repositories. Repository names select browser listeners; they do not restrict access. The transport does not support sessions authorized for only one repository.
 
@@ -149,7 +150,7 @@ The web runner supports local browser use and network use through `--host` and `
 ## Verify a change
 
 ```sh
-bun run frontend:boundary-guard
+bun run lint
 (cd packages/openducktor-web && bunx vite build --outDir /tmp/openducktor-web-vite-build --emptyOutDir)
 bun run --filter @openducktor/frontend test
 bun run --filter @openducktor/web test

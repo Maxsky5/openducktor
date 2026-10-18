@@ -38,7 +38,7 @@ jobs:
       - name: Run React Doctor
         uses: millionco/react-doctor@673ce802a375eeb4c3c5cb9a96d21eaeb7eafd93 # v2.3.1
         with:
-          project: "@openducktor/frontend,@openducktor/electron"
+          project: "@openducktor/frontend,@openducktor/frontend-core,@openducktor/electron"
           blocking: warning
           version: "0.9.14"
 

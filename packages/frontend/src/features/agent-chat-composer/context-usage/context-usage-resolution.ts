@@ -1,5 +1,5 @@
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { AgentSessionContextUsage } from "@/types/agent-orchestrator";
+import type { AgentSessionContextUsage } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type AgentStudioContextUsage = {
   totalTokens: number;

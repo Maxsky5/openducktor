@@ -1,7 +1,7 @@
 import type { RuntimeKind, RuntimeLifecycleImpact } from "@openducktor/contracts";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { useHostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import type { HostRuntimeEvents } from "@/types/state-slices";
 
 export type RuntimeImpactState = {

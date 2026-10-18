@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { act, render } from "@testing-library/react";
 import type { ComponentType } from "react";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   createMarkdownSyntaxBlock,
   type MarkdownSyntaxBlockProps,

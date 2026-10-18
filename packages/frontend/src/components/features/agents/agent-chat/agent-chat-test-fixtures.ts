@@ -6,8 +6,8 @@ import type {
 } from "@openducktor/core";
 import { createRef } from "react";
 import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
@@ -19,7 +19,7 @@ import type {
   AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionState,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentRoleOption } from "../agent-studio-header.types";
 import type {
   AgentChatThreadModel,
@@ -27,7 +27,7 @@ import type {
   AgentChatTranscriptPresentation,
   AgentChatTranscriptSession,
 } from "./agent-chat.types";
-import { createTextSegment } from "./agent-chat-composer-draft";
+import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
 
 const baseTask: TaskCard = {
