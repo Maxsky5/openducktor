@@ -90,6 +90,10 @@ Only the task detail sheet can show `close_task`. Do not show it on a Kanban car
 
 ## Merged pull requests
 
+The host syncs pull requests for all open workspaces when it starts. It waits five minutes after each iteration before it syncs again. Closed workspaces and incomplete removals do not sync.
+
+If one workspace sync fails, the host logs its repo path and the error, then continues with the other open workspaces. It tries the failed workspace again on the next interval.
+
 Pull request sync records the merged pull request, stops task terminals, and removes the task worktree and local source branch before it closes the task. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules
