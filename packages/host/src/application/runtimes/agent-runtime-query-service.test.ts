@@ -77,6 +77,16 @@ const harness = async (
               },
             };
           }),
+        loadKnownRuntimeCatalog: (input) =>
+          Effect.sync(() => {
+            calls.push({ known: input.workingDirectory });
+            return {
+              models: {
+                status: "available" as const,
+                catalog: options.catalog ?? { models: [], defaultModelsByProvider: {} },
+              },
+            };
+          }),
         loadSessionHistory: (input) =>
           Effect.sync(() => {
             calls.push(input);
@@ -286,6 +296,15 @@ for (const runtimeKind of ["opencode", "claude", "codex"] as const) {
     expect(h.calls).toEqual([{ repoPath, runtimeKind, workingDirectory: repoPath }]);
   });
 }
+
+test("validation catalog reads use the adapter's known catalog read", async () => {
+  const h = await harness("claude");
+  const input = { repoPath: "/alias", runtimeKind: "claude" as const, workingDirectory };
+  expect(await Effect.runPromise(h.service.loadKnownRuntimeCatalog(input))).toEqual({
+    models: { status: "available", catalog: { models: [], defaultModelsByProvider: {} } },
+  });
+  expect(h.calls).toEqual([{ known: workingDirectory }]);
+});
 
 for (const directory of [repoPath, `${repoPath}/nested`, workingDirectory, "/legacy/repo/task"]) {
   test(`accepts workspace directory ${directory}`, async () => {

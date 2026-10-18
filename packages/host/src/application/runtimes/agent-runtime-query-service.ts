@@ -6,8 +6,9 @@ import type {
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode } from "../../effect/host-errors";
 import type {
+  AgentRuntimeQueryAdapterPort,
   AgentRuntimeQueryPort,
-  NativeAgentRuntimeQueryPort,
+  NativeAgentRuntimeQueries,
 } from "../../ports/agent-runtime-query-port";
 import type {
   AgentSessionLiveAdapterPort,
@@ -36,7 +37,7 @@ export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDepend
   worktreeReads: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
 };
 
-type QueryMethod = keyof AgentRuntimeQueryPort;
+type QueryMethod = keyof NativeAgentRuntimeQueries;
 
 /**
  * Hold the worktree read guard until the query finishes and the host checks its runtime binding again.
@@ -49,7 +50,7 @@ export const createAgentRuntimeQueryService = (
     method: QueryMethod,
     input: Input,
     invoke: (
-      queries: NativeAgentRuntimeQueryPort,
+      queries: AgentRuntimeQueryAdapterPort,
       input: Input,
       runtime: RuntimeInstanceSummary,
     ) => Effect.Effect<Result, RuntimeQueryError>,
@@ -129,6 +130,12 @@ export const createAgentRuntimeQueryService = (
       read("loadRuntimeCatalog", input, (queries, request, runtime) =>
         queries
           .loadRuntimeCatalog(request)
+          .pipe(Effect.map((catalogRead) => toCatalogResponse(catalogRead, runtime))),
+      ),
+    loadKnownRuntimeCatalog: (input) =>
+      read("loadRuntimeCatalog", input, (queries, request, runtime) =>
+        queries
+          .loadKnownRuntimeCatalog(request)
           .pipe(Effect.map((catalogRead) => toCatalogResponse(catalogRead, runtime))),
       ),
     searchFiles: (input) =>

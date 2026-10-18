@@ -30,12 +30,12 @@ type PreparationTarget = Omit<AgentMessageTarget, "externalSessionId">;
 
 export const createSessionTurnPreparation = (deps: {
   settings: Pick<WorkspaceSettingsService, "getRepoConfigByRepoPath" | "getSettingsSnapshot">;
-  queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog" | "loadSessionHistory">;
+  queries: Pick<AgentRuntimeQueryPort, "loadKnownRuntimeCatalog" | "loadSessionHistory">;
   taskReader: Pick<TaskStorePort, "getTask">;
 }) => {
   const catalogFor = (target: PreparationTarget) =>
     Effect.gen(function* () {
-      const read = yield* deps.queries.loadRuntimeCatalog(target);
+      const read = yield* deps.queries.loadKnownRuntimeCatalog(target);
       if (read.models?.status !== "available")
         return yield* new HostValidationError({
           field: "model",

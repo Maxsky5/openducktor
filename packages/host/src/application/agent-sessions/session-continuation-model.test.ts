@@ -73,7 +73,7 @@ const setup = (
       },
       queries: {
         loadSessionHistory: unexpected,
-        loadRuntimeCatalog: () =>
+        loadKnownRuntimeCatalog: () =>
           Effect.succeed({
             models: {
               status: "available" as const,

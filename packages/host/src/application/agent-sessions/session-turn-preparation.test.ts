@@ -60,7 +60,7 @@ const setup = (history: AgentSessionHistoryMessage[] = []) => {
     },
     queries: {
       loadSessionHistory: () => Effect.succeed(history),
-      loadRuntimeCatalog: () =>
+      loadKnownRuntimeCatalog: () =>
         Effect.succeed({ models: { status: "available", catalog: currentCatalog } }),
     },
     taskReader: {

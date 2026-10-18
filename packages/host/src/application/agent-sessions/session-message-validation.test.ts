@@ -107,7 +107,8 @@ const setup = ({
       ),
   };
   const queries = {
-    loadRuntimeCatalog: () => Effect.succeed({ models: { status: "available" as const, catalog } }),
+    loadKnownRuntimeCatalog: () =>
+      Effect.succeed({ models: { status: "available" as const, catalog } }),
     loadSessionHistory: () =>
       Effect.succeed([
         // OpenCode exposes the active model on assistant rows.

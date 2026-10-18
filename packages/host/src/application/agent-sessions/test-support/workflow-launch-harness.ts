@@ -461,7 +461,7 @@ export const createLaunchHarness = async (
     definitions: { listRuntimeDefinitions: () => [descriptor] },
     registry,
     queries: {
-      loadRuntimeCatalog: () =>
+      loadKnownRuntimeCatalog: () =>
         Effect.sync(() => {
           catalogLoads += 1;
           return {
