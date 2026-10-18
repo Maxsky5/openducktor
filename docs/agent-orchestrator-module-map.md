@@ -8,9 +8,9 @@ Pass primitive identity through these modules. Use `workspaceRepoPath` for repos
 
 ## Session store
 
-Files: `packages/frontend/src/state/agent-sessions-store.ts` and `hooks/use-orchestrator-session-state.ts`.
+Files: `packages/frontend/src/state/agent-sessions-store.ts`, `state/workspace-agent-sessions.ts`, `state/providers/agent-studio-state-provider.tsx`, and `hooks/use-orchestrator-session-state.ts`.
 
-Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. The store keeps every visited repository collection in memory.
+Owns the per-repository `AgentSessionState` collections, derived summaries, activity snapshot, and React notifications. `AgentStudioStateProvider` mounts one controller for each open workspace. Each controller keeps its own collection, read model, history loaders, turn state, and faults. Closing or removing the workspace unmounts that controller and releases its collection and queue projection.
 
 Rules:
 
@@ -20,9 +20,11 @@ Rules:
 - The store keeps the `policyNotice` and `launchFailure` of each live snapshot. It puts them back into the session messages after each commit. It inserts a launch failure in timestamp order.
 - Read one selected session through the store reader. Do not request a full collection only to prepare or load one session.
 - Pass summaries to render code as snapshots. Do not build a mutable mirror.
-- All reads and writes target the active repository. A session outside the active collection resolves to no session.
-- A repository switch keeps retained transcripts and marks their history stale. The store serves the retained transcript immediately. The selected attachment restores loaded history when its live coverage version still matches. An open transcript view refreshes history that remains stale.
-- An unfinished baseline read returns to `not_requested` when its repository becomes inactive. An interrupted refresh returns to `stale` and keeps its visible baseline.
+- Each store is bound to one repository for its lifetime. The registry owns workspace retention and removal.
+- Context reads and writes use a view bound to the selected repository. A workspace switch selects another mounted controller. It does not rebuild a collection, restart observation, clear faults or turn state, or mark history stale.
+- Background launch results use `getWorkspaceStore` to write to their open workspace. A closed workspace has no store and cannot receive a late launch projection. Task-record removal reaches the named workspace, including an inactive one.
+- Transcript warming uses `getSessionSnapshotAcrossWorkspaces` to read retained cache entries from any open workspace. The cache keeps its six-entry bound, complete session identity, thinking-preference keys, and cancellation rules.
+- An unfinished history read continues while its workspace stays open. Closing the workspace invalidates the controller lifetime, so a late read cannot restore its collection.
 
 ## Activity state
 
@@ -42,7 +44,10 @@ Owns durable record reads, root admission from durable records or explicit start
 
 Rules:
 
-- Attach the host listener before `agentSessionLiveAttach`. The host returns the repository snapshot to that caller only.
+- `WorkspaceActivityProvider` owns one live transport subscription for each open workspace. `workspace-activity/workspace-session-live-source.ts` feeds its envelopes to both activity and the workspace session controller. It also keeps the existing list, Git, and history-coverage updates. Do not add another transport subscription or poll.
+- A controller registers on that stream before it calls `agentSessionLiveAttach`. The host returns the repository snapshot to that caller only. The host-client attachment helper orders that snapshot and the changes received during the read. Switching workspaces needs no new attachment. An explicit read-model retry can attach again and restart a failed shared observation. Closing a workspace releases even an observation that is still opening.
+- The shared source returns its stop callback at once. Disposal closes the old connection before a replacement opens, also while the old transport is still opening.
+- A streamed connection snapshot installs a new controller sequence bound, including when a host restart resets the sequence. It keeps `historyReplayGap` and drops buffered changes from the lost coverage. It replaces any pending initial read, so that read's later result or failure cannot replace recovered state. If the connection snapshot arrives during startup, no additional initial snapshot read is needed.
 - The first attachment of a repository reads its durable roots and runtime sessions once. Later attachments from any browser use the live projection.
 - A live snapshot cannot create a root. A root enters through an OpenDucktor start registration or a durable task or workspace session record.
 - A live event can add a descendant only when its parent already exists in the collection.
@@ -65,7 +70,7 @@ Files: `history/session-history-loader.ts`, `history/session-history-load-policy
 
 Task chats, workspace chats, and dialogs for registered sessions share one history loader and one store transcript. Selection does not make loaded history stale. Live events keep the transcript current while its repository stream stays connected.
 
-A selected-workspace attachment delivers a connection snapshot, including on a workspace return. The snapshot restores covered retained histories when their observation epoch and session revision still match. A replay gap, unknown coverage, observation failure, or scoped runtime fault keeps affected history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
+Each open workspace keeps its own attachment and transcript projection while another workspace is selected. Returning to that workspace uses its current history without another attachment. A connection snapshot checks history coverage against the observation epoch and session revision. A replay gap, unknown coverage, observation failure, or scoped runtime fault keeps affected history stale. Cancel older query reads before an open transcript can refresh. Hidden sessions stay stale until opened. Do not reload every retained transcript after a gap.
 
 TanStack Query owns native history reads and their cancellation. The session store owns the merge with live messages. A late read cannot replace newer live text or tool results, restore removed responses or answered questions, or drop known tool timing. An unchanged merge keeps the message objects and transcript revision. Failed reads keep an actionable error and wait for a retry.
 
@@ -501,9 +506,9 @@ Rules:
 
 ## Startup sequence
 
-1. Read task IDs from the task store.
-2. Read task and workspace session records through their shared Query keys.
-3. Attach to the generic host-event channel, then request a repository live snapshot. Host observation already follows admitted workspaces and does not depend on this client attachment.
+1. Mount one session controller for each open workspace and read its tasks through the shared Query key.
+2. Read each workspace's task and workspace session records through their shared Query keys.
+3. Use the workspace activity observer's generic host-event subscription, then request a repository live snapshot for the controller. Host observation already follows admitted workspaces and does not depend on this client attachment.
 4. Runtime adapters read exact saved roots and verified descendants. Apply durable records before and after the live projection, then commit once.
 5. Derive rows, activity, pending input, current context usage, and counters from that commit.
 6. Apply ordered changes on the same channel. After a browser reconnect, apply the replayed changes. Attach again only after a replay gap or a host change.
@@ -515,6 +520,7 @@ Startup is complete when task records and the first host snapshot have produced 
 
 | Rule | Main tests |
 |---|---|
+| Open workspace switches, inactive warming, launches, and release | `state/providers/agent-studio-state-provider.test.tsx`, `state/workspace-activity/workspace-session-live-source.test.ts` |
 | Reload keeps active and waiting sessions | `session-read-model/agent-session-live-projection.test.ts`, host adapter tests |
 | Snapshot comes before changes | `hooks/use-repo-session-read-model.test.tsx`, `agent-session-live-state-service.test.ts` |
 | Lost live evidence clears only live state | `session-read-model/agent-session-live-projection.test.ts` |
@@ -528,6 +534,10 @@ Startup is complete when task records and the first host snapshot have produced 
 | Runtime status follows events by revision | `state/host-runtime/host-runtime-status-owner.test.ts` |
 | Replies use normalized refs | `handlers/session-actions-pending-input.test.ts` |
 | Read-only history and replies | Read-only transcript hook tests |
+
+## Related work
+
+Task `openduckto-j9sgg` moves session projection and history reconciliation into a shared client layer. The workspace controllers keep using the existing projection and history modules, and the shared stream uses the host-client attachment helper. This change does not copy those algorithms or change a runtime adapter. Task `openduckto-v9ax6` owns transcript derivation cost. Cross-workspace warming uses the existing cache and build rules.
 
 ## Guardrails
 

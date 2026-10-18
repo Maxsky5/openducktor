@@ -1,40 +1,35 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
 import type { SessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { markSessionHistoriesStale } from "../history/session-history-freshness";
 import { createSessionTurnState, type SessionTurnState } from "../support/session-turn-state";
 
-type UseOrchestratorSessionStateRefs = {
+type UseOrchestratorSessionStateArgs = {
+  workspaceRepoPath: string | null;
+  tasks: TaskCard[];
+  historyFreshness: SessionHistoryFreshnessTracker;
+  store?: AgentSessionsStore | undefined;
+};
+
+type UseOrchestratorSessionStateResult = {
+  sessionStore: AgentSessionsStore;
   taskRef: MutableRefObject<TaskCard[]>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   sessionTurnState: SessionTurnState;
 };
 
-type UseOrchestratorSessionStateArgs = {
-  workspaceRepoPath: string | null;
-  tasks: TaskCard[];
-  historyFreshness: SessionHistoryFreshnessTracker;
-  flushTranscriptEvents: () => void;
-};
-
-type UseOrchestratorSessionStateResult = {
-  sessionStore: AgentSessionsStore;
-} & UseOrchestratorSessionStateRefs;
-
 export const useOrchestratorSessionState = ({
   workspaceRepoPath,
   tasks,
   historyFreshness,
-  flushTranscriptEvents,
+  store,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
-  const initialWorkspaceRepoPathRef = useRef(workspaceRepoPath);
-  const sessionStore = useMemo(
-    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current, historyFreshness),
-    [historyFreshness],
+  const [sessionStore] = useState(
+    () => store ?? createAgentSessionsStore(workspaceRepoPath, historyFreshness),
   );
   const taskRef = useRef(tasks);
   const currentWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
@@ -50,31 +45,21 @@ export const useOrchestratorSessionState = ({
       historyFreshness.subscribeWorkspaceResets((repoPath) => {
         const currentRepoPath = currentWorkspaceRepoPathRef.current;
         if (currentRepoPath && normalizeWorkingDirectory(currentRepoPath) === repoPath) {
-          // The rail can finish recovery after the selected attachment restored its collection.
+          // Activity recovery can finish after this controller restores its collection.
           sessionStore.setSessionCollection(markSessionHistoriesStale);
         }
       }),
     [historyFreshness, sessionStore],
   );
 
-  useLayoutEffect(() => {
-    if (currentWorkspaceRepoPathRef.current === workspaceRepoPath) {
-      return;
-    }
-    // Commit buffered events to the old workspace before its collection is retained.
-    flushTranscriptEvents();
-    repoEpochRef.current += 1;
-    currentWorkspaceRepoPathRef.current = workspaceRepoPath;
-
-    sessionTurnState.clearAll();
-    sessionStore.resetWorkspace(workspaceRepoPath);
-  }, [flushTranscriptEvents, sessionTurnState, workspaceRepoPath, sessionStore]);
-
-  const clearMutableSessionState = useCallback(() => {
-    sessionTurnState.clearAll();
-  }, [sessionTurnState]);
-
-  useEffect(() => clearMutableSessionState, [clearMutableSessionState]);
+  useEffect(() => {
+    currentWorkspaceRepoPathRef.current = sessionStore.getActivitySnapshot().workspaceRepoPath;
+    return () => {
+      repoEpochRef.current += 1;
+      currentWorkspaceRepoPathRef.current = null;
+      sessionTurnState.clearAll();
+    };
+  }, [sessionStore, sessionTurnState]);
 
   return useMemo(
     () => ({

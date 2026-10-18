@@ -127,10 +127,7 @@ const mountSidebar = (
 ) => {
   let listener: ((envelope: AgentSessionLiveEnvelope) => void) | undefined;
   const observe = mock(
-    async (
-      _input: { repoPath: string },
-      onEnvelope: (envelope: AgentSessionLiveEnvelope) => void,
-    ) => {
+    (_input: { repoPath: string }, onEnvelope: (envelope: AgentSessionLiveEnvelope) => void) => {
       listener = onEnvelope;
       return () => {};
     },

@@ -814,7 +814,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     "applied-selected-first",
   ] as const;
   test.each([...retentionCoverageCases])(
-    "returns to retained workspace history with %s continuity",
+    "keeps loaded workspace history consistent with %s continuity",
     async (continuity) => {
       const baselineHistory: AgentSessionHistoryMessage[] = [
         {
@@ -996,7 +996,6 @@ describe("use-agent-orchestrator-operations session state", () => {
             ).toBe("stale");
           }
         }
-        await harness.updateArgs({ activeRepo: "/tmp/repo-b", tasks: [taskFixture] });
         if (continuity === "gap")
           historyObservation.recordEvent(
             createLiveSnapshotEnvelope({
@@ -1005,10 +1004,15 @@ describe("use-agent-orchestrator-operations session state", () => {
               historyReplayGap: true,
             }),
           );
-        await harness.updateArgs({
-          activeRepo: "/tmp/repo-a",
-          tasks: [taskFixtureWithPersistedBuildSession],
-        });
+        await harness.run(() =>
+          liveStream.emit(
+            createLiveSnapshotEnvelope({
+              repoPath: "/tmp/repo-a",
+              sessions: snapshots,
+              isConnectionSnapshot: true,
+            }),
+          ),
+        );
 
         const restored = await harness.waitFor((state) =>
           listHarnessSessions(state).some(

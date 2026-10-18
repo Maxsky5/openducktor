@@ -82,9 +82,9 @@ test("preparation presentation preserves newer activity and cannot populate a di
   projectWorkflowLaunch(store, queryClient, outcome);
   expect(store.getSessionSnapshot(outcome.session!)?.pendingQuestions).toHaveLength(1);
   expect(store.getSessionSnapshot(outcome.session!)?.status).toBe("running");
-  store.resetWorkspace("/other");
-  projectWorkflowLaunch(store, queryClient, outcome);
-  expect(store.listSessionSnapshots()).toEqual([]);
+  const other = createAgentSessionsStore("/other");
+  projectWorkflowLaunch(other, queryClient, outcome);
+  expect(other.listSessionSnapshots()).toEqual([]);
   queryClient.clear();
 });
 

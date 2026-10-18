@@ -18,6 +18,7 @@ import type {
 import { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { type AgentSessionReadPort, agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { workspaceQueryKeys } from "@/state/queries/workspace";
@@ -192,7 +193,7 @@ const createState = (
   return {
     callOrder,
     subscribe: sessionStore.subscribe,
-    resetWorkspace: sessionStore.resetWorkspace,
+    clearSessions: () => sessionStore.setSessionCollection(() => createAgentSessionCollection([])),
     replaceSession: sessionStore.replaceSession,
     getSession: () =>
       sessionStore.getSessionSnapshot({
@@ -1400,8 +1401,7 @@ describe("useRepoSessionReadModel", () => {
     );
     state.props.workspaceId = "workspace-A";
     // A cold store has no task record and no earlier native projection.
-    state.resetWorkspace(null);
-    state.resetWorkspace("/repo");
+    state.clearSessions();
     try {
       await state.harness.mount();
       expect(state.observeAgentSessionLive).not.toHaveBeenCalled();

@@ -119,7 +119,7 @@ export const useAgentChatTranscriptModel = ({
     }
     const builds = buildsRef.current;
     for (const [cacheKey, entry] of cache) {
-      const liveSession = sessionStore.getSessionSnapshot(entry.session);
+      const liveSession = sessionStore.getSessionSnapshotAcrossWorkspaces(entry.session);
       const activeSession = sessionRef.current;
       const isSelected =
         activeSession !== null &&

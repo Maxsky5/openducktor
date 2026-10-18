@@ -73,15 +73,15 @@ describe("createAgentSessionsStore session snapshots", () => {
     expect(store.getSessionSnapshot(active)?.status).toBe("running");
   });
 
-  test.each(["sibling", "child", "closed", "refreshing", "attaching"] as const)(
-    "retains covered workspace history after %s",
+  test.each(["sibling", "child", "closed", "gap", "attaching"] as const)(
+    "checks connection snapshot coverage after %s without dropping the transcript",
     (change) => {
       const queryClient = new QueryClient();
       const freshnessTracker = getSessionHistoryFreshnessTracker(queryClient);
       const observation = freshnessTracker.observeWorkspace("/repo");
       const session = createAgentSessionFixture({
         workingDirectory: "/repo",
-        historyLoadState: change === "refreshing" ? "refreshing" : "loaded",
+        historyLoadState: "loaded",
       });
       const root: AgentSessionLiveSnapshot = {
         ref: {
@@ -107,7 +107,6 @@ describe("createAgentSessionsStore session snapshots", () => {
       store.replaceSession({ ...session, historyLoadState: "not_requested" });
       store.updateSession(session, (current) => ({ ...current, historyLoadState: "loading" }));
       store.updateSession(session, () => session);
-      store.resetWorkspace("/other");
       if (change === "sibling")
         observation.recordEvent({
           type: "session_upsert",
@@ -119,14 +118,18 @@ describe("createAgentSessionsStore session snapshots", () => {
           session: { ...child, activity: "running" },
         });
       if (change === "closed") observation.close();
-      store.resetWorkspace("/repo");
-      expect(store.getSessionSnapshot(session)?.historyLoadState).toBe("stale");
       if (change === "attaching")
         observation.recordEvent({
           type: "session_upsert",
           session: { ...root, activity: "running" },
         });
-      store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [root, child] }));
+      store.applyLiveSessionEnvelope(
+        createLiveSnapshotEnvelope({
+          sessions: [root, child],
+          isConnectionSnapshot: true,
+          historyReplayGap: change === "gap",
+        }),
+      );
       expect(store.getSessionSnapshot(session)?.historyLoadState).toBe(
         change === "sibling" ? "loaded" : "stale",
       );
@@ -135,7 +138,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       queryClient.clear();
     },
   );
-  test.each(["removed", "snapshot", "workspace"] as const)(
+  test.each(["removed", "snapshot"] as const)(
     "clears unregistered policy feedback after %s and keeps runtime identities separate",
     (cleanup) => {
       const store = createAgentSessionsStore("/repo");
@@ -176,13 +179,6 @@ describe("createAgentSessionsStore session snapshots", () => {
         store.applyLiveSessionEnvelope({ type: "session_removed", ref: snapshot.ref });
       } else if (cleanup === "snapshot") {
         store.applyLiveSessionEnvelope(createLiveSnapshotEnvelope({ sessions: [] }));
-      } else {
-        store.resetWorkspace("/other");
-        // A late callback from the previous workspace must not retain feedback here.
-        store.applyLiveSessionEnvelope({ type: "session_upsert", session: snapshot });
-        store.replaceSession(session);
-        expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
-        store.resetWorkspace("/repo");
       }
       store.replaceSession(session);
       expect(getSessionMessageCount(store.getSessionSnapshot(session)!)).toBe(0);
@@ -299,8 +295,6 @@ describe("createAgentSessionsStore session snapshots", () => {
     expect(store.getActivitySnapshot().repositorySessions).toMatchObject([
       { activityState: "waiting_input", pendingApprovalCount: 1, pendingQuestionCount: 0 },
     ]);
-    store.resetWorkspace("/other");
-    expect(store.getActivitySnapshot().repositorySessions).toEqual([]);
   });
   test("updates one session atomically and returns the applied state", () => {
     const store = createAgentSessionsStore();
@@ -522,138 +516,6 @@ describe("createAgentSessionsStore session snapshots", () => {
   });
 });
 
-describe("createAgentSessionsStore repository retention", () => {
-  const createLoadedSession = (
-    externalSessionId: string,
-    workingDirectory: string,
-    content: string,
-  ) =>
-    createAgentSessionFixture({
-      externalSessionId,
-      runtimeKind: "opencode",
-      workingDirectory,
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-      status: "idle",
-      historyLoadState: "loaded",
-      messages: createSessionMessagesState(externalSessionId, [
-        {
-          id: `${externalSessionId}-message`,
-          role: "assistant",
-          content,
-          timestamp: "2026-09-18T00:00:00.000Z",
-        },
-      ]),
-    });
-
-  test("restores a retained repository transcript on return", () => {
-    const store = createAgentSessionsStore("/repo-a");
-    const session = createLoadedSession("session-a", "/repo-a/worktree", "Transcript A");
-    replaceStoreSessions(store, [session]);
-
-    store.resetWorkspace("/repo-b");
-
-    expect(store.getSessionSnapshot(session)).toBeNull();
-    expect(store.listSessionSnapshots()).toEqual([]);
-
-    store.resetWorkspace("/repo-a");
-
-    const restored = store.getSessionSnapshot(session);
-    expect(restored?.messages).toBe(session.messages);
-    expect(restored?.historyLoadState).toBe("stale");
-    expect(store.listSessionSnapshots()).toEqual([{ ...session, historyLoadState: "stale" }]);
-  });
-
-  test("scopes the activity snapshot and session reads to the active repository", () => {
-    const store = createAgentSessionsStore("/repo-a");
-    const sessionA = createLoadedSession("session-a", "/repo-a/worktree", "Transcript A");
-    const sessionB = createLoadedSession("session-b", "/repo-b/worktree", "Transcript B");
-    replaceStoreSessions(store, [sessionA]);
-
-    store.resetWorkspace("/repo-b");
-
-    expect(store.getActivitySnapshot()).toEqual({
-      workspaceRepoPath: "/repo-b",
-      sessions: [],
-      repositorySessions: [],
-      pendingInputSessions: [],
-    });
-
-    replaceStoreSessions(store, [sessionB]);
-
-    expect(store.getActivitySnapshot()).toMatchObject({
-      workspaceRepoPath: "/repo-b",
-      sessions: [expect.objectContaining({ externalSessionId: "session-b" })],
-    });
-
-    store.resetWorkspace("/repo-a");
-
-    const snapshot = store.getActivitySnapshot();
-    expect(snapshot.workspaceRepoPath).toBe("/repo-a");
-    expect(snapshot.sessions).toEqual([
-      expect.objectContaining({ externalSessionId: "session-a" }),
-    ]);
-    expect(store.getSessionSnapshot(sessionB)).toBeNull();
-    expect(store.listSessionSnapshots()).toEqual([{ ...sessionA, historyLoadState: "stale" }]);
-  });
-
-  test("retains every visited repository collection", () => {
-    const store = createAgentSessionsStore("/repo-a");
-    const sessionA = createLoadedSession("session-a", "/repo-a/worktree", "Transcript A");
-    const sessionB = createLoadedSession("session-b", "/repo-b/worktree", "Transcript B");
-    const sessionC = createLoadedSession("session-c", "/repo-c/worktree", "Transcript C");
-    replaceStoreSessions(store, [sessionA]);
-    store.resetWorkspace("/repo-b");
-    replaceStoreSessions(store, [sessionB]);
-    store.resetWorkspace("/repo-c");
-    replaceStoreSessions(store, [sessionC]);
-
-    store.resetWorkspace("/repo-b");
-    expect(store.getSessionSnapshot(sessionB)?.messages).toBe(sessionB.messages);
-    expect(store.getSessionSnapshot(sessionB)?.historyLoadState).toBe("stale");
-
-    store.resetWorkspace("/repo-a");
-    expect(store.getSessionSnapshot(sessionA)?.messages).toBe(sessionA.messages);
-    expect(store.getSessionSnapshot(sessionA)?.historyLoadState).toBe("stale");
-
-    store.resetWorkspace("/repo-c");
-    expect(store.getSessionSnapshot(sessionC)?.messages).toBe(sessionC.messages);
-    expect(store.getSessionSnapshot(sessionC)?.historyLoadState).toBe("stale");
-  });
-
-  test("reopens an interrupted history load when its repository becomes inactive", () => {
-    const store = createAgentSessionsStore("/repo-a");
-    const session = {
-      ...createLoadedSession("session-a", "/repo-a/worktree", "Partial transcript"),
-      historyLoadState: "loading" as const,
-    };
-    replaceStoreSessions(store, [session]);
-
-    store.resetWorkspace("/repo-b");
-    store.resetWorkspace("/repo-a");
-
-    const restored = store.getSessionSnapshot(session);
-    expect(restored?.historyLoadState).toBe("not_requested");
-    expect(restored?.messages).toEqual(session.messages);
-  });
-
-  test("rejects a late update for a session outside the active repository", () => {
-    const store = createAgentSessionsStore("/repo-a");
-    const sessionA = createLoadedSession("session-a", "/repo-a/worktree", "Transcript A");
-    replaceStoreSessions(store, [sessionA]);
-
-    store.resetWorkspace("/repo-b");
-
-    expect(
-      store.updateSession(sessionA, (current) => ({ ...current, status: "running" })),
-    ).toBeNull();
-    expect(store.getSessionSnapshot(sessionA)).toBeNull();
-
-    store.resetWorkspace("/repo-a");
-
-    expect(store.getSessionSnapshot(sessionA)?.status).toBe("idle");
-  });
-});
-
 describe("createAgentSessionsStore activity snapshots", () => {
   test("reuses the activity snapshot when only non-activity fields change", () => {
     const store = createAgentSessionsStore();
@@ -810,69 +672,9 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     expect(store.getActivitySnapshot().sessions).toEqual([]);
   });
-
-  test("resets workspace-scoped activity atomically", () => {
-    const store = createAgentSessionsStore("/repo-a");
-    const session = createAgentSessionFixture({
-      externalSessionId: "session-1",
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
-      status: "running",
-    });
-
-    replaceStoreSessions(store, [session]);
-    expect(store.getActivitySnapshot()).toMatchObject({
-      workspaceRepoPath: "/repo-a",
-      sessions: [expect.objectContaining({ externalSessionId: "session-1" })],
-    });
-
-    store.resetWorkspace("/repo-b");
-
-    expect(store.getSessionSnapshot(session)).toBeNull();
-    expect(store.getActivitySnapshot()).toEqual({
-      workspaceRepoPath: "/repo-b",
-      sessions: [],
-      repositorySessions: [],
-      pendingInputSessions: [],
-    });
-  });
 });
 
-test("applies confirmed inactive task removals before exposing a retained workspace", () => {
-  const store = createAgentSessionsStore("/a");
-  const deleted = createAgentSessionFixture({
-    externalSessionId: "deleted",
-    sessionAssociation: { kind: "workflow", taskId: "same-task", role: "build" },
-  });
-  const repository = createAgentSessionFixture({
-    externalSessionId: "repository",
-    sessionAssociation: { kind: "repository" },
-    status: "running",
-  });
-  replaceStoreSessions(store, [deleted, repository]);
-  store.resetWorkspace("/b");
-  const other = createAgentSessionFixture({
-    externalSessionId: "other",
-    sessionAssociation: { kind: "workflow", taskId: "same-task", role: "build" },
-    status: "running",
-  });
-  replaceStoreSessions(store, [other]);
-  store.removeTaskSessions("/a", ["same-task"]);
-  expect(store.listSessionSnapshots()).toEqual([other]);
-  const observed: string[][] = [];
-  const unsubscribe = store.subscribe(() =>
-    observed.push(store.listSessionSnapshots().map((session) => session.externalSessionId)),
-  );
-  store.resetWorkspace("/a");
-  unsubscribe();
-  expect(observed).toEqual([["repository"]]);
-  expect(store.getActivitySnapshot().repositorySessions[0]?.activityState).toBe("running");
-  store.resetWorkspace("/b");
-  expect(store.listSessionSnapshots()).toEqual([{ ...other, historyLoadState: "stale" }]);
-  store.removeTaskSessions("/b", ["same-task"]);
-  expect(store.listSessionSnapshots()).toEqual([]);
-});
-
-test("lists the task owners of workflow sessions in active and retained workspaces", () => {
+test("lists and removes task owners only in its bound workspace", () => {
   const store = createAgentSessionsStore("/a");
   replaceStoreSessions(store, [
     createAgentSessionFixture({
@@ -894,7 +696,8 @@ test("lists the task owners of workflow sessions in active and retained workspac
   ]);
   expect(store.listSessionTaskIds("/a").sort()).toEqual(["task-1", "task-2"]);
 
-  store.resetWorkspace("/b");
+  store.removeTaskSessions("/b", ["task-1"]);
+  expect(store.listSessionTaskIds("/a").sort()).toEqual(["task-1", "task-2"]);
   store.removeTaskSessions("/a", ["task-2"]);
 
   expect(store.listSessionTaskIds("/a")).toEqual(["task-1"]);

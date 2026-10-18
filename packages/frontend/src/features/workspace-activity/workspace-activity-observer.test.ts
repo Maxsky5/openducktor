@@ -77,7 +77,7 @@ const createHarness = ({
   };
 
   const observer = createWorkspaceActivityObserver({
-    observe: async ({ repoPath }, listener) => {
+    observe: ({ repoPath }, listener) => {
       if (failObserveFor.has(repoPath)) {
         throw new Error(`live stream unavailable for ${repoPath}`);
       }

@@ -15,9 +15,9 @@ export const projectWorkflowLaunch = (
   queryClient: QueryClient,
   outcome: WorkflowLaunchResult,
 ): void => {
-  if (!outcome.session || store.getActivitySnapshot().workspaceRepoPath !== outcome.repoPath)
-    return;
-  const current = store.getSessionSnapshot(outcome.session) ?? undefined;
+  const workspaceStore = store.getWorkspaceStore(outcome.repoPath);
+  if (!outcome.session || !workspaceStore) return;
+  const current = workspaceStore.getSessionSnapshot(outcome.session) ?? undefined;
   const bound = current?.sessionAssociation.kind === "workflow";
   const key = agentSessionQueryKeys.list(outcome.repoPath, outcome.taskId);
   const saved = queryClient
@@ -44,5 +44,5 @@ export const projectWorkflowLaunch = (
     session.livePresence = "present";
     session.status = outcome.session.status;
   }
-  store.setSessionCollection((collection) => replaceAgentSession(collection, session));
+  workspaceStore.setSessionCollection((collection) => replaceAgentSession(collection, session));
 };

@@ -6,6 +6,7 @@ type HookRunner<State> = (state: State) => void | Promise<void>;
 
 type CreateHookHarnessOptions = {
   wrapper?: ComponentType<PropsWithChildren>;
+  reactStrictMode?: boolean;
 };
 
 const flushHookEffects = async (): Promise<void> => {
@@ -41,6 +42,7 @@ export const createHookHarness = <Props, State>(
       const renderOptions: Parameters<typeof renderHook<State, Props>>[1] = {
         initialProps: currentProps,
       };
+      if (options?.reactStrictMode) renderOptions.reactStrictMode = true;
       if (options?.wrapper) {
         renderOptions.wrapper = options.wrapper;
       }

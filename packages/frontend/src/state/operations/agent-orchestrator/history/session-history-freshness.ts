@@ -5,7 +5,7 @@ import {
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-/** A live subscription covers only its active workspace. Keep the baseline when coverage ends. */
+/** Keep the transcript baseline when live coverage ends. */
 export const markSessionHistoryStale = (session: AgentSessionState): AgentSessionState => {
   if (session.historyLoadState === "loaded" || session.historyLoadState === "refreshing") {
     return { ...session, historyLoadState: "stale" };

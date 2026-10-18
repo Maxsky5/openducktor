@@ -48,10 +48,10 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
   const runtimeStatus = useHostRuntimeStatusContext();
   const { refreshTaskStoreCheckForRepo } = useChecksOperationsContext();
   const { loadWorkspaceTasks } = useTaskControlContext();
-  const sessionStore = useAgentSessionsContext();
+  const { listSessionTaskIds, removeTaskSessions } = useAgentSessionsContext();
   const taskStreamControllerFactory = useMemo(
-    () => createProductionTaskStreamController(sessionStore),
-    [sessionStore],
+    () => createProductionTaskStreamController({ listSessionTaskIds, removeTaskSessions }),
+    [listSessionTaskIds, removeTaskSessions],
   );
 
   useRuntimeCatalogBootstrap({
