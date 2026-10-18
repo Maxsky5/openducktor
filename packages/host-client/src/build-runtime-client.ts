@@ -1,4 +1,7 @@
 import {
+  repoPullRequestSyncRequestSchema,
+  repoPullRequestSyncResponseSchema,
+  type RepoPullRequestSyncResponse,
   taskDirectMergeCompleteIntentSchema,
   type TaskDirectMergeCompleteIntent,
 } from "@openducktor/contracts";
@@ -232,8 +235,13 @@ const taskPullRequestLinkMerged = async (
 const repoPullRequestSync = async (
   invokeFn: InvokeFn,
   repoPath: string,
-): Promise<{ ok: boolean }> => {
-  return invokeFn("repo_pull_request_sync", { repoPath }, okResultSchema("repo_pull_request_sync"));
+  expectedWorkspaceId?: string,
+): Promise<RepoPullRequestSyncResponse> => {
+  return invokeFn(
+    "repo_pull_request_sync",
+    repoPullRequestSyncRequestSchema.parse({ repoPath, expectedWorkspaceId }),
+    repoPullRequestSyncResponseSchema,
+  );
 };
 
 const agentSessionStop = async (
@@ -360,8 +368,11 @@ export class HostAgentClient {
     return taskPullRequestLinkMerged(this.invokeFn, repoPath, taskId, pullRequest);
   }
 
-  async repoPullRequestSync(repoPath: string): Promise<{ ok: boolean }> {
-    return repoPullRequestSync(this.invokeFn, repoPath);
+  async repoPullRequestSync(
+    repoPath: string,
+    expectedWorkspaceId?: string,
+  ): Promise<RepoPullRequestSyncResponse> {
+    return repoPullRequestSync(this.invokeFn, repoPath, expectedWorkspaceId);
   }
 
   async agentSessionStop(target: AgentSessionStopTarget): Promise<{ ok: boolean }> {

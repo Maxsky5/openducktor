@@ -31,6 +31,7 @@ import {
   buildSession,
 } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { useAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/use-agent-chat-transcript-model";
+import * as repositoryModal from "@/components/features/repository/open-repository-modal";
 import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
@@ -65,6 +66,7 @@ import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { useRecentItemsStore } from "@/features/command-palette/recent-items";
 import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
+import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 import { DiagnosticsPanelProvider } from "@/components/features/diagnostics";
@@ -78,6 +80,7 @@ import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import {
   createChecksStateFixture,
   createDeferred,
+  createGitProviderContextFixture,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
@@ -480,7 +483,13 @@ function AppShellTestEnvironment({
                                             )}
                                           >
                                             <Routes>
-                                              <Route element={<AppShell />}>
+                                              <Route
+                                                element={
+                                                  <ManualPullRequestSyncProvider>
+                                                    <AppShell />
+                                                  </ManualPullRequestSyncProvider>
+                                                }
+                                              >
                                                 <Route
                                                   path="/kanban"
                                                   element={<main>Kanban</main>}
@@ -1535,6 +1544,116 @@ describe("AppShell command palette", () => {
     cleanup();
     useRecentItemsStore.setState({ items: [], loadError: null });
     configureShellBridge(createUnavailableShellBridge());
+  });
+
+  test.each(["sync pull requests", "refresh pull requests", "sync PRs"])(
+    "finds manual sync with %s and makes no call when the scope choice is dismissed",
+    async (query) => {
+      const sync = mock(async () => ({ ok: true as const }));
+      configurePaletteHost({ repoPullRequestSync: sync });
+      renderPalette();
+      const palette = await openPalette();
+      const input = search(palette, query);
+      expect(selectedOption(palette)?.textContent).toContain("Sync pull requests");
+      fireEvent.keyDown(input, { key: "Enter" });
+      const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
+      expect(
+        within(chooser).getByRole("button", { name: "Sync workspace OpenDucktor" }),
+      ).toBeTruthy();
+      expect(sync).not.toHaveBeenCalled();
+      fireEvent.keyDown(chooser, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: "Sync pull requests" })).toBeNull(),
+      );
+      expect(sync).not.toHaveBeenCalled();
+    },
+  );
+
+  test("uses the palette filter for named sync without changing the active workspace", async () => {
+    const sync = mock(async () => ({ ok: true as const }));
+    configurePaletteHost({
+      repoPullRequestSync: sync,
+      workspaceGetGitProviderContext: async () => createGitProviderContextFixture(),
+    });
+    renderPalette();
+    const palette = await openPalette();
+    fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "ArrowDown", altKey: true });
+    fireEvent.click(await screen.findByRole("option", { name: "Fairnest" }));
+    search(palette, "sync PRs");
+    fireEvent.click(actionOption(palette, "Sync pull requests"));
+    const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
+    await flushQueryUpdates();
+    expect(sync).not.toHaveBeenCalled();
+    fireEvent.click(within(chooser).getByRole("button", { name: "Sync workspace Fairnest" }));
+    await waitFor(() => expect(sync).toHaveBeenCalledWith("/fairnest", "workspace-2"));
+    expect(screen.getByRole("button", { name: "New task in OpenDucktor" })).toBeTruthy();
+    expect(screen.getByTestId("current-route").textContent).toBe("/kanban");
+  });
+
+  test("syncs only open workspaces and disables a reopened palette action while pending", async () => {
+    const first = createDeferred<{ ok: true }>();
+    const calls: unknown[] = [];
+    configurePaletteHost({
+      workspaceGetGitProviderContext: async () => createGitProviderContextFixture(),
+      repoPullRequestSync: async (repoPath, workspaceId) => {
+        calls.push([repoPath, workspaceId]);
+        return repoPath === "/repo" ? first.promise : { ok: true };
+      },
+    });
+    renderPalette({
+      closedWorkspaces: [{ ...fairnest, workspaceId: "closed", repoPath: "/closed" }],
+      incompleteRemovals: [
+        {
+          workspace: { ...fairnest, workspaceId: "removing", repoPath: "/removing" },
+          record: { phase: "worktrees", removeTaskWorktrees: true, pendingWorktreePath: null },
+        },
+      ],
+    });
+    try {
+      const palette = await openPalette();
+      search(palette, "sync pull requests");
+      fireEvent.click(actionOption(palette, "Sync pull requests"));
+      const chooser = await screen.findByRole("dialog", { name: "Sync pull requests" });
+      await flushQueryUpdates();
+      fireEvent.click(within(chooser).getByRole("button", { name: "Sync all open workspaces" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      const reopened = await openPalette();
+      search(reopened, "sync pull requests");
+      expect(actionOption(reopened, "Sync pull requests").getAttribute("aria-disabled")).toBe(
+        "true",
+      );
+      expect(reopened.textContent).toContain("all open workspaces");
+      expect(calls).toEqual([["/repo", "workspace-1"]]);
+      await act(async () => first.resolve({ ok: true }));
+      await waitFor(() =>
+        expect(calls).toEqual([
+          ["/repo", "workspace-1"],
+          ["/fairnest", "workspace-2"],
+        ]),
+      );
+      await waitFor(() =>
+        expect(actionOption(reopened, "Sync pull requests").getAttribute("aria-disabled")).toBe(
+          "false",
+        ),
+      );
+    } finally {
+      first.resolve({ ok: true });
+    }
+  });
+
+  test("disables manual sync with a reason when no workspace is open", async () => {
+    const modal = spyOn(repositoryModal, "OpenRepositoryModal").mockImplementation(() => null);
+    try {
+      renderPalette({ closedOnly: true, extraWorkspaces: [] });
+      const palette = await openPalette();
+      search(palette, "sync pull requests");
+      const action = actionOption(palette, "Sync pull requests");
+      expect(action.getAttribute("aria-disabled")).toBe("true");
+      expect(action.textContent).toContain("Open a workspace");
+    } finally {
+      cleanup();
+      modal.mockRestore();
+    }
   });
 
   test("opens with the shortcut, starts with New task, and closes with the same keys", async () => {

@@ -49,6 +49,8 @@ const createServices = (
         failures.push(failure);
       }),
     workspaceSettingsService: {
+      getWorkspaceCatalog: () =>
+        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
       listWorkspaces: () => Effect.succeed([]),
       getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
     },

@@ -2332,9 +2332,28 @@ describe("HostClient", () => {
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    await expect(client.repoPullRequestSync("/repo")).rejects.toThrow(
-      "Expected { ok: boolean } payload from host command repo_pull_request_sync",
-    );
+    await expect(client.repoPullRequestSync("/repo")).rejects.toThrow("ok");
+  });
+
+  test("repo pull request sync sends the captured identity and preserves typed skips", async () => {
+    const skipped = { ok: false, reason: "workspace_closed", message: "Reopen the workspace." };
+    const { client, calls } = createClient(() => skipped);
+    expect(await client.repoPullRequestSync("/repo", "workspace-1")).toEqual(skipped);
+    expect(calls).toEqual([
+      {
+        command: "repo_pull_request_sync",
+        args: { repoPath: "/repo", expectedWorkspaceId: "workspace-1" },
+      },
+    ]);
+  });
+
+  test.each([
+    { ok: false },
+    { ok: false, reason: "unknown", message: "Reason" },
+    { ok: false, reason: "disabled", message: " " },
+  ])("rejects an incomplete sync skip response %j", async (response) => {
+    const { client } = createClient(() => response);
+    await expect(client.repoPullRequestSync("/repo")).rejects.toThrow();
   });
 
   test("taskPullRequestUnlink maps a validated boolean host response", async () => {

@@ -16,9 +16,11 @@ import { hasOpenDialog } from "@/components/ui/open-dialogs";
 import { errorMessage } from "@/lib/errors";
 import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { platformQueryOptions } from "@/state/queries/system";
+import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 import { CommandPaletteContext, type CommandPaletteContextValue } from "./command-palette-context";
 import { CommandPaletteDialog } from "./command-palette-dialog";
 import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
+import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
 import { useRecentItemsStore } from "./recent-items";
 import { useWorkspaceIntentRunner } from "./use-workspace-intent-runner";
 
@@ -34,6 +36,13 @@ export function CommandPaletteProvider({
   children,
 }: PropsWithChildren<{ shell: CommandPaletteShell }>): ReactElement {
   const [isOpen, setOpen] = useState(false);
+  const [syncChoice, setSyncChoice] = useState<{
+    open: boolean;
+    workspace: PullRequestSyncTarget | null;
+  }>({ open: false, workspace: null });
+  const openPullRequestSync = useCallback((workspace: PullRequestSyncTarget | null) => {
+    setSyncChoice({ open: true, workspace: workspace ? { ...workspace } : null });
+  }, []);
   const [pageCommands, setPageCommands] = useState<CommandPalettePageCommand[]>([]);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   /** True when this open ended with an action, which then owns focus. */
@@ -109,6 +118,7 @@ export function CommandPaletteProvider({
       {children}
       <CommandPaletteDialog
         open={isOpen}
+        openPullRequestSync={openPullRequestSync}
         platform={platform}
         shell={shell}
         pageCommands={pageCommands}
@@ -121,6 +131,15 @@ export function CommandPaletteProvider({
           event.preventDefault();
           // An action already moved focus to its own dialog or page.
           if (!closedWithActionRef.current) focusIfConnected(previousFocusRef.current);
+        }}
+      />
+      <PullRequestSyncDialog
+        open={syncChoice.open}
+        workspace={syncChoice.workspace}
+        onClose={() => setSyncChoice((current) => ({ ...current, open: false }))}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          focusIfConnected(previousFocusRef.current);
         }}
       />
     </CommandPaletteContext>

@@ -77,6 +77,7 @@ export * from "./odt-mcp-schemas";
 export * from "./odt-tool-names";
 export * from "./prompt-schemas";
 export * from "./pull-request-review-schemas";
+export * from "./pull-request-sync-schemas";
 export * from "./run-schemas";
 export * from "./runtime-catalog-schemas";
 export * from "./runtime-descriptors";

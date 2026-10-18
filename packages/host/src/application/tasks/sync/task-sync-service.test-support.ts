@@ -22,7 +22,7 @@ type TaskSyncServiceTestInput = Omit<
       Partial<
         Pick<
           Parameters<typeof createTaskSyncService>[0]["workspaceSettingsService"],
-          "getSettingsSnapshot"
+          "getSettingsSnapshot" | "getWorkspaceCatalog"
         >
       >;
     eventBus: { publish(event: ExternalTaskSyncEvent): void };
@@ -36,6 +36,8 @@ export const createTaskSyncServiceForTest = (input: TaskSyncServiceTestInput) =>
     ...input,
     workspaceSettingsService: {
       getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
+      getWorkspaceCatalog: () =>
+        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
       ...input.workspaceSettingsService,
     },
     taskService: {

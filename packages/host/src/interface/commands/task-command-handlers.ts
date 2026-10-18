@@ -17,6 +17,7 @@ import {
   parsePullRequestUpsertInput,
   parseQaOutcomeInput,
   parseRepoPathInput,
+  parseRepoPullRequestSyncInput,
   parseSetPlanInput,
   parseTaskIdInput,
   parseTaskStopImpactInput,
@@ -47,7 +48,7 @@ export const createTaskCommandHandlers = (taskService: TaskService) =>
     qa_get_report: (args) => taskService.qaGetReport(parseTaskIdInput(args, "qa_get_report input")),
     qa_rejected: (args) => taskService.qaRejected(parseQaOutcomeInput(args, "qa_rejected input")),
     repo_pull_request_sync: (args) =>
-      taskService.repoPullRequestSync(parseRepoPathInput(args, "repo_pull_request_sync input")),
+      taskService.repoPullRequestSync(parseRepoPullRequestSyncInput(args)),
     task_approval_context_get: (args) =>
       taskService.getApprovalContext(parseTaskIdInput(args, "task_approval_context_get input")),
     task_close: (args) => taskService.closeTask(parseTaskIdInput(args, "task_close input")),

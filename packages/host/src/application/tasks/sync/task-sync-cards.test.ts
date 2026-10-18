@@ -48,6 +48,8 @@ describe("committed task cards", () => {
         taskService: base,
         taskEventStream: stream,
         workspaceSettingsService: {
+          getWorkspaceCatalog: () =>
+            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
           listWorkspaces: () => Effect.succeed([]),
           getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },
@@ -115,6 +117,8 @@ describe("committed task cards", () => {
       const sync = createTaskSyncServiceForTest({
         taskService: { ...base, listTasks: readCards },
         workspaceSettingsService: {
+          getWorkspaceCatalog: () =>
+            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
           listWorkspaces: () => Effect.succeed([]),
           getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },
@@ -160,7 +164,13 @@ describe("committed task cards", () => {
     const sync = createTaskSyncServiceForTest({
       taskService: {
         listTasks,
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+        repoPullRequestSyncDetailed: () =>
+          Effect.succeed({
+            ran: false,
+            changedTaskIds: [],
+            reason: "not_configured",
+            message: "Configure a Git provider.",
+          }),
       },
       workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
       eventBus: { publish: (event) => events.push(event) },

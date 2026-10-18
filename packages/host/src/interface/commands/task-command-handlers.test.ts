@@ -85,6 +85,25 @@ const runHandler = <T>(
 };
 
 describe("createTaskCommandHandlers", () => {
+  test.each([
+    { repoPath: " " },
+    { repoPath: "/repo", expectedWorkspaceId: " " },
+    { repoPath: "/repo", expectedWorkspaceId: 42 },
+  ])("rejects invalid manual sync input before dispatch: %j", (input) => {
+    let dispatched = false;
+    const handlers = createTaskCommandHandlers(
+      createTaskServiceTestDouble({
+        repoPullRequestSync: () => {
+          dispatched = true;
+          return Effect.succeed({ ok: true });
+        },
+      }),
+    );
+    expect(() => handlers.repo_pull_request_sync(input)).toThrow(
+      "repo_pull_request_sync input is invalid",
+    );
+    expect(dispatched).toBe(false);
+  });
   test("registers task_ids_list for the IDs of all tasks of a repository", async () => {
     const inputs: unknown[] = [];
     const handlers = createTaskCommandHandlers(
@@ -548,7 +567,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync", input });
-            return { ok: true };
+            return { ok: true as const };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -562,7 +581,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
-            return { ran: true, changedTaskIds: [] };
+            return { ran: true as const, changedTaskIds: [] };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -759,7 +778,9 @@ describe("createTaskCommandHandlers", () => {
       runHandler(handlers.qa_get_report?.({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toBeDefined();
     await expect(
-      runHandler(handlers.repo_pull_request_sync?.({ repoPath: "/repo" })),
+      runHandler(
+        handlers.repo_pull_request_sync?.({ repoPath: "/repo", expectedWorkspaceId: "repo-id" }),
+      ),
     ).resolves.toEqual({ ok: true });
     await expect(
       runHandler(
@@ -934,7 +955,7 @@ describe("createTaskCommandHandlers", () => {
       },
       {
         command: "repo_pull_request_sync",
-        input: { repoPath: "/repo" },
+        input: { repoPath: "/repo", expectedWorkspaceId: "repo-id" },
       },
       {
         command: "human_request_changes",

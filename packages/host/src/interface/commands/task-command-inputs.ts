@@ -1,4 +1,7 @@
-import { taskDirectMergeCompleteIntentSchema } from "@openducktor/contracts";
+import {
+  repoPullRequestSyncRequestSchema,
+  taskDirectMergeCompleteIntentSchema,
+} from "@openducktor/contracts";
 import {
   planSubtaskInputSchema,
   pullRequestSchema,
@@ -378,4 +381,15 @@ export const parseDirectMergeCompleteInput = (input: HostCommandArgs) => {
       message: `Invalid completion intent: ${result.error.message}`,
     });
   return result.data;
+};
+
+export const parseRepoPullRequestSyncInput = (input: HostCommandArgs) => {
+  const parsed = repoPullRequestSyncRequestSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new HostValidationError({
+      message: `repo_pull_request_sync input is invalid: ${parsed.error.message}`,
+      field: "input",
+    });
+  }
+  return parsed.data;
 };

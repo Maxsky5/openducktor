@@ -23,6 +23,7 @@ import type {
   TaskMutationOperation,
 } from "../task-mutation-operation";
 import type { RepoPullRequestSyncResult, TaskService, TaskServiceError } from "../task-service";
+import { workspaceSyncSkip } from "./pull-request-sync-target";
 
 const DEFAULT_PULL_REQUEST_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 export type TaskSyncLifecycleLogger = {
@@ -65,6 +66,7 @@ export type TaskSyncService = {
   ): Effect.Effect<TaskEventCursor, HostOperationErrorAggregate>;
   syncRepoPullRequests(
     repoPath: string,
+    expectedWorkspaceId?: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
   /**
    * A workspace failure must not block other workspaces. A failed log write stops the run.
@@ -100,7 +102,7 @@ export type CreateTaskSyncServiceInput = {
   taskService: Pick<TaskService, "listTasks" | "repoPullRequestSyncDetailed">;
   workspaceSettingsService: Pick<
     WorkspaceSettingsService,
-    "listWorkspaces" | "getSettingsSnapshot"
+    "listWorkspaces" | "getSettingsSnapshot" | "getWorkspaceCatalog"
   >;
 };
 const defaultTaskSyncLifecycleLogger: TaskSyncLifecycleLogger = {
@@ -317,11 +319,19 @@ export const createTaskSyncService = ({
     });
   const syncRepoPullRequests = (
     repoPath: string,
+    expectedWorkspaceId?: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> =>
     runStatusMutation(
       repoPath,
       "repo-pull-request-sync",
-      taskService.repoPullRequestSyncDetailed({ repoPath }),
+      Effect.gen(function* () {
+        if (expectedWorkspaceId !== undefined) {
+          const catalog = yield* workspaceSettingsService.getWorkspaceCatalog();
+          const skip = workspaceSyncSkip(catalog, repoPath, expectedWorkspaceId);
+          if (skip) return skip;
+        }
+        return yield* taskService.repoPullRequestSyncDetailed({ repoPath });
+      }),
       ({ result: syncResult, statusChanges }) =>
         Effect.gen(function* () {
           if (syncResult._tag === "Success") {

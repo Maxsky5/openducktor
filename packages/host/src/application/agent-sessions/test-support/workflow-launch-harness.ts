@@ -303,7 +303,13 @@ export const createLaunchHarness = async (
       runStatusMutation: (_path, _operation, mutation, afterCommit) =>
         collectTaskStatusChanges(mutation).pipe(Effect.flatMap(afterCommit)),
       publishExternalTaskCreated: () => Effect.void,
-      syncRepoPullRequests: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+      syncRepoPullRequests: () =>
+        Effect.succeed({
+          ran: false,
+          changedTaskIds: [],
+          reason: "not_configured",
+          message: "Configure a Git provider.",
+        }),
       publishTasksUpdated: (_repoPath, _changes, operation) =>
         publicationGate.pipe(
           Effect.andThen(
