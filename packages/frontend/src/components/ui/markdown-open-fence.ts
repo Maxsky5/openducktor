@@ -1,7 +1,7 @@
 import { createContext } from "react";
 
 /**
- * True while the Markdown block around the consumer streams and ends in a code fence that is not
- * closed. The code in that fence can still change.
+ * The code of the fence that the streaming Markdown block around the consumer ends in, while that
+ * fence is not closed. The code can still change.
  */
-export const MarkdownOpenFenceContext = createContext(false);
+export const MarkdownOpenFenceContext = createContext<string | null>(null);

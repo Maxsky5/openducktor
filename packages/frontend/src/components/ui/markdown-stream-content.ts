@@ -27,7 +27,7 @@ export type MarkdownBlockContent = {
 export type KeyedContent = { inputKey: string; content: MarkdownBlockContent };
 
 /** A top-level block: its content, and the facts of its parse that its content does not hold. */
-export type DescribedBlock = KeyedContent & Pick<ParsedBlock, "start" | "endsInOpenFence">;
+export type DescribedBlock = KeyedContent & Pick<ParsedBlock, "start" | "openFenceCode">;
 
 export type DescribedMarkdown = {
   markdown: string;
@@ -131,7 +131,7 @@ const describeBlocks = (
       },
       linkDefinitions.filter(({ node }) => linkIds.has(node.identifier)),
     );
-    return { ...keyed, start: block.start, endsInOpenFence: block.endsInOpenFence };
+    return { ...keyed, start: block.start, openFenceCode: block.openFenceCode };
   });
   if (footnoteIds.length === 0) {
     return { blocks, footnotes: null };

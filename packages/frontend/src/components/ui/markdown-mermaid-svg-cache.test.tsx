@@ -3,12 +3,8 @@ import { act, render } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { MarkdownMermaid } from "./markdown-mermaid";
 import * as renderModule from "./markdown-mermaid-render";
-import {
-  drawMermaidSvg,
-  type MermaidSvgCache,
-  MermaidSvgCacheProvider,
-  peekMermaidSvg,
-} from "./markdown-mermaid-svg-cache";
+import { drawMermaidSvg, type MermaidSvgCache, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
+import { MermaidSvgCacheProvider } from "./markdown-mermaid-svg-cache-context";
 
 enableReactActEnvironment();
 

@@ -19,8 +19,8 @@ export type ParsedBlock = {
   footnoteIds: readonly string[];
   /** True when the block shows math, which needs KaTeX. */
   hasMath: boolean;
-  /** True when the text ends in this block, inside a code fence that is not closed yet. */
-  endsInOpenFence: boolean;
+  /** The code of the fence that the text ends in, while that fence is not closed. */
+  openFenceCode: string | null;
 };
 
 export type ParsedDefinition = {
@@ -97,7 +97,7 @@ const parseTail = (
         start: tailStart + lineStart,
         node,
         ...readBlockFacts(node),
-        endsInOpenFence: index === nodes.length - 1 && endsInOpenFence(node, blockText),
+        openFenceCode: index === nodes.length - 1 ? readOpenFenceCode(node, blockText) : null,
       };
     }),
     definitions: nodes.flatMap((node) => readDefinitions(node, tail, prefix.length, tailStart)),
@@ -109,9 +109,11 @@ const STUB_END = "\n\n<!-- -->\n\n";
 
 const stubPrefix = (definitions: readonly ParsedDefinition[]): string => {
   const stubs = new Set(
-    definitions.map(({ node }) =>
-      node.type === "footnoteDefinition" ? `[^${node.identifier}]: x` : `[${node.identifier}]: x`,
-    ),
+    definitions
+      .filter(definesForText)
+      .map(({ node }) =>
+        node.type === "footnoteDefinition" ? `[^${node.identifier}]: x` : `[${node.identifier}]: x`,
+      ),
   );
   return stubs.size === 0 ? "" : `${[...stubs].join("\n\n")}${STUB_END}`;
 };
@@ -146,13 +148,13 @@ const CLOSING_FENCE_LINE = /^[\s>]*(`{3,}|~{3,})[ \t]*$/;
  * The block ends in an open fence when its last node is code and its last line is not a closing
  * fence. A closing fence line is not part of the code value, but a content line is.
  */
-const endsInOpenFence = (node: RootContent, text: string): boolean => {
+const readOpenFenceCode = (node: RootContent, text: string): string | null => {
   const last = lastDescendant(node);
   if (last.type !== "code") {
-    return false;
+    return null;
   }
   const fence = CLOSING_FENCE_LINE.exec(text.slice(text.lastIndexOf("\n") + 1))?.[1];
-  return fence === undefined || last.value.endsWith(fence);
+  return fence === undefined || last.value.endsWith(fence) ? last.value : null;
 };
 
 const lastDescendant = (node: Nodes): Nodes => {
@@ -171,7 +173,9 @@ const readDefinitions = (
     if (child.type !== "definition" && child.type !== "footnoteDefinition") {
       return undefined;
     }
-    const { start, end } = readOffsets(child, prefixLength);
+    // A definition from a reparsed task-list item body has no position. It takes the position and
+    // text of its top-level block.
+    const { start, end } = readOffsets(child.position ? child : node, prefixLength);
     definitions.push({
       start: tailStart + start,
       source: tail.slice(start, end),
@@ -193,8 +197,21 @@ const containsMath = (node: Nodes): boolean => {
 
 const isMath = (node: Nodes): boolean => node.type === "math" || node.type === "inlineMath";
 
+/**
+ * The task-list math plugin parses an item body again apart from the text. The parse of the whole
+ * text did not see a definition in that body, so the definition has no position and defines its
+ * identifier only for references in the same body.
+ */
+const definesForText = ({ node }: ParsedDefinition): boolean => node.position !== undefined;
+
 const definedIdsKey = (definitions: readonly ParsedDefinition[]): string =>
-  [...new Set(definitions.map(({ node }) => `${node.type}:${node.identifier}`))].sort().join("\n");
+  [
+    ...new Set(
+      definitions.filter(definesForText).map(({ node }) => `${node.type}:${node.identifier}`),
+    ),
+  ]
+    .sort()
+    .join("\n");
 
 type Offsets = { start: number; end: number };
 

@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test, mock } from "bun:test";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { act, type ReactElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache";
+import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
 import { ChatFileLinkContext } from "./agent-chat-file-link-context";

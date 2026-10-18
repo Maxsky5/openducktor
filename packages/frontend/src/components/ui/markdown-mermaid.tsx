@@ -2,7 +2,8 @@ import { AlertCircle, Expand } from "lucide-react";
 import { createContext, type ReactNode, useContext, useId, useLayoutEffect, useState } from "react";
 import { Dialog, DialogTrigger } from "./dialog";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
-import { drawMermaidSvg, peekMermaidSvg, useMermaidSvgCache } from "./markdown-mermaid-svg-cache";
+import { drawMermaidSvg, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
+import { useMermaidSvgCache } from "./markdown-mermaid-svg-cache-context";
 import { MarkdownOpenFenceContext } from "./markdown-open-fence";
 import {
   getMermaidErrorMessage,
@@ -41,9 +42,9 @@ export function MarkdownMermaid({
 }) {
   const reactId = useId();
   const preparedPreview = useContext(MermaidPreviewContext)?.get(source);
-  // The source in an open fence is incomplete, so a render now would show a partial diagram or an
-  // error.
-  const sourceOpen = useContext(MarkdownOpenFenceContext);
+  // A source in a fence that is not closed is incomplete, so a render now would show a partial
+  // diagram or an error.
+  const sourceOpen = useContext(MarkdownOpenFenceContext) === source;
   const svgCache = useMermaidSvgCache();
   const [drawn, setDrawn] = useState<DrawnDiagram | null>(() => {
     const svg = peekMermaidSvg(svgCache, source, createRenderId(reactId));

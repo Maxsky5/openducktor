@@ -1480,6 +1480,32 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
+  test("keeps the first row of a scrolled row window when history is prepended after its last row is removed", async () => {
+    const { harness, container } = await mountPinnedTranscript();
+    const rows = createTurnRows(8);
+    container.scrollTop = 40;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+    const rowsWithoutLast = rows.slice(0, -1);
+
+    await harness.update({
+      rows: rowsWithoutLast,
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    });
+    await harness.update({
+      rows: [...createTurnRows(1, "older"), ...rowsWithoutLast],
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().visibleRows[0]?.key).toBe("session-1:user-0");
+
+    await harness.unmount();
+  });
+
   test("keeps a pinned transcript at the bottom when appended rows advance the row window", async () => {
     const initialRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
     const nextRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 2 + 15);

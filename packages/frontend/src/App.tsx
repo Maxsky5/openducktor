@@ -11,7 +11,7 @@ import {
 import { AppShell } from "@/components/layout/app-shell";
 import { ApplicationOverlays } from "@/components/layout/application-overlays";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache";
+import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import {
   WorkspacePreviewRouteGuard,
   WorkspacePreviewTransitionGuardProvider,

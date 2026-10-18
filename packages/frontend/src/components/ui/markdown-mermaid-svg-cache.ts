@@ -1,4 +1,3 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
 import { renderMermaidSvg } from "./markdown-mermaid-render";
 
 /**
@@ -17,23 +16,6 @@ type Drawing = {
 };
 
 const MAX_CACHED_SVGS = 100;
-
-const MermaidSvgCacheContext = createContext<MermaidSvgCache | null>(null);
-
-export function MermaidSvgCacheProvider({ children }: { children: ReactNode }): ReactNode {
-  const [cache] = useState<MermaidSvgCache>(() => new Map());
-  return (
-    <MermaidSvgCacheContext.Provider value={cache}>{children}</MermaidSvgCacheContext.Provider>
-  );
-}
-
-export const useMermaidSvgCache = (): MermaidSvgCache => {
-  const cache = useContext(MermaidSvgCacheContext);
-  if (cache === null) {
-    throw new Error("MarkdownMermaid must render inside MermaidSvgCacheProvider.");
-  }
-  return cache;
-};
 
 /** Gives a copy of the drawn SVG of `source` with `renderId`, or null. Does not change the cache. */
 export const peekMermaidSvg = (

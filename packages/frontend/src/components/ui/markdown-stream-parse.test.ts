@@ -13,13 +13,13 @@ const parseWhileStreaming = (markdown: string, step: number): ParsedMarkdown[] =
 
 // Nodes keep the positions of the parse that made them, so compare what the blocks render from.
 const blockFacts = ({ blocks, definitions }: ParsedMarkdown) => ({
-  blocks: blocks.map(({ text, start, linkIds, footnoteIds, hasMath, endsInOpenFence, node }) => ({
+  blocks: blocks.map(({ text, start, linkIds, footnoteIds, hasMath, openFenceCode, node }) => ({
     text,
     start,
     linkIds,
     footnoteIds,
     hasMath,
-    endsInOpenFence,
+    openFenceCode,
     type: node.type,
   })),
   definitions: definitions.map(({ start, source }) => ({ start, source })),
@@ -80,22 +80,22 @@ describe("parseMarkdown", () => {
   });
 
   test.each([
-    ["a fence without a closing line", "Intro\n\n```mermaid\ngraph TD", true],
-    ["a closed fence", "Intro\n\n```mermaid\ngraph TD\n```", false],
-    ["a fence in a list item", "1. Draw:\n\n   ```mermaid\n   graph TD", true],
-    ["a closed fence in a list item", "1. Draw:\n\n   ```mermaid\n   graph TD\n   ```", false],
-    ["a fence in a quote", "> ```mermaid\n> graph TD", true],
-    ["a closed fence in a quote", "> ```mermaid\n> graph TD\n> ```", false],
-    ["a fence with a shorter closing line", "````mermaid\ngraph TD\n```", true],
-    ["a tilde fence with a backtick line", "~~~mermaid\ngraph TD\n```", true],
-    ["a closed tilde fence", "~~~mermaid\ngraph TD\n~~~", false],
-    ["a paragraph after a fence", "```mermaid\ngraph TD\n```\n\nAfter", false],
-  ])("finds whether the text ends in %s that is open", (_, markdown, open) => {
+    ["a fence without a closing line", "Intro\n\n```mermaid\ngraph TD", "graph TD"],
+    ["a closed fence", "Intro\n\n```mermaid\ngraph TD\n```", null],
+    ["a fence in a list item", "1. Draw:\n\n   ```mermaid\n   graph TD", "graph TD"],
+    ["a closed fence in a list item", "1. Draw:\n\n   ```mermaid\n   graph TD\n   ```", null],
+    ["a fence in a quote", "> ```mermaid\n> graph TD", "graph TD"],
+    ["a closed fence in a quote", "> ```mermaid\n> graph TD\n> ```", null],
+    ["a fence with a shorter closing line", "````mermaid\ngraph TD\n```", "graph TD\n```"],
+    ["a tilde fence with a backtick line", "~~~mermaid\ngraph TD\n```", "graph TD\n```"],
+    ["a closed tilde fence", "~~~mermaid\ngraph TD\n~~~", null],
+    ["a paragraph after a fence", "```mermaid\ngraph TD\n```\n\nAfter", null],
+  ])("finds the code of %s at the end of the text", (_, markdown, code) => {
     const { blocks } = parseMarkdown(markdown, null);
 
-    expect(blocks.map(({ endsInOpenFence }) => endsInOpenFence)).toEqual([
-      ...blocks.slice(0, -1).map(() => false),
-      open,
+    expect(blocks.map(({ openFenceCode }) => openFenceCode)).toEqual([
+      ...blocks.slice(0, -1).map(() => null),
+      code,
     ]);
   });
 
@@ -109,6 +109,7 @@ describe("parseMarkdown", () => {
     "- [ ] $$\n  x = 1\n  $$\n\n  > [a]: /x\n\nSee [a].",
     "- [ ] $$\n  x = 1\n  $$\n\n  > [^n]: note\n\nSee[^n].",
     "- [ ] $$\n  x = 1\n  $$\n  - [b]: /y",
+    "- [ ] $$\n  x = 1\n  $$\n\n  > [a]: /x\n\n  See [a] and[^n].\n\n  [^n]: A note.\n\nAfter [a].",
   ])("parses each streamed prefix of %j as a full parse does", (markdown) => {
     for (const parsed of parseWhileStreaming(markdown, 3)) {
       expect(blockFacts(parsed)).toEqual(blockFacts(parseMarkdown(parsed.markdown, null)));

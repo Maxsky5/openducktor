@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache";
+import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";

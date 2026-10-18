@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { Root } from "hast";
 import { renderToStaticMarkup } from "react-dom/server";
 import Markdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
-import { unified } from "unified";
 import {
   type DescribedMarkdown,
   describeCompleteMarkdown,
   describeMarkdown,
   type MarkdownBlockContent,
 } from "./markdown-stream-content";
+import { drawMath } from "./markdown-stream-math";
 import { renderMarkdownBlock } from "./markdown-stream-tree";
 import { MATH_REMARK_PLUGINS } from "./markdown-math-plugins";
 import { RICH_MARKDOWN_URL_TRANSFORM } from "./markdown-renderer-context";
@@ -45,11 +44,6 @@ const renderWholeText = (markdown: string): string =>
       </Markdown>,
     ),
   );
-
-const katex = unified().use(rehypeKatex);
-const drawMath = (tree: Root): void => {
-  katex.runSync(tree);
-};
 
 // The block renders as the stream renderer renders it, with KaTeX for a block that shows math.
 const renderBlock = (content: MarkdownBlockContent): string =>
@@ -88,6 +82,19 @@ describe("describeMarkdown", () => {
     expect(second.blocks[0]?.content).toBe(first.blocks[0]?.content);
     expect(second.blocks[1]?.content).toBe(first.blocks[1]?.content);
     expect(second.blocks[0]?.content).not.toBe(second.blocks[1]?.content);
+  });
+
+  test("links a reference to a definition in the same task-list math item", () => {
+    const { blocks } = describeMarkdown(
+      "- [ ] $$\n  x = 1\n  $$\n\n  > [a]: /x\n\n  See [a].",
+      null,
+    );
+    const [item] = blocks;
+    if (!item) {
+      throw new Error("Expected a block");
+    }
+
+    expect(renderBlock(item.content)).toContain('href="/x"');
   });
 
   test("gives the link definitions only to the blocks that use them", () => {
@@ -136,6 +143,7 @@ describe("describeMarkdown", () => {
     "- [ ] $$\n  x = 1\n  $$\n\n  > [a]: /x\n\nSee [a].",
     "- [ ] $$\n  x = 1\n  $$\n\n  > [^n]: note\n\nSee[^n].",
     "- [ ] $$\n  x = 1\n  $$\n  - [b]: /y",
+    "- [ ] $$\n  x = 1\n  $$\n\n  > [a]: /x\n\n  See [a] and[^n].\n\n  [^n]: A note.\n\nAfter [a].",
   ])("renders each streamed prefix of %j as the whole text renders", (markdown) => {
     for (const described of describeWhileStreaming(markdown, 3)) {
       expect(renderBlocks(described)).toBe(renderWholeText(described.markdown));

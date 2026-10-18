@@ -97,10 +97,9 @@ const sessionRowRange = (
 
 const findRowIndex = (
   rows: AgentChatTranscriptRow[],
-  rowKey: string | null,
+  rowKey: string,
   expectedIndex: number,
 ): number | null => {
-  if (rowKey === null) return null;
   if (rows[expectedIndex]?.key === rowKey) return expectedIndex;
   const index = rows.findIndex((row) => row.key === rowKey);
   return index < 0 ? null : index;
@@ -110,15 +109,16 @@ const findRowIndex = (
  * Rows can move before the layout effects set a new range, for example when the transcript inserts
  * a row inside the window or prepends history. The range follows its first and last rows, so no
  * mounted row leaves the window for one render and mounts again. A range whose edge row is gone
- * keeps its indexes.
+ * keeps its indexes in a new object, so that the layout effect stores its new edge rows.
  */
 const followRangeRows = (
   { range, firstRowKey, lastRowKey }: SessionRowRange,
   rows: AgentChatTranscriptRow[],
 ): RowRange => {
+  if (firstRowKey === null || lastRowKey === null) return range;
   const startRow = findRowIndex(rows, firstRowKey, range.startRow);
   const lastRow = findRowIndex(rows, lastRowKey, range.endRowExclusive - 1);
-  if (startRow === null || lastRow === null) return range;
+  if (startRow === null || lastRow === null) return { ...range };
   if (startRow === range.startRow && lastRow + 1 === range.endRowExclusive) return range;
   return { startRow, endRowExclusive: lastRow + 1 };
 };

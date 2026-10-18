@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { act, render as renderView, waitFor, within } from "@testing-library/react";
 import type { Nodes } from "mdast";
 import { createElement, type ReactElement } from "react";
-import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache";
+import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import * as markdownStreamTree from "@/components/ui/markdown-stream-tree";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
@@ -209,6 +209,24 @@ describe("AgentChatMarkdownRenderer", () => {
   });
 
   // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
+  test("draws a closed diagram while a later fence in its list streams", async () => {
+    const diagramSpy = await spyOnDiagramRender();
+    const rendered = render(
+      chatMarkdown(
+        "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Code:\n\n   ```ts\n   const value",
+        true,
+      ),
+    );
+
+    try {
+      await waitForDiagram(rendered.container);
+      expect(diagramSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      rendered.unmount();
+      diagramSpy.mockRestore();
+    }
+  });
+
   test("keeps a diagram after a display equation drawn while text streams", async () => {
     const diagramSpy = await spyOnDiagramRender();
     const equationAndDiagram = `$$\nx = 1\n\ny = 2\n$$\n\n${DIAGRAM_FENCE}`;
@@ -256,6 +274,29 @@ describe("AgentChatMarkdownRenderer", () => {
     } finally {
       rendered.unmount();
       blockSpy.mockRestore();
+    }
+  }, 4000);
+
+  // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
+  test("keeps a diagram mounted when math first appears in its block", async () => {
+    const diagramSpy = await spyOnDiagramRender();
+    const list = "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Value";
+    const rendered = render(chatMarkdown(list, true));
+
+    try {
+      await waitForDiagram(rendered.container);
+      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+
+      rendered.rerender(chatMarkdown(`${list} $x$`, true));
+
+      await waitFor(() => expect(rendered.container.querySelector(".katex")).not.toBeNull(), {
+        timeout: 3000,
+      });
+      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(diagramSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      rendered.unmount();
+      diagramSpy.mockRestore();
     }
   }, 4000);
 
