@@ -20,27 +20,12 @@ import {
 import { createDeferred } from "../operations/workspace/workspace-hook-test-fixtures";
 import { useRuntimeCatalogBootstrap } from "./use-runtime-catalog-bootstrap";
 
-const config = (workspaceId: string): RepoConfig => ({
-  workspaceId,
-  workspaceName: workspaceId,
-  repoPath: `/${workspaceId}`,
-  branchPrefix: "odt",
-  defaultTargetBranch: { remote: "origin", branch: "main" },
-  git: {},
-  hooks: { postComplete: [] },
-  actions: { items: [], defaultActionId: null },
-  worktreeCopyPaths: [],
-  promptOverrides: {},
-  agentDefaults: {},
-  agentStudioState: { openTaskIds: [] },
-});
-
 test.each(["catalog", "config"] as const)(
   "keeps an unobserved workspace %s after an hour",
   async (kind) => {
     jest.useFakeTimers();
     const { queryClient: client } = createTestClientConnection({
-      client: { workspaceGetRepoConfig: async () => config("a") },
+      client: { workspaceGetRepoConfig: async () => makeRepoConfig("a") },
     });
     const catalog = createRuntimeCatalogFixture();
     const catalogOptions = runtimeCatalogQueryOptions(
@@ -57,7 +42,7 @@ test.each(["catalog", "config"] as const)(
         client.getQueryData<unknown>(
           kind === "catalog" ? catalogOptions.queryKey : configOptions.queryKey,
         ),
-      ).toEqual(kind === "catalog" ? catalog : config("a"));
+      ).toEqual(kind === "catalog" ? catalog : makeRepoConfig("a"));
     } finally {
       client.clear();
       jest.useRealTimers();
@@ -76,13 +61,8 @@ test("loads only visited workspaces and shows cached data during a stale return 
   });
   const catalogRead = createDeferred<AgentRuntimeCatalog>();
   const configRead = createDeferred<RepoConfig>();
-  let returning = false;
-  const loadRepoRuntimeCatalog = mock(async (ref: RuntimeWorkingDirectoryRef) =>
-    returning && ref.repoPath === "/a" ? catalogRead.promise : catalog,
-  );
-  const workspaceGetRepoConfig = mock(async (workspaceId: string) =>
-    returning && workspaceId === "a" ? configRead.promise : config(workspaceId),
-  );
+  const loadRepoRuntimeCatalog = mock(async (_ref: RuntimeWorkingDirectoryRef) => catalog);
+  const workspaceGetRepoConfig = mock(async (workspaceId: string) => makeRepoConfig(workspaceId));
   const connection = createTestClientConnection({
     queryClient: client,
     client: { workspaceGetRepoConfig },
@@ -129,16 +109,17 @@ test("loads only visited workspaces and shows cached data during a stale return 
     await harness.update({ workspaceId: "b" });
     await harness.waitFor((state) => state.catalog.isSuccess && state.config.isSuccess);
     expect(client.getQueryData<AgentRuntimeCatalog>(catalogKey)).toEqual(catalog);
-    expect(client.getQueryData<RepoConfig>(configKey)).toEqual(config("a"));
+    expect(client.getQueryData<RepoConfig>(configKey)).toEqual(makeRepoConfig("a"));
 
     const updatedAt = Date.now() - 61 * 60_000;
     client.setQueryData(catalogKey, catalog, { updatedAt });
-    client.setQueryData(configKey, config("a"), { updatedAt });
-    returning = true;
+    client.setQueryData(configKey, makeRepoConfig("a"), { updatedAt });
+    loadRepoRuntimeCatalog.mockImplementationOnce(() => catalogRead.promise);
+    workspaceGetRepoConfig.mockImplementationOnce(() => configRead.promise);
     await harness.update({ workspaceId: "a" });
     const state = harness.getLatest();
     expect(state.catalog.data).toEqual(catalog);
-    expect(state.config.data).toEqual(config("a"));
+    expect(state.config.data).toEqual(makeRepoConfig("a"));
     expect(state.catalog.isLoading).toBe(false);
     expect(state.config.isLoading).toBe(false);
     expect(state.catalog.isFetching).toBe(true);
@@ -151,15 +132,32 @@ test("loads only visited workspaces and shows cached data during a stale return 
     expect(workspaceGetRepoConfig.mock.calls.map(([id]) => id)).toEqual(["a", "b", "a"]);
 
     catalogRead.resolve(catalog);
-    configRead.resolve({ ...config("a"), branchPrefix: "updated" });
+    configRead.resolve({ ...makeRepoConfig("a"), branchPrefix: "updated" });
     await harness.waitFor(
       (next) => !next.catalog.isFetching && next.config.data?.branchPrefix === "updated",
     );
   } finally {
     jest.useRealTimers();
     catalogRead.resolve(catalog);
-    configRead.resolve(config("a"));
+    configRead.resolve(makeRepoConfig("a"));
     await harness.unmount();
     client.clear();
   }
 });
+
+function makeRepoConfig(workspaceId: string): RepoConfig {
+  return {
+    workspaceId,
+    workspaceName: workspaceId,
+    repoPath: `/${workspaceId}`,
+    branchPrefix: "odt",
+    defaultTargetBranch: { remote: "origin", branch: "main" },
+    git: {},
+    hooks: { postComplete: [] },
+    actions: { items: [], defaultActionId: null },
+    worktreeCopyPaths: [],
+    promptOverrides: {},
+    agentDefaults: {},
+    agentStudioState: { openTaskIds: [] },
+  };
+}

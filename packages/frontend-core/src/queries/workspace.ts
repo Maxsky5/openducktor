@@ -164,25 +164,11 @@ const sharedWorkspaceQueryKeys = new Set([
   JSON.stringify(workspaceQueryKeys.catalog()),
 ]);
 
-export const dropWorkspaceConfigurationQueries = (
-  queryClient: QueryClient,
-  identity: { repoPath: string; workspaceId: string },
-): void => {
-  const filters: QueryFilters[] = [
-    { queryKey: runtimeCatalogQueryKeys.repoCatalogScope(identity.repoPath) },
-    { queryKey: workspaceQueryKeys.repoConfig(identity.workspaceId), exact: true },
-  ];
-  for (const filter of filters) {
-    void queryClient.cancelQueries(filter, { revert: false });
-    queryClient.removeQueries(filter);
-  }
-};
-
 export const dropWorkspaceQueries = (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
 ): void => {
-  dropWorkspaceConfigurationQueries(queryClient, identity);
+  dropWorkspaceConfigQueries(queryClient, identity);
   const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean => {
     const serializedKey = JSON.stringify(query.queryKey);
     if (sharedWorkspaceQueryKeys.has(serializedKey)) {
@@ -196,4 +182,18 @@ export const dropWorkspaceQueries = (
   };
   void queryClient.cancelQueries({ predicate: matchesRemovedWorkspace }, { revert: false });
   queryClient.removeQueries({ predicate: matchesRemovedWorkspace });
+};
+
+export const dropWorkspaceConfigQueries = (
+  queryClient: QueryClient,
+  identity: { repoPath: string; workspaceId: string },
+): void => {
+  const filters: QueryFilters[] = [
+    { queryKey: runtimeCatalogQueryKeys.repoCatalogScope(identity.repoPath) },
+    { queryKey: workspaceQueryKeys.repoConfig(identity.workspaceId), exact: true },
+  ];
+  for (const filter of filters) {
+    void queryClient.cancelQueries(filter, { revert: false });
+    queryClient.removeQueries(filter);
+  }
 };

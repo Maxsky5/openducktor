@@ -94,11 +94,8 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs, client: Partial<Hos
 describe("use-workspace-branch-operations", () => {
   test("shows the cached branch on return and reads an external change within the stale time", async () => {
     let branch = "main";
-    const returningRead = createDeferred<GitCurrentBranch>();
-    let returning = false;
-    const read = mock(async () =>
-      returning ? returningRead.promise : { name: branch, detached: false },
-    );
+    const pending = createDeferred<GitCurrentBranch>();
+    const read = mock(async (): Promise<GitCurrentBranch> => ({ name: branch, detached: false }));
     workspaceHost.gitGetCurrentBranch = read;
     workspaceHost.gitGetBranches = mock(async () => [
       { name: branch, isCurrent: true, isRemote: false },
@@ -111,7 +108,7 @@ describe("use-workspace-branch-operations", () => {
       await harness.updateArgs({ activeRepo: "/repo-b" });
       await harness.run((value) => value.refreshBranches(false));
       branch = "feature";
-      returning = true;
+      read.mockImplementationOnce(() => pending.promise);
       await harness.updateArgs({ activeRepo: "/repo-a" });
       expect(harness.getLatest().activeBranch?.name).toBe("main");
       let refresh: Promise<void> | undefined;
@@ -121,12 +118,12 @@ describe("use-workspace-branch-operations", () => {
       expect(read).toHaveBeenCalledTimes(3);
       expect(harness.getLatest().activeBranch?.name).toBe("main");
       expect(harness.getLatest().isLoadingBranches).toBe(false);
-      returningRead.resolve({ name: "feature", detached: false });
+      pending.resolve({ name: "feature", detached: false });
       await refresh;
       await harness.waitFor((value) => value.activeBranch?.name === "feature");
       expect(harness.getLatest().branches.map((entry) => entry.name)).toEqual(["feature"]);
     } finally {
-      returningRead.resolve({ name: "feature", detached: false });
+      pending.resolve({ name: "feature", detached: false });
       await harness.unmount();
     }
   });

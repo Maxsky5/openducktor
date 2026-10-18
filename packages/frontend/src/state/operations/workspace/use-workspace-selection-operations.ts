@@ -21,7 +21,7 @@ import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-cor
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
-  dropWorkspaceConfigurationQueries,
+  dropWorkspaceConfigQueries,
   invalidateWorkspaceCaches,
   invalidateWorkspaceSettingsSnapshot,
   loadWorkspaceListFromQuery,
@@ -468,7 +468,7 @@ export function useWorkspaceSelectionOperations({
       runLifecycleAction(async () => {
         const catalog = await hostClient.workspaceClose(input.workspaceId, input.expectedRepoPath);
         applyLifecycleCatalog(catalog);
-        dropWorkspaceConfigurationQueries(queryClient, {
+        dropWorkspaceConfigQueries(queryClient, {
           repoPath: input.expectedRepoPath,
           workspaceId: input.workspaceId,
         });

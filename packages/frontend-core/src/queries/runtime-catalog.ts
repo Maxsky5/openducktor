@@ -69,7 +69,7 @@ export type CachedRuntimeCatalog = Omit<AgentRuntimeCatalog, "models"> & {
   models?: CachedModelSurface | undefined;
 };
 
-/** Options of every catalog read, live or preview. */
+/** Previews need a time limit because they have no workspace close event. */
 export const catalogQueryOptions = (
   queryKey: QueryKey,
   loadCatalog: () => Promise<AgentRuntimeCatalog>,
