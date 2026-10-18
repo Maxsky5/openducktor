@@ -905,71 +905,86 @@ describe("createAgentSessionCommandService", () => {
     expect(storeCount).toBe(0);
   });
 
-  test("stores controlled resume and fork results", async () => {
-    const stored: AgentSessionRecord[] = [];
-    const service = createAgentSessionCommandService({
-      ...createControlDeps(),
-      runtime: {
-        startSession: () => Effect.die(new Error("unexpected start")),
-        resumeSession: (input) =>
-          Effect.succeed({
-            ...summary,
-            externalSessionId: input.externalSessionId,
-          }),
-        continueInterruptedTurn: () =>
-          Effect.die(new Error("unexpected continue interrupted turn")),
-        forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
-        sendUserMessage: unexpectedSend,
-        updateSessionModel: () => Effect.die(new Error("unexpected model update")),
-        stopSession: () => Effect.die(new Error("unexpected stop")),
-        releaseSession: () => Effect.die(new Error("unexpected release")),
+  test.each([
+    { choice: "saved", nativeModel: undefined },
+    {
+      choice: "native",
+      nativeModel: {
+        runtimeKind: "opencode" as const,
+        providerId: "openai",
+        modelId: "gpt-6",
+        variant: "low",
       },
-      tasks: {
-        agentSessionsList: () =>
-          Effect.succeed([
-            {
+    },
+  ])(
+    "stores controlled resume and fork results with the $choice model",
+    async ({ nativeModel }) => {
+      const stored: AgentSessionRecord[] = [];
+      const service = createAgentSessionCommandService({
+        ...createControlDeps(),
+        runtime: {
+          startSession: () => Effect.die(new Error("unexpected start")),
+          resumeSession: (input) =>
+            Effect.succeed({
               ...summary,
-              role: "build",
-              selectedModel: storedModel,
-            },
-          ]),
-        agentSessionUpsert: ({ session }) =>
-          Effect.sync(() => {
-            stored.push(session);
-            return true;
-          }),
-        agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
-      },
-    });
+              externalSessionId: input.externalSessionId,
+              model: nativeModel,
+            }),
+          continueInterruptedTurn: () =>
+            Effect.die(new Error("unexpected continue interrupted turn")),
+          forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
+          sendUserMessage: unexpectedSend,
+          updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopSession: () => Effect.die(new Error("unexpected stop")),
+          releaseSession: () => Effect.die(new Error("unexpected release")),
+        },
+        tasks: {
+          agentSessionsList: () =>
+            Effect.succeed([
+              {
+                ...summary,
+                role: "build",
+                selectedModel: storedModel,
+              },
+            ]),
+          agentSessionUpsert: ({ session }) =>
+            Effect.sync(() => {
+              stored.push(session);
+              return true;
+            }),
+          agentSessionUpdateModel: () => Effect.die(new Error("unexpected stored model update")),
+        },
+      });
 
-    await Effect.runPromise(
-      service.resumeSession({
-        resumeMode: "reattach",
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
-        externalSessionId: "session-1",
-        sessionScope: workflowStart.sessionScope,
-      }),
-    );
-    await Effect.runPromise(
-      service.forkSession({
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
-        parentExternalSessionId: "session-1",
-        sessionScope: workflowStart.sessionScope,
-        systemPrompt: "Fork it",
-        model: workflowStart.model,
-      }),
-    );
+      await Effect.runPromise(
+        service.resumeSession({
+          resumeMode: "reattach",
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: workflowStart.sessionScope,
+        }),
+      );
+      await Effect.runPromise(
+        service.forkSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          parentExternalSessionId: "session-1",
+          sessionScope: workflowStart.sessionScope,
+          systemPrompt: "Fork it",
+          model: workflowStart.model,
+        }),
+      );
 
-    expect(stored.map(({ externalSessionId }) => externalSessionId)).toEqual([
-      "session-1",
-      "fork-1",
-    ]);
-    expect(stored[0]?.selectedModel).toEqual(storedModel);
-  });
+      expect(stored.map(({ externalSessionId }) => externalSessionId)).toEqual([
+        "session-1",
+        "fork-1",
+      ]);
+      expect(stored[0]?.selectedModel).toEqual(nativeModel ?? storedModel);
+    },
+  );
 
   test("routes a continue-interrupted-turn resume to the runtime without storing a session", async () => {
     const continuations: unknown[] = [];

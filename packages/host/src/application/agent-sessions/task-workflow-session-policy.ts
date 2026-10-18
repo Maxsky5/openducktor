@@ -152,16 +152,19 @@ export const createTaskWorkflowSessionPolicy = ({
                     ? (stored.selectedModel ?? undefined)
                     : undefined,
               },
-              save: (summary: AgentSessionControlSummary) =>
-                summary.externalSessionId !== stored.externalSessionId
-                  ? Effect.void
-                  : storeWorkflowSession(tasks.agentSessionUpsert, {
-                      repoPath: input.repoPath,
-                      sessionScope: scope,
-                      model: stored.selectedModel ?? undefined,
-                      selectedModel: stored.selectedModel,
-                      summary,
-                    }).pipe(Effect.asVoid),
+              save: (summary: AgentSessionControlSummary) => {
+                if (summary.externalSessionId !== stored.externalSessionId) return Effect.void;
+                const selectedModel = summary.model
+                  ? { ...summary.model, runtimeKind: summary.runtimeKind }
+                  : stored.selectedModel;
+                return storeWorkflowSession(tasks.agentSessionUpsert, {
+                  repoPath: input.repoPath,
+                  sessionScope: scope,
+                  model: selectedModel ?? undefined,
+                  selectedModel,
+                  summary,
+                }).pipe(Effect.asVoid);
+              },
             };
           }),
         prepareSend: (input) =>

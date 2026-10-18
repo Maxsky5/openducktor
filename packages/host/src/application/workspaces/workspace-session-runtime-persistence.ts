@@ -1,11 +1,12 @@
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
+  AgentSessionControlSummary,
   AgentSessionControlUpdateTitleInput,
   AgentSessionLiveRef,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { agentSessionRefKey, type AgentSessionSummary } from "@openducktor/core";
+import { agentSessionRefKey, isSameSelection } from "@openducktor/core";
 import { Effect, Exit, FiberSet, Scope } from "effect";
 import {
   buildWorkspaceSessionTitle,
@@ -144,11 +145,11 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   const prepare = <Input extends AgentSessionControlResumeInput | AgentSessionSendContent>(
     input: Input,
-  ): Effect.Effect<Input, HostError> =>
+  ) =>
     Effect.gen(function* () {
-      if (input.sessionScope.kind !== "repository") return input;
+      if (input.sessionScope.kind !== "repository") return { input, known: null };
       const known = yield* findActive(input);
-      if (!known) return input;
+      if (!known) return { input, known };
       const storedTitle = runtimeTitle(known.session);
       const prepared = {
         ...input,
@@ -158,9 +159,13 @@ export const createWorkspaceSessionRuntimePersistence = ({
             : { kind: "repository" as const, title: storedTitle },
         systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
       };
-      if ("resumeMode" in input)
-        return { ...prepared, model: known.session.selectedModel ?? undefined };
-      return prepared;
+      return {
+        input:
+          "resumeMode" in input
+            ? { ...prepared, model: known.session.selectedModel ?? undefined }
+            : prepared,
+        known,
+      };
     });
   const planAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
@@ -372,7 +377,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       ),
     prepareResume: (input) =>
       Effect.gen(function* () {
-        const prepared = yield* prepare(input);
+        const { input: prepared, known } = yield* prepare(input);
         if (
           prepared.runtimeKind === "codex" &&
           prepared.sessionScope.kind === "repository" &&
@@ -382,14 +387,23 @@ export const createWorkspaceSessionRuntimePersistence = ({
           titleSync.set(agentSessionRefKey(prepared), "pending");
         return {
           input: prepared,
-          save: (summary: AgentSessionSummary) =>
-            Effect.sync(() => {
+          save: (summary: AgentSessionControlSummary) =>
+            Effect.gen(function* () {
+              if (known && summary.model) {
+                const selectedModel = { ...summary.model, runtimeKind: summary.runtimeKind };
+                if (!isSameSelection(known.session.selectedModel, selectedModel)) {
+                  const saved = yield* storeEffect(
+                    store.setSelectedModel({ ...known.ref, selectedModel }),
+                  );
+                  yield* publishUpdated(known.ref.workspaceId, saved);
+                }
+              }
               if (prepared.runtimeKind === "codex" && summary.firstTurnCompleted === true)
                 titleSync.set(agentSessionRefKey(prepared), "handled");
             }),
         };
       }),
-    prepareSend: prepare,
+    prepareSend: (input) => prepare(input).pipe(Effect.map((prepared) => prepared.input)),
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {

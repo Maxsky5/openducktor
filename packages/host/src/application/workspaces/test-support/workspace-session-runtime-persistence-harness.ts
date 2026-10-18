@@ -63,7 +63,9 @@ export const createPersistenceHarness = async (
   draft = false,
   createControls?: (
     ref: AgentSessionLiveRef,
-  ) => Pick<AgentSessionRuntimeAdapterPort, "sendUserMessage" | "updateSessionTitle">,
+  ) => Partial<
+    Pick<AgentSessionRuntimeAdapterPort, "sendUserMessage" | "updateSessionTitle" | "resumeSession">
+  >,
 ) => {
   const ref: AgentSessionLiveRef = {
     repoPath: database.repoPath,

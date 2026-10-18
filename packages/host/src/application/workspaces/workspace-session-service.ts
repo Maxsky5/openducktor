@@ -165,7 +165,9 @@ export const createWorkspaceSessionService = (
                 systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
               }),
             ),
-            Effect.map((runtimeSession) => ({ session, runtimeSession })),
+            Effect.flatMap((runtimeSession) =>
+              recordFor(input).pipe(Effect.map(({ session }) => ({ session, runtimeSession }))),
+            ),
           );
         }),
       ),

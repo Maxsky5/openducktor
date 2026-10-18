@@ -157,6 +157,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
 
       const { runSummary, runTitleUpdate } = createCodexControlRunner({
         runtimeId: runtime.runtimeId,
+        controller,
         refreshProjection: (admittedRoot) => refreshProjection([], admittedRoot),
         reportProjectionFailure,
       });

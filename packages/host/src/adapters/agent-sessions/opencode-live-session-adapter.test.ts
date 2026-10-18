@@ -37,6 +37,47 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("createOpenCodeLiveSessionAdapterPreparer", () => {
+  test("returns the native model choice from reattachment through the host contract", async () => {
+    const harness = createRuntimeHarness();
+    const model = {
+      providerId: "native",
+      modelId: "current",
+      variant: "high",
+      profileId: "review",
+    };
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: createLifecycle([]),
+        prepareRuntime: async (input) => {
+          const native = await harness.prepareRuntime(input);
+          return {
+            ...native,
+            connection: {
+              ...native.connection,
+              resumeSession: async (request) => ({
+                ...(await native.connection.resumeSession(request)),
+                model,
+              }),
+            },
+          };
+        },
+      })(runtime, ignoreObservationLoss),
+    );
+    try {
+      const summary = await Effect.runPromise(
+        prepared.adapter.resumeSession({
+          ...ref,
+          resumeMode: "reattach",
+          sessionScope: { kind: "repository" },
+          model: { providerId: "saved", modelId: "old" },
+        }),
+      );
+      expect(summary.model).toEqual(model);
+    } finally {
+      await Effect.runPromise(prepared.adapter.releaseRuntime());
+    }
+  });
+
   test("invalidates queried catalog scopes without live sessions and keeps runtime ownership", async () => {
     const harness = createRuntimeHarness();
     const changes: AgentSessionLiveAdapterChange[] = [];

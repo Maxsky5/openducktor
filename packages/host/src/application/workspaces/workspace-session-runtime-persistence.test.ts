@@ -33,6 +33,61 @@ describe("Workspace Session persistence through the shared command module", () =
 
   const setup = () => createPersistenceHarness(database);
 
+  test("saves the native model choice when reopening a saved workspace chat", async () => {
+    const nativeModel = {
+      runtimeKind: "codex" as const,
+      providerId: "codex",
+      modelId: "gpt-6",
+      variant: "low",
+      speed: "priority",
+    };
+    const h = await createPersistenceHarness(database, "codex", false, (ref) => ({
+      resumeSession: () =>
+        Effect.succeed({
+          ...ref,
+          startedAt: "2026-09-07T10:00:00Z",
+          status: "idle" as const,
+          model: nativeModel,
+        }),
+    }));
+    try {
+      const opened = await Effect.runPromise(h.workspaceService().start(h.storeRef));
+      expect((await h.get()).selectedModel).toEqual(nativeModel);
+      expect(opened.session.selectedModel).toEqual(nativeModel);
+      expect(h.updates.at(-1)?.session.selectedModel).toEqual(nativeModel);
+      expect(h.models).toEqual([]);
+    } finally {
+      await Effect.runPromise(h.live.shutdownOperations());
+      await Effect.runPromise(h.persistence.shutdown());
+    }
+  });
+
+  test.each(["opencode", "claude", "codex"] as const)(
+    "opens a saved %s workspace chat through the shared command policy",
+    async (runtimeKind) => {
+      const h = await createPersistenceHarness(database, runtimeKind);
+      try {
+        const opened = await Effect.runPromise(
+          h.workspaceService().start(h.storeRef).pipe(Effect.timeout("1 second")),
+        );
+        expect(opened.runtimeSession).toMatchObject({
+          runtimeKind,
+          externalSessionId: h.ref.externalSessionId,
+          workingDirectory: h.ref.workingDirectory,
+        });
+        expect(h.inputs).toHaveLength(1);
+        expect(h.inputs[0]).toMatchObject({
+          externalSessionId: h.ref.externalSessionId,
+          model: h.record.selectedModel,
+          systemPrompt: "Original instructions.",
+        });
+      } finally {
+        await Effect.runPromise(h.live.shutdownOperations());
+        await Effect.runPromise(h.persistence.shutdown());
+      }
+    },
+  );
+
   test("uses the stored Role and Model on resume without adding settings to Send", async () => {
     const h = await setup();
     const scope = { kind: "repository" } as const;
@@ -586,6 +641,8 @@ describe("Workspace Session persistence through the shared command module", () =
     ["send", "archive"],
     ["resume", "command"],
     ["resume", "archive"],
+    ["open", "command"],
+    ["open", "archive"],
   ] as const)("serializes archive with %s when %s starts first", async (operation, first) => {
     const h = await setup();
     const entered = Promise.withResolvers<void>();
@@ -678,23 +735,25 @@ describe("Workspace Session persistence through the shared command module", () =
         },
       },
     });
-    const command = () =>
-      operation === "send"
-        ? h.live
-            .sendUserMessage({
-              delivery: "new_turn",
-              ...h.ref,
-              sessionScope: { kind: "repository" },
-              parts: [{ kind: "text", text: "Continue" }],
-            })
-            .pipe(Effect.asVoid)
-        : h.live
-            .resumeSession({
-              resumeMode: "reattach",
-              ...h.ref,
-              sessionScope: { kind: "repository" },
-            })
-            .pipe(Effect.asVoid);
+    const command = () => {
+      if (operation === "open") return workspace.start(h.storeRef).pipe(Effect.asVoid);
+      if (operation === "send")
+        return h.live
+          .sendUserMessage({
+            delivery: "new_turn",
+            ...h.ref,
+            sessionScope: { kind: "repository" },
+            parts: [{ kind: "text", text: "Continue" }],
+          })
+          .pipe(Effect.asVoid);
+      return h.live
+        .resumeSession({
+          resumeMode: "reattach",
+          ...h.ref,
+          sessionScope: { kind: "repository" },
+        })
+        .pipe(Effect.asVoid);
+    };
     const archive = () =>
       workspace
         .archive({

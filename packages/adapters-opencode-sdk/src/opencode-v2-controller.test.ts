@@ -913,16 +913,43 @@ describe("OpenCode V2 controls and accepted input", () => {
     expect(requests).toHaveLength(1);
   });
   test("reattachment keeps native rules and metadata and ignores new creation defaults", async () => {
+    const detail = session({
+      ...current,
+      model: { providerID: "native", id: "first", variant: "low" },
+      agent: "build",
+    });
     const { controller, requests } = createController(
       ({ url, method }) => {
         if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
         if (url.pathname === "/api/session/active") return response({});
         if (method === "PATCH" || method === "PUT") return noContent();
-        return response(current);
+        return response(detail);
       },
       { defaults: [{ permission: "shell", pattern: "new default", action: "allow" }], role: [] },
     );
-    await controller.resumeSession(repository);
+    const saved = {
+      ...repository,
+      model: { providerId: "saved", modelId: "old", profileId: "old" },
+    };
+    expect(await controller.resumeSession(saved)).toMatchObject({
+      model: {
+        providerId: "native",
+        modelId: "first",
+        variant: "low",
+        profileId: "build",
+      },
+    });
+    detail.model = { providerID: "native", id: "second", variant: "high" };
+    detail.agent = "review";
+    expect(await controller.resumeSession(saved)).toMatchObject({
+      model: {
+        providerId: "native",
+        modelId: "second",
+        variant: "high",
+        profileId: "review",
+      },
+    });
+    expect(requests.filter(({ url }) => url.pathname.endsWith("/model"))).toEqual([]);
     const patch = requests.find((request) => request.method === "PATCH");
     expect(patch?.body.metadata).toMatchObject({ native: "retained" });
     expect(patch?.body.permissions).toContainEqual(current.permissions?.[0]);

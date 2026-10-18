@@ -235,6 +235,8 @@ export const agentSessionControlSummarySchema = z
     startedAt: isoTimestampSchema,
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
     firstTurnCompleted: z.boolean().optional(),
+    // Native settings after the operation, when the runtime reports them.
+    model: agentModelSelectionSchema.optional(),
   })
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;

@@ -266,6 +266,7 @@ export type ReplyQuestionInput = PolicyBoundSessionRef & {
 export type EventUnsubscribe = () => void;
 
 export type AgentSessionSummary = {
+  model?: AgentModelSelection;
   externalSessionId: ExternalSessionId;
   runtimeKind: RuntimeKind;
   workingDirectory: string;

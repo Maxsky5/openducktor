@@ -59,7 +59,7 @@ import {
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 import { OPENCODE_WORKFLOW_INSTRUCTION_KEY } from "./opencode-session-transcript";
-import { iso, projectInboxUser } from "./opencode-message-projection";
+import { iso, modelSelection, projectInboxUser } from "./opencode-message-projection";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMessageId } from "./opencode-message-id";
@@ -179,6 +179,10 @@ export class OpencodeSdkAdapter {
       status: running ? "running" : "idle",
     };
     if (binding.detail.title) summary.title = binding.detail.title;
+    if (binding.detail.model) {
+      summary.model = modelSelection(binding.detail.model);
+      if (binding.detail.agent) summary.model.profileId = binding.detail.agent;
+    }
     return summary;
   }
 
@@ -322,10 +326,11 @@ export class OpencodeSdkAdapter {
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
+    const generation = this.generation(input.externalSessionId);
     const existing = this.bindings.get(input.externalSessionId);
     const binding = existing?.prepared
-      ? this.requirePreparedBinding(input)
-      : await this.bind(input);
+      ? this.admit(input, input.sessionScope, await this.readBinding(input, generation), true)
+      : await this.bind(input, generation);
     input.onWorkAccepted?.();
     const active = await nativeRequest(input, "read session activity", () =>
       this.client.session.active(),
