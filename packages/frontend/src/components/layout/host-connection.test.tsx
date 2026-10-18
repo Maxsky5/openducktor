@@ -17,6 +17,8 @@ test("the rail, host modal, and Settings share live client counts and host addre
     webOrigins: [],
   };
   const snapshot = Promise.withResolvers<RemoteAccessState>();
+  const rejected = Promise.withResolvers<RemoteAccessState>();
+  const disabled = Promise.withResolvers<RemoteAccessState>();
   const stop = mock(() => {});
   const bridge: RemoteAccessBridge = {
     readState: () => snapshot.promise,
@@ -24,9 +26,7 @@ test("the rail, host modal, and Settings share live client counts and host addre
     enable: async () => {
       throw new Error("This test uses the live state stream.");
     },
-    disable: async () => {
-      throw new Error("This test uses the live state stream.");
-    },
+    disable: mock(() => rejected.promise),
     subscribeState: mock(async (listener: (state: RemoteAccessState) => void) => {
       publish = listener;
       return stop;
@@ -101,12 +101,31 @@ test("the rail, host modal, and Settings share live client counts and host addre
       name: "Copy address",
     }),
   ).toBeNull();
+  expect(
+    within(view.getByRole("dialog", { name: "Host connection" })).queryByRole("button", {
+      name: "Disable remote control",
+    }),
+  ).toBeNull();
   view.rerender(content(false, false));
   expect(
     within(view.getByRole("dialog", { name: "Host connection" })).getByRole("status").textContent,
   ).toBe("1 client connected");
+  fireEvent.click(view.getByRole("button", { name: "Disable remote control" }));
+  await view.findByRole("button", { name: "Disabling…" });
+  const group = view.getByRole("button", { name: "Disabling…" }).closest("fieldset");
+  expect(group?.disabled).toBe(true);
   await act(async () => {
-    publish({ status: "disabled", configuration: null, connectedClients: 0 });
+    rejected.reject(new Error("Could not stop sharing. Try again."));
+  });
+  expect((await view.findByRole("alert")).textContent).toBe("Could not stop sharing. Try again.");
+  expect(group?.disabled).toBe(false);
+  bridge.disable = mock(() => disabled.promise);
+  fireEvent.click(view.getByRole("button", { name: "Disable remote control" }));
+  await view.findByRole("button", { name: "Disabling…" });
+  await act(async () => {
+    const next = { status: "disabled", configuration: null, connectedClients: 0 } as const;
+    publish(next);
+    disabled.resolve(next);
   });
   expect(control.getAttribute("aria-label")).toBe("Host connection: Web runner host");
   expect(control.textContent).toBe("");
@@ -115,8 +134,64 @@ test("the rail, host modal, and Settings share live client counts and host addre
       name: "Copy address",
     }),
   ).toBeNull();
+  expect(
+    within(view.getByRole("dialog", { name: "Host connection" })).getByText("Off"),
+  ).toBeDefined();
+  expect(
+    within(view.getByRole("dialog", { name: "Host connection" })).getByText(
+      "Other devices cannot connect to this host.",
+    ),
+  ).toBeDefined();
   view.unmount();
   expect(stop).toHaveBeenCalledTimes(1);
+});
+
+test("opens remote control settings without changing the selected host", async () => {
+  let openedFromRail = false;
+  const openSettings = mock(() => {
+    openedFromRail = document.activeElement === control;
+  });
+  const select = mock(async (_endpoint: string | null) => {});
+  const bridge: RemoteAccessBridge = {
+    readState: async () => ({ status: "disabled", configuration: null, connectedClients: 0 }),
+    readNetworks: async () => [],
+    enable: async () => {
+      throw new Error("Not used by this test.");
+    },
+    disable: async () => {
+      throw new Error("Not used by this test.");
+    },
+    subscribeState: async () => () => {},
+  };
+  const view = render(
+    <QueryProvider useIsolatedClient>
+      <ShellStateProvider remoteAccess={bridge}>
+        <HostConnectionProvider
+          selection={{
+            target: { kind: "local" },
+            localHost: "electron",
+            select,
+            disconnect: async () => {},
+          }}
+          connection={undefined}
+        >
+          <HostSwitcher onOpenSettings={openSettings} />
+        </HostConnectionProvider>
+      </ShellStateProvider>
+    </QueryProvider>,
+  );
+  const control = view.getByRole("button", { name: "Host connection: Desktop app host" });
+  control.focus();
+  fireEvent.click(control);
+  await view.findByText("Off");
+  expect(view.queryByRole("button", { name: "Disable remote control" })).toBeNull();
+  fireEvent.click(view.getByRole("button", { name: "Remote control settings" }));
+  await waitFor(() => expect(view.queryByRole("dialog", { name: "Host connection" })).toBeNull(), {
+    timeout: 500,
+  });
+  await waitFor(() => expect(openSettings).toHaveBeenCalledTimes(1), { timeout: 500 });
+  expect(openedFromRail).toBe(true);
+  expect(select).not.toHaveBeenCalled();
 });
 
 test("keeps all host actions in the modal footer", () => {

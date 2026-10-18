@@ -6,7 +6,7 @@ export type SettingsModalOpenRequest = {
   onOpenChange?: (open: boolean) => void;
 };
 
-type ActiveSettingsRequest = SettingsModalOpenRequest & { id: number };
+type ActiveSettingsRequest = SettingsModalOpenRequest & { id: number; trigger: HTMLElement | null };
 
 export const useSettingsModalRequests = () => {
   const [activeRequest, setActiveRequest] = useState<ActiveSettingsRequest | null>(null);
@@ -15,7 +15,11 @@ export const useSettingsModalRequests = () => {
 
   const openSettings = useCallback((request: SettingsModalOpenRequest = {}): void => {
     if (activeRequestRef.current) return;
-    const nextRequest = { ...request, id: ++requestIdRef.current };
+    const nextRequest = {
+      ...request,
+      id: ++requestIdRef.current,
+      trigger: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    };
     activeRequestRef.current = nextRequest;
     setActiveRequest(nextRequest);
     request.onOpenChange?.(true);

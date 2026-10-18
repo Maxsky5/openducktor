@@ -12,6 +12,7 @@ import { WorkspaceRail } from "./workspace-rail";
 import { WorkspacePreviewTransitionGuardProvider } from "./workspace-preview-transition-guard";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
+import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
 
 const selectWorkspaceMock = mock(async (_workspaceId: string): Promise<void> => {});
 const reorderWorkspacesMock = mock(async (_workspaceIds: string[]): Promise<void> => {});
@@ -42,7 +43,7 @@ const withProviders = (children: ReactElement): ReactElement => (
       <WorkspaceActivityContext.Provider
         value={createWorkspaceActivityObserverStub(workspaceActivity)}
       >
-        {children}
+        <SettingsModalProvider>{children}</SettingsModalProvider>
       </WorkspaceActivityContext.Provider>
     </WorkspaceStateContext.Provider>
   </WorkspacePreviewTransitionGuardProvider>

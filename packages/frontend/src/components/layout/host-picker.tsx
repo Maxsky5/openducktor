@@ -1,6 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
 import { Laptop, LoaderCircle, Server, Unplug } from "lucide-react";
-import { RemoteAddress } from "@/components/features/remote-control/remote-address";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -8,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { localHostLabel, parseHostEndpoint, type HostSelection } from "@/lib/host-location";
 import { cn } from "@/lib/utils";
 import { useRemoteAccess } from "@/state/remote-access-provider";
+import { HostSharing } from "./host-sharing";
 
 type Action = "connect" | "local" | "disconnect";
 
@@ -15,10 +15,12 @@ export function HostPicker({
   selection,
   error: initialError,
   onCancel,
+  onOpenSettings,
 }: {
   selection: HostSelection;
   error?: string | undefined;
   onCancel?: () => void;
+  onOpenSettings?: (() => void) | undefined;
 }) {
   const { target } = selection;
   const [endpoint, setEndpoint] = useState("");
@@ -57,7 +59,9 @@ export function HostPicker({
         <Body
           className={cn("flex min-h-0 flex-col gap-5", onCancel && "overflow-y-auto px-6 py-5")}
         >
-          {currentHost ? <SelectedHost selection={selection} /> : null}
+          {currentHost ? (
+            <SelectedHost selection={selection} onOpenSettings={onOpenSettings} />
+          ) : null}
           {error && error.action !== "connect" ? (
             <p role="alert" className="text-sm text-destructive-surface-foreground">
               {error.message}
@@ -106,9 +110,15 @@ export function HostPicker({
   );
 }
 
-function SelectedHost({ selection }: { selection: HostSelection }) {
+function SelectedHost({
+  selection,
+  onOpenSettings,
+}: {
+  selection: HostSelection;
+  onOpenSettings: (() => void) | undefined;
+}) {
   const { target } = selection;
-  const { state } = useRemoteAccess();
+  const { bridge } = useRemoteAccess();
   const Icon = target.kind === "remote" ? Server : Laptop;
   return (
     <>
@@ -121,12 +131,8 @@ function SelectedHost({ selection }: { selection: HostSelection }) {
           </dd>
         </div>
       </dl>
-      {target.kind === "local" && state?.status === "available" && state.configuration ? (
-        <RemoteAddress
-          key={state.configuration.publicEndpoint}
-          endpoint={state.configuration.publicEndpoint}
-          connectedClients={state.connectedClients}
-        />
+      {target.kind === "local" && bridge ? (
+        <HostSharing bridge={bridge} onOpenSettings={onOpenSettings} />
       ) : null}
     </>
   );

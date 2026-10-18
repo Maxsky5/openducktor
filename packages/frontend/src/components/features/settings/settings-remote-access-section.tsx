@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   type RemoteAccessState,
   type RemoteAccessEnableInput,
@@ -12,10 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Radio } from "lucide-react";
 import { useRemoteAccess } from "@/state/remote-access-provider";
-import {
-  remoteAccessNetworksQueryOptions,
-  remoteAccessQueryKey,
-} from "@/state/queries/remote-access";
+import { remoteAccessNetworksQueryOptions } from "@/state/queries/remote-access";
+import { useRemoteAccessAction } from "@/state/operations/remote-access";
 import { RemoteAccessForm } from "./settings-remote-access-form";
 import { RemoteAddress } from "../remote-control/remote-address";
 
@@ -139,27 +137,15 @@ function SharingStatus({
 }
 
 function useRemoteAccessControls(bridge: RemoteAccessBridge) {
-  const queryClient = useQueryClient();
   const { state, error: stateError } = useRemoteAccess();
   const [draft, setDraft] = useState<RemoteAccessEnableInput | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const action = useRemoteAccessAction(bridge);
   const networks = useQuery(remoteAccessNetworksQueryOptions(bridge));
   const { status, configuration, failure } = state ?? {};
   const saved = draftFrom(configuration, networks.data ?? []);
   const fields = draft ?? saved;
   const failureMessage = failure ? `${failure.message} ${failure.nextAction}` : undefined;
-  const message = error ?? stateError ?? networks.error?.message ?? failureMessage;
-  const action = useMutation({
-    mutationFn: (configuration: RemoteAccessEnableInput | null) =>
-      configuration ? bridge.enable(configuration) : bridge.disable(),
-    onMutate: () => queryClient.cancelQueries({ queryKey: remoteAccessQueryKey, exact: true }),
-    onSuccess: (next) => {
-      queryClient.setQueryData(remoteAccessQueryKey, next);
-      if (next.status !== "failed") setDraft(null);
-      setError(null);
-    },
-    onError: (cause) => setError(cause.message),
-  });
+  const message = action.error?.message ?? stateError ?? networks.error?.message ?? failureMessage;
   const pending = action.isPending || status === "starting" || networks.isPending;
   return {
     state,
@@ -168,7 +154,12 @@ function useRemoteAccessControls(bridge: RemoteAccessBridge) {
       fields,
       networks: networks.data ?? [],
       onChange: (value: Partial<RemoteAccessEnableInput>) => setDraft({ ...fields, ...value }),
-      onAction: action.mutate,
+      onAction: (configuration: RemoteAccessEnableInput | null) =>
+        action.mutate(configuration, {
+          onSuccess: (next) => {
+            if (next.status !== "failed") setDraft(null);
+          },
+        }),
       onRefresh: () => {
         void networks.refetch();
       },

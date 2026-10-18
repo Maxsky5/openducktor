@@ -76,13 +76,16 @@ for (const shared of [true, false]) {
   }, 2000);
 }
 
-test("a client without a local host hides Remote control and keeps the settings footer", async () => {
+test("a client without a local host keeps settings controls and returns focus", async () => {
   const settings = renderSettings(true);
   try {
+    const trigger = within(document.body).getByRole("button", { name: "Open settings" });
+    trigger.focus();
     const content = await settings.open();
     expect(content.queryByRole("button", { name: "Remote control" })).toBeNull();
     expect(content.getByRole("button", { name: "Save Settings" })).toBeDefined();
     await settings.close(content);
+    await waitFor(() => expect(document.activeElement === trigger).toBe(true), { timeout: 500 });
     expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
   } finally {
     settings.unmount();

@@ -27,7 +27,10 @@ import { HostRetryButton } from "./host-retry-button";
 import { HostConnectionPage } from "./host-connection-page";
 import { RemoteConnectionBoundary } from "./remote-connection-boundary";
 
-const HostContext = createContext<{ selection: HostSelection; choose(): void } | null>(null);
+const HostContext = createContext<{
+  selection: HostSelection;
+  choose(openSettings?: () => void): void;
+} | null>(null);
 
 export function HostConnectionProvider({
   selection,
@@ -37,11 +40,13 @@ export function HostConnectionProvider({
   selection: HostSelection;
   connection: ShellBridge["remoteConnection"];
 }>) {
-  const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<{ openSettings: (() => void) | undefined } | null>(null);
+  const open = dialog !== null;
   const trigger = useRef<HTMLElement | null>(null);
-  const choose = useCallback(() => {
+  const settings = useRef<(() => void) | null>(null);
+  const choose = useCallback((openSettings?: () => void) => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setOpen(true);
+    setDialog({ openSettings });
   }, []);
   const host = useMemo(() => ({ selection, choose }), [selection, choose]);
   const name =
@@ -52,34 +57,59 @@ export function HostConnectionProvider({
     <HostContext value={host}>
       <RemoteConnectionBoundary
         connection={connection}
-        changeHost={choose}
+        changeHost={() => choose()}
         choosingHost={open}
         initialView={(state) => (
-          <ConnectionProgress state={state} name={name} connection={connection} choose={choose} />
+          <ConnectionProgress
+            state={state}
+            name={name}
+            connection={connection}
+            choose={() => choose()}
+          />
         )}
       >
         {children}
       </RemoteConnectionBoundary>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(open) => {
+          if (!open) setDialog(null);
+        }}
+      >
         <DialogContent
           className="max-w-xl gap-0 overflow-hidden p-0"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             trigger.current?.focus();
+            // Settings must capture the rail button after this dialog releases focus.
+            const openSettings = settings.current;
+            settings.current = null;
+            openSettings?.();
           }}
         >
           <DialogHeader className="px-6 pb-1 pt-6">
             <DialogTitle>Host connection</DialogTitle>
             <DialogDescription>Choose the host for this window.</DialogDescription>
           </DialogHeader>
-          <HostPicker selection={selection} onCancel={() => setOpen(false)} />
+          <HostPicker
+            selection={selection}
+            onCancel={() => setDialog(null)}
+            onOpenSettings={
+              dialog?.openSettings
+                ? () => {
+                    settings.current = dialog.openSettings ?? null;
+                    setDialog(null);
+                  }
+                : undefined
+            }
+          />
         </DialogContent>
       </Dialog>
     </HostContext>
   );
 }
 
-export function HostSwitcher() {
+export function HostSwitcher({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const host = useContext(HostContext);
   const { state, error } = useRemoteAccess();
   if (!host) return null;
@@ -98,7 +128,7 @@ export function HostSwitcher() {
       className="relative size-9 text-sidebar-muted-foreground hover:text-sidebar-foreground"
       aria-label={label}
       title={label}
-      onClick={host.choose}
+      onClick={() => host.choose(onOpenSettings)}
     >
       {local ? <LocalHostIcon state={state} /> : <Server aria-hidden="true" />}
     </Button>

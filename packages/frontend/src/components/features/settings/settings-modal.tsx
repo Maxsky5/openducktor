@@ -97,6 +97,10 @@ export function SettingsModalProvider({ children }: PropsWithChildren): ReactEle
           initialNavigation={navigation}
           {...(activeRequest.deepLink ? { deepLink: activeRequest.deepLink } : {})}
           onOpenChange={handleDialogOpenChange}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            activeRequest.trigger?.focus();
+          }}
         />
       ) : null}
     </SettingsModalContext.Provider>
@@ -143,6 +147,7 @@ type SettingsDialogProps = {
   deepLink?: SettingsDeepLink | undefined;
   initialNavigation?: Navigation;
   onOpenChange: (open: boolean, navigation: Navigation) => void;
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
   open: boolean;
 };
 
@@ -151,6 +156,7 @@ function SettingsDialog({
   deepLink,
   initialNavigation = INITIAL_NAVIGATION,
   onOpenChange,
+  onCloseAutoFocus,
   open,
 }: SettingsDialogProps): ReactElement {
   const initial = getOpenState(deepLink, initialNavigation);
@@ -232,7 +238,10 @@ function SettingsDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {children}
 
-      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0">
+      <DialogContent
+        className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
