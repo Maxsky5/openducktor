@@ -3,6 +3,7 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { toPrimaryAgentOptions } from "@/components/features/agents/catalog-select-options";
 import type { ModelPickerValue } from "@/components/features/agents/model-picker";
 import type { ComboboxOption } from "@/components/ui/combobox";
+import { resolveSavedModelAlias } from "@/lib/model-catalog-selection";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
 import { selectedModelKey, toVariantOptionsForModelKey } from "./model-defaults-model";
 
@@ -72,12 +73,13 @@ export const buildRepositoryAgentControls = ({
   isCatalogLoading: boolean;
   isSaving: boolean;
 }): RepositoryAgentControls => {
+  const current = catalog ? resolveSavedModelAlias(catalog, value) : value;
   const selectedPickerValue: ModelPickerValue | null =
-    runtimeKind && value.providerId && value.modelId
+    runtimeKind && current.providerId && current.modelId
       ? {
           runtimeKind,
-          providerId: value.providerId,
-          modelId: value.modelId,
+          providerId: current.providerId,
+          modelId: current.modelId,
         }
       : null;
   const supportsProfiles =
@@ -86,7 +88,7 @@ export const buildRepositoryAgentControls = ({
     runtimeDescriptor?.capabilities.optionalSurfaces.supportsVariants === true;
   const profileOptions = toPrimaryAgentOptions(catalog);
   const variantOptions = supportsVariants
-    ? toVariantOptionsForModelKey(catalog, selectedModelKey(value))
+    ? toVariantOptionsForModelKey(catalog, selectedModelKey(current))
     : [];
 
   return {

@@ -7,6 +7,7 @@ import {
   normalizeVisibleCatalogProfileId,
   pickCatalogDefaultModel,
   pickVisibleCatalogDefaultProfileId,
+  resolveSavedModelAlias,
 } from "./model-catalog-selection";
 
 export type ResolvedModelPair = {
@@ -46,15 +47,6 @@ export const pickDefaultVisibleSelectionForCatalog = (
   return selection;
 };
 
-const findCatalogModelByAlias = (
-  catalog: AgentModelCatalog,
-  selection: Pick<AgentModelSelection, "providerId" | "modelId">,
-): AgentModelCatalog["models"][number] | null =>
-  catalog.models.find(
-    (model) =>
-      model.providerId === selection.providerId && model.aliases?.includes(selection.modelId),
-  ) ?? null;
-
 export const coerceVisibleSelectionToCatalog = (
   catalog: AgentModelCatalog | null,
   selection: AgentModelSelection | null,
@@ -70,7 +62,7 @@ export const coerceVisibleSelectionToCatalog = (
     return null;
   }
 
-  const model = findCatalogModel(catalog, selection) ?? findCatalogModelByAlias(catalog, selection);
+  const model = findCatalogModel(catalog, resolveSavedModelAlias(catalog, selection));
   if (!model) {
     return null;
   }

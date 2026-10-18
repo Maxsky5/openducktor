@@ -14,6 +14,7 @@ import {
   resolveModelSelectionPolicy,
   findCatalogModel,
   readAttachmentValidationError,
+  resolveSavedModelAlias,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import {
@@ -179,39 +180,43 @@ export const createSessionTurnPreparation = (deps: {
           });
         const config = yield* deps.settings.getRepoConfigByRepoPath(target.repoPath);
         const catalog = yield* catalogFor(target);
-        const decision = resolveSavedSessionModel({
+        const current = saved ? resolveSavedModelAlias(catalog, saved) : null;
+        const resolved = resolveSavedSessionModel({
           runtimeKind: target.runtimeKind,
-          savedSelection: saved,
+          savedSelection: current,
           defaultSelection:
             target.sessionScope.kind === "workflow"
               ? (config.agentDefaults[target.sessionScope.role] ?? config.defaultModel ?? null)
               : (config.defaultModel ?? null),
           catalog,
         });
-        if (decision.kind === "blocked")
+        if (resolved.kind === "blocked")
           return yield* new HostValidationError({
-            field: decision.reason,
-            message: decision.message,
+            field: resolved.reason,
+            message: resolved.message,
           });
-        if (captured && (decision.kind === "repair" || !isSameSelection(saved, decision.selection)))
+        if (
+          captured &&
+          (resolved.kind === "repair" || !isSameSelection(current, resolved.selection))
+        )
           return yield* new HostValidationError({
             field: "model",
             message:
               "The model captured for this message is no longer permitted. Review the queued message and select a permitted model before sending a new message.",
           });
-        if (previous !== undefined && saved) {
-          const model = findCatalogModel(catalog, saved);
+        if (previous !== undefined && current) {
+          const model = findCatalogModel(catalog, current);
           const policy = resolveModelSelectionPolicy(model, true);
-          if (!policy.canChangeProfile && saved.profileId !== previous?.profileId)
+          if (!policy.canChangeProfile && current.profileId !== previous?.profileId)
             return yield* new HostValidationError({
               field: "profile",
               message:
                 "This runtime cannot change the profile of a live session. Start a new session with the required profile.",
             });
           if (
-            saved.variant !== previous?.variant &&
-            saved.variant &&
-            !policy.variants.includes(saved.variant)
+            current.variant !== previous?.variant &&
+            current.variant &&
+            !policy.variants.includes(current.variant)
           )
             return yield* new HostValidationError({
               field: "model",
@@ -219,6 +224,11 @@ export const createSessionTurnPreparation = (deps: {
                 "This runtime cannot apply this variant to a live session. Select a permitted variant or start a new session.",
             });
         }
+        const convertedSelection =
+          current !== saved && resolved.kind === "keep" ? resolved.selection : null;
+        const decision = convertedSelection
+          ? { kind: "repair" as const, selection: convertedSelection }
+          : resolved;
         yield* validateAttachments(parts, catalog, decision.selection);
         return decision;
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-model"))),

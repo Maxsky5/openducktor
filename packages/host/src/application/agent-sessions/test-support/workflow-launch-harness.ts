@@ -475,6 +475,7 @@ export const createLaunchHarness = async (
                     providerName: "Provider",
                     modelId: "model",
                     modelName: "Model",
+                    aliases: ["model-alias"],
                     variants: ["medium", "high"],
                     speedLevels: [{ id: "fast", label: "Fast" }],
                     supportsReasoning: true,

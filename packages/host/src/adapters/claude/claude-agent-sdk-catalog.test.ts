@@ -539,6 +539,10 @@ describe("loadClaudeModelCatalog", () => {
     displayName: "Claude Sonnet 4.6",
     description: "Claude Sonnet",
   };
+  const readCatalog = (models: ModelInfo[]) =>
+    loadClaudeModelCatalog("/repo", undefined, process.execPath, () =>
+      createClaudeQueryFixture({ supportedModels: mock(async () => models) }),
+    );
 
   test("reads only models and closes its short-lived session", async () => {
     const close = mock(() => {});
@@ -566,11 +570,6 @@ describe("loadClaudeModelCatalog", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  const readCatalog = (models: ModelInfo[]) =>
-    loadClaudeModelCatalog("/repo", undefined, process.execPath, () =>
-      createClaudeQueryFixture({ supportedModels: mock(async () => models) }),
-    );
-
   test("lists one entry for each model that Claude reports, with its aliases", async () => {
     const catalog = await readCatalog([
       {
@@ -597,8 +596,8 @@ describe("loadClaudeModelCatalog", () => {
     expect(
       catalog.models.map(({ modelId, modelName, aliases }) => ({ modelId, modelName, aliases })),
     ).toEqual([
+      { modelId: "claude-haiku-5-5", modelName: "Haiku 5.5", aliases: ["default", "haiku"] },
       { modelId: "claude-opus-5-5", modelName: "Opus 5.5", aliases: ["opus"] },
-      { modelId: "claude-haiku-5-5", modelName: "Haiku 5.5", aliases: ["haiku", "default"] },
       { modelId: "claude-opus-4-8", modelName: "Opus 4.8", aliases: undefined },
     ]);
     expect(catalog.defaultModelsByProvider).toEqual({ claude: "claude-haiku-5-5" });

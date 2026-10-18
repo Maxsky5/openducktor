@@ -159,19 +159,23 @@ describe("authoritative turn preparation", () => {
     });
   });
 
-  describe("Claude models", () => {
-    const claudeTarget: AgentMessageTarget = { ...target, runtimeKind: "claude" };
-    const claudeCatalog = agentModelCatalogSchema.parse({
+  const claudeTarget: AgentMessageTarget = { ...target, runtimeKind: "claude" };
+  const claudeModel = {
+    id: "claude-opus-5-5",
+    providerId: "claude",
+    providerName: "Claude",
+    modelId: "claude-opus-5-5",
+    modelName: "Opus 5.5",
+    variants: ["low", "max"],
+    liveSessionUpdates: { variants: ["low"] },
+  };
+
+  describe("steering attachment checks", () => {
+    const steeringCatalog = agentModelCatalogSchema.parse({
       runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
       models: [
         {
-          id: "claude-opus-5-5",
-          providerId: "claude",
-          providerName: "Claude",
-          modelId: "claude-opus-5-5",
-          modelName: "Opus 5.5",
-          aliases: ["opus"],
-          variants: [],
+          ...claudeModel,
           attachmentSupport: {
             image: true,
             audio: false,
@@ -180,17 +184,8 @@ describe("authoritative turn preparation", () => {
             mimeTypes: { image: ["image/png"] },
           },
         },
-        {
-          id: "claude-haiku-5-5",
-          providerId: "claude",
-          providerName: "Claude",
-          modelId: "claude-haiku-5-5",
-          modelName: "Haiku 5.5",
-          aliases: ["haiku", "default"],
-          variants: [],
-        },
       ],
-      defaultModelsByProvider: { claude: "claude-haiku-5-5" },
+      defaultModelsByProvider: { claude: "claude-opus-5-5" },
     });
     const imagePart = {
       kind: "attachment" as const,
@@ -222,23 +217,20 @@ describe("authoritative turn preparation", () => {
           parts: [],
         },
       ]);
-
-    test("accepts a steer attachment that suits the model that the turn reports", async () => {
-      const { preparation, setCatalog } = setup(turnHistory("claude-opus-5-5"));
-      setCatalog(claudeCatalog);
-
-      await Effect.runPromise(preparation.steeringContent(claudeTarget, [imagePart]));
-    });
-
-    test("rejects a steer attachment when the catalog lacks the model of the turn", async () => {
-      const { preparation, setCatalog } = setup(turnHistory("claude-unknown"));
-      setCatalog(claudeCatalog);
-
-      const result = await Effect.runPromise(
+    const steer = async (modelId: string) => {
+      const { preparation, setCatalog } = setup(turnHistory(modelId));
+      setCatalog(steeringCatalog);
+      return Effect.runPromise(
         Effect.result(preparation.steeringContent(claudeTarget, [imagePart])),
       );
+    };
 
-      expect(result).toMatchObject({
+    test("accepts an attachment that suits the model that the turn reports", async () => {
+      expect((await steer("claude-opus-5-5"))._tag).toBe("Success");
+    });
+
+    test("rejects an attachment when the catalog lacks the model of the turn", async () => {
+      expect(await steer("claude-unknown")).toMatchObject({
         _tag: "Failure",
         failure: {
           message:
@@ -246,20 +238,41 @@ describe("authoritative turn preparation", () => {
         },
       });
     });
+  });
 
-    test("converts a saved alias to the model that it points to", async () => {
+  describe("saved alias selections", () => {
+    const aliasCatalog = agentModelCatalogSchema.parse({
+      runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+      models: [
+        { ...claudeModel, aliases: ["opus"] },
+        { ...claudeModel, id: "claude-haiku-5-5", modelId: "claude-haiku-5-5" },
+      ],
+      defaultModelsByProvider: { claude: "claude-haiku-5-5" },
+    });
+    const savedAlias: AgentSessionModelSelection = {
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "opus",
+      variant: "max",
+    };
+    const prepare = (options?: { captured: boolean }) => {
       const { preparation, setCatalog } = setup();
-      setCatalog(claudeCatalog);
+      setCatalog(aliasCatalog);
+      return Effect.runPromise(preparation.model(claudeTarget, savedAlias, options));
+    };
 
-      expect(
-        await Effect.runPromise(
-          preparation.model(claudeTarget, {
-            runtimeKind: "claude",
-            providerId: "claude",
-            modelId: "opus",
-          }),
-        ),
-      ).toMatchObject({ kind: "repair", selection: { modelId: "claude-opus-5-5" } });
+    test("saves the model ID that an alias points to and keeps its variant", async () => {
+      expect(await prepare()).toEqual({
+        kind: "repair",
+        selection: { ...savedAlias, modelId: "claude-opus-5-5" },
+      });
+    });
+
+    test("accepts a captured alias as the model that it points to", async () => {
+      expect((await prepare({ captured: true })).selection).toEqual({
+        ...savedAlias,
+        modelId: "claude-opus-5-5",
+      });
     });
   });
 });

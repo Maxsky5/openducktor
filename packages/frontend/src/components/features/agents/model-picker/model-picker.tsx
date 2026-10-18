@@ -423,7 +423,9 @@ const ModelFavoriteButton = ({
             aria-disabled={favoriteDisabledReason !== null}
             aria-describedby={favoriteDisabledReason ? favoriteDisabledReasonId : undefined}
             onClick={
-              favoriteDisabledReason ? undefined : () => favoriteState.toggleFavorite(item.value)
+              favoriteDisabledReason
+                ? undefined
+                : () => favoriteState.toggleFavorite(item.savedFavorite ?? item.value)
             }
           >
             <Star

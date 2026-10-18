@@ -1,5 +1,6 @@
 export {
   findCatalogModel,
+  resolveSavedModelAlias,
   pickCatalogDefaultModel,
   normalizeCatalogVariant,
   STANDARD_SPEED,

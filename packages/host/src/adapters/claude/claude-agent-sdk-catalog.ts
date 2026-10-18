@@ -170,32 +170,27 @@ const toClaudeModelCatalog = (
   models: ModelInfo[],
   speedAvailability: AgentSpeedAvailability | undefined,
 ): AgentModelCatalog => {
-  const defaultRow = models.find((model) => model.value === CLAUDE_DEFAULT_MODEL_ALIAS);
-  const namedRows = models.filter((model) => model !== defaultRow);
-  const descriptors = mergeRowsByModelId(defaultRow ? [...namedRows, defaultRow] : namedRows);
-  const defaultModelId = defaultRow ? readClaudeModelId(defaultRow) : descriptors[0]?.modelId;
+  const rowsByModelId = new Map<string, [ModelInfo, ...ModelInfo[]]>();
+  let defaultModelId: string | undefined;
+  for (const row of models) {
+    const modelId = readClaudeModelId(row);
+    if (row.value === CLAUDE_DEFAULT_MODEL_ALIAS) defaultModelId = modelId;
+    const listed = rowsByModelId.get(modelId);
+    rowsByModelId.set(modelId, listed ? [...listed, row] : [row]);
+  }
+  const descriptors = [...rowsByModelId].map(([modelId, rows]) => {
+    const namedRow = rows.find((row) => row.value !== CLAUDE_DEFAULT_MODEL_ALIAS) ?? rows[0];
+    const aliases = rows.map((row) => row.value).filter((value) => value !== modelId);
+    return toClaudeModelDescriptor(namedRow, aliases);
+  });
+  const catalogDefaultModelId = defaultModelId ?? descriptors[0]?.modelId;
   return {
     runtime: CLAUDE_RUNTIME_DESCRIPTOR,
     speedAvailability,
     models: descriptors,
-    defaultModelsByProvider: defaultModelId ? { claude: defaultModelId } : {},
+    defaultModelsByProvider: catalogDefaultModelId ? { claude: catalogDefaultModelId } : {},
     profiles: [],
   };
-};
-
-const mergeRowsByModelId = (rows: ModelInfo[]): AgentModelDescriptor[] => {
-  const descriptors = new Map<string, AgentModelDescriptor>();
-  for (const row of rows) {
-    const descriptor = toClaudeModelDescriptor(row);
-    const first = descriptors.get(descriptor.modelId);
-    if (!first) {
-      descriptors.set(descriptor.modelId, descriptor);
-      continue;
-    }
-    const aliases = [...(first.aliases ?? []), ...(descriptor.aliases ?? [])];
-    if (aliases.length > 0) descriptors.set(descriptor.modelId, { ...first, aliases });
-  }
-  return [...descriptors.values()];
 };
 
 const readClaudeModelId = (model: ModelInfo): string => {
@@ -206,7 +201,10 @@ const readClaudeModelId = (model: ModelInfo): string => {
   return model.resolvedModel;
 };
 
-export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor => {
+export const toClaudeModelDescriptor = (
+  model: ModelInfo,
+  aliases: string[] = [],
+): AgentModelDescriptor => {
   const modelId = readClaudeModelId(model);
   const descriptor: AgentModelDescriptor = {
     id: modelId,
@@ -230,7 +228,7 @@ export const toClaudeModelDescriptor = (model: ModelInfo): AgentModelDescriptor 
       },
     },
   };
-  if (model.value !== modelId) descriptor.aliases = [model.value];
+  if (aliases.length > 0) descriptor.aliases = aliases;
   // Claude omits this flag for models without fast mode.
   if (model.supportsFastMode === true) descriptor.speedLevels = [CLAUDE_FAST_SPEED_LEVEL];
   return descriptor;

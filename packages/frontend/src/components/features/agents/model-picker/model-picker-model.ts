@@ -6,6 +6,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { resolveSavedModelAlias } from "@/lib/model-catalog-selection";
 import type { RuntimeModelCatalogResource } from "@/state/queries/use-runtime-model-catalogs";
 
 export type ModelPickerValue = AgentModelFavorite;
@@ -115,6 +116,7 @@ export type ModelPickerItem = {
   value: ModelPickerValue;
   runtime: RuntimeDescriptor;
   model: AgentModelCatalog["models"][number];
+  savedFavorite: AgentModelFavorite | null;
   isFavorite: boolean;
   isEnabledForFavorites: boolean;
   runtimeIndex: number;
@@ -185,23 +187,32 @@ export const buildModelPickerItems = ({
   searchQuery: string;
   lockedRuntimeKind: RuntimeKind | null;
 }): ModelPickerItem[] => {
-  const favoriteKeys = new Set((favorites ?? []).map(modelPickerValueKey));
   const items = runtimes.flatMap((runtime, runtimeIndex) => {
     const catalog = selectableModelPickerCatalog(runtime.resource);
     if (!catalog || (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)) {
       return [];
     }
+    const savedFavorites = new Map(
+      (favorites ?? [])
+        .filter((favorite) => favorite.runtimeKind === runtime.descriptor.kind)
+        .map((favorite) => [
+          modelPickerValueKey(resolveSavedModelAlias(catalog, favorite)),
+          favorite,
+        ]),
+    );
     return catalog.models.map((model, catalogIndex) => {
       const value = {
         runtimeKind: runtime.descriptor.kind,
         providerId: model.providerId,
         modelId: model.modelId,
       };
+      const savedFavorite = savedFavorites.get(modelPickerValueKey(value)) ?? null;
       return {
         value,
         runtime: runtime.descriptor,
         model,
-        isFavorite: favoriteKeys.has(modelPickerValueKey(value)),
+        savedFavorite,
+        isFavorite: savedFavorite !== null,
         isEnabledForFavorites: runtime.isEnabledForFavorites,
         runtimeIndex,
         catalogIndex,

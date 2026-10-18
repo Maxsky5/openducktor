@@ -435,6 +435,45 @@ describe("ModelPicker", () => {
     expect(statuses[0]?.textContent).toBe("Loading models...");
   });
 
+  test("removes a favorite that was saved as an alias", async () => {
+    const toggleFavorite = mock(() => {});
+    const savedAlias = { ...value, modelId: "gpt-five" };
+    const opencodeCatalog = catalog("opencode");
+    render(
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
+            resource: {
+              status: "ready",
+              catalog: {
+                ...opencodeCatalog,
+                models: opencodeCatalog.models.map((model) => ({
+                  ...model,
+                  aliases: ["gpt-five"],
+                })),
+              },
+            },
+          },
+        ]}
+        value={value}
+        favoriteState={favoriteState({ favorites: [savedAlias], toggleFavorite })}
+        selectionPolicy={{ kind: "editable" }}
+        onValueChange={mock(() => {})}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Remove GPT Five from favorites" }));
+    });
+
+    expect(toggleFavorite).toHaveBeenCalledWith(savedAlias);
+  });
+
   test("toggles a favorite without selecting the row or closing the picker", async () => {
     const toggleFavorite = mock(() => {});
     const onValueChange = mock(() => {});
