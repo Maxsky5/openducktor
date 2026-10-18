@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -28,6 +28,8 @@ const model: KanbanPageContentModel = {
       tasks: [],
     },
   ],
+  hasLoadedTasks: false,
+  filter: { isActive: false, onClear: () => {} },
   taskSessionsByTaskId: new Map(),
   historicalSessionsByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
@@ -80,7 +82,7 @@ describe("KanbanPageContent", () => {
         };
         const view = render(<KanbanPageContent model={movingModel} />);
         try {
-          view.getByRole("button", { name }).focus();
+          act(() => view.getByRole("button", { name }).focus());
           view.rerender(
             <KanbanPageContent
               model={{
@@ -126,7 +128,7 @@ describe("KanbanPageContent", () => {
           value: () => new DOMRect(0, laneTop, 302, 8000),
         });
         await frames.flushFrame();
-        view.getByRole("button", { name: "Start Builder" }).focus();
+        act(() => view.getByRole("button", { name: "Start Builder" }).focus());
         laneTop = -7000;
         window.dispatchEvent(new Event("scroll"));
         await frames.flushFrame();
@@ -174,7 +176,7 @@ describe("KanbanPageContent", () => {
       </>,
     );
     try {
-      view.getByRole("button", { name: "Open Planner session" }).focus();
+      act(() => view.getByRole("button", { name: "Open Planner session" }).focus());
       const destinationModel: KanbanPageContentModel = {
         ...movingModel,
         columns: [
@@ -192,7 +194,7 @@ describe("KanbanPageContent", () => {
         view.getByRole("button", { name: "Open Planner session" }),
       );
       const outside = view.getByRole("textbox", { name: "Outside board" });
-      outside.focus();
+      act(() => outside.focus());
       view.rerender(
         <>
           <input aria-label="Outside board" />
@@ -220,7 +222,7 @@ describe("KanbanPageContent", () => {
     };
     const view = render(<KanbanPageContent model={movingModel} />);
     try {
-      view.getByRole("button", { name: "Start Builder" }).focus();
+      act(() => view.getByRole("button", { name: "Start Builder" }).focus());
       view.rerender(
         <KanbanPageContent
           model={{
@@ -302,6 +304,7 @@ describe("KanbanPageContent", () => {
         model: {
           ...model,
           isLoadingTasks: true,
+          hasLoadedTasks: true,
           columns: [
             {
               id: "open",
@@ -385,5 +388,73 @@ describe("KanbanPageContent", () => {
     expect(html).toContain('aria-label="Copy task ID"');
     expect(html).not.toContain(">TASK-1<");
     expect(html).toContain("rounded-lg shadow-none");
+  });
+
+  test("announces the no-match message over the mounted lanes and clears the filters from it", () => {
+    const onClear = mock(() => {});
+    const inactiveModel = { ...model, hasLoadedTasks: true };
+    const view = render(<KanbanPageContent model={inactiveModel} />);
+    try {
+      const status = view.getByRole("status");
+      const lane = view.getByRole("region", { name: "Backlog lane" });
+      expect(status.textContent).toBe("");
+      expect(lane.closest("[inert]")).toBeNull();
+
+      view.rerender(
+        <KanbanPageContent model={{ ...inactiveModel, filter: { isActive: true, onClear } }} />,
+      );
+
+      expect(view.getByRole("status")).toBe(status);
+      expect(status.textContent).toBe("No tasks match your search or filters");
+      expect(lane.isConnected).toBe(true);
+      expect(lane.closest("[inert]")).not.toBeNull();
+
+      fireEvent.click(view.getByRole("button", { name: "Clear filters" }));
+
+      expect(onClear).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(view.getByRole("region", { name: "Kanban board" }));
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows the no-match message, not the loader, when a refresh runs and no loaded task matches", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          isLoadingTasks: true,
+          hasLoadedTasks: true,
+          filter: { isActive: true, onClear: () => {} },
+        },
+      }),
+    );
+
+    expect(html).not.toContain('data-testid="kanban-loading-overlay"');
+    expect(html).toContain("No tasks match your search or filters");
+  });
+
+  test("shows the lanes without the no-match message when no filter is active", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, { model: { ...model, hasLoadedTasks: true } }),
+    );
+
+    expect(html).not.toContain("No tasks match your search or filters");
+    expect(html).toContain("Backlog");
+  });
+
+  test("shows the no-match message when the board loaded no task and a filter is active", () => {
+    const html = renderToStaticMarkup(
+      createElement(KanbanPageContent, {
+        model: {
+          ...model,
+          emptyColumnDisplay: "hidden",
+          filter: { isActive: true, onClear: () => {} },
+        },
+      }),
+    );
+
+    expect(html).toContain("No tasks match your search or filters");
+    expect(html).toContain("Clear filters");
   });
 });

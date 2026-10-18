@@ -40,9 +40,12 @@ export const ISSUE_TYPE_STYLES = {
   }
 >;
 
-type PriorityLevel = 0 | 1 | 2 | 3 | 4;
+/** The task priorities, from P0 to P4. */
+export const PRIORITY_LEVELS = [0, 1, 2, 3, 4] as const;
 
-const PRIORITY_STYLES = {
+type PriorityLevel = (typeof PRIORITY_LEVELS)[number];
+
+export const PRIORITY_STYLES = {
   0: {
     label: "P0",
     hint: "Critical",

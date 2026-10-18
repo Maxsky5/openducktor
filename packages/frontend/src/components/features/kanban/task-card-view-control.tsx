@@ -2,11 +2,14 @@ import type { KanbanTaskCardView } from "@openducktor/contracts";
 import type { ReactElement } from "react";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { TASK_CARD_VIEW_OPTIONS } from "./task-card-view-options";
 
 type TaskCardViewControlProps = {
   value: KanbanTaskCardView | null;
   disabled?: boolean;
+  /** `md` fits a form row. `sm` fits a page header toolbar. */
+  size?: "sm" | "md";
   "aria-labelledby"?: string;
   onValueChange: (value: KanbanTaskCardView) => void;
 };
@@ -14,10 +17,12 @@ type TaskCardViewControlProps = {
 export function TaskCardViewControl({
   value,
   disabled = false,
+  size = "md",
   "aria-labelledby": ariaLabelledBy,
   onValueChange,
 }: TaskCardViewControlProps): ReactElement {
   const isUnavailable = disabled || value === null;
+  const classes = SIZE_CLASSES[size];
 
   return (
     <TooltipProvider>
@@ -27,7 +32,7 @@ export function TaskCardViewControl({
         aria-disabled={isUnavailable}
         value={value ?? ""}
         data-variant="segmented"
-        className="flex h-10 w-auto items-center gap-1 rounded-lg bg-muted p-1"
+        className={cn("flex w-auto items-center gap-1 rounded-lg bg-muted p-1", classes.group)}
         onValueChange={(nextValue) => {
           if (isUnavailable) {
             return;
@@ -48,7 +53,7 @@ export function TaskCardViewControl({
                     value={option.value}
                     aria-label={option.label}
                     aria-disabled={isUnavailable}
-                    className="size-8 flex-none p-0 text-foreground/70 [&_svg]:size-4"
+                    className={cn("flex-none p-0 text-foreground/70", classes.item)}
                   >
                     <Icon aria-hidden="true" />
                   </RadioGroupSegmentItem>
@@ -62,3 +67,8 @@ export function TaskCardViewControl({
     </TooltipProvider>
   );
 }
+
+const SIZE_CLASSES = {
+  sm: { group: "h-8", item: "size-6 [&_svg]:size-3.5" },
+  md: { group: "h-10", item: "size-8 [&_svg]:size-4" },
+} as const;

@@ -144,7 +144,10 @@ type UseKanbanBoardModelArgs = {
   taskCardView: KanbanTaskCardView;
   pendingState?: WorkflowPendingState | undefined;
   showHorizontalScrollbars: boolean | null;
+  /** The tasks that the search and filters show. */
   tasks: TaskCard[];
+  hasLoadedTasks: boolean;
+  filter: KanbanPageContentModel["filter"];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: Map<string, ActiveTaskSessionContext>;
@@ -166,6 +169,8 @@ export function useKanbanBoardModel({
   pendingState,
   showHorizontalScrollbars,
   tasks,
+  hasLoadedTasks,
+  filter,
   historicalSessionsByTaskId,
   taskSessionsByTaskId,
   activeTaskSessionContextByTaskId,
@@ -202,6 +207,8 @@ export function useKanbanBoardModel({
     pendingState,
     showHorizontalScrollbars,
     columns: columnsWithSortedTasks,
+    hasLoadedTasks,
+    filter,
     taskSessionsByTaskId,
     historicalSessionsByTaskId,
     activeTaskSessionContextByTaskId,
