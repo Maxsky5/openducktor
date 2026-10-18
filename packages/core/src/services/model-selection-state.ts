@@ -7,6 +7,7 @@ import {
   normalizeVisibleCatalogProfileId,
   pickCatalogDefaultModel,
   pickVisibleCatalogDefaultProfileId,
+  resolveSavedModelAlias,
 } from "./model-catalog-selection";
 
 export type ResolvedModelPair = {
@@ -61,7 +62,7 @@ export const coerceVisibleSelectionToCatalog = (
     return null;
   }
 
-  const model = findCatalogModel(catalog, selection);
+  const model = findCatalogModel(catalog, resolveSavedModelAlias(catalog, selection));
   if (!model) {
     return null;
   }

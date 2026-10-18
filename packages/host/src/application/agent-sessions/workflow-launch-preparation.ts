@@ -17,10 +17,12 @@ import {
   AUTOPILOT_ACTION_DEFINITIONS,
   buildAgentKickoffPrompt,
   buildAgentSystemPrompt,
+  findCatalogModel,
   getSessionLaunchAction,
   mergePromptOverrides,
   type SessionLaunchAction,
   resolvePullRequestTarget,
+  resolveSavedModelAlias,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
@@ -368,12 +370,12 @@ const resolveConfiguredDefaultModel = (
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
-    const configured = config.agentDefaults[role] ?? config.defaultModel;
-    if (!configured)
+    const savedDefault = config.agentDefaults[role] ?? config.defaultModel;
+    if (!savedDefault)
       return yield* launchValidationError(
         `Configure the ${role} role default or repository default model in workspace '${workspaceId}'.`,
       );
-    const runtimeKind = configured.runtimeKind;
+    const runtimeKind = savedDefault.runtimeKind;
     const { models } = yield* deps.queries.loadRuntimeCatalog({
       repoPath,
       runtimeKind,
@@ -383,9 +385,8 @@ const resolveConfiguredDefaultModel = (
       return yield* launchValidationError(
         `The ${role} default model for runtime ${runtimeKind} could not load: ${models?.status === "failed" ? models.message : "the runtime returned no model catalog."} Update the default in repository settings.`,
       );
-    const entry = models.catalog.models.find(
-      (item) => item.providerId === configured.providerId && item.modelId === configured.modelId,
-    );
+    const configured = resolveSavedModelAlias(models.catalog, savedDefault);
+    const entry = findCatalogModel(models.catalog, configured);
     const profiles = models.catalog.profiles ?? [];
     const profileAvailable =
       configured.profileId === undefined ||

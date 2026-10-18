@@ -326,7 +326,8 @@ describe("FileDiffList tree view and search", () => {
       fireEvent.scroll(list);
       expect(rowTop(fileToggle("src/file-030.ts"))).toBe(0);
       expect(list.scrollTop).toBe(29 * LIST_ROW + 800);
-    });
+      // Three full renders of 100 files and an expanded diff take over 1000 ms on CI runners.
+    }, 3000);
 
     test("keeps the top visible file when a view switch changes only the row heights", () => {
       const files = Array.from(

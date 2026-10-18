@@ -85,6 +85,41 @@ describe("model-picker-model", () => {
     ]);
   });
 
+  test("shows favorites saved as aliases on the model that the aliases point to", () => {
+    const aliasCatalog = catalog("opencode");
+    const savedAliases = [
+      { ...favorite, modelId: "claude-sonnet" },
+      { ...favorite, modelId: "sonnet-latest" },
+    ];
+    const items = buildModelPickerItems({
+      runtimes: [
+        {
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+          resource: {
+            status: "ready",
+            catalog: {
+              ...aliasCatalog,
+              models: aliasCatalog.models.map((model) =>
+                model.modelId === "sonnet"
+                  ? { ...model, aliases: ["claude-sonnet", "sonnet-latest"] }
+                  : model,
+              ),
+            },
+          },
+          isEnabledForFavorites: true,
+        },
+      ],
+      favorites: savedAliases,
+      activeView: "favorites",
+      searchQuery: "",
+      lockedRuntimeKind: null,
+    });
+
+    expect(items.map(({ value, savedFavorites }) => ({ value, savedFavorites }))).toEqual([
+      { value: favorite, savedFavorites: savedAliases },
+    ]);
+  });
+
   test("matches every search term across runtime, provider, and model text", () => {
     const items = buildModelPickerItems({
       runtimes,

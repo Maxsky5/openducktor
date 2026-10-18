@@ -14,6 +14,7 @@ import {
   resolveModelSelectionPolicy,
   findCatalogModel,
   readAttachmentValidationError,
+  resolveSavedModelAlias,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import {
@@ -179,6 +180,7 @@ export const createSessionTurnPreparation = (deps: {
           });
         const config = yield* deps.settings.getRepoConfigByRepoPath(target.repoPath);
         const catalog = yield* catalogFor(target);
+        const current = saved ? resolveSavedModelAlias(catalog, saved) : null;
         const decision = resolveSavedSessionModel({
           runtimeKind: target.runtimeKind,
           savedSelection: saved,
@@ -193,25 +195,25 @@ export const createSessionTurnPreparation = (deps: {
             field: decision.reason,
             message: decision.message,
           });
-        if (captured && (decision.kind === "repair" || !isSameSelection(saved, decision.selection)))
+        if (captured && !isSameSelection(current, decision.selection))
           return yield* new HostValidationError({
             field: "model",
             message:
               "The model captured for this message is no longer permitted. Review the queued message and select a permitted model before sending a new message.",
           });
-        if (previous !== undefined && saved) {
-          const model = findCatalogModel(catalog, saved);
+        if (previous !== undefined && current) {
+          const model = findCatalogModel(catalog, current);
           const policy = resolveModelSelectionPolicy(model, true);
-          if (!policy.canChangeProfile && saved.profileId !== previous?.profileId)
+          if (!policy.canChangeProfile && current.profileId !== previous?.profileId)
             return yield* new HostValidationError({
               field: "profile",
               message:
                 "This runtime cannot change the profile of a live session. Start a new session with the required profile.",
             });
           if (
-            saved.variant !== previous?.variant &&
-            saved.variant &&
-            !policy.variants.includes(saved.variant)
+            current.variant !== previous?.variant &&
+            current.variant &&
+            !policy.variants.includes(current.variant)
           )
             return yield* new HostValidationError({
               field: "model",

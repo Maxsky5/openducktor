@@ -26,6 +26,7 @@ describe("toClaudeModelDescriptor", () => {
   test("maps Claude SDK effort levels to OpenDucktor variants", () => {
     const descriptor = toClaudeModelDescriptor({
       value: "claude-sonnet-4-6-20260601",
+      resolvedModel: "claude-sonnet-4-6-20260601",
       displayName: "Claude Sonnet 4.6",
       description: "Claude Sonnet",
       supportsEffort: true,
@@ -61,7 +62,12 @@ describe("toClaudeModelDescriptor", () => {
     [false, undefined],
     [undefined, undefined],
   ])("maps supportsFastMode %p to speed levels", (supportsFastMode, speedLevels) => {
-    const model: ModelInfo = { value: "opus", displayName: "Opus", description: "Opus" };
+    const model: ModelInfo = {
+      value: "claude-opus-5-5",
+      resolvedModel: "claude-opus-5-5",
+      displayName: "Opus",
+      description: "Opus",
+    };
     if (supportsFastMode !== undefined) model.supportsFastMode = supportsFastMode;
 
     expect(toClaudeModelDescriptor(model).speedLevels).toEqual(speedLevels);
@@ -70,6 +76,7 @@ describe("toClaudeModelDescriptor", () => {
   test("leaves variants empty when the SDK does not expose effort levels", () => {
     const descriptor = toClaudeModelDescriptor({
       value: "claude-haiku-4-5-20251001",
+      resolvedModel: "claude-haiku-4-5-20251001",
       displayName: "Claude Haiku 4.5",
       description: "Claude Haiku",
     } satisfies ModelInfo);
@@ -352,6 +359,7 @@ describe("loadClaudeRuntimeCatalog", () => {
 
   const modelFixture: ModelInfo = {
     value: "claude-sonnet-4-6",
+    resolvedModel: "claude-sonnet-4-6",
     displayName: "Claude Sonnet 4.6",
     description: "Claude Sonnet",
   };
@@ -527,9 +535,14 @@ describe("loadClaudeRuntimeCatalog", () => {
 describe("loadClaudeModelCatalog", () => {
   const model: ModelInfo = {
     value: "claude-sonnet-4-6",
+    resolvedModel: "claude-sonnet-4-6",
     displayName: "Claude Sonnet 4.6",
     description: "Claude Sonnet",
   };
+  const readCatalog = (models: ModelInfo[]) =>
+    loadClaudeModelCatalog("/repo", undefined, process.execPath, () =>
+      createClaudeQueryFixture({ supportedModels: mock(async () => models) }),
+    );
 
   test("reads only models and closes its short-lived session", async () => {
     const close = mock(() => {});
@@ -555,6 +568,47 @@ describe("loadClaudeModelCatalog", () => {
     expect(supportedAgents).not.toHaveBeenCalled();
     expect(supportedCommands).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  test("lists one entry for each model that Claude reports, with its aliases", async () => {
+    const catalog = await readCatalog([
+      {
+        value: "default",
+        resolvedModel: "claude-haiku-5-5",
+        displayName: "Default",
+        description: "",
+      },
+      { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", description: "" },
+      {
+        value: "haiku",
+        resolvedModel: "claude-haiku-5-5",
+        displayName: "Haiku 5.5",
+        description: "",
+      },
+      {
+        value: "claude-opus-4-8",
+        resolvedModel: "claude-opus-4-8",
+        displayName: "Opus 4.8",
+        description: "",
+      },
+    ]);
+
+    expect(
+      catalog.models.map(({ modelId, modelName, aliases }) => ({ modelId, modelName, aliases })),
+    ).toEqual([
+      { modelId: "claude-haiku-5-5", modelName: "Haiku 5.5", aliases: ["default", "haiku"] },
+      { modelId: "claude-opus-5-5", modelName: "Opus 5.5", aliases: ["opus"] },
+      { modelId: "claude-opus-4-8", modelName: "Opus 4.8", aliases: undefined },
+    ]);
+    expect(catalog.defaultModelsByProvider).toEqual({ claude: "claude-haiku-5-5" });
+  });
+
+  test("fails when Claude does not report the model ID of a row", async () => {
+    await expect(
+      readCatalog([{ value: "opus", displayName: "Opus 5.5", description: "" }]),
+    ).rejects.toThrow(
+      "Claude did not report the model ID of 'opus'. Update Claude Code, then refresh the model catalog.",
+    );
   });
 
   test("closes the session when the model read fails", async () => {

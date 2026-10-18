@@ -51,6 +51,25 @@ const descriptorWithoutVariants: RuntimeDescriptor = {
 };
 
 describe("buildRepositoryAgentControls", () => {
+  test("shows the model and effort options that a saved alias points to", () => {
+    const controls = buildRepositoryAgentControls({
+      value: { ...savedDefault, modelId: "sonnet" },
+      runtimeKind: "opencode",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      catalog: {
+        ...opencodeCatalog,
+        models: opencodeCatalog.models.map((model) =>
+          model.modelId === "claude-sonnet" ? { ...model, aliases: ["sonnet"] } : model,
+        ),
+      },
+      isCatalogLoading: false,
+      isSaving: false,
+    });
+
+    expect(controls.selectedPickerValue?.modelId).toBe("claude-sonnet");
+    expect(controls.variant.options.map((option) => option.value)).toEqual(["low", "high"]);
+  });
+
   test("enables the profile control when the runtime supports profiles", () => {
     const controls = buildRepositoryAgentControls({
       value: savedDefault,

@@ -10,6 +10,7 @@ import {
   normalizeCatalogSpeed,
   normalizeVisibleCatalogProfileId,
   pickVisibleCatalogDefaultProfileId,
+  resolveSavedModelAlias,
   STANDARD_SPEED,
   withSpeed,
 } from "./model-catalog-selection";
@@ -65,9 +66,10 @@ export const resolveLoadedSessionSelection = ({
     };
   }
 
+  const savedModel = resolveSavedModelAlias(selectionCatalog, selectedSessionModel);
   const savedChoice = coerceSessionSelectionToCatalog({
     selectionCatalog,
-    selection: selectedSessionModel,
+    selection: savedModel,
     sessionRuntimeKind,
   });
   const defaultChoice = coerceSessionSelectionToCatalog({
@@ -76,22 +78,20 @@ export const resolveLoadedSessionSelection = ({
     sessionRuntimeKind,
   });
   const catalogChoice = pickSessionCatalogDefaultSelection(selectionCatalog, sessionRuntimeKind);
-  if (savedChoice && isSameSelection(selectedSessionModel, savedChoice)) {
+  if (savedChoice && isSameSelection(savedModel, savedChoice)) {
     return {
       selectedModelSelection: savedChoice,
-      repairSelection: null,
+      repairSelection: savedModel === selectedSessionModel ? null : savedChoice,
       blockedReason: null,
     };
   }
 
   let blockedReason: SendBlockReason = "model";
   for (const selection of [savedChoice, defaultChoice, catalogChoice]) {
-    const repair = pickSessionRepair(selectionCatalog, selection, selectedSessionModel);
+    const repair = pickSessionRepair(selectionCatalog, selection, savedModel);
     if (repair.selection) {
       const model = findCatalogModel(selectionCatalog, repair.selection);
-      const savedSpeed = model
-        ? normalizeCatalogSpeed(model, selectedSessionModel.speed)
-        : undefined;
+      const savedSpeed = model ? normalizeCatalogSpeed(model, savedModel.speed) : undefined;
       const repairSelection = withSpeed(repair.selection, savedSpeed ?? STANDARD_SPEED);
       return {
         selectedModelSelection: repairSelection,

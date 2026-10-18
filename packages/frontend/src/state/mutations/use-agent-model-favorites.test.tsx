@@ -31,6 +31,37 @@ const useTwoAgentModelFavorites = (args: {
 });
 
 describe("useAgentModelFavorites", () => {
+  test("removes every saved favorite of a model in one save", async () => {
+    const savedAliases = [
+      { ...favorite, modelId: "gpt-latest" },
+      { ...favorite, modelId: "gpt-default" },
+    ];
+    const original = host.workspaceGetSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = mock(async () =>
+      createSettingsSnapshotFixture({ agentModelFavorites: [...savedAliases, concurrentFavorite] }),
+    );
+    const saveAgentModelFavorites = mock(async (favorites: AgentModelFavorite[]) =>
+      createSettingsSnapshotFixture({ agentModelFavorites: favorites }),
+    );
+    const harness = createHookHarness(
+      useAgentModelFavorites,
+      { saveAgentModelFavorites },
+      { wrapper },
+    );
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.favorites !== null, 2000);
+      await harness.run((state) => state.toggleFavorite(favorite, savedAliases));
+      await harness.waitFor((state) => state.favorites?.length === 1, 2000);
+
+      expect(saveAgentModelFavorites).toHaveBeenCalledTimes(1);
+      expect(saveAgentModelFavorites).toHaveBeenCalledWith([concurrentFavorite]);
+    } finally {
+      await harness.unmount();
+      host.workspaceGetSettingsSnapshot = original;
+    }
+  });
+
   test("keeps its result stable between changes and updates it after saving", async () => {
     const original = host.workspaceGetSettingsSnapshot;
     host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshotFixture());

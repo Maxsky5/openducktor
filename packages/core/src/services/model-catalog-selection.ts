@@ -29,6 +29,20 @@ export const findCatalogModel = (
   );
 };
 
+export const resolveSavedModelAlias = <
+  Selection extends Pick<AgentModelSelection, "providerId" | "modelId">,
+>(
+  catalog: AgentModelCatalog,
+  selection: Selection,
+): Selection => {
+  if (findCatalogModel(catalog, selection)) return selection;
+  const model = catalog.models.find(
+    (entry) =>
+      entry.providerId === selection.providerId && entry.aliases?.includes(selection.modelId),
+  );
+  return model ? { ...selection, modelId: model.modelId } : selection;
+};
+
 export const pickCatalogDefaultModel = (catalog: AgentModelCatalog): CatalogModel | null => {
   for (const model of catalog.models) {
     if (catalog.defaultModelsByProvider[model.providerId] === model.modelId) {

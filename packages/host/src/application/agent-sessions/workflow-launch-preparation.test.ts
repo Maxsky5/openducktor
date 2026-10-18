@@ -112,6 +112,19 @@ test("automatic fresh launch fills an unset default variant from the runtime cat
   expect(h.sends[0]?.model).toEqual(modelFor("codex"));
 });
 
+test("automatic fresh launch starts the model that a saved alias default points to", async () => {
+  const h = await createLaunchHarness();
+  h.setModelDefault({ ...modelFor("codex"), modelId: "model-alias" });
+  const result = await Effect.runPromise(
+    h.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startBuilder" },
+    }),
+  );
+  expect(result).toMatchObject({ status: "completed", model: modelFor("codex") });
+  expect(h.sends[0]?.model).toEqual(modelFor("codex"));
+});
+
 test.each([
   [{ variant: "not-in-catalog" }, "failed"],
   [{ profileId: "unlisted-profile" }, "completed"],

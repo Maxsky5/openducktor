@@ -38,6 +38,7 @@ export const agentModelDescriptorSchema = z
     providerName: nonEmptyStringSchema,
     modelId: nonEmptyStringSchema,
     modelName: nonEmptyStringSchema,
+    aliases: z.array(nonEmptyStringSchema).optional(),
     variants: z.array(z.string()),
     speedLevels: z.array(agentSpeedLevelSchema).optional(),
     contextWindow: z.number().int().positive().optional(),
