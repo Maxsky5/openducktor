@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, rm, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { WorkspaceFileTreeEntry, WorkspaceFileTreeCursor } from "@openducktor/contracts";
+import type {
+  WorkspaceFileTreeEntry,
+  WorkspaceFileTreeCursor,
+  WorkspaceFileTreeContext,
+} from "@openducktor/contracts";
 import { Effect, Deferred, Fiber } from "effect";
 import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
@@ -390,29 +394,37 @@ describe("workspace tree refresh", () => {
   }, 10_000);
 
   test("returns net changes for older clients, shares a projection across bases, and resets expired cursors", async () => {
-    await withRepository(async (root) => {
-      const git = createGitCliAdapter({
-        runner: createDefaultGitRunner(() => process.env, { command: "git" }),
-      });
-      const context = await Effect.runPromise(git.getFileTreeContext(root));
-      const repositoryRoot = await Effect.runPromise(git.getRepositoryRoot(root));
-      let modified = false,
-        projections = 0;
-      const inventory = [{ path: "stable.txt", kind: "file" as const }];
-      const service = createWorkspaceFilesService(createFilesystemAdapter(), {
-        ...git,
-        getFileTreeContext: () => Effect.succeed(context),
-        getRepositoryRoot: () => Effect.succeed(repositoryRoot),
-        listFiles: () => Effect.succeed(inventory),
-        listFileRegions: (_root, regions) => {
-          projections += 1;
-          return Effect.succeed(regions.includes("stable.txt") ? inventory : []);
-        },
-        getStatus: () =>
-          Effect.succeed(
-            modified ? [{ path: "stable.txt", status: "modified", staged: false }] : [],
-          ),
-      });
+    const directory = await mkdtemp(path.join(tmpdir(), "odt-tree-history-"));
+    const filesystem = createFilesystemAdapter();
+    const root = await Effect.runPromise(filesystem.canonicalize(directory));
+    const context = {
+      rootPath: root,
+      gitDirectory: path.join(root, ".git"),
+      branch: "main",
+      head: "initial",
+      targetBranch: null,
+      targetRevision: null,
+      indexVersion: "unchanged",
+      sparsePolicy: "",
+    } satisfies WorkspaceFileTreeContext;
+    let modified = false,
+      projections = 0;
+    const inventory = [{ path: "stable.txt", kind: "file" as const }];
+    const service = createWorkspaceFilesService(filesystem, {
+      getCurrentBranch: () => Effect.succeed({ name: "main", detached: false }),
+      isGitRepository: () => Effect.succeed(true),
+      listChangedFiles: () => Effect.succeed([]),
+      getFileTreeContext: () => Effect.succeed(context),
+      getRepositoryRoot: () => Effect.succeed(root),
+      listFiles: () => Effect.succeed(inventory),
+      listFileRegions: (_root, regions) => {
+        projections += 1;
+        return Effect.succeed(regions.includes("stable.txt") ? inventory : []);
+      },
+      getStatus: () =>
+        Effect.succeed(modified ? [{ path: "stable.txt", status: "modified", staged: false }] : []),
+    });
+    try {
       const first = await Effect.runPromise(
         service.refreshTree({ rootPath: root, mode: "full", refreshId: "first" }),
       );
@@ -514,7 +526,10 @@ describe("workspace tree refresh", () => {
         }),
       );
       expect(expired).toEqual({ kind: "reset_required", reason: "expired_revision" });
-    });
+    } finally {
+      await Effect.runPromise(service.dispose());
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   // A real branch switch during status capture must invalidate the operation before publication.

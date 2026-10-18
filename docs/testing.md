@@ -42,6 +42,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - The root `bun run test` and CI run workspace suites in sequence.
 - `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
 - The host suite uses two workers to limit process load on Windows CI.
+- The SQLite task-store test helper uses disposable files with WAL and foreign keys. It disables synchronous disk flushes before running production migrations. Tests that check production connection setup use `openSqliteTaskStoreConnection` directly.
 - `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
 - The other workspaces run serially in one process.
 - The preload gives every parallel worker its own temp directory and config directory.
