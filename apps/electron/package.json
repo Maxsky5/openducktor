@@ -23,7 +23,7 @@
     "package": "bun run scripts/package-build.ts",
     "release:artifact": "bun run scripts/package-build.ts --stage-release-artifacts",
     "preview": "electron dist/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 1000",
     "lint": "oxlint -c ../../.oxlintrc.json src scripts vite.config.ts"
   },

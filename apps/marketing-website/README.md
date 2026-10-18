@@ -14,7 +14,7 @@ bun run --filter @openducktor/marketing-website preview
 
 Astro prints the local address. The output is `apps/marketing-website/dist/`. The build recreates the ignored `public/` directory from the sources in [the asset record](ASSETS.md). It generates the sharing image and copies the favicon and the font and icon licenses. Do not put hand-edited files in `public/`. The current Astro CLI can leave its preview process running; use `bunx astro preview stop` from this workspace when finished.
 
-Root `build`, `typecheck`, and `test` discover this workspace. Root formatting runs Oxfmt and the website's Prettier Astro plugin. Oxlint checks the website's TypeScript; `astro check` checks the templates. TypeScript 6 stays local to this workspace because the Astro checker does not support the repository's TypeScript 7 compiler.
+Root `build`, `typecheck`, and `test` discover this workspace. Root formatting runs Oxfmt and the website's Prettier Astro plugin. Oxlint checks the website's TypeScript; `astro check` checks the templates. TypeScript 6 stays local to this workspace because the Astro checker does not support the repository's TypeScript 7 compiler. The required command stays `astro check --minimumFailingSeverity warning` in local hooks and CI. See [Type checking](../../docs/typechecking.md#astro-exception) for the upstream support requirement.
 
 ## Build modes
 

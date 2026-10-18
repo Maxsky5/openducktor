@@ -17,7 +17,7 @@ on:
           - beta
 
 env:
-  BUN_VERSION: 1.4.2
+  BUN_VERSION: 1.4.3
 
 jobs:
   publish-mcp:
