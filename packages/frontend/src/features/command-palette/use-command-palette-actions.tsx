@@ -38,7 +38,7 @@ import {
   runIssueImport,
   toIssueImportState,
 } from "@/pages/kanban/issue-import-provider";
-import { taskCreationBlockedReason } from "@/pages/kanban/kanban-page-header-model";
+import { taskCreationBlockedReason } from "@/pages/kanban/task-creation-availability";
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";

@@ -3,7 +3,7 @@ import { createTaskStoreCheckFixture } from "@/test-utils/shared-test-fixtures";
 import {
   isKanbanTaskCreationDisabled,
   taskCreationBlockedReason,
-} from "./kanban-page-header-model";
+} from "./task-creation-availability";
 
 const workspace = { workspaceId: "workspace-repo", workspaceName: "Repo", repoPath: "/repo" };
 
