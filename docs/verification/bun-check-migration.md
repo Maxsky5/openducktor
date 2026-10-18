@@ -36,7 +36,7 @@ The frontend thread comparison also used three samples per limit:
 | 4 | 1.547 s | 675.8 MB |
 | Default, 18 cores | 0.756 s | 922.7 MB |
 
-The local data does not justify a fixed thread cap. The required workspace scripts keep Bun's default thread count. Hosted runner results must also show that the default completes within the CI limits.
+The local data does not justify a fixed thread cap. The required workspace scripts keep Bun's default thread count. The hosted typecheck steps also passed with that default on all three runners, without a timeout or memory failure. No CI thread cap is needed for the tested runners. Hosted memory use was not profiled.
 
 ## Failure propagation and build output
 
@@ -71,4 +71,16 @@ The build ran MCP's unchanged `tsc -p tsconfig.json --emitDeclarationOnly` step 
 
 ## Hosted checks
 
-Hosted CI validation is pending.
+[CI run 39136699033](https://github.com/Maxsky5/openducktor/actions/runs/39136699033) tests implementation commit `3a3e974899e022802f0ac7b955dda8d73e1ecdd6` through the existing `workflow_dispatch` entry point. The final follow-up commit records these results in Markdown only.
+
+| Runner | Root typecheck step | Full quality job |
+|---|---|---|
+| `ubuntu-latest` | Passed, 20 s | Passed |
+| `macos-15` | Passed, 27 s | Passed |
+| `windows-latest` | Passed, 43 s | Passed |
+
+Each hosted log contains 16 successful standalone checks, including both MCP configurations, and a successful Astro check.
+
+These step durations include all 16 standalone checks and Astro, plus workspace runner overhead. They are single hosted samples, not a hosted comparison with TypeScript. The jobs keep the existing 20-minute timeout and default Bun thread count.
+
+General CI checks formatting, lint, types, and tests for every workspace. It builds every workspace except the website, then checks image workers in Node, Bun, and Electron. The full local build includes the website. The marketing browser/deploy workflow and release/publish workflows were not run. React Doctor is skipped by design for a manual CI dispatch; the local hook reported no staged source files.
