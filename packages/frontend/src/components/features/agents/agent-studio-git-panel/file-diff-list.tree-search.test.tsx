@@ -350,7 +350,8 @@ describe("FileDiffList tree view and search", () => {
       fireEvent.scroll(list);
       expect(rowTop(fileToggle("file-030.ts"))).toBe(0);
       expect(list.scrollTop).toBe(30 * LIST_ROW);
-    });
+      // Three full renders of 100 files take up to 1.1 s on macOS CI runners.
+    }, 3000);
 
     test("keeps the scrolled place inside an expanded file when the view changes", () => {
       const files = Array.from(
