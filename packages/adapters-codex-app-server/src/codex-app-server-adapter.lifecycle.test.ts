@@ -72,6 +72,27 @@ describe("CodexAppServerAdapter lifecycle", () => {
     { kind: "repository" },
     { kind: "workflow", taskId: "task-1", role: "build" },
   ] as const) {
+    for (const action of ["start", "fork"] as const) {
+      test(`keeps an idle ${sessionScope.kind} session idle after ${action}`, async () => {
+        const { adapter } = createHarness();
+        const input = codexStartSessionInput({ sessionScope });
+        const summary =
+          action === "start"
+            ? await adapter.startSession(input)
+            : await adapter.forkSession({ ...input, parentExternalSessionId: "parent-thread" });
+
+        expect(summary.status).toBe("idle");
+        expect(adapter.listLiveSessionSnapshots("runtime-live")).toMatchObject([
+          { ref: { externalSessionId: summary.externalSessionId }, activity: "idle" },
+        ]);
+      });
+    }
+  }
+
+  for (const sessionScope of [
+    { kind: "repository" },
+    { kind: "workflow", taskId: "task-1", role: "build" },
+  ] as const) {
     test(`does not create a ${sessionScope.kind} thread after cancellation during preparation`, async () => {
       const entered = createDeferred<void>();
       const release = createDeferred<void>();

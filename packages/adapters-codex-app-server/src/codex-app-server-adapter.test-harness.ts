@@ -367,7 +367,7 @@ export const codexThreadStartResultFixture = (
     serviceTier: null,
     thread: codexThreadFixture({
       id: threadId,
-      status: { type: "active", activeFlags: [] },
+      status: method === "thread/resume" ? { type: "active", activeFlags: [] } : { type: "idle" },
       historyMode,
     }),
   };

@@ -79,6 +79,8 @@ Create and subscribe the live-session adapter before the runtime can send events
 
 OpenCode creation, fork, and reattach prepare a conversation without starting agent work. Keep control summaries in sync with the known turn state. Prompt submission reports running activity while OpenCode starts the turn. Native turn events then confirm running or idle activity. Registration must not emit a synthetic `session_started` activity event.
 
+Codex creation and fork use `thread.status` from the native response for both the control summary and live snapshot. A prepared thread stays idle until work starts. Do not infer running activity from a successful `thread/start` or `thread/fork` request. The [native creation test](https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/thread_start.rs) and [native fork test](https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/thread_fork.rs) require idle initial status.
+
 Restoring an idle Claude session must not publish new activity. Publish startup activity for a new session, a fork, or an interrupted turn that the runtime continues.
 
 Provide an `AgentRuntimeQueryAdapterPort` with each live-session adapter. Reuse the native controller that owns its session state. Route frontend reads through `HostClient`. Check that queries do not resume sessions or change live state. Test reads during live updates and runtime replacement.
