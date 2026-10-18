@@ -34,6 +34,7 @@ import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-su
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", repoPath: "/repos/alpha" });
 const beta = createWorkspaceRecordFixture({
   workspaceId: "beta",
+  workspaceName: "Beta",
   repoPath: "/repos/beta",
   isActive: false,
 });
@@ -96,10 +97,13 @@ const renderProvider = (
 ) => {
   const calls: string[] = [];
   const listeners: RunEventListener[] = [];
+  const deferred = new Map<string, PromiseWithResolvers<AutopilotState>>();
   const readState = mock(
     async ({ workspaceId }: { workspaceId: string }): Promise<AutopilotState> => {
       calls.push(`read:${workspaceId}`);
-      return held[workspaceId] ?? { outcomes: [], failure: null };
+      const read = deferred.get(workspaceId);
+      deferred.delete(workspaceId);
+      return read ? read.promise : (held[workspaceId] ?? { outcomes: [], failure: null });
     },
   );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -133,8 +137,15 @@ const renderProvider = (
   };
   return {
     calls,
-    readState,
     emit,
+    /** Holds the next read of the workspace until the test settles it. */
+    deferRead: (workspaceId: string) => {
+      const read = Promise.withResolvers<AutopilotState>();
+      deferred.set(workspaceId, read);
+      return read;
+    },
+    waitForAttachReads: () =>
+      waitFor(() => expect(calls).toEqual(["subscribe", "read:alpha", "read:beta"])),
     queryClient,
     rerender: (activeWorkspace: WorkspaceRecord, workspaces: WorkspaceRecord[]) =>
       act(async () => {
@@ -154,13 +165,10 @@ describe("AutopilotProvider", () => {
     "awaits held outcome recovery and propagates failure %s",
     async (failure) => {
       const provider = renderProvider({});
-      const replacement = Promise.withResolvers<AutopilotState>();
       try {
-        await waitFor(() =>
-          expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]),
-        );
+        await provider.waitForAttachReads();
         // Query has no observer for this read. The reconnect owner must await its application.
-        provider.readState.mockImplementationOnce(() => replacement.promise);
+        const replacement = provider.deferRead("alpha");
         const recovery = provider.emit({
           __openducktorConnectionControl: true,
           kind: "reconnected",
@@ -188,7 +196,6 @@ describe("AutopilotProvider", () => {
           expect(shownToastIds()).toEqual(["autopilot:recovered"]);
         }
       } finally {
-        replacement.resolve({ outcomes: [], failure: null });
         provider.unmount();
       }
     },
@@ -236,13 +243,9 @@ describe("AutopilotProvider", () => {
 
   test("shows the held outcomes of a read that completes after the selection changed", async () => {
     const provider = renderProvider({});
-    const betaRead = Promise.withResolvers<AutopilotState>();
-    provider.readState.mockImplementation(async ({ workspaceId }) => {
-      provider.calls.push(`read:${workspaceId}`);
-      return workspaceId === "beta" ? betaRead.promise : { outcomes: [], failure: null };
-    });
+    const betaRead = provider.deferRead("beta");
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.waitForAttachReads();
       await provider.rerender(beta, [alpha, beta]);
       await provider.rerender(alpha, [alpha, beta]);
       await act(async () => {
@@ -251,7 +254,6 @@ describe("AutopilotProvider", () => {
 
       await waitFor(() => expect(shownToastIds()).toEqual(["autopilot:beta-held"]));
     } finally {
-      betaRead.resolve({ outcomes: [], failure: null });
       provider.unmount();
     }
   });
@@ -260,7 +262,7 @@ describe("AutopilotProvider", () => {
     const held: Record<string, AutopilotState> = {};
     const provider = renderProvider(held);
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.waitForAttachReads();
       const event = { type: "autopilot_outcome" as const, outcome: skipped("beta-live", beta) };
       provider.emit(event);
       provider.emit(event);
@@ -300,7 +302,7 @@ describe("AutopilotProvider", () => {
   test("a started outcome refreshes the task worktree view without a toast", async () => {
     const provider = renderProvider({});
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.waitForAttachReads();
       const worktreeKey = taskWorktreeQueryKeys.taskWorktree({
         repoPath: "/repos/beta",
         taskId: "beta-task",
@@ -418,15 +420,33 @@ describe("AutopilotProvider", () => {
     }
   });
 
+  test("names the workspace whose held outcomes could not load", async () => {
+    const error = spyOn(toast, "error").mockReturnValue("error");
+    const provider = renderProvider({});
+    const betaRead = provider.deferRead("beta");
+    try {
+      await provider.waitForAttachReads();
+      await act(async () => {
+        betaRead.reject(new Error("The host is busy."));
+      });
+
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith("Autopilot outcomes of Beta could not load.", {
+          id: "autopilot-read:beta",
+          description: "The host is busy. Select Beta again to retry.",
+        }),
+      );
+    } finally {
+      provider.unmount();
+      error.mockRestore();
+    }
+  });
+
   test("does not show the held outcomes of a workspace that leaves the workspace list during the read", async () => {
     const provider = renderProvider({});
-    const betaRead = Promise.withResolvers<AutopilotState>();
-    provider.readState.mockImplementation(async ({ workspaceId }) => {
-      provider.calls.push(`read:${workspaceId}`);
-      return workspaceId === "beta" ? betaRead.promise : { outcomes: [], failure: null };
-    });
+    const betaRead = provider.deferRead("beta");
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.waitForAttachReads();
       await provider.rerender(alpha, [alpha]);
       await act(async () => {
         betaRead.resolve({ outcomes: [skipped("beta-removed", beta)], failure: null });
@@ -442,7 +462,7 @@ describe("AutopilotProvider", () => {
   test("dismisses the outcomes of a workspace that leaves the workspace list", async () => {
     const provider = renderProvider({});
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.waitForAttachReads();
       provider.emit({ type: "autopilot_outcome", outcome: skipped("beta-live", beta) });
       await provider.rerender(alpha, [alpha]);
 
