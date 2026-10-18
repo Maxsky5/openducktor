@@ -92,9 +92,13 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs, client: Partial<Hos
 };
 
 describe("use-workspace-branch-operations", () => {
-  test("uses fresh branch data on automatic reads and refreshes invalidated, expired, and forced reads", async () => {
+  test("shows the cached branch on return and reads an external change within the stale time", async () => {
     let branch = "main";
-    const read = mock(async () => ({ name: branch, detached: false }));
+    const returningRead = createDeferred<GitCurrentBranch>();
+    let returning = false;
+    const read = mock(async () =>
+      returning ? returningRead.promise : { name: branch, detached: false },
+    );
     workspaceHost.gitGetCurrentBranch = read;
     workspaceHost.gitGetBranches = mock(async () => [
       { name: branch, isCurrent: true, isRemote: false },
@@ -104,34 +108,25 @@ describe("use-workspace-branch-operations", () => {
       await harness.mount();
       await harness.run((value) => value.refreshBranches(false));
       await harness.waitFor((value) => value.activeBranch?.name === "main");
+      await harness.updateArgs({ activeRepo: "/repo-b" });
+      await harness.run((value) => value.refreshBranches(false));
       branch = "feature";
-      await harness.run((value) => value.refreshBranches(false));
-      expect(read).toHaveBeenCalledTimes(1);
+      returning = true;
+      await harness.updateArgs({ activeRepo: "/repo-a" });
       expect(harness.getLatest().activeBranch?.name).toBe("main");
-      const client = harness.getQueryClient();
-      await client.invalidateQueries({
-        queryKey: gitQueryKeys.currentBranch("/repo-a"),
-        exact: true,
-        refetchType: "none",
+      let refresh: Promise<void> | undefined;
+      await harness.run((value) => {
+        refresh = value.refreshBranches(false);
       });
-      await harness.run((value) => value.refreshBranches(false));
+      expect(read).toHaveBeenCalledTimes(3);
+      expect(harness.getLatest().activeBranch?.name).toBe("main");
+      expect(harness.getLatest().isLoadingBranches).toBe(false);
+      returningRead.resolve({ name: "feature", detached: false });
+      await refresh;
       await harness.waitFor((value) => value.activeBranch?.name === "feature");
-      expect(harness.getLatest().activeBranch?.name).toBe("feature");
-      branch = "next";
-      client.setQueryData(
-        gitQueryKeys.currentBranch("/repo-a"),
-        { name: "feature", detached: false },
-        { updatedAt: Date.now() - 61_000 },
-      );
-      await harness.run((value) => value.refreshBranches(false));
-      await harness.waitFor((value) => value.activeBranch?.name === "next");
-      expect(harness.getLatest().activeBranch?.name).toBe("next");
-      branch = "forced";
-      await harness.run((value) => value.refreshBranches(true));
-      await harness.waitFor((value) => value.activeBranch?.name === "forced");
-      expect(harness.getLatest().activeBranch?.name).toBe("forced");
-      expect(harness.getLatest().branches.map((entry) => entry.name)).toEqual(["forced"]);
+      expect(harness.getLatest().branches.map((entry) => entry.name)).toEqual(["feature"]);
     } finally {
+      returningRead.resolve({ name: "feature", detached: false });
       await harness.unmount();
     }
   });

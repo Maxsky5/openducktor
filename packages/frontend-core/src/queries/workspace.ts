@@ -7,10 +7,11 @@ import {
   type WorkspaceCatalog,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { type QueryClient, type QueryFilters, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "../lib/target-branch";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "../types/session-slices";
 import { connectionHost } from "../connection/client-connection";
+import { runtimeCatalogQueryKeys } from "./runtime-catalog";
 
 type WorkspaceRecordUpdate =
   | WorkspaceRecord[]
@@ -73,6 +74,7 @@ export const repoConfigQueryOptions = (workspaceId: string) =>
     queryKey: workspaceQueryKeys.repoConfig(workspaceId),
     queryFn: ({ client }) => connectionHost(client).workspaceGetRepoConfig(workspaceId),
     staleTime: REPO_CONFIG_STALE_TIME_MS,
+    gcTime: Number.POSITIVE_INFINITY,
   });
 
 export const workspaceListQueryOptions = () =>
@@ -162,10 +164,25 @@ const sharedWorkspaceQueryKeys = new Set([
   JSON.stringify(workspaceQueryKeys.catalog()),
 ]);
 
+export const dropWorkspaceConfigurationQueries = (
+  queryClient: QueryClient,
+  identity: { repoPath: string; workspaceId: string },
+): void => {
+  const filters: QueryFilters[] = [
+    { queryKey: runtimeCatalogQueryKeys.repoCatalogScope(identity.repoPath) },
+    { queryKey: workspaceQueryKeys.repoConfig(identity.workspaceId), exact: true },
+  ];
+  for (const filter of filters) {
+    void queryClient.cancelQueries(filter, { revert: false });
+    queryClient.removeQueries(filter);
+  }
+};
+
 export const dropWorkspaceQueries = (
   queryClient: QueryClient,
   identity: { repoPath: string; workspaceId: string },
 ): void => {
+  dropWorkspaceConfigurationQueries(queryClient, identity);
   const matchesRemovedWorkspace = (query: { queryKey: readonly unknown[] }): boolean => {
     const serializedKey = JSON.stringify(query.queryKey);
     if (sharedWorkspaceQueryKeys.has(serializedKey)) {

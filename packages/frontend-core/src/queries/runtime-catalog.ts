@@ -12,7 +12,6 @@ import { normalizeWorkingDirectory } from "../lib/working-directory";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 export const RUNTIME_CATALOG_STALE_TIME_MS = 30 * 60_000;
-export const RUNTIME_CATALOG_GC_TIME_MS = 60 * 60_000;
 export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 const runtimeCatalogKey = ["runtime-catalog"] as const;
@@ -80,17 +79,19 @@ export const catalogQueryOptions = (
     queryFn: async ({ client }): Promise<CachedRuntimeCatalog> =>
       withLastModels(client.getQueryData<CachedRuntimeCatalog>(queryKey), await loadCatalog()),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
-    gcTime: RUNTIME_CATALOG_GC_TIME_MS,
+    gcTime: 60 * 60_000,
     retry: false,
   });
 
 export const runtimeCatalogQueryOptions = (
   runtimeRef: RuntimeWorkingDirectoryRef,
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
-) =>
-  catalogQueryOptions(runtimeCatalogQueryKeys.catalog(runtimeRef), () =>
+): ReturnType<typeof catalogQueryOptions> => ({
+  ...catalogQueryOptions(runtimeCatalogQueryKeys.catalog(runtimeRef), () =>
     loadRuntimeCatalog(runtimeRef),
-  );
+  ),
+  gcTime: Number.POSITIVE_INFINITY,
+});
 
 export const skippedRuntimeCatalogQueryOptions = () =>
   skippedQueryOptions<CachedRuntimeCatalog>({

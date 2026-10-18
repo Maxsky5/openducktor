@@ -9,6 +9,7 @@ import { createHookHarness } from "@openducktor/frontend-core/test-support/react
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
@@ -901,39 +902,62 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
-  test("drops repository-path and workspace-id caches after committed removal", async () => {
-    workspaceHost.workspaceRemove = mock(async () => ({
-      catalog: {
-        openWorkspaces: [],
-        closedWorkspaces: [],
-        incompleteRemovals: [],
-      },
-      removedWorktrees: [],
-    }));
-    const harness = createRepoSelectionHarness("/repo");
+  test.each(["close", "remove"] as const)(
+    "drops catalog and config caches after committed %s",
+    async (action) => {
+      workspaceHost.workspaceRemove = mock(async () => ({
+        catalog: {
+          openWorkspaces: [],
+          closedWorkspaces: [],
+          incompleteRemovals: [],
+        },
+        removedWorktrees: [],
+      }));
+      const harness = createRepoSelectionHarness("/repo");
 
-    try {
-      await harness.mount();
-      const queryClient = harness.getQueryClient();
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
-        tasks: [{ id: "task-1" }],
-      });
-      queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+      try {
+        await harness.mount();
+        const queryClient = harness.getQueryClient();
+        queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+          tasks: [{ id: "task-1" }],
+        });
+        queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+        const catalogKeys = ["opencode", "claude"].map((runtimeKind) => [
+          ...runtimeCatalogQueryKeys.repoCatalogScope("/repo"),
+          runtimeKind,
+          "/repo/worktree",
+        ]);
+        for (const key of catalogKeys) queryClient.setQueryData(key, { models: [] });
+        const otherConfigKey = workspaceQueryKeys.repoConfig("other");
+        const otherCatalogKey = runtimeCatalogQueryKeys.catalog({
+          repoPath: "/other",
+          runtimeKind: "opencode",
+          workingDirectory: "/other",
+        });
+        queryClient.setQueryData(otherConfigKey, { workspaceId: "other" });
+        queryClient.setQueryData(otherCatalogKey, { models: [] });
 
-      await harness.run((value) =>
-        value.removeWorkspace({
-          workspaceId: "repo",
-          expectedRepoPath: "/repo",
-          removeTaskWorktrees: false,
-        }),
-      );
+        await harness.run((value) =>
+          action === "close"
+            ? value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" })
+            : value.removeWorkspace({
+                workspaceId: "repo",
+                expectedRepoPath: "/repo",
+                removeTaskWorktrees: false,
+              }),
+        );
 
-      expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
-      expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
-    } finally {
-      await harness.unmount();
-    }
-  });
+        if (action === "remove")
+          expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+        expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
+        for (const key of catalogKeys) expect(queryClient.getQueryData(key)).toBeUndefined();
+        expect(queryClient.getQueryData<unknown>(otherConfigKey)).toEqual({ workspaceId: "other" });
+        expect(queryClient.getQueryData<unknown>(otherCatalogKey)).toEqual({ models: [] });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("keeps the list and catalog caches when the removed workspace id matches a shared key", async () => {
     let listCalls = 0;

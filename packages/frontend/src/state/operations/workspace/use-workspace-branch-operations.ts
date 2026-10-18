@@ -13,7 +13,6 @@ import {
   invalidateCurrentBranchQuery,
   invalidateGitWorkingDirectoryQueries,
   invalidateRepoBranchesQuery,
-  loadCurrentBranchFromQuery,
   loadRepoBranchesFromQuery,
   repoBranchesQueryOptions,
 } from "@openducktor/frontend-core/queries/git";
@@ -94,8 +93,14 @@ export function useWorkspaceBranchOperations({
 
       try {
         await Promise.all([
-          loadCurrentBranchFromQuery(queryClient, repoPath),
-          loadRepoBranchesFromQuery(queryClient, repoPath),
+          queryClient.fetchQuery({
+            ...currentBranchQueryOptions(repoPath),
+            staleTime: 0,
+          }),
+          queryClient.fetchQuery({
+            ...repoBranchesQueryOptions(repoPath),
+            staleTime: 0,
+          }),
         ]);
       } catch (error) {
         if (error instanceof CancelledError) {
