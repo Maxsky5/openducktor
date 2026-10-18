@@ -38,12 +38,20 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const notificationsRef = useRef(sessionStartNotifications);
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  const openWorkspaceIds = useMemo(
+    () => workspaces.map((workspace) => workspace.workspaceId),
+    [workspaces],
+  );
+  const openWorkspaceIdsRef = useRef(openWorkspaceIds);
+  // The workspaces whose held outcomes this subscription read.
+  const readWorkspaceIdsRef = useRef(new Set<string>());
   const [subscribed, setSubscribed] = useState(false);
   useEffect(() => {
     sendAgentMessageRef.current = sendAgentMessage;
     notificationsRef.current = sessionStartNotifications;
     activeWorkspaceIdRef.current = activeWorkspaceId;
-  }, [activeWorkspaceId, sendAgentMessage, sessionStartNotifications]);
+    openWorkspaceIdsRef.current = openWorkspaceIds;
+  }, [activeWorkspaceId, openWorkspaceIds, sendAgentMessage, sessionStartNotifications]);
 
   const presenter = useMemo(
     () =>
@@ -63,15 +71,24 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     [host, queryClient],
   );
 
-  // The host keeps failed and skipped outcomes, so a client that attaches or selects a workspace
-  // shows the ones it missed.
+  // The host keeps failed and skipped outcomes of each workspace, so a client that attaches,
+  // reconnects after missed events, or selects a workspace shows the ones it missed. Each read
+  // shows its outcomes when it completes, also when the selection changed meanwhile.
   const readHeldOutcomes = useCallback(
-    (workspaceId: string, { workspaceSelected }: { workspaceSelected: boolean }) => {
-      return queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then((state) => {
-        if (activeWorkspaceIdRef.current !== workspaceId) return;
-        for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
-        presenter.presentFailure(state.failure);
-      });
+    async (
+      workspaceIds: readonly string[],
+      { workspaceSelected }: { workspaceSelected: boolean },
+    ): Promise<void> => {
+      const reads = await Promise.allSettled(
+        workspaceIds.map((workspaceId) =>
+          queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then((state) => {
+            for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
+            presenter.presentFailure(state.failure);
+          }),
+        ),
+      );
+      const failed = reads.find((read) => read.status === "rejected");
+      if (failed) throw failed.reason;
     },
     [presenter, queryClient],
   );
@@ -79,6 +96,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   useEffect(() => {
     let disposed = false;
     let unsubscribe: (() => void) | null = null;
+    const readWorkspaceIds = readWorkspaceIdsRef.current;
     // An open settings modal reads the saved rules again at once, and other readers on next use.
     // A failed read shows in the Autopilot settings section.
     const reloadSavedRules = () => {
@@ -87,19 +105,15 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     host
       .subscribeRunEvents((payload) => {
         if ("__openducktorConnectionControl" in payload) {
-          const workspaceId = activeWorkspaceIdRef.current;
           if (payload.kind !== CONNECTION_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
           // A missed settings event can leave old Autopilot rules in the cache.
           reloadSavedRules();
-          if (workspaceId) {
-            return readHeldOutcomes(workspaceId, { workspaceSelected: false }).catch(
-              (cause: unknown) => {
-                reportHeldOutcomeFailure(cause);
-                throw cause;
-              },
-            );
-          }
-          return;
+          return readHeldOutcomes(openWorkspaceIdsRef.current, { workspaceSelected: false }).catch(
+            (cause: unknown) => {
+              reportHeldOutcomeFailure(cause);
+              throw cause;
+            },
+          );
         }
         // Another client can save the rules, so this client reads them again.
         if (payload.type === "autopilot_settings_saved") {
@@ -131,16 +145,28 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     return () => {
       disposed = true;
       unsubscribe?.();
+      readWorkspaceIds.clear();
       setSubscribed(false);
     };
   }, [host, presenter, queryClient, readHeldOutcomes]);
 
+  // This effect runs first, so the next effect does not read the selected workspace again.
   useEffect(() => {
-    if (subscribed && activeWorkspaceId)
-      void readHeldOutcomes(activeWorkspaceId, { workspaceSelected: true }).catch(
-        reportHeldOutcomeFailure,
-      );
+    if (!subscribed || !activeWorkspaceId) return;
+    readWorkspaceIdsRef.current.add(activeWorkspaceId);
+    void readHeldOutcomes([activeWorkspaceId], { workspaceSelected: true }).catch(
+      reportHeldOutcomeFailure,
+    );
   }, [activeWorkspaceId, readHeldOutcomes, subscribed]);
+
+  useEffect(() => {
+    if (!subscribed) return;
+    const read = readWorkspaceIdsRef.current;
+    const unread = openWorkspaceIds.filter((workspaceId) => !read.has(workspaceId));
+    if (unread.length === 0) return;
+    for (const workspaceId of unread) read.add(workspaceId);
+    void readHeldOutcomes(unread, { workspaceSelected: false }).catch(reportHeldOutcomeFailure);
+  }, [openWorkspaceIds, readHeldOutcomes, subscribed]);
 
   useEffect(() => {
     presenter.keepWorkspaces(

@@ -156,7 +156,9 @@ describe("AutopilotProvider", () => {
       const provider = renderProvider({});
       const replacement = Promise.withResolvers<AutopilotState>();
       try {
-        await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+        await waitFor(() =>
+          expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]),
+        );
         // Query has no observer for this read. The reconnect owner must await its application.
         provider.readState.mockImplementationOnce(() => replacement.promise);
         const recovery = provider.emit({
@@ -191,31 +193,74 @@ describe("AutopilotProvider", () => {
       }
     },
   );
-  test("subscribes before it reads held outcomes, and reads again when a workspace is selected", async () => {
+  test("subscribes before it reads the held outcomes of every open workspace, and shows each once", async () => {
+    const gamma = createWorkspaceRecordFixture({
+      workspaceId: "gamma",
+      repoPath: "/repos/gamma",
+      isActive: false,
+    });
     const provider = renderProvider({
       alpha: { outcomes: [skipped("alpha-held", alpha)], failure: null },
       beta: { outcomes: [skipped("beta-held", beta)], failure: null },
+      gamma: { outcomes: [skipped("gamma-held", gamma)], failure: null },
     });
     try {
-      await waitFor(() => expect(shownToastIds()).toEqual(["autopilot:alpha-held"]));
-      await provider.rerender(beta, [alpha, beta]);
       await waitFor(() =>
         expect(shownToastIds()).toEqual(["autopilot:alpha-held", "autopilot:beta-held"]),
       );
-      await provider.rerender(alpha, [alpha, beta]);
-      await waitFor(() => expect(provider.calls).toHaveLength(4));
+      // A workspace that opens later is read once.
+      await provider.rerender(alpha, [alpha, beta, gamma]);
+      await waitFor(() => expect(shownToastIds()).toContain("autopilot:gamma-held"));
+      // A selection reads its workspace again, and the outcomes do not show again.
+      await provider.rerender(beta, [alpha, beta, gamma]);
+      await provider.rerender(alpha, [alpha, beta, gamma]);
+      await waitFor(() => expect(provider.calls).toHaveLength(6));
 
-      expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta", "read:alpha"]);
-      expect(info).toHaveBeenCalledTimes(2);
+      expect(provider.calls).toEqual([
+        "subscribe",
+        "read:alpha",
+        "read:beta",
+        "read:gamma",
+        "read:beta",
+        "read:alpha",
+      ]);
+      expect(shownToastIds()).toEqual([
+        "autopilot:alpha-held",
+        "autopilot:beta-held",
+        "autopilot:gamma-held",
+      ]);
     } finally {
       provider.unmount();
     }
   });
 
-  test("shows live outcomes from any workspace once and reads again after missed events", async () => {
+  test("shows the held outcomes of a read that completes after the selection changed", async () => {
     const provider = renderProvider({});
+    const betaRead = Promise.withResolvers<AutopilotState>();
+    provider.readState.mockImplementation(async ({ workspaceId }) => {
+      provider.calls.push(`read:${workspaceId}`);
+      return workspaceId === "beta" ? betaRead.promise : { outcomes: [], failure: null };
+    });
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.rerender(beta, [alpha, beta]);
+      await provider.rerender(alpha, [alpha, beta]);
+      await act(async () => {
+        betaRead.resolve({ outcomes: [skipped("beta-held", beta)], failure: null });
+      });
+
+      await waitFor(() => expect(shownToastIds()).toEqual(["autopilot:beta-held"]));
+    } finally {
+      betaRead.resolve({ outcomes: [], failure: null });
+      provider.unmount();
+    }
+  });
+
+  test("shows live outcomes from any workspace once, and reads every open workspace after missed events", async () => {
+    const held: Record<string, AutopilotState> = {};
+    const provider = renderProvider(held);
+    try {
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
       const event = { type: "autopilot_outcome" as const, outcome: skipped("beta-live", beta) };
       provider.emit(event);
       provider.emit(event);
@@ -224,15 +269,29 @@ describe("AutopilotProvider", () => {
         kind: "reconnected",
         missedEvents: false,
       });
-      provider.emit({
+      held.alpha = { outcomes: [skipped("alpha-missed", alpha)], failure: null };
+      held.beta = {
+        outcomes: [skipped("beta-live", beta), skipped("beta-missed", beta)],
+        failure: null,
+      };
+      await provider.emit({
         __openducktorConnectionControl: true,
         kind: "reconnected",
         missedEvents: true,
       });
-      await waitFor(() => expect(provider.calls).toHaveLength(3));
 
-      expect(shownToastIds()).toEqual(["autopilot:beta-live"]);
-      expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:alpha"]);
+      expect(shownToastIds()).toEqual([
+        "autopilot:beta-live",
+        "autopilot:alpha-missed",
+        "autopilot:beta-missed",
+      ]);
+      expect(provider.calls).toEqual([
+        "subscribe",
+        "read:alpha",
+        "read:beta",
+        "read:alpha",
+        "read:beta",
+      ]);
     } finally {
       provider.unmount();
     }
@@ -241,7 +300,7 @@ describe("AutopilotProvider", () => {
   test("a started outcome refreshes the task worktree view without a toast", async () => {
     const provider = renderProvider({});
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
       const worktreeKey = taskWorktreeQueryKeys.taskWorktree({
         repoPath: "/repos/beta",
         taskId: "beta-task",
@@ -362,7 +421,7 @@ describe("AutopilotProvider", () => {
   test("dismisses the outcomes of a workspace that leaves the workspace list", async () => {
     const provider = renderProvider({});
     try {
-      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha"]));
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
       provider.emit({ type: "autopilot_outcome", outcome: skipped("beta-live", beta) });
       await provider.rerender(alpha, [alpha]);
 
