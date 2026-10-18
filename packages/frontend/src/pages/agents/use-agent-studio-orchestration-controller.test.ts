@@ -108,6 +108,7 @@ const createBaseArgs = (): BuildArgs => {
       selectedTask: task,
       sessionsForTask: [sessionSummary],
       selectedSession: {
+        preparation: { ready: true, error: null },
         identity: toAgentSessionIdentity(session),
         activityState: sessionSummary.activityState,
         selectedModel: session.selectedModel,

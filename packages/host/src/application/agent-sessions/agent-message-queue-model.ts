@@ -116,7 +116,6 @@ export const snapshotOf = (queue: MessageQueue): AgentMessageQueueSnapshot => ({
       entry.state === "editing"
         ? { ...fields, state: entry.state, editId: entry.editId }
         : { ...fields, state: entry.state };
-    if (entry.content.model !== undefined) message.model = entry.content.model;
     if (entry.error !== undefined) message.error = entry.error;
     return message;
   }),

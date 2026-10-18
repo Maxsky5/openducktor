@@ -64,6 +64,7 @@ export const createLaunchHarness = async (
     forkSourceRead?: Effect.Effect<void>;
     nativeStart?: Effect.Effect<void>;
     nativeFork?: Effect.Effect<void>;
+    beforeModelUpdate?: Effect.Effect<void>;
     startingHold?: Effect.Effect<void>;
     completion?: Effect.Effect<void, HostOperationError>;
   } = {},
@@ -195,6 +196,19 @@ export const createLaunchHarness = async (
             startedAt: timestamp,
             status: "idle" as const,
           };
+        }),
+      updateSessionModel: (input) =>
+        Effect.gen(function* () {
+          yield* gates.beforeModelUpdate ?? Effect.void;
+          input.workStartGuard?.assertCurrent();
+          input.onWorkIssued?.();
+          const session = live.get(agentSessionRefKey(input));
+          if (session)
+            live.set(agentSessionRefKey(input), {
+              ...session,
+              model: input.model ? { ...input.model, runtimeKind } : undefined,
+            });
+          input.onWorkAccepted?.();
         }),
       sendUserMessage: (input, options) =>
         Effect.gen(function* () {
@@ -445,7 +459,14 @@ export const createLaunchHarness = async (
     taskReader,
     taskLifecycle: lifecycle,
     taskSessionStart: preparation,
-    persistTaskModel: unexpected("task model update"),
+    persistTaskModel: (input) =>
+      tasks.agentSessionUpdateModel(input).pipe(
+        Effect.map((updated) => ({ updated, publish: Effect.void })),
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({ operation: "test.persist-model", message: cause.message }),
+        ),
+      ),
     pauseForStop: () => Effect.void,
     repositoryPolicy: {
       run: unexpected("repository operation"),
@@ -467,7 +488,7 @@ export const createLaunchHarness = async (
     definitions: { listRuntimeDefinitions: () => [descriptor] },
     registry,
     queries: {
-      loadKnownRuntimeCatalog: () =>
+      loadRuntimeCatalog: () =>
         Effect.sync(() => {
           catalogLoads += 1;
           return {
@@ -504,6 +525,7 @@ export const createLaunchHarness = async (
     runtime: {
       ...runtime,
       sendUserMessage: commands.sendUserMessage,
+      updateSessionModel: commands.updateSessionModel,
       holdWorkflowLaunch: (ref, held) =>
         (held ? (gates.startingHold ?? Effect.void) : (gates.holdRelease ?? Effect.void)).pipe(
           Effect.andThen(runtime.holdWorkflowLaunch(ref, held)),

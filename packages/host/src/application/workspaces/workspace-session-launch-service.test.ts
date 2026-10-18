@@ -196,7 +196,6 @@ test.each(["opencode", "codex", "claude"] as const)(
     expect(h.inputs[0]).toMatchObject({
       parts: request.parts,
       systemPrompt: "Original instructions.",
-      model: h.record.selectedModel,
       workingDirectory: h.ref.workingDirectory,
     });
     expect((await h.get()).externalSessionId).toBe(h.ref.externalSessionId);
@@ -232,7 +231,7 @@ test("a model change waits for the session start, and the first send keeps the s
   expect((await Effect.runPromise(Fiber.join(caller))).status).toBe("completed");
   await Effect.runPromise(Fiber.join(change));
   expect(changed).toBe(true);
-  expect(h.inputs[0]?.model).toEqual(h.record.selectedModel ?? undefined);
+  expect(h.inputs[0]).not.toHaveProperty("model");
 });
 
 test("a failed first send returns the saved session and the unsent message", async () => {

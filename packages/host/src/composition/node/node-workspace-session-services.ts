@@ -20,7 +20,10 @@ export const createNodeWorkspaceSessionServices = ({
   commands,
   ...dependencies
 }: Input) => {
-  const workspaceSessionService = createWorkspaceSessionService(dependencies);
+  const workspaceSessionService = createWorkspaceSessionService({
+    ...dependencies,
+    live: { ...dependencies.live, resumeSession: commands.resumeSession },
+  });
   const workspaceSessionImports = createWorkspaceSessionImportService(dependencies);
   const workspaceSessionLaunchService = createWorkspaceSessionLaunchService({
     ...dependencies,

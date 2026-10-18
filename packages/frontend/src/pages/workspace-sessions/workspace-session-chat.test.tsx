@@ -4,10 +4,9 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_CHAT_SETTINGS,
   CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
-  type WorkspaceSessionLaunchRequest,
-  type WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
 import { act, type ReactElement, type ReactNode, useState } from "react";
 import { fireEvent, render, renderHook, waitFor } from "@testing-library/react";
@@ -67,6 +66,22 @@ import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture"
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { createComposerAttachment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 
+function preparedChatClient(entry: WorkspaceSession, session: AgentSessionState) {
+  return {
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    workspaceSessionStart: async () => ({
+      session: { ...entry, externalSessionId: session.externalSessionId },
+      runtimeSession: {
+        externalSessionId: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+        startedAt: session.startedAt,
+        status: session.status,
+      },
+    }),
+  };
+}
+
 function QueryStatus() {
   const pending = useIsFetching();
   return (
@@ -77,7 +92,7 @@ function QueryStatus() {
 }
 
 test.each(["local_repo_root", "local_worktree"] as const)(
-  "sends both diff scopes from a %s draft chat before runtime startup",
+  "sends both diff scopes from a prepared %s chat",
   async (kind) => {
     const workspace = {
       workspaceId: `comment-chat-${kind}`,
@@ -96,7 +111,7 @@ test.each(["local_repo_root", "local_worktree"] as const)(
     const entry: WorkspaceSession = {
       id: "draft-comments",
       runtimeKind: "opencode",
-      externalSessionId: null,
+      externalSessionId: "native-comments",
       executionTarget,
       selectedModel: null,
       roleSnapshot: null,
@@ -115,32 +130,8 @@ test.each(["local_repo_root", "local_worktree"] as const)(
       status: "idle",
     });
     const store = createAgentSessionsStore(workspace.repoPath);
+    store.replaceSession(session);
     const sends: Parameters<AgentOperationsContextValue["sendAgentMessage"]>[] = [];
-    const launch = mock(
-      async (request: WorkspaceSessionLaunchRequest): Promise<WorkspaceSessionLaunchResult> => ({
-        workspaceId: request.workspaceId,
-        repoPath: request.repoPath,
-        sessionId: request.sessionId,
-        status: "completed",
-        record: { ...entry, externalSessionId: session.externalSessionId },
-        session: {
-          externalSessionId: session.externalSessionId,
-          runtimeKind: session.runtimeKind,
-          workingDirectory: session.workingDirectory,
-          startedAt: session.startedAt,
-          status: "idle",
-        },
-        acceptedMessage: {
-          type: "user_message",
-          externalSessionId: session.externalSessionId,
-          messageId: "accepted-1",
-          timestamp: session.startedAt,
-          message: "Review",
-          parts: [],
-          state: "read",
-        },
-      }),
-    );
     const ownerKey = toInlineCommentDraftStorageKey({
       workspaceId: workspace.workspaceId,
       workspaceSessionId: entry.id,
@@ -152,7 +143,7 @@ test.each(["local_repo_root", "local_worktree"] as const)(
       store,
       scenario: "draft",
       counters: { runtimeReads: 0, baselineLoads: 0, revalidations: 0 },
-      client: { workspaceSessionLaunch: launch },
+      client: preparedChatClient(entry, session),
       sendAgentMessage: async (identity, parts) => {
         sends.push([identity, parts]);
         return createAgentMessageSendReceipt(identity);
@@ -175,23 +166,14 @@ test.each(["local_repo_root", "local_worktree"] as const)(
     try {
       const send = await view.findByRole("button", { name: "Send message" });
       await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false));
-      expect(launch).toHaveBeenCalledTimes(0);
       await act(async () => {
         fireEvent.click(send);
       });
-      await waitFor(() => expect(launch).toHaveBeenCalledTimes(1));
-      expect(launch.mock.calls[0]?.[0]).toMatchObject({
-        workspaceId: workspace.workspaceId,
-        repoPath: workspace.repoPath,
-        sessionId: entry.id,
-      });
-      expect(sends).toEqual([]);
-      expect(launch.mock.calls[0]?.[0].parts).toEqual([
+      await waitFor(() => expect(sends).toHaveLength(1));
+      expect(sends[0]?.[1]).toEqual([
         { kind: "text", text: expect.stringContaining("Review uncommitted") },
       ]);
-      expect(launch.mock.calls[0]?.[0].parts[0]).toMatchObject({
-        text: expect.stringContaining("Review target"),
-      });
+      expect(sends[0]?.[1][0]).toMatchObject({ text: expect.stringContaining("Review target") });
       expect(inlineComments.getState().getDraftCount(ownerKey)).toBe(0);
     } finally {
       view.unmount();
@@ -239,7 +221,7 @@ const createWorkspaceChatHarness = ({
 }) => {
   const connectionOptions: TestClientConnectionOptions = {
     client: {
-      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      ...preparedChatClient(entry, session),
       ...client,
     },
   };
@@ -415,6 +397,110 @@ const createPresentationScenario = (
     }),
   };
 };
+
+test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR])(
+  "keeps the $kind composer and session settings stable while a selected session prepares",
+  async (descriptor) => {
+    const { Harness, connection, workspace, entry, session, store, definitions } =
+      createPresentationScenario(descriptor.kind);
+    definitions.runtimeDefinitions = [descriptor];
+    definitions.availableRuntimeDefinitions = [descriptor];
+    const selections: NonNullable<WorkspaceSession["selectedModel"]>[] = [
+      { runtimeKind: descriptor.kind, providerId: "provider", modelId: "first", variant: "low" },
+      {
+        runtimeKind: descriptor.kind,
+        providerId: "provider",
+        modelId: "second",
+        variant: "high",
+        speed: "fast",
+      },
+    ];
+    entry.selectedModel = selections[0]!;
+    session.contextUsage = { totalTokens: 10_000, contextWindow: 100_000 };
+    store.replaceSession(session);
+    const second = {
+      ...entry,
+      id: "second-session",
+      externalSessionId: "second-native",
+      selectedModel: selections[1]!,
+    };
+    store.replaceSession({
+      ...session,
+      externalSessionId: second.externalSessionId,
+      messages: createSessionMessagesState(second.externalSessionId),
+      selectedModel: selections[1]!,
+      contextUsage: { totalTokens: 20_000, contextWindow: 100_000 },
+    });
+    definitions.loadRepoRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: {
+          models: ["first", "second"].map((modelId) => ({
+            id: `provider/${modelId}`,
+            providerId: "provider",
+            providerName: "Provider",
+            modelId,
+            modelName: modelId,
+            variants: ["low", "high"],
+            speedLevels: [{ id: "fast", label: "Fast" }],
+          })),
+          defaultModelsByProvider: {},
+        },
+      },
+    });
+    const start = mock<ReturnType<typeof preparedChatClient>["workspaceSessionStart"]>(
+      () => new Promise(() => {}),
+    );
+    connection.host.client.workspaceSessionStart = start;
+    const chat = (record: WorkspaceSession, visitKey: number) => (
+      <Harness>
+        <WorkspaceSessionChat
+          workspace={workspace}
+          record={record}
+          visitKey={visitKey}
+          chatSettings={DEFAULT_CHAT_SETTINGS}
+          reusablePrompts={[]}
+          onToolRefresh={() => {}}
+          isMounted={() => true}
+        />
+      </Harness>
+    );
+    const view = render(chat(entry, 0));
+    try {
+      await view.findByRole("button", { name: `Select model, ${descriptor.label}, first` });
+      await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+      const editor = view.getByRole("combobox", { name: "Message composer" });
+      const card = editor.closest(".rounded-xl");
+      const cardClass = card?.className;
+      for (const [record, effort, speed, context] of [
+        [second, "high", "Fast", "20.0% used, 20K tokens"],
+        [entry, "low", "Standard", "10.0% used, 10K tokens"],
+      ] as const) {
+        view.rerender(chat(record, 1));
+        expect(view.getByRole("combobox", { name: "Message composer" })).toBe(editor);
+        expect(editor.getAttribute("aria-disabled")).toBe("false");
+        expect(editor.getAttribute("contenteditable")).toBe("true");
+        expect(card?.className).toBe(cardClass);
+        expect(view.queryByText("Preparing the session...") === null).toBe(true);
+        for (const name of [
+          `Select model, ${descriptor.label}, ${record.selectedModel!.modelId}`,
+          effort,
+          `Session context: ${context}`,
+          ...(descriptor.kind === "opencode" ? [] : [`Speed: ${speed}`]),
+        ]) {
+          expect(view.getByRole("button", { name }).hasAttribute("disabled")).toBe(false);
+        }
+        typeIntoComposer(view.container, `Draft for ${record.id}`);
+        expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+          true,
+        );
+      }
+      expect(start).toHaveBeenCalledTimes(3);
+    } finally {
+      view.unmount();
+    }
+  },
+);
 
 test.each(["model", "effort", "profile"] as const)(
   "keeps the workspace draft editor active and gates supported Resume controls while saving %s",
@@ -933,14 +1019,14 @@ test("returning to a retained chat expands requests without clearing drafts, whi
   // The full chat render includes settings queries and retained Activity transitions.
 }, 5000);
 
-test.each(["retry", "streaming", "draft", "record-failure"] as const)(
+test.each(["retry", "streaming", "record-failure"] as const)(
   "workspace chat %s preserves readiness and completed turns",
   async (scenario) => {
     const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
     const entry: WorkspaceSession = {
       id: "session-1",
       runtimeKind: "opencode",
-      externalSessionId: scenario === "draft" ? null : "native-1",
+      externalSessionId: "native-1",
       executionTarget: { kind: "local_repo_root", workingDirectory: "/repo" },
       roleSnapshot: null,
       selectedModel: null,
@@ -968,7 +1054,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
       pendingQuestions: [],
     });
     const store = createAgentSessionsStore("/repo");
-    if (scenario !== "draft") store.replaceSession(session);
+    store.replaceSession(session);
     const counters: WorkspaceChatCounters = {
       runtimeReads: 0,
       baselineLoads: 0,
@@ -994,26 +1080,8 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
       workspace.workspaceId,
       entry.id,
     );
-    if (scenario === "draft") {
-      draftPersistence.set({ segments: [createTextSegment("Unsent draft survives reload")] });
-      await draftPersistence.flush();
-    }
     const view = render(<Harness />);
     try {
-      if (scenario === "draft") {
-        await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"), {
-          timeout: 2000,
-        });
-        expect(view.getByLabelText("Message composer").textContent).toContain(
-          "Unsent draft survives reload",
-        );
-        expect(view.getByLabelText("Message composer").getAttribute("contenteditable")).toBe(
-          "true",
-        );
-        expect(view.queryByText("Loading session")).toBeNull();
-        expect(counters.runtimeReads).toBe(0);
-        return;
-      }
       if (scenario === "streaming") {
         await view.findByText("Completed answer", {}, { timeout: 2000 });
         await view.findByText("Current answer", {}, { timeout: 2000 });
@@ -1229,7 +1297,7 @@ test("workspace Send waits for its first catalog with a saved model", async () =
   }
 }, 5000);
 
-test("workspace checks a new blocking question before repairing a staged attachment send", async () => {
+test("workspace checks a new blocking question before submitting a staged attachment", async () => {
   const staging = Promise.withResolvers<{ path: string; mime: string }>();
   const stage = mock(() => staging.promise);
   const h = createPreparationScenario(
@@ -1271,6 +1339,7 @@ test("workspace checks a new blocking question before repairing a staged attachm
   );
   let pending!: Promise<unknown>;
   try {
+    await act(async () => {});
     act(() => {
       pending = view.result.current.onSend(
         {

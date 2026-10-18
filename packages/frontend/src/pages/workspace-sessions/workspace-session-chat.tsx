@@ -1,3 +1,4 @@
+import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
 import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
@@ -16,10 +17,7 @@ import { useAgentChatPresentation } from "@/components/features/agents/agent-cha
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
 import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
-import {
-  getAgentSessionWaitingInputPlaceholder,
-  isAgentSessionBlockedOnInput,
-} from "@openducktor/frontend-core/lib/agent-session-waiting-input";
+import { isAgentSessionBlockedOnInput } from "@openducktor/frontend-core/lib/agent-session-waiting-input";
 import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
@@ -72,8 +70,6 @@ export function WorkspaceSessionChat({
   const identity = useStableAgentSessionIdentity(workspaceSessionIdentity(record));
   const session = useAgentSession(identity);
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
-  const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
-  const { isStarting, isSavingModel } = actions;
   const chatDrafts = useClientConnection().drafts.chat;
   const draftPersistence = useMemo(
     () => createWorkspaceSessionChatDraftPersistence(chatDrafts, workspace.workspaceId, record.id),
@@ -86,6 +82,14 @@ export function WorkspaceSessionChat({
     hasWorkspace: true,
     runtimeTarget: runtimeReadinessTargetForRuntime(record.runtimeKind),
   });
+  const actions = useWorkspaceSessionChatActions(
+    workspace,
+    record,
+    isMounted,
+    runtimeReadiness.state === "ready" && readModel.sessionReadModelLoadState.kind === "ready",
+    visitKey,
+  );
+  const { isStarting, isSavingModel } = actions;
   const recordsError = readModel.workspaceSessionRecordsError;
   const fault = readModel.getSessionFault(identity);
   const chatState = useMemo(
@@ -140,14 +144,14 @@ export function WorkspaceSessionChat({
       }),
     [runtime.allRuntimeDefinitions, record.runtimeKind],
   );
-  const { support, slashCommands, skills, subagents, searchFiles, refreshCatalogIfStale } =
-    useWorkspaceSessionPromptInput({
-      repoPath: workspace.repoPath,
-      record,
-      identity,
-      runtimeReadinessState: runtimeReadiness.state,
-      reusablePrompts,
-    });
+  const promptInput = useWorkspaceSessionPromptInput({
+    repoPath: workspace.repoPath,
+    record,
+    identity,
+    runtimeReadinessState: runtimeReadiness.state,
+    reusablePrompts,
+  });
+  const { support, skills } = promptInput;
   const contextUsage = useSelectedSessionContextUsage({
     selectedSession: session,
     sessionModelCatalog: modelCatalog,
@@ -214,10 +218,10 @@ export function WorkspaceSessionChat({
   const target = useMemo(
     () =>
       sendTarget({
-        canSend: canInteract && !picker.isLoading,
+        canSend: canInteract && actions.isPrepared && !picker.isLoading,
         assertCanSubmit,
       }),
-    [assertCanSubmit, canInteract, picker.isLoading, sendTarget],
+    [assertCanSubmit, canInteract, actions.isPrepared, picker.isLoading, sendTarget],
   );
   const messageDelivery = useAgentChatSend({
     identity,
@@ -285,47 +289,18 @@ export function WorkspaceSessionChat({
             },
           }
         : undefined,
-    composer: {
-      ...messageDelivery,
-      displayedSessionKey: chatState.sessionKey,
-      selectedSession: identity ? { ...identity, selectedModel: chatState.selectedModel } : null,
-      isSessionModelCatalogLoading: picker.isLoading,
-      isSessionWorking: chatState.isWorking,
-      isWaitingInput,
-      waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(chatState),
-      canStopSession: chatState.canStopSession,
-      stopAgentSession: operations.stopAgentSession,
-      isResumingSession: actions.isResumingSession,
-      isReadOnly: chatState.isReadOnly,
-      readOnlyReason: chatState.readOnlyReason,
-      draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
-      onSend: reviewComments.onSend,
-      pendingSendItems: reviewComments.pendingSendItems ?? undefined,
-      isStarting,
-      isSavingModel,
+    composer: buildWorkspaceSessionComposer({
+      state: chatState,
+      identity,
+      actions,
+      delivery: messageDelivery,
+      reviewComments,
+      draftPersistence,
+      picker,
+      promptInput,
       contextUsage,
-      selectedModelSelection: picker.selection,
-      speed: picker.speed,
-      selectedModelDescriptor: picker.selectedModelEntry,
-      isSelectionCatalogLoading: picker.isLoading,
-      supportsProfiles: picker.supportsProfiles,
-      supportsAttachments: support.supportsAttachments,
-      supportsFileSearch: support.supportsFileSearch,
-      supportsSkillReferences: support.supportsSkillReferences,
-      supportsSubagentReferences: support.supportsSubagentReferences,
-      ...slashCommands,
-      ...skills,
-      ...subagents,
-      onCatalogMenuOpen: refreshCatalogIfStale,
-      onAgentSelectorOpen: refreshCatalogIfStale,
-      onVariantSelectorOpen: refreshCatalogIfStale,
-      searchFiles,
-      agentOptions: picker.agentProfileOptions,
-      variantOptions: picker.variantOptions,
-      onSelectAgent: picker.handleSelectAgentProfile,
-      onSelectVariant: picker.handleSelectVariant,
-      modelPicker: picker.modelPicker,
-    },
+      stopSession: operations.stopAgentSession,
+    }),
   });
   return <AgentChatSurface model={surface} visitKey={visitKey} />;
 }

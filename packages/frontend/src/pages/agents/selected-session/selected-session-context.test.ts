@@ -77,6 +77,7 @@ const createInput = (
     selectedTask,
     sessionsForTask,
     selectedSession: {
+      preparation: { ready: true, error: null },
       identity: selectedSessionIdentity,
       activityState: selectedSessionActivityState,
       selectedModel: selectedSessionModel,

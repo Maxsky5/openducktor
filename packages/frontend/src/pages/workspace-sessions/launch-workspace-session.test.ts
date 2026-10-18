@@ -5,7 +5,7 @@ import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/ag
 import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { sessionMessagesToArray } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { launchWorkspaceSession, projectWorkspaceSessionLaunch } from "./launch-workspace-session";
+import { launchWorkspaceSession, projectWorkspaceSessionResult } from "./launch-workspace-session";
 
 const createRecord = (): WorkspaceSession => ({
   id: "saved",
@@ -46,7 +46,7 @@ test.each([false, true])(
     const archived = workspaceSessionQueryKeys.list("workspace", true);
     client.setQueryData(active, [record]);
     client.setQueryData(archived, []);
-    projectWorkspaceSessionLaunch(outcome, store, client);
+    projectWorkspaceSessionResult(outcome, store, client);
     expect(sessionMessagesToArray(store.getSessionSnapshot(outcome.session!)!)).toEqual([]);
     store.updateSession(outcome.session!, (session) => ({
       ...session,
@@ -56,7 +56,7 @@ test.each([false, true])(
     const newer = { ...record, manualTitle: "New title", archivedAt: 2000 };
     client.setQueryData(active, []);
     client.setQueryData(archived, [newer]);
-    projectWorkspaceSessionLaunch(outcome, store, client);
+    projectWorkspaceSessionResult(outcome, store, client);
     expect(client.getQueryData<WorkspaceSession[]>(active)).toEqual([]);
     expect(client.getQueryData<WorkspaceSession[]>(archived)).toEqual([newer]);
     expect(store.getSessionSnapshot(outcome.session!)).toMatchObject({

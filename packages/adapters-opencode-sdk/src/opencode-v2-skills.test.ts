@@ -144,6 +144,7 @@ describe("OpenCode V2 skill references", () => {
           { kind: "text" as const, text: "." },
         ],
       };
+      await controller.bind(input);
       const accepted = await controller.sendUserMessage(input);
       if (accepted.type !== "user_message") throw new Error("Expected accepted skill references");
       const expectedBody = {

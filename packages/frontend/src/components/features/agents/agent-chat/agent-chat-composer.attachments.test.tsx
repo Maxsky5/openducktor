@@ -1,21 +1,8 @@
 import { QueryProvider } from "@/test-utils/query-provider";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
-import { useAgentStudioSendTarget } from "@/pages/agents/session-actions/use-agent-studio-send-target";
-import { createAgentMessageQueuesStore } from "@openducktor/frontend-core/sessions/agent-message-queues-store";
-import {
-  AgentMessageQueuesContext,
-  AgentOperationsContext,
-  HostRuntimeStatusContext,
-} from "@openducktor/frontend-core/sessions/session-contexts";
-import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
-import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
-import { agentStudioChatDraftScopeKey } from "@/pages/agents/agent-studio-chat-draft";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { RenderOptions } from "@testing-library/react";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode } from "react";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import {
   type AgentChatDraftSessionIdentity,
@@ -745,132 +732,6 @@ describe("AgentChatComposer attachments", () => {
       expect(screen.getAllByTitle("image.png")).toHaveLength(1);
     });
   });
-});
-
-/** The contexts that the shared send hook reads. */
-function SendProviders({ children }: { children: ReactNode }) {
-  return (
-    <QueryProvider>
-      <AgentOperationsContext value={createAgentOperationsFixture()}>
-        <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
-          <AgentMessageQueuesContext value={createAgentMessageQueuesStore()}>
-            {children}
-          </AgentMessageQueuesContext>
-        </HostRuntimeStatusContext>
-      </AgentOperationsContext>
-    </QueryProvider>
-  );
-}
-
-describe("first-message composer recovery", () => {
-  test.each([false, true])(
-    "retries in the created session after navigation (switch task: %s)",
-    async (switchTask) => {
-      const firstSend = createDeferred<void>();
-      const created: AgentSessionIdentity = {
-        runtimeKind: "opencode",
-        externalSessionId: "created",
-        workingDirectory: "/repo/task-1",
-      };
-      const send = mock(async () => null);
-      const start = mock(async (_parts: import("@openducktor/core").AgentUserMessagePart[]) => {
-        await firstSend.promise;
-        return { ...created, postStartActionError: new Error("first send failed") };
-      });
-      function RecoveryComposer({ taskId }: { taskId: string }) {
-        const [session, setSession] = useState<AgentSessionIdentity | null>(null);
-        const selected = taskId === "task-1" ? session : null;
-        const target = useAgentStudioSendTarget({
-          workspaceId: "workspace-1",
-          taskId,
-          role: "build",
-          selectedSessionIdentity: selected,
-          isSessionModelCatalogLoading: false,
-
-          assertCanPrepareSession: () => {},
-          agentStudioReady: true,
-          canStartNewSession: true,
-          isStarting: false,
-          startSession: async (parts) => {
-            const result = await start(parts);
-            setSession(created);
-            return result;
-          },
-        });
-        const sending = useAgentChatSend({
-          identity: selected,
-          repoPath: "/repo",
-          runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-          modelCatalog: null,
-          messages: [],
-          isSessionWorking: false,
-          isWaitingInput: false,
-          selectedModelDescriptor: null,
-          draftRules: { reusablePrompts: [], supportsAttachments: false },
-          sendAgentMessage: send,
-          target,
-        });
-        const key = agentStudioChatDraftScopeKey("workspace-1", {
-          taskId,
-          role: "build",
-          session: selected,
-        });
-        return (
-          <AgentChatComposer
-            model={{
-              ...buildModel(),
-              displayedSessionKey: key,
-              draftScope: { key, persistence: null },
-              onSend: sending.onSend,
-              isSending: sending.isSending,
-            }}
-          />
-        );
-      }
-      const providers = { wrapper: SendProviders };
-      const { container, rerender, unmount } = render(
-        <RecoveryComposer taskId="task-1" />,
-        providers,
-      );
-      try {
-        typeIntoComposer(container, "retry my first message");
-        fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-        await waitFor(() => expect(start).toHaveBeenCalledTimes(1), { timeout: 300 });
-        expect(start).toHaveBeenCalledWith([{ kind: "text", text: "retry my first message" }]);
-        expect(send).not.toHaveBeenCalled();
-        if (switchTask) {
-          rerender(<RecoveryComposer taskId="task-2" />);
-          typeIntoComposer(container, "new task draft");
-        }
-        firstSend.resolve();
-        if (switchTask) {
-          await waitFor(
-            () => {
-              const button = screen.getByRole("button", { name: "Send message" });
-              expect(button instanceof HTMLButtonElement && !button.disabled).toBe(true);
-            },
-            { timeout: 300 },
-          );
-          expect(getEditorRoot(container).textContent).toBe("new task draft");
-          rerender(<RecoveryComposer taskId="task-1" />);
-        }
-        await waitFor(
-          () => expect(getEditorRoot(container).textContent).toBe("retry my first message"),
-          { timeout: 300 },
-        );
-        fireEvent.keyDown(getEditorRoot(container), { key: "Enter" });
-        await waitFor(() => expect(send).toHaveBeenCalledTimes(1), { timeout: 300 });
-        expect(start).toHaveBeenCalledTimes(1);
-        expect(send).toHaveBeenLastCalledWith(
-          created,
-          [{ kind: "text", text: "retry my first message" }],
-          expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
-        );
-      } finally {
-        unmount();
-      }
-    },
-  );
 });
 
 describe("AgentChatComposer selection controls", () => {

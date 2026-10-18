@@ -260,17 +260,12 @@ export const createOpenCodeSessionControlAdapter = ({
         parts: input.parts.map(toOpenCodeUserMessagePart),
         delivery: input.delivery,
       };
-      if (input.model) {
-        request.model = input.model;
-      }
       if (input.systemPrompt) {
         request.systemPrompt = input.systemPrompt;
       }
       if (input.submissionId) {
         request.submissionId = input.submissionId;
       }
-      if (options?.onModelIssued) request.onWorkIssued = options.onModelIssued;
-      if (options?.onModelAccepted) request.onWorkAccepted = options.onModelAccepted;
       if (options?.assertCurrent) request.workStartGuard = { assertCurrent: options.assertCurrent };
       return sendGate.run(
         refKey(sessionRef),

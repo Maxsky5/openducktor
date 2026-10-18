@@ -93,6 +93,10 @@ describe("CodexAppServerAdapter managed MCP binding", () => {
     });
     await adapter.resumeSession(sessionRef("/repo-a", "native-a", repositoryScope));
     await adapter.openExistingSession(sessionRef("/repo-b", "import-b", repositoryScope));
+    await adapter.resumeSession({
+      ...sessionRef("/repo-a", "detached-a"),
+      systemPrompt: "Use the repo rules.",
+    });
     await adapter.sendUserMessage({
       ...sessionRef("/repo-a", "detached-a"),
       systemPrompt: "Use the repo rules.",

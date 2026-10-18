@@ -7,7 +7,6 @@ import type {
 export const unexpectedRuntimeQueries = {
   resolveSessionParent: () => Effect.die(new Error("Unexpected query: resolveSessionParent")),
   loadRuntimeCatalog: () => Effect.die(new Error("Unexpected query: loadRuntimeCatalog")),
-  loadKnownRuntimeCatalog: () => Effect.die(new Error("Unexpected query: loadKnownRuntimeCatalog")),
   searchFiles: () => Effect.die(new Error("Unexpected query: searchFiles")),
   loadSessionHistory: () => Effect.die(new Error("Unexpected query: loadSessionHistory")),
   loadSessionTodos: () => Effect.die(new Error("Unexpected query: loadSessionTodos")),

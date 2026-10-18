@@ -40,6 +40,7 @@ export const toAgentSessionControlSummary = (
       if (summary.firstTurnCompleted !== undefined) {
         control.firstTurnCompleted = summary.firstTurnCompleted;
       }
+      if (summary.model !== undefined) control.model = summary.model;
       return agentSessionControlSummarySchema.parse(control);
     },
     catch: (cause) =>

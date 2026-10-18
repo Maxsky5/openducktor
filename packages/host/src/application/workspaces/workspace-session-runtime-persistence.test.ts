@@ -33,7 +33,62 @@ describe("Workspace Session persistence through the shared command module", () =
 
   const setup = () => createPersistenceHarness(database);
 
-  test("uses the stored Role and Model on resume and send after catalog edits or deletion", async () => {
+  test("saves the native model choice when reopening a saved workspace chat", async () => {
+    const nativeModel = {
+      runtimeKind: "codex" as const,
+      providerId: "codex",
+      modelId: "gpt-6",
+      variant: "low",
+      speed: "priority",
+    };
+    const h = await createPersistenceHarness(database, "codex", false, (ref) => ({
+      resumeSession: () =>
+        Effect.succeed({
+          ...ref,
+          startedAt: "2026-09-07T10:00:00Z",
+          status: "idle" as const,
+          model: nativeModel,
+        }),
+    }));
+    try {
+      const opened = await Effect.runPromise(h.workspaceService().start(h.storeRef));
+      expect((await h.get()).selectedModel).toEqual(nativeModel);
+      expect(opened.session.selectedModel).toEqual(nativeModel);
+      expect(h.updates.at(-1)?.session.selectedModel).toEqual(nativeModel);
+      expect(h.models).toEqual([]);
+    } finally {
+      await Effect.runPromise(h.live.shutdownOperations());
+      await Effect.runPromise(h.persistence.shutdown());
+    }
+  });
+
+  test.each(["opencode", "claude", "codex"] as const)(
+    "opens a saved %s workspace chat through the shared command policy",
+    async (runtimeKind) => {
+      const h = await createPersistenceHarness(database, runtimeKind);
+      try {
+        const opened = await Effect.runPromise(
+          h.workspaceService().start(h.storeRef).pipe(Effect.timeout("1 second")),
+        );
+        expect(opened.runtimeSession).toMatchObject({
+          runtimeKind,
+          externalSessionId: h.ref.externalSessionId,
+          workingDirectory: h.ref.workingDirectory,
+        });
+        expect(h.inputs).toHaveLength(1);
+        expect(h.inputs[0]).toMatchObject({
+          externalSessionId: h.ref.externalSessionId,
+          model: h.record.selectedModel,
+          systemPrompt: "Original instructions.",
+        });
+      } finally {
+        await Effect.runPromise(h.live.shutdownOperations());
+        await Effect.runPromise(h.persistence.shutdown());
+      }
+    },
+  );
+
+  test("uses the stored Role and Model on resume without adding settings to Send", async () => {
     const h = await setup();
     const scope = { kind: "repository" } as const;
     await Effect.runPromise(
@@ -43,7 +98,7 @@ describe("Workspace Session persistence through the shared command module", () =
         sessionScope: scope,
       }),
     );
-    // Like the message queue, a send captures the stored settings before dispatch.
+    // Send keeps the role context, but leaves settings in the prepared session.
     await Effect.runPromise(
       h.live
         .prepareUserMessage({
@@ -57,11 +112,12 @@ describe("Workspace Session persistence through the shared command module", () =
         ),
     );
     expect(h.inputs).toHaveLength(2);
-    for (const input of h.inputs)
-      expect(input).toMatchObject({
-        systemPrompt: "Original instructions.",
-        model: h.record.selectedModel,
-      });
+    expect(h.inputs[0]).toMatchObject({
+      systemPrompt: "Original instructions.",
+      model: h.record.selectedModel,
+    });
+    expect(h.inputs[1]).toMatchObject({ systemPrompt: "Original instructions." });
+    expect(h.inputs[1]).not.toHaveProperty("model");
     const saved = await h.get();
     expect(saved.generatedTitle).toBe("First accepted prompt");
     expect(saved.updatedAt).toBe(Date.parse("2026-09-07T10:00:00Z"));
@@ -410,7 +466,7 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.models).toEqual([model]);
     expect(h.updates.at(-1)?.session.selectedModel).toEqual({ ...model, runtimeKind: "opencode" });
     await h.send("Continue after profile repair");
-    expect(h.inputs.at(-1)?.model).toEqual({ ...model, runtimeKind: "opencode" });
+    expect(h.inputs.at(-1)).not.toHaveProperty("model");
   });
 
   test.each([
@@ -447,25 +503,20 @@ describe("Workspace Session persistence through the shared command module", () =
       }),
     );
     await h.send("Continue");
-    expect(h.inputs.map((input) => input.model)).toEqual([expectedModel, expectedModel]);
+    expect(h.inputs[0]).toHaveProperty("model", expectedModel);
+    expect(h.inputs[1]).not.toHaveProperty("model");
   });
 
-  test("does not save any accepted-message fields when its model is invalid", async () => {
+  test("accepted message metadata cannot change the saved session model", async () => {
     const h = await setup();
-    await expect(
-      Effect.runPromise(
-        h.persistence.recordAcceptedMessage(
-          h.ref,
-          {
-            ...h.accepted(),
-            model: { runtimeKind: "codex", providerId: "provider", modelId: "wrong-runtime" },
-          },
-          { saveModel: true },
-        ),
-      ),
-    ).rejects.toThrow("Accepted message model does not match its Runtime");
-    expect(await h.get()).toEqual(h.record);
-    expect(h.updates).toEqual([]);
+    await Effect.runPromise(
+      h.persistence.recordAcceptedMessage(h.ref, {
+        ...h.accepted(),
+        model: { runtimeKind: "codex", providerId: "provider", modelId: "wrong-runtime" },
+      }),
+    );
+    expect((await h.get()).selectedModel).toEqual(h.record.selectedModel);
+    expect((await h.get()).generatedTitle).toBe("First accepted prompt");
   });
 
   test("keeps the saved profile during model compensation", async () => {
@@ -491,7 +542,7 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.updates).toEqual([]);
   });
 
-  test("keeps the saved model when a queued message ran with an older model", async () => {
+  test("queued content cannot overwrite a later explicit settings change", async () => {
     const h = await setup();
     const captured = await Effect.runPromise(
       h.live.prepareUserMessage({
@@ -503,15 +554,13 @@ describe("Workspace Session persistence through the shared command module", () =
     const newerModel = { ...h.record.selectedModel!, modelId: "newer" };
     await Effect.runPromise(h.store.setSelectedModel({ ...h.storeRef, selectedModel: newerModel }));
 
-    await Effect.runPromise(
-      h.live.sendUserMessage({ ...captured, modelCaptured: true, delivery: "new_turn" }),
-    );
+    await Effect.runPromise(h.live.sendUserMessage({ ...captured, delivery: "new_turn" }));
 
-    expect(h.inputs.at(-1)?.model).toEqual(captured.model);
+    expect(h.inputs.at(-1)).not.toHaveProperty("model");
     expect((await h.get()).selectedModel).toEqual(newerModel);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
     await h.send("Next prompt");
-    expect(h.inputs.at(-1)?.model).toEqual(newerModel);
+    expect(h.inputs.at(-1)).not.toHaveProperty("model");
     expect((await h.get()).selectedModel).toEqual(newerModel);
   });
 
@@ -520,16 +569,14 @@ describe("Workspace Session persistence through the shared command module", () =
     h.state.failPublish = true;
     const model = { runtimeKind: "opencode" as const, providerId: "provider", modelId: "chosen" };
     await expect(
-      Effect.runPromise(
-        h.persistence.recordAcceptedMessage(h.ref, { ...h.accepted(), model }, { saveModel: true }),
-      ),
+      Effect.runPromise(h.persistence.recordAcceptedMessage(h.ref, { ...h.accepted(), model })),
     ).rejects.toThrow("publication failed");
     expect(await h.get()).toEqual({
       ...h.record,
       generatedTitle: "First accepted prompt",
       updatedAt: Date.parse(h.accepted().timestamp),
       lastActivityAt: Date.parse(h.accepted().timestamp),
-      selectedModel: model,
+      selectedModel: h.record.selectedModel,
     });
     expect(h.updates).toEqual([]);
   });
@@ -594,6 +641,8 @@ describe("Workspace Session persistence through the shared command module", () =
     ["send", "archive"],
     ["resume", "command"],
     ["resume", "archive"],
+    ["open", "command"],
+    ["open", "archive"],
   ] as const)("serializes archive with %s when %s starts first", async (operation, first) => {
     const h = await setup();
     const entered = Promise.withResolvers<void>();
@@ -686,23 +735,25 @@ describe("Workspace Session persistence through the shared command module", () =
         },
       },
     });
-    const command = () =>
-      operation === "send"
-        ? h.live
-            .sendUserMessage({
-              delivery: "new_turn",
-              ...h.ref,
-              sessionScope: { kind: "repository" },
-              parts: [{ kind: "text", text: "Continue" }],
-            })
-            .pipe(Effect.asVoid)
-        : h.live
-            .resumeSession({
-              resumeMode: "reattach",
-              ...h.ref,
-              sessionScope: { kind: "repository" },
-            })
-            .pipe(Effect.asVoid);
+    const command = () => {
+      if (operation === "open") return workspace.start(h.storeRef).pipe(Effect.asVoid);
+      if (operation === "send")
+        return h.live
+          .sendUserMessage({
+            delivery: "new_turn",
+            ...h.ref,
+            sessionScope: { kind: "repository" },
+            parts: [{ kind: "text", text: "Continue" }],
+          })
+          .pipe(Effect.asVoid);
+      return h.live
+        .resumeSession({
+          resumeMode: "reattach",
+          ...h.ref,
+          sessionScope: { kind: "repository" },
+        })
+        .pipe(Effect.asVoid);
+    };
     const archive = () =>
       workspace
         .archive({

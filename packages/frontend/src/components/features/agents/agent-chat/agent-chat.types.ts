@@ -187,6 +187,7 @@ export type AgentChatComposerModel = {
   displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
+  canSend?: boolean;
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatPendingSendItems;
   draftScope: AgentChatDraftScope;

@@ -171,7 +171,6 @@ export type AgentUserMessageDelivery = z.infer<typeof agentUserMessageDeliverySc
 export const agentSessionMessageContentFields = {
   parts: z.array(agentSessionUserMessagePartSchema).min(1),
   resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
-  model: agentModelSelectionSchema.optional(),
   systemPrompt: z.string().optional(),
 };
 
@@ -236,6 +235,8 @@ export const agentSessionControlSummarySchema = z
     startedAt: isoTimestampSchema,
     status: z.enum(["starting", "running", "idle", "error", "stopped"]),
     firstTurnCompleted: z.boolean().optional(),
+    // Native settings after the operation, when the runtime reports them.
+    model: agentModelSelectionSchema.optional(),
   })
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;

@@ -6,6 +6,5 @@ export const commandPreparationFixture: ReturnType<typeof createSessionTurnPrepa
   context: (target) =>
     Effect.succeed(target.sessionScope.kind === "workflow" ? "Current host context" : undefined),
   promptOverrides: () => Effect.succeed({}),
-  steeringContent: () => Effect.void,
-  model: (_target, selection) => Effect.succeed({ kind: "keep", selection }),
+  model: (_target, selection) => Effect.succeed(selection),
 };

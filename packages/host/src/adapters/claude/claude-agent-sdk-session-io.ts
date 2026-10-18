@@ -143,27 +143,6 @@ export const applyClaudeSessionModel = async (
   session.model = nextModel;
 };
 
-const rollbackClaudeSessionModel = async (input: {
-  cause: unknown;
-  previousModel: AgentModelSelection | undefined;
-  session: ClaudeSession;
-}): Promise<void> => {
-  const { cause, previousModel, session } = input;
-  try {
-    await applyClaudeSessionModel(session, previousModel);
-  } catch (rollbackCause) {
-    throw new HostOperationError({
-      operation: "claudeRuntime.sendUserMessage",
-      message: `Claude message delivery failed and model rollback was incomplete: ${errorMessage(rollbackCause)}`,
-      cause,
-      details: {
-        externalSessionId: session.externalSessionId,
-        rollbackFailure: errorMessage(rollbackCause),
-      },
-    });
-  }
-};
-
 export const consumeClaudeSession = async (input: {
   emit: ClaudeAgentSdkEventEmitter;
   now: () => string;
@@ -305,20 +284,6 @@ export const sendClaudeUserMessage = async (input: {
         "The running turn ended before steering. Send a new turn with current host context.",
       ),
     );
-  const previousModel = session.model;
-  let modelApplied = false;
-  if (messageInput.model !== undefined) {
-    await applyClaudeSessionModel(
-      session,
-      messageInput.model,
-      false,
-      messageInput.workStartGuard,
-      messageInput.onWorkIssued,
-    );
-    messageInput.onWorkAccepted?.();
-    modelApplied = true;
-    assertClaudeSessionAcceptingMessages(session);
-  }
   const previousActivity = session.activity;
   const previousTurnSystemPrompt = session.turnSystemPrompt;
   if (messageInput.systemPrompt !== undefined) session.turnSystemPrompt = messageInput.systemPrompt;
@@ -327,9 +292,7 @@ export const sendClaudeUserMessage = async (input: {
   if (isManualCompaction) {
     acceptedMessage.isManualCompaction = true;
   }
-  if (messageInput.model) {
-    acceptedMessage.model = messageInput.model;
-  }
+  if (session.model) acceptedMessage.model = session.model;
   session.acceptedUserMessages.push(acceptedMessage);
   session.pendingUserTurnCount = previousPendingUserTurnCount + 1;
   session.activity = "running";
@@ -360,11 +323,6 @@ export const sendClaudeUserMessage = async (input: {
     } else {
       session.sdkState = previousSdkState;
     }
-    if (modelApplied) {
-      await rollbackClaudeSessionModel({ cause, previousModel, session });
-    } else {
-      session.model = previousModel;
-    }
     throw cause;
   }
   input.onSent?.();
@@ -386,7 +344,6 @@ export const sendClaudeUserMessage = async (input: {
         timestamp: now(),
         event: { kind: "user_turn_cancelled" },
       });
-      if (modelApplied) await rollbackClaudeSessionModel({ cause, previousModel, session });
     }
     throw cause;
   }
@@ -432,10 +389,3 @@ const steerClaudeUserMessage = async (input: {
     session.unreadSteeredUserMessages.has(acceptedMessage.messageId) ? "queued" : "read",
   );
 };
-
-export const withClaudeModelCallbacks = (
-  input: import("@openducktor/core").SendAgentUserMessageInput,
-  options:
-    | import("../../ports/agent-session-live-adapter-port").AgentSessionSendOptions
-    | undefined,
-) => ({ ...input, onWorkIssued: options?.onModelIssued, onWorkAccepted: options?.onModelAccepted });

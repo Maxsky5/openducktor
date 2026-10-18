@@ -64,7 +64,7 @@ test("manual fresh launch starts a model that the catalog does not list without 
   );
   expect(result).toMatchObject({ status: "completed", model: selectedModel });
   expect(h.catalogLoads()).toBe(0);
-  expect(h.sends[0]?.model).toEqual(selectedModel);
+  expect(h.sends[0]).not.toHaveProperty("model");
 });
 
 test("automatic launch fails when no role or repository default model is set", async () => {
@@ -109,7 +109,7 @@ test("automatic fresh launch fills an unset default variant from the runtime cat
   expect(result).toMatchObject({ status: "completed", model: modelFor("codex") });
   expect(h.catalogLoads()).toBe(1);
   expect(h.records[0]?.selectedModel).toEqual(modelFor("codex"));
-  expect(h.sends[0]?.model).toEqual(modelFor("codex"));
+  expect(h.sends[0]).not.toHaveProperty("model");
 });
 
 test("automatic fresh launch starts the model that a saved alias default points to", async () => {
@@ -122,7 +122,7 @@ test("automatic fresh launch starts the model that a saved alias default points 
     }),
   );
   expect(result).toMatchObject({ status: "completed", model: modelFor("codex") });
-  expect(h.sends[0]?.model).toEqual(modelFor("codex"));
+  expect(h.sends[0]).not.toHaveProperty("model");
 });
 
 test.each([
@@ -245,7 +245,7 @@ test("automatic model and prompt selection uses role and repository overrides on
     }),
   );
   expect(result.status).toBe("completed");
-  expect(h.sends[0]?.model).toEqual(modelFor("codex"));
+  expect(h.sends[0]).not.toHaveProperty("model");
   expect(h.sends[0]?.parts).toEqual([{ kind: "text", text: "Repository kickoff task" }]);
   expect(h.sends[0]?.systemPrompt).toContain("Repository system");
 });

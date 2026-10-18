@@ -143,19 +143,28 @@ export const createTaskWorkflowSessionPolicy = ({
               input: {
                 ...input,
                 runtimeKind: stored.runtimeKind,
-                workingDirectory: stored.workingDirectory,
-                model: stored.selectedModel ?? undefined,
+                workingDirectory:
+                  input.externalSessionId === stored.externalSessionId
+                    ? stored.workingDirectory
+                    : input.workingDirectory,
+                model:
+                  input.externalSessionId === stored.externalSessionId
+                    ? (stored.selectedModel ?? undefined)
+                    : undefined,
               },
-              save: (summary: AgentSessionControlSummary) =>
-                summary.externalSessionId !== stored.externalSessionId
-                  ? Effect.void
-                  : storeWorkflowSession(tasks.agentSessionUpsert, {
-                      repoPath: input.repoPath,
-                      sessionScope: scope,
-                      model: stored.selectedModel ?? undefined,
-                      selectedModel: stored.selectedModel,
-                      summary,
-                    }).pipe(Effect.asVoid),
+              save: (summary: AgentSessionControlSummary) => {
+                if (summary.externalSessionId !== stored.externalSessionId) return Effect.void;
+                const selectedModel = summary.model
+                  ? { ...summary.model, runtimeKind: summary.runtimeKind }
+                  : stored.selectedModel;
+                return storeWorkflowSession(tasks.agentSessionUpsert, {
+                  repoPath: input.repoPath,
+                  sessionScope: scope,
+                  model: selectedModel ?? undefined,
+                  selectedModel,
+                  summary,
+                }).pipe(Effect.asVoid);
+              },
             };
           }),
         prepareSend: (input) =>
@@ -166,8 +175,6 @@ export const createTaskWorkflowSessionPolicy = ({
               runtimeKind: stored.runtimeKind,
               workingDirectory: stored.workingDirectory,
             };
-            if (stored.selectedModel) prepared.model = stored.selectedModel;
-            else delete prepared.model;
             return prepared;
           }),
         recordAcceptedMessage: () => Effect.void,

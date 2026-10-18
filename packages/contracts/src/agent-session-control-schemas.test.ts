@@ -375,6 +375,13 @@ describe("agent session control contracts", () => {
       workingDirectory: "/repo",
       startedAt: "2026-07-16T10:00:00.000Z",
       status: "idle",
+      model: {
+        runtimeKind: "codex",
+        providerId: "codex",
+        modelId: "gpt-6",
+        variant: "low",
+        speed: "priority",
+      },
     } as const;
 
     expect(agentSessionControlSummarySchema.parse(summary)).toEqual(summary);

@@ -5,7 +5,6 @@ import {
   acceptedThenFailed,
   createHarness,
   failureOf,
-  model,
   ref,
   sessionState,
   target,
@@ -22,7 +21,7 @@ describe("agent message delivery: submit and drain", () => {
     expect(result).toMatchObject({ kind: "accepted", acceptedMessage: { message: "first" } });
     expect(harness.calls).toEqual([
       {
-        input: expect.objectContaining({ repoPath: "/repo", delivery: "new_turn", model }),
+        input: expect.objectContaining({ repoPath: "/repo", delivery: "new_turn" }),
       },
     ]);
     expect(harness.service.listQueues("/repo")).toEqual([]);
@@ -37,7 +36,7 @@ describe("agent message delivery: submit and drain", () => {
 
     expect(result).toMatchObject({
       kind: "queued",
-      queue: { target, entries: [{ submissionId: "submission-first", state: "queued", model }] },
+      queue: { target, entries: [{ submissionId: "submission-first", state: "queued" }] },
     });
     expect(harness.queueTexts()).toEqual(["first:queued"]);
     expect(harness.envelopes.map((envelope) => envelope.type)).toEqual(["message_queue_updated"]);
@@ -65,7 +64,7 @@ describe("agent message delivery: submit and drain", () => {
     await harness.runBackground();
 
     expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
-    expect(harness.calls[1]?.input.model).toEqual(model);
+    expect(harness.calls[1]?.input).not.toHaveProperty("model");
     expect(harness.queueTexts()).toEqual(["second:queued"]);
 
     harness.idle();

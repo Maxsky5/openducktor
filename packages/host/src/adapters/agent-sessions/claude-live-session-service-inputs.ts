@@ -207,9 +207,6 @@ export const toClaudeSendInput = (
     delivery: input.delivery,
     ...CLAUDE_RUNTIME_POLICY_BINDING,
   };
-  if (input.model !== undefined) {
-    result.model = input.model;
-  }
   if (input.systemPrompt !== undefined) {
     result.systemPrompt = input.systemPrompt;
   }

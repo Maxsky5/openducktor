@@ -4,11 +4,7 @@ import {
   agentSessionMessageContentFields,
   refineAgentSessionUserMessageParts,
 } from "./agent-session-control-schemas";
-import {
-  agentModelSelectionSchema,
-  agentSessionLiveRefSchema,
-  agentSessionScopeSchema,
-} from "./agent-session-schemas";
+import { agentSessionLiveRefSchema, agentSessionScopeSchema } from "./agent-session-schemas";
 import { isoTimestampSchema } from "./string-schemas";
 import { submissionAcknowledgementSchema } from "./workflow-operation-schemas";
 
@@ -54,7 +50,6 @@ export type AgentQueuedMessageState = z.infer<typeof agentQueuedMessageStateSche
 const agentQueuedMessageFields = {
   submissionId: nonEmptyStringSchema,
   parts: agentSessionMessageContentFields.parts,
-  model: agentModelSelectionSchema.optional(),
   queuedAt: isoTimestampSchema,
   /** The last delivery failure of this message. */
   error: nonEmptyStringSchema.optional(),

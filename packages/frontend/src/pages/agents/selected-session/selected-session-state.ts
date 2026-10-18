@@ -16,4 +16,5 @@ export type AgentStudioSelectedSessionState = {
   runtimeReadiness: RuntimeReadiness;
   transcriptState: AgentSessionTranscriptState;
   sessionAuxiliaryError: string | null;
+  preparation: { ready: boolean; error: string | null };
 };

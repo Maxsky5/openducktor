@@ -238,6 +238,7 @@ describe("OpenCode V2 conversation identity and history", () => {
         });
       throw new Error(`Unexpected request ${method} ${url.pathname}`);
     });
+    await controller.bind({ ...repository });
     const accepted = await controller.sendUserMessage({
       ...repository,
       parts: [{ kind: "text", text }],
@@ -479,20 +480,22 @@ describe("OpenCode V2 conversation identity and history", () => {
 });
 
 describe("OpenCode V2 controls and accepted input", () => {
-  test.each(["policy", "prompt", "command"] as const)(
+  test.each(["instructions", "prompt", "command"] as const)(
     "preserves rejection evidence when %s fails",
     async (stage) => {
       const { controller, requests } = createController(({ url, method }) => {
         if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
-        if ((stage === "policy" && method === "PATCH") || url.pathname.endsWith(`/${stage}`))
+        if ((stage === "instructions" && method === "PUT") || url.pathname.endsWith(`/${stage}`))
           return Response.json({ message: "Native request failed" }, { status: 503 });
         if (method === "PATCH" || method === "PUT") return noContent();
         if (url.pathname === "/api/session/ses_saved") return response(current);
         throw new Error(`Unexpected request ${method} ${url.pathname}`);
       });
+      await controller.bind(repository);
       const failure = await controller
         .sendUserMessage({
           ...repository,
+          systemPrompt: "Current instructions",
           parts:
             stage === "command"
               ? [
@@ -516,9 +519,9 @@ describe("OpenCode V2 controls and accepted input", () => {
           },
         },
       });
-      expect(failure instanceof AgentSessionMessageRefusedError).toBe(stage === "policy");
+      expect(failure instanceof AgentSessionMessageRefusedError).toBe(stage === "instructions");
       expect(requests.some(({ url }) => /\/(prompt|command)$/.test(url.pathname))).toBe(
-        stage !== "policy",
+        stage !== "instructions",
       );
     },
   );
@@ -542,6 +545,7 @@ describe("OpenCode V2 controls and accepted input", () => {
         throw new Error(`Unexpected input request ${method} ${url.pathname}`);
       });
       let submitted = false;
+      await controller.bind({ ...workflow, sessionScope: { ...workflow.sessionScope, role } });
       const accepted = await controller.sendUserMessage(
         {
           ...workflow,
@@ -582,6 +586,7 @@ describe("OpenCode V2 controls and accepted input", () => {
       if (url.pathname === "/api/session/ses_saved") return response(current);
       throw new Error(`Unexpected command request ${method} ${url.pathname}`);
     });
+    await controller.bind({ ...workflow, sessionScope: scope });
     const accepted = await controller.sendUserMessage({
       ...workflow,
       sessionScope: scope,
@@ -908,16 +913,43 @@ describe("OpenCode V2 controls and accepted input", () => {
     expect(requests).toHaveLength(1);
   });
   test("reattachment keeps native rules and metadata and ignores new creation defaults", async () => {
+    const detail = session({
+      ...current,
+      model: { providerID: "native", id: "first", variant: "low" },
+      agent: "build",
+    });
     const { controller, requests } = createController(
       ({ url, method }) => {
         if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
         if (url.pathname === "/api/session/active") return response({});
         if (method === "PATCH" || method === "PUT") return noContent();
-        return response(current);
+        return response(detail);
       },
       { defaults: [{ permission: "shell", pattern: "new default", action: "allow" }], role: [] },
     );
-    await controller.resumeSession(repository);
+    const saved = {
+      ...repository,
+      model: { providerId: "saved", modelId: "old", profileId: "old" },
+    };
+    expect(await controller.resumeSession(saved)).toMatchObject({
+      model: {
+        providerId: "native",
+        modelId: "first",
+        variant: "low",
+        profileId: "build",
+      },
+    });
+    detail.model = { providerID: "native", id: "second", variant: "high" };
+    detail.agent = "review";
+    expect(await controller.resumeSession(saved)).toMatchObject({
+      model: {
+        providerId: "native",
+        modelId: "second",
+        variant: "high",
+        profileId: "review",
+      },
+    });
+    expect(requests.filter(({ url }) => url.pathname.endsWith("/model"))).toEqual([]);
     const patch = requests.find((request) => request.method === "PATCH");
     expect(patch?.body.metadata).toMatchObject({ native: "retained" });
     expect(patch?.body.permissions).toContainEqual(current.permissions?.[0]);
@@ -1058,6 +1090,7 @@ describe("OpenCode V2 controls and accepted input", () => {
       if (method === "PATCH") return noContent();
       return response(current);
     });
+    await controller.bind({ ...repository });
     expect(
       await controller.sendUserMessage({
         ...repository,
@@ -1130,69 +1163,38 @@ describe("OpenCode V2 controls and accepted input", () => {
       ),
     ).rejects.toThrow("across the worktree boundary");
   });
-  test.each(
-    (["prompt", "compact"] as const).flatMap((submission) =>
-      (["stop", "release", "close"] as const).flatMap((action) =>
-        (action === "release"
-          ? [ref.externalSessionId, "ses_grandchild"]
-          : [ref.externalSessionId]
-        ).map((externalSessionId) => ({ submission, action, externalSessionId })),
-      ),
-    ),
-  )(
-    "does not submit prepared $submission for $externalSessionId after $action during preparation",
-    async ({ action, submission, externalSessionId }) => {
+  test.each(["stop", "release", "close"] as const)(
+    "does not submit a prompt after %s during preparation",
+    async (action) => {
       const entered = Promise.withResolvers<void>();
       const allowPolicy = Promise.withResolvers<void>();
-      let deferRead = submission === "compact";
       let preparing = false;
-      const descendants = [
-        session({ ...current, id: "ses_child", parentID: ref.externalSessionId }),
-        session({ ...current, id: "ses_grandchild", parentID: "ses_child" }),
-      ];
-      const target = { ...repository, externalSessionId };
       const { controller, requests } = createController(({ url, method }) => {
         if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
         if (url.pathname.endsWith("/interrupt")) return Response.json({});
-        if (url.pathname.endsWith(`/${submission}`))
+        if (url.pathname.endsWith("/prompt"))
           return response({
             id: "msg_accepted",
-            sessionID: externalSessionId,
-            type: submission === "compact" ? "compaction" : "user",
-            payload: submission === "compact" ? {} : { text: "Retain draft" },
+            sessionID: ref.externalSessionId,
+            type: "user",
+            payload: { text: "Retain draft" },
             delivery: "prompt",
             time: { created: 3 },
           });
-        const detail =
-          descendants.find((detail) => url.pathname === `/api/session/${detail.id}`) ?? current;
         if (url.pathname === "/api/session/active") return response({});
-        if (
-          preparing &&
-          deferRead &&
-          method === "GET" &&
-          url.pathname === `/api/session/${externalSessionId}`
-        ) {
-          deferRead = false;
-          entered.resolve();
-          return allowPolicy.promise.then(() => response(detail));
-        }
-        if (method === "PATCH") {
+        if (method === "PUT" || method === "PATCH") {
           if (!preparing) return noContent();
           entered.resolve();
           return allowPolicy.promise.then(noContent);
         }
-        return response(detail);
+        return response(current);
       });
-      if (externalSessionId !== ref.externalSessionId)
-        for (const detail of [current, ...descendants])
-          await controller.resumeSession({ ...repository, externalSessionId: detail.id });
+      await controller.bind(repository);
       preparing = true;
       const sending = controller.sendUserMessage({
-        ...target,
-        parts:
-          submission === "compact"
-            ? [{ kind: "slash_command", command: MANUAL_SESSION_COMPACTION_SLASH_COMMAND }]
-            : [{ kind: "text", text: "Retain draft" }],
+        ...repository,
+        systemPrompt: "Updated task instructions",
+        parts: [{ kind: "text", text: "Retain draft" }],
       });
       const failure = sending.catch((cause: unknown) => cause);
       await entered.promise;
@@ -1201,7 +1203,7 @@ describe("OpenCode V2 controls and accepted input", () => {
       if (action === "close") controller.close();
       allowPolicy.resolve();
       const result = await failure;
-      expect(requests.some(({ url }) => url.pathname.endsWith(`/${submission}`))).toBe(false);
+      expect(requests.some(({ url }) => url.pathname.endsWith("/prompt"))).toBe(false);
       expect(result).toBeInstanceOf(AgentSessionMessageRefusedError);
       if (!(result instanceof AgentSessionMessageRefusedError)) throw new Error("Expected refusal");
       expect(result.cause).toMatchObject({
@@ -1240,6 +1242,7 @@ describe("OpenCode V2 message delivery", () => {
           }),
         ),
       );
+      await controller.bind({ ...repository, delivery });
       const accepted = await controller.sendUserMessage({
         ...repository,
         delivery,
@@ -1271,6 +1274,7 @@ describe("OpenCode V2 message delivery", () => {
     let sent = false;
     let failure: unknown;
     try {
+      await controller.bind({ ...repository });
       await controller.sendUserMessage(
         { ...repository, delivery: "new_turn", parts: [{ kind: "text", text: "Next step" }] },
         { onSent: () => (sent = true) },
@@ -1290,6 +1294,7 @@ describe("OpenCode V2 message delivery", () => {
     );
     let failure: unknown;
     try {
+      await controller.bind({ ...repository });
       await controller.sendUserMessage({
         ...repository,
         delivery: "new_turn",

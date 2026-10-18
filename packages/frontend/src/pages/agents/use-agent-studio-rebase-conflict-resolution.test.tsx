@@ -54,6 +54,7 @@ const buildSession = (overrides: Parameters<typeof createAgentSessionSummaryFixt
 const createSelectedSession = (
   overrides: Partial<HookArgs["selection"]["view"]["selectedSession"]> = {},
 ): HookArgs["selection"]["view"]["selectedSession"] => ({
+  preparation: { ready: true, error: null },
   identity: null,
   activityState: null,
   selectedModel: null,

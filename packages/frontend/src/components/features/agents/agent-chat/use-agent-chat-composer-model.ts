@@ -39,6 +39,7 @@ export type AgentChatComposerConfig = {
   stopAgentSession: StopAgentSession;
   isResumingSession: boolean;
   isReadOnly: boolean;
+  canSend?: boolean;
   readOnlyReason: string | null;
   pendingSendItems?: AgentChatComposerModel["pendingSendItems"];
   draftScope: AgentChatDraftScope;
@@ -129,6 +130,7 @@ export function useAgentChatComposerModel({
       displayedSessionKey: composer.displayedSessionKey,
       isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
       isReadOnly: composer.isReadOnly,
+      canSend: composer.canSend ?? true,
       readOnlyReason: composer.readOnlyReason,
       draftScope: composer.draftScope,
       onSend: async (

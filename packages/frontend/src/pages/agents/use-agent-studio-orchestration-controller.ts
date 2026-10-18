@@ -239,7 +239,6 @@ export function useAgentStudioOrchestrationController({
 
   const {
     selectionForNewSession,
-    newSessionCatalog,
     selectedModelSelection,
     speed,
     selectedModelDescriptor,
@@ -328,7 +327,6 @@ export function useAgentStudioOrchestrationController({
     assertCanPrepareSession: actions.assertCanPrepareSession,
     isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
-    newSessionCatalog,
     reusablePrompts,
     repoSettings,
     workspaceRepoPath,

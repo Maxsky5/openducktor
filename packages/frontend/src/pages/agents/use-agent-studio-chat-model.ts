@@ -339,8 +339,8 @@ export function useAgentStudioChatModel({
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
       isResumingSession: sessionActions.isResumingSession,
-      isReadOnly: surfaceState.composerReadOnly,
-      readOnlyReason: surfaceState.composerReadOnlyReason,
+      isReadOnly: surfaceState.composerReadOnly || selectedSessionState.preparation.error !== null,
+      readOnlyReason: surfaceState.composerReadOnlyReason ?? selectedSessionState.preparation.error,
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isStarting: sessionActions.isStarting,
@@ -387,6 +387,7 @@ export function useAgentStudioChatModel({
   }, [
     chatContextUsage,
     composerDraftScope,
+    selectedSessionState.preparation.error,
     modelSelection.agentOptions,
     modelSelection.isSelectionCatalogLoading,
     modelSelection.isSlashCommandsLoading,

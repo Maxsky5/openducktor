@@ -7,7 +7,7 @@ import type {
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, useSyncExternalStore } from "react";
-import { projectWorkspaceSessionLaunch } from "@/pages/workspace-sessions/launch-workspace-session";
+import { projectWorkspaceSessionResult } from "@/pages/workspace-sessions/launch-workspace-session";
 import { useAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/use-agent-chat-transcript-model";
 import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
 import { toAgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat-transcript-session";
@@ -334,12 +334,10 @@ test("finishes history and projects launch results into an inactive open workspa
           status: "running",
         },
       });
-      projectWorkspaceSessionLaunch(
+      projectWorkspaceSessionResult(
         {
-          status: "completed",
           repoPath: "/a",
           workspaceId: "a",
-          sessionId: record("/a").id,
           record: record("/a"),
           session: { ...a.ref, startedAt: a.startedAt, status: "running" },
           acceptedMessage: {

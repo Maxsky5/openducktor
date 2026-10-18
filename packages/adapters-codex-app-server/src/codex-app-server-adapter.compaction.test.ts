@@ -95,6 +95,9 @@ describe("CodexAppServerAdapter manual compaction", () => {
     };
     const adapter = createAdapterWithTransport(transport);
 
+    await adapter.resumeSession({
+      ...codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    });
     const accepted = await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -156,6 +159,13 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
     });
 
+    await adapter.resumeSession({
+      ...codexUserMessageInput({
+        externalSessionId: "thread-1",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        parts: [compactPart()],
+      }),
+    });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-1",
@@ -189,6 +199,9 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
     });
 
+    await adapter.resumeSession({
+      ...codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    });
     await expect(
       adapter.sendUserMessage(
         codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
@@ -214,6 +227,9 @@ describe("CodexAppServerAdapter manual compaction", () => {
       },
     });
 
+    await adapter.resumeSession({
+      ...codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    });
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -249,6 +265,9 @@ describe("CodexAppServerAdapter manual compaction", () => {
       { subscribeEvents: runtimeStream.subscribeEvents },
     );
     const events: AgentEvent[] = [];
+    await adapter.resumeSession({
+      ...codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    });
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );
@@ -357,6 +376,9 @@ describe("CodexAppServerAdapter manual compaction", () => {
       events.push(event),
     );
 
+    await adapter.resumeSession({
+      ...codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
+    });
     await adapter.sendUserMessage(
       codexUserMessageInput({ externalSessionId: "thread-1", parts: [compactPart()] }),
     );

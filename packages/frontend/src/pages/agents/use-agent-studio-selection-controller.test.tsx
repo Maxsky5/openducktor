@@ -54,6 +54,9 @@ import {
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+
 interface SessionReadModelLoadStateRefContract {
   current: AgentSessionReadModelLoadState;
 }
@@ -298,12 +301,26 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
 
 describe("useAgentStudioSelectionController", () => {
   beforeEach(() => {
+    configureShellBridge(
+      createShellBridgeFixture({
+        client: {
+          agentSessionControlResume: async (input) => ({
+            externalSessionId: input.externalSessionId,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            startedAt: "2026-10-18T00:00:00Z",
+            status: "idle",
+          }),
+        },
+      }),
+    );
     createdSessionStateByKey.clear();
     sessionStore = createAgentSessionsStore(workspaceRepoPath);
     readSessionTodosRef.current = async () => [];
   });
 
   afterEach(async () => {
+    configureShellBridge(createUnavailableShellBridge());
     sessionStore = createAgentSessionsStore(workspaceRepoPath);
   });
 

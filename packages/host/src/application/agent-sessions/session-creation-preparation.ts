@@ -34,7 +34,6 @@ export const createSessionCreationPreparation = ({
         input.model
           ? { ...input.model, runtimeKind: input.model.runtimeKind ?? input.runtimeKind }
           : null,
-        { captured: true },
       );
       const systemPrompt = yield* turnPreparation.context(target);
       const prepared = { ...input };
@@ -68,7 +67,6 @@ export const createSessionCreationPreparation = ({
         input.model
           ? { ...input.model, runtimeKind: input.model.runtimeKind ?? input.runtimeKind }
           : null,
-        { captured: true },
       );
       const owned = yield* policyFor(root.sessionScope).prepareSend({ ...target, parts: [] });
       const systemPrompt = yield* turnPreparation.context(target);

@@ -65,7 +65,7 @@ export type WorkflowLaunchPreparationDependencies = {
   git: Pick<GitPort, "canonicalizePath">;
   definitions: RuntimeDefinitionsService;
   registry: Pick<RuntimeRegistryPort, "requireReady">;
-  queries: Pick<AgentRuntimeQueryPort, "loadKnownRuntimeCatalog">;
+  queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   provider: Pick<GitProviderService, "getContext">;
   runtime: Pick<SessionLaunchRuntimePort, "read">;
 };
@@ -376,7 +376,7 @@ const resolveConfiguredDefaultModel = (
         `Configure the ${role} role default or repository default model in workspace '${workspaceId}'.`,
       );
     const runtimeKind = savedDefault.runtimeKind;
-    const { models } = yield* deps.queries.loadKnownRuntimeCatalog({
+    const { models } = yield* deps.queries.loadRuntimeCatalog({
       repoPath,
       runtimeKind,
       workingDirectory: repoPath,

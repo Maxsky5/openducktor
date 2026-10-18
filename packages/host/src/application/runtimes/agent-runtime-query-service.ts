@@ -132,12 +132,6 @@ export const createAgentRuntimeQueryService = (
           .loadRuntimeCatalog(request)
           .pipe(Effect.map((catalogRead) => toCatalogResponse(catalogRead, runtime))),
       ),
-    loadKnownRuntimeCatalog: (input) =>
-      read("loadRuntimeCatalog", input, (queries, request, runtime) =>
-        queries
-          .loadKnownRuntimeCatalog(request)
-          .pipe(Effect.map((catalogRead) => toCatalogResponse(catalogRead, runtime))),
-      ),
     searchFiles: (input) =>
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),
     loadSessionHistory: (input) =>

@@ -38,8 +38,6 @@ import type { AgentRuntimeQueryAdapterPort } from "./agent-runtime-query-port";
 
 /** Host options for one user message. */
 export type AgentSessionSendOptions = {
-  readonly onModelIssued?: (() => void) | undefined;
-  readonly onModelAccepted?: (() => void) | undefined;
   readonly assertCurrent?: (() => void) | undefined;
   /**
    * The adapter calls it when it sends the native request that carries the message. If the send

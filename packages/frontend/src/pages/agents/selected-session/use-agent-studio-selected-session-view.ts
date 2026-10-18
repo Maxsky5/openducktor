@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
   firstLaunchAction,
   resolveBuildContinuationLaunchAction,
@@ -27,6 +27,8 @@ import {
   type AgentStudioRouteSessionResolution,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { useChatSessionPreparation } from "@/features/agent-chat-composer/use-chat-session-preparation";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
   deriveSelectedSessionRuntimeTarget,
@@ -54,32 +56,6 @@ export type AgentStudioSelectedSessionView = {
   launchActionId: SessionLaunchActionId;
 };
 
-const toSessionRuntimeDataTarget = (
-  session: AgentSessionState | null,
-  identity: AgentSessionIdentity | null,
-  summary: AgentSessionSummary | null,
-): SessionRuntimeDataTarget | null => {
-  if (session) {
-    return {
-      identity: session,
-      sessionAssociation: session.sessionAssociation,
-      selectedModel: session.selectedModel,
-    };
-  }
-  if (!identity || !summary || !matchesAgentSessionIdentity(summary, identity)) {
-    return null;
-  }
-  return {
-    identity,
-    sessionAssociation: {
-      kind: "workflow",
-      taskId: summary.taskId,
-      role: summary.role,
-    },
-    selectedModel: summary.selectedModel,
-  };
-};
-
 export function useAgentStudioSelectedSessionView({
   workspaceRepoPath,
   selectedTask,
@@ -94,6 +70,7 @@ export function useAgentStudioSelectedSessionView({
   repoSettings,
   isLoadingRepoSettings,
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
+  const host = useHostClient();
   const { readSessionTodos } = useAgentOperations();
   const { allRuntimeDefinitions: runtimeDefinitions, loadRepoRuntimeCatalog } =
     useRuntimeAvailabilityContext();
@@ -215,6 +192,30 @@ export function useAgentStudioSelectedSessionView({
     selectedSessionFault,
     sessionReadModelLoadState,
   ]);
+  const { runtimeKind, externalSessionId, workingDirectory } = selectedSessionIdentity ?? {};
+  const taskId = selectedTask?.id ?? null;
+  const role = selection.role;
+  const prepare = useCallback(async () => {
+    if (!workspaceRepoPath || !runtimeKind || !externalSessionId || !workingDirectory || !taskId)
+      return;
+    await host.agentSessionControlResume({
+      repoPath: workspaceRepoPath,
+      runtimeKind,
+      externalSessionId,
+      workingDirectory,
+      sessionScope: { kind: "workflow", taskId, role },
+      resumeMode: "reattach",
+    });
+  }, [host, workspaceRepoPath, runtimeKind, externalSessionId, workingDirectory, taskId, role]);
+  const preparation = useChatSessionPreparation({
+    identity: selectedSessionIdentity,
+    targetKey: JSON.stringify([workspaceRepoPath, selectedSessionIdentity, taskId, role]),
+    enabled:
+      loadedSession !== null &&
+      runtimeReadinessState === "ready" &&
+      sessionReadModelLoadState.kind === "ready",
+    prepare,
+  });
   const selectedSessionActivityState = selectedSessionViewProjection.activityState;
   const selectedSessionModel = selectedSessionViewProjection.selectedModel;
   const transcriptState = selectedSessionViewProjection.transcriptState;
@@ -247,10 +248,12 @@ export function useAgentStudioSelectedSessionView({
       runtimeData,
       runtimeReadiness,
       transcriptState,
+      preparation,
       sessionAuxiliaryError: selectedSessionViewProjection.sessionAuxiliaryError,
     }),
     [
       transcriptState,
+      preparation,
       runtimeReadiness,
       runtimeData,
       selectedSessionActivityState,
@@ -270,3 +273,29 @@ export function useAgentStudioSelectedSessionView({
     [launchActionId, selectedSession, selection.role],
   );
 }
+
+const toSessionRuntimeDataTarget = (
+  session: AgentSessionState | null,
+  identity: AgentSessionIdentity | null,
+  summary: AgentSessionSummary | null,
+): SessionRuntimeDataTarget | null => {
+  if (session) {
+    return {
+      identity: session,
+      sessionAssociation: session.sessionAssociation,
+      selectedModel: session.selectedModel,
+    };
+  }
+  if (!identity || !summary || !matchesAgentSessionIdentity(summary, identity)) {
+    return null;
+  }
+  return {
+    identity,
+    sessionAssociation: {
+      kind: "workflow",
+      taskId: summary.taskId,
+      role: summary.role,
+    },
+    selectedModel: summary.selectedModel,
+  };
+};

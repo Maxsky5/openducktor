@@ -60,7 +60,7 @@ const deriveAgentStudioChatEmptyState = ({
 
   if (canKickoff) {
     return {
-      title: "Send a message to start a new session automatically.",
+      title: "Start a session before sending a message.",
       actionLabel: kickoffLabel,
       onAction: (): void => {
         void startLaunchKickoff();
@@ -69,7 +69,7 @@ const deriveAgentStudioChatEmptyState = ({
   }
 
   return {
-    title: "Send a message to start a new session automatically.",
+    title: "Start a session before sending a message.",
   };
 };
 

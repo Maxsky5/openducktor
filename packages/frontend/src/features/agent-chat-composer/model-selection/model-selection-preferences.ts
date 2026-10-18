@@ -5,22 +5,11 @@ import {
   resolvePreferredModelSelection,
 } from "@/features/model-selection/model-selection-state";
 import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { resolveLoadedSessionSelection } from "@openducktor/core";
-
-type SendBlockReason = "model" | "profile" | "session";
 
 export type ChatComposerModelSelections = {
   selectionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
   selectionForNewSession: AgentModelSelection | null;
-  repair: SessionModelRepair | null;
-  sendBlockReason: SendBlockReason | null;
-};
-
-type SessionModelRepair = {
-  session: AgentSessionIdentity;
-  selection: AgentModelSelection;
 };
 
 export type ChatComposerModelSelectionSource =
@@ -31,11 +20,8 @@ export type ChatComposerModelSelectionSource =
     }
   | {
       kind: "session";
-      sessionIdentity: AgentSessionIdentity | null;
-      sessionRuntimeKind: RuntimeKind;
       modelCatalog: AgentModelCatalog | null;
       selectedSessionModel: AgentModelSelection | null;
-      draftSelection: AgentModelSelection | null;
     };
 
 export const resolveChatComposerModelSelections = ({
@@ -48,26 +34,10 @@ export const resolveChatComposerModelSelections = ({
   if (source.kind === "session") {
     const selectionCatalog = source.modelCatalog;
     const catalogChoice = pickDefaultVisibleSelectionForCatalog(selectionCatalog);
-    const sessionSelection = resolveLoadedSessionSelection({
-      selectionCatalog,
-      selectedSessionModel: source.selectedSessionModel,
-      defaultSelection,
-      sessionRuntimeKind: source.sessionRuntimeKind,
-    });
-    const repair =
-      source.sessionIdentity && sessionSelection.repairSelection
-        ? { session: source.sessionIdentity, selection: sessionSelection.repairSelection }
-        : null;
-
     return {
       selectionCatalog,
-      selectedModelSelection: sessionSelection.selectedModelSelection,
-      selectionForNewSession:
-        sessionSelection.selectedModelSelection ?? catalogChoice ?? defaultSelection,
-      repair,
-      sendBlockReason:
-        sessionSelection.blockedReason ??
-        (sessionSelection.repairSelection && !repair ? "session" : null),
+      selectedModelSelection: source.selectedSessionModel,
+      selectionForNewSession: source.selectedSessionModel ?? catalogChoice ?? defaultSelection,
     };
   }
 
@@ -86,8 +56,6 @@ export const resolveChatComposerModelSelections = ({
     selectionCatalog,
     selectedModelSelection: selectionForNewSession,
     selectionForNewSession,
-    repair: null,
-    sendBlockReason: null,
   };
 };
 

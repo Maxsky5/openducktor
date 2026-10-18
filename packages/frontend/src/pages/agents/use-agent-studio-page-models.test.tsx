@@ -328,6 +328,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       selectedTask: selectedSessionCore.selectedTask,
       sessionsForTask: selectedSessionCore.sessionsForTask,
       selectedSession: {
+        preparation: { ready: true, error: null },
         identity: selectedSessionCore.selectedSessionIdentity,
         activityState: selectedSessionCore.selectedSessionActivityState,
         selectedModel: selectedSessionCore.selectedSessionModel,
@@ -418,6 +419,32 @@ const createAgentChatThreadElement = (model: AgentChatModel) =>
   );
 
 describe("useAgentStudioPageModels", () => {
+  test("keeps the task composer editable while preparation blocks Send", async () => {
+    const args = createHookArgs({
+      sessionActions: { messageDelivery: createAgentChatSendFixture({ canSend: false }) },
+    });
+    args.selectedSession.selectedSession.preparation = { ready: false, error: null };
+    const harness = createHookHarness(args);
+    try {
+      await harness.mount();
+      const composer = harness.getLatest().agentChatModel.composer;
+      expect(composer.canSend).toBe(false);
+      expect(composer.isReadOnly).toBe(false);
+      expect(composer.readOnlyReason).toBeNull();
+      args.selectedSession.selectedSession.preparation = { ready: true, error: null };
+      args.sessionActions.messageDelivery = createAgentChatSendFixture({ canSend: true });
+      await harness.update(args);
+      const prepared = harness.getLatest().agentChatModel.composer;
+      expect(prepared.canSend).toBe(true);
+      expect(prepared.isReadOnly).toBe(false);
+      expect(prepared.selectedModelSelection).toEqual(composer.selectedModelSelection);
+      expect(prepared.contextUsage).toEqual(composer.contextUsage);
+      expect(prepared.speed).toEqual(composer.speed);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("keeps Claude skill presentation and pending Recheck feedback in task chat", async () => {
     const skill = { id: "review", name: "review", path: "review", title: "Review code" };
     const session = createSession("claude-parent", {

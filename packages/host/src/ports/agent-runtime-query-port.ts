@@ -32,15 +32,10 @@ type HostQueries = {
 };
 
 /** Application reads. Catalog failures carry user-facing messages. */
-export type AgentRuntimeQueryPort = HostQueries & {
-  /** Reads the catalog to validate a message or a session start. It can reuse an earlier read. */
-  readonly loadKnownRuntimeCatalog: HostQueries["loadRuntimeCatalog"];
-};
+export type AgentRuntimeQueryPort = HostQueries;
 
 export type AgentRuntimeQueryAdapterPort = NativeAgentRuntimeQueryPort & {
   readonly resolveSessionParent: (
     input: AgentSessionLiveRef,
   ) => Effect.Effect<string | null, RuntimeQueryError>;
-  /** Reads the catalog to validate a message or a session start. It can reuse an earlier read. */
-  readonly loadKnownRuntimeCatalog: NativeAgentRuntimeQueryPort["loadRuntimeCatalog"];
 };

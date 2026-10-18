@@ -20,7 +20,7 @@ import type { HostCommandHandlerDefinitions } from "../router/host-command-route
 import type { HostCommandArgs } from "./command-inputs";
 
 export const createAgentRuntimeQueryCommandHandlers = (
-  service: Omit<AgentRuntimeQueryPort, "loadKnownRuntimeCatalog">,
+  service: AgentRuntimeQueryPort,
   previewModels: (
     input: AgentRuntimePreviewModelsInput,
   ) => Effect.Effect<AgentRuntimeCatalog, RuntimeQueryError>,

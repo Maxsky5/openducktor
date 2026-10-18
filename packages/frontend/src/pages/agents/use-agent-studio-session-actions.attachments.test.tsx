@@ -160,6 +160,7 @@ const createBaseArgs = (): HookArgs => {
     role: "spec",
     launchActionId: "spec_initial",
     selectedSession: {
+      preparation: { ready: true, error: null },
       identity: selectedSessionIdentity,
       activityState: "running",
       selectedModel: loadedSession.selectedModel,

@@ -113,7 +113,6 @@ test.each(runtimeKinds)(
     expect(h.sends).toHaveLength(1);
     expect(h.sends[0]).toMatchObject({
       externalSessionId: "session-1",
-      model: modelFor(kind),
       parts: [{ kind: "text", text: "\n  first instruction\n" }],
       sessionScope: builderScope,
     });
@@ -154,7 +153,6 @@ test("Resolve conflicts with Reuse existing sends the message to the live Builde
   expect(h.sends[0]).toMatchObject({
     externalSessionId: "builder",
     workingDirectory: "/worktrees/task",
-    model: modelFor("codex"),
     parts,
     sessionScope: builderScope,
   });
@@ -185,7 +183,7 @@ test.each(runtimeKinds)(
     });
     expect(h.starts).toHaveLength(0);
     expect(h.resumes).toEqual(["source"]);
-    expect(h.sends[0]?.model).toEqual(modelFor(kind));
+    expect(h.sends[0]).not.toHaveProperty("model");
   },
 );
 
@@ -208,9 +206,10 @@ test.each([
       },
     }),
   );
-  expect(result.status).toBe("completed");
+  expect(result).toMatchObject({ status: "completed" });
+  expect(result.failure).toBeUndefined();
   expect(h.records[0]?.selectedModel).toEqual(saved);
-  expect(h.sends[0]?.model).toEqual(saved);
+  expect(h.sends[0]).not.toHaveProperty("model");
 });
 
 test.each(runtimeKinds)(
@@ -251,7 +250,7 @@ test("manual reuse loads no runtime catalog and keeps a stored model that the ca
   const result = await Effect.runPromise(h.service.launch(reuseRequest(sourceSession)));
   expect(result).toMatchObject({ status: "completed", model: retired });
   expect(h.catalogLoads()).toBe(0);
-  expect(h.sends.map((input) => input.model)).toEqual([retired]);
+  expect(h.sends[0]).not.toHaveProperty("model");
 });
 
 test("a reuse launch refuses a source session that waits for blocking input", async () => {
@@ -516,8 +515,6 @@ test("the first send reaches the runtime adapter with its native admission optio
     {
       assertCurrent: expect.any(Function),
       onSent: expect.any(Function),
-      onModelIssued: expect.any(Function),
-      onModelAccepted: expect.any(Function),
     },
   ]);
 });
@@ -640,6 +637,41 @@ test("a canceled reuse launch does not stop the reused session", async () => {
   expect(h.stops).toEqual([]);
   const state = await Effect.runPromise(h.runtime.read({ repoPath: "/repo", ...sourceSession }));
   expect(state.type).toBe("live");
+});
+
+test("shutdown cancels a reused session's pending speed change", async () => {
+  const model = await pausePoint();
+  const h = await createLaunchHarness("claude", { beforeModelUpdate: model.pause });
+  h.setTaskStatus("in_progress");
+  const sourceSession = h.addTaskSession("builder", { live: true });
+  const ref = { repoPath: "/repo", ...sourceSession };
+  const before = await Effect.runPromise(h.runtime.read(ref));
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const launch = yield* Effect.forkChild(
+        h.service.launch({
+          ...requestFor("claude"),
+          policy: {
+            kind: "manual",
+            actionId: "build_after_qa_rejected",
+            decision: { startMode: "reuse", sourceSession, speed: "fast" },
+          },
+        }),
+      );
+      yield* Deferred.await(model.entered);
+      const shutdown = yield* Effect.forkChild(
+        h.service.shutdown().pipe(Effect.andThen(h.commands.shutdownOperations())),
+      );
+      yield* yieldToFibers;
+      yield* model.open;
+      yield* Fiber.join(shutdown);
+      expect((yield* Fiber.join(launch)).status).toBe("canceled");
+    }).pipe(Effect.ensuring(model.open)),
+  );
+  expect(h.records[0]?.selectedModel).toEqual(modelFor("claude"));
+  expect(await Effect.runPromise(h.runtime.read(ref))).toEqual(before);
+  expect(h.sends).toEqual([]);
+  expect(h.stops).toEqual([]);
 });
 
 test.each(["before", "during"] as const)(

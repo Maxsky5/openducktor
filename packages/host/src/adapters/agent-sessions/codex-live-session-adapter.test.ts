@@ -1044,9 +1044,18 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     },
   );
 
-  test("resolves and injects Codex policy behind the normalized control boundary", async () => {
+  test("binds Codex policy and keeps native settings during reattach", async () => {
     const policyScopes: AgentSessionScope[] = [];
-    const harness = createControllerHarness();
+    const nativeModel = {
+      runtimeKind: "codex" as const,
+      providerId: "codex",
+      modelId: "gpt-6",
+      variant: "low",
+      speed: "priority",
+    };
+    const harness = createControllerHarness({
+      initialSnapshots: [{ ...liveSnapshot(), model: nativeModel }],
+    });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveMcpServerConfig,
@@ -1075,8 +1084,14 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         systemPrompt: "Build",
       }),
     );
-    await Effect.runPromise(
-      prepared.adapter.resumeSession({ resumeMode: "reattach", ...ref, sessionScope }),
+    const resumed = await Effect.runPromise(
+      prepared.adapter.resumeSession({
+        resumeMode: "reattach",
+        ...ref,
+        sessionScope,
+        systemPrompt: "Resume build",
+        model: { providerId: "codex", modelId: "retired", variant: "high", speed: "priority" },
+      }),
     );
     await Effect.runPromise(
       prepared.adapter.forkSession({
@@ -1099,6 +1114,9 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
 
     expect(policyScopes).toEqual([sessionScope, sessionScope, sessionScope, sessionScope]);
+    expect(harness.controlInputs.resumes[0]).not.toHaveProperty("model");
+    expect(resumed).toHaveProperty("model", nativeModel);
+    expect(harness.controlInputs.resumes[0]?.systemPrompt).toBe("Resume build");
     const { continuations, ...invokedControls } = harness.controlInputs;
     expect(continuations).toEqual([]);
     for (const inputs of Object.values(invokedControls)) {

@@ -155,7 +155,7 @@ export const createSessionOperationOwner = (deps: {
           };
           if (submissionId) operation.observation.submissionId = submissionId;
           session.active = operation;
-          const work = Effect.uninterruptibleMask((restore) =>
+          let work: Effect.Effect<A, E | HostError, R> = Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
               yield* Effect.try({
                 try: operation.assertCurrent,
@@ -253,15 +253,15 @@ export const createSessionOperationOwner = (deps: {
             }),
           );
           const policy = deps.policyFor(target);
-          return yield* (
-            kind === "submission"
-              ? policy.runSend(target, work)
-              : policy.run(
-                  target,
-                  kind === "reattach" || kind === "continue" ? "resume session" : kind,
-                  work,
-                )
-          ).pipe(
+          if (kind === "submission") work = policy.runSend(target, work);
+          // Model changes take the lifecycle lock after the live turn becomes idle.
+          else if (kind !== "model")
+            work = policy.run(
+              target,
+              kind === "reattach" || kind === "continue" ? "resume session" : kind,
+              work,
+            );
+          return yield* work.pipe(
             Effect.provideService(current, operation),
             Effect.ensuring(
               Effect.sync(() => {

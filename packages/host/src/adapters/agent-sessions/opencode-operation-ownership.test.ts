@@ -59,6 +59,7 @@ const createHarness = async (loseModelResponse = false) => {
         if (url.pathname.endsWith("/migration/v1")) return Response.json({ status: "completed" });
         if (method === "GET" && url.pathname === `/api/session/${ref.externalSessionId}`)
           return response(session());
+        if (method === "PUT" && url.pathname.includes("/instructions/entries/")) return noContent();
         if (url.pathname.endsWith("/instructions/entries"))
           return response([
             { key: "openducktor.workflow", value: "Current Builder instructions." },
@@ -102,6 +103,12 @@ const createHarness = async (loseModelResponse = false) => {
       },
     },
   );
+  await controller.bind({
+    ...target,
+    runtimeKind: "opencode",
+    runtimePolicy: { kind: "opencode" },
+    systemPrompt: "Current Builder instructions.",
+  });
   const events: AgentSessionLiveEnvelope[] = [];
   const unexpected = () => Effect.die(new Error("Unexpected preparation"));
   const policy: AgentSessionOperationPolicy = {
@@ -138,6 +145,7 @@ const createHarness = async (loseModelResponse = false) => {
       ...prepared.connection,
       sendUserMessage: (input, options) => controller.sendUserMessage(input, options),
       stopSession: (input) => controller.stopSession(input),
+      updateSessionModel: (input) => controller.updateSessionModel(input),
     },
     state: createOpenCodeLiveSessionState({ runtime, nextOccurrenceId: () => crypto.randomUUID() }),
     serializeRuntime: (work) => work,
@@ -154,35 +162,39 @@ const createHarness = async (loseModelResponse = false) => {
         return result.value;
       }),
   });
-  const send = (
-    delivery: "steer" | "new_turn",
-    submissionId: string,
-    model?: { providerId: string; modelId: string },
-  ) =>
+  const send = (delivery: "steer" | "new_turn", submissionId: string) =>
     owner.run(
       target,
       "submission",
       Effect.gen(function* () {
         const primary = yield* owner.options();
-        const modelAdmission = yield* owner.options("model");
         const input = {
           ...target,
           submissionId,
           delivery,
           parts: [{ kind: "text" as const, text: "Follow up" }],
-          model,
         };
-        const accepted = yield* adapter.sendUserMessage(input, {
-          ...primary,
-          onModelIssued: modelAdmission.onSent,
-          onModelAccepted: modelAdmission.onAccepted,
-        });
+        const accepted = yield* adapter.sendUserMessage(input, primary);
         yield* owner.accepted(accepted);
         return accepted;
       }),
       submissionId,
     );
-  return { owner, adapter, send, events, requests, fetchMock };
+  const updateModel = () =>
+    owner.run(
+      target,
+      "model",
+      Effect.gen(function* () {
+        const guarded = yield* owner.options("model");
+        yield* adapter.updateSessionModel({
+          ...target,
+          model: { providerId: "test", modelId: "test-model" },
+          onWorkIssued: guarded.onSent,
+          onWorkAccepted: guarded.onAccepted,
+        });
+      }),
+    );
+  return { owner, adapter, send, updateModel, events, requests, fetchMock };
 };
 
 describe("OpenCode operation admission", () => {
@@ -239,11 +251,9 @@ describe("OpenCode operation admission", () => {
   });
 
   test("a lost native model response retains its uncertainty lock", async () => {
-    const { owner, send, requests, fetchMock } = await createHarness(true);
+    const { owner, send, updateModel, requests, fetchMock } = await createHarness(true);
     try {
-      const failed = await Effect.runPromise(
-        Effect.result(send("new_turn", "send-1", { providerId: "test", modelId: "test-model" })),
-      );
+      const failed = await Effect.runPromise(Effect.result(updateModel()));
       expect(failed).toMatchObject({
         _tag: "Failure",
         failure: { observation: { failure: { stage: "model" } } },

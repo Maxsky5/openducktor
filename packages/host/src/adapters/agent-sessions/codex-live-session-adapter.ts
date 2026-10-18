@@ -157,6 +157,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
 
       const { runSummary, runTitleUpdate } = createCodexControlRunner({
         runtimeId: runtime.runtimeId,
+        controller,
         refreshProjection: (admittedRoot) => refreshProjection([], admittedRoot),
         reportProjectionFailure,
       });
@@ -216,7 +217,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           resolveRuntimePolicy,
           refreshProjection,
         ),
-        queries: { ...queries, loadRuntimeCatalog, loadKnownRuntimeCatalog: loadRuntimeCatalog },
+        queries: { ...queries, loadRuntimeCatalog },
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: projection.binding,
@@ -383,11 +384,9 @@ export const createCodexLiveSessionAdapterPreparer = ({
         resumeSession: (input) =>
           bindControlPolicy(input, "resume-session").pipe(
             Effect.flatMap((boundInput) => {
-              const { model, systemPrompt, ...requiredInput } = boundInput;
+              // Codex restores settings from its native thread.
+              const { model: _model, systemPrompt, ...requiredInput } = boundInput;
               const request: Parameters<typeof controller.resumeSession>[0] = requiredInput;
-              if (model !== undefined) {
-                request.model = model;
-              }
               if (systemPrompt !== undefined) {
                 request.systemPrompt = systemPrompt;
               }

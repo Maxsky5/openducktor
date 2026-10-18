@@ -16,13 +16,16 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { AgentSessionTitleUpdateOutcome } from "../../ports/agent-session-live-adapter-port";
+import type { CodexSessionController } from "./codex-live-session-adapter-contract";
 
 export const createCodexControlRunner = ({
   runtimeId,
   refreshProjection,
   reportProjectionFailure,
+  controller,
 }: {
   runtimeId: string;
+  controller: Pick<CodexSessionController, "listLiveSessionSnapshots">;
   refreshProjection: (admittedRoot?: AgentSessionAuthorizedRoot) => Effect.Effect<void, HostError>;
   reportProjectionFailure: (
     ref: AgentSessionLiveRef,
@@ -41,7 +44,16 @@ export const createCodexControlRunner = ({
       Effect.flatMap((summary) =>
         refreshCodexSummary(summary, operation, runtimeId, refreshProjection, creation),
       ),
-      Effect.flatMap((summary) => toAgentSessionControlSummary(summary, operation)),
+      Effect.flatMap((summary) => {
+        const model = controller
+          .listLiveSessionSnapshots(runtimeId)
+          .find(
+            (snapshot) =>
+              snapshot.ref.externalSessionId === summary.externalSessionId &&
+              snapshot.ref.workingDirectory === summary.workingDirectory,
+          )?.model;
+        return toAgentSessionControlSummary(model ? { ...summary, model } : summary, operation);
+      }),
     ),
   runTitleUpdate: (
     operation: string,

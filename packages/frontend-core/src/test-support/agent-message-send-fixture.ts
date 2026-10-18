@@ -3,7 +3,6 @@ import type {
   AgentMessageQueueSnapshot,
   AgentMessageTarget,
   AgentQueuedMessage,
-  AgentTranscriptModelSelection,
 } from "@openducktor/contracts";
 import type {
   AcceptedAgentMessageSendReceipt,
@@ -36,15 +35,12 @@ export const createAgentMessageQueueSnapshot = ({
   target,
   revision = 1,
   texts = [],
-  model,
   pause = null,
 }: {
   target: AgentMessageTarget;
   revision?: number;
   /** Each text gets the submission ID "submission-<text>". */
   texts?: readonly string[];
-  /** The model that each message captured. */
-  model?: AgentTranscriptModelSelection;
   pause?: AgentMessageQueuePause | null;
 }): AgentMessageQueueSnapshot => ({
   target,
@@ -56,7 +52,6 @@ export const createAgentMessageQueueSnapshot = ({
       queuedAt: "2026-10-08T10:00:00.000Z",
       state: "queued",
     };
-    if (model) entry.model = model;
     return entry;
   }),
   pause,

@@ -141,7 +141,10 @@ const closeClaudeCatalogSession = ({ queue, sdkQuery }: ClaudeCatalogSession): v
 const readClaudeCatalogSurfaces = async ({
   sdkQuery,
   speedAvailability,
-}: ClaudeCatalogSession): Promise<AgentRuntimeCatalogRead> => {
+}: Pick<
+  ClaudeCatalogSession,
+  "sdkQuery" | "speedAvailability"
+>): Promise<AgentRuntimeCatalogRead> => {
   let commands: Promise<SlashCommand[]> | undefined;
   const readCommands = (): Promise<SlashCommand[]> => {
     commands ??= sdkQuery.supportedCommands();

@@ -665,10 +665,18 @@ describe("CodexAppServerAdapter repository sessions", () => {
     ).resolves.toMatchObject({ availability: "runtime", title: "Live Codex session" });
   });
 
-  test("reconciles the durable repository title when a send attaches a detached session", async () => {
+  test("reconciles the durable repository title before sending to a detached session", async () => {
     const transport = new RecordingTransport("runtime-live", false);
     const adapter = createAdapterWithTransport(transport);
 
+    await adapter.resumeSession({
+      ...codexUserMessageInput({
+        externalSessionId: "thread-history",
+        sessionScope: { kind: "repository", title: "Fairnest" },
+        systemPrompt: "",
+        parts: [],
+      }),
+    });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-history",
@@ -906,6 +914,13 @@ describe("CodexAppServerAdapter repository sessions", () => {
 
     const restoredTransport = new NameFailingTransport("runtime-live", false);
     const restoredAdapter = createAdapterWithTransport(restoredTransport);
+    await restoredAdapter.resumeSession({
+      ...codexUserMessageInput({
+        externalSessionId: "thread-history",
+        sessionScope: repositoryScope,
+        parts: [],
+      }),
+    });
     await expect(
       restoredAdapter.sendUserMessage(
         codexUserMessageInput({
@@ -950,7 +965,42 @@ describe("CodexAppServerAdapter repository sessions", () => {
     expect(transportFactory).toHaveBeenCalledTimes(0);
   });
 
-  test("keeps the retained model when resume fails", async () => {
+  test("a failed title update cannot replace a running session when the chat reopens", async () => {
+    const transport = new NameFailingTransport("runtime-live", true, "Renamed");
+    const adapter = createAdapterWithTransport(transport);
+    const context = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo",
+      sessionScope: { kind: "repository" as const },
+      runtimePolicy: { kind: "codex" as const, policy: defaultCodexEffectivePolicy() },
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    };
+    const started = await adapter.startSession(context);
+    const message = codexUserMessageInput({
+      ...context,
+      externalSessionId: started.externalSessionId,
+      parts: [{ kind: "text", text: "Start the turn" }],
+    });
+    transport.turnStartDeferred.resolve({
+      turn: codexTurnFixture({ id: "turn-running", status: "inProgress", items: [] }),
+    });
+    await adapter.sendUserMessage(message);
+    await expect(
+      adapter.updateSessionTitle({
+        ...context,
+        externalSessionId: started.externalSessionId,
+        title: "Renamed",
+      }),
+    ).rejects.toThrow("name failed");
+    await adapter.resumeSession({ ...context, externalSessionId: started.externalSessionId });
+    await adapter.sendUserMessage({ ...message, delivery: "steer" });
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(false);
+    expect(transport.calls.filter((call) => call.method === "turn/steer")).toHaveLength(1);
+  });
+
+  test("keeps the retained model when reattaching a prepared session", async () => {
     const sessionScope = { kind: "repository" } as const;
     const runtimePolicy = { kind: "codex" as const, policy: defaultCodexEffectivePolicy() };
     const transport = new ResumeFailingTransport("runtime-live", false);
@@ -976,7 +1026,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         systemPrompt: "replacement system prompt",
         model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
       }),
-    ).rejects.toThrow("resume failed");
+    ).resolves.toBeDefined();
 
     await adapter.sendUserMessage(
       codexUserMessageInput({

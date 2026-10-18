@@ -336,7 +336,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             };
           },
         }),
-        queries: { ...queries, loadRuntimeCatalog, loadKnownRuntimeCatalog: loadRuntimeCatalog },
+        queries: { ...queries, loadRuntimeCatalog },
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,

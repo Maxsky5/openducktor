@@ -54,7 +54,12 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   runtime: Pick<RuntimeRegistryPort, "requireReady">;
   live: Pick<
     AgentSessionLiveStateService,
-    "startSession" | "releaseSession" | "read" | "stopSession" | "updateSessionTitle"
+    | "startSession"
+    | "resumeSession"
+    | "releaseSession"
+    | "read"
+    | "stopSession"
+    | "updateSessionTitle"
   >;
 };
 
@@ -142,7 +147,30 @@ export const createWorkspaceSessionService = (
             }),
         );
       }),
-    start: createWorkspaceSessionStart(dependencies),
+    start: (input: WorkspaceSessionRefInput) =>
+      createWorkspaceSessionStart(dependencies)(input).pipe(
+        Effect.flatMap((started) => {
+          if (started.runtimeSession) return Effect.succeed(started);
+          const session = started.session;
+          return scopeFor(input.workspaceId).pipe(
+            Effect.flatMap(({ repoPath }) =>
+              live.resumeSession({
+                repoPath,
+                runtimeKind: session.runtimeKind,
+                workingDirectory: session.executionTarget.workingDirectory,
+                externalSessionId: session.externalSessionId!,
+                sessionScope: { kind: "repository" },
+                resumeMode: "reattach",
+                model: session.selectedModel ?? undefined,
+                systemPrompt: session.roleSnapshot?.systemPrompt ?? "",
+              }),
+            ),
+            Effect.flatMap((runtimeSession) =>
+              recordFor(input).pipe(Effect.map(({ session }) => ({ session, runtimeSession }))),
+            ),
+          );
+        }),
+      ),
     setDraftModel: (
       input: WorkspaceSessionRefInput & { selectedModel: AgentSessionModelSelection },
     ) =>

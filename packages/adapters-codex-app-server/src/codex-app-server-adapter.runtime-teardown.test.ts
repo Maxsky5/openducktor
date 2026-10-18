@@ -22,7 +22,7 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 import { releaseCodexRuntimeState } from "./codex-runtime-cleanup";
-import type { CodexAppServerClient, CodexLiveSessionMutation } from "./types";
+import type { CodexLiveSessionMutation } from "./types";
 
 const failureOf = (promise: Promise<unknown>): Promise<Error | null> =>
   promise.then(
@@ -161,80 +161,58 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     );
     adapter.releaseRuntime("runtime-live");
 
-    await expect(send).rejects.toThrow(
-      "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
-    );
+    await expect(send).rejects.toThrow("Unknown Codex session 'thread/start-runtime-live'.");
   });
 
-  test("does not send a turn after ownership is lost during model validation", async () => {
-    const { adapter, transports } = createHarness();
-    const internals: {
-      models: {
-        validate: (
-          client: CodexAppServerClient,
-          runtimeId: string,
-          model: { providerId: string; modelId: string; variant: string },
-        ) => Promise<void>;
-      };
-    } = adapter;
+  test("rejects settings when the runtime releases the session during catalog validation", async () => {
     const validationStarted = createDeferred<void>();
     const allowValidation = createDeferred<void>();
-
-    await adapter.startSession(codexStartSessionInput());
-    const validateModel = internals.models.validate;
-    internals.models.validate = async () => {
-      validationStarted.resolve();
-      await allowValidation.promise;
-    };
-    try {
-      const send = adapter.sendUserMessage(
-        codexUserMessageInput({
-          parts: [{ kind: "text", text: "Release during validation" }],
-        }),
-      );
-      await validationStarted.promise;
-      adapter.releaseRuntime("runtime-live");
-      allowValidation.resolve();
-
-      await expect(send).rejects.toThrow(
-        "Cannot continue Codex turn for session 'thread/start-runtime-live' because its retained owner was released or replaced.",
-      );
-      const transport = transports.get("runtime-live");
-      if (!transport) {
-        throw new Error("Expected the runtime transport used during model validation.");
+    const transport = new RecordingTransport("runtime-live", false);
+    const request = transport.request.bind(transport);
+    transport.request = async (input) => {
+      if (input.method === "model/list") {
+        validationStarted.resolve();
+        await allowValidation.promise;
       }
-      expect(transport.calls.filter((request) => request.method === "turn/start")).toEqual([]);
-    } finally {
-      internals.models.validate = validateModel;
-    }
-  });
-
-  test("leaves the session idle when model validation fails before turn/start", async () => {
-    const { adapter, transports } = createHarness();
-    await adapter.startSession(codexStartSessionInput());
-
-    const failure = await failureOf(
-      adapter.sendUserMessage(
-        codexUserMessageInput({
-          parts: [{ kind: "text", text: "Go" }],
-          model: { providerId: "openai", modelId: "gpt-unknown", variant: "medium" },
-        }),
-      ),
-    );
-
-    expect(failure).toBeInstanceOf(AgentSessionMessageRefusedError);
-    expect(failure?.message).toContain("gpt-unknown");
-    expect(adapter.listLiveSessionSnapshots("runtime-live")[0]?.activity).toBe("idle");
-    // No turn runs, so the next send starts one.
-    await adapter.sendUserMessage(
-      codexUserMessageInput({
-        parts: [{ kind: "text", text: "Go" }],
+      return request(input);
+    };
+    const adapter = createAdapterWithTransport(transport);
+    await adapter.resumeSession({ ...codexSessionRuntimeRef(), model: undefined });
+    const updating = failureOf(
+      adapter.updateSessionModel({
+        ...codexSessionRuntimeRef(),
         model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       }),
     );
+    await validationStarted.promise;
+    adapter.releaseRuntime("runtime-live");
+    allowValidation.resolve();
+    expect((await updating)?.message).toContain("session closed");
+    expect(transport.calls.some((call) => call.method === "turn/start")).toBe(false);
+  });
+
+  test("a rejected explicit settings change leaves accepted settings available for Send", async () => {
+    const { adapter, transports } = createHarness();
+    await adapter.startSession(codexStartSessionInput());
+    await expect(
+      adapter.updateSessionModel({
+        ...codexSessionRuntimeRef(),
+        model: { providerId: "openai", modelId: "gpt-unknown", variant: "medium" },
+      }),
+    ).rejects.toThrow("gpt-unknown");
+    const transport = transports.get("runtime-live");
+    if (!transport) throw new Error("Expected a runtime transport");
+    const before = transport.calls.length;
+    await adapter.sendUserMessage(codexUserMessageInput({ parts: [{ kind: "text", text: "Go" }] }));
     expect(
-      transports.get("runtime-live")?.calls.filter((call) => call.method === "turn/start"),
-    ).toHaveLength(1);
+      transport.calls
+        .slice(before)
+        .some((call) => call.method === "model/list" || call.method === "thread/resume"),
+    ).toBe(false);
+    expect(transport.calls.find((call) => call.method === "turn/start")?.params).toMatchObject({
+      model: "gpt-5",
+      effort: "medium",
+    });
   });
 
   test("does not report a released turn failure to a replacement session", async () => {

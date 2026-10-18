@@ -1,11 +1,12 @@
 import type {
   AcceptedAgentUserMessage,
   AgentSessionControlResumeInput,
+  AgentSessionControlSummary,
   AgentSessionControlUpdateTitleInput,
   AgentSessionLiveRef,
   WorkspaceSession,
 } from "@openducktor/contracts";
-import { agentSessionRefKey, type AgentSessionSummary } from "@openducktor/core";
+import { agentSessionRefKey, isSameSelection } from "@openducktor/core";
 import { Effect, Exit, FiberSet, Scope } from "effect";
 import {
   buildWorkspaceSessionTitle,
@@ -144,11 +145,11 @@ export const createWorkspaceSessionRuntimePersistence = ({
     });
   const prepare = <Input extends AgentSessionControlResumeInput | AgentSessionSendContent>(
     input: Input,
-  ): Effect.Effect<Input, HostError> =>
+  ) =>
     Effect.gen(function* () {
-      if (input.sessionScope.kind !== "repository") return input;
+      if (input.sessionScope.kind !== "repository") return { input, known: null };
       const known = yield* findActive(input);
-      if (!known) return input;
+      if (!known) return { input, known };
       const storedTitle = runtimeTitle(known.session);
       const prepared = {
         ...input,
@@ -158,34 +159,25 @@ export const createWorkspaceSessionRuntimePersistence = ({
             : { kind: "repository" as const, title: storedTitle },
         systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
       };
-      if (known.session.selectedModel !== null) prepared.model = known.session.selectedModel;
-      return prepared;
+      return {
+        input:
+          "resumeMode" in input
+            ? { ...prepared, model: known.session.selectedModel ?? undefined }
+            : prepared,
+        known,
+      };
     });
   const planAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
-    saveModel: boolean,
   ): Effect.Effect<AcceptedMessagePlan, HostError> =>
-    Effect.gen(function* () {
+    Effect.sync(() => {
       const input: Parameters<WorkspaceSessionStorePort["recordAcceptedMessage"]>[0] = {
         ...known.ref,
         generatedTitle: buildWorkspaceSessionTitle(message),
         occurredAt: Date.parse(message.timestamp),
       };
-      if (saveModel && message.model) {
-        if (
-          message.model.runtimeKind !== undefined &&
-          message.model.runtimeKind !== runtimeRef.runtimeKind
-        )
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: "Accepted message model does not match its Runtime.",
-              field: "model",
-            }),
-          );
-        input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
-      }
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind)) return { input, runtimeRename: null };
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
       const nextTitle = runtimeTitle({
@@ -268,7 +260,6 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const recordAcceptedMessage = (
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
-    saveModel: boolean,
   ) =>
     Effect.gen(function* () {
       const located = yield* find(runtimeRef);
@@ -280,7 +271,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           if (!known) return;
           yield* applyAcceptedMessage(
             known,
-            yield* planAcceptedMessage(known, runtimeRef, message, saveModel),
+            yield* planAcceptedMessage(known, runtimeRef, message),
             runtimeRef,
           );
         }),
@@ -293,7 +284,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.gen(function* () {
       const known = yield* find(runtimeRef);
       if (!known) return;
-      const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
+      const plan = yield* planAcceptedMessage(known, runtimeRef, message);
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
         return yield* saveMessage(runtimeRef, known, plan.input);
       // Defer observed renames because a manual rename can hold the gate during live publication.
@@ -307,7 +298,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       // Start the saved title's rename before a publication failure can stop it.
       if (renamePending && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
         yield* startJob(
-          recordAcceptedMessage(runtimeRef, message, false).pipe(
+          recordAcceptedMessage(runtimeRef, message).pipe(
             Effect.catch((failure) => reportRenameFailure(runtimeRef, failure.message)),
           ),
         );
@@ -386,7 +377,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       ),
     prepareResume: (input) =>
       Effect.gen(function* () {
-        const prepared = yield* prepare(input);
+        const { input: prepared, known } = yield* prepare(input);
         if (
           prepared.runtimeKind === "codex" &&
           prepared.sessionScope.kind === "repository" &&
@@ -396,14 +387,23 @@ export const createWorkspaceSessionRuntimePersistence = ({
           titleSync.set(agentSessionRefKey(prepared), "pending");
         return {
           input: prepared,
-          save: (summary: AgentSessionSummary) =>
-            Effect.sync(() => {
+          save: (summary: AgentSessionControlSummary) =>
+            Effect.gen(function* () {
+              if (known && summary.model) {
+                const selectedModel = { ...summary.model, runtimeKind: summary.runtimeKind };
+                if (!isSameSelection(known.session.selectedModel, selectedModel)) {
+                  const saved = yield* storeEffect(
+                    store.setSelectedModel({ ...known.ref, selectedModel }),
+                  );
+                  yield* publishUpdated(known.ref.workspaceId, saved);
+                }
+              }
               if (prepared.runtimeKind === "codex" && summary.firstTurnCompleted === true)
                 titleSync.set(agentSessionRefKey(prepared), "handled");
             }),
         };
       }),
-    prepareSend: prepare,
+    prepareSend: (input) => prepare(input).pipe(Effect.map((prepared) => prepared.input)),
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {
@@ -434,8 +434,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           ).pipe(Effect.map((saved) => publishUpdated(known.ref.workspaceId, saved))),
         };
       }),
-    recordAcceptedMessage: (ref, message, { saveModel }) =>
-      recordAcceptedMessage(ref, message, saveModel),
+    recordAcceptedMessage,
     observe: (envelope, provenance) =>
       Effect.gen(function* () {
         if (provenance === "baseline") return;
