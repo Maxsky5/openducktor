@@ -197,7 +197,7 @@ export function useKanbanPageModels({
     activeWorkspace,
     mergedPullRequestModal: pendingMergedPullRequest
       ? {
-          pullRequest: pendingMergedPullRequest.pullRequest,
+          ...pendingMergedPullRequest,
           isLinking: pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId,
           onCancel: cancelLinkMergedPullRequest,
           onConfirm: () => {

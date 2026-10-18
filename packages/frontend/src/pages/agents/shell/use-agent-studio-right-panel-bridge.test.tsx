@@ -86,7 +86,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedFile: null,
   onSelectFile: mock(() => {}),
   setTaskTargetBranch: mock(async () => undefined),
-  detectingPullRequestTaskId: null,
+  detectingPullRequestTaskIds: new Set<string>(),
   onDetectPullRequest: mock((_taskId: string) => {}),
   ...overrides,
 });

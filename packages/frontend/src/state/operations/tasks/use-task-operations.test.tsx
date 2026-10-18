@@ -1,15 +1,75 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
+import type { AgentSessionRecord, TaskPullRequestDetectResult } from "@openducktor/contracts";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { PropsWithChildren } from "react";
+import { createQueryClient } from "@/lib/query-client";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createDeferred,
+  createSettingsSnapshotFixture,
+  createTaskCardFixture,
+  createWorkspaceRecordFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionReadPort } from "../../queries/agent-sessions";
+import { workspaceQueryKeys } from "../../queries/workspace";
+import { host } from "../shared/host";
 import { prepareTaskChatDraftCleanupTargets } from "./task-chat-draft-cleanup";
 import { useTaskOperations } from "./use-task-operations";
 import { useTaskResetOperations } from "./use-task-reset-operations";
 
 describe("useTaskOperations", () => {
+  test("keeps pull request progress when workspace selection clears task reads", async () => {
+    const detection = createDeferred<TaskPullRequestDetectResult>();
+    const originalDetect = host.taskPullRequestDetect;
+    const queryClient = createQueryClient();
+    queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture(),
+    );
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const workspace = createWorkspaceRecordFixture();
+    const harness = createHookHarness(
+      ({ activeWorkspace }) => useTaskOperations({ activeWorkspace }),
+      { activeWorkspace: workspace },
+      { wrapper },
+    );
+    host.taskPullRequestDetect = mock(() => detection.promise);
+
+    try {
+      await harness.mount();
+      let detectionPromise: Promise<void> | undefined;
+      await harness.run((operations) => {
+        detectionPromise = operations.syncPullRequests("task-1");
+      });
+      await harness.run((operations) => operations.clearTaskData());
+      await harness.update({
+        activeWorkspace: createWorkspaceRecordFixture({
+          workspaceId: "workspace-2",
+          repoPath: "/other-repo",
+        }),
+      });
+      await harness.run((operations) => operations.clearTaskData());
+      await harness.update({ activeWorkspace: workspace });
+      expect(harness.getLatest().detectingPullRequestTaskIds).toEqual(new Set(["task-1"]));
+      await harness.run(async () => {
+        detection.resolve({
+          outcome: "not_found",
+          sourceBranch: "feature/task-1",
+          targetBranch: "main",
+        });
+        await detectionPromise;
+      });
+      expect(harness.getLatest().detectingPullRequestTaskIds).toEqual(new Set());
+    } finally {
+      await harness.unmount();
+      host.taskPullRequestDetect = originalDetect;
+      queryClient.clear();
+    }
+  });
+
   test("composes reset commands with workspace guards before reading session metadata", async () => {
     const agentSessionsListForTasks = mock(async () => []);
     const agentSessionReadPort: AgentSessionReadPort = {

@@ -168,21 +168,6 @@ const notificationContextValue = {
   },
 } satisfies NotificationContextValue;
 
-type PendingMergedPullRequestFixture = {
-  taskId: string;
-  pullRequest: {
-    providerId: string;
-    number: number;
-    url: string;
-    state: "merged";
-    createdAt: string;
-    updatedAt: string;
-    lastSyncedAt: string;
-    mergedAt: string;
-    closedAt: string;
-  };
-};
-
 type KanbanColumnTestProps = ComponentProps<typeof KanbanColumn>;
 
 type LatestKanbanPageModels = {
@@ -206,7 +191,7 @@ type KanbanPageRenderState = {
   repoConfig: RepoConfig;
   settingsSnapshot: SettingsSnapshot;
   sessions: AgentSessionState[];
-  pendingMergedPullRequest: PendingMergedPullRequestFixture | null;
+  pendingMergedPullRequest: TasksStateContextValue["pendingMergedPullRequest"];
   linkingMergedPullRequestTaskId: string | null;
 };
 
@@ -237,7 +222,7 @@ const requireCallback = <Callback extends (...args: never[]) => void>(
   return callback;
 };
 
-let currentPendingMergedPullRequest: PendingMergedPullRequestFixture | null = null;
+let currentPendingMergedPullRequest: TasksStateContextValue["pendingMergedPullRequest"] = null;
 let currentLinkingMergedPullRequestTaskId: string | null = null;
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR];
 
@@ -406,9 +391,9 @@ const createTasksStateValue = (
   linkMergedPullRequest: async () => {},
   cancelLinkMergedPullRequest: () => {},
   unlinkPullRequest: async () => {},
-  detectingPullRequestTaskId: null,
+  detectingPullRequestTaskIds: new Set<string>(),
   linkingMergedPullRequestTaskId: renderState.linkingMergedPullRequestTaskId,
-  unlinkingPullRequestTaskId: null,
+  unlinkingPullRequestTaskIds: new Set<string>(),
   pendingMergedPullRequest: renderState.pendingMergedPullRequest,
   deleteTask: deleteTaskMock,
   closeTask: async () => {},
@@ -2046,6 +2031,7 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest("shows the shared merged pull request dialog from task state", async () => {
     currentPendingMergedPullRequest = {
       taskId: "TASK-123",
+      taskTitle: "Keep workspace results",
       pullRequest: {
         providerId: "github",
         number: 268,
@@ -2066,6 +2052,8 @@ describe("KanbanPage session start modal flow", () => {
         currentPendingMergedPullRequest.pullRequest,
       );
       expect(renderer.getMergedPullRequestModalProps()?.isLinking).toBe(false);
+      expect(renderer.getMergedPullRequestModalProps()?.taskId).toBe("TASK-123");
+      expect(renderer.getMergedPullRequestModalProps()?.taskTitle).toBe("Keep workspace results");
     } finally {
       await act(async () => {
         renderer.unmount();
@@ -2076,6 +2064,7 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest("marks the shared merged pull request dialog pending while linking", async () => {
     currentPendingMergedPullRequest = {
       taskId: "TASK-123",
+      taskTitle: "Keep workspace results",
       pullRequest: {
         providerId: "github",
         number: 268,

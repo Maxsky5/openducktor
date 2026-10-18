@@ -224,9 +224,9 @@ let tasksState: TasksStateContextValue = {
   transitionTask: mock(async () => undefined),
   humanApproveTask: mock(async () => undefined),
   humanRequestChangesTask: mock(async () => undefined),
-  detectingPullRequestTaskId: null,
+  detectingPullRequestTaskIds: new Set<string>(),
   linkingMergedPullRequestTaskId: null,
-  unlinkingPullRequestTaskId: null,
+  unlinkingPullRequestTaskIds: new Set<string>(),
   pendingMergedPullRequest: null,
 };
 let agentSessions = [createSession()];
@@ -683,9 +683,9 @@ beforeEach(async () => {
     transitionTask: mock(async () => undefined),
     humanApproveTask: mock(async () => undefined),
     humanRequestChangesTask: mock(async () => undefined),
-    detectingPullRequestTaskId: null,
+    detectingPullRequestTaskIds: new Set<string>(),
     linkingMergedPullRequestTaskId: null,
-    unlinkingPullRequestTaskId: null,
+    unlinkingPullRequestTaskIds: new Set<string>(),
     pendingMergedPullRequest: null,
   };
   const session = createSession();
@@ -848,6 +848,7 @@ describe("useAgentsPageShellModel", () => {
       ...tasksState,
       pendingMergedPullRequest: {
         taskId: "task-1",
+        taskTitle: "Original task",
         pullRequest: {
           providerId: "github",
           number: 268,

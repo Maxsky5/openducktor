@@ -9,6 +9,7 @@ type HookArgs = Parameters<typeof useAgentStudioPullRequestModalModel>[0];
 
 const createPendingPullRequest = (): NonNullable<HookArgs["pendingMergedPullRequest"]> => ({
   taskId: "task-1",
+  taskTitle: "Original task",
   pullRequest: {
     providerId: "github",
     number: 268,
@@ -63,6 +64,8 @@ describe("useAgentStudioPullRequestModalModel", () => {
       await harness.mount();
 
       const model = harness.getLatest();
+      expect(model?.taskId).toBe("task-1");
+      expect(model?.taskTitle).toBe("Original task");
       expect(model?.pullRequest).toBe(pendingMergedPullRequest.pullRequest);
       expect(model?.isLinking).toBe(true);
 

@@ -18,6 +18,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   linkingMergedPullRequestTaskId: null,
   pendingMergedPullRequest: {
     taskId: "task-1",
+    taskTitle: "Original task",
     pullRequest: {
       providerId: "github",
       number: 268,

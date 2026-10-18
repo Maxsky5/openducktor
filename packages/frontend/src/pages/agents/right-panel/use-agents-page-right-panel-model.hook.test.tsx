@@ -201,7 +201,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   documentsModel: null,
   selectedFile: null,
   onSelectFile: () => {},
-  detectingPullRequestTaskId: null,
+  detectingPullRequestTaskIds: new Set<string>(),
   onDetectPullRequest: () => {},
   ...overrides,
 });

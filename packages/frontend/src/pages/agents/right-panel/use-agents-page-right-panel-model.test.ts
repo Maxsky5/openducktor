@@ -337,7 +337,7 @@ describe("buildAgentsPageDiffModel", () => {
         qa: { required: false, canSkip: true, available: false, completed: true },
       },
     }),
-    detectingPullRequestTaskId: null,
+    detectingPullRequestTaskIds: new Set<string>(),
     onDetectPullRequest: () => {},
   });
 
@@ -348,6 +348,24 @@ describe("buildAgentsPageDiffModel", () => {
         gitProviderContext: null,
       }).onDetectPullRequest,
     ).toBeUndefined();
+  });
+
+  test("shows detection progress for each task when several detections run", () => {
+    const args = createPullRequestDetectionArgs();
+    const busyTaskIds = new Set(["task-12", "task-24"]);
+    for (const [taskId, isBusy] of [
+      ["task-12", true],
+      ["task-24", true],
+      ["task-36", false],
+    ] as const) {
+      const model = buildAgentsPageDiffModel({
+        ...args,
+        selectedTask: { ...args.selectedTask, id: taskId },
+        gitProviderContext: createGitProviderContextFixture(),
+        detectingPullRequestTaskIds: busyTaskIds,
+      });
+      expect(Boolean(model.isDetectingPullRequest)).toBe(isBusy);
+    }
   });
 
   test("carries the provider health error for supported Pull Request detection", () => {
@@ -412,7 +430,7 @@ describe("buildAgentsPageDiffModel", () => {
         id: "task-24",
         targetBranchError: validationError,
       }),
-      detectingPullRequestTaskId: null,
+      detectingPullRequestTaskIds: new Set<string>(),
       onDetectPullRequest: () => {},
     });
 
