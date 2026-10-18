@@ -197,3 +197,23 @@ export const dropWorkspaceConfigQueries = (
     queryClient.removeQueries(filter);
   }
 };
+
+export const pruneWorkspaceConfigQueries = (
+  queryClient: QueryClient,
+  openWorkspaces: WorkspaceRecord[],
+): void => {
+  const filter: QueryFilters = {
+    predicate: ({ queryKey }) =>
+      (queryKey[0] === runtimeCatalogQueryKeys.all[0] &&
+        queryKey[1] === "catalog" &&
+        !openWorkspaces.some(
+          (workspace) =>
+            runtimeCatalogQueryKeys.repoCatalogScope(workspace.repoPath)[2] === queryKey[2],
+        )) ||
+      (queryKey[0] === workspaceQueryKeys.all[0] &&
+        queryKey[1] === "repo-config" &&
+        !openWorkspaces.some((workspace) => workspace.workspaceId === queryKey[2])),
+  };
+  void queryClient.cancelQueries(filter, { revert: false });
+  queryClient.removeQueries(filter);
+};

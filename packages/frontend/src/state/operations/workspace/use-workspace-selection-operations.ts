@@ -25,6 +25,7 @@ import {
   invalidateWorkspaceCaches,
   invalidateWorkspaceSettingsSnapshot,
   loadWorkspaceListFromQuery,
+  pruneWorkspaceConfigQueries,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
   workspaceQueryKeys,
@@ -284,8 +285,9 @@ export function useWorkspaceSelectionOperations({
     }
 
     const records = workspaceListQuery.data;
+    pruneWorkspaceConfigQueries(queryClient, records);
     startTransition(() => applyActiveWorkspaceFromRecords(records));
-  }, [applyActiveWorkspaceFromRecords, workspaceListQuery.data]);
+  }, [applyActiveWorkspaceFromRecords, queryClient, workspaceListQuery.data]);
 
   useEffect(() => {
     if (!workspaceQueryError) {
