@@ -905,14 +905,6 @@ describe("use-workspace-selection-operations", () => {
   test.each(["close", "remove"] as const)(
     "drops catalog and config caches after committed %s",
     async (action) => {
-      workspaceHost.workspaceRemove = mock(async () => ({
-        catalog: {
-          openWorkspaces: [],
-          closedWorkspaces: [],
-          incompleteRemovals: [],
-        },
-        removedWorktrees: [],
-      }));
       const harness = createRepoSelectionHarness("/repo");
 
       try {
@@ -921,7 +913,7 @@ describe("use-workspace-selection-operations", () => {
         queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
           tasks: [{ id: "task-1" }],
         });
-        queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+        queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), { workspaceId: "repo" });
         const catalogKeys = ["opencode", "claude"].map((runtimeKind) => [
           ...runtimeCatalogQueryKeys.repoCatalogScope("/repo"),
           runtimeKind,
@@ -949,7 +941,7 @@ describe("use-workspace-selection-operations", () => {
 
         if (action === "remove")
           expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
-        expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
+        expect(queryClient.getQueryData(workspaceQueryKeys.repoConfig("repo"))).toBeUndefined();
         for (const key of catalogKeys) expect(queryClient.getQueryData(key)).toBeUndefined();
         expect(queryClient.getQueryData<unknown>(otherConfigKey)).toEqual({ workspaceId: "other" });
         expect(queryClient.getQueryData<unknown>(otherCatalogKey)).toEqual({ models: [] });

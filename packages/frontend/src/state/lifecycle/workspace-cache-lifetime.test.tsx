@@ -9,7 +9,10 @@ import {
   runtimeCatalogQueryOptions,
 } from "@openducktor/frontend-core/queries/runtime-catalog";
 import { useRuntimeCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
-import { repoConfigQueryOptions, workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
+import {
+  repoConfigQueryOptions,
+  workspaceQueryKeys,
+} from "@openducktor/frontend-core/queries/workspace";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -137,7 +140,6 @@ test("loads only visited workspaces and shows cached data during a stale return 
       (next) => !next.catalog.isFetching && next.config.data?.branchPrefix === "updated",
     );
   } finally {
-    jest.useRealTimers();
     catalogRead.resolve(catalog);
     configRead.resolve(makeRepoConfig("a"));
     await harness.unmount();
