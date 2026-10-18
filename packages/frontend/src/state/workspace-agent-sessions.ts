@@ -34,12 +34,12 @@ export const createWorkspaceAgentSessions = (): WorkspaceAgentSessions => {
     return {
       subscribe,
       getWorkspaceStore: getStore,
-      getSessionSnapshotAcrossWorkspaces: (identity) => {
-        const selected = selectedStore().getSessionSnapshot(identity);
+      getSessionSource: (identity) => {
+        const selected = selectedStore().getSessionSource(identity);
         if (selected) return selected;
         for (const { controller } of controllers.values()) {
-          const session = controller.sessionStore.getSessionSnapshot(identity);
-          if (session) return session;
+          const source = controller.sessionStore.getSessionSource(identity);
+          if (source) return source;
         }
         return null;
       },

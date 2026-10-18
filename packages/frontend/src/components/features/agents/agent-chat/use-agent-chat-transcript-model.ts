@@ -7,6 +7,7 @@ import {
   useReducer,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -63,6 +64,15 @@ export const useAgentChatTranscriptModel = ({
 }) => {
   const sessionStore = useContext(AgentSessionsContext);
   const sharedCache = useContext(AgentChatTranscriptCacheContext);
+  const readLifetime = useCallback(
+    () => (session ? (sessionStore?.getSessionSource(session)?.lifetime ?? null) : null),
+    [session, sessionStore],
+  );
+  const lifetime = useSyncExternalStore(
+    sessionStore?.subscribe ?? subscribeEmpty,
+    readLifetime,
+    readLifetime,
+  );
   const [cache] = useState(() =>
     createInitialCache(session, showThinkingMessages, sessionStore, sharedCache),
   );
@@ -81,7 +91,7 @@ export const useAgentChatTranscriptModel = ({
   ]);
   const [, publishCacheWrite] = useReducer((generation: number) => generation + 1, 0);
   const cacheLookup = session
-    ? readTranscriptModelCache({ session, showThinkingMessages, cache })
+    ? readTranscriptModelCache({ session, showThinkingMessages, cache, lifetime })
     : { current: null, latest: null };
   const shownModel =
     cacheLookup.current ??
@@ -119,12 +129,19 @@ export const useAgentChatTranscriptModel = ({
     }
     const builds = buildsRef.current;
     for (const [cacheKey, entry] of cache) {
-      const liveSession = sessionStore.getSessionSnapshotAcrossWorkspaces(entry.session);
+      const source = sessionStore.getSessionSource(entry.session);
+      const liveSession = source?.session;
       const activeSession = sessionRef.current;
       const isSelected =
         activeSession !== null &&
         agentSessionIdentityKey(activeSession) === agentSessionIdentityKey(entry.session);
       const existingBuild = builds.get(cacheKey);
+      if (entry.lifetime !== null && entry.lifetime !== source?.lifetime) {
+        existingBuild?.stop();
+        builds.delete(cacheKey);
+        cache.delete(cacheKey);
+        continue;
+      }
       if (!liveSession || isSelected || entry.baseline === null) {
         existingBuild?.stop();
         builds.delete(cacheKey);
@@ -175,6 +192,7 @@ export const useAgentChatTranscriptModel = ({
         previous: entry,
         onComplete: (transcriptModel) => {
           build.stop = () => {};
+          if (sessionStore.getSessionSource(nextSession)?.lifetime !== source?.lifetime) return;
           writeTranscriptModelCacheEntry({
             session: nextSession,
             showThinkingMessages: entry.showThinkingMessages,
@@ -182,6 +200,7 @@ export const useAgentChatTranscriptModel = ({
             cache,
             touch: false,
             baseline: liveSession.messages,
+            lifetime: source?.lifetime ?? null,
           });
           const selected = sessionRef.current;
           if (
@@ -235,6 +254,7 @@ export const useAgentChatTranscriptModel = ({
       showThinkingMessages,
       cache,
       touchCurrent: true,
+      lifetime,
     });
     if (currentCacheLookup.current) {
       return;
@@ -246,18 +266,20 @@ export const useAgentChatTranscriptModel = ({
       showThinkingMessages,
       previous: currentCacheLookup.latest,
       onComplete: (transcriptModel) => {
+        if ((sessionStore?.getSessionSource(currentSession)?.lifetime ?? null) !== lifetime) return;
         writeTranscriptModelCacheEntry({
           session: currentSession,
           showThinkingMessages,
           transcriptModel,
           cache,
           baseline,
+          lifetime,
         });
         stopEvictedBuilds(cache, buildsRef.current);
         publishCacheWrite();
       },
     });
-  }, [buildKey, cache, showThinkingMessages, sessionStore]);
+  }, [buildKey, cache, lifetime, showThinkingMessages, sessionStore]);
 
   return {
     transcriptState,
@@ -273,6 +295,8 @@ export const useAgentChatTranscriptModel = ({
     isTranscriptModelPending: boolean;
   };
 };
+
+const subscribeEmpty = (): (() => void) => () => {};
 
 const stopEvictedBuilds = (cache: TranscriptModelCache, builds: Map<string, CacheBuild>): void => {
   for (const [cacheKey, build] of builds) {
@@ -290,10 +314,11 @@ const createInitialCache = (
   sharedCache: TranscriptModelCache | null,
 ): TranscriptModelCache => {
   const cache = sharedCache ?? createTranscriptModelCache();
+  const lifetime = session ? (sessionStore?.getSessionSource(session)?.lifetime ?? null) : null;
   if (
     !session ||
     getSessionMessageCount(session) > MAX_SYNC_MESSAGES ||
-    readTranscriptModelCache({ session, showThinkingMessages, cache }).latest
+    readTranscriptModelCache({ session, showThinkingMessages, cache, lifetime }).latest
   ) {
     return cache;
   }
@@ -307,6 +332,7 @@ const createInitialCache = (
     transcriptModel,
     cache,
     baseline: readLiveMessages(session, sessionStore),
+    lifetime,
   });
   return cache;
 };

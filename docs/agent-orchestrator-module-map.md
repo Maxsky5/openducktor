@@ -23,7 +23,7 @@ Rules:
 - Each store is bound to one repository for its lifetime. The registry owns workspace retention and removal.
 - Context reads and writes use a view bound to the selected repository. A workspace switch selects another mounted controller. It does not rebuild a collection, restart observation, clear faults or turn state, or mark history stale.
 - Background launch results use `getWorkspaceStore` to write to their open workspace. A closed workspace has no store and cannot receive a late launch projection. Task-record removal reaches the named workspace, including an inactive one.
-- Transcript warming uses `getSessionSnapshotAcrossWorkspaces` to read retained cache entries from any open workspace. The cache keeps its six-entry bound, complete session identity, thinking-preference keys, and cancellation rules.
+- Transcript warming uses `getSessionSource` to read each retained session and its collection lifetime from any open workspace. The cache keeps its six-entry bound, complete session identity, thinking-preference keys, and cancellation rules. Rendered entries and pending builds use the collection lifetime as well as message revisions. Closing a workspace removes its rendered entries. A late build cannot write into a replacement collection.
 - An unfinished history read continues while its workspace stays open. Closing the workspace invalidates the controller lifetime, so a late read cannot restore its collection.
 
 ## Activity state

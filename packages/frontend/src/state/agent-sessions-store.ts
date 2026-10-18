@@ -75,9 +75,14 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   collection: AgentSessionCollection;
   result: Result;
 };
+export type AgentSessionSource = {
+  session: AgentSessionState;
+  lifetime: symbol;
+};
+
 export type AgentSessionsStore = {
   getWorkspaceStore: (repoPath: string) => AgentSessionsStore | null;
-  getSessionSnapshotAcrossWorkspaces: (identity: AgentSessionIdentity) => AgentSessionState | null;
+  getSessionSource: (identity: AgentSessionIdentity) => AgentSessionSource | null;
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   listSessionSnapshots: () => AgentSessionState[];
@@ -104,6 +109,8 @@ export const createAgentSessionsStore = (
   workspaceRepoPath: string | null = null,
   historyFreshness?: SessionHistoryFreshnessTracker,
 ): AgentSessionsStore => {
+  // Message revisions can repeat when a workspace creates a new collection.
+  const lifetime = Symbol();
   const historyProgress = historyFreshness?.createHistoryProgressTracker();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
@@ -332,7 +339,10 @@ export const createAgentSessionsStore = (
 
   const store: AgentSessionsStore = {
     getWorkspaceStore: (repoPath) => (repoPath === workspaceRepoPath ? store : null),
-    getSessionSnapshotAcrossWorkspaces: (identity) => getAgentSession(sessionCollection, identity),
+    getSessionSource: (identity) => {
+      const session = getAgentSession(sessionCollection, identity);
+      return session ? { session, lifetime } : null;
+    },
     listSessionTaskIds: (repoPath) => {
       if (repoPath !== workspaceRepoPath) return [];
       const taskIds = new Set<string>();

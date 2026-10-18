@@ -10,6 +10,7 @@ import { type PropsWithChildren, useSyncExternalStore } from "react";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { projectWorkspaceSessionLaunch } from "@/pages/workspace-sessions/launch-workspace-session";
 import { useAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/use-agent-chat-transcript-model";
+import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
 import { toAgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat-transcript-session";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -147,7 +148,9 @@ const createHarness = (history?: Promise<AgentSessionHistoryMessage[]>, strict =
             }}
           >
             <WorkspaceActivityProvider>
-              <AgentStudioStateProvider agentEngine={engine}>{children}</AgentStudioStateProvider>
+              <AgentStudioStateProvider agentEngine={engine}>
+                <AgentChatTranscriptCacheProvider>{children}</AgentChatTranscriptCacheProvider>
+              </AgentStudioStateProvider>
             </WorkspaceActivityProvider>
           </TaskControlContext.Provider>
         </TaskSnapshotContext.Provider>
@@ -367,14 +370,14 @@ test("finishes history and projects launch results into an inactive open workspa
     await state.select(workspaceB);
     await state.run(() => store.removeTaskSessions("/a", ["autopilot-task"]));
     expect(store.listSessionTaskIds("/a")).toEqual([]);
-    expect(store.getSessionSnapshotAcrossWorkspaces(a.ref)).not.toBeNull();
+    expect(store.getSessionSource(a.ref)).not.toBeNull();
     expect(store.getWorkspaceStore("/a")?.listSessionSnapshots()).toHaveLength(1);
     expect(store.getWorkspaceStore("/b")?.listSessionSnapshots()).toHaveLength(1);
     await state.select(workspaceB, [workspaceB]);
     expect(state.stops.get("/a")).toBe(1);
     expect(store.listSessionTaskIds("/a")).toEqual([]);
     expect(store.getWorkspaceStore("/a")).toBeNull();
-    expect(store.getSessionSnapshotAcrossWorkspaces(a.ref)).toBeNull();
+    expect(store.getSessionSource(a.ref)).toBeNull();
   } finally {
     await state.dispose();
   }
@@ -403,4 +406,43 @@ test("strict mode releases replaced observations and keeps workspace controllers
   expect([...state.stops.values()].reduce((total, count) => total + count, 0)).toBe(
     state.observe.mock.calls.length,
   );
+});
+
+test("shows fresh history when a closed workspace reopens with the same message count", async () => {
+  const state = createHarness();
+  try {
+    await state.mount();
+    await state.waitFor(
+      ({ session, transcript }) =>
+        session?.historyLoadState === "loaded" && transcript.hasCurrentRowsForActiveSession,
+    );
+    await state.select(workspaceB);
+    await state.waitFor(
+      ({ session, transcript }) =>
+        session?.historyLoadState === "loaded" && transcript.hasCurrentRowsForActiveSession,
+    );
+    await state.select(workspaceB, [workspaceB]);
+    state.loadHistory.mockImplementation(async () =>
+      Array.from({ length: 300 }, (_, index) => ({
+        messageId: `history-${index}`,
+        role: "assistant" as const,
+        text: `Updated ${index}`,
+        parts: [],
+        timestamp: new Date(1000 + index).toISOString(),
+      })),
+    );
+
+    await state.select(workspaceA, [workspaceA, workspaceB]);
+    await state.waitFor(
+      ({ session, transcript }) =>
+        session?.historyLoadState === "loaded" && transcript.hasCurrentRowsForActiveSession,
+    );
+    const { session, transcript } = state.getLatest();
+    expect(session?.messages.items[0]?.content).toBe("Updated 0");
+    expect(transcript.transcriptState.rows.find((row) => row.kind === "message")).toMatchObject({
+      message: { content: "Updated 0" },
+    });
+  } finally {
+    await state.dispose();
+  }
 });

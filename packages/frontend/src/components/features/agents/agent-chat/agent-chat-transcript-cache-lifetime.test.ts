@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
-import { Activity, act, createElement, useSyncExternalStore } from "react";
+import { Activity, act, createElement, useContext, useSyncExternalStore } from "react";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { AgentSessionsContext } from "@/state/app-state-contexts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
@@ -10,6 +10,8 @@ import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import { AgentChatTranscriptCacheProvider } from "./agent-chat-transcript-cache-provider";
+import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
+import type { TranscriptModelCache } from "./agent-chat-transcript-model-cache";
 import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
 
@@ -57,6 +59,55 @@ describe("transcript cache lifetime", () => {
   afterEach(() => {
     animationFrameDriver.restore();
     restoreActEnvironment();
+  });
+
+  test("clears removed session rows after the chat unmounts", async () => {
+    const first = createAgentSessionFixture({
+      ...createLargeSession("released", 2),
+      historyLoadState: "loaded",
+    });
+    const store = createAgentSessionsStore("/repo");
+    store.replaceSession(first);
+    let cache!: TranscriptModelCache;
+    let transcript!: HookResult;
+    const Chat = () => {
+      const session = useSyncExternalStore(store.subscribe, () => store.getSessionSnapshot(first));
+      transcript = useAgentChatTranscriptModel({
+        session: session ? toAgentChatTranscriptSession(session) : null,
+        showThinkingMessages: true,
+      });
+      return null;
+    };
+    const Cache = ({ showChat }: { showChat: boolean }) => {
+      cache = useContext(AgentChatTranscriptCacheContext)!;
+      return showChat ? createElement(Chat) : null;
+    };
+    const view = (showChat: boolean) =>
+      createElement(
+        AgentSessionsContext.Provider,
+        { value: store },
+        createElement(AgentChatTranscriptCacheProvider, {
+          children: createElement(Cache, { showChat }),
+        }),
+      );
+    const rendered = render(view(true));
+    try {
+      expect(cache.size).toBe(1);
+      act(() => {
+        store.replaceSession({
+          ...first,
+          messages: createLargeSession(first.externalSessionId).messages,
+        });
+      });
+      expect(transcript.isTranscriptModelPending).toBe(true);
+      rendered.rerender(view(false));
+      act(() => store.removeSession(first));
+      expect(cache.size).toBe(0);
+      await animationFrameDriver.flushTimers(5);
+      expect(cache.size).toBe(0);
+    } finally {
+      rendered.unmount();
+    }
   });
 
   // Builds and mounts large transcripts, which can exceed 1000 ms on a loaded CI runner.
