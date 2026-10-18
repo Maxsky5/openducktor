@@ -48,7 +48,7 @@ export type TaskViewSync = {
 export type TaskSnapshotResult = {
   /** The task IDs of each open workspace whose task read succeeded. */
   taskIdsByRepo: ReadonlyMap<string, string[]>;
-  /** The cause for each open workspace whose task read failed. The task query keeps the failure. */
+  /** The cause for each open workspace whose task or document read failed. Its query keeps it. */
   failures: ReadonlyMap<string, unknown>;
 };
 
@@ -394,13 +394,14 @@ export const createTaskViewSync = ({
       const tasks = await replaceIncompleteList(request);
       const taskIds = tasks.map((task) => task.id);
       const visibleTaskIds = new Set(taskIds);
-      // A failed document read stays in its document query. The task IDs are current.
-      await Promise.allSettled(
+      // Every observed document reads, also after one fails. The task IDs stay current.
+      const documentReads = await Promise.allSettled(
         observedDocuments
           .filter((entry) => visibleTaskIds.has(entry.taskId))
           .map((entry) => refreshDocuments(request.repoPath, [entry])),
       );
-      return taskIds;
+      const documentFailure = documentReads.find((read) => read.status === "rejected");
+      return { taskIds, documentFailure };
     });
 
   /** Mark the cached views of a workspace that is not open stale. Observed views read again. */
@@ -527,8 +528,13 @@ export const createTaskViewSync = ({
         // A release during the snapshot superseded this workspace. Its result does not matter.
         if (isSuperseded(request)) return;
         const result = results[index]!;
-        if (result.status === "fulfilled") taskIdsByRepo.set(request.repoPath, result.value);
-        else failures.set(request.repoPath, result.reason);
+        if (result.status === "rejected") {
+          failures.set(request.repoPath, result.reason);
+          return;
+        }
+        const { taskIds, documentFailure } = result.value;
+        taskIdsByRepo.set(request.repoPath, taskIds);
+        if (documentFailure) failures.set(request.repoPath, documentFailure.reason);
       });
       return { taskIdsByRepo, failures };
     },

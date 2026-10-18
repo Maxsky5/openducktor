@@ -220,7 +220,10 @@ describe("task stream controller recovery", () => {
       taskViewSync: {
         reconcileStreamSnapshot: mock(async () => ({
           taskIdsByRepo,
-          failures: new Map([["/repo-b", new Error("task store unavailable")]]),
+          failures: new Map([
+            ["/repo-a", new Error("spec unavailable")],
+            ["/repo-b", new Error("task store unavailable")],
+          ]),
         })),
       },
     });
@@ -242,15 +245,17 @@ describe("task stream controller recovery", () => {
       expect.any(Function),
     );
     expect(harness.onSnapshotStarted.mock.calls).toEqual([["/repo-a"], ["/repo-b"], ["/repo-c"]]);
-    // A workspace that failed on its own loads again when it becomes active.
+    // The failed task list keeps its workspace owned, so no task load reads it again. A failed
+    // document read does not, because the task list of its workspace is current.
     expect(harness.onSnapshotFinished.mock.calls).toEqual([
       ["/repo-a", true],
-      ["/repo-b", true],
+      ["/repo-b", false],
       ["/repo-c", true],
     ]);
     expect(harness.onWorkspaceFailures.mock.calls).toEqual([
       [
         new Map([
+          ["/repo-a", new Error("spec unavailable")],
           ["/repo-b", new Error("task store unavailable")],
           ["/repo-c", new Error("live refresh failed")],
         ]),

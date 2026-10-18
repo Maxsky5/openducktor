@@ -204,7 +204,8 @@ export const createTaskStreamController = ({
   ): Promise<boolean> => {
     const repoPaths = getOpenRepoPaths();
     for (const repoPath of repoPaths) onSnapshotStarted?.(repoPath);
-    let succeeded = false;
+    // A failed task list keeps the stream ownership of its workspace, so no task load retries it.
+    let readRepoPaths: ReadonlySet<string> = new Set();
     try {
       const tasks = await taskViewSync.reconcileStreamSnapshot(repoPaths);
       // A newer snapshot supersedes this one before it reconciles session lists.
@@ -214,7 +215,7 @@ export const createTaskStreamController = ({
         tasks.taskIdsByRepo,
         () => isActive(owner, frameGeneration),
       );
-      succeeded = true;
+      readRepoPaths = new Set(tasks.taskIdsByRepo.keys());
       if (isActive(owner, frameGeneration)) {
         // One workspace that fails does not stop the snapshot of the other workspaces.
         reportWorkspaceFailures(new Map([...tasks.failures, ...sessionFailures]));
@@ -222,10 +223,11 @@ export const createTaskStreamController = ({
     } finally {
       if (isActive(owner, frameGeneration)) {
         const openRepoPaths = new Set(getOpenRepoPaths());
-        // Only a failed snapshot recovers the stream. A workspace that failed on its own loads
-        // again when it becomes active.
+        // Only a failed snapshot recovers the stream.
         for (const repoPath of repoPaths) {
-          if (openRepoPaths.has(repoPath)) onSnapshotFinished?.(repoPath, succeeded);
+          if (openRepoPaths.has(repoPath)) {
+            onSnapshotFinished?.(repoPath, readRepoPaths.has(repoPath));
+          }
         }
       }
     }

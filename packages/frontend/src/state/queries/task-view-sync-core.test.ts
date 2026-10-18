@@ -822,7 +822,7 @@ describe("TaskViewSync", () => {
     }
   });
 
-  test("waits for every observed document of a snapshot when one document read fails", async () => {
+  test("reads every observed document of a snapshot and reports the one that fails", async () => {
     const pendingPlan = deferred<{ markdown: string; updatedAt: string | null }>();
     const planStarted = deferred<void>();
     const readFailure = new Error("spec unavailable");
@@ -851,9 +851,10 @@ describe("TaskViewSync", () => {
 
       const fresh = { markdown: "# Fresh plan", updatedAt: "2026-04-10T13:10:00.000Z" };
       pendingPlan.resolve(fresh);
+      // The task IDs still reconcile the sessions. The notification names the workspace.
       expect(await snapshot).toEqual({
         taskIdsByRepo: new Map([["/repo", ["task-1"]]]),
-        failures: new Map(),
+        failures: new Map([["/repo", readFailure]]),
       });
       expect(queryClient.getQueryState(specKey)).toMatchObject({
         status: "error",
