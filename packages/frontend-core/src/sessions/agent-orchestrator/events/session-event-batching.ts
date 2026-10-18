@@ -40,14 +40,21 @@ const IMMEDIATE_SESSION_EVENT_TYPES = new Set<SessionEvent["type"]>(
   IMMEDIATE_SESSION_EVENT_TYPE_LIST,
 );
 
+// Streamed text renders block by block, so an update costs a few milliseconds and a short interval
+// keeps the stream smooth. A tool update changes a whole card, so it waits longer.
+export const TEXT_STREAM_INTERVAL_MS = 100;
+const TOOL_UPDATE_INTERVAL_MS = 400;
+
 const minAssistantPartEmitIntervalMs = (
   event: Extract<QueuedSessionEvent, { type: "assistant_part" }>,
 ): number | null => {
   if (event.part.kind === "text" || event.part.kind === "reasoning") {
-    return event.part.completed ? null : 500;
+    return event.part.completed ? null : TEXT_STREAM_INTERVAL_MS;
   }
   if (event.part.kind === "tool") {
-    return event.part.status === "completed" || event.part.status === "error" ? null : 400;
+    return event.part.status === "completed" || event.part.status === "error"
+      ? null
+      : TOOL_UPDATE_INTERVAL_MS;
   }
   return null;
 };
@@ -79,7 +86,7 @@ const queuedSessionEventMinEmitIntervalMs = (event: QueuedSessionEvent): number 
   switch (event.type) {
     case "assistant_delta":
     case "assistant_message":
-      return 500;
+      return TEXT_STREAM_INTERVAL_MS;
     case "assistant_part":
       return minAssistantPartEmitIntervalMs(event);
     case "session_started":

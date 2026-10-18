@@ -17,6 +17,7 @@ import {
   type QueuedSessionEvent,
   type QueuedSessionEventBatchItem,
   shouldFlushQueuedSessionEventImmediately,
+  TEXT_STREAM_INTERVAL_MS,
 } from "./session-event-batching";
 import type {
   EnsureSession,
@@ -42,7 +43,9 @@ import {
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
 
-const TRANSCRIPT_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 500;
+// The first update of a stream waits no longer than the updates after it.
+const TRANSCRIPT_EVENT_BATCH_WINDOW_MS =
+  process.env.NODE_ENV === "test" ? 0 : TEXT_STREAM_INTERVAL_MS;
 
 type TranscriptEventDependencies = {
   feedback: ClientFeedback;

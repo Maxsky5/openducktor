@@ -242,7 +242,7 @@ describe("session-event-batching", () => {
 
     expect(firstPrepared.readyEvents).toHaveLength(2);
 
-    now += 150;
+    now += 50;
     const prepared = prepareQueuedEvents(batcher, [
       {
         type: "assistant_message",
@@ -270,7 +270,7 @@ describe("session-event-batching", () => {
 
     expect(prepared.readyEvents).toHaveLength(0);
     expect(prepared.deferredEvents).toHaveLength(2);
-    expect(prepared.nextDelayMs).toBe(250);
+    expect(prepared.nextDelayMs).toBe(50);
   });
 
   test("classifies only configured session events as immediate", async () => {
