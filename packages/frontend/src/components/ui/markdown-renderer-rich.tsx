@@ -5,8 +5,8 @@ import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import {
-  createTaskDescriptionComponents,
-  TASK_DESCRIPTION_URL_TRANSFORM,
+  RICH_MARKDOWN_URL_TRANSFORM,
+  useRichMarkdownComponents,
 } from "./markdown-renderer-context";
 import { usePremiumCodeComponents } from "./markdown-renderer-premium-code";
 
@@ -32,23 +32,18 @@ export default function MarkdownRendererRich({
     enabled: premiumCodeBlocks,
     fallback,
   });
+  const richComponents = useRichMarkdownComponents(premiumComponents, {
+    resolveTaskAssetSource,
+    taskAssetContext,
+  });
   const content = markdown.trim();
   if (!content) return null;
-  const componentInput: Parameters<typeof createTaskDescriptionComponents>[0] = {
-    components: premiumComponents,
-  };
-  if (resolveTaskAssetSource) {
-    componentInput.resolveTaskAssetSource = resolveTaskAssetSource;
-  }
-  if (taskAssetContext) {
-    componentInput.taskAssetContext = taskAssetContext;
-  }
   return (
     <Markdown
       remarkPlugins={[remarkGfm]}
       skipHtml
-      urlTransform={markdownLinkUrlTransform(TASK_DESCRIPTION_URL_TRANSFORM, linkPolicy)}
-      components={createTaskDescriptionComponents(componentInput)}
+      urlTransform={markdownLinkUrlTransform(RICH_MARKDOWN_URL_TRANSFORM, linkPolicy)}
+      components={richComponents}
     >
       {content}
     </Markdown>

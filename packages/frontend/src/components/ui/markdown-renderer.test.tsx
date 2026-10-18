@@ -762,6 +762,38 @@ describe("rich task description rendering", () => {
     }
   }, 4000);
 
+  // The Mermaid and math renderers load lazily, which can take more than 1 s in a full test run.
+  test.each([
+    ["Markdown", "Before"],
+    ["Markdown with math", "Before $x$"],
+  ])(
+    "keeps a Mermaid diagram mounted when the text around it in %s changes",
+    async (_, intro) => {
+      const renderModule = await import("./markdown-mermaid-render");
+      const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+      );
+      const diagram = "```mermaid\ngraph TD\n  A --> B\n```";
+
+      try {
+        const view = render(<MarkdownRenderer markdown={`${intro}\n\n${diagram}\n\nAfter`} />);
+        await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
+          timeout: 3000,
+        });
+        const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+
+        view.rerender(<MarkdownRenderer markdown={`${intro}\n\n${diagram}\n\nAfter more text`} />);
+
+        expect(view.getByText("After more text")).toBeTruthy();
+        expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+        expect(renderSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        renderSpy.mockRestore();
+      }
+    },
+    4000,
+  );
+
   test("commits math and Mermaid through the same prepared render", async () => {
     const view = render(
       <MarkdownRenderer markdown={"Before $x$\n\n```mermaid\ngraph TD\n  A --> B\n```"} />,
