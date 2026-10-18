@@ -1,4 +1,4 @@
-import type { BlockContent, ListItem, Root } from "mdast";
+import type { BlockContent, Definition, FootnoteDefinition, ListItem, Nodes, Root } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
@@ -35,10 +35,20 @@ const taskItemBodySource = (source: string): string | undefined => {
   return body;
 };
 
+const isDefinition = (node: Nodes): node is Definition | FootnoteDefinition =>
+  node.type === "definition" || node.type === "footnoteDefinition";
+
 const parseTaskItemBody = (source: string): Root => {
   const body = unified().use(remarkParse).use(remarkGfm).use(remarkMath).parse(source);
-  visit(body, (node) => {
+  // The body parses apart from the text, so its nodes have no source positions. A definition
+  // without a position cannot point into the text, so definitions go at every depth.
+  visit(body, (node, index, parent) => {
+    if (isDefinition(node) && parent !== undefined && index !== undefined) {
+      parent.children.splice(index, 1);
+      return index;
+    }
     delete node.position;
+    return undefined;
   });
   return body;
 };
@@ -57,10 +67,9 @@ export const normalizeTaskListBlockMath = (tree: Root, markdown: string): void =
     if (body.children[0]?.type !== "math") {
       return;
     }
-    node.children = body.children.filter(
-      (child): child is BlockContent =>
-        child.type !== "definition" && child.type !== "footnoteDefinition",
-    );
+    // SAFETY: remark-parse puts only block content and definitions at the root, and the body has
+    // no definitions now.
+    node.children = body.children as BlockContent[];
   });
 };
 

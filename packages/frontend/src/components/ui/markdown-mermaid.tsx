@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useContext, useId, useLayoutEffect, useS
 import { Dialog, DialogTrigger } from "./dialog";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
 import { drawMermaidSvg, peekMermaidSvg, useMermaidSvgCache } from "./markdown-mermaid-svg-cache";
+import { MarkdownOpenFenceContext } from "./markdown-open-fence";
 import {
   getMermaidErrorMessage,
   type MermaidPreview,
@@ -40,6 +41,9 @@ export function MarkdownMermaid({
 }) {
   const reactId = useId();
   const preparedPreview = useContext(MermaidPreviewContext)?.get(source);
+  // The source in an open fence is incomplete, so a render now would show a partial diagram or an
+  // error.
+  const sourceOpen = useContext(MarkdownOpenFenceContext);
   const svgCache = useMermaidSvgCache();
   const [drawn, setDrawn] = useState<DrawnDiagram | null>(() => {
     const svg = peekMermaidSvg(svgCache, source, createRenderId(reactId));
@@ -49,7 +53,7 @@ export function MarkdownMermaid({
   const drawnSource = drawn?.source;
 
   useLayoutEffect(() => {
-    if (preparedPreview || drawnSource === source) {
+    if (preparedPreview || sourceOpen || drawnSource === source) {
       return;
     }
     let active = true;
@@ -77,7 +81,7 @@ export function MarkdownMermaid({
       active = false;
       clearTimeout(renderTimeout);
     };
-  }, [drawnSource, preparedPreview, reactId, renderDelayMs, source, svgCache]);
+  }, [drawnSource, preparedPreview, reactId, renderDelayMs, source, sourceOpen, svgCache]);
 
   const preview = preparedPreview ?? drawn?.preview ?? null;
 

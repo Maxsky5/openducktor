@@ -4,15 +4,13 @@ import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import {
   RICH_MARKDOWN_URL_TRANSFORM,
   useRichMarkdownComponents,
 } from "./markdown-renderer-context";
 import { usePremiumCodeComponents } from "./markdown-renderer-premium-code";
-import { remarkTaskListBlockMath } from "./markdown-task-list-math";
+import { MATH_REMARK_PLUGINS } from "./markdown-math-plugins";
 
 export default function MarkdownRendererMath({
   markdown,
@@ -44,7 +42,7 @@ export default function MarkdownRendererMath({
   if (!content) return null;
   return (
     <Markdown
-      remarkPlugins={[remarkGfm, remarkMath, remarkTaskListBlockMath]}
+      remarkPlugins={MATH_REMARK_PLUGINS}
       rehypePlugins={[rehypeKatex]}
       skipHtml
       urlTransform={markdownLinkUrlTransform(RICH_MARKDOWN_URL_TRANSFORM, linkPolicy)}

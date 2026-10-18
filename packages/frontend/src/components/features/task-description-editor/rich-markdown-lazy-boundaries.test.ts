@@ -99,6 +99,7 @@ describe("rich Markdown lazy module boundaries", () => {
     const candidateGraph = await readStaticModuleGraph(
       "../../ui/markdown-renderer-math-candidate.tsx",
     );
+    const mathGraph = await readStaticModuleGraph("../../ui/markdown-renderer-math.tsx");
 
     expect(renderer).toContain('import("./markdown-renderer-math-candidate")');
     expect(renderer).not.toContain("markdown-math-detection");
@@ -114,7 +115,7 @@ describe("rich Markdown lazy module boundaries", () => {
     expect(candidateGraph.packages).not.toContain("katex/dist/katex.min.css");
     expect(candidateRenderer).toContain("fallback={fallback ?? fallbackContent}");
     expect(mathRenderer).toContain('import "katex/dist/katex.min.css"');
-    expect(mathRenderer).toContain('from "remark-math"');
+    expect(mathGraph.packages).toContain("remark-math");
     expect(mathRenderer).toContain('from "rehype-katex"');
   });
 

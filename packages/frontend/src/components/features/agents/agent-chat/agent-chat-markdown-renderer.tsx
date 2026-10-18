@@ -1,8 +1,8 @@
 import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
 import { memo, type ReactElement } from "react";
-import { MarkdownRenderer, type MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import type { MarkdownRendererVariant } from "@/components/ui/markdown-renderer";
+import { MarkdownStreamRenderer } from "@/components/ui/markdown-stream-renderer";
 import { cn } from "@/lib/utils";
-import { closeOpenStreamingCodeFence } from "./agent-chat-code-fence-healing";
 
 const MARKDOWN_PROSE_WRAPPING_CLASSES =
   "prose-p:break-words prose-li:break-words prose-blockquote:break-words";
@@ -20,18 +20,17 @@ export const AgentChatMarkdownRenderer = memo(function AgentChatMarkdownRenderer
   variant = "document",
   className,
 }: AgentChatMarkdownRendererProps): ReactElement | null {
-  const content = markdown;
-  const trimmedContent = content.trim();
-  if (!trimmedContent) {
+  const content = markdown.trim();
+  if (!content) {
     return null;
   }
 
-  const preparedMarkdown = closeOpenStreamingCodeFence(content, streaming);
   const markdownClassName = cn(MARKDOWN_PROSE_WRAPPING_CLASSES, className);
   return (
-    <MarkdownRenderer
+    <MarkdownStreamRenderer
+      markdown={content}
+      streaming={streaming}
       linkPolicy={CHAT_MARKDOWN_LINK_POLICY}
-      markdown={preparedMarkdown}
       variant={variant}
       className={markdownClassName}
     />
