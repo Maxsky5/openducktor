@@ -58,6 +58,10 @@ export type AgentSessionListBatch = {
   dropAll: () => void;
   /** Advances with each `dropAll`, so superseded work can stop. */
   epoch: () => number;
+  /** Cancel every read of a workspace that closed and forget its state. */
+  release: (repoPath: string) => void;
+  /** Advances with each `release` of the workspace, so its superseded work can stop. */
+  workspaceEpoch: (repoPath: string) => number;
   /**
    * The tasks whose last read failed in one request with a deleted task. The deletion can
    * explain the failure, so their lists need another read.
@@ -112,6 +116,7 @@ export const getAgentSessionListBatch = (queryClient: QueryClient): AgentSession
 
 const createAgentSessionListBatch = (): AgentSessionListBatch => {
   const workspaces = new Map<string, WorkspaceQueue>();
+  const workspaceEpochs = new Map<string, number>();
   let epoch = 0;
 
   const workspace = (repoPath: string): WorkspaceQueue => {
@@ -263,6 +268,13 @@ const createAgentSessionListBatch = (): AgentSessionListBatch => {
       for (const queue of workspaces.values()) cancel(queue, null);
     },
     epoch: () => epoch,
+    release: (repoPath) => {
+      const queue = workspaces.get(repoPath);
+      if (queue) cancel(queue, null);
+      workspaces.delete(repoPath);
+      workspaceEpochs.set(repoPath, (workspaceEpochs.get(repoPath) ?? 0) + 1);
+    },
+    workspaceEpoch: (repoPath) => workspaceEpochs.get(repoPath) ?? 0,
     takeFailedWith: (repoPath, deletedTaskIds) => {
       const queue = workspaces.get(repoPath);
       if (!queue) return [];

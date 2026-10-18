@@ -239,10 +239,9 @@ export function useRepoSettingsOperations({
           queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
         });
       }
-      const savedActiveWorkspace = workspaces.find((workspace) => workspace.isActive);
       if (changes.kanbanDoneVisibleDaysChanged) {
         await getProductionTaskViewSync(queryClient).refreshAfterTaskRetentionChange(
-          savedActiveWorkspace?.repoPath ?? null,
+          workspaces.map((workspace) => workspace.repoPath),
         );
       }
       if (changes.agentRuntimesChanged) {

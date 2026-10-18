@@ -113,7 +113,7 @@ describe("createSpecOperations", () => {
         event.boardChanges!.documentChanges = written
           ? [{ taskId: card.id, sections: [section] }]
           : [];
-        await sync.reconcileExternalEvent(event, "/repo-a", eventCursor(sequence));
+        await sync.reconcileExternalEvent(event, eventCursor(sequence));
       };
       try {
         if (change.endsWith("after reply")) {
@@ -209,10 +209,10 @@ describe("createSpecOperations", () => {
       const card = createTaskCardFixture({ id: "task-1", updatedAt: saved.updatedAt });
       card.documentSummary[section] = { has: true, updatedAt: saved.updatedAt };
       const load = sync.loadWorkspace("/repo-a", { forceFresh: true });
-      let recovery: Promise<string[]> | undefined;
+      let recovery: Promise<unknown> | undefined;
       try {
         await boardStarted;
-        recovery = sync.reconcileStreamSnapshot("/repo-b");
+        recovery = sync.reconcileStreamSnapshot(["/repo-b"]);
         await operations[method]("task-1", saved.markdown);
         boardResponse = Promise.resolve([card]);
         finishBoard([card]);
@@ -295,7 +295,7 @@ describe("createSpecOperations", () => {
         (error: Error) => error,
       );
       try {
-        await sync.reconcileStreamSnapshot(activeRepoPath);
+        await sync.reconcileStreamSnapshot(activeRepoPath ? [activeRepoPath] : []);
         finishSave(saveResult("2026-04-10T13:10:00.000Z"));
         const outcome = await completion;
         expect(outcome).toBeInstanceOf(Error);
@@ -396,7 +396,7 @@ describe("createSpecOperations", () => {
         snapshotCards = [card];
         snapshotDocument = empty;
         if (change === "snapshot" || change === "snapshot-start") {
-          const recovery = sync.reconcileStreamSnapshot("/repo-a");
+          const recovery = sync.reconcileStreamSnapshot(["/repo-a"]);
           if (change === "snapshot-start") finishSave(saveResult(saved.updatedAt));
           await recovery;
         } else
@@ -419,7 +419,6 @@ describe("createSpecOperations", () => {
               },
               emittedAt: committedAt,
             },
-            "/repo-a",
             eventCursor(Date.parse(committedAt)),
           );
         finishSave(saveResult(saved.updatedAt));

@@ -3,6 +3,7 @@ import type {
   AgentSessionRecord,
   ExternalTaskSyncEvent,
   TaskAgentSessions,
+  TaskCard,
   TaskEventCursor,
 } from "@openducktor/contracts";
 import { notifyManager, QueryClient, QueryObserver } from "@tanstack/react-query";
@@ -10,6 +11,7 @@ import type { TaskStreamFrame, TaskStreamSubscription } from "@/lib/shell-bridge
 import {
   type AdmittedSessionChange,
   createAgentSessionViewSync,
+  type AgentSessionViewReadPort,
   type AgentSessionViewSync,
 } from "@/state/queries/agent-session-view-sync";
 import {
@@ -17,22 +19,33 @@ import {
   agentSessionQueryKeys,
   loadAgentSessionListFromQuery,
 } from "@/state/queries/agent-sessions";
-import { createTaskViewSync, type TaskViewSync } from "@/state/queries/task-view-sync";
+import {
+  createTaskViewSync,
+  type TaskSnapshotResult,
+  type TaskViewSync,
+} from "@/state/queries/task-view-sync";
+import { taskQueryKeys } from "@/state/queries/tasks";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createTaskStreamController } from "./task-stream-controller";
 
 const epoch = "11111111-1111-4111-8111-111111111111";
 const cursor = (sequence: number): TaskEventCursor => ({ epoch, sequence });
-const event = (taskId: string): ExternalTaskSyncEvent => ({
+const event = (taskId: string, repoPath = "/repo"): ExternalTaskSyncEvent => ({
   kind: "tasks_updated",
   boardChanges: null,
   eventId: `event-${taskId}`,
-  repoPath: "/repo",
+  repoPath,
   taskIds: [taskId],
   removedTaskIds: [],
   statusChanges: [],
   taskSnapshots: [{ id: taskId, title: taskId, status: "open" }],
   emittedAt: "2026-04-10T13:10:00.000Z",
+});
+
+/** The task IDs that a snapshot read in the test workspace. */
+const snapshotOf = (taskIds: string[]): TaskSnapshotResult => ({
+  taskIdsByRepo: new Map([["/repo", taskIds]]),
+  failures: new Map(),
 });
 
 const deferred = <Value>() => {
@@ -60,22 +73,39 @@ type SubscriptionRecord = {
   unsubscribe: ReturnType<typeof mock<() => Promise<void>>>;
 };
 
+/** A session view sync for one open, active workspace. A test replaces what it checks. */
+const createSessionSync = (
+  queryClient: QueryClient,
+  readPort: AgentSessionViewReadPort,
+  overrides: Partial<Parameters<typeof createAgentSessionViewSync>[0]> = {},
+): AgentSessionViewSync =>
+  createAgentSessionViewSync({
+    queryClient,
+    readPort,
+    listSessionTaskIds: () => [],
+    removeTaskSessions: () => {},
+    refreshLiveSessions: async () => {},
+    isWorkspaceOpen: () => true,
+    isWorkspaceActive: () => true,
+    ...overrides,
+  });
+
 const createHarness = ({
   onSubscribe,
-  onSnapshotStarted = mock((_repoPath: string | null) => {}),
-  onSnapshotFinished = mock((_repoPath: string | null, _succeeded: boolean) => {}),
+  onSnapshotStarted = mock((_repoPath: string) => {}),
+  onSnapshotFinished = mock((_repoPath: string, _succeeded: boolean) => {}),
+  onWorkspaceFailures = mock((_failures: ReadonlyMap<string, unknown>) => {}),
   taskViewSync: taskViewSyncOverrides,
   agentSessionViewSync: agentSessionViewSyncOverride,
-  getActiveRepoPath = () => "/repo",
+  getOpenRepoPaths = () => ["/repo"],
 }: {
   onSubscribe?: (record: SubscriptionRecord, index: number) => Promise<TaskStreamSubscription>;
-  onSnapshotStarted?: ReturnType<typeof mock<(repoPath: string | null) => void>>;
-  onSnapshotFinished?: ReturnType<
-    typeof mock<(repoPath: string | null, succeeded: boolean) => void>
-  >;
+  onSnapshotStarted?: ReturnType<typeof mock<(repoPath: string) => void>>;
+  onSnapshotFinished?: ReturnType<typeof mock<(repoPath: string, succeeded: boolean) => void>>;
+  onWorkspaceFailures?: ReturnType<typeof mock<(failures: ReadonlyMap<string, unknown>) => void>>;
   taskViewSync?: Partial<TaskViewSync>;
   agentSessionViewSync?: AgentSessionViewSync;
-  getActiveRepoPath?: () => string | null;
+  getOpenRepoPaths?: () => readonly string[];
 } = {}) => {
   const records: SubscriptionRecord[] = [];
   const taskViewSync: TaskViewSync = {
@@ -84,7 +114,13 @@ const createHarness = ({
     refreshAfterTaskRetentionChange: async () => {},
     refreshDocumentsForTasks: async () => {},
     reconcileExternalEvent: mock(async () => {}),
-    reconcileStreamSnapshot: mock(async () => []),
+    reconcileStreamSnapshot: mock(
+      async (repoPaths: readonly string[]): Promise<TaskSnapshotResult> => ({
+        taskIdsByRepo: new Map(repoPaths.map((repoPath) => [repoPath, []])),
+        failures: new Map(),
+      }),
+    ),
+    releaseWorkspace: async () => {},
     ...taskViewSyncOverrides,
   };
   const agentSessionViewSync: AgentSessionViewSync = agentSessionViewSyncOverride ?? {
@@ -96,7 +132,8 @@ const createHarness = ({
       await Promise.all(changes);
     }),
     cancelReads: mock(() => {}),
-    reconcileStreamSnapshot: mock(async () => {}),
+    reconcileStreamSnapshot: mock(async () => new Map<string, unknown>()),
+    releaseWorkspace: mock(async (_repoPath: string) => {}),
   };
   const transport = {
     subscribeNotificationStream: async () => () => {},
@@ -124,10 +161,11 @@ const createHarness = ({
     transport,
     taskViewSync,
     agentSessionViewSync,
-    getActiveRepoPath,
+    getOpenRepoPaths,
     onDegraded,
     onSnapshotStarted,
     onSnapshotFinished,
+    onWorkspaceFailures,
   };
   const controller = createTaskStreamController(controllerOptions);
 
@@ -137,6 +175,7 @@ const createHarness = ({
     onDegraded,
     onSnapshotFinished,
     onSnapshotStarted,
+    onWorkspaceFailures,
     records,
     taskViewSync,
     transport,
@@ -148,13 +187,13 @@ const createHarness = ({
 };
 
 describe("task stream controller recovery", () => {
-  test("claims the active repository before applying a snapshot", async () => {
+  test("claims the open repositories before applying a snapshot", async () => {
     const snapshotRefresh = deferred<void>();
     const harness = createHarness({
       taskViewSync: {
         reconcileStreamSnapshot: async () => {
           await snapshotRefresh.promise;
-          return [];
+          return snapshotOf([]);
         },
       },
     });
@@ -171,6 +210,126 @@ describe("task stream controller recovery", () => {
     expect(harness.onSnapshotFinished).toHaveBeenCalledWith("/repo", true);
   });
 
+  test("reconciles every open repository and reports the failures of each", async () => {
+    const taskIdsByRepo = new Map([
+      ["/repo-a", ["task-a"]],
+      ["/repo-c", ["task-c"]],
+    ]);
+    const harness = createHarness({
+      getOpenRepoPaths: () => ["/repo-a", "/repo-b", "/repo-c"],
+      taskViewSync: {
+        reconcileStreamSnapshot: mock(async () => ({
+          taskIdsByRepo,
+          failures: new Map([
+            ["/repo-a", new Error("spec unavailable")],
+            ["/repo-b", new Error("task store unavailable")],
+          ]),
+        })),
+      },
+    });
+    harness.agentSessionViewSync.reconcileStreamSnapshot = mock(
+      async () => new Map([["/repo-c", new Error("live refresh failed")]]),
+    );
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+
+    expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith([
+      "/repo-a",
+      "/repo-b",
+      "/repo-c",
+    ]);
+    expect(harness.agentSessionViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith(
+      taskIdsByRepo,
+      expect.any(Function),
+    );
+    expect(harness.onSnapshotStarted.mock.calls).toEqual([["/repo-a"], ["/repo-b"], ["/repo-c"]]);
+    // The failed task list keeps its workspace owned, so no task load reads it again. A failed
+    // document read does not, because the task list of its workspace is current.
+    expect(harness.onSnapshotFinished.mock.calls).toEqual([
+      ["/repo-a", true],
+      ["/repo-b", false],
+      ["/repo-c", true],
+    ]);
+    expect(harness.onWorkspaceFailures.mock.calls).toEqual([
+      [
+        new Map([
+          ["/repo-a", new Error("spec unavailable")],
+          ["/repo-b", new Error("task store unavailable")],
+          ["/repo-c", new Error("live refresh failed")],
+        ]),
+      ],
+    ]);
+    // The stream itself is not degraded.
+    expect(harness.onDegraded).not.toHaveBeenCalled();
+    // The stream stays open for every workspace.
+    expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(7));
+    expect(harness.records).toHaveLength(1);
+  });
+
+  test("reports only the repositories that stay open during a snapshot", async () => {
+    let openRepoPaths = ["/repo-a", "/repo-b"];
+    const harness = createHarness({
+      getOpenRepoPaths: () => openRepoPaths,
+      taskViewSync: {
+        reconcileStreamSnapshot: mock(async () => {
+          openRepoPaths = ["/repo-a"];
+          return {
+            taskIdsByRepo: new Map([
+              ["/repo-a", ["task-a"]],
+              ["/repo-b", ["task-b"]],
+            ]),
+            failures: new Map(),
+          };
+        }),
+      },
+    });
+
+    await harness.controller.start();
+    harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+    await flush();
+
+    expect(harness.onSnapshotFinished.mock.calls).toEqual([["/repo-a", true]]);
+    expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(7));
+  });
+
+  test("acknowledges a snapshot without waiting for the read of a workspace that closed", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const pendingRead = deferred<TaskCard[]>();
+    const readStarted = deferred<void>();
+    const taskViewSync = createTaskViewSync({
+      queryClient,
+      ports: {
+        listTasks: async (repoPath) => {
+          if (repoPath === "/repo-a") return [createTaskCardFixture({ id: "task-a" })];
+          readStarted.resolve();
+          return pendingRead.promise;
+        },
+        loadFreshDocument: async () => ({ markdown: "", updatedAt: null }),
+      },
+    });
+    let openRepoPaths = ["/repo-a", "/repo-b"];
+    const harness = createHarness({ getOpenRepoPaths: () => openRepoPaths, taskViewSync });
+
+    try {
+      await harness.controller.start();
+      harness.emit(0, { type: "snapshot_required", cursor: cursor(7), reason: "buffer_gap" });
+      await readStarted.promise;
+      openRepoPaths = ["/repo-a"];
+      await harness.controller.releaseWorkspace("/repo-b");
+      await flush();
+
+      expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(7));
+      expect(harness.onDegraded).not.toHaveBeenCalled();
+      expect(harness.onWorkspaceFailures).not.toHaveBeenCalled();
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))).toBeUndefined();
+    } finally {
+      pendingRead.resolve([]);
+      queryClient.clear();
+    }
+  });
+
   test("uses one task list read to reconcile task and session snapshots", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const listTasks = mock(async () => [createTaskCardFixture({ id: "task-1" })]);
@@ -182,15 +341,9 @@ describe("task stream controller recovery", () => {
       },
     });
     const loadSessionBatch = mock(async () => [{ taskId: "task-1", agentSessions: [] }]);
-    const agentSessionViewSync = createAgentSessionViewSync({
-      queryClient,
-      readPort: {
-        agentSessionsListForTasks: loadSessionBatch,
-        taskIdsList: async () => ["task-1"],
-      },
-      listSessionTaskIds: () => [],
-      removeTaskSessions: () => {},
-      refreshLiveSessions: async () => {},
+    const agentSessionViewSync = createSessionSync(queryClient, {
+      agentSessionsListForTasks: loadSessionBatch,
+      taskIdsList: async () => ["task-1"],
     });
     const harness = createHarness({ taskViewSync, agentSessionViewSync });
 
@@ -246,14 +399,8 @@ describe("task stream controller recovery", () => {
     const refreshLiveSessions = mock(async (_repoPath: string) => {});
     const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
     const harness = createHarness({
-      taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise },
-      agentSessionViewSync: createAgentSessionViewSync({
-        queryClient,
-        readPort,
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions,
-      }),
+      taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise.then(snapshotOf) },
+      agentSessionViewSync: createSessionSync(queryClient, readPort, { refreshLiveSessions }),
     });
     queryClient.setQueryData(listKey, []);
     const stopObserving = new QueryObserver(
@@ -310,13 +457,7 @@ describe("task stream controller recovery", () => {
     );
     const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
     const harness = createHarness({
-      agentSessionViewSync: createAgentSessionViewSync({
-        queryClient,
-        readPort,
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions: async () => {},
-      }),
+      agentSessionViewSync: createSessionSync(queryClient, readPort),
     });
     const stops = ["busy", "task-a", "task-b"].map((taskId) => {
       if (taskId !== "busy")
@@ -356,18 +497,18 @@ describe("task stream controller recovery", () => {
       taskIds.map((taskId) => ({ taskId, agentSessions: [] })),
     );
     const refreshLiveSessions = mock(async (_repoPath: string) => {});
-    const prepareSnapshot = mock(async (_repoPath: string | null) =>
-      prepareSnapshot.mock.calls.length === 1 ? olderPreparation.promise : ["newer"],
+    const prepareSnapshot = mock(async (_repoPaths: readonly string[]) =>
+      snapshotOf(
+        prepareSnapshot.mock.calls.length === 1 ? await olderPreparation.promise : ["newer"],
+      ),
     );
     const harness = createHarness({
       taskViewSync: { reconcileStreamSnapshot: prepareSnapshot },
-      agentSessionViewSync: createAgentSessionViewSync({
+      agentSessionViewSync: createSessionSync(
         queryClient,
-        readPort: { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] },
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions,
-      }),
+        { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] },
+        { refreshLiveSessions },
+      ),
     });
     try {
       await harness.controller.start();
@@ -395,6 +536,61 @@ describe("task stream controller recovery", () => {
     selectedModel: null,
   });
 
+  test("a change batch starts no live refresh for a workspace that closed while it waited", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const pendingRead = deferred<TaskAgentSessions[]>();
+    const readPort = {
+      agentSessionsListForTasks: mock(async (repoPath: string, taskIds: string[]) =>
+        repoPath === "/repo-a"
+          ? pendingRead.promise
+          : taskIds.map((taskId) => ({ taskId, agentSessions: [recordFixture("b-new")] })),
+      ),
+      taskIdsList: async () => [],
+    };
+    const refreshLiveSessions = mock(async (_repoPath: string) => {});
+    let openRepoPaths = ["/repo-a", "/repo-b"];
+    const harness = createHarness({
+      getOpenRepoPaths: () => openRepoPaths,
+      agentSessionViewSync: createSessionSync(queryClient, readPort, {
+        refreshLiveSessions,
+        isWorkspaceOpen: (repoPath) => openRepoPaths.includes(repoPath),
+      }),
+    });
+    const stopObserving = (
+      [
+        ["/repo-a", "task-a", "a-old"],
+        ["/repo-b", "task-b", "b-old"],
+      ] as const
+    ).map(([repoPath, taskId, record]) => {
+      queryClient.setQueryData(agentSessionQueryKeys.list(repoPath, taskId), [
+        recordFixture(record),
+      ]);
+      return new QueryObserver(
+        queryClient,
+        agentSessionListQueryOptions(repoPath, taskId, readPort),
+      ).subscribe(() => {});
+    });
+
+    try {
+      await harness.controller.start();
+      harness.emit(0, { type: "change", cursor: cursor(0), event: event("task-a", "/repo-a") });
+      harness.emit(0, { type: "change", cursor: cursor(1), event: event("task-b", "/repo-b") });
+      await flush();
+      openRepoPaths = ["/repo-a"];
+      await harness.controller.releaseWorkspace("/repo-b");
+      pendingRead.resolve([{ taskId: "task-a", agentSessions: [recordFixture("a-new")] }]);
+      await flush();
+
+      expect(refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(1));
+      expect(harness.onDegraded).not.toHaveBeenCalled();
+    } finally {
+      for (const stop of stopObserving) stop();
+      pendingRead.resolve([]);
+      queryClient.clear();
+    }
+  });
+
   for (let microtasks = 0; microtasks <= 6; microtasks += 1) {
     test(`a snapshot ${microtasks} microtasks after a cold read response keeps its records out`, async () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -408,14 +604,8 @@ describe("task stream controller recovery", () => {
       );
       const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
       const harness = createHarness({
-        taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise },
-        agentSessionViewSync: createAgentSessionViewSync({
-          queryClient,
-          readPort,
-          listSessionTaskIds: () => [],
-          removeTaskSessions: () => {},
-          refreshLiveSessions: async () => {},
-        }),
+        taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise.then(snapshotOf) },
+        agentSessionViewSync: createSessionSync(queryClient, readPort),
       });
       const observer = new QueryObserver(
         queryClient,
@@ -468,13 +658,7 @@ describe("task stream controller recovery", () => {
       );
       const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
       const harness = createHarness({
-        agentSessionViewSync: createAgentSessionViewSync({
-          queryClient,
-          readPort,
-          listSessionTaskIds: () => [],
-          removeTaskSessions: () => {},
-          refreshLiveSessions: async () => {},
-        }),
+        agentSessionViewSync: createSessionSync(queryClient, readPort),
       });
       try {
         await harness.controller.start();
@@ -506,13 +690,7 @@ describe("task stream controller recovery", () => {
     const loadSessionBatch = mock(async () => heldRead.promise);
     const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
     const harness = createHarness({
-      agentSessionViewSync: createAgentSessionViewSync({
-        queryClient,
-        readPort,
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions: async () => {},
-      }),
+      agentSessionViewSync: createSessionSync(queryClient, readPort),
     });
     try {
       await harness.controller.start();
@@ -558,13 +736,7 @@ describe("task stream controller recovery", () => {
     const refreshLiveSessions = mock(async (_repoPath: string) => {});
     const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
     const harness = createHarness({
-      agentSessionViewSync: createAgentSessionViewSync({
-        queryClient,
-        readPort,
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions,
-      }),
+      agentSessionViewSync: createSessionSync(queryClient, readPort, { refreshLiveSessions }),
     });
     const stops = ["unrelated", "task-a", "task-b"].map((taskId) => {
       if (taskId !== "unrelated") {
@@ -603,14 +775,12 @@ describe("task stream controller recovery", () => {
     const loadSessionBatch = mock(async () => heldRead.promise);
     const refreshLiveSessions = mock(async (_repoPath: string) => {});
     const harness = createHarness({
-      taskViewSync: { reconcileStreamSnapshot: async () => ["task-1"] },
-      agentSessionViewSync: createAgentSessionViewSync({
+      taskViewSync: { reconcileStreamSnapshot: async () => snapshotOf(["task-1"]) },
+      agentSessionViewSync: createSessionSync(
         queryClient,
-        readPort: { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] },
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions,
-      }),
+        { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] },
+        { refreshLiveSessions },
+      ),
     });
     try {
       await harness.controller.start();
@@ -643,14 +813,8 @@ describe("task stream controller recovery", () => {
       );
       const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
       const harness = createHarness({
-        taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise },
-        agentSessionViewSync: createAgentSessionViewSync({
-          queryClient,
-          readPort,
-          listSessionTaskIds: () => [],
-          removeTaskSessions: () => {},
-          refreshLiveSessions: async () => {},
-        }),
+        taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise.then(snapshotOf) },
+        agentSessionViewSync: createSessionSync(queryClient, readPort),
       });
       const observer = new QueryObserver(
         queryClient,
@@ -695,13 +859,7 @@ describe("task stream controller recovery", () => {
     const refreshLiveSessions = mock(async (_repoPath: string) => {});
     const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
     const harness = createHarness({
-      agentSessionViewSync: createAgentSessionViewSync({
-        queryClient,
-        readPort,
-        listSessionTaskIds: () => [],
-        removeTaskSessions: () => {},
-        refreshLiveSessions,
-      }),
+      agentSessionViewSync: createSessionSync(queryClient, readPort, { refreshLiveSessions }),
     });
     queryClient.setQueryData(listKey, []);
     const stopObserving = new QueryObserver(
@@ -748,14 +906,8 @@ describe("task stream controller recovery", () => {
       });
       const readPort = { agentSessionsListForTasks: loadSessionBatch, taskIdsList: async () => [] };
       const harness = createHarness({
-        taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise },
-        agentSessionViewSync: createAgentSessionViewSync({
-          queryClient,
-          readPort,
-          listSessionTaskIds: () => [],
-          removeTaskSessions: () => {},
-          refreshLiveSessions,
-        }),
+        taskViewSync: { reconcileStreamSnapshot: () => snapshotPrepared.promise.then(snapshotOf) },
+        agentSessionViewSync: createSessionSync(queryClient, readPort, { refreshLiveSessions }),
       });
       queryClient.setQueryData(listKey, []);
       const stopObserving = new QueryObserver(
@@ -937,10 +1089,9 @@ describe("task stream controller recovery", () => {
     harness.emit(1, { type: "change", cursor: cursor(8), event: event("resumed") });
     await flush();
 
-    expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith("/repo");
+    expect(harness.taskViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith(["/repo"]);
     expect(harness.agentSessionViewSync.reconcileStreamSnapshot).toHaveBeenCalledWith(
-      "/repo",
-      [],
+      new Map([["/repo", []]]),
       expect.any(Function),
     );
     expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(7)], [cursor(8)]]);
@@ -1123,7 +1274,7 @@ describe("task stream controller recovery", () => {
       taskViewSync: {
         reconcileStreamSnapshot: async () => {
           await snapshotRefresh.promise;
-          return [];
+          return snapshotOf([]);
         },
       },
     });

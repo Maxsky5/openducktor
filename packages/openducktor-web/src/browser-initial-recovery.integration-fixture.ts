@@ -165,12 +165,14 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
       reconcileStreamSnapshot: async () => {
         taskSnapshotStarted.resolve();
         await taskSnapshotGate.promise;
-        return [];
+        return { taskIdsByRepo: new Map([["/repo", []]]), failures: new Map() };
       },
+      releaseWorkspace: async () => {},
     },
     agentSessionViewSync: {
       cancelReads: () => {},
-      reconcileStreamSnapshot: async () => {},
+      releaseWorkspace: async () => {},
+      reconcileStreamSnapshot: async () => new Map(),
       admitExternalEvent: async (event) => ({
         repoPath: event.repoPath,
         changedTaskIds: [],
@@ -180,10 +182,11 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
         sessionsChanged.resolve();
       },
     },
-    getActiveRepoPath: () => "/repo",
+    getOpenRepoPaths: () => ["/repo"],
     onDegraded: (cause) => {
       throw cause;
     },
+    onWorkspaceFailures: () => {},
   });
   const started = controller.start().catch((cause: unknown) => cause);
   const failed = Promise.withResolvers<void>();

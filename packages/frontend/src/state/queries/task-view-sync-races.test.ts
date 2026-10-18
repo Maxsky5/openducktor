@@ -39,7 +39,6 @@ describe("TaskViewSync races", () => {
       void read.catch(() => {});
       await sync.reconcileExternalEvent(
         boardEvent("/repo", [createTaskCardFixture({ id: "task-1", title: "Obsolete" })]),
-        "/repo",
         eventCursor(),
       );
       const replacement = createTaskCardFixture({ id: "task-1", title: "Replacement" });
@@ -86,11 +85,7 @@ describe("TaskViewSync races", () => {
       stopObserving();
       for (let index = 0; index < 50; index++) {
         changed = createTaskCardFixture({ id: "task-1", title: `Changed ${index}` });
-        await sync.reconcileExternalEvent(
-          boardEvent("/inactive", [changed]),
-          "/repo",
-          eventCursor(),
-        );
+        await sync.reconcileExternalEvent(boardEvent("/inactive", [changed]), eventCursor());
       }
       expect(queryClient.getQueryData(queryKey)).toBeUndefined();
       expect(queryClient.getQueryData(idKey)).toBeUndefined();
@@ -172,17 +167,14 @@ describe("TaskViewSync races", () => {
       try {
         await sync.reconcileExternalEvent(
           boardEvent("/repo", [earlyChanged, firstParent, moved], { removedTaskIds: ["old"] }),
-          "/repo",
           eventCursor(),
         );
         await sync.reconcileExternalEvent(
           boardEvent("/repo", [marker], { doneVisibleDays: 0 }),
-          "/repo",
           eventCursor(),
         );
         await sync.reconcileExternalEvent(
           boardEvent("/repo", [lastParent, restored, reopened], { doneVisibleDays: 7 }),
-          "/repo",
           eventCursor(),
         );
         result.resolve({ tasks });
@@ -236,7 +228,6 @@ describe("TaskViewSync races", () => {
         boardChanges: { documentChanges: [], cards: [queued], doneVisibleDays: 1 },
         emittedAt: "2026-04-10T13:10:00.000Z",
       },
-      "/repo",
       eventCursor(),
     );
 
@@ -257,7 +248,7 @@ describe("TaskViewSync races", () => {
     });
     const { sync } = createSync(createPorts({ listTasks }));
 
-    const snapshot = sync.reconcileStreamSnapshot("/repo");
+    const snapshot = sync.reconcileStreamSnapshot(["/repo"]);
     const workspaceLoad = sync.loadWorkspace("/repo");
     void workspaceLoad.catch(() => {});
 
@@ -268,7 +259,10 @@ describe("TaskViewSync races", () => {
       expect(listTasks).toHaveBeenCalledTimes(1);
 
       taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
-      await expect(snapshot).resolves.toEqual(["task-1"]);
+      await expect(snapshot).resolves.toEqual({
+        taskIdsByRepo: new Map([["/repo", ["task-1"]]]),
+        failures: new Map(),
+      });
       await expect(workspaceLoad).resolves.toBeUndefined();
     } finally {
       taskList.resolve([createTaskCardFixture({ id: "task-1" })]);
@@ -291,7 +285,7 @@ describe("TaskViewSync races", () => {
 
     const workspaceLoad = sync.loadWorkspace("/repo", { forceFresh: true });
     await firstTaskListStarted.promise;
-    const retentionRefresh = sync.refreshAfterTaskRetentionChange("/repo");
+    const retentionRefresh = sync.refreshAfterTaskRetentionChange(["/repo"]);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     expect(listTasks).toHaveBeenCalledTimes(1);
@@ -408,7 +402,7 @@ describe("TaskViewSync races", () => {
 
     try {
       await staleDocumentStarted.promise;
-      await sync.reconcileStreamSnapshot("/repo");
+      await sync.reconcileStreamSnapshot(["/repo"]);
 
       expect(calls.indexOf("cancel")).toBeLessThan(calls.indexOf("invalidate"));
       expect(
@@ -472,7 +466,7 @@ describe("TaskViewSync races", () => {
 
     try {
       await Promise.all([activeStaleStarted.promise, inactiveStaleStarted.promise]);
-      await sync.reconcileStreamSnapshot("/repo");
+      await sync.reconcileStreamSnapshot(["/repo"]);
 
       activeStaleDocument.resolve({ markdown: "# Late active", updatedAt: null });
       inactiveStaleDocument.resolve({ markdown: "# Late inactive", updatedAt: null });
