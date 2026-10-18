@@ -22,7 +22,7 @@ import {
   workspaceConflictChatKey,
 } from "./workspace-git-conflict-assistance";
 import { useWorkspaceSessionGit } from "./use-workspace-session-git";
-import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
+import { WorkspaceSessionChatPane } from "./workspace-session-chat-pane";
 import {
   WorkspaceSessionFilePreview,
   type WorkspaceSessionFilePreviewHandle,
@@ -49,7 +49,7 @@ const NARROW_TOOLS_PANEL_SIZES: SessionPanelSplitSizes = {
 type WorkspaceSessionContentProps = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
-  sessionIds: readonly string[];
+  isVisible: boolean;
   rightPanel: SessionPanelModel;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectedFileChange: (sessionId: string, selectedFile: TaskExecutionSelectedFile | null) => void;
@@ -59,13 +59,13 @@ type WorkspaceSessionContentProps = {
 export function WorkspaceSessionContent({
   workspace,
   record,
-  sessionIds,
+  isVisible,
   rightPanel,
   selectedFile,
   onSelectedFileChange,
   onSafeToLeave,
 }: WorkspaceSessionContentProps): ReactElement {
-  const isPanelOpen = rightPanel.isVisible;
+  const isPanelOpen = isVisible && rightPanel.isVisible;
   const [chatActions, setChatActions] = useState<WorkspaceConflictChatActions | null>(null);
   const selectedKey = workspaceConflictChatKey(workspace.workspaceId, record.id);
   const onActionsReady = useCallback(
@@ -126,7 +126,7 @@ export function WorkspaceSessionContent({
   );
   const previewContent = (
     <WorkspaceSessionFilePreview
-      key={record.id}
+      key={selectedKey}
       ref={previewRef}
       initialFile={selectedFile}
       onSelectionChange={onSelectionChange}
@@ -146,10 +146,11 @@ export function WorkspaceSessionContent({
           style={{ visibility: selectedFile ? "hidden" : undefined }}
           inert={selectedFile !== null}
         >
-          <WorkspaceSessionChatPanes
+          <WorkspaceSessionChatPane
+            key={selectedKey}
             workspace={workspace}
             record={record}
-            sessionIds={sessionIds}
+            isVisible={isVisible}
             onToolRefresh={onToolRefresh}
             onSelectFile={onSelectFile}
             workingDirectory={workingDirectory}
@@ -206,13 +207,14 @@ export function WorkspaceSessionContent({
       <SessionPanelSplit
         ids={TOOLS_PANEL_SPLIT_IDS}
         model={rightPanel}
+        keepPanelMounted
         direction={isNarrow ? "vertical" : "horizontal"}
         sizes={isNarrow ? NARROW_TOOLS_PANEL_SIZES : TOOLS_PANEL_SIZES}
         className="h-full min-h-0 overflow-hidden"
         mainClassName="h-full min-h-0"
         panelClassName="border-l border-border bg-card"
         main={mainContent}
-        panel={<SessionPanel model={rightPanel} toolTabs={toolTabs} />}
+        panel={<SessionPanel model={rightPanel} toolTabs={toolTabs} isActive={isPanelOpen} />}
       />
     </div>
   );

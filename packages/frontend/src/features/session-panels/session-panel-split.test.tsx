@@ -27,7 +27,7 @@ const renderSplit = (presence: PanelPresence, onSettled: () => void, onCollapsed
 );
 
 const panelElement = (): HTMLElement => {
-  const panel = document.getElementById(ids.panel);
+  const panel = document.querySelector<HTMLElement>(`[id^="${ids.panel}-"]`);
   if (!panel) throw new Error("Expected the panel element.");
   return panel;
 };

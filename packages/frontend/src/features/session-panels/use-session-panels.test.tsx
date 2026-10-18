@@ -74,6 +74,7 @@ type HarnessProps = { overrides: Partial<TerminalSessionsModel> };
 const renderPanels = (
   owner: SessionPanelOwner | null,
   initialOverrides: Partial<TerminalSessionsModel>,
+  shortcutsEnabled = true,
 ) => {
   const scopeKey = owner ? sessionPanelOwnerKey(owner) : null;
   const starts: (RepoAction | undefined)[] = [];
@@ -102,6 +103,7 @@ const renderPanels = (
         selectionKey: "build",
         unavailableKinds: WITHOUT_CI_CHECKS,
         terminals,
+        shortcutsEnabled,
       });
     },
     { initialProps: { overrides: initialOverrides }, wrapper },
@@ -442,22 +444,29 @@ describe("useSessionPanels", () => {
     expectPanelSlidesOut(view, "right");
   });
 
-  test("toggles the bottom panel at once from the keyboard shortcut", () => {
-    const view = renderPanels(newTaskOwner(), { tabs: [terminalTab("terminal-1")] });
-    expect(view.result.current.bottom.isVisible).toBe(true);
+  test.each([true, false])(
+    "honors the bottom panel keyboard shortcut when enabled=%s",
+    (shortcutsEnabled) => {
+      const view = renderPanels(
+        newTaskOwner(),
+        { tabs: [terminalTab("terminal-1")] },
+        shortcutsEnabled,
+      );
+      expect(view.result.current.bottom.isVisible).toBe(true);
 
-    act(() => {
-      fireEvent.keyDown(window, { key: "`", ctrlKey: true });
-    });
-    expect(view.result.current.bottom.presence).toBe("closed");
-    act(() => {
-      fireEvent.keyDown(window, { key: "`", ctrlKey: true });
-    });
-    expect(view.result.current.bottom.presence).toBe("open");
+      act(() => {
+        fireEvent.keyDown(window, { key: "`", ctrlKey: true });
+      });
+      expect(view.result.current.bottom.presence).toBe(shortcutsEnabled ? "closed" : "open");
+      act(() => {
+        fireEvent.keyDown(window, { key: "`", ctrlKey: true });
+      });
+      expect(view.result.current.bottom.presence).toBe("open");
 
-    act(() => view.result.current.bottomToggle.onToggle());
-    expectPanelSlidesOut(view, "bottom");
-  });
+      act(() => view.result.current.bottomToggle.onToggle());
+      expectPanelSlidesOut(view, "bottom");
+    },
+  );
 
   test("asks at once before it closes a terminal that runs a command, and changes nothing", () => {
     const closeCalls: boolean[] = [];

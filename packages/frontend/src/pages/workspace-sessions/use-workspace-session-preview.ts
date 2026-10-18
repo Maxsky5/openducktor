@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 
 export function useWorkspaceSessionPreview(
   selectedFile: TaskExecutionSelectedFile | null,
@@ -9,51 +10,56 @@ export function useWorkspaceSessionPreview(
   isWorktree: boolean,
 ) {
   const { register } = useWorkspacePreviewTransitionGuard();
+  const isActive = useSessionViewActive();
   const preview = useTaskExecutionFilePreviewController(selectedFile);
   const pendingExitRef = useRef<{ discarded: boolean } | null>(null);
 
   useEffect(
     () =>
-      register(
-        (apply, cancel, options) => {
-          if (isWorktree && options?.kind === "root_branch_switch") {
-            void apply();
-            return;
-          }
-          const pendingExit = { discarded: false };
-          pendingExitRef.current = pendingExit;
-          preview.requestContextTransition(
-            () => {
-              if (options?.waitForSuccess) {
-                return Promise.resolve()
-                  .then(async () => (await apply()) === true)
-                  .then((switched) => {
-                    if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                    if (switched)
-                      onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
-                    return switched;
-                  })
-                  .catch((error) => {
-                    if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-                    throw error;
-                  });
+      isActive
+        ? register(
+            (apply, cancel, options) => {
+              if (isWorktree && options?.kind === "root_branch_switch") {
+                void apply();
+                return;
               }
-              if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-              onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
-              apply();
+              const pendingExit = { discarded: false };
+              pendingExitRef.current = pendingExit;
+              preview.requestContextTransition(
+                () => {
+                  if (options?.waitForSuccess) {
+                    return Promise.resolve()
+                      .then(async () => (await apply()) === true)
+                      .then((switched) => {
+                        if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                        if (switched)
+                          onSelectionChange(
+                            pendingExit.discarded ? null : preview.model.selectedFile,
+                          );
+                        return switched;
+                      })
+                      .catch((error) => {
+                        if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                        throw error;
+                      });
+                  }
+                  if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                  onSelectionChange(pendingExit.discarded ? null : preview.model.selectedFile);
+                  apply();
+                },
+                () => {
+                  if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
+                  cancel?.();
+                },
+                options,
+              );
             },
             () => {
-              if (pendingExitRef.current === pendingExit) pendingExitRef.current = null;
-              cancel?.();
+              if (pendingExitRef.current) preview.model.onKeepEditing();
             },
-            options,
-          );
-        },
-        () => {
-          if (pendingExitRef.current) preview.model.onKeepEditing();
-        },
-      ),
-    [isWorktree, onSelectionChange, preview, register],
+          )
+        : undefined,
+    [isActive, isWorktree, onSelectionChange, preview, register],
   );
 
   const onDiscard = useCallback(() => {

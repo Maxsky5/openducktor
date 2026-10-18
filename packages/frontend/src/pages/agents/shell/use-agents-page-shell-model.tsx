@@ -31,6 +31,7 @@ import {
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
 import { useAgentsPageOrchestrationShellModel } from "./use-agents-page-orchestration-shell-model";
 import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 
 type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
@@ -57,6 +58,7 @@ type AgentsPageShellModel = {
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
+  const isActive = useSessionViewActive();
   const { activeBranch, branches, activeWorkspace } = useWorkspaceBranchState();
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -137,16 +139,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         answerAgentQuestion,
       },
     });
-  const mountedTaskIds = useMemo(
-    () => (selection.view.taskId ? [selection.view.taskId] : []),
-    [selection.view.taskId],
-  );
   const terminals = useAgentStudioTerminals({
     workspaceId: activeWorkspaceId,
     repoPath: workspaceRepoPath,
     taskId: selection.view.taskId || null,
     taskVersion: selection.view.selectedTask?.updatedAt ?? null,
-    mountedTaskIds,
   });
   const panelOwner = useMemo<SessionPanelOwner | null>(
     () =>
@@ -168,8 +165,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspace,
     activeBranch,
     selectedView: orchestrationSelection.view,
-    isDiffsActive: panels.right.activeKind === "diffs",
-    isPanelOpen: panels.right.isVisible,
+    isDiffsActive: isActive && panels.right.activeKind === "diffs",
+    isPanelOpen: isActive && panels.right.isVisible,
     repoSettings: orchestration.repoSettings,
     repoSettingsError,
     loadRepoSettings,

@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
+import { useSessionViewActive } from "../session-navigation/session-view-context";
 import {
   isTerminalToggleShortcut,
   type MountedTerminal,
@@ -111,6 +112,7 @@ type SessionPanelsInput = {
   /** Kinds that the rules allow but that the page cannot show now. */
   unavailableKinds?: ReadonlySet<ToolTabKind>;
   terminals: TerminalSessionsModel;
+  shortcutsEnabled?: boolean;
 };
 
 type LatestControllerState = LatestPanelState & {
@@ -294,7 +296,9 @@ export function useSessionPanels({
   selectionKey,
   unavailableKinds = NO_UNAVAILABLE_KINDS,
   terminals,
+  shortcutsEnabled = true,
 }: SessionPanelsInput): SessionPanelsModel {
+  const isActive = useSessionViewActive();
   const layoutStore = useSessionPanelLayoutStore();
   const ownerKey = owner ? sessionPanelOwnerKey(owner) : null;
   const isOwnerTerminals = ownerKey !== null && terminals.scopeKey === ownerKey;
@@ -409,6 +413,7 @@ export function useSessionPanels({
   const toggleBottom = useCallback((): void => toggleBottomWith("slide"), [toggleBottomWith]);
 
   useEffect(() => {
+    if (!isActive || !shortcutsEnabled) return;
     const handleShortcut = (event: KeyboardEvent): void => {
       if (!isTerminalToggleShortcut(event)) return;
       event.preventDefault();
@@ -417,7 +422,7 @@ export function useSessionPanels({
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [toggleBottomWith]);
+  }, [isActive, shortcutsEnabled, toggleBottomWith]);
 
   const hideBottom = useCallback((): void => {
     pendingBottomOpen.current = null;

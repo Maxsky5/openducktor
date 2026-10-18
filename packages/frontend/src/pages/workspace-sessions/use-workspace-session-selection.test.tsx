@@ -65,6 +65,7 @@ test("selection commits before the scheduled storage write and unmount flushes t
   const h = renderHook<WorkspaceSession | null, string | undefined>(
     (requestedSessionId: string | undefined) => {
       const { selected } = useWorkspaceSessionSelection({
+        isActive: true,
         workspaceId,
         sessions,
         requestedSessionId,
@@ -95,8 +96,12 @@ test("replaces a stale saved ID and clears it only after the loaded list becomes
   saved.setItem(key, "Archived");
   const h = renderHook<WorkspaceSession | null, WorkspaceSession[] | undefined>(
     (sessions: WorkspaceSession[] | undefined) =>
-      useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined })
-        .selected,
+      useWorkspaceSessionSelection({
+        workspaceId,
+        sessions,
+        requestedSessionId: undefined,
+        isActive: true,
+      }).selected,
     { initialProps: undefined, wrapper },
   );
   try {
@@ -122,6 +127,7 @@ test("keeps a missing requested chat unselected and keeps the saved selection", 
   const h = renderHook(
     () =>
       useWorkspaceSessionSelection({
+        isActive: true,
         workspaceId,
         sessions: [record("First"), record("Second")],
         requestedSessionId: "Archived",
@@ -168,7 +174,8 @@ test.each(["idle", "pending"])(
       }: {
         workspaceId: string;
         requestedSessionId: string | undefined;
-      }) => useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId }),
+      }) =>
+        useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId, isActive: true }),
       {
         initialProps: {
           workspaceId: workspaceA,
@@ -221,6 +228,7 @@ test.each([undefined, "Second", "First"])(
     const h = renderHook(
       () =>
         useWorkspaceSessionSelection({
+          isActive: true,
           workspaceId,
           sessions: [record("First"), record("Second")],
           requestedSessionId,
@@ -276,6 +284,7 @@ test("a failed write retries the intended chat and a workspace switch keeps erro
   const h = renderHook(
     (workspaceId: string) =>
       useWorkspaceSessionSelection({
+        isActive: true,
         workspaceId,
         sessions,
         requestedSessionId: "Second",

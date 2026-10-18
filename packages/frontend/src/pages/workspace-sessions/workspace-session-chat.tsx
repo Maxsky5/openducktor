@@ -9,7 +9,7 @@ import {
 } from "./workspace-session-chat-state";
 import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
-import { type ReactElement, useMemo } from "react";
+import { Activity, type ReactElement, useMemo } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
@@ -45,6 +45,7 @@ import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-ta
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
+  isVisible: boolean;
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   chatSettings: ChatSettings | null;
@@ -58,6 +59,7 @@ type WorkspaceSessionChatProps = {
 };
 
 export function WorkspaceSessionChat({
+  isVisible,
   workspace,
   record,
   chatSettings,
@@ -302,5 +304,9 @@ export function WorkspaceSessionChat({
       stopSession: operations.stopAgentSession,
     }),
   });
-  return <AgentChatSurface model={surface} visitKey={visitKey} />;
+  return (
+    <Activity mode={isVisible ? "visible" : "hidden"}>
+      <AgentChatSurface model={surface} visitKey={visitKey} />
+    </Activity>
+  );
 }

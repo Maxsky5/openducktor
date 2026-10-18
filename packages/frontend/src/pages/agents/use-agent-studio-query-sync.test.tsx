@@ -53,7 +53,7 @@ describe("useAgentStudioQuerySync", () => {
       throw new Error("Expected a URLSearchParams update.");
     }
     expect(lastCall[0].toString()).toBe("task=task-1&session=session-1&agent=build");
-    expect(lastCall[1]).toEqual({ replace: true });
+    expect(lastCall[1]).toEqual(expect.objectContaining({ replace: true }));
     await harness.unmount();
   });
 

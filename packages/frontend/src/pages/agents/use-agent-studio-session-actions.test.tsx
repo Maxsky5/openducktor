@@ -1,3 +1,4 @@
+import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
@@ -1149,7 +1150,7 @@ describe("useAgentStudioSessionActions", () => {
     const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => null);
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
 
     const harness = createHookHarness({
       ...createBaseArgs(),

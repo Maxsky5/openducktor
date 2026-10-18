@@ -9,6 +9,8 @@ import {
   sessionPanelOwnerKey,
   useSessionPanels,
 } from "@/features/session-panels";
+import { SessionTerminalHost } from "@/features/session-panels/session-terminal-host";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 import type { TerminalSessionsModel, TerminalTab } from "@/features/terminals";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
@@ -101,9 +103,15 @@ export function renderTaskTerminalPanels(
     mountedTaskIds: [initial.taskId ?? "task-a"],
     ...initial,
   };
-  function Harness({ workspaceId, taskId, taskVersion, mountedTaskIds, children }: HarnessProps) {
+  function Harness({
+    workspaceId,
+    taskId,
+    taskVersion,
+    children,
+    active,
+  }: Omit<HarnessProps, "mountedTaskIds"> & { active: boolean }) {
     const terminals = useAgentStudioTerminals(
-      { workspaceId, repoPath: "/repo", taskId, taskVersion, mountedTaskIds },
+      { workspaceId, repoPath: "/repo", taskId, taskVersion },
       hookDependencies,
     );
     const owner = useMemo(
@@ -116,7 +124,8 @@ export function renderTaskTerminalPanels(
       unavailableKinds: WITHOUT_CI_CHECKS,
       terminals,
     });
-    latest = { terminals, panels };
+    const result = { terminals, panels };
+    if (active) latest = result;
     // The page ends each panel slide when its transition ends. No transition runs in tests.
     const { right, bottom } = panels;
     useLayoutEffect(() => {
@@ -124,11 +133,25 @@ export function renderTaskTerminalPanels(
         if (panel.presence === "opening" || panel.presence === "closing") panel.onSettled();
       }
     }, [bottom, right]);
-    return children ? <>{children(latest)}</> : null;
+    return children ? <>{children(result)}</> : null;
   }
   const element = () => (
     <QueryProvider connection={connection}>
-      <Harness {...props} />
+      <SessionTerminalHost viewIds={props.mountedTaskIds} activeViewId={props.taskId}>
+        {props.mountedTaskIds.map((taskId) => (
+          <SessionViewContext
+            key={taskId}
+            value={{ id: taskId, isActive: taskId === props.taskId }}
+          >
+            <div
+              style={{ display: taskId === props.taskId ? undefined : "none" }}
+              inert={taskId !== props.taskId}
+            >
+              <Harness {...props} taskId={taskId} active={taskId === props.taskId} />
+            </div>
+          </SessionViewContext>
+        ))}
+      </SessionTerminalHost>
     </QueryProvider>
   );
   const view = render(element());
@@ -142,7 +165,11 @@ export function renderTaskTerminalPanels(
     scopeKey: (taskId = props.taskId): string =>
       sessionPanelOwnerKey({ kind: "task", workspaceId: props.workspaceId, taskId }),
     update: (next: Partial<HarnessProps>): void => {
-      props = { ...props, ...next };
+      props = {
+        ...props,
+        ...next,
+        mountedTaskIds: next.mountedTaskIds ?? (next.taskId ? [next.taskId] : props.mountedTaskIds),
+      };
       view.rerender(element());
     },
     unmount: view.unmount,

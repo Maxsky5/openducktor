@@ -1,10 +1,15 @@
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import type { WorkspaceSession, WorkspaceSessionArchiveInput } from "@openducktor/contracts";
+import type {
+  TerminalSummary,
+  WorkspaceSession,
+  WorkspaceSessionArchiveInput,
+  WorkspaceSessionCreateInput,
+} from "@openducktor/contracts";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
-import { useQueryClient } from "@tanstack/react-query";
-import { act, type ReactNode, useEffect, useState } from "react";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { act, type ReactNode, startTransition, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -19,17 +24,29 @@ import {
 } from "@openducktor/frontend-core/platform/client-storage";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { ActiveWorkspaceContext, WorkspaceBranchStateContext } from "@/state/app-state-contexts";
+import {
+  ActiveWorkspaceContext,
+  RuntimeDefinitionsContext,
+  TaskSnapshotContext,
+  WorkspaceBranchStateContext,
+  WorkspacePresenceContext,
+  WorkspaceStateContext,
+} from "@/state/app-state-contexts";
 import {
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
+  HostRuntimeStatusContext,
 } from "@openducktor/frontend-core/sessions/session-contexts";
 import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
 import {
   createAgentSessionFixture,
+  createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
+  createWorkspacePresenceFixture,
+  createWorkspaceRecordFixture,
+  createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { WorkspaceSessions } from "./workspace-sessions-view";
+import WorkspaceSessionsPage from "./workspace-sessions-page";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
 import {
@@ -38,6 +55,12 @@ import {
 } from "@openducktor/frontend-core/queries/workspace-sessions";
 import * as workspaceChat from "./workspace-session-chat";
 import * as sessionContent from "./workspace-session-content";
+import * as workspaceNavigation from "./use-workspace-session-navigation";
+import * as createDialog from "./workspace-session-create-dialog";
+import { useActiveWorkspace } from "@/state/app-state-provider";
+import type { ActiveWorkspace } from "@/types/state-slices";
+import { SessionsPage } from "@/pages/sessions/sessions-page";
+import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
 
 // Every test here renders the full workspace session page, which can exceed 1000 ms on a loaded
 // CI runner. Each test sets a 5_000 ms budget for that render.
@@ -147,7 +170,7 @@ test.each([
           branchName: "feature/second",
         };
       expect(requests).toEqual([expectedRequest]);
-      expect(view.getByRole("heading", { name: "First", level: 2 })).toBeTruthy();
+      expect(await view.findByRole("heading", { name: "First", level: 2 })).toBeTruthy();
     } finally {
       view.unmount();
     }
@@ -393,12 +416,17 @@ test("metadata updates and new drafts keep the selected conversation", async () 
 function renderSessions(
   hostClient: Partial<HostClient>,
   runningId?: string,
-  initialEntry = "/chats",
+  initialEntry: string | string[] = "/chats",
   workspaceId = crypto.randomUUID(),
   queryControls: ReactNode = null,
   previewControls: ReactNode = null,
+  options: { workspaces?: ActiveWorkspace[]; viaSessionsPage?: boolean } = {},
 ) {
-  const workspace = { workspaceId, workspaceName: "A", repoPath: "/repo" };
+  const workspace = options.workspaces?.find((entry) => entry.workspaceId === workspaceId) ?? {
+    workspaceId,
+    workspaceName: "A",
+    repoPath: "/repo",
+  };
   const store = createAgentSessionsStore("/repo");
   if (runningId) {
     store.replaceSession(
@@ -415,18 +443,13 @@ function renderSessions(
   }
   const connection = createTestClientConnection({ client: hostClient, storage: hostStorage });
   const view = render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={Array.isArray(initialEntry) ? initialEntry : [initialEntry]}>
       <RouteControls />
       <SessionLinks />
       <QueryProvider connection={connection}>
         <ThemeProvider>
           {queryControls}
-          <ActiveWorkspaceContext
-            value={{
-              activeWorkspace: workspace,
-              setActiveWorkspace: () => {},
-            }}
-          >
+          <TestWorkspaceScope initial={workspace} workspaces={options.workspaces}>
             <AgentSessionReadModelStateContext
               value={{
                 sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
@@ -451,7 +474,7 @@ function renderSessions(
                     <VisibleSessionTargetProvider>
                       <SettingsModalProvider>
                         <CommandPaletteTestContext>
-                          <WorkspaceSessions workspace={workspace} />
+                          {options.viaSessionsPage ? <SessionsPage /> : <ActiveWorkspaceSessions />}
                         </CommandPaletteTestContext>
                         {previewControls}
                       </SettingsModalProvider>
@@ -460,12 +483,615 @@ function renderSessions(
                 </WorkspaceBranchStateContext.Provider>
               </AgentSessionsContext>
             </AgentSessionReadModelStateContext>
-          </ActiveWorkspaceContext>
+          </TestWorkspaceScope>
         </ThemeProvider>
       </QueryProvider>
     </MemoryRouter>,
   );
   return { ...view, workspaceId, store };
+}
+
+function TestWorkspaceScope({
+  initial,
+  workspaces = [],
+  children,
+}: {
+  initial: ActiveWorkspace;
+  workspaces?: ActiveWorkspace[] | undefined;
+  children: ReactNode;
+}) {
+  const [workspace, setWorkspace] = useState<ActiveWorkspace | null>(initial);
+  const openWorkspaces = workspaces.length ? workspaces : [initial];
+  const records = openWorkspaces.map((entry) => createWorkspaceRecordFixture(entry));
+  const state = createWorkspaceStateFixture({
+    activeWorkspace: records.find((entry) => entry.workspaceId === workspace?.workspaceId) ?? null,
+    workspaces: records,
+    selectWorkspace: async (workspaceId, onSelected) => {
+      const next = openWorkspaces.find((entry) => entry.workspaceId === workspaceId);
+      if (!next) throw new Error("Workspace is not open.");
+      await Promise.resolve();
+      startTransition(() => {
+        setWorkspace(next);
+        onSelected?.();
+      });
+    },
+  });
+  return (
+    <ActiveWorkspaceContext
+      value={{ activeWorkspace: workspace, setActiveWorkspace: setWorkspace }}
+    >
+      <WorkspacePresenceContext value={createWorkspacePresenceFixture()}>
+        <WorkspaceStateContext value={state}>
+          <TaskSnapshotContext value={{ tasks: [], isLoadingTasks: false }}>
+            <RuntimeDefinitionsContext
+              value={createRuntimeDefinitionsContextValue({ runtimeDefinitions: [] })}
+            >
+              <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+                {workspaces.map((entry) => (
+                  <button key={entry.workspaceId} onClick={() => setWorkspace(entry)}>
+                    Open workspace {entry.workspaceName}
+                  </button>
+                ))}
+                {children}
+              </HostRuntimeStatusContext>
+            </RuntimeDefinitionsContext>
+          </TaskSnapshotContext>
+        </WorkspaceStateContext>
+      </WorkspacePresenceContext>
+    </ActiveWorkspaceContext>
+  );
+}
+
+function ActiveWorkspaceSessions() {
+  const workspace = useActiveWorkspace();
+  return workspace ? <WorkspaceSessionsPage workspace={workspace} isWorkspaceReady /> : null;
+}
+
+function createChatTerminalClient(
+  listActive: HostClient["workspaceSessionListActive"] = async () => [sessionRecord("First")],
+  overrides: Partial<HostClient> = {},
+): Partial<HostClient> {
+  return {
+    systemGetPlatform: async () => "darwin",
+    workspaceSessionListActive: listActive,
+    workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    terminalList: async ({ filter }) => {
+      if (filter.kind !== "workspace_session") throw new Error("Expected a chat terminal filter.");
+      const summary: TerminalSummary = {
+        terminalId: `${filter.workspaceId}:${filter.sessionId}`,
+        label: "Shell",
+        context: { ...filter, repoPath: "/repo" },
+        initialWorkingDir: "/repo",
+        createdAt: "2026-10-18T00:00:00.000Z",
+        lifecycle: "running",
+        exit: null,
+        startedBy: "user",
+      };
+      return { hostInstanceId: "host", terminals: [summary] };
+    },
+    ...overrides,
+  };
+}
+
+test.each(["Archive chat", "New chat", "Rename chat", "Session actions"] as const)(
+  "%s closes while a workspace route is pending and stays closed on return",
+  async (dialogName) => {
+    const workspaces = ["A", "B"].map((name) => ({
+      workspaceId: crypto.randomUUID(),
+      workspaceName: name,
+      repoPath: `/${name}`,
+    }));
+    const first = workspaces[0]!;
+    const other = workspaces[1]!;
+    const records = dialogName === "New chat" ? [] : [sessionRecord("First")];
+    const chatList = Promise.withResolvers<WorkspaceSession[]>();
+    const archives: WorkspaceSessionArchiveInput[] = [];
+    const creates: WorkspaceSessionCreateInput[] = [];
+    const hostClient = createChatTerminalClient(
+      async (workspaceId) => (workspaceId === other.workspaceId ? chatList.promise : records),
+      {
+        workspaceSessionArchive: async (input) => {
+          archives.push(input);
+          return { ...sessionRecord("First"), archivedAt: 2000 };
+        },
+        workspaceSessionCreate: async (input) => {
+          creates.push(input);
+          throw new Error("Unexpected chat creation.");
+        },
+      },
+    );
+    const firstUrl = `/sessions?workspace=${first.workspaceId}&kind=workspace${records.length ? "&session=First" : ""}`;
+    const otherUrl = `/sessions?workspace=${other.workspaceId}&kind=workspace&session=Other`;
+    const view = renderSessions(
+      hostClient,
+      undefined,
+      [otherUrl, firstUrl],
+      first.workspaceId,
+      null,
+      null,
+      {
+        workspaces,
+        viaSessionsPage: true,
+      },
+    );
+    try {
+      const heading = records.length ? "First" : "Workspace chat";
+      await view.findByRole("heading", { name: heading });
+      if (records.length) {
+        await waitFor(() =>
+          expect(view.container.querySelector("[data-terminal-viewport]")).not.toBeNull(),
+        );
+      }
+      const viewport = view.container.querySelector("[data-terminal-viewport]");
+      const back = view.getByRole("button", { name: "Back" });
+      const forward = view.getByRole("button", { name: "Forward" });
+      if (dialogName === "Archive chat") {
+        await openArchive(view, "First", "primary");
+      } else if (dialogName === "New chat") {
+        fireEvent.click(view.getByRole("button", { name: "New chat" }));
+      } else {
+        fireEvent.click(view.getByRole("button", { name: "Session actions" }));
+        if (dialogName === "Rename chat") {
+          const menu = await view.findByRole("dialog", { name: "Session actions" });
+          fireEvent.click(within(menu).getByRole("button", { name: "Rename" }));
+        }
+      }
+      const dialog = await view.findByRole("dialog", { name: dialogName });
+      fireEvent.click(back);
+      await view.findByText("Loading chats…");
+      expect(view.getByTestId("session-url").textContent).toBe(otherUrl);
+      expect(dialog.isConnected).toBe(false);
+      expect(view.queryByRole("dialog")).toBeNull();
+      if (viewport) expect(viewport.isConnected).toBe(true);
+      expect(archives).toHaveLength(0);
+      expect(creates).toHaveLength(0);
+
+      fireEvent.click(forward);
+      await view.findByRole("heading", { name: heading });
+      expect(view.queryByRole("dialog")).toBeNull();
+      if (viewport) expect(view.container.querySelector("[data-terminal-viewport]")).toBe(viewport);
+    } finally {
+      view.unmount();
+      chatList.resolve([]);
+    }
+  },
+  5_000,
+);
+
+test("an archive started before Back updates its workspace while the next workspace is pending", async () => {
+  const first = { workspaceId: crypto.randomUUID(), workspaceName: "A", repoPath: "/A" };
+  const other = { workspaceId: crypto.randomUUID(), workspaceName: "B", repoPath: "/B" };
+  const workspaces = [first, other];
+  const chatList = Promise.withResolvers<WorkspaceSession[]>();
+  const archived = Promise.withResolvers<WorkspaceSession>();
+  const requests: WorkspaceSessionArchiveInput[] = [];
+  let cache: QueryClient | null = null;
+  function CaptureCache() {
+    cache = useQueryClient();
+    return null;
+  }
+  const hostClient = createChatTerminalClient(
+    async (workspaceId) =>
+      workspaceId === other.workspaceId ? chatList.promise : [sessionRecord("First")],
+    {
+      workspaceSessionArchive: async (input) => {
+        requests.push(input);
+        return archived.promise;
+      },
+    },
+  );
+  const otherUrl = `/sessions?workspace=${other.workspaceId}&kind=workspace&session=Other`;
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    [otherUrl, `/sessions?workspace=${first.workspaceId}&kind=workspace&session=First`],
+    first.workspaceId,
+    <CaptureCache />,
+    null,
+    { workspaces, viaSessionsPage: true },
+  );
+  try {
+    await view.findByRole("heading", { name: "First" });
+    const back = view.getByRole("button", { name: "Back" });
+    await openArchive(view, "First", "primary");
+    fireEvent.click(view.getByRole("button", { name: "Archive chat" }));
+    await view.findByRole("button", { name: "Archiving…" });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.workspaceId).toBe(first.workspaceId);
+    fireEvent.click(back);
+    await view.findByText("Loading chats…");
+    expect(view.queryByRole("dialog")).toBeNull();
+    await act(async () => {
+      archived.resolve({ ...sessionRecord("First"), archivedAt: 2000 });
+      await archived.promise;
+    });
+    await waitFor(() =>
+      expect(
+        cache?.getQueryData<WorkspaceSession[]>(
+          workspaceSessionQueryKeys.list(first.workspaceId, false),
+        ),
+      ).toEqual([]),
+    );
+    expect(view.getByTestId("session-url").textContent).toBe(otherUrl);
+    expect(view.getByText("Loading chats…")).toBeTruthy();
+    expect(requests).toHaveLength(1);
+  } finally {
+    view.unmount();
+    chatList.resolve([]);
+    archived.resolve({ ...sessionRecord("First"), archivedAt: 2000 });
+  }
+}, 5_000);
+
+test.each(["cached", "pending", "cached empty", "pending empty"] as const)(
+  "chat terminal viewports survive workspace switches with a %s destination list",
+  async (listState) => {
+    const pending = listState.startsWith("pending");
+    const empty = listState.endsWith("empty");
+    const otherSessions = empty ? [] : [sessionRecord("First")];
+    const activeChats = new Set<string>();
+    chatStub.mockImplementation(({ workspace, isVisible }) => {
+      useEffect(() => {
+        if (!isVisible) return;
+        activeChats.add(workspace.workspaceId);
+        return () => {
+          activeChats.delete(workspace.workspaceId);
+        };
+      }, [isVisible, workspace.workspaceId]);
+      return <input data-chat-draft data-testid={`${workspace.workspaceId} draft`} />;
+    });
+    const workspaces = ["A", "B"].map((name) => ({
+      workspaceId: crypto.randomUUID(),
+      workspaceName: name,
+      repoPath: `/${name}`,
+    }));
+    const useNavigation = workspaceNavigation.useWorkspaceSessionNavigation;
+    const navigation = spyOn(
+      workspaceNavigation,
+      "useWorkspaceSessionNavigation",
+    ).mockImplementation((args) =>
+      useNavigation({
+        ...args,
+        setSearchParams: (next, options) => {
+          // A user can leave after the view mounts but before this router write commits.
+          if (args.workspaceId !== workspaces[1]!.workspaceId) args.setSearchParams(next, options);
+        },
+      }),
+    );
+    const chatList = Promise.withResolvers<WorkspaceSession[]>();
+    const hostClient = createChatTerminalClient(async (workspaceId) =>
+      workspaceId === workspaces[1]!.workspaceId
+        ? pending
+          ? chatList.promise
+          : otherSessions
+        : [sessionRecord("First")],
+    );
+    const view = renderSessions(
+      hostClient,
+      undefined,
+      `/sessions?workspace=${workspaces[0]!.workspaceId}&kind=workspace&session=First`,
+      workspaces[0]!.workspaceId,
+      <>
+        <SeedChatLists workspaces={workspaces.slice(0, 1)} />
+        {!pending && <SeedChatLists workspaces={workspaces.slice(1)} sessions={otherSessions} />}
+      </>,
+      null,
+      { workspaces, viaSessionsPage: true },
+    );
+    try {
+      await waitFor(() =>
+        expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+      );
+      fireEvent.contextMenu(view.getByRole("tab", { name: "Shell, Running" }));
+      fireEvent.click(await view.findByRole("menuitem", { name: "Move to right panel" }));
+      const first = view.container.querySelector("[data-terminal-viewport]");
+      const draft = view.getByTestId(`${workspaces[0]!.workspaceId} draft`);
+      fireEvent.click(view.getByRole("button", { name: "Open workspace B" }));
+      if (pending) {
+        await view.findByText("Loading chats…");
+        expect(first?.isConnected).toBe(true);
+        expect(view.queryByRole("heading", { name: "First", level: 2 })).toBeNull();
+        expect(activeChats.size).toBe(0);
+        await act(async () => {
+          chatList.resolve(otherSessions);
+          await chatList.promise;
+        });
+      }
+      if (empty) await view.findByRole("heading", { name: "Workspace chat" });
+      await waitFor(() =>
+        expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(
+          empty ? 1 : 2,
+        ),
+      );
+      const second = [...view.container.querySelectorAll("[data-terminal-viewport]")].find(
+        (node) => node !== first,
+      );
+      expect(first?.isConnected).toBe(true);
+      expect(draft.isConnected).toBe(true);
+      expect([...activeChats]).toEqual(empty ? [] : [workspaces[1]!.workspaceId]);
+      fireEvent.click(view.getByRole("button", { name: "Open workspace A" }));
+      await waitFor(() => expect([...activeChats]).toEqual([workspaces[0]!.workspaceId]));
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(
+        empty ? 1 : 2,
+      );
+      expect(first?.isConnected).toBe(true);
+      if (!empty) expect(second?.isConnected).toBe(true);
+      expect(view.getByTestId(`${workspaces[0]!.workspaceId} draft`)).toBe(draft);
+    } finally {
+      view.unmount();
+      navigation.mockRestore();
+    }
+  },
+  5_000,
+);
+
+test("chat terminal viewports drop the least recent chat with its pane", async () => {
+  const hostClient = createChatTerminalClient();
+  chatStub.mockImplementation(({ workspace, record }) => (
+    <input data-chat-draft data-testid={`${workspace.workspaceId}:${record.id} draft`} />
+  ));
+  const workspaces = Array.from({ length: 7 }, (_, index) => ({
+    workspaceId: crypto.randomUUID(),
+    workspaceName: String(index),
+    repoPath: `/repo-${index}`,
+  }));
+  const view = renderSessions(
+    hostClient,
+    undefined,
+    `/sessions?workspace=${workspaces[0]!.workspaceId}&kind=workspace`,
+    workspaces[0]!.workspaceId,
+    <SeedChatLists workspaces={workspaces} />,
+    null,
+    { workspaces, viaSessionsPage: true },
+  );
+  try {
+    const workspaceButtons = view.getAllByRole("button", { name: /^Open workspace \d$/ });
+    const waitOptions = {
+      container: view.container,
+      mutationObserverOptions: { subtree: true, childList: true },
+    };
+    await waitFor(
+      () => expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+      waitOptions,
+    );
+    const first = view.container.querySelector("[data-terminal-viewport]");
+    const firstDraft = view.getByTestId(`${workspaces[0]!.workspaceId}:First draft`);
+    for (let index = 1; index < 6; index += 1) {
+      fireEvent.click(workspaceButtons[index]!);
+      await waitFor(
+        () =>
+          expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(
+            index + 1,
+          ),
+        waitOptions,
+      );
+    }
+    fireEvent.click(workspaceButtons[6]!);
+    await waitFor(() => {
+      expect(first?.isConnected).toBe(false);
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(6);
+    }, waitOptions);
+    expect(firstDraft.isConnected).toBe(false);
+    expect(view.container.querySelectorAll("[data-chat-draft]")).toHaveLength(6);
+  } finally {
+    view.unmount();
+  }
+}, 5_000);
+
+test.each([true, false])(
+  "a chat switch keeps the layout when the next chat has terminals=%s",
+  async (hasTerminals) => {
+    const media = spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => true,
+    }));
+    const workspaceId = crypto.randomUUID();
+    chatStub.mockImplementation(({ record }) => <input data-testid={`${record.id} draft`} />);
+    const client = createChatTerminalClient(async () => [
+      sessionRecord("First"),
+      sessionRecord("Second"),
+    ]);
+    const listTerminals = client.terminalList!;
+    client.terminalList = async (input) =>
+      !hasTerminals &&
+      input.filter.kind === "workspace_session" &&
+      input.filter.sessionId === "Second"
+        ? { hostInstanceId: "host", terminals: [] }
+        : listTerminals(input);
+    const view = renderSessions(
+      client,
+      undefined,
+      `/sessions?workspace=${workspaceId}&kind=workspace&session=First`,
+      workspaceId,
+      null,
+      null,
+      { viaSessionsPage: true },
+    );
+    try {
+      const draft = await view.findByTestId("First draft");
+      await waitFor(() =>
+        expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+      );
+      const viewport = view.container.querySelector("[data-terminal-viewport]");
+      await act(async () => {
+        fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
+      });
+      await view.findByRole("heading", { name: "Second" });
+      await waitFor(() => {
+        const split = view
+          .getByTestId("Second draft")
+          .closest('[data-group][id^="workspace-session-terminal-layout"]');
+        const panels = split!.querySelectorAll<HTMLElement>(":scope > [data-panel]");
+        expect(panels).toHaveLength(2);
+        expect(panels[0]!.style.flexGrow).toBe(hasTerminals ? "72" : "100");
+        expect(panels[1]!.style.flexGrow).toBe(hasTerminals ? "28" : "0");
+      });
+      expect(viewport?.isConnected).toBe(true);
+      expect(draft.isConnected).toBe(true);
+      await act(async () => {
+        fireEvent.click(view.getByRole("link", { name: "Open first chat" }));
+      });
+      await view.findByRole("heading", { name: "First" });
+      expect(view.getByTestId("First draft")).toBe(draft);
+      expect(viewport?.isConnected).toBe(true);
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(
+        hasTerminals ? 2 : 1,
+      );
+    } finally {
+      view.unmount();
+      media.mockRestore();
+    }
+  },
+  5_000,
+);
+
+test("creating a chat keeps the view that opened the dialog", async () => {
+  const workspaceId = crypto.randomUUID();
+  chatStub.mockImplementation(({ record }) => <input data-testid={`${record.id} draft`} />);
+  const dialog = spyOn(createDialog, "WorkspaceSessionCreateDialog").mockImplementation(
+    ({ onCreated }) => (
+      <button onClick={() => onCreated(sessionRecord("Second"))}>Complete create</button>
+    ),
+  );
+  const view = renderSessions(
+    createChatTerminalClient(async () => [sessionRecord("First"), sessionRecord("Second")]),
+    undefined,
+    `/sessions?workspace=${workspaceId}&kind=workspace&session=First&create=session`,
+    workspaceId,
+    null,
+    null,
+    { viaSessionsPage: true },
+  );
+  try {
+    const draft = await view.findByTestId("First draft");
+    await waitFor(() =>
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+    );
+    const viewport = view.container.querySelector("[data-terminal-viewport]");
+    fireEvent.click(view.getByRole("button", { name: "Complete create" }));
+    await view.findByRole("heading", { name: "Second" });
+    expect(viewport?.isConnected).toBe(true);
+    expect(draft.isConnected).toBe(true);
+    fireEvent.click(view.getByRole("link", { name: "Open first chat" }));
+    await view.findByRole("heading", { name: "First" });
+    expect(view.getByTestId("First draft")).toBe(draft);
+    expect(viewport?.isConnected).toBe(true);
+  } finally {
+    view.unmount();
+    dialog.mockRestore();
+  }
+}, 5_000);
+
+test("a revisited chat becomes the saved selection after reload", async () => {
+  const workspaceId = crypto.randomUUID();
+  const key = workspaceSessionSelectionStorageKey(workspaceId);
+  const client = createChatTerminalClient(async () => [
+    sessionRecord("First"),
+    sessionRecord("Second"),
+  ]);
+  const open = (sessionId?: string) =>
+    renderSessions(
+      client,
+      undefined,
+      `/sessions?workspace=${workspaceId}&kind=workspace${sessionId ? `&session=${sessionId}` : ""}`,
+      workspaceId,
+      null,
+      null,
+      { viaSessionsPage: true },
+    );
+  let view = open("First");
+  try {
+    await view.findByRole("heading", { name: "First", level: 2 });
+    fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
+    await view.findByRole("heading", { name: "Second", level: 2 });
+    await waitFor(() => expect(hostStorage.getItem(key)).toBe("Second"));
+    fireEvent.click(view.getByRole("link", { name: "Open first chat" }));
+    await view.findByRole("heading", { name: "First", level: 2 });
+    await waitFor(() => expect(hostStorage.getItem(key)).toBe("First"));
+    view.unmount();
+    view = open();
+    await view.findByRole("heading", { name: "First", level: 2 });
+  } finally {
+    view.unmount();
+  }
+}, 5_000);
+
+test("a removed chat loses its terminal viewport and pane", async () => {
+  const workspaceId = crypto.randomUUID();
+  let records = [sessionRecord("First"), sessionRecord("Second")];
+  chatStub.mockImplementation(({ record }) => <input data-testid={`${record.id} draft`} />);
+  const view = renderSessions(
+    createChatTerminalClient(async () => records),
+    undefined,
+    `/sessions?workspace=${workspaceId}&kind=workspace`,
+    workspaceId,
+    <RemoveChat
+      workspaceId={workspaceId}
+      onRemove={() => {
+        records = [sessionRecord("Second")];
+      }}
+    />,
+    null,
+    { viaSessionsPage: true },
+  );
+  try {
+    await waitFor(() =>
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+    );
+    const first = view.container.querySelector("[data-terminal-viewport]");
+    const draft = view.getByTestId("First draft");
+    fireEvent.click(view.getByRole("button", { name: "Remove first chat" }));
+    fireEvent.click(view.getByRole("link", { name: "Open second chat" }));
+    await waitFor(() =>
+      expect(view.getByRole("heading", { name: "Second", level: 2 })).toBeTruthy(),
+    );
+    expect(first?.isConnected).toBe(false);
+    expect(draft.isConnected).toBe(false);
+    await waitFor(() =>
+      expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1),
+    );
+  } finally {
+    view.unmount();
+  }
+}, 5_000);
+
+function RemoveChat({ workspaceId, onRemove }: { workspaceId: string; onRemove: () => void }) {
+  const client = useQueryClient();
+  return (
+    <button
+      onClick={() => {
+        onRemove();
+        client.setQueryData(workspaceSessionQueryKeys.list(workspaceId, false), [
+          sessionRecord("Second"),
+        ]);
+      }}
+    >
+      Remove first chat
+    </button>
+  );
+}
+
+function SeedChatLists({
+  workspaces,
+  sessions,
+}: {
+  workspaces: ActiveWorkspace[];
+  sessions?: WorkspaceSession[];
+}) {
+  const client = useQueryClient();
+  useEffect(() => {
+    for (const workspace of workspaces)
+      client.setQueryData(
+        workspaceSessionQueryKeys.list(workspace.workspaceId, false),
+        sessions ?? [sessionRecord("First")],
+      );
+  }, [client, sessions, workspaces]);
+  return null;
 }
 
 function DirtyPreview({ startOpen = true }: { startOpen?: boolean }) {

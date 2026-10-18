@@ -23,7 +23,9 @@ export type AgentStudioQueryKey =
   (typeof AGENT_STUDIO_QUERY_KEYS)[keyof typeof AGENT_STUDIO_QUERY_KEYS];
 
 /** A change of address values. A `session` change replaces the session identity values too. */
-export type AgentStudioQueryUpdate = Partial<Record<AgentStudioQueryKey, string | undefined>>;
+export type AgentStudioQueryUpdate = Partial<Record<AgentStudioQueryKey, string | undefined>> & {
+  keepSessionless?: boolean;
+};
 
 export type AgentStudioNavigationState = {
   taskId: string;
@@ -31,6 +33,7 @@ export type AgentStudioNavigationState = {
   /** The complete identity of the session, when the address names all its fields. */
   sessionIdentity: AgentSessionIdentity | null;
   role: AgentRole | null;
+  keepSessionless?: boolean;
 };
 
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
@@ -132,6 +135,12 @@ export const applyQueryUpdateToNavigationState = (
     }
   }
 
+  const keepSessionless =
+    updates.keepSessionless ?? (hasChanged ? false : (current.keepSessionless ?? false));
+  if (keepSessionless !== Boolean(current.keepSessionless)) {
+    next.keepSessionless = keepSessionless;
+    hasChanged = true;
+  }
   return hasChanged ? next : current;
 };
 
@@ -165,6 +174,7 @@ export const isSameNavigationState = (
     left.taskId === right.taskId &&
     left.sessionExternalId === right.sessionExternalId &&
     sameSessionIdentity(left.sessionIdentity, right.sessionIdentity) &&
+    Boolean(left.keepSessionless) === Boolean(right.keepSessionless) &&
     left.role === right.role
   );
 };

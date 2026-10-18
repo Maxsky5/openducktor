@@ -27,10 +27,9 @@ const chat = (overrides: Partial<WorkspaceSession> = {}): WorkspaceSession => ({
 });
 
 const startBlockedReason = (selected: WorkspaceSession): string | null => {
-  const view = renderHook(
-    () => useWorkspaceSessionTerminals({ workspace, selected, sessions: [selected] }),
-    { wrapper: QueryProvider },
-  );
+  const view = renderHook(() => useWorkspaceSessionTerminals({ workspace, selected }), {
+    wrapper: QueryProvider,
+  });
   try {
     return view.result.current.startBlockedReason;
   } finally {

@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION, type TerminalSummary } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { type ReactElement, useCallback, useState } from "react";
 import type { TerminalTab } from "@/features/terminals";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
@@ -39,6 +39,50 @@ const toolTabs = {
   diffs: { content: <p>Diff content</p> },
   files: { content: <p>File tree</p> },
 };
+
+test("an inactive panel root closes its terminal confirmation and keeps its content mounted", () => {
+  const confirm = mock(() => {});
+  let showConfirmation!: () => void;
+  function Harness({
+    isActive,
+    hideCandidate = true,
+  }: {
+    isActive: boolean;
+    hideCandidate?: boolean;
+  }) {
+    const [candidate, setCandidate] = useState<TerminalTab | null>(terminal);
+    showConfirmation = () => setCandidate(terminal);
+    const cancel = useCallback(() => setCandidate(null), []);
+    const panels = createSessionPanelsFixture({
+      terminalClose: {
+        candidate: hideCandidate && !isActive ? null : candidate,
+        isConfirming: false,
+        onCancel: cancel,
+        onConfirm: confirm,
+      },
+    });
+    return (
+      <SessionPanelsRoot panels={panels} isActive={isActive}>
+        <input data-testid="kept-content" />
+      </SessionPanelsRoot>
+    );
+  }
+  const view = renderWithConnection(<Harness isActive />);
+  const content = view.getByTestId("kept-content");
+  const dialog = view.getByRole("dialog", { name: "Terminate and close bun run dev?" });
+  view.rerender(<Harness isActive={false} />);
+  expect(dialog.isConnected).toBe(false);
+  expect(content.isConnected).toBe(true);
+  view.rerender(<Harness isActive />);
+  expect(view.queryAllByRole("dialog").length).toBe(0);
+  view.rerender(<Harness isActive={false} hideCandidate={false} />);
+  act(() => showConfirmation());
+  view.rerender(<Harness isActive hideCandidate={false} />);
+  expect(view.queryAllByRole("dialog").length).toBe(0);
+  expect(view.getByTestId("kept-content")).toBe(content);
+  expect(confirm).not.toHaveBeenCalled();
+  view.unmount();
+});
 
 describe("SessionPanel", () => {
   test("shows each tab with its label, the selected tab, and a close button", () => {

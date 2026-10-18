@@ -1,4 +1,5 @@
-import type { ComponentProps, ReactElement } from "react";
+import { type ComponentProps, type ReactElement, useEffect, useEffectEvent } from "react";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 import { SessionStartModal } from "@/components/features/agents/session-start-modal";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
@@ -16,6 +17,21 @@ type AgentsPageModalContentProps = {
 
 export function AgentsPageModalContent({ model }: AgentsPageModalContentProps): ReactElement {
   const { mergedPullRequestModal, humanReviewFeedbackModal, sessionStartModal } = model;
+  const isActive = useSessionViewActive();
+  const close = useEffectEvent(() => {
+    mergedPullRequestModal?.onCancel();
+    humanReviewFeedbackModal?.onOpenChange(false);
+    sessionStartModal?.onOpenChange(false);
+  });
+  useEffect(() => {
+    if (!isActive) close();
+  }, [
+    isActive,
+    mergedPullRequestModal?.taskId,
+    humanReviewFeedbackModal?.open,
+    sessionStartModal?.open,
+  ]);
+  if (!isActive) return <></>;
 
   return (
     <>

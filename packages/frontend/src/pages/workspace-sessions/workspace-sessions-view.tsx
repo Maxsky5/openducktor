@@ -1,5 +1,4 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
@@ -10,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useNavigationType, useSearchParams } from "react-router";
+import type { SetURLSearchParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { useDialogPresence } from "@/components/ui/dialog";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
@@ -29,7 +28,6 @@ import { usePublishVisibleSessionTarget } from "@/features/session-navigation/vi
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
-import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   WorkspaceSessionContent,
@@ -47,25 +45,43 @@ import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigatio
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
 import { useVisibleSessionId } from "./use-visible-session-id";
 
-type WorkspaceSessionsProps = { workspace: ActiveWorkspace };
+export type WorkspaceSessionsViewState = {
+  workspace: ActiveWorkspace;
+  sessions: WorkspaceSession[];
+  recordsError: Error | null;
+  searchParams: URLSearchParams;
+  locationKey: string;
+  navigationType: "POP" | "PUSH" | "REPLACE";
+};
+type WorkspaceSessionsProps = WorkspaceSessionsViewState & {
+  isActive: boolean;
+  setSearchParams: SetURLSearchParams;
+  retryRecords: () => void;
+};
 
-export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactElement {
+export function WorkspaceSessions({
+  workspace,
+  sessions,
+  recordsError,
+  searchParams,
+  locationKey,
+  navigationType,
+  isActive,
+  setSearchParams,
+  retryRecords,
+}: WorkspaceSessionsProps): ReactElement {
   const { run: guardWorkspaceChange, cancelPending } = useWorkspacePreviewTransitionGuard();
-  const [params, setParams] = useSearchParams();
-  const location = useLocation();
-  const navigationType = useNavigationType();
   const { sessionId, creating, updateNavigation } = useWorkspaceSessionNavigation({
     workspaceId: workspace.workspaceId,
-    locationKey: location.key,
+    locationKey,
     navigationType,
-    searchParams: params,
-    setSearchParams: setParams,
+    searchParams,
+    setSearchParams,
+    enabled: isActive,
   });
-  const records = useQuery(workspaceSessionListQueryOptions(workspace.workspaceId));
-  const sessions = records.data ?? [];
   const [createWorkspaceId, setCreateWorkspaceId] = useState<string | null>(null);
   const createOpen = createWorkspaceId === workspace.workspaceId;
-  if (createWorkspaceId !== null && createWorkspaceId !== workspace.workspaceId) {
+  if (createWorkspaceId !== null && (!isActive || createWorkspaceId !== workspace.workspaceId)) {
     setCreateWorkspaceId(null);
   }
   const [createAttempt, setCreateAttempt] = useState(0);
@@ -84,8 +100,9 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     isRetryingNavigationPersistence,
   } = useWorkspaceSessionSelection({
     workspaceId: workspace.workspaceId,
-    sessions: records.data,
+    sessions,
     requestedSessionId: sessionId,
+    isActive,
   });
   const requestedSelectedId = requestedSelected?.id ?? null;
   const { visibleSelectedId, leaveRemovedChat, completeArchive } = useVisibleSessionId(
@@ -105,7 +122,6 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   const terminals = useWorkspaceSessionTerminals({
     workspace,
     selected,
-    sessions,
   });
   const panelOwner = useMemo<SessionPanelOwner | null>(
     () =>
@@ -118,6 +134,7 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     owner: panelOwner,
     selectionKey: "chat",
     terminals,
+    shortcutsEnabled: isActive && selectedId !== null,
   });
   const { selectedFile, onSelectedFileChange } = useSelectedFiles(
     workspace.workspaceId,
@@ -126,7 +143,6 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   useEffect(() => {
     if (
       !navigationPersistenceError &&
-      records.data &&
       missingSessionId === null &&
       sessionId !== requestedSelectedId
     )
@@ -134,7 +150,6 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
   }, [
     navigationPersistenceError,
     missingSessionId,
-    records.data,
     requestedSelectedId,
     sessionId,
     updateNavigation,
@@ -147,11 +162,12 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
     [selectedId, workspace.workspaceId],
   );
   usePublishVisibleSessionTarget(
-    navigationPersistenceError ? null : visibleTarget,
+    !isActive || navigationPersistenceError ? null : visibleTarget,
     selected ? workspaceSessionIdentity(selected) : null,
   );
   const { archive, archiveTarget, setArchiveTarget, beginArchive } = useWorkspaceSessionArchive({
     workspace,
+    isActive,
     mounted,
     selectedId,
     sessions,
@@ -174,44 +190,27 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         isPending={isRetryingNavigationPersistence}
       />
     );
-  if (records.isPending)
-    return (
-      <p role="status" className="p-6 text-muted-foreground">
-        Loading chats…
-      </p>
-    );
-  // A failed refresh keeps the last records, so only a failed first read replaces the chats.
-  if (records.data === undefined)
-    return (
-      <div role="alert" className="space-y-3 p-6">
-        <p className="text-destructive">Could not load chats: {errorMessage(records.error)}</p>
-        <Button variant="outline" onClick={() => void records.refetch()}>
-          Retry
-        </Button>
-      </div>
-    );
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <WorkspaceSessionReadModelNotice />
-      <WorkspaceSessionRecordsRefreshNotice
-        error={records.error}
-        onRetry={() => void records.refetch()}
-      />
+      <WorkspaceSessionRecordsRefreshNotice error={recordsError} onRetry={retryRecords} />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
       <WorkspaceSessionActiveContent
         workspace={workspace}
         selected={selected}
-        sessionIds={sessions.map((record) => record.id)}
+        isVisible={isActive}
         missingSessionId={missingSessionId}
         onDismissMissing={() => updateNavigation({ sessionId: null })}
         panels={panels}
         selectedFile={selectedFile}
         onSelectedFileChange={onSelectedFileChange}
         onSafeToLeave={leaveRemovedChat}
-        hasSessions={records.data.length > 0}
+        hasSessions={sessions.length > 0}
         onCreate={() => setCreating(true)}
         viewControls={
-          <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
+          isActive ? (
+            <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
+          ) : null
         }
         onArchive={(onCloseAutoFocus) => {
           if (!selected) return;
@@ -221,28 +220,31 @@ export function WorkspaceSessions({ workspace }: WorkspaceSessionsProps): ReactE
         }}
         isArchiving={archive.isPending}
       />
-      <WorkspaceSessionDialogs
-        key={workspace.workspaceId}
-        workspace={workspace}
-        archiveTarget={archiveTarget}
-        archivePending={archive.isPending}
-        archiveError={archive.error}
-        onArchiveCloseAutoFocus={(event) => archiveCloseAutoFocusRef.current?.(event)}
-        onArchive={beginArchive}
-        onArchiveClose={() => {
-          setArchiveTarget(null);
-          archive.reset();
-        }}
-        createOpen={createOpen || creating}
-        createAttempt={createAttempt}
-        onCreateClose={() => setCreating(false)}
-        onCreated={(record) => {
-          if (mounted.current && workspaceIdRef.current === workspace.workspaceId) {
-            setCreateWorkspaceId(null);
-            updateNavigation({ sessionId: record.id, creating: false });
-          }
-        }}
-      />
+      {/* Dialog portals sit outside the hidden page, so remove them while inactive. */}
+      {isActive && (
+        <WorkspaceSessionDialogs
+          key={workspace.workspaceId}
+          workspace={workspace}
+          archiveTarget={archiveTarget}
+          archivePending={archive.isPending}
+          archiveError={archive.error}
+          onArchiveCloseAutoFocus={(event) => archiveCloseAutoFocusRef.current?.(event)}
+          onArchive={beginArchive}
+          onArchiveClose={() => {
+            setArchiveTarget(null);
+            archive.reset();
+          }}
+          createOpen={createOpen || creating}
+          createAttempt={createAttempt}
+          onCreateClose={() => setCreating(false)}
+          onCreated={(record) => {
+            if (mounted.current && workspaceIdRef.current === workspace.workspaceId) {
+              setCreateWorkspaceId(null);
+              updateNavigation({ sessionId: record.id, creating: false });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -271,7 +273,7 @@ function WorkspaceSessionRecordsRefreshNotice({
 function WorkspaceSessionActiveContent({
   workspace,
   selected,
-  sessionIds,
+  isVisible,
   missingSessionId,
   onDismissMissing,
   panels,
@@ -286,7 +288,7 @@ function WorkspaceSessionActiveContent({
 }: {
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
-  sessionIds: readonly string[];
+  isVisible: boolean;
   missingSessionId: string | null;
   onDismissMissing: () => void;
   panels: SessionPanelsModel;
@@ -299,63 +301,73 @@ function WorkspaceSessionActiveContent({
   onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
   isArchiving: boolean;
 }): ReactElement {
-  // A removed chat stays visible until its draft can leave; then the request shows as unavailable.
-  if (!selected && missingSessionId !== null)
-    return (
-      <section
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-card p-6 text-center"
-        role="alert"
-      >
-        <h1 className="text-lg font-semibold">This chat is unavailable</h1>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          The requested workspace session is archived, removed, or not in this workspace. Restore it
-          from Archived chats or choose another session.
-        </p>
-        <Button variant="outline" onClick={onDismissMissing}>
-          Close
-        </Button>
-      </section>
-    );
-  if (!selected)
-    return <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />;
+  const isChatVisible = isVisible && selected !== null;
   return (
     <>
-      <WorkspaceSessionHeader
-        key={selected.id}
-        workspace={workspace}
-        record={selected}
-        repoActions={
-          <SessionRepoActions
-            workspace={workspace}
-            terminal={{
-              startBlockedReason: panels.startBlockedReason,
-              onRunAction: panels.runAction,
-            }}
-          />
-        }
-        viewControls={viewControls}
-        onArchive={onArchive}
-        isArchiving={isArchiving}
-      />
-      <SessionPanelsRoot panels={panels}>
+      {isVisible && selected && (
+        <WorkspaceSessionHeader
+          key={selected.id}
+          workspace={workspace}
+          record={selected}
+          repoActions={
+            <SessionRepoActions
+              workspace={workspace}
+              terminal={{
+                startBlockedReason: panels.startBlockedReason,
+                onRunAction: panels.runAction,
+              }}
+            />
+          }
+          viewControls={viewControls}
+          onArchive={onArchive}
+          isArchiving={isArchiving}
+        />
+      )}
+      <SessionPanelsRoot panels={panels} isActive={isChatVisible}>
         <BottomPanelSplit
           ids={TERMINAL_PANEL_SPLIT_IDS}
           model={panels.bottom}
           className="min-h-0 min-w-0 flex-1 overflow-hidden"
           mainClassName="flex h-full min-h-0 flex-col"
         >
-          <WorkspaceSessionContent
-            workspace={workspace}
-            record={selected}
-            sessionIds={sessionIds}
-            rightPanel={panels.right}
-            selectedFile={selectedFile}
-            onSelectedFileChange={onSelectedFileChange}
-            onSafeToLeave={onSafeToLeave}
-          />
+          {selected && (
+            <WorkspaceSessionContent
+              workspace={workspace}
+              record={selected}
+              selectedFile={selectedFile}
+              onSelectedFileChange={onSelectedFileChange}
+              onSafeToLeave={onSafeToLeave}
+              isVisible={isChatVisible}
+              rightPanel={panels.right}
+            />
+          )}
+          {!selected &&
+            (missingSessionId !== null ? (
+              <WorkspaceSessionUnavailable onDismiss={onDismissMissing} />
+            ) : (
+              <WorkspaceSessionEmptyState hasSessions={hasSessions} onCreate={onCreate} />
+            ))}
         </BottomPanelSplit>
       </SessionPanelsRoot>
     </>
+  );
+}
+
+function WorkspaceSessionUnavailable({ onDismiss }: { onDismiss: () => void }): ReactElement {
+  return (
+    <section
+      className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-card p-6 text-center"
+      role="alert"
+    >
+      <h1 className="text-lg font-semibold">This chat is unavailable</h1>
+      <p className="max-w-sm text-sm text-muted-foreground">
+        The requested workspace session is archived, removed, or not in this workspace. Restore it
+        from Archived chats or choose another session.
+      </p>
+      <Button variant="outline" onClick={onDismiss}>
+        Close
+      </Button>
+    </section>
   );
 }
 
@@ -419,6 +431,7 @@ function WorkspaceSessionArchiveError({ error }: { error: Error | null }): React
 
 function useWorkspaceSessionArchive({
   workspace,
+  isActive,
   mounted,
   selectedId,
   sessions,
@@ -426,6 +439,7 @@ function useWorkspaceSessionArchive({
   guardWorkspaceChange,
 }: {
   workspace: ActiveWorkspace;
+  isActive: boolean;
   mounted: ReturnType<typeof useMountedRef>;
   selectedId: string | null;
   sessions: WorkspaceSession[];
@@ -438,7 +452,10 @@ function useWorkspaceSessionArchive({
   }>({ workspaceId: workspace.workspaceId, target: null });
   const archiveTarget =
     archiveScope.workspaceId === workspace.workspaceId ? archiveScope.target : null;
-  if (archiveScope.workspaceId !== workspace.workspaceId) {
+  if (
+    archiveScope.workspaceId !== workspace.workspaceId ||
+    (!isActive && archiveScope.target !== null)
+  ) {
     setArchiveScope({ workspaceId: workspace.workspaceId, target: null });
   }
   const setArchiveTarget = (target: WorkspaceSession | null) =>

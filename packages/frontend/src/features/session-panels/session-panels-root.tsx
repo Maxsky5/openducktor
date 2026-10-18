@@ -35,6 +35,7 @@ import {
 import type { PanelDropTarget, ResolvedPanelTab } from "./session-panel-layout";
 import { panelTabPresentation } from "./session-panel-tab-presentation";
 import type { SessionPanelsModel } from "./use-session-panels";
+import { useSessionViewActive } from "../session-navigation/session-view-context";
 
 export type PanelDropState = "accepted" | "rejected" | null;
 
@@ -83,14 +84,21 @@ function PanelTabDragPreview({
  */
 export function SessionPanelsRoot({
   panels,
+  isActive = true,
   children,
 }: {
   panels: SessionPanelsModel;
+  isActive?: boolean;
   children: ReactNode;
 }): ReactElement {
   const sensors = useTabDragSensors();
+  const active = useSessionViewActive() && isActive;
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const { right, bottom, canMove, onMove, onDrop, platformError } = panels;
+  const { candidate, onCancel } = panels.terminalClose;
+  useEffect(() => {
+    if (!active) onCancel();
+  }, [active, candidate, onCancel]);
 
   useEffect(() => {
     if (!platformError) return;
@@ -172,7 +180,7 @@ export function SessionPanelsRoot({
           ) : null}
         </DragOverlay>
       </DndContext>
-      <TerminalCloseDialog model={panels.terminalClose} />
+      {active && <TerminalCloseDialog model={panels.terminalClose} />}
     </SessionPanelMovesContext>
   );
 }

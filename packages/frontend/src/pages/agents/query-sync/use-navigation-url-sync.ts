@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  taskRouteStateSchema,
+  readTaskRouteIntent,
+  writeTaskRouteIntent,
+} from "./task-route-intent";
 import type { SetURLSearchParams } from "react-router";
 import {
   type AgentStudioNavigationState,
@@ -13,9 +18,11 @@ type UseNavigationUrlSyncArgs = {
   workspaceId: string | null;
   initialNavigation?: AgentStudioNavigationState;
   locationKey: string;
+  locationState?: unknown;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
+  enabled?: boolean;
 };
 
 type UseNavigationUrlSyncResult = {
@@ -30,23 +37,43 @@ export function useNavigationUrlSync({
   workspaceId,
   initialNavigation,
   locationKey,
+  locationState,
   navigationType,
   searchParams,
   setSearchParams,
+  enabled = true,
 }: UseNavigationUrlSyncArgs): UseNavigationUrlSyncResult {
+  const routeState = useMemo(() => {
+    const parsed = taskRouteStateSchema.safeParse(locationState);
+    return parsed.success ? parsed.data : {};
+  }, [locationState]);
   const [scope, setScope] = useState(() => ({ workspaceId, searchParams, initialNavigation }));
   const waitsForInitialWriteRef = useRef(false);
   const latestSearchParamsRef = useRef(searchParams);
-  const pendingSearchParamWritesRef = useRef<string[]>([]);
+  const pendingSearchParamWritesRef = useRef<Array<{ key: string; keepSessionless: boolean }>>([]);
   const searchKey = toCanonicalSearchParamsKey(searchParams);
   const [snapshot, setSnapshot] = useState(() => ({
-    address: { locationKey, navigationType, searchKey, searchParams },
-    navigation: initialNavigation ?? parseNavigationStateFromSearchParams(searchParams),
+    enabled,
+    address: { locationKey, locationState: routeState, navigationType, searchKey, searchParams },
+    navigation:
+      initialNavigation ??
+      readTaskRouteIntent(
+        parseNavigationStateFromSearchParams(searchParams),
+        workspaceId,
+        routeState,
+      ),
   }));
+  const ownedNavigation = readTaskRouteIntent(
+    parseNavigationStateFromSearchParams(searchParams),
+    workspaceId,
+    routeState,
+  );
   const workspaceChanged = scope.workspaceId !== workspaceId;
   let currentSnapshot = snapshot;
   if (
     workspaceChanged ||
+    snapshot.enabled !== enabled ||
+    snapshot.address.locationState !== routeState ||
     snapshot.address.locationKey !== locationKey ||
     snapshot.address.navigationType !== navigationType ||
     snapshot.address.searchKey !== searchKey
@@ -56,14 +83,35 @@ export function useNavigationUrlSync({
     const isOwnWrite =
       !workspaceChanged &&
       navigationType === "REPLACE" &&
-      pendingSearchParamWritesRef.current.includes(searchKey);
+      pendingSearchParamWritesRef.current.some(
+        (write) =>
+          write.key === searchKey &&
+          write.keepSessionless === Boolean(ownedNavigation.keepSessionless),
+      );
     currentSnapshot = {
-      address: { locationKey, navigationType, searchKey, searchParams },
-      navigation: workspaceChanged
-        ? (initialNavigation ?? parseNavigationStateFromSearchParams(searchParams))
-        : isOwnWrite
-          ? snapshot.navigation
-          : parseNavigationStateFromSearchParams(searchParams),
+      enabled,
+      address: { locationKey, locationState: routeState, navigationType, searchKey, searchParams },
+      navigation:
+        snapshot.enabled !== enabled
+          ? readTaskRouteIntent(
+              parseNavigationStateFromSearchParams(searchParams),
+              workspaceId,
+              routeState,
+            )
+          : workspaceChanged
+            ? (initialNavigation ??
+              readTaskRouteIntent(
+                parseNavigationStateFromSearchParams(searchParams),
+                workspaceId,
+                routeState,
+              ))
+            : isOwnWrite
+              ? snapshot.navigation
+              : readTaskRouteIntent(
+                  parseNavigationStateFromSearchParams(searchParams),
+                  workspaceId,
+                  routeState,
+                ),
     };
     setSnapshot(currentSnapshot);
   }
@@ -85,6 +133,7 @@ export function useNavigationUrlSync({
 
   const setNavigation = useCallback<UseNavigationUrlSyncResult["setNavigation"]>((update) => {
     setSnapshot((current) => {
+      if (!current.enabled) return current;
       const next = update(current.navigation);
       return isSameNavigationState(current.navigation, next)
         ? current
@@ -100,6 +149,13 @@ export function useNavigationUrlSync({
   );
 
   useLayoutEffect(() => {
+    if (enabled) return;
+    pendingSearchParamWritesRef.current = [];
+    latestSearchParamsRef.current = new URLSearchParams(address.searchParams);
+    waitsForInitialWriteRef.current = false;
+  }, [address.searchParams, enabled]);
+
+  useLayoutEffect(() => {
     const currentSearchParamsKey = address.searchKey;
     if (
       waitsForInitialWriteRef.current &&
@@ -111,7 +167,11 @@ export function useNavigationUrlSync({
 
     const pendingWriteIndex =
       address.navigationType === "REPLACE"
-        ? pendingSearchParamWritesRef.current.indexOf(currentSearchParamsKey)
+        ? pendingSearchParamWritesRef.current.findIndex(
+            (write) =>
+              write.key === currentSearchParamsKey &&
+              write.keepSessionless === Boolean(ownedNavigation.keepSessionless),
+          )
         : -1;
     if (pendingWriteIndex !== -1) {
       pendingSearchParamWritesRef.current.splice(pendingWriteIndex, 1);
@@ -124,25 +184,52 @@ export function useNavigationUrlSync({
 
     pendingSearchParamWritesRef.current = [];
     latestSearchParamsRef.current = new URLSearchParams(address.searchParams);
-  }, [address, scope]);
+  }, [address, ownedNavigation.keepSessionless, scope]);
 
   useEffect(() => {
+    if (!enabled) return;
     const latestSearchParams = latestSearchParamsRef.current;
     const currentSearchParams = toCanonicalSearchParamsKey(latestSearchParams);
     const next = buildSearchParamsFromNavigationState(latestSearchParams, navigation);
     const nextSearchParams = toCanonicalSearchParamsKey(next);
-    if (nextSearchParams === currentSearchParams) {
+    const owned = readTaskRouteIntent(
+      parseNavigationStateFromSearchParams(address.searchParams),
+      workspaceId,
+      address.locationState,
+    );
+    if (
+      nextSearchParams === currentSearchParams &&
+      Boolean(navigation.keepSessionless) === Boolean(owned.keepSessionless)
+    ) {
       return;
     }
 
-    if (pendingSearchParamWritesRef.current.at(-1) === nextSearchParams) {
+    const pending = pendingSearchParamWritesRef.current.at(-1);
+    if (
+      pending?.key === nextSearchParams &&
+      pending.keepSessionless === Boolean(navigation.keepSessionless)
+    ) {
       return;
     }
 
     latestSearchParamsRef.current = new URLSearchParams(next);
-    pendingSearchParamWritesRef.current.push(nextSearchParams);
-    setSearchParams(next, { replace: true });
-  }, [navigation, scope, setSearchParams]);
+    pendingSearchParamWritesRef.current.push({
+      key: nextSearchParams,
+      keepSessionless: Boolean(navigation.keepSessionless),
+    });
+    setSearchParams(next, {
+      replace: true,
+      state: writeTaskRouteIntent(navigation, workspaceId, address.locationState),
+    });
+  }, [
+    address.locationState,
+    address.searchParams,
+    enabled,
+    navigation,
+    scope,
+    setSearchParams,
+    workspaceId,
+  ]);
 
   return {
     navigation,

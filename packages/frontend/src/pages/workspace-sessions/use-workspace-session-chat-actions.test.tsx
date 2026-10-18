@@ -3,7 +3,7 @@ import { RUNTIME_DESCRIPTORS_BY_KIND, type WorkspaceSession } from "@openducktor
 import { type HostClient, HostInvokeError } from "@openducktor/host-client";
 import { act, render, renderHook } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
-import { Activity, type PropsWithChildren } from "react";
+import { Activity, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
 import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -29,7 +29,8 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesFixture } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import * as sessionChat from "./workspace-session-chat";
-import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
+import { WorkspaceSessionChatPane } from "./workspace-session-chat-pane";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { requestWorkspaceGitConflictAssistance } from "./workspace-git-conflict-assistance";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
@@ -178,7 +179,6 @@ const createSessionOneRecord = (): WorkspaceSession => ({
 test.each([
   ["hidden", true],
   ["removed", true],
-  ["evicted", true],
   ["unmounted", true],
 ] as const)("pending draft send with pane %s, already bound=%s", async (change, alreadyBound) => {
   const record = {
@@ -201,11 +201,7 @@ test.each([
       result = view.actions.send({ segments: [createTextSegment("Hello")] }, "default");
     });
     if (change === "unmounted") view.unmount();
-    else if (change === "evicted") {
-      for (let index = 0; index < 6; index += 1) {
-        view.select({ ...record, id: `other-${index}` });
-      }
-    } else {
+    else {
       const other = { ...record, id: "other" };
       view.select(other, change === "removed" ? [other.id] : [record.id, other.id]);
     }
@@ -272,9 +268,8 @@ test.each([
 test.each([
   ["hidden", "host"],
   ["removed", "host"],
-  ["evicted", "host"],
+  ["removed", "accepted"],
   ["unmounted", "plain"],
-  ["evicted", "accepted"],
 ] as const)("shows the %s pane's late resume result: %s", async (change, outcome) => {
   const record = {
     ...createWorkspaceSessionRecord(),
@@ -302,9 +297,7 @@ test.each([
     expect(resume).toHaveBeenCalledTimes(1);
     expect(view.actions.isResumingSession).toBe(true);
     if (change === "unmounted") view.unmount();
-    else if (change === "evicted") {
-      for (let index = 0; index < 6; index += 1) view.select({ ...record, id: `other-${index}` });
-    } else {
+    else {
       view.select(
         { ...record, id: "other" },
         change === "removed" ? ["other"] : [record.id, "other"],
@@ -715,19 +708,35 @@ async function renderChatPanes(
   const refresh = () => {};
   const selectFile = () => {};
   let sessionIds = [record.id];
+  const records = new Map([[record.id, record]]);
+  function Content({ current }: { current: WorkspaceSession }): ReactElement {
+    return (
+      <>
+        {sessionIds.map((id) => {
+          const pane = records.get(id);
+          if (!pane) throw new Error(`Missing test record: ${id}`);
+          return (
+            <SessionViewContext key={id} value={{ id, isActive: id === current.id }}>
+              <WorkspaceSessionChatPane
+                workspace={workspace}
+                record={pane}
+                isVisible={id === current.id}
+                workingDirectory="/repo"
+                branchKey="main"
+                onToolRefresh={refresh}
+                onSelectFile={selectFile}
+              />
+            </SessionViewContext>
+          );
+        })}
+      </>
+    );
+  }
   const content = (current: WorkspaceSession) => (
     <ClientConnectionProvider connection={connection}>
       <AgentSessionsContext value={store}>
         <AgentChatSendProviders operations={operations}>
-          <WorkspaceSessionChatPanes
-            workspace={workspace}
-            record={current}
-            sessionIds={sessionIds}
-            workingDirectory="/repo"
-            branchKey="main"
-            onToolRefresh={refresh}
-            onSelectFile={selectFile}
-          />
+          <Content current={current} />
         </AgentChatSendProviders>
       </AgentSessionsContext>
     </ClientConnectionProvider>
@@ -742,7 +751,8 @@ async function renderChatPanes(
     },
     unmount: view.unmount,
     select(next: WorkspaceSession, ids = [...sessionIds, next.id]) {
-      sessionIds = ids;
+      sessionIds = [...new Set(ids)];
+      records.set(next.id, next);
       view.rerender(content(next));
     },
     dispose() {

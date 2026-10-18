@@ -3,6 +3,7 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useId,
   useLayoutEffect,
   useRef,
 } from "react";
@@ -17,7 +18,6 @@ export type SessionPanelSplitIds = {
   group: string;
   main: string;
   panel: string;
-  separator?: string;
 };
 
 /** Sizes in percent of the group, and minimum and maximum sizes as CSS percentages. */
@@ -64,7 +64,8 @@ const hasTransition = (element: HTMLElement): boolean =>
  * split tells the controller when the move ends.
  */
 function usePanelMotion({
-  ids,
+  mainId,
+  panelId,
   model,
   direction,
   openSize,
@@ -73,7 +74,8 @@ function usePanelMotion({
   panelRef,
   contentRef,
 }: {
-  ids: SessionPanelSplitIds;
+  mainId: string;
+  panelId: string;
   model: SplitPanelModel;
   direction: SplitDirection;
   openSize: () => number;
@@ -96,7 +98,7 @@ function usePanelMotion({
       const panelSpace = axisSize(main, direction) + axisSize(panel, direction);
       content.style.setProperty("--session-panel-size", `${(panelSpace * openSize()) / 100}px`);
     }
-    groupRef.current?.setLayout({ [ids.main]: 100 - size, [ids.panel]: size });
+    groupRef.current?.setLayout({ [mainId]: 100 - size, [panelId]: size });
     if (!isMoving) return;
     // Without a size transition, as with reduced motion, the move ends at once.
     if (!isResize || !panel || !hasTransition(panel)) {
@@ -118,13 +120,14 @@ function usePanelMotion({
     contentRef,
     direction,
     groupRef,
-    ids,
     isMoving,
     isOpen,
     mainRef,
+    mainId,
     onSettled,
     openSize,
     panelRef,
+    panelId,
   ]);
 }
 
@@ -146,6 +149,11 @@ export function SessionPanelSplit({
   main,
   panel,
 }: SessionPanelSplitProps): ReactElement {
+  // Kept session views mount the same split more than once. The library looks up groups by ID.
+  const suffix = useId();
+  const groupId = `${ids.group}-${suffix}`;
+  const mainId = `${ids.main}-${suffix}`;
+  const panelId = `${ids.panel}-${suffix}`;
   const groupRef = useRef<GroupImperativeHandle | null>(null);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -157,7 +165,8 @@ export function SessionPanelSplit({
     [fillsGroup],
   );
   usePanelMotion({
-    ids,
+    mainId,
+    panelId,
     model,
     direction,
     openSize,
@@ -169,7 +178,7 @@ export function SessionPanelSplit({
   const { onCollapsed } = model;
   const onLayoutChanged = useCallback(
     (layout: Record<string, number>, meta: LayoutChangedMeta): void => {
-      const size = layout[ids.panel];
+      const size = layout[panelId];
       if (size === undefined) return;
       if (size > 0) {
         if (!fillsGroup) panelSizeRef.current = size;
@@ -179,7 +188,7 @@ export function SessionPanelSplit({
       // then shows it as closed, and one click opens it again.
       if (meta.isUserInteraction) onCollapsed();
     },
-    [fillsGroup, ids.panel, onCollapsed],
+    [fillsGroup, panelId, onCollapsed],
   );
   const { presence } = model;
   const isPresent = presence !== "closed";
@@ -204,19 +213,19 @@ export function SessionPanelSplit({
   );
   return (
     <ResizablePanelGroup
-      id={ids.group}
+      id={groupId}
       groupRef={groupRef}
       direction={direction}
       defaultLayout={{
-        [ids.main]: isPresent ? sizes.main : 100,
-        [ids.panel]: isPresent ? sizes.panel : 0,
+        [mainId]: isPresent ? sizes.main : 100,
+        [panelId]: isPresent ? sizes.panel : 0,
       }}
       onLayoutChanged={onLayoutChanged}
       data-panel-motion={motion}
       className={className}
     >
       <ResizablePanel
-        id={ids.main}
+        id={mainId}
         elementRef={mainRef}
         defaultSize={`${sizes.main}%`}
         minSize={fillsGroup ? "0%" : sizes.mainMin}
@@ -225,11 +234,9 @@ export function SessionPanelSplit({
           {main}
         </div>
       </ResizablePanel>
-      {isPresent && !fillsGroup ? (
-        <ResizableHandle id={ids.separator} aria-label={separatorLabel} withHandle />
-      ) : null}
+      {isPresent && !fillsGroup ? <ResizableHandle aria-label={separatorLabel} withHandle /> : null}
       <ResizablePanel
-        id={ids.panel}
+        id={panelId}
         elementRef={panelRef}
         collapsible
         collapsedSize="0%"

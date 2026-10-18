@@ -113,7 +113,7 @@ describe("useNavigationUrlSync", () => {
     expect(calls).toHaveLength(1);
     const [next, options] = calls[0] ?? [];
     expect(next?.toString()).toBe("task=task-1&session=session-1&agent=planner");
-    expect(options).toEqual({ replace: true });
+    expect(options).toEqual(expect.objectContaining({ replace: true }));
     await harness.unmount();
   });
 
@@ -188,7 +188,7 @@ describe("useNavigationUrlSync", () => {
       expect(next.get("agent")).toBe("build");
       expect(next.get("autostart")).toBeNull();
       expect(next.get("start")).toBeNull();
-      expect(options).toEqual({ replace: true });
+      expect(options).toEqual(expect.objectContaining({ replace: true }));
 
       await harness.unmount();
     } finally {

@@ -1,3 +1,4 @@
+import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoRuntimeRef } from "@openducktor/contracts";
@@ -400,7 +401,7 @@ const confirmSessionStartModal = async ({
 
 describe("useAgentStudioSessionStartFlow", () => {
   test("startSessionRequest starts a fresh session even when another session is active", async () => {
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
     const loadedSession = createSession({
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
       externalSessionId: "session-active",
@@ -495,7 +496,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("startSessionRequest uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "planner",
@@ -599,7 +600,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("handleCreateSession uses the internal modal flow when no external request hook is provided", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-plan"));
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
       role: "spec",
@@ -938,7 +939,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       throw new Error("start failed");
     });
     const sendAgentMessage = mock(async () => null);
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1044,7 +1045,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("handleCreateSession for qa rejection starts a fresh builder session in the existing worktree", async () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-rework"));
     const sendAgentMessage = mock(async () => null);
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -1151,7 +1152,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         ),
     );
     const sendAgentMessage = mock(async () => null);
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
     const existingSession = createSession({
       externalSessionId: "session-existing",
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
@@ -1246,7 +1247,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     const startAgentSession = mock(async () => {
       throw new Error("start failed");
     });
-    const updateCalls: Array<Record<string, string | undefined>> = [];
+    const updateCalls: AgentStudioQueryUpdate[] = [];
 
     const harness = createHookHarness({
       ...createBaseArgs(),

@@ -38,7 +38,7 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
   const attemptRef = useRef<SwitchAttempt | null>(null);
   const [retry, setRetry] = useState(0);
   const [failure, setFailure] = useState<{ locationKey: string; message: string } | null>(null);
-  const [settledAttempt, setSettledAttempt] = useState<SwitchAttempt | null>(null);
+  const [interruptedAttempt, setInterruptedAttempt] = useState<SwitchAttempt | null>(null);
 
   useEffect(() => {
     if (activeWorkspaceId === null) return;
@@ -71,9 +71,13 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
     if (previous?.locationKey === location.key && previous.retry === retry) return;
     const attempt = { locationKey: location.key, retry };
     attemptRef.current = attempt;
-    selectWorkspace(requestedWorkspaceId).then(
+    let queued = false;
+    selectWorkspace(requestedWorkspaceId, () => {
+      queued = true;
+    }).then(
       () => {
-        if (attemptRef.current === attempt) setSettledAttempt(attempt);
+        // The queued workspace can commit after this promise resolves.
+        if (!queued && attemptRef.current === attempt) setInterruptedAttempt(attempt);
       },
       (cause: unknown) => {
         if (attemptRef.current === attempt) {
@@ -110,14 +114,14 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
   }
   const retrySwitch = (): void => {
     setFailure(null);
-    setSettledAttempt(null);
+    setInterruptedAttempt(null);
     setRetry((value) => value + 1);
   };
   if (failure?.locationKey === location.key) {
     return { kind: "failed", message: failure.message, retry: retrySwitch };
   }
   // Another workspace action can replace this switch before it applies.
-  if (settledAttempt?.locationKey === location.key && settledAttempt.retry === retry) {
+  if (interruptedAttempt?.locationKey === location.key && interruptedAttempt.retry === retry) {
     return {
       kind: "failed",
       message: "Another workspace action interrupted opening this workspace.",

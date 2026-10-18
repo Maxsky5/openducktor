@@ -45,9 +45,10 @@ export const agentStudioSelectionQueryKey = (selection: AgentStudioSelectionStat
 /** The selection key with the session identity, so two sessions with one external ID differ. */
 export const agentStudioSelectionRouteKey = (selection: AgentStudioSelectionState): string => {
   const queryKey = agentStudioSelectionQueryKey(selection);
-  return selection.sessionIdentity
+  const sessionKey = selection.sessionIdentity
     ? `${queryKey}\u001f${agentSessionIdentityKey(selection.sessionIdentity)}`
     : queryKey;
+  return selection.keepSessionless ? `${sessionKey}\u001ffresh` : sessionKey;
 };
 
 export const createAgentStudioRouteSelectionState = ({
@@ -57,6 +58,7 @@ export const createAgentStudioRouteSelectionState = ({
   hasExplicitRoleParam,
   roleFromQuery,
   routeSessionIdentity = null,
+  keepSessionlessParam = false,
 }: {
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
@@ -64,6 +66,7 @@ export const createAgentStudioRouteSelectionState = ({
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   routeSessionIdentity?: AgentSessionIdentity | null;
+  keepSessionlessParam?: boolean;
 }): AgentStudioSelectionState => {
   if (isWorkspaceRestorePending) {
     return emptyAgentStudioSelectionState();
@@ -75,7 +78,7 @@ export const createAgentStudioRouteSelectionState = ({
     sessionIdentity: routeSessionIdentity,
     role: roleFromQuery,
     hasExplicitRoleSelection: hasExplicitRoleParam,
-    keepSessionless: false,
+    keepSessionless: keepSessionlessParam,
   };
 };
 
@@ -116,8 +119,8 @@ export const toAgentStudioSessionlessRoleSelection = ({
 
 export const buildAgentStudioSelectionQueryUpdateFromState = (
   selection: AgentStudioSelectionState,
-) =>
-  ({
+): AgentStudioQueryUpdate => {
+  const update: AgentStudioQueryUpdate = {
     [AGENT_STUDIO_QUERY_KEYS.task]: selection.taskId || undefined,
     ...sessionQueryUpdate(
       agentStudioSelectionSessionExternalId(selection),
@@ -126,4 +129,7 @@ export const buildAgentStudioSelectionQueryUpdateFromState = (
     [AGENT_STUDIO_QUERY_KEYS.agent]: selection.hasExplicitRoleSelection
       ? selection.role
       : undefined,
-  }) satisfies AgentStudioQueryUpdate;
+  };
+  update.keepSessionless = selection.keepSessionless;
+  return update;
+};

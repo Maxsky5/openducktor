@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { TerminalBridge } from "@/lib/shell-bridge";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { acquireTerminalTransport } from "./terminal-transport-pool";
@@ -15,10 +15,16 @@ export const useTerminalTransport = (
     setTransportError(error);
     onError?.(error);
   });
-  useEffect(() => {
+  const leaseRef = useRef<ReturnType<typeof acquireTerminalTransport> | null>(null);
+  useLayoutEffect(() => {
     const lease = acquireTerminalTransport(bridge, handleError);
+    leaseRef.current = lease;
     setActiveController({ bridge, controller: lease.controller });
-    return () => lease.release();
+  }, [bridge]);
+  // New views acquire before departing views release the shared transport.
+  useEffect(() => {
+    const lease = leaseRef.current;
+    return () => lease?.release();
   }, [bridge]);
   return {
     controller: activeController?.bridge === bridge ? activeController.controller : null,

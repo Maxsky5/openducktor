@@ -9,8 +9,7 @@ import {
   TASK_SESSION_QUERY_KEYS,
 } from "@/features/session-navigation/session-navigation-target";
 import { useSessionPanelLayoutPruning } from "@/features/session-panels";
-import { AgentsPage } from "@/pages/agents/agents-page";
-import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
+import { SessionViews } from "./session-views";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import { useTaskSnapshotContext } from "@/state/app-state-contexts";
 import { SessionsEmptyState } from "./sessions-empty-state";
@@ -37,29 +36,34 @@ export function SessionsPage(): ReactElement {
       </div>
     );
   }
-  if (workspaceMatch.kind === "failed") {
-    return (
-      <SessionsWorkspaceUnavailable
-        message={workspaceMatch.message}
-        retry={workspaceMatch.retry}
-        activeWorkspaceId={activeWorkspace.workspaceId}
-      />
-    );
-  }
-  if (workspaceMatch.kind === "pending") {
-    return <SessionsStatus>Opening workspace…</SessionsStatus>;
-  }
-  if (kind === "task") {
+  if (kind === "task" && workspaceMatch.kind === "ready") {
     const taskId = searchParams.get(TASK_SESSION_QUERY_KEYS.task);
     if (tasks.some((task) => task.id === taskId && task.status === "closed")) {
       return <Navigate to="/kanban" replace />;
     }
-    return <AgentsPage />;
   }
-  if (kind === "workspace") {
-    return <WorkspaceSessionsPage />;
-  }
-  return <SessionsEmptyState key={activeWorkspace.workspaceId} workspace={activeWorkspace} />;
+  return (
+    <>
+      {workspaceMatch.kind === "failed" ? (
+        <SessionsWorkspaceUnavailable
+          message={workspaceMatch.message}
+          retry={workspaceMatch.retry}
+          activeWorkspaceId={activeWorkspace.workspaceId}
+        />
+      ) : null}
+      {workspaceMatch.kind === "pending" ? (
+        <SessionsStatus>Opening workspace…</SessionsStatus>
+      ) : null}
+      {workspaceMatch.kind === "ready" && kind === null ? (
+        <SessionsEmptyState key={activeWorkspace.workspaceId} workspace={activeWorkspace} />
+      ) : null}
+      <SessionViews
+        workspace={activeWorkspace}
+        kind={kind}
+        isReady={workspaceMatch.kind === "ready"}
+      />
+    </>
+  );
 }
 
 function SessionsStatus({ children }: { children: string }): ReactElement {

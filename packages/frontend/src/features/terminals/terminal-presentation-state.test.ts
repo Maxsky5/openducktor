@@ -20,7 +20,7 @@ describe("terminalPresentationReducer", () => {
   test("preserves state identity when the host list has no material change", () => {
     const scopeKey = "/repo:task-1";
     const terminal = summary("terminal-a");
-    const initial = terminalPresentationReducer(createTerminalPresentationState(scopeKey), {
+    const initial = terminalPresentationReducer(createTerminalPresentationState(), {
       type: "hostSynced",
       scopeKey,
       hostInstanceId: "host-1",
@@ -41,7 +41,7 @@ describe("terminalPresentationReducer", () => {
 
   test("shows a surviving tab when overlapping closes have mixed outcomes", () => {
     const scopeKey = "/repo:task-1";
-    let state = createTerminalPresentationState(scopeKey);
+    let state = createTerminalPresentationState();
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
@@ -75,7 +75,7 @@ describe("terminalPresentationReducer", () => {
 
   test("does not turn an intentionally closing terminal into a lost tab", () => {
     const scopeKey = "/repo:task-1";
-    let state = createTerminalPresentationState(scopeKey);
+    let state = createTerminalPresentationState();
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
@@ -108,7 +108,7 @@ describe("terminalPresentationReducer", () => {
 
   test("keeps terminal identity stable when a stale close follows a forgotten event", () => {
     const scopeKey = "/repo:task-1";
-    let state = createTerminalPresentationState(scopeKey);
+    let state = createTerminalPresentationState();
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
@@ -142,7 +142,7 @@ describe("terminalPresentationReducer", () => {
 
   test("does not restore a forgotten terminal from a stale host list", () => {
     const scopeKey = "/repo:task-1";
-    let state = createTerminalPresentationState(scopeKey);
+    let state = createTerminalPresentationState();
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
@@ -174,7 +174,7 @@ describe("terminalPresentationReducer", () => {
 
   test("does not restore a forgotten terminal after the host restarts", () => {
     const scopeKey = "/repo:task-1";
-    let state = createTerminalPresentationState(scopeKey);
+    let state = createTerminalPresentationState();
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
@@ -206,7 +206,7 @@ describe("terminalPresentationReducer", () => {
 
   test("does not reactivate a tab removed before close rejection", () => {
     const scopeKey = "/repo:task-1";
-    let state = createTerminalPresentationState(scopeKey);
+    let state = createTerminalPresentationState();
     state = terminalPresentationReducer(state, {
       type: "hostSynced",
       scopeKey,
