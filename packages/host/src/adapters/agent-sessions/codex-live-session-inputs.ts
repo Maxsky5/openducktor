@@ -11,7 +11,6 @@ type CodexSendRequest = Parameters<CodexSessionController["sendUserMessage"]>[0]
 /** Builds the controller request of a send that carries its Codex policy. */
 export const toCodexSendRequest = ({
   resolvedQuestionRequestIds,
-  model,
   parts,
   systemPrompt,
   submissionId,
@@ -27,7 +26,6 @@ export const toCodexSendRequest = ({
   if (resolvedQuestionRequestIds !== undefined) {
     request.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
   }
-  if (model !== undefined) request.model = model;
   if (systemPrompt !== undefined) request.systemPrompt = systemPrompt;
   if (submissionId !== undefined) request.submissionId = submissionId;
   return request;

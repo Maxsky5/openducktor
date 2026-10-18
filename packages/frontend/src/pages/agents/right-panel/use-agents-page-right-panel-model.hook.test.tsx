@@ -91,6 +91,7 @@ type SelectedViewOverrides = Partial<HookArgs["selectedView"]> & {
 const createSelectedSession = (
   overrides: Partial<HookArgs["selectedView"]["selectedSession"]> = {},
 ): HookArgs["selectedView"]["selectedSession"] => ({
+  preparation: { ready: true, error: null },
   identity: null,
   activityState: null,
   selectedModel: null,

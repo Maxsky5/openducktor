@@ -15,7 +15,7 @@ export type WorkflowLaunchDependencies = WorkflowLaunchPreparationDependencies &
   sessions: Pick<TaskSessionOperations, "start" | "fork" | "resume">;
   /** `sendUserMessage` must apply the normal workflow send policy. */
   runtime: SessionLaunchRuntimePort &
-    Pick<AgentSessionLiveStateService, "publishTaskSessionRecords">;
+    Pick<AgentSessionLiveStateService, "publishTaskSessionRecords" | "updateSessionModel">;
 };
 
 /** Decides, when a waiting automatic launch gets its turn, whether it still starts. */

@@ -157,9 +157,9 @@ export const assembleNodeEffectHostCommandRouter = (
     eventBus,
     onBackgroundFailure,
     canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
-    prepare: (content, options) =>
+    prepare: (content) =>
       resolvePreparedSessionAttachments(
-        agentSessionCommandService.prepareUserMessage(content, options),
+        agentSessionCommandService.prepareUserMessage(content),
         localAttachmentService,
       ),
     runOperation: (target, work, submissionId) =>

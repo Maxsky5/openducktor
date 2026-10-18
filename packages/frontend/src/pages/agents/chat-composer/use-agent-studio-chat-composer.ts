@@ -79,9 +79,7 @@ type UseAgentStudioChatComposerArgs = {
 type AgentStudioChatComposerState = {
   speed: SpeedControlModel | null;
   selectionForNewSession: AgentModelSelection | null;
-  newSessionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
-  /** Repairs the saved choice and returns a guard to keep Send bound to this chat. */
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
   supportsProfiles?: boolean;
@@ -347,11 +345,8 @@ export function useAgentStudioChatComposer({
     const source: ChatComposerModelSelectionSource = selectedSessionIdentity
       ? {
           kind: "session",
-          sessionIdentity: loadedSessionIdentity,
-          sessionRuntimeKind: selectedSessionIdentity.runtimeKind,
           modelCatalog: sessionModelCatalog,
           selectedSessionModel,
-          draftSelection,
         }
       : {
           kind: "new_session",
@@ -365,13 +360,11 @@ export function useAgentStudioChatComposer({
     });
   }, [
     composerCatalog,
-    draftSelection,
     explicitDraftSelection,
     defaultSelection,
     selectedSessionIdentity,
     selectedSessionModel,
     sessionModelCatalog,
-    loadedSessionIdentity,
   ]);
   const { selectionCatalog, selectedModelSelection, selectionForNewSession } = modelSelections;
 
@@ -477,7 +470,6 @@ export function useAgentStudioChatComposer({
 
   return {
     speed,
-    newSessionCatalog: isRuntimeReady ? composerCatalog : null,
     selectionForNewSession,
     selectedModelSelection,
     selectedModelDescriptor: selectedModelEntry,

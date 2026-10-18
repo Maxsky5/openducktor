@@ -1,16 +1,14 @@
-import type {
-  AgentSessionOperationPolicy,
-  AgentSessionSendContent,
-  PreparedSessionModelUpdate,
-} from "./agent-session-operation-policy";
+import type { PreparedSessionModelUpdate } from "./agent-session-operation-policy";
 import type {
   AgentSessionControlResumeInput,
   AgentSessionLiveSnapshot,
   AgentSessionModelSelection,
+  AgentSessionLiveRef,
+  AgentSessionLiveEnvelope,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
-import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { Deferred, Effect, Exit } from "effect";
+import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
 import type { createSessionOperationOwner } from "./session-operation-owner";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
@@ -22,32 +20,91 @@ export const createSessionModelPreparation = ({
   turnPreparation,
 }: {
   owner: ReturnType<typeof createSessionOperationOwner>;
-  runtime: Pick<AgentSessionLiveStateService, "updateSessionModel">;
+  runtime: Pick<AgentSessionLiveStateService, "updateSessionModel" | "read">;
   turnPreparation: ReturnType<typeof createSessionTurnPreparation>;
 }) => {
-  const prepareModel = (
-    input: AgentSessionSendContent,
-    policy: AgentSessionOperationPolicy,
-    steering = false,
-  ) =>
+  const idleWaiters = new Map<
+    string,
+    { ref: AgentSessionLiveRef; waiter: Deferred.Deferred<void, HostError> }
+  >();
+  const waitForIdle = (ref: AgentSessionLiveRef): Effect.Effect<void, HostError> =>
     Effect.gen(function* () {
-      if (steering) {
-        yield* turnPreparation.steeringContent(input, input.parts);
-        return input;
-      }
-      const decision = yield* turnPreparation.model(
-        input,
-        input.model ? { ...input.model, runtimeKind: input.runtimeKind } : null,
-        { captured: input.modelCaptured === true, parts: input.parts },
+      const key = agentSessionRefKey(ref);
+      const guarded = yield* owner.options();
+      const assertCurrent = Effect.try({
+        try: () => guarded.assertCurrent?.(),
+        catch: (cause) =>
+          new HostValidationError({
+            field: "model",
+            message: "Stop canceled the pending settings change.",
+            cause,
+          }),
+      });
+      yield* assertCurrent;
+      const waiter = Deferred.makeUnsafe<void, HostError>();
+      idleWaiters.set(key, { ref, waiter });
+      const { repoPath, runtimeKind, workingDirectory, externalSessionId } = ref;
+      yield* runtime.read({ repoPath, runtimeKind, workingDirectory, externalSessionId }).pipe(
+        Effect.flatMap((live) => {
+          if (live.type !== "live")
+            return new HostValidationError({
+              field: "externalSessionId",
+              message: "The session is not attached. Reopen it before changing its settings.",
+            });
+          return live.session.activity === "running" || live.session.activity === "retrying"
+            ? Deferred.await(waiter)
+            : Effect.void;
+        }),
+        Effect.andThen(assertCurrent),
+        Effect.ensuring(Effect.sync(() => idleWaiters.delete(key))),
       );
-      if (decision.kind === "repair") {
-        const prepared = yield* policy.prepareModelUpdate({ ...input, model: decision.selection });
-        yield* updateModel(prepared);
-      }
-      return { ...input, model: decision.selection ?? undefined };
     });
-
-  const prepareContinuationModel = (
+  const cancel = (ref: AgentSessionLiveRef): void => {
+    const waiter = idleWaiters.get(agentSessionRefKey(ref))?.waiter;
+    if (waiter)
+      Deferred.doneUnsafe(
+        waiter,
+        Exit.fail(
+          new HostValidationError({
+            field: "model",
+            message:
+              "Stop canceled the pending settings change. Select the settings again when the session is idle.",
+          }),
+        ),
+      );
+  };
+  const observe = (change: AgentSessionLiveEnvelope): void => {
+    if (change.type === "snapshot") {
+      const sessions = new Map(
+        change.sessions.map((session) => [agentSessionRefKey(session.ref), session]),
+      );
+      for (const [key, pending] of idleWaiters) {
+        if (pending.ref.repoPath !== change.repoPath) continue;
+        const session = sessions.get(key);
+        if (session) observe({ type: "session_upsert", session });
+        else observe({ type: "session_removed", ref: pending.ref });
+      }
+      return;
+    }
+    if (change.type !== "session_upsert" && change.type !== "session_removed") return;
+    const ref = change.type === "session_upsert" ? change.session.ref : change.ref;
+    const waiter = idleWaiters.get(agentSessionRefKey(ref))?.waiter;
+    if (!waiter) return;
+    if (change.type === "session_removed") {
+      Deferred.doneUnsafe(
+        waiter,
+        Exit.fail(
+          new HostValidationError({
+            field: "externalSessionId",
+            message: "The session stopped before its settings could change. Reopen it and retry.",
+          }),
+        ),
+      );
+    } else if (change.session.activity === "idle") {
+      Deferred.doneUnsafe(waiter, Exit.void);
+    }
+  };
+  const continuationModel = (
     input: AgentSessionControlResumeInput,
     live: AgentSessionLiveSnapshot | undefined,
   ) =>
@@ -66,8 +123,7 @@ export const createSessionModelPreparation = ({
           });
         selected = { ...live.model, runtimeKind: live.model.runtimeKind ?? input.runtimeKind };
       }
-      const decision = yield* turnPreparation.model(input, selected, { captured: true });
-      return { ...input, model: decision.selection ?? undefined };
+      return yield* turnPreparation.model(input, selected);
     });
 
   const updateModel = (prepared: PreparedSessionModelUpdate) =>
@@ -144,5 +200,5 @@ export const createSessionModelPreparation = ({
       }),
     );
 
-  return { prepareModel, prepareContinuationModel, updateModel };
+  return { continuationModel, updateModel, waitForIdle, observe, cancel };
 };

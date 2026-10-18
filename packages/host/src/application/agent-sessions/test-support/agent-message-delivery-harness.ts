@@ -31,7 +31,6 @@ export const ref = {
   externalSessionId: "session-1",
 };
 export const target = { ...ref, sessionScope: { kind: "repository" as const } };
-export const model = { runtimeKind: "codex" as const, providerId: "openai", modelId: "gpt-5" };
 export const slashCommand: AgentSessionUserMessagePart = {
   kind: "slash_command",
   command: { id: "compact", trigger: "compact", title: "Compact", hints: [] },
@@ -161,7 +160,7 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
     runOperation: (_target, effect) => effect,
     commitQueueResume: (commit) => Effect.sync(commit),
     prepareQueueResume: () => Effect.void,
-    prepare: (content) => Effect.succeed({ ...content, model }),
+    prepare: (content) => Effect.succeed(content),
     send: (input) =>
       Effect.suspend(() => {
         calls.push({ input });

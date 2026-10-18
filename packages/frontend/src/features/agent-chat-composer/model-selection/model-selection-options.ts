@@ -10,7 +10,35 @@ type ModelSelectionOptions = {
   variantOptions: ComboboxOption[];
 };
 
-/** Finds the catalog entry of a model, or null when the catalog lacks it. */
+export const resolveModelSelectionOptions = ({
+  liveSession = false,
+  selectionCatalog,
+  selectedModelSelection,
+}: {
+  liveSession?: boolean;
+  selectionCatalog: AgentModelCatalog | null;
+  selectedModelSelection: AgentModelSelection | null;
+}): ModelSelectionOptions => {
+  const selectedModelEntry = findModelEntry(selectionCatalog, selectedModelSelection);
+  const policy = resolveModelSelectionPolicy(selectedModelEntry, liveSession);
+  const profileOptions = toAgentProfileOptions(
+    selectionCatalog,
+    selectedModelSelection,
+    liveSession,
+  );
+  return {
+    selectedModelEntry,
+    agentProfileOptions: policy.canChangeProfile
+      ? profileOptions
+      : profileOptions.map((option) => ({
+          ...option,
+          disabled: true,
+          description: "Start a new session to change the agent profile.",
+        })),
+    variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection, liveSession),
+  };
+};
+
 export const findModelEntry = (
   selectionCatalog: AgentModelCatalog | null,
   model: Pick<AgentModelSelection, "providerId" | "modelId"> | null,
@@ -25,10 +53,7 @@ export const findModelEntry = (
   );
 };
 
-/**
- * Finds the catalog entry of the model of the running turn, or null when it is unknown.
- * The latest user message that reports a model started or joined that turn.
- */
+/** The latest user message with a model started or joined the running turn. */
 export const findRunningTurnModelEntry = (
   selectionCatalog: AgentModelCatalog | null,
   messages: readonly AgentChatMessage[],
@@ -45,24 +70,25 @@ export const findRunningTurnModelEntry = (
   return null;
 };
 
-const toAgentProfileOptionsWithSelectedFallback = (
+const toAgentProfileOptions = (
   selectionCatalog: AgentModelCatalog | null,
   selectedModelSelection: AgentModelSelection | null,
+  liveSession: boolean,
 ): ComboboxOption[] => {
   const options = toPrimaryAgentOptions(selectionCatalog);
-  if (options.length > 0) {
+  const currentProfile = selectedModelSelection?.profileId;
+  if (!currentProfile || options.some((option) => option.value === currentProfile)) {
     return options;
   }
-  const fallbackAgent = selectedModelSelection?.profileId;
-  if (fallbackAgent && fallbackAgent.trim().length > 0) {
-    const option: ComboboxOption = {
-      value: fallbackAgent,
-      label: fallbackAgent,
+  if (liveSession || options.length === 0) {
+    options.unshift({
+      value: currentProfile,
+      label: currentProfile,
       description: "Current session profile",
-    };
-    return [option];
+      disabled: liveSession,
+    });
   }
-  return [];
+  return options;
 };
 
 const toVariantOptions = (
@@ -82,47 +108,19 @@ const toVariantOptions = (
     }
     return [];
   }
-  let { variants } = resolveModelSelectionPolicy(selectedModelEntry, liveSession);
-  if (liveSession && selectedModelEntry.liveSessionUpdates?.variants) {
-    const selectedVariant = selectedModelSelection?.variant;
-    if (
-      selectedVariant &&
-      selectedModelEntry.variants.includes(selectedVariant) &&
-      !variants.includes(selectedVariant)
-    ) {
-      variants = [selectedVariant, ...variants];
-    }
-  }
-  return variants.map((variant) => ({
+  const { variants } = resolveModelSelectionPolicy(selectedModelEntry, liveSession);
+  const options: ComboboxOption[] = variants.map((variant) => ({
     value: variant,
     label: variant,
   }));
-};
-
-export const resolveModelSelectionOptions = ({
-  liveSession = false,
-  selectionCatalog,
-  selectedModelSelection,
-}: {
-  liveSession?: boolean;
-  selectionCatalog: AgentModelCatalog | null;
-  selectedModelSelection: AgentModelSelection | null;
-}): ModelSelectionOptions => {
-  const selectedModelEntry = findModelEntry(selectionCatalog, selectedModelSelection);
-  const policy = resolveModelSelectionPolicy(selectedModelEntry, liveSession);
-  const profileOptions = toAgentProfileOptionsWithSelectedFallback(
-    selectionCatalog,
-    selectedModelSelection,
-  );
-  return {
-    selectedModelEntry,
-    agentProfileOptions: policy.canChangeProfile
-      ? profileOptions
-      : profileOptions.map((option) => ({
-          ...option,
-          disabled: true,
-          description: "Start a new session to change the agent profile.",
-        })),
-    variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection, liveSession),
-  };
+  const currentVariant = selectedModelSelection?.variant;
+  if (liveSession && currentVariant && !variants.includes(currentVariant)) {
+    options.unshift({
+      value: currentVariant,
+      label: currentVariant,
+      disabled: true,
+      description: "Current session effort",
+    });
+  }
+  return options;
 };

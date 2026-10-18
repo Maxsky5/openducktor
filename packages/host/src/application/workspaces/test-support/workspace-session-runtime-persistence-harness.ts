@@ -109,6 +109,7 @@ export const createPersistenceHarness = async (
   const events: AgentSessionLiveEnvelope[] = [];
   const starts: import("@openducktor/contracts").AgentSessionControlStartInput[] = [];
   let nativeAttached = true;
+  let nativeModel = record.selectedModel ?? undefined;
   const inputs: Array<AgentSessionControlSendInput | AgentSessionControlResumeInput> = [];
   const releases: AgentSessionLiveRef[] = [];
   const stops: AgentSessionLiveRef[] = [];
@@ -355,7 +356,7 @@ export const createPersistenceHarness = async (
               Effect.suspend(() => {
                 inputs.push(input);
                 if (state.failSend) return failure("runtime rejected message");
-                const acceptedMessage = { ...accepted(), model: input.model };
+                const acceptedMessage = { ...accepted(), model: nativeModel };
                 if (!state.publishAcceptedMessageDuringSend) return Effect.succeed(acceptedMessage);
                 return registration
                   .runMutation(
@@ -378,6 +379,7 @@ export const createPersistenceHarness = async (
             models.push(input.model);
             if (state.failModel) return failure("runtime rejected model");
             if (state.failRestore && models.length === 2) return failure("runtime restore failed");
+            nativeModel = input.model ? { ...input.model, runtimeKind } : undefined;
             return Effect.void;
           }),
         updateSessionTitle: (input) =>
@@ -426,7 +428,7 @@ export const createPersistenceHarness = async (
       Effect.succeed({ value: undefined, changes: [{ type: "transcript_event", event }] }),
     );
   const emit = (event: AgentSessionTranscriptEvent) => Effect.runPromise(emitEffect(event));
-  // Like the message queue, a send captures the stored session settings before dispatch.
+  // The command owner prepares ownership; the runtime owns accepted model settings.
   const send = (text: string) =>
     Effect.runPromise(
       commands

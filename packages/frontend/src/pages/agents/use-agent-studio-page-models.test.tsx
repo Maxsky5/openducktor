@@ -328,6 +328,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       selectedTask: selectedSessionCore.selectedTask,
       sessionsForTask: selectedSessionCore.sessionsForTask,
       selectedSession: {
+        preparation: { ready: true, error: null },
         identity: selectedSessionCore.selectedSessionIdentity,
         activityState: selectedSessionCore.selectedSessionActivityState,
         selectedModel: selectedSessionCore.selectedSessionModel,

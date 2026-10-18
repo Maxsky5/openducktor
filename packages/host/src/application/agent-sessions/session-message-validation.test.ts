@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Deferred, Effect, Exit } from "effect";
 import {
-  agentMessageSubmitInputSchema,
-  agentModelCatalogSchema,
   repoConfigSchema,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type AgentRuntimeCatalog,
   settingsSnapshotSchema,
   taskCardSchema,
-  RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
+  type RuntimeKind,
 } from "@openducktor/contracts";
 import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
 import { createAgentSessionCommandService } from "./agent-session-command-service";
@@ -40,48 +40,19 @@ const attachment = {
   },
 };
 
-const setup = ({
-  image = false,
-  mimeTypes = ["image/png"],
-  saved = selection(),
-  running = selection(),
-} = {}) => {
-  let savedModel = saved;
+const setup = (runtimeKind: RuntimeKind, catalog?: Effect.Effect<AgentRuntimeCatalog>) => {
+  const recipient = { ...target, runtimeKind };
+  let savedModel = { ...selection(), runtimeKind };
+  let attached = true;
+  let nativeModel = savedModel;
+  const order: string[] = [];
+  const background: Effect.Effect<void>[] = [];
   let activity: AgentSessionLiveSnapshot["activity"] = "idle";
-  let catalog = agentModelCatalogSchema.parse({
-    runtime: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
-    models: [
-      {
-        id: "provider/current",
-        providerId: "provider",
-        providerName: "Provider",
-        modelId: "current",
-        modelName: "Current",
-        variants: [],
-        attachmentSupport: {
-          image,
-          audio: false,
-          video: false,
-          pdf: false,
-          mimeTypes: { image: mimeTypes },
-        },
-      },
-      {
-        id: "provider/running",
-        providerId: "provider",
-        providerName: "Provider",
-        modelId: "running",
-        modelName: "Running",
-        variants: [],
-        attachmentSupport: { image: false, audio: false, video: false, pdf: false },
-      },
-    ],
-    defaultModelsByProvider: { provider: "current" },
-    profiles: [{ name: "build", mode: "primary" }],
-  });
   const native = { sends: 0, models: 0 };
+  let readCount = 0;
+  const waiting = Promise.withResolvers<void>();
   const live = (): AgentSessionLiveSnapshot => ({
-    ref: target,
+    ref: recipient,
     title: "Session",
     startedAt: "2026-10-13T12:00:00Z",
     activity,
@@ -107,29 +78,7 @@ const setup = ({
       ),
   };
   const queries = {
-    loadKnownRuntimeCatalog: () =>
-      Effect.succeed({ models: { status: "available" as const, catalog } }),
-    loadSessionHistory: () =>
-      Effect.succeed([
-        // OpenCode exposes the active model on assistant rows.
-        {
-          role: "user" as const,
-          messageId: "turn-input",
-          timestamp: "2026-10-13T12:00:00Z",
-          text: "Start",
-          state: "read" as const,
-          displayParts: [],
-          parts: [],
-        },
-        {
-          role: "assistant" as const,
-          messageId: "native-response",
-          timestamp: "2026-10-13T12:00:01Z",
-          text: "",
-          parts: [],
-          model: running,
-        },
-      ]),
+    loadRuntimeCatalog: () => catalog ?? Effect.die(new Error("Send must not load a catalog")),
   };
   const unexpected = () => Effect.die(new Error("Unexpected native work"));
   const commands = createAgentSessionCommandService({
@@ -137,10 +86,14 @@ const setup = ({
     taskReader,
     taskLifecycle: createTaskSessionLifecycleCoordinator(),
     taskSessionStart: { prepare: unexpected, complete: unexpected },
-    persistTaskModel: () => Effect.succeed({ updated: true, publish: Effect.void }),
+    persistTaskModel: (input) =>
+      Effect.sync(() => {
+        savedModel = { ...input.selectedModel!, runtimeKind };
+        return { updated: true, publish: Effect.void };
+      }),
     pauseForStop: () => Effect.void,
     approvalPolicy: { reply: unexpected },
-    readSessionRootRefs: () => Effect.succeed([target]),
+    readSessionRootRefs: () => Effect.succeed([recipient]),
     turnPreparation: createSessionTurnPreparation({
       taskReader,
       queries,
@@ -158,7 +111,13 @@ const setup = ({
       },
     }),
     runtime: {
-      read: () => Effect.succeed({ type: "live" as const, session: live() }),
+      read: () =>
+        Effect.sync(() => {
+          if (++readCount === 2) waiting.resolve();
+          return attached
+            ? { type: "live" as const, session: live() }
+            : { type: "missing" as const, ref: recipient };
+        }),
       list: () => Effect.succeed([live()]),
       publishOperation: () => Effect.void,
       retainOperation: () => Effect.void,
@@ -167,14 +126,23 @@ const setup = ({
       resumeSession: unexpected,
       continueInterruptedTurn: unexpected,
       releaseSession: unexpected,
-      stopSession: unexpected,
+      stopSession: () =>
+        Effect.sync(() => {
+          activity = "idle";
+          order.push("stop");
+        }),
       loadContext: unexpected,
       loadSessionDiff: unexpected,
       replyApproval: unexpected,
       replyQuestion: unexpected,
-      updateSessionModel: () =>
+      updateSessionModel: (input) =>
         Effect.sync(() => {
+          input.workStartGuard?.assertCurrent();
+          input.onWorkIssued?.();
           native.models += 1;
+          nativeModel = { ...input.model!, runtimeKind };
+          order.push("settings");
+          input.onWorkAccepted?.();
         }),
       sendUserMessage: (input) =>
         Effect.suspend(() => {
@@ -187,6 +155,7 @@ const setup = ({
             );
           return Effect.sync(() => {
             native.sends += 1;
+            order.push(`send:${nativeModel.modelId}`);
             return {
               type: "user_message" as const,
               externalSessionId: "root",
@@ -195,6 +164,7 @@ const setup = ({
               message: "Message",
               parts: input.parts.filter((part) => part.kind !== "slash_command"),
               state: "read" as const,
+              model: nativeModel,
             };
           });
         }),
@@ -204,7 +174,7 @@ const setup = ({
         Effect.succeed([
           {
             externalSessionId: "root",
-            runtimeKind: "opencode",
+            runtimeKind,
             workingDirectory: "/repo/tree",
             role: "build",
             selectedModel: savedModel,
@@ -235,165 +205,228 @@ const setup = ({
     send: commands.sendUserMessage,
     steeringAvailability: () => Effect.succeed({ available: true }),
     publish: () => {},
-    runInBackground: () => {},
+    runInBackground: (effect) => background.push(effect),
     now: () => "2026-10-13T12:00:00Z",
   });
   return {
+    target: recipient,
     commands,
     delivery,
     native,
-    setSavedModel: (value: AgentSessionModelSelection) => {
-      savedModel = value;
+    order,
+    background,
+    live,
+    waiting: waiting.promise,
+    detach: () => {
+      attached = false;
     },
     setActivity: (value: typeof activity) => {
       activity = value;
     },
-    removeCurrentModel: () => {
-      catalog = {
-        ...catalog,
-        models: catalog.models.filter((model) => model.modelId !== "current"),
-      };
-    },
   };
 };
 
-describe("host message content and captured model validation", () => {
-  test.each([
-    { image: false, saved: selection(), mime: "image/png", name: "image.png" },
-    { image: true, saved: selection(), mime: "image/webp", name: "image.png" },
-    { image: false, saved: selection("removed"), mime: "image/png", name: "image.png" },
-  ])(
-    "rejects disallowed attachments before model or message effects: %j",
-    async ({ image, saved, mime, name }) => {
-      const h = setup({ image, saved });
+describe("message delivery uses prepared session settings", () => {
+  test.each(["claude", "codex", "opencode"] as const)(
+    "%s sends and steers without catalog or model work",
+    async (kind) => {
+      const h = setup(kind);
       try {
-        const input = agentMessageSubmitInputSchema.parse({
-          ...target,
-          submissionId: "message",
+        for (const delivery of ["new_turn", "steer"] as const) {
+          const result = await Effect.runPromise(
+            h.commands.sendUserMessage({ ...h.target, parts: [attachment], delivery }),
+          );
+          expect(result.type).toBe("user_message");
+          h.setActivity("running");
+        }
+        expect(h.native).toEqual({ sends: 2, models: 0 });
+      } finally {
+        await Effect.runPromise(h.commands.shutdownOperations());
+      }
+    },
+  );
+
+  test("editing a queued message needs no catalog and stores no model", async () => {
+    const h = setup("opencode");
+    h.setActivity("running");
+    h.delivery.observeChanges([
+      {
+        type: "session_upsert",
+        session: {
+          ref: h.target,
+          title: "Session",
+          activity: "running",
+          startedAt: "2026-10-13T12:00:00Z",
+          pendingApprovals: [],
+          pendingQuestions: [],
+          contextUsage: null,
+        },
+      },
+    ]);
+    try {
+      await Effect.runPromise(
+        h.delivery.submit({
+          ...h.target,
+          submissionId: "queued",
           mode: "default",
-          parts: [{ ...attachment, attachment: { ...attachment.attachment, mime, name } }],
-        });
-        const result = await Effect.runPromise(Effect.result(h.delivery.submit(input)));
-        expect(result._tag).toBe("Failure");
-        expect(h.native).toEqual({ sends: 0, models: 0 });
-      } finally {
-        await Effect.runPromise(h.commands.shutdownOperations());
-      }
-    },
-  );
+          parts: [{ kind: "text", text: "Original" }],
+        }),
+      );
+      const edited = await Effect.runPromise(
+        h.delivery.manage({ ...h.target, action: { kind: "begin_edit", submissionId: "queued" } }),
+      );
+      const entry = edited.queue.entries[0];
+      if (entry?.state !== "editing") throw new Error("Missing edit reservation");
+      await Effect.runPromise(
+        h.delivery.manage({
+          ...h.target,
+          action: {
+            kind: "save_edit",
+            submissionId: "queued",
+            editId: entry.editId,
+            parts: [attachment],
+          },
+        }),
+      );
+      const queued = h.delivery.listQueues("/repo")[0]?.entries[0];
+      expect(queued).toMatchObject({ state: "queued", parts: [attachment] });
+      expect(queued).not.toHaveProperty("model");
+      expect(h.native).toEqual({ sends: 0, models: 0 });
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+});
 
-  test.each(["image/png", "image/jpg"])(
-    "admits a MIME listed by the authoritative model: %j",
-    async (mime) => {
-      const h = setup({ image: true, mimeTypes: [mime] });
-      try {
-        const result = await Effect.runPromise(
-          h.delivery.submit({
-            ...target,
-            submissionId: "supported",
-            mode: "default",
-            parts: [
-              {
-                ...attachment,
-                attachment: {
-                  ...attachment.attachment,
-                  mime,
-                  name: mime === "image/jpg" ? "image.jpg" : "image.png",
-                },
-              },
-            ],
-          }),
-        );
-        expect(result.kind).toBe("accepted");
-        expect(h.native).toEqual({ sends: 1, models: 0 });
-      } finally {
-        await Effect.runPromise(h.commands.shutdownOperations());
-      }
+const settingsCatalog: AgentRuntimeCatalog = {
+  models: {
+    status: "available",
+    catalog: {
+      runtime: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      models: ["current", "next"].map((modelId) => ({
+        id: `provider/${modelId}`,
+        providerId: "provider",
+        providerName: "Provider",
+        modelId,
+        modelName: modelId,
+        variants: [],
+      })),
+      profiles: [{ name: "build", mode: "primary" }],
+      defaultModelsByProvider: { provider: "current" },
     },
-  );
+  },
+};
 
-  test.each(["current", "running"])(
-    "steering checks the native running turn model %j",
-    async (modelId) => {
-      const h = setup({ image: true, running: selection(modelId) });
-      h.setActivity("running");
-      try {
-        const result = await Effect.runPromise(
-          Effect.result(
-            h.commands.sendUserMessage({ ...target, parts: [attachment], delivery: "steer" }),
-          ),
-        );
-        expect(result._tag).toBe(modelId === "current" ? "Success" : "Failure");
-        expect(h.native).toEqual({ sends: modelId === "current" ? 1 : 0, models: 0 });
-      } finally {
-        await Effect.runPromise(h.commands.shutdownOperations());
-      }
-    },
-  );
-
-  test.each([false, true])(
-    "Queue Save validates the captured model, available=%j",
-    async (available) => {
-      const h = setup({ image: true });
-      h.setActivity("running");
+describe("explicit settings ordering", () => {
+  test("applies settings before an idle event drains a queued message", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    h.delivery.observeChanges([{ type: "session_upsert", session: h.live() }]);
+    try {
+      await Effect.runPromise(
+        h.delivery.submit({
+          ...h.target,
+          submissionId: "queued",
+          mode: "default",
+          parts: [{ kind: "text", text: "Next" }],
+        }),
+      );
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      );
+      expect(h.order).toEqual([]);
+      h.setActivity("idle");
+      const idle = { type: "session_upsert" as const, session: h.live() };
+      await Effect.runPromise(h.commands.observeOperation(idle));
       h.delivery.observeChanges([
+        idle,
         {
-          type: "session_upsert",
-          session: {
-            ref: target,
-            title: "Session",
-            activity: "running",
-            startedAt: "2026-10-13T12:00:00Z",
-            pendingApprovals: [],
-            pendingQuestions: [],
-            contextUsage: null,
+          type: "transcript_event",
+          event: {
+            type: "session_idle",
+            sessionRef: h.target,
+            externalSessionId: h.target.externalSessionId,
+            timestamp: "2026-10-13T12:01:00Z",
+            turnOutcome: "completed",
           },
         },
       ]);
+      await Promise.all([
+        updating,
+        ...h.background.splice(0).map((effect) => Effect.runPromise(effect)),
+      ]);
+      expect(h.order).toEqual(["settings", "send:next"]);
+      expect(h.native).toEqual({ sends: 1, models: 1 });
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
+  test.each([false, true])(
+    "Stop cancels pending settings, catalog pending=%s",
+    async (catalogPending) => {
+      const gate = Deferred.makeUnsafe<void>();
+      const h = setup(
+        "opencode",
+        (catalogPending ? Deferred.await(gate) : Effect.void).pipe(Effect.as(settingsCatalog)),
+      );
+      h.setActivity("running");
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      ).catch((cause: Error) => cause);
       try {
-        await Effect.runPromise(
-          h.delivery.submit({
-            ...target,
-            submissionId: "queued",
-            mode: "default",
-            parts: [{ kind: "text", text: "Original" }],
-          }),
-        );
-        const edited = await Effect.runPromise(
-          h.delivery.manage({ ...target, action: { kind: "begin_edit", submissionId: "queued" } }),
-        );
-        const entry = edited.queue.entries[0];
-        if (entry?.state !== "editing") throw new Error("Missing edit reservation");
-        h.setSavedModel(selection("running"));
-        if (!available) h.removeCurrentModel();
-        const result = await Effect.runPromise(
-          Effect.result(
-            h.delivery.manage({
-              ...target,
-              action: {
-                kind: "save_edit",
-                submissionId: "queued",
-                editId: entry.editId,
-                parts: [attachment],
-              },
-            }),
-          ),
-        );
-        if (available) {
-          expect(result._tag).toBe("Success");
-          expect(h.delivery.listQueues("/repo")[0]?.entries[0]).toMatchObject({
-            state: "queued",
-            model: entry.model,
-            parts: [attachment],
-          });
-        } else {
-          expect(result._tag).toBe("Failure");
-          expect(h.delivery.listQueues("/repo")[0]?.entries[0]).toEqual(entry);
-        }
-        expect(h.native).toEqual({ sends: 0, models: 0 });
+        const stopping = Effect.runPromise(h.commands.stopSession(h.target));
+        Deferred.doneUnsafe(gate, Exit.void);
+        await stopping;
+        expect(await updating).toMatchObject({ message: expect.stringContaining("Stop canceled") });
+        expect(h.order).toEqual(["stop"]);
+        expect(h.native.models).toBe(0);
       } finally {
         await Effect.runPromise(h.commands.shutdownOperations());
       }
     },
   );
+
+  test("a replacement snapshot cancels settings for a removed session", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    const updating = Effect.runPromise(
+      h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+    ).catch((cause: Error) => cause);
+    try {
+      await h.waiting;
+      h.detach();
+      await Effect.runPromise(
+        h.commands.observeOperation({
+          type: "snapshot",
+          repoPath: "/repo",
+          sessions: [],
+          messageQueues: [],
+        }),
+      );
+      expect(await updating).toMatchObject({ message: expect.stringContaining("session stopped") });
+      expect(h.native.models).toBe(0);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
+  test("Send fails clearly for a detached session without resuming it", async () => {
+    const h = setup("opencode");
+    h.detach();
+    try {
+      await expect(
+        Effect.runPromise(
+          h.commands.sendUserMessage({
+            ...h.target,
+            delivery: "new_turn",
+            parts: [{ kind: "text", text: "Hello" }],
+          }),
+        ),
+      ).rejects.toThrow("not attached");
+      expect(h.native).toEqual({ sends: 0, models: 0 });
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
 });

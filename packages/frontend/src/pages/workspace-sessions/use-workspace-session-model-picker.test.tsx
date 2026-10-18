@@ -204,7 +204,10 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
       models: catalog.models.map((model) => ({ ...model, variants: ["medium"] })),
     };
     await harness.update({ ...changed, catalog: nextCatalog });
-    expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual(["medium"]);
+    expect(harness.getLatest().variantOptions).toEqual([
+      expect.objectContaining({ value: "high", disabled: true }),
+      { value: "medium", label: "medium" },
+    ]);
     await harness.run((state) =>
       state.modelPicker.onValueChange({
         runtimeKind: "opencode",

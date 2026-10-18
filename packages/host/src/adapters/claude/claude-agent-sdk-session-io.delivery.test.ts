@@ -27,7 +27,6 @@ const SENT_MESSAGE_ID = "00000000-0000-4000-8000-000000000003";
 type MessageOverrides = {
   delivery?: SendAgentUserMessageInput["delivery"];
   parts?: SendAgentUserMessageInput["parts"];
-  model?: NonNullable<SendAgentUserMessageInput["model"]>;
 };
 
 const messageInput = (overrides: MessageOverrides = {}): SendAgentUserMessageInput => ({
@@ -181,7 +180,6 @@ describe("Claude session I/O message delivery", () => {
       messageInput({
         delivery: "steer",
         parts: [{ kind: "text", text: "Also check the tests" }],
-        model: { providerId: "claude", modelId: "claude-haiku-4-5", runtimeKind: "claude" },
       }),
       events,
     );
@@ -383,12 +381,6 @@ describe("Claude session I/O message delivery", () => {
       send(
         session,
         messageInput({
-          model: {
-            providerId: "claude",
-            modelId: "claude-opus-4-6",
-            runtimeKind: "claude",
-            variant: "xhigh",
-          },
           parts: [{ kind: "text", text: "should not be accepted" }],
         }),
         events,

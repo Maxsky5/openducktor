@@ -323,6 +323,12 @@ export function useAgentStudioChatModel({
   const pendingSendItems = reviewCommentComposer.pendingSendItems;
 
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
+    let preparationReason: string | null = null;
+    if (selectedSessionIdentity === null) {
+      preparationReason = "Start a session before sending a message.";
+    } else if (!selectedSessionState.preparation.ready) {
+      preparationReason = "Preparing the session...";
+    }
     const config: AgentChatComposerConfig = {
       ...messageDelivery,
       displayedSessionKey: selectedSessionKey,
@@ -339,8 +345,14 @@ export function useAgentStudioChatModel({
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
       isResumingSession: sessionActions.isResumingSession,
-      isReadOnly: surfaceState.composerReadOnly,
-      readOnlyReason: surfaceState.composerReadOnlyReason,
+      isReadOnly:
+        surfaceState.composerReadOnly ||
+        selectedSessionIdentity === null ||
+        !selectedSessionState.preparation.ready,
+      readOnlyReason:
+        surfaceState.composerReadOnlyReason ??
+        selectedSessionState.preparation.error ??
+        preparationReason,
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isStarting: sessionActions.isStarting,
@@ -387,6 +399,8 @@ export function useAgentStudioChatModel({
   }, [
     chatContextUsage,
     composerDraftScope,
+    selectedSessionState.preparation.ready,
+    selectedSessionState.preparation.error,
     modelSelection.agentOptions,
     modelSelection.isSelectionCatalogLoading,
     modelSelection.isSlashCommandsLoading,

@@ -14,10 +14,8 @@ import type {
 } from "@openducktor/contracts";
 import { readClaudeToolCatalog } from "./claude-agent-sdk-tool-catalog";
 import type {
-  AgentSessionScope,
   ContinueInterruptedAgentTurnInput,
   ForkAgentSessionInput,
-  LoadAgentRuntimeCatalogInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
@@ -26,6 +24,7 @@ import type {
   ReplyQuestionInput,
   ResumeAgentSessionInput,
   SearchAgentFilesInput,
+  LoadAgentRuntimeCatalogInput,
   SendAgentUserMessageInput,
   SessionRef,
   StartAgentSessionInput,
@@ -57,13 +56,12 @@ import {
   createClaudeAgentSdkSession,
   type CreateClaudeAgentSdkSessionInput,
 } from "./claude-agent-sdk-session-factory";
-import { sendClaudeUserMessage, withClaudeModelCallbacks } from "./claude-agent-sdk-session-io";
+import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
   type ClaudeSessionLaunchInput,
   continuedClaudeSessionLaunch,
   forkedClaudeSessionLaunch,
   freshClaudeSessionLaunch,
-  requireClaudeOpenDucktorMcpForScope,
   requireClaudeSessionScope,
   resumedClaudeSessionLaunch,
 } from "./claude-agent-sdk-session-policy";
@@ -313,21 +311,18 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   sendUserMessage(
     input: SendAgentUserMessageInput,
-    runtimeId: string,
+    _runtimeId: string,
     options?: AgentSessionSendOptions,
   ) {
     return Effect.gen({ self: this }, function* () {
-      const scope = yield* requireClaudeSessionScope(
-        input.sessionScope,
-        "send Claude user message",
-      );
-      const session = yield* this.requireSessionForSend(input, runtimeId, scope);
-      yield* fromSync("claudeRuntime.sendUserMessage", () =>
-        assertClaudeSessionRef(session, input, "send message"),
-      );
+      const session = yield* fromSync("claudeRuntime.sendUserMessage", () => {
+        const retained = requireClaudeSession(this.sessionStore, input.externalSessionId);
+        assertClaudeSessionRef(retained, input, "send message");
+        return retained;
+      });
       return yield* fromPromise("claudeRuntime.sendUserMessage", () =>
         sendClaudeUserMessage({
-          messageInput: withClaudeModelCallbacks(input, options),
+          messageInput: input,
           session,
           now: this.now,
           randomId: this.randomId,
@@ -458,32 +453,6 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       return yield* fromPromise("claudeRuntime.createSession", () =>
         createClaudeAgentSdkSession(createSessionInput),
       );
-    });
-  }
-
-  private requireSessionForSend(
-    input: SendAgentUserMessageInput,
-    runtimeId: string,
-    scope: AgentSessionScope,
-  ) {
-    const existing = this.sessionStore.get(input.externalSessionId);
-    if (existing) {
-      return fromPromise("claudeRuntime.sendUserMessage", async () => {
-        assertClaudeSessionRef(existing, input, "send message");
-        await requireClaudeOpenDucktorMcpForScope(scope, existing.query, {
-          externalSessionId: existing.externalSessionId,
-          runtimeId,
-        });
-        return existing;
-      });
-    }
-    return Effect.gen({ self: this }, function* () {
-      yield* this.createSession(
-        input,
-        runtimeId,
-        resumedClaudeSessionLaunch(scope, input.externalSessionId),
-      );
-      return requireClaudeSession(this.sessionStore, input.externalSessionId);
     });
   }
 

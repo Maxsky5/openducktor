@@ -13,10 +13,9 @@ import {
   type RuntimeQueryIdentity,
 } from "../../ports/runtime-query-error";
 
-/** Each runtime adapter chooses its own `loadKnownRuntimeCatalog`. */
 export const createRuntimeQueryAdapter = (
   native: NativeAgentRuntimeQueries & AgentSessionQueryParentPort,
-): Omit<AgentRuntimeQueryAdapterPort, "loadKnownRuntimeCatalog"> => {
+): AgentRuntimeQueryAdapterPort => {
   const read = <Result>(
     operation: string,
     input: RuntimeQueryIdentity,

@@ -189,6 +189,14 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           }),
       },
       live: {
+        resumeSession: (request) =>
+          Effect.succeed({
+            externalSessionId: request.externalSessionId,
+            runtimeKind: request.runtimeKind,
+            workingDirectory: request.workingDirectory,
+            startedAt: "2026-09-07T00:00:00Z",
+            status: "idle" as const,
+          }),
         startSession: (input) =>
           Effect.suspend(() => {
             starts.push(input);

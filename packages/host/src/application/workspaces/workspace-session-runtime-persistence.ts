@@ -158,34 +158,21 @@ export const createWorkspaceSessionRuntimePersistence = ({
             : { kind: "repository" as const, title: storedTitle },
         systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
       };
-      if (known.session.selectedModel !== null) prepared.model = known.session.selectedModel;
+      if ("resumeMode" in input)
+        return { ...prepared, model: known.session.selectedModel ?? undefined };
       return prepared;
     });
   const planAcceptedMessage = (
     known: { ref: WorkspaceSessionStoreRef; session: WorkspaceSession },
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
-    saveModel: boolean,
   ): Effect.Effect<AcceptedMessagePlan, HostError> =>
-    Effect.gen(function* () {
+    Effect.sync(() => {
       const input: Parameters<WorkspaceSessionStorePort["recordAcceptedMessage"]>[0] = {
         ...known.ref,
         generatedTitle: buildWorkspaceSessionTitle(message),
         occurredAt: Date.parse(message.timestamp),
       };
-      if (saveModel && message.model) {
-        if (
-          message.model.runtimeKind !== undefined &&
-          message.model.runtimeKind !== runtimeRef.runtimeKind
-        )
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: "Accepted message model does not match its Runtime.",
-              field: "model",
-            }),
-          );
-        input.selectedModel = { ...message.model, runtimeKind: runtimeRef.runtimeKind };
-      }
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind)) return { input, runtimeRename: null };
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
       const nextTitle = runtimeTitle({
@@ -268,7 +255,6 @@ export const createWorkspaceSessionRuntimePersistence = ({
   const recordAcceptedMessage = (
     runtimeRef: AgentSessionLiveRef,
     message: AcceptedAgentUserMessage,
-    saveModel: boolean,
   ) =>
     Effect.gen(function* () {
       const located = yield* find(runtimeRef);
@@ -280,7 +266,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           if (!known) return;
           yield* applyAcceptedMessage(
             known,
-            yield* planAcceptedMessage(known, runtimeRef, message, saveModel),
+            yield* planAcceptedMessage(known, runtimeRef, message),
             runtimeRef,
           );
         }),
@@ -293,7 +279,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.gen(function* () {
       const known = yield* find(runtimeRef);
       if (!known) return;
-      const plan = yield* planAcceptedMessage(known, runtimeRef, message, false);
+      const plan = yield* planAcceptedMessage(known, runtimeRef, message);
       if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
         return yield* saveMessage(runtimeRef, known, plan.input);
       // Defer observed renames because a manual rename can hold the gate during live publication.
@@ -307,7 +293,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       // Start the saved title's rename before a publication failure can stop it.
       if (renamePending && !sendsInFlight.has(agentSessionRefKey(runtimeRef)))
         yield* startJob(
-          recordAcceptedMessage(runtimeRef, message, false).pipe(
+          recordAcceptedMessage(runtimeRef, message).pipe(
             Effect.catch((failure) => reportRenameFailure(runtimeRef, failure.message)),
           ),
         );
@@ -434,8 +420,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
           ).pipe(Effect.map((saved) => publishUpdated(known.ref.workspaceId, saved))),
         };
       }),
-    recordAcceptedMessage: (ref, message, { saveModel }) =>
-      recordAcceptedMessage(ref, message, saveModel),
+    recordAcceptedMessage,
     observe: (envelope, provenance) =>
       Effect.gen(function* () {
         if (provenance === "baseline") return;

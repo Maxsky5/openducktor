@@ -461,6 +461,7 @@ describe("CodexAppServerAdapter runtime snapshots", () => {
     });
 
     const unsubscribe = await adapter.subscribeEvents(codexSessionRef("thread-idle"), () => {});
+    await adapter.resumeSession({ ...codexSessionRuntimeRef("thread-idle"), model: undefined });
     await adapter.sendUserMessage(
       codexUserMessageInput({
         externalSessionId: "thread-idle",

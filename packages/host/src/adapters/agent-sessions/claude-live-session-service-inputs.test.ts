@@ -41,7 +41,6 @@ describe("Claude live-session service inputs", () => {
           },
         },
       ],
-      model: undefined,
       systemPrompt: undefined,
     });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentModelCatalog } from "@openducktor/core";
 import { resolvePreferredModelSelection } from "@/features/model-selection/model-selection-state";
 import {
   resolveChatComposerModelSelections,
@@ -258,18 +258,7 @@ describe("model-selection-preferences", () => {
     });
   });
 
-  test("resolves stale loaded-session models to an explicit repair selection", () => {
-    const sessionIdentity = {
-      externalSessionId: "session-1",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/repo",
-    };
-    const draftSelection = {
-      runtimeKind: "opencode" as const,
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-    };
+  test("keeps accepted session settings when the current catalog no longer lists them", () => {
     const defaultSelection = {
       runtimeKind: "opencode" as const,
       providerId: "anthropic",
@@ -285,130 +274,15 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
-          sessionIdentity,
-          sessionRuntimeKind: "opencode",
           modelCatalog: CATALOG,
           selectedSessionModel: unknownSessionModel,
-          draftSelection,
         },
         defaultSelection,
       }),
-    ).toEqual({
+    ).toMatchObject({
       selectionCatalog: CATALOG,
-      selectedModelSelection: defaultSelection,
-      selectionForNewSession: defaultSelection,
-      repair: {
-        session: sessionIdentity,
-        selection: defaultSelection,
-      },
-      sendBlockReason: null,
-    });
-  });
-
-  test.each([
-    { savedSpeed: undefined, expectedSpeed: undefined },
-    { savedSpeed: "unsupported", expectedSpeed: undefined },
-    { savedSpeed: "priority", expectedSpeed: "priority" },
-  ])("repairs a model without inheriting default speed: %j", ({ savedSpeed, expectedSpeed }) => {
-    const catalog: AgentModelCatalog = {
-      ...CATALOG,
-      runtime: CODEX_RUNTIME_DESCRIPTOR,
-      profiles: [],
-      models: CATALOG.models.map((model) => ({
-        ...model,
-        speedLevels: [{ id: "priority", label: "Fast" }],
-      })),
-    };
-    const selectedSessionModel: AgentModelSelection = {
-      runtimeKind: "codex",
-      providerId: "missing",
-      modelId: "removed",
-    };
-    if (savedSpeed) selectedSessionModel.speed = savedSpeed;
-    const result = resolveChatComposerModelSelections({
-      source: {
-        kind: "session",
-        sessionIdentity: {
-          externalSessionId: "session-1",
-          runtimeKind: "codex",
-          workingDirectory: "/repo",
-        },
-        sessionRuntimeKind: "codex",
-        modelCatalog: catalog,
-        selectedSessionModel,
-        draftSelection: null,
-      },
-      defaultSelection: {
-        runtimeKind: "codex",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "high",
-        speed: "priority",
-      },
-    });
-    const expected: AgentModelSelection = {
-      runtimeKind: "codex",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-    };
-    if (expectedSpeed) expected.speed = expectedSpeed;
-    expect(result.selectedModelSelection).toEqual(expected);
-    expect(result.repair?.selection).toEqual(expected);
-  });
-
-  test("uses a live-compatible variant when repairing a loaded-session model", () => {
-    const sessionIdentity = {
-      externalSessionId: "session-1",
-      runtimeKind: "opencode" as const,
-      workingDirectory: "/repo",
-    };
-
-    expect(
-      resolveChatComposerModelSelections({
-        source: {
-          kind: "session",
-          sessionIdentity,
-          sessionRuntimeKind: "opencode",
-          modelCatalog: LIVE_UPDATE_CATALOG,
-          selectedSessionModel: {
-            runtimeKind: "opencode",
-            providerId: "missing",
-            modelId: "missing-model",
-          },
-          draftSelection: null,
-        },
-        defaultSelection: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "max",
-        },
-      }),
-    ).toEqual({
-      selectionCatalog: LIVE_UPDATE_CATALOG,
-      selectedModelSelection: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-      },
-      selectionForNewSession: {
-        runtimeKind: "opencode",
-        providerId: "openai",
-        modelId: "gpt-5",
-        variant: "default",
-      },
-      repair: {
-        session: sessionIdentity,
-        selection: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "default",
-        },
-      },
-      sendBlockReason: null,
+      selectedModelSelection: unknownSessionModel,
+      selectionForNewSession: unknownSessionModel,
     });
   });
 
@@ -424,15 +298,8 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
-          sessionIdentity: {
-            externalSessionId: "session-1",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo",
-          },
-          sessionRuntimeKind: "opencode",
           modelCatalog: LIVE_UPDATE_CATALOG,
           selectedSessionModel,
-          draftSelection: null,
         },
         defaultSelection: null,
       }),
@@ -440,8 +307,6 @@ describe("model-selection-preferences", () => {
       selectionCatalog: LIVE_UPDATE_CATALOG,
       selectedModelSelection: selectedSessionModel,
       selectionForNewSession: selectedSessionModel,
-      repair: null,
-      sendBlockReason: null,
     });
   });
 
@@ -456,15 +321,8 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
-          sessionIdentity: {
-            externalSessionId: "session-1",
-            runtimeKind: "opencode" as const,
-            workingDirectory: "/repo",
-          },
-          sessionRuntimeKind: "opencode",
           modelCatalog: CATALOG,
           selectedSessionModel: null,
-          draftSelection: null,
         },
         defaultSelection,
       }),
@@ -478,8 +336,6 @@ describe("model-selection-preferences", () => {
         variant: "default",
         profileId: "spec-agent",
       },
-      repair: null,
-      sendBlockReason: null,
     });
   });
 
@@ -500,47 +356,10 @@ describe("model-selection-preferences", () => {
       resolveChatComposerModelSelections({
         source: {
           kind: "session",
-          sessionIdentity: {
-            externalSessionId: "session-1",
-            runtimeKind: "opencode" as const,
-            workingDirectory: "/repo",
-          },
-          sessionRuntimeKind: "opencode",
           modelCatalog: CATALOG,
           selectedSessionModel,
-          draftSelection: null,
         },
         defaultSelection,
-      }).selectionForNewSession,
-    ).toEqual(selectedSessionModel);
-  });
-
-  test("ignores stale draft selections while a session is selected", () => {
-    const selectedSessionModel = {
-      runtimeKind: "opencode" as const,
-      providerId: "anthropic",
-      modelId: "claude-sonnet",
-    };
-
-    expect(
-      resolveChatComposerModelSelections({
-        source: {
-          kind: "session",
-          sessionIdentity: {
-            externalSessionId: "session-1",
-            runtimeKind: "opencode" as const,
-            workingDirectory: "/repo",
-          },
-          sessionRuntimeKind: "opencode",
-          modelCatalog: CATALOG,
-          selectedSessionModel,
-          draftSelection: {
-            runtimeKind: "codex" as const,
-            providerId: "openai",
-            modelId: "gpt-5",
-          },
-        },
-        defaultSelection: null,
       }).selectionForNewSession,
     ).toEqual(selectedSessionModel);
   });
@@ -565,8 +384,6 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: defaultSelection,
       selectionForNewSession: defaultSelection,
-      repair: null,
-      sendBlockReason: null,
     });
 
     expect(
@@ -582,8 +399,6 @@ describe("model-selection-preferences", () => {
       selectionCatalog: null,
       selectedModelSelection: defaultSelection,
       selectionForNewSession: defaultSelection,
-      repair: null,
-      sendBlockReason: null,
     });
   });
 

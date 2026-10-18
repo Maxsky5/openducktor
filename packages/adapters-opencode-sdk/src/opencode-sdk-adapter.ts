@@ -58,6 +58,7 @@ import {
 } from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
+import { OPENCODE_WORKFLOW_INSTRUCTION_KEY } from "./opencode-session-transcript";
 import { iso, projectInboxUser } from "./opencode-message-projection";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
@@ -72,6 +73,7 @@ export type OpenCodeSessionBinding = {
   ref: SessionRef;
   scope: AgentSessionScope;
   detail: SessionInfo;
+  prepared: boolean;
 };
 export type OpenCodeControlHooks = {
   readDirectory: ReadOpencodeDirectory;
@@ -180,7 +182,12 @@ export class OpencodeSdkAdapter {
     return summary;
   }
 
-  admit(ref: SessionRef, scope: AgentSessionScope, detail: SessionInfo): OpenCodeSessionBinding {
+  admit(
+    ref: SessionRef,
+    scope: AgentSessionScope,
+    detail: SessionInfo,
+    prepared = false,
+  ): OpenCodeSessionBinding {
     const previous = this.bindings.get(detail.id);
     if (
       previous &&
@@ -194,14 +201,14 @@ export class OpencodeSdkAdapter {
         "identity_mismatch",
         "The conversation already has a different OpenDucktor association.",
       );
-    const binding = { ref, scope, detail };
+    const binding = { ref, scope, detail, prepared: prepared || previous?.prepared === true };
     this.bindings.set(detail.id, binding);
     this.hooks.admitted(binding);
     return binding;
   }
 
   private async readBinding(
-    input: ResumeAgentSessionInput | SendAgentUserMessageInput,
+    input: ResumeAgentSessionInput,
     generation: number,
   ): Promise<SessionInfo> {
     assertAgentRuntimePolicyBinding(input, "bind the OpenCode conversation");
@@ -224,7 +231,7 @@ export class OpencodeSdkAdapter {
   }
 
   async bind(
-    input: ResumeAgentSessionInput | SendAgentUserMessageInput,
+    input: ResumeAgentSessionInput,
     generation = this.generation(input.externalSessionId),
   ): Promise<OpenCodeSessionBinding> {
     const detail = await this.readBinding(input, generation);
@@ -241,7 +248,7 @@ export class OpencodeSdkAdapter {
       });
     });
     this.assertCurrent(input, generation);
-    return this.admit(input, input.sessionScope, detail);
+    return this.admit(input, input.sessionScope, detail, true);
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -293,6 +300,7 @@ export class OpencodeSdkAdapter {
             ref,
             input.sessionScope,
             await this.readSession(ref, "confirm the new conversation"),
+            true,
           ),
         );
       } catch (cause) {
@@ -314,7 +322,10 @@ export class OpencodeSdkAdapter {
   }
 
   async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
-    const binding = await this.bind(input);
+    const existing = this.bindings.get(input.externalSessionId);
+    const binding = existing?.prepared
+      ? this.requirePreparedBinding(input)
+      : await this.bind(input);
     input.onWorkAccepted?.();
     const active = await nativeRequest(input, "read session activity", () =>
       this.client.session.active(),
@@ -387,12 +398,43 @@ export class OpencodeSdkAdapter {
         if (title) await this.client.session.update({ sessionID: detail.id, title });
         if (input.model) await this.updateNativeModel(ref, input.model);
         return this.summary(
-          this.admit(ref, input.sessionScope, await this.readSession(ref, "confirm the fork")),
+          this.admit(
+            ref,
+            input.sessionScope,
+            await this.readSession(ref, "confirm the fork"),
+            true,
+          ),
         );
       } catch (cause) {
         return this.cleanupNewSession(sessionID, cause);
       }
     });
+  }
+
+  private requirePreparedBinding(
+    input: SendAgentUserMessageInput | ResumeAgentSessionInput,
+  ): OpenCodeSessionBinding {
+    assertAgentRuntimePolicyBinding(input, "use the OpenCode conversation");
+    const binding = this.bindings.get(input.externalSessionId);
+    if (!binding?.prepared)
+      throw operationError(
+        input,
+        "send input",
+        "session_not_found",
+        "The conversation is not prepared for messages.",
+        "Reopen the chat before sending.",
+      );
+    if (
+      !agentSessionRefsEqual(binding.ref, input) ||
+      !agentSessionScopesEqual(binding.scope, input.sessionScope)
+    )
+      throw operationError(
+        input,
+        "send input",
+        "identity_mismatch",
+        "The conversation has a different OpenDucktor association.",
+      );
+    return binding;
   }
 
   async sendUserMessage(
@@ -407,6 +449,7 @@ export class OpencodeSdkAdapter {
     const generation = this.generation(input.externalSessionId);
     return nativeRequest<AcceptedAgentInput>(input, "send input", async () => {
       options?.signal?.throwIfAborted();
+      const binding = this.requirePreparedBinding(input);
       const commands = input.parts.filter((part) => part.kind === "slash_command");
       if (commands.length > 1) throw new Error("Use one slash command per submission.");
       if (commands[0] && isManualSessionCompactionSlashCommand(commands[0].command)) {
@@ -416,9 +459,6 @@ export class OpencodeSdkAdapter {
           )
         )
           throw new Error("Submit /compact without other input.");
-        const detail = await this.readBinding(input, generation);
-        this.admit(input, input.sessionScope, detail);
-        if (input.model) await this.updateNativeModel(input, input.model);
         this.assertCurrent(input, generation);
         options?.signal?.throwIfAborted();
         const sending = this.client.session.compact({
@@ -442,8 +482,27 @@ export class OpencodeSdkAdapter {
           );
         return { type: "command_accepted", commandName: "compact", inputId: item.id };
       }
-      await this.bind(input, generation);
-      if (input.model) await this.updateNativeModel(input, input.model);
+      if (
+        !binding.detail.parentID &&
+        input.delivery !== "steer" &&
+        input.systemPrompt !== undefined
+      ) {
+        if (input.sessionScope.kind === "workflow" && !input.systemPrompt.trim())
+          throw operationError(
+            input,
+            "update workflow instructions",
+            "policy_failed",
+            "The workflow prompt is empty.",
+            "Restore the workflow prompt in settings.",
+          );
+        if (input.systemPrompt.trim())
+          await this.client.session.instructions.entry.put({
+            sessionID: binding.detail.id,
+            key: OPENCODE_WORKFLOW_INSTRUCTION_KEY,
+            value: input.systemPrompt,
+          });
+      }
+      this.assertCurrent(input, generation);
       const encoded = buildOpenCodePromptText(
         input.parts.filter((part) => part.kind !== "slash_command"),
       );

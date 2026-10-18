@@ -57,10 +57,9 @@ import type { AgentSessionSendContent } from "./agent-session-operation-policy";
 export type AgentMessageDeliveryDependencies = {
   readonly submissionFingerprint: (input: AgentMessageSubmitInput) => string;
   readonly canonicalizeRepoPath: (repoPath: string) => Effect.Effect<string, HostError>;
-  /** Checks the destination and returns the message with the stored session settings. */
+  /** Checks the destination and prepares the owned message content. */
   readonly prepare: (
     content: AgentSessionSendContent,
-    options?: { steering: boolean },
   ) => Effect.Effect<AgentSessionSendContent, HostError>;
   readonly runOperation: <A, E>(
     target: AgentMessageTarget,
@@ -69,9 +68,9 @@ export type AgentMessageDeliveryDependencies = {
   ) => Effect.Effect<A, E | HostError>;
   readonly commitQueueResume: <A>(commit: () => A) => Effect.Effect<A, HostError>;
   readonly prepareQueueResume: (content: AgentSessionSendContent) => Effect.Effect<void, HostError>;
-  /** Sends one message to the runtime with the model that it captured at submission. */
+  /** Sends one message to its configured runtime session. */
   readonly send: (
-    input: AgentSessionControlSendInput & { modelCaptured?: true },
+    input: AgentSessionControlSendInput,
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
   /** Tells if the runtime of this kind can steer running work. */
   readonly steeringAvailability: (
@@ -113,7 +112,7 @@ export const createAgentMessageDeliveryService = (
   const reserveSubmission = createSubmissionReservations(dependencies.submissionFingerprint);
 
   const send = (content: AgentSessionSendContent, delivery: AgentUserMessageDelivery) =>
-    dependencies.send({ ...content, modelCaptured: true, delivery });
+    dependencies.send({ ...content, delivery });
 
   /**
    * Marks a new turn as in flight from this call until the send ends. The mark changes at once,
@@ -368,7 +367,7 @@ export const createAgentMessageDeliveryService = (
             : null;
         if (blocker) return yield* actionError(blocker);
         const head = queue.entries[0];
-        if (head) yield* dependencies.prepareQueueResume({ ...head.content, modelCaptured: true });
+        if (head) yield* dependencies.prepareQueueResume(head.content);
         return yield* dependencies.commitQueueResume(() => {
           queue.pause = null;
           return publishAndRelease(queue);
@@ -380,7 +379,6 @@ export const createAgentMessageDeliveryService = (
         const prepared = yield* dependencies.prepare({
           ...entry.content,
           parts: action.parts,
-          modelCaptured: true,
         });
         action = { ...action, parts: prepared.parts };
       }
@@ -433,14 +431,8 @@ export const createAgentMessageDeliveryService = (
             const repoPath = yield* dependencies.canonicalizeRepoPath(input.repoPath);
             if (conditions.isBlockedOnInput(agentSessionRefKey({ ...input, repoPath })))
               return yield* blockedOnInputError();
-            const steering =
-              input.mode === "steer" &&
-              conditions.isWorking(agentSessionRefKey({ ...input, repoPath }));
             // The prepared message carries the stored destination, which keys its queue.
-            const prepared = yield* dependencies.prepare(
-              { ...contentOf(input), repoPath },
-              { steering },
-            );
+            const prepared = yield* dependencies.prepare({ ...contentOf(input), repoPath });
             delete prepared.systemPrompt;
             delete prepared.resolvedQuestionRequestIds;
             const content = { ...prepared, submissionId: input.submissionId };

@@ -524,6 +524,21 @@ export class CodexAppServerAdapter
         );
       }
       assertRuntimeContextCompatibleWithSession(current, input, "resume session");
+      if (
+        current.summary.sessionAssociation.kind !== "unbound" &&
+        (this.freshTitleState.get(current) !== "tried" ||
+          runningTurnOf(this.activeTurnsBySessionId, current.threadId) !== null)
+      ) {
+        assertAgentWorkStartCurrent(input);
+        markAgentWorkAccepted(input);
+        if (sessionPolicy.kind === "repository") {
+          await this.applyRepositoryTitle(input, current, sessionPolicy.title, {
+            tolerateFailure: true,
+          });
+          return { ...current.summary, firstTurnCompleted: !this.freshTitleState.has(current) };
+        }
+        return current.summary;
+      }
     }
     if (
       sessionPolicy.kind === "repository" &&
@@ -587,6 +602,11 @@ export class CodexAppServerAdapter
         tolerateFailure: true,
       });
       return { ...session.summary, firstTurnCompleted };
+    }
+    if (!input.model) {
+      const session = await this.ensureSessionState(input);
+      markAgentWorkAccepted(input);
+      return session;
     }
     const model = requireModelSelection(input.model);
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "resume session");
@@ -863,7 +883,7 @@ export class CodexAppServerAdapter
     options: CodexSendOptions = {},
   ): Promise<AcceptedAgentUserMessage> {
     assertCodexRuntimePolicyBinding(input, "send Codex user message");
-    resolveCodexSessionScopePolicy(
+    const scopePolicy = resolveCodexSessionScopePolicy(
       input.sessionScope,
       input.runtimePolicy,
       "send Codex user message",
@@ -872,16 +892,24 @@ export class CodexAppServerAdapter
     if (systemInvocation.kind === "not_system") {
       assertCodexUserMessagePartsSupported(input.parts);
     }
-    const session = this.policyBoundSession(
-      input,
+    const current = this.localSessions.get(input.externalSessionId);
+    if (!current || current.summary.sessionAssociation.kind === "unbound")
+      throw new Error("The Codex session is not attached. Reopen the chat before sending.");
+    const session = await this.policyBoundSession(
+      {
+        repoPath: input.repoPath,
+        runtimeKind: "codex",
+        runtimePolicy: { kind: "codex", policy: scopePolicy.runtimePolicy },
+        workingDirectory: input.workingDirectory,
+        externalSessionId: input.externalSessionId,
+        sessionScope: input.sessionScope,
+        systemPrompt: input.systemPrompt,
+      },
       { lookup: "send", context: "send user message" },
-      true,
+      false,
     );
-    return session instanceof Promise
-      ? session.then((boundSession) =>
-          this.sendUserMessageFromBoundSession(input, boundSession, systemInvocation, options),
-        )
-      : this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
+    if (!session) throw new Error("The Codex session closed before sending. Reopen the chat.");
+    return this.sendUserMessageFromBoundSession(input, session, systemInvocation, options);
   }
 
   private async sendUserMessageFromBoundSession(
@@ -903,7 +931,7 @@ export class CodexAppServerAdapter
     const acceptedUserMessage = createCodexAcceptedUserMessage({
       session,
       parts: input.parts,
-      model: input.model ?? session.model ?? undefined,
+      model: session.model ?? undefined,
       resolvedQuestionRequestIds,
       submissionId: input.submissionId,
     });
@@ -935,7 +963,6 @@ export class CodexAppServerAdapter
       input.parts,
       acceptedUserMessage,
       input.delivery,
-      input.model,
       resolvedQuestionRequestIds,
     );
     this.asyncQuestions.resolve(session.runtimeId, session.threadId, resolvedQuestionRequestIds);
@@ -1249,7 +1276,15 @@ export class CodexAppServerAdapter
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (!session) throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
+    if (input.model) {
+      const client = this.runtimeClients.clientForRuntime(session.runtimeId);
+      await this.models.validate(client, session.runtimeId, input.model);
+    }
     assertAgentWorkStartCurrent(input);
+    if (this.localSessions.get(input.externalSessionId) !== session)
+      throw new Error(
+        "The Codex session closed while its settings were checked. Reopen the chat and retry.",
+      );
     if (input.model) session.model = input.model;
     else delete session.model;
     markAgentWorkAccepted(input);
@@ -2012,7 +2047,6 @@ export class CodexAppServerAdapter
       sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
-      validateModel: (client, runtimeId, model) => this.models.validate(client, runtimeId, model),
       ensureRuntimeEventSubscription: (runtimeId) =>
         this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId),
       bindActiveTurnId: (activeTurn, turnId, startedAtMs) =>

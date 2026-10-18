@@ -29,6 +29,7 @@ const createSummary = (overrides: Partial<AgentSessionSummary> = {}): AgentSessi
 const createSelectedSession = (
   overrides: Partial<AgentStudioSelectedSessionState> = {},
 ): AgentStudioSelectedSessionState => ({
+  preparation: { ready: true, error: null },
   identity: selectedSession,
   activityState: null,
   selectedModel: null,

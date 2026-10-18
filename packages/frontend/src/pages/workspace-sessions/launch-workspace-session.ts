@@ -36,12 +36,15 @@ export const launchWorkspaceSession = async (
     throw new Error(
       "The host started a different chat target. Reopen this chat before sending your draft.",
     );
-  projectWorkspaceSessionLaunch(outcome, store, queryClient);
+  projectWorkspaceSessionResult(outcome, store, queryClient);
   return outcome;
 };
 
-export const projectWorkspaceSessionLaunch = (
-  outcome: WorkspaceSessionLaunchResult,
+export const projectWorkspaceSessionResult = (
+  outcome: Pick<
+    WorkspaceSessionLaunchResult,
+    "record" | "workspaceId" | "repoPath" | "session" | "acceptedMessage"
+  >,
   store: AgentSessionsStore,
   queryClient: QueryClient,
 ) => {

@@ -134,6 +134,8 @@ Send an explicit standard value to the runtime, so a native default cannot selec
 |---|---|
 | `messageDelivery.minimumSteeringRuntimeVersion` | Lowest runtime version that supports steering. Use `null` when no version supports it. |
 
+Send messages only to an existing prepared session using its current settings. Keep catalog reads and model or effort changes in separate operations.
+
 A runtime without steering can still use the host queue. See [Queue and steering](#queue-and-steering).
 
 ### History
@@ -326,13 +328,11 @@ Read the effective model catalog from the runtime so proxy and third-party provi
 
 OpenCode catalog reads register their repository and working directory with the owned runtime adapter. Catalog update events invalidate these scopes even before a live conversation exists. A directory event changes only matching scopes. A global event changes each known repository once. Runtime release clears the registered scopes.
 
-The host validates the model of each message, queued message, session start, and workflow launch with `loadKnownRuntimeCatalog`. Each runtime adapter supplies this read. OpenCode and Codex read the running runtime each time. Each Claude catalog read starts a Claude Code process. Thus the Claude query adapter keeps the last read of each working directory that returned models. Validation uses this known catalog. Validation reads Claude only when the directory has no known catalog. Concurrent reads of one directory share one Claude read. A UI catalog read reads Claude again, or joins the read that runs for that directory. Claude can change its model list without a runtime restart. Thus a UI read that returns models replaces the known catalog of its directory and removes the known catalogs of other directories. A runtime restart removes all known catalogs.
-
 For a repository that is not yet a workspace, `agent_runtime_preview_models` reads Claude, Codex, or OpenCode models through a short-lived native session or process. The host checks the Git path, does not connect the OpenDucktor MCP bridge, and closes the session or process after the read. Keep this preview out of the host runtime registry and use a separate frontend query key.
 
 Keep names that the runtime accepts. A bad catalog entry fails that catalog request and names the entry. It does not block history or session reads.
 
-Use the model ID that the runtime reports for a turn as `AgentModelDescriptor.modelId`. History, steering checks, labels, and imports then match the catalog exactly. List each model once. Put each runtime alias that points to the model, such as the Claude `opus` row, in `aliases`. `resolveSavedModelAlias` converts a saved alias to the current `modelId`. Each read of a saved selection uses it, and the next send saves the converted selection. The Claude `default` row points to the session default model. It sets `defaultModelsByProvider` and adds `default` to the aliases of that model. A Claude row without `resolvedModel` fails the catalog read with an update action.
+Use the model ID that the runtime reports for a turn as `AgentModelDescriptor.modelId`. History, steering checks, labels, and imports then match the catalog exactly. List each model once. Put each runtime alias that points to the model, such as the Claude `opus` row, in `aliases`. `resolveSavedModelAlias` converts a saved alias to the current `modelId`. The Claude `default` row points to the session default model. It sets `defaultModelsByProvider` and adds `default` to the aliases of that model. A Claude row without `resolvedModel` fails the catalog read with an update action.
 
 Claude tool availability uses optional `toolAvailability` maps in the default and role policy fields. A missing default map disables `Artifact`, `ArtifactComments`, and `ArtifactData`. An explicit map replaces these initial choices; omitted keys and `true` values add no exclusion. A missing role map inherits defaults, an explicit role map replaces them, and an empty role map enables all tools by preference. Removing the role's field restores inheritance without changing its other policy fields. These maps use config version `4`; old data remains readable, but older app versions can reject the new field.
 

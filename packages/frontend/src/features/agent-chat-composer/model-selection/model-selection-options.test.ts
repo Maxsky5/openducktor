@@ -93,41 +93,64 @@ describe("model-selection-options", () => {
     ]);
   });
 
-  test("keeps the current active-session variant visible when it is not live-updatable", () => {
+  test.each(
+    [["low", "medium", "high", "xhigh", "max"], ["low", "medium", "high", "xhigh"], []].map(
+      (variants) => ({ variants }),
+    ),
+  )(
+    "keeps accepted effort visible when the catalog omits it or disallows live changes: $variants",
+    ({ variants }) => {
+      const options = resolveModelSelectionOptions({
+        liveSession: true,
+        selectionCatalog: {
+          ...makeCatalogWithProfile(),
+          models: [
+            {
+              id: "anthropic/claude-sonnet",
+              providerId: "anthropic",
+              providerName: "Anthropic",
+              modelId: "claude-sonnet",
+              modelName: "Claude Sonnet",
+              variants,
+              liveSessionUpdates: {
+                profile: false,
+                variants: ["low", "medium", "high", "xhigh"],
+              },
+            },
+          ],
+        },
+        selectedModelSelection: {
+          runtimeKind: "claude",
+          providerId: "anthropic",
+          modelId: "claude-sonnet",
+          variant: "max",
+        },
+      });
+
+      expect(options.variantOptions[0]).toMatchObject({
+        value: "max",
+        label: "max",
+        disabled: true,
+      });
+    },
+  );
+
+  test("keeps an accepted profile visible when a later catalog lists other profiles", () => {
     const options = resolveModelSelectionOptions({
       liveSession: true,
       selectionCatalog: {
         ...makeCatalogWithProfile(),
-        models: [
-          {
-            id: "anthropic/claude-sonnet",
-            providerId: "anthropic",
-            providerName: "Anthropic",
-            modelId: "claude-sonnet",
-            modelName: "Claude Sonnet",
-            variants: ["low", "medium", "high", "xhigh", "max"],
-            liveSessionUpdates: {
-              profile: false,
-              variants: ["low", "medium", "high", "xhigh"],
-            },
-          },
-        ],
+        profiles: [{ name: "other", mode: "primary" }],
       },
-      selectedModelSelection: {
-        runtimeKind: "claude",
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        variant: "max",
-      },
+      selectedModelSelection: makeSelectedSessionModel(),
     });
-
-    expect(options.variantOptions.map((option) => option.value)).toEqual([
-      "max",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-    ]);
+    expect(options.agentProfileOptions).toContainEqual(
+      expect.objectContaining({
+        value: "build-agent",
+        label: "build-agent",
+        disabled: true,
+      }),
+    );
   });
 });
 

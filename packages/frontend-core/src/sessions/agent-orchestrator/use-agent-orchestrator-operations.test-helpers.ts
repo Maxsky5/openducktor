@@ -42,8 +42,5 @@ export const acceptedUserMessageForInput = (
     parts: [],
     state: "read",
   };
-  if (input.model) {
-    message.model = input.model;
-  }
   return message;
 };

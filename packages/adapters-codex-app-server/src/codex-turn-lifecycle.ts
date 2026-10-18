@@ -36,11 +36,6 @@ export type CodexTurnLifecycleContext = {
   sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
-  validateModel(
-    client: CodexAppServerClient,
-    runtimeId: string,
-    model: AgentModelSelection,
-  ): Promise<void>;
   ensureRuntimeEventSubscription(runtimeId: string): Promise<void>;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
@@ -69,7 +64,6 @@ export const sendCodexUserMessage = async (
   parts: AgentUserMessagePart[],
   acceptedUserMessage: AcceptedAgentUserMessage,
   delivery: AgentUserMessageDelivery,
-  requestedModel?: AgentModelSelection,
   resolvedQuestionRequestIds?: readonly string[],
 ): Promise<AcceptedAgentUserMessage> => {
   const admitted = await admitCodexMessage(context, {
@@ -77,7 +71,6 @@ export const sendCodexUserMessage = async (
     input: toCodexTurnInputList(parts, resolvedQuestionRequestIds),
     message: acceptedUserMessage,
     delivery,
-    requestedModel,
     echoProvesAcceptance: true,
   });
   requireAdmittedOwner(context, admitted);
@@ -291,7 +284,6 @@ const startNewTurn = async (
   let policy: CodexEffectivePolicy;
   try {
     policy = context.codexPolicyForSession(session);
-    await context.validateModel(client, session.runtimeId, model);
     requireRetainedTurnSession(context, session);
   } catch (error) {
     turn.markTurnSettled();

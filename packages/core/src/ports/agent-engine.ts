@@ -161,18 +161,21 @@ export type ForkAgentSessionInput = StartAgentSessionInput & {
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
-export type SendAgentUserMessageInput = PolicyBoundSessionControlRef & {
-  parts: AgentUserMessagePart[];
-  /**
-   * The host steers only parts that `steeringPartsBlockedReason` allows, so adapters do not check
-   * them again.
-   */
-  delivery: AgentUserMessageDelivery;
-  resolvedQuestionRequestIds?: string[];
-  model?: AgentModelSelection;
-  /** The adapter copies it to the accepted user message, so readers can correlate both. */
-  submissionId?: string;
-};
+export type SendAgentUserMessageInput = SessionRef &
+  AgentRuntimePolicyBinding &
+  AgentWorkStartOptions & {
+    sessionScope: AgentSessionScope;
+    systemPrompt?: string;
+    parts: AgentUserMessagePart[];
+    /**
+     * The host steers only parts that `steeringPartsBlockedReason` allows, so adapters do not check
+     * them again.
+     */
+    delivery: AgentUserMessageDelivery;
+    resolvedQuestionRequestIds?: string[];
+    /** The adapter copies it to the accepted user message, so readers can correlate both. */
+    submissionId?: string;
+  };
 
 export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
 export type AcceptedAgentInput =

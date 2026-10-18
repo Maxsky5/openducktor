@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   agentModelCatalogSchema,
-  agentSessionHistorySchema,
   repoConfigSchema,
   settingsSnapshotSchema,
   taskCardSchema,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type AgentMessageTarget,
-  type AgentSessionHistoryMessage,
   type AgentSessionModelSelection,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -43,7 +41,7 @@ const catalog = agentModelCatalogSchema.parse({
   defaultModelsByProvider: { provider: "current" },
   profiles: [{ name: "build", mode: "primary" }],
 });
-const setup = (history: AgentSessionHistoryMessage[] = []) => {
+const setup = () => {
   let currentCatalog = catalog;
   let description = "First task context";
   const preparation = createSessionTurnPreparation({
@@ -59,8 +57,7 @@ const setup = (history: AgentSessionHistoryMessage[] = []) => {
       getSettingsSnapshot: () => Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
     },
     queries: {
-      loadSessionHistory: () => Effect.succeed(history),
-      loadKnownRuntimeCatalog: () =>
+      loadRuntimeCatalog: () =>
         Effect.succeed({ models: { status: "available", catalog: currentCatalog } }),
     },
     taskReader: {
@@ -91,7 +88,7 @@ const setup = (history: AgentSessionHistoryMessage[] = []) => {
   };
 };
 
-describe("authoritative turn preparation", () => {
+describe("session turn preparation", () => {
   test("reads current task context for each new turn", async () => {
     const { preparation, setDescription } = setup();
     expect(await Effect.runPromise(preparation.context(target))).toContain("First task context");
@@ -103,17 +100,9 @@ describe("authoritative turn preparation", () => {
 
   test("preserves a valid saved variant while blocking an explicit forbidden live change", async () => {
     const { preparation } = setup();
-    expect(await Effect.runPromise(preparation.model(target, selected))).toEqual({
-      kind: "keep",
-      selection: selected,
-    });
+    expect(await Effect.runPromise(preparation.model(target, selected))).toEqual(selected);
     const result = await Effect.runPromise(
-      Effect.result(
-        preparation.model(target, selected, {
-          captured: true,
-          previous: { ...selected, variant: "low" },
-        }),
-      ),
+      Effect.result(preparation.model(target, selected, { ...selected, variant: "low" })),
     );
     expect(result._tag).toBe("Failure");
   });
@@ -143,20 +132,12 @@ describe("authoritative turn preparation", () => {
     });
   });
 
-  test("validates a captured queued choice without changing it", async () => {
+  test("rejects an invalid explicit configuration without choosing a replacement", async () => {
     const { preparation } = setup();
     const result = await Effect.runPromise(
-      Effect.result(
-        preparation.model(target, { ...selected, modelId: "obsolete" }, { captured: true }),
-      ),
+      Effect.result(preparation.model(target, { ...selected, modelId: "obsolete" })),
     );
     expect(result._tag).toBe("Failure");
-    expect(
-      await Effect.runPromise(preparation.model(target, { ...selected, modelId: "obsolete" })),
-    ).toMatchObject({
-      kind: "repair",
-      selection: { modelId: "current", profileId: "build", variant: "low" },
-    });
   });
 
   const claudeTarget: AgentMessageTarget = { ...target, runtimeKind: "claude" };
@@ -169,76 +150,6 @@ describe("authoritative turn preparation", () => {
     variants: ["low", "max"],
     liveSessionUpdates: { variants: ["low"] },
   };
-
-  describe("steering attachment checks", () => {
-    const steeringCatalog = agentModelCatalogSchema.parse({
-      runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
-      models: [
-        {
-          ...claudeModel,
-          attachmentSupport: {
-            image: true,
-            audio: false,
-            video: false,
-            pdf: true,
-            mimeTypes: { image: ["image/png"] },
-          },
-        },
-      ],
-      defaultModelsByProvider: { claude: "claude-opus-5-5" },
-    });
-    const imagePart = {
-      kind: "attachment" as const,
-      attachment: {
-        id: "attachment-1",
-        path: "/tmp/image.png",
-        name: "image.png",
-        kind: "image" as const,
-        mime: "image/png",
-      },
-    };
-    const turnHistory = (modelId: string) =>
-      agentSessionHistorySchema.parse([
-        {
-          messageId: "user-1",
-          role: "user",
-          timestamp: "2026-10-17T12:00:00Z",
-          text: "Start",
-          displayParts: [],
-          state: "read",
-          parts: [],
-        },
-        {
-          messageId: "assistant-1",
-          role: "assistant",
-          timestamp: "2026-10-17T12:00:01Z",
-          text: "Working",
-          model: { runtimeKind: "claude", providerId: "claude", modelId },
-          parts: [],
-        },
-      ]);
-    const steer = async (modelId: string) => {
-      const { preparation, setCatalog } = setup(turnHistory(modelId));
-      setCatalog(steeringCatalog);
-      return Effect.runPromise(
-        Effect.result(preparation.steeringContent(claudeTarget, [imagePart])),
-      );
-    };
-
-    test("accepts an attachment that suits the model that the turn reports", async () => {
-      expect((await steer("claude-opus-5-5"))._tag).toBe("Success");
-    });
-
-    test("rejects an attachment when the catalog lacks the model of the turn", async () => {
-      expect(await steer("claude-unknown")).toMatchObject({
-        _tag: "Failure",
-        failure: {
-          message:
-            "image.png: The model of the running turn does not expose attachment capability data.",
-        },
-      });
-    });
-  });
 
   describe("saved alias selections", () => {
     const aliasCatalog = agentModelCatalogSchema.parse({
@@ -255,21 +166,10 @@ describe("authoritative turn preparation", () => {
       modelId: "opus",
       variant: "max",
     };
-    const prepare = (options?: { captured: boolean }) => {
+    test("accepts the model that an alias points to and keeps its variant", async () => {
       const { preparation, setCatalog } = setup();
       setCatalog(aliasCatalog);
-      return Effect.runPromise(preparation.model(claudeTarget, savedAlias, options));
-    };
-
-    test("saves the model ID that an alias points to and keeps its variant", async () => {
-      expect(await prepare()).toEqual({
-        kind: "repair",
-        selection: { ...savedAlias, modelId: "claude-opus-5-5" },
-      });
-    });
-
-    test("accepts a captured alias as the model that it points to", async () => {
-      expect((await prepare({ captured: true })).selection).toEqual({
+      expect(await Effect.runPromise(preparation.model(claudeTarget, savedAlias))).toEqual({
         ...savedAlias,
         modelId: "claude-opus-5-5",
       });

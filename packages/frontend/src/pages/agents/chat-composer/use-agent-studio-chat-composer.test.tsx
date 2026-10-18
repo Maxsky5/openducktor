@@ -375,6 +375,7 @@ const createBaseProps = (overrides: BasePropsOverrides = {}): HookArgs => {
   return {
     workspaceRepoPath: "/repo",
     selectedSession: {
+      preparation: { ready: true, error: null },
       identity: selectedSessionIdentity,
       activityState: null,
       selectedModel: selectedSessionModel,
@@ -862,7 +863,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("repairs a stale loaded-session model when the user sends, never when the session is viewed", async () => {
+  test("keeps accepted settings visible until an explicit model update", async () => {
     const staleSelection = {
       runtimeKind: "opencode" as const,
       providerId: "missing",
@@ -901,11 +902,9 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "claude-sonnet");
+      await harness.waitFor((state) => state.selectedModelSelection?.modelId === "missing-model");
 
-      expect(harness.getLatest().selectedModelSelection).toEqual(repairedSelection);
-      expect(updateAgentSessionModel).not.toHaveBeenCalled();
-
+      expect(harness.getLatest().selectedModelSelection).toEqual(staleSelection);
       expect(updateAgentSessionModel).not.toHaveBeenCalled();
 
       await harness.update(
@@ -1659,7 +1658,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("marks loaded session model unsendable when catalog cannot produce a replacement", async () => {
+  test("keeps accepted session settings when the model catalog is empty", async () => {
     const updateAgentSessionModel = mock(async () => {});
     const loadedSession = createLoadedSession();
 
@@ -1676,14 +1675,14 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().selectedModelSelection).toBeNull();
+      expect(harness.getLatest().selectedModelSelection).toEqual(loadedSession.selectedModel);
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("normalizes loaded session model and repairs the durable session model on send", async () => {
+  test("keeps the accepted effort even when the catalog no longer lists it", async () => {
     const updateAgentSessionModel = mock(
       async (..._args: Parameters<HookArgs["updateAgentSessionModel"]>) => {},
     );
@@ -1707,17 +1706,15 @@ describe("useAgentStudioChatComposer", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((state) => state.selectedModelSelection?.variant === "default");
+      await harness.waitFor((state) => state.selectedModelSelection?.variant === "missing");
 
       expect(harness.getLatest().selectedModelSelection).toEqual({
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
-        variant: "default",
+        variant: "missing",
         profileId: "spec-agent",
       });
-      expect(updateAgentSessionModel).not.toHaveBeenCalled();
-
       expect(updateAgentSessionModel).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();

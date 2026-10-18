@@ -167,16 +167,16 @@ const sendFirstMessage = async (
       delivery: "new_turn" as const,
     };
     try {
-      await controller.sendUserMessage(
-        scenario === "unknown_model"
-          ? { ...send, model: { providerId: "openai", modelId: "missing", variant: "medium" } }
-          : send,
-        {
-          onSent: () => {
-            sent = true;
-          },
+      if (scenario === "unknown_model")
+        await controller.updateSessionModel({
+          ...sessionInput,
+          model: { providerId: "openai", modelId: "missing", variant: "medium" },
+        });
+      await controller.sendUserMessage(send, {
+        onSent: () => {
+          sent = true;
         },
-      );
+      });
     } catch (cause) {
       if (cause instanceof Error) return { cause, sent };
       throw cause;
@@ -203,10 +203,10 @@ test("a lost reply to the first turn does not prove that Codex rejected the mess
   expect(toCodexMessageSendError(cause, ref)).toBeInstanceOf(AgentSessionAcceptanceUnknownError);
 });
 
-test("a send that fails before turn/start reports no native request", async () => {
+test("a rejected settings change does not issue a user message", async () => {
   const { cause, sent } = await sendFirstMessage("unknown_model");
   expect(cause.message).toContain("missing");
   // Codex never got the message, so onSent did not run and the caller can send it again.
   expect(sent).toBe(false);
-  expect(toCodexMessageSendError(cause, ref)).toBeInstanceOf(AgentSessionMessageRejectedError);
+  expect(toCodexMessageSendError(cause, ref)).toBeNull();
 });

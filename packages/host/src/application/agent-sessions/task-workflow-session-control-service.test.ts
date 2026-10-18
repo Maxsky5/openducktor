@@ -68,8 +68,7 @@ const createAgentSessionCommandService = ({
     turnPreparation: {
       context: () => Effect.succeed("Current host context"),
       promptOverrides: () => Effect.succeed({}),
-      steeringContent: () => Effect.void,
-      model: (_target, selection) => Effect.succeed({ kind: "keep" as const, selection }),
+      model: (_target, selection) => Effect.succeed(selection),
     },
     approvalPolicy: { reply: () => Effect.die(new Error("unexpected approval reply")) },
     readSessionRootRefs: (repoPath) =>
@@ -238,12 +237,6 @@ const workflowSend: AgentSessionControlSendInput = {
   sessionScope: workflowStart.sessionScope,
   parts: [{ kind: "text", text: "Continue" }],
   delivery: "new_turn",
-  model: {
-    runtimeKind: "opencode",
-    providerId: "openai",
-    modelId: "gpt-5",
-    profileId: "other-profile",
-  },
 };
 
 const acceptedUserMessage: AcceptedAgentUserMessage = {
@@ -1162,7 +1155,7 @@ describe("createAgentSessionCommandService", () => {
     expect(runtimeCalls).toBe(0);
   });
 
-  test("sends a workflow message with the stored settings that it captured", async () => {
+  test("sends a workflow message with current context and no settings payload", async () => {
     const runtimeInputs: AgentSessionControlSendInput[] = [];
     const service = createAgentSessionCommandService({
       canonicalizeRepoPath: () => Effect.succeed("/repo"),
@@ -1202,20 +1195,14 @@ describe("createAgentSessionCommandService", () => {
       {
         ...workflowSend,
         repoPath: "/repo",
-        model: storedModel,
         systemPrompt: "Current host context",
       },
     ]);
   });
 
-  test("uses the captured queued model for a new turn and keeps steering on the running settings", async () => {
+  test("keeps settings out of new turns and steering", async () => {
     const runtimeInputs: AgentSessionControlSendInput[] = [];
     let activity: "idle" | "running" = "idle";
-    const queuedModel = {
-      runtimeKind: "opencode" as const,
-      providerId: "openai",
-      modelId: "gpt-4.1",
-    };
     const service = createAgentSessionCommandService({
       ...createControlDeps(),
       runtime: {
@@ -1255,12 +1242,10 @@ describe("createAgentSessionCommandService", () => {
     });
 
     for (const delivery of ["new_turn", "steer"] as const) {
-      // The workflow session stores another model, but the queued model wins.
+      // Send leaves session settings with the runtime.
       await Effect.runPromise(
         service.sendUserMessage({
           ...workflowSend,
-          model: queuedModel,
-          modelCaptured: true,
           delivery,
         }),
       );
@@ -1268,10 +1253,10 @@ describe("createAgentSessionCommandService", () => {
     }
 
     expect(
-      runtimeInputs.map((input) => [input.sessionScope.kind, input.delivery, input.model]),
+      runtimeInputs.map((input) => [input.sessionScope.kind, input.delivery, "model" in input]),
     ).toEqual([
-      ["workflow", "new_turn", queuedModel],
-      ["workflow", "steer", undefined],
+      ["workflow", "new_turn", false],
+      ["workflow", "steer", false],
     ]);
   });
 

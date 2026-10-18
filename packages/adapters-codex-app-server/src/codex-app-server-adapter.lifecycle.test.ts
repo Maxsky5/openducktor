@@ -643,7 +643,15 @@ describe("CodexAppServerAdapter lifecycle", () => {
 
   test("uses the restored Codex model when a saved session has no model selection", async () => {
     const { adapter, transports } = createHarness();
+    const admissions: string[] = [];
 
+    await adapter.resumeSession({
+      ...codexSessionRuntimeRef("thread-without-model"),
+      model: undefined,
+      onWorkIssued: () => admissions.push("issued"),
+      onWorkAccepted: () => admissions.push("accepted"),
+    });
+    expect(admissions).toEqual(["issued", "accepted"]);
     await expect(
       adapter.sendUserMessage(
         codexUserMessageInput({

@@ -304,6 +304,14 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       },
       live: {
+        resumeSession: (request) =>
+          Effect.succeed({
+            externalSessionId: request.externalSessionId,
+            runtimeKind: request.runtimeKind,
+            workingDirectory: request.workingDirectory,
+            startedAt: "2026-09-07T00:00:00Z",
+            status: "idle" as const,
+          }),
         startSession: (request) =>
           Effect.suspend(() => {
             calls.push("start");
@@ -607,7 +615,9 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(await Effect.runPromise(h.service.listActive("fairnest"))).toEqual([started.session]);
       expect(await Effect.runPromise(h.service.start(ref))).toEqual({
         session: started.session,
-        runtimeSession: null,
+        runtimeSession: expect.objectContaining({
+          externalSessionId: started.session.externalSessionId,
+        }),
       });
       expect(h.starts).toHaveLength(1);
     },

@@ -7,7 +7,6 @@ import {
   type DeliveryHarness,
   editIdOf,
   failureOf,
-  model,
   ref,
   slashCommand,
   target,
@@ -181,7 +180,7 @@ describe("agent message delivery: queue actions and steering", () => {
     expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
   });
 
-  test("steers one queued message with its captured model and keeps the paused remainder", async () => {
+  test("steers one queued message with current session settings and keeps the paused remainder", async () => {
     const harness = createHarness();
     harness.outcomes.push("busy");
     await harness.submit("first");
@@ -193,7 +192,7 @@ describe("agent message delivery: queue actions and steering", () => {
 
     expect(result.acceptedMessage).toMatchObject({ message: "second" });
     expect(harness.calls.at(-1)).toMatchObject({
-      input: { delivery: "steer", model },
+      input: { delivery: "steer" },
     });
     expect(harness.queueTexts()).toEqual(["first:queued"]);
     expect(harness.pause()).not.toBeNull();

@@ -72,8 +72,7 @@ const setup = (
           Effect.succeed(settingsSnapshotSchema.parse({ theme: "system" })),
       },
       queries: {
-        loadSessionHistory: unexpected,
-        loadKnownRuntimeCatalog: () =>
+        loadRuntimeCatalog: () =>
           Effect.succeed({
             models: {
               status: "available" as const,

@@ -187,6 +187,7 @@ export const createNodeTaskSessionServices = ({
     runtime: {
       ...agentSessionLiveStateService,
       sendUserMessage: agentSessionCommandService.sendUserMessage,
+      updateSessionModel: agentSessionCommandService.updateSessionModel,
     },
     sessions: createTaskSessionOperations({
       canonicalizeRepoPath,

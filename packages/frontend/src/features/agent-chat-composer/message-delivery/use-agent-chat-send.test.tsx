@@ -36,8 +36,6 @@ const SESSION: AgentSessionIdentity = {
   externalSessionId: "session-1",
 };
 
-const CAPTURED_MODEL = { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" };
-
 const NO_FILES = { image: false, audio: false, video: false, pdf: false };
 
 const PDF_MODEL: AgentModelCatalog["models"][number] = {
@@ -77,7 +75,6 @@ const queuedFollowUp = () =>
   createAgentMessageQueueSnapshot({
     target: { repoPath: "/repo", ...SESSION, sessionScope: { kind: "repository" } },
     texts: ["follow-up"],
-    model: CAPTURED_MODEL,
   });
 
 const userMessageWithModel = (modelId: string): AgentChatMessage => ({
@@ -88,7 +85,7 @@ const userMessageWithModel = (modelId: string): AgentChatMessage => ({
   meta: { kind: "user", state: "read", providerId: "openai", modelId },
 });
 
-type TargetProps = Pick<AgentChatSendTarget, "resolve" | "onFailure" | "onSettled"> & {
+type TargetProps = Pick<AgentChatSendTarget, "resolve" | "onFailure"> & {
   canSend: boolean;
 };
 
@@ -104,7 +101,6 @@ const useTestChatSend = ({ target: { canSend, ...target }, ...props }: HookProps
 };
 
 const existingSession = async (): Promise<AgentChatResolvedTarget> => ({
-  kind: "session",
   identity: SESSION,
 });
 
@@ -194,11 +190,12 @@ describe("useAgentChatSend", () => {
     }
   });
 
-  test("checks an edited attachment against the model that the queued message captured", async () => {
+  test("checks an edited attachment against the current session model", async () => {
     const captured = renderChatSend({}, { stageAttachment: stageBriefOnHost });
     const textOnly = renderChatSend(
       {
         modelCatalog: { ...MODEL_CATALOG, models: [{ ...PDF_MODEL, attachmentSupport: NO_FILES }] },
+        selectedModelDescriptor: { ...PDF_MODEL, attachmentSupport: NO_FILES },
       },
       { stageAttachment: stageBriefOnHost },
     );
@@ -306,37 +303,6 @@ describe("useAgentChatSend", () => {
       }
     });
 
-    test("launches a new session once and returns the launch result", async () => {
-      const started = createDeferred<AgentChatResolvedTarget>();
-      const resolve = mock(() => started.promise);
-      const { view, sendAgentMessage } = renderChatSend({
-        identity: null,
-        target: { canSend: true, resolve },
-      });
-      try {
-        // A new chat has no queue to show and no running work to steer.
-        expect(view.result.current).toMatchObject({ messageQueue: null, steerBlockedReason: null });
-        let first!: Promise<AgentChatSendResult>;
-        act(() => {
-          first = view.result.current.onSend(textDraft("First"), "steer");
-        });
-        await act(async () => {
-          expect(await view.result.current.onSend(textDraft("Second"), "default")).toBe(false);
-        });
-        await act(async () => {
-          started.resolve({ kind: "launched", result: true });
-          expect(await first).toBe(true);
-        });
-
-        expect(resolve).toHaveBeenCalledTimes(1);
-        expect(resolve).toHaveBeenCalledWith([{ kind: "text", text: "First" }]);
-        // The launch delivers the first message, so the chat sends nothing more.
-        expect(sendAgentMessage).not.toHaveBeenCalled();
-      } finally {
-        view.unmount();
-      }
-    });
-
     test("checks a steer against the model of the running turn", async () => {
       const textOnly = {
         ...PDF_MODEL,
@@ -396,9 +362,8 @@ describe("useAgentChatSend", () => {
     test("ends the send and reports a failure", async () => {
       const failure = new Error("send failed");
       const onFailure = mock((_cause: Error) => false);
-      const onSettled = mock(() => {});
       const { view, sendAgentMessage } = renderChatSend({
-        target: { canSend: true, resolve: existingSession, onFailure, onSettled },
+        target: { canSend: true, resolve: existingSession, onFailure },
       });
       sendAgentMessage.mockImplementationOnce(async () => {
         throw failure;
@@ -409,7 +374,6 @@ describe("useAgentChatSend", () => {
         });
 
         expect(onFailure.mock.calls).toEqual([[failure]]);
-        expect(onSettled).toHaveBeenCalledTimes(1);
         expect(view.result.current.isSending).toBe(false);
       } finally {
         view.unmount();

@@ -72,11 +72,8 @@ export function useWorkspaceSessionModelPicker(
     if (session?.identity) {
       source = {
         kind: "session",
-        sessionIdentity: session.identity,
-        sessionRuntimeKind: session.identity.runtimeKind,
         modelCatalog: session.catalog,
         selectedSessionModel: session.selection,
-        draftSelection: null,
       };
     } else {
       source = {

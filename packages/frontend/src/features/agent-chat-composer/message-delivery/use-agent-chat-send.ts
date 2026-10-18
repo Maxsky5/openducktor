@@ -12,10 +12,7 @@ import type {
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { steersRunningTurn } from "@/components/features/agents/agent-chat/agent-chat-steering";
-import {
-  findModelEntry,
-  findRunningTurnModelEntry,
-} from "@/features/agent-chat-composer/model-selection/model-selection-options";
+import { findRunningTurnModelEntry } from "@/features/agent-chat-composer/model-selection/model-selection-options";
 import { MISSING_RUNTIME_REASON } from "@/lib/agent-message-send-policy";
 import type { AsyncActivityTracker } from "@/lib/use-async-activity-tracker";
 import { useAgentMessageQueue, useAgentOperations } from "@/state/app-state-provider";
@@ -33,18 +30,10 @@ import {
 } from "./agent-chat-send-draft";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
-/** Where a send goes: to an existing session, or into the launch of a new session. */
-export type AgentChatResolvedTarget =
-  | {
-      readonly kind: "session";
-      readonly identity: AgentSessionIdentity;
-      readonly sendOptions?: Omit<AgentMessageSendOptions, "mode">;
-    }
-  | {
-      /** The host launched a new session with the message as its first instruction. */
-      readonly kind: "launched";
-      readonly result: AgentChatSendResult;
-    };
+export type AgentChatResolvedTarget = {
+  readonly identity: AgentSessionIdentity;
+  readonly sendOptions?: Omit<AgentMessageSendOptions, "mode">;
+};
 
 /** What differs between chat kinds: how a chat finds its session and reports a failure. */
 export type AgentChatSendTarget = {
@@ -56,23 +45,17 @@ export type AgentChatSendTarget = {
   readonly canSend: () => boolean;
   /** Captures the selected recipient before attachment staging starts. */
   readonly capture: () => () => boolean;
-  /**
-   * Returns the session that takes the message, or launches a new session with it. It can
-   * capture the selected recipient. Null drops the send and keeps the draft.
-   */
+  /** Returns the recipient. Null cancels the send and keeps the draft. */
   readonly resolve: (parts: AgentUserMessagePart[]) => Promise<AgentChatResolvedTarget | null>;
   /** Turns a failure into the composer result. Without it, the composer gets the failure. */
   readonly onFailure?: (cause: Error) => AgentChatSendResult;
-  /** Runs after each send ends. */
-  readonly onSettled?: () => void;
 };
 
 type UseAgentChatSendArgs = {
-  /** The session of the chat. A new chat has no queue, and its first send launches the session. */
   identity: AgentSessionIdentity | null;
   repoPath: string | null;
   runtimeDescriptor: RuntimeDescriptor | null;
-  /** Resolves the models that queued messages captured and the model of the running turn. */
+  /** Resolves the model of the running turn. */
   modelCatalog: AgentModelCatalog | null;
   /** The session transcript. */
   messages: readonly AgentChatMessage[] | undefined;
@@ -153,11 +136,10 @@ export function useAgentChatSend({
       onSaveEdit: async ({ submissionId, editId }, draft) => {
         const entry = queue?.entries.find((candidate) => candidate.submissionId === submissionId);
         if (!entry) throw new Error("This message is no longer in the queue.");
-        // Check an edit with the rules of a new message and the model that the entry captured.
         const parts = await resolveAgentChatSendDraftParts({
           draft,
           reusablePrompts,
-          modelDescriptor: findModelEntry(modelCatalog, entry.model ?? null),
+          modelDescriptor: selectedModelDescriptor,
           supportsAttachments,
           stageAttachment: stageSendAttachment,
         });
@@ -169,7 +151,7 @@ export function useAgentChatSend({
     };
   }, [
     manageAgentMessageQueue,
-    modelCatalog,
+    selectedModelDescriptor,
     queue,
     reusablePrompts,
     identity,
@@ -179,12 +161,7 @@ export function useAgentChatSend({
 
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft, mode: AgentMessageSubmitMode) => {
-      // An existing session queues later sends in the host. A new session launches only once.
-      if (
-        !target.canSend() ||
-        isWaitingInput ||
-        (identity === null && target.activity.hasInFlight(target.activityKey))
-      ) {
+      if (!target.canSend() || isWaitingInput) {
         return false;
       }
       const isCurrentRecipient = target.capture();
@@ -203,7 +180,6 @@ export function useAgentChatSend({
         if (!parts || !isCurrentRecipient()) return false;
         const resolved = await target.resolve(parts);
         if (!resolved) return false;
-        if (resolved.kind === "launched") return resolved.result;
         await sendAgentMessage(resolved.identity, parts, {
           ...resolved.sendOptions,
           mode,
@@ -222,11 +198,9 @@ export function useAgentChatSend({
         return target.onFailure(error);
       } finally {
         activity.finish();
-        target.onSettled?.();
       }
     },
     [
-      identity,
       isSessionWorking,
       isWaitingInput,
       reusablePrompts,

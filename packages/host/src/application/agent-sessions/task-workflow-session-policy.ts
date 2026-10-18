@@ -143,8 +143,14 @@ export const createTaskWorkflowSessionPolicy = ({
               input: {
                 ...input,
                 runtimeKind: stored.runtimeKind,
-                workingDirectory: stored.workingDirectory,
-                model: stored.selectedModel ?? undefined,
+                workingDirectory:
+                  input.externalSessionId === stored.externalSessionId
+                    ? stored.workingDirectory
+                    : input.workingDirectory,
+                model:
+                  input.externalSessionId === stored.externalSessionId
+                    ? (stored.selectedModel ?? undefined)
+                    : undefined,
               },
               save: (summary: AgentSessionControlSummary) =>
                 summary.externalSessionId !== stored.externalSessionId
@@ -166,8 +172,6 @@ export const createTaskWorkflowSessionPolicy = ({
               runtimeKind: stored.runtimeKind,
               workingDirectory: stored.workingDirectory,
             };
-            if (stored.selectedModel) prepared.model = stored.selectedModel;
-            else delete prepared.model;
             return prepared;
           }),
         recordAcceptedMessage: () => Effect.void,

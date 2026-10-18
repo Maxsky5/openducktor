@@ -111,6 +111,7 @@ type SelectionState = {
     sessionsForTask: AgentSessionSummary[];
     selectedSessionSummary: AgentSessionSummary | null;
     selectedSession: {
+      preparation: { ready: boolean; error: string | null };
       identity: ReturnType<typeof sessionIdentity> | null;
       activityState: null;
       selectedModel: null;
@@ -291,6 +292,7 @@ let selectionState: SelectionState = {
     sessionsForTask: [toAgentSessionSummary(initialSelectionSession)],
     selectedSessionSummary: toAgentSessionSummary(initialSelectionSession),
     selectedSession: {
+      preparation: { ready: true, error: null },
       identity: null,
       activityState: null,
       selectedModel: null,
@@ -746,6 +748,7 @@ beforeEach(async () => {
       sessionsForTask: [toAgentSessionSummary(session)],
       selectedSessionSummary: toAgentSessionSummary(session),
       selectedSession: {
+        preparation: { ready: true, error: null },
         identity: null,
         activityState: null,
         selectedModel: null,

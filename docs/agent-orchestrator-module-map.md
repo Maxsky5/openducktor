@@ -109,7 +109,7 @@ The host owns each message queue, its order, its pause, and its automatic delive
 - Only a `session_idle` event with `turnOutcome: "completed"` delivers the next queued message. Pending blocking input stops steering and automatic delivery until the user answers.
 - An interrupted or failed turn, an agent error, a stop, a failed steer, or a session that left its runtime pauses a queue that has messages. Only the user can resume it.
 - A message with an unknown result stays locked in the `acceptance_unknown` state until a live `user_message` with its message ID or `submissionId` arrives.
-- A new turn from the queue uses the model of the message at submission. The host saves that model as the session model only when it equals the stored selection. It never saves the model of a steer.
+- A queued message uses the session's accepted settings when delivery starts. Queued messages do not store a model choice.
 - `agent-message-send-outcome.ts` classifies the result of each send once. Every queue path reads that outcome, and `settle` ends every send.
 - `agent-message-session-conditions.ts` reads running work, blocking input, and runtime loss from each published session, also from a refresh snapshot.
 - `agent-session-live-change-publisher.ts` publishes adapter changes in order. The queues then read each change that the renderer received, also when a later publication fails.
@@ -125,8 +125,8 @@ The host owns each message queue, its order, its pause, and its automatic delive
 - A confirmed settings save publishes its parsed Chat section into the existing settings query before the canonical refresh. A failed refresh keeps that choice and shows the error. Until the first successful settings read, new-message submission stays blocked. Stop, pending input, and explicit queue actions keep their existing rules.
 - The config remains version `4`. Valid older Chat settings default `steerMessagesByDefault` to `false`. A config written by this version includes the field. An older app with a strict Chat schema can reject that config during a downgrade.
 - `useAgentChatSend` sends the messages of task and workspace chats. It owns the queue panel, the steering availability, the running turn model, the busy-send rule, the sends in progress, the attachment check, and the send mode.
-- Each chat kind gives `useAgentChatSend` one memoized `AgentChatSendTarget`. The target says when the chat can send, finds the session or launches a new one, and can turn a failure into a composer result. A new session gets the message as the first instruction of its host launch, so the chat does not send it again. `useAgentStudioSendTarget` prepares the model and launches a task session. `useWorkspaceSessionChatActions` launches a workspace session and shows a failure in the chat.
-- An existing session takes several sends at once, because the host queues them. A send that launches a session runs alone.
+- Each chat kind gives `useAgentChatSend` one memoized `AgentChatSendTarget`. The target checks the prepared session and can turn a failure into a composer result. `useChatSessionPreparation` creates or reattaches the selected session before enabling Send.
+- A prepared session takes several sends at once, because the host queues them.
 - `resolveRuntimeSteeringAvailability` in core owns the steering rule. The host enforces it, and the renderer uses the same reason to block a steer early.
 - The host checks steer content with `steeringPartsBlockedReason` before it dispatches a steer, so runtime adapters do not check it again. The composer uses `draftSteerBlockedReason` and the queue card uses `queuedMessageSteerBlockedReason`. Both check the runtime steering limit first, then the content.
 - `findRunningTurnModelEntry` reads the model of the running turn from the latest user message that reports a model.
@@ -237,7 +237,7 @@ Send and reply use the complete reference and a session scope assertion. The hos
 
 Files: `packages/host/src/application/agent-sessions/session-turn-preparation.ts` and `agent-session-command-service.ts`.
 
-The host prepares current context, validates the saved model, and reattaches the same owned session before sending. Viewing a session starts no preparation.
+Opening a chat prepares its selected session before enabling Send. Preparation creates or reattaches the session. Send uses current context and accepted settings without creating or reattaching a session.
 
 ## Pending input
 
@@ -400,13 +400,12 @@ Rules:
 - Apply live model restrictions only when a native session identity exists. `model-selection-policy.ts` supplies the same profile and variant rules to visible options and selection actions. A saved workspace draft still uses startup model options.
 - The shared host command updates the native model, saves the durable choice, then publishes metadata. If the save fails, restore the previous native model before releasing the owner permit. A publication failure after a successful save must not roll back the native model.
 - Core model-selection services own pure runtime, profile, variant, speed, and saved-choice rules. Client presentation and host enforcement use these rules.
-- Task and workspace composers present saved choices. The host prepares and repairs eligible choices within Send. Viewing a session never sends a model update, because a model update can resume an idle session.
-- A saved-choice repair preserves a valid saved profile and a supported saved speed. Standard speed stays Standard. An obsolete profile needs an explicit visible replacement that the live model permits, because the host preserves an omitted profile. If no permitted replacement exists, preparation stops before a model update or message submission.
-- For an existing session whose runtime supports profiles, an explicit `profiles: []` has no replacement for a saved profile. Preparation blocks Send. Omitted profile metadata keeps the existing normalization rule.
-- The shared sender tracks Send activity and checks the captured recipient before transport. The host prepares the model and delivers the message.
+- Task and workspace composers present accepted session settings. The selected chat creates or reattaches its session before enabling Send. Model, effort, speed, and profile changes use the explicit settings operation. Send never chooses or repairs them.
+- The composer keeps the accepted session model, effort, speed, and profile even when a later catalog omits them. Catalog defaults apply to new sessions. An explicit settings change validates the new choice.
+- The shared sender tracks Send activity and checks the captured recipient before transport. The host validates ownership and delivers the content to a prepared session.
 - An existing chat waits for its first usable model catalog before Send. A background refresh with a usable catalog does not block Send. A loading session and an unavailable model have separate error reasons.
 - Task and workspace targets check the loaded session before attachment staging and before transport. The host checks current blocking input before work-starting preparation and again before dispatch.
-- A retained workspace pane owns its lifetime above React Activity. Hiding the pane does not invalidate its unchanged model target. Removing the pane or changing its recipient, workspace, or catalog target still cancels a pending send.
+- A retained workspace pane owns its lifetime above React Activity. Each reveal prepares the selected session again before enabling its composer. Removing the pane or changing its recipient, workspace, or catalog target cancels a pending send.
 
 Build-tool worktree reads belong to `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts`. Their key is repository, task ID, and task version. Git refresh belongs to `use-agent-studio-build-worktree-refresh.ts`. Transcript display state does not control either read.
 
@@ -422,7 +421,7 @@ The shared send handler checks a typed accepted-message failure before ordinary 
 
 The sender returns `AgentMessageSendReceipt` for accepted, acknowledged, queued, or uncertain input. Its optional `assertCanSubmit` guard checks the captured recipient before transport. A task post-start workflow carries the receipt so conflict assistance does not treat startup as delivery or retry an accepted message.
 
-Before sending to a stopped repository or workflow session, the host verifies ownership and reattaches that same native session. A failed reattachment sends no message.
+Stop and session removal clear preparation readiness. The chat must prepare the same owned session before enabling Send again. A failed preparation sends no message.
 
 Rules:
 
@@ -504,7 +503,7 @@ Rules:
 - The expanded sidebar keeps New task as a split button. The collapsed sidebar has one plus button that opens the action menu, with New task first. Both menus show action labels without descriptions or a heading. Closing a creation dialog restores keyboard focus to its action.
 - Activity time comes from the record's `lastActivityAt`. Older task sessions use `startedAt`; older workspace sessions use `createdAt`. The list labels those dates as start times. Metadata edits do not change the date.
 - The host saves activity at message and turn boundaries, using the event timestamp. New input requests use the host clock because their snapshots have no event timestamp. Restore baselines, streaming output, repeated status reports, and idle cleanup do not move the date.
-- Navigation does not load history, start sessions, resume sessions, or change runtime state.
+- Navigation lists do not load history, start sessions, resume sessions, or change runtime state. The committed chat view owns session preparation before its composer becomes ready.
 
 ## Startup sequence
 

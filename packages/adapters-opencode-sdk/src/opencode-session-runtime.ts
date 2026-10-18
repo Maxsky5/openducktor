@@ -10,7 +10,6 @@ import {
   type AgentSessionAuthorizedRoot,
 } from "@openducktor/contracts";
 import type {
-  SendAgentUserMessageInput,
   ManagedMcpServerResolver,
   AgentCatalogPort,
   AgentSessionHistoryPort,
@@ -701,7 +700,7 @@ export const createPrepareOpencodeSessionRuntime =
           );
           if (!isCurrent()) return;
           const childSource = await source(
-            controller.admit(ref, parent.scope, detail),
+            controller.admit(ref, parent.scope, detail, true),
             parent.detail.id,
           );
           if (isCurrent()) emit({ type: "session_source", source: childSource });
@@ -919,8 +918,6 @@ export const createPrepareOpencodeSessionRuntime =
           awaitingTurns.has(messageInput.externalSessionId);
         if (working && messageInput.delivery === "new_turn")
           return Promise.reject(new AgentSessionTurnActiveError(messageInput.externalSessionId));
-        // A steer joins the running turn, which keeps its model. A model change waits for the next turn.
-        const request = working ? withoutModel(messageInput) : messageInput;
         const binding = controller.bindings.get(messageInput.externalSessionId);
         const turn: AwaitingTurn = {
           ref: messageInput,
@@ -983,7 +980,7 @@ export const createPrepareOpencodeSessionRuntime =
         });
         const sending = (attachTails.get(messageInput.repoPath) ?? Promise.resolve()).then(() => {
           signal.throwIfAborted();
-          return controller.sendUserMessage(request, {
+          return controller.sendUserMessage(messageInput, {
             signal,
             assertCommandIdle,
             onSent: () => {
@@ -1239,9 +1236,3 @@ export const createPrepareOpencodeSessionRuntime =
       },
     };
   };
-
-const withoutModel = (input: SendAgentUserMessageInput): SendAgentUserMessageInput => {
-  const request = { ...input };
-  delete request.model;
-  return request;
-};

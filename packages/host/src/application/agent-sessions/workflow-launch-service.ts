@@ -97,14 +97,6 @@ export const createWorkflowLaunchService = (
         ));
       } else {
         const { source, live } = decision;
-        // The first instruction applies a changed speed. Save it first, so the record matches.
-        if (model && model.speed !== source.selectedModel?.speed)
-          yield* deps.tasks.agentSessionUpdateModel({
-            repoPath,
-            taskId: request.taskId,
-            identity: decision.sourceSession,
-            selectedModel: model,
-          });
         session = { ...decision.sourceSession, startedAt: source.startedAt, status: "idle" };
         attempt.reusedSession(repoPath, session);
         // Preparation rejects blocking input. The first instruction answers open background
@@ -127,6 +119,14 @@ export const createWorkflowLaunchService = (
           ({ session, publish } = yield* deps.sessions.resume(resumeInput));
           attempt.reusedSession(repoPath, session);
         }
+        if (model && model.speed !== source.selectedModel?.speed)
+          yield* deps.runtime.updateSessionModel({
+            repoPath,
+            ...decision.sourceSession,
+            sessionScope,
+            model,
+            workStartGuard: { assertCurrent: attempt.assertCurrent },
+          });
       }
       if (publish) {
         yield* publish;
@@ -148,7 +148,6 @@ export const createWorkflowLaunchService = (
         parts,
         delivery: "new_turn",
       };
-      if (model) input.model = model;
       if (resolvedQuestionRequestIds.length > 0)
         input.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
       yield* attempt.send(

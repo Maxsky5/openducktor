@@ -37,6 +37,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     taskId: "task-1",
     selectedTask: null,
     selectedSession: {
+      preparation: { ready: true, error: null },
       identity: null,
       activityState: null,
       selectedModel: null,

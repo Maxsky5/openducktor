@@ -499,6 +499,18 @@ describe("OpenCode V2 live observation", () => {
         }),
       ];
       const fixture = prepareFixture(({ url, method, body }) => {
+        const promptedChild = children.find(
+          (item) => url.pathname === `/api/session/${item.id}/prompt`,
+        );
+        if (promptedChild)
+          return response({
+            id: body.id,
+            sessionID: promptedChild.id,
+            type: "user",
+            payload: { text: body.text },
+            delivery: "prompt",
+            time: { created: 3 },
+          });
         const child = children.find((item) => url.pathname === `/api/session/${item.id}`);
         if (child) {
           if (method === "PATCH") {
@@ -567,6 +579,16 @@ describe("OpenCode V2 live observation", () => {
             sessionScope,
             runtimePolicy: { kind: "opencode" },
             systemPrompt: parentPrompt,
+          });
+          expect(entries.has(child.id)).toBe(false);
+          await runtime.connection.sendUserMessage({
+            ...ref,
+            externalSessionId: child.id,
+            sessionScope,
+            runtimePolicy: { kind: "opencode" },
+            delivery: "new_turn",
+            systemPrompt: parentPrompt,
+            parts: [{ kind: "text", text: "Review the delegated task" }],
           });
           expect(entries.has(child.id)).toBe(false);
         }
@@ -752,10 +774,10 @@ describe("OpenCode V2 live observation", () => {
   });
 
   test.each([
-    ["validation", "idle"],
+    ["instructions", "idle"],
     ["prompt", "idle"],
     ["command", "idle"],
-    ["validation", "running"],
+    ["instructions", "running"],
     ["prompt", "running"],
   ] as const)(
     "settles preparation after a native %s rejection while %s",
@@ -769,13 +791,14 @@ describe("OpenCode V2 live observation", () => {
           );
         if (
           rejectRead &&
-          (rejection === "validation"
-            ? method === "GET" && url.pathname === "/api/session/ses_saved"
+          (rejection === "instructions"
+            ? method === "PUT" && url.pathname.includes("/instructions/entries/")
             : url.pathname.endsWith(`/${rejection}`))
         ) {
           rejectRead = false;
           return Response.json({ message: "Native validation failed" }, { status: 503 });
         }
+        if (method === "PUT" && url.pathname.includes("/instructions/entries/")) return noContent();
         return undefined;
       });
       const runtime = await fixture.prepare();
@@ -798,6 +821,7 @@ describe("OpenCode V2 live observation", () => {
           runtime.connection.sendUserMessage(
             {
               ...input,
+              systemPrompt: "Current instructions",
               parts:
                 rejection === "command"
                   ? [
@@ -816,12 +840,12 @@ describe("OpenCode V2 live observation", () => {
           ),
         ).rejects.toThrow("UnexpectedStatus: 503");
         expect(statuses).toEqual(["busy", activity === "running" ? "busy" : "idle"]);
-        expect(sends).toBe(rejection === "validation" ? 0 : 1);
+        expect(sends).toBe(rejection === "instructions" ? 0 : 1);
         expect(
           (await runtime.connection.readSessionSources(ref.repoPath)).sources[0]?.runtimeActivity,
         ).toBe(activity);
         expect(fixture.requests.some(({ url }) => /\/(prompt|command)$/.test(url.pathname))).toBe(
-          rejection !== "validation",
+          rejection !== "instructions",
         );
       } finally {
         await runtime.release();
@@ -1303,7 +1327,7 @@ describe("OpenCode V2 live observation", () => {
               ? { ses_other: true }
               : {},
         );
-      if (deferRead && method === "GET" && url.pathname === "/api/session/ses_saved") {
+      if (deferRead && method === "PUT" && url.pathname.includes("/instructions/entries/")) {
         deferRead = false;
         readStarted.resolve();
         return read.promise;
@@ -1317,7 +1341,11 @@ describe("OpenCode V2 live observation", () => {
           delivery: "queue",
           time: { created: 10 },
         });
-      if (url.pathname.endsWith("/command")) return noContent();
+      if (
+        url.pathname.endsWith("/command") ||
+        (method === "PUT" && url.pathname.includes("/instructions/entries/"))
+      )
+        return noContent();
       return undefined;
     });
     const runtime = await fixture.prepare();
@@ -1340,6 +1368,7 @@ describe("OpenCode V2 live observation", () => {
         deferRead = true;
         preparing = runtime.connection.sendUserMessage({
           ...sessionInput,
+          systemPrompt: "Current instructions",
           parts: [{ kind: "text", text: "Prepare input" }],
         });
         await readStarted.promise;
@@ -1349,6 +1378,7 @@ describe("OpenCode V2 live observation", () => {
         .sendUserMessage(
           {
             ...sessionInput,
+            systemPrompt: "Current instructions",
             parts: [
               {
                 kind: "slash_command",
@@ -1375,7 +1405,7 @@ describe("OpenCode V2 live observation", () => {
         });
         await observed.promise;
       }
-      read.resolve(response(session()));
+      read.resolve(noContent());
       await preparing;
       const result = await sending;
       if (activity === "idle" || activity === "another conversation running") {
@@ -1403,7 +1433,7 @@ describe("OpenCode V2 live observation", () => {
       }
       expect(statuses).not.toContain("idle");
     } finally {
-      read.resolve(response(session()));
+      read.resolve(noContent());
       await Promise.allSettled([preparing]);
       await runtime.release();
     }

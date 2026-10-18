@@ -69,7 +69,6 @@ type UseAgentStudioSessionActionsArgs = {
   agentStudioReady: boolean;
   isActiveTaskReady: boolean;
   selectionForNewSession: AgentModelSelection | null;
-  newSessionCatalog?: AgentModelCatalog | null;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
@@ -130,7 +129,6 @@ export function useAgentStudioSessionActions({
   agentStudioReady,
   isActiveTaskReady,
   selectionForNewSession,
-  newSessionCatalog,
   reusablePrompts,
   repoSettings,
   workspaceRepoPath,
@@ -159,7 +157,6 @@ export function useAgentStudioSessionActions({
       }),
     [agentStudioReady, isActiveTaskReady, selectedTask, taskId],
   );
-  const canStartNewSession = canStartRole(role);
   const sessionStartInput: Parameters<typeof useAgentStudioSessionStartFlow>[0] = {
     branches,
     favoriteState,
@@ -173,7 +170,6 @@ export function useAgentStudioSessionActions({
     canStartRole,
     isSessionWorking: sessionState.isSessionWorking,
     selectionForNewSession,
-    newSessionCatalog: newSessionCatalog ?? null,
     repoSettings,
     workspaceId: activeWorkspaceId,
     workspaceRepoPath,
@@ -186,7 +182,6 @@ export function useAgentStudioSessionActions({
     sessionStartModal,
     humanReviewFeedbackModal,
     startSessionRequest,
-    startSessionForMessage,
     startLaunchKickoff,
     handleCreateSession,
     handleQuickAction,
@@ -200,10 +195,8 @@ export function useAgentStudioSessionActions({
     selectedSessionIdentity: stableSelectedSessionIdentity,
     isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
     assertCanPrepareSession,
-    agentStudioReady,
-    canStartNewSession,
+    agentStudioReady: agentStudioReady && selectedSession.preparation.ready,
     isStarting,
-    startSession: startSessionForMessage,
   });
   const messageDelivery = useAgentChatSend({
     identity: stableSelectedSessionIdentity,
@@ -263,7 +256,7 @@ export function useAgentStudioSessionActions({
   });
 
   const canUseKickoffPrompt = canUseAgentStudioKickoffPrompt({
-    canStartSession: canStartNewSession,
+    canStartSession: canStartRole(role),
     launchActionId,
   });
   const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];

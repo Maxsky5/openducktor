@@ -171,7 +171,6 @@ export type AgentUserMessageDelivery = z.infer<typeof agentUserMessageDeliverySc
 export const agentSessionMessageContentFields = {
   parts: z.array(agentSessionUserMessagePartSchema).min(1),
   resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
-  model: agentModelSelectionSchema.optional(),
   systemPrompt: z.string().optional(),
 };
 
