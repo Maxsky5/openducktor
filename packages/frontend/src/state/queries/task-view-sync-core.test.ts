@@ -117,8 +117,8 @@ describe("TaskViewSync", () => {
       try {
         const event = boardEvent("/repo", [card]);
         event.boardChanges!.documentChanges = [{ taskId: card.id, sections: [section] }];
-        await sync.reconcileExternalEvent(event, "/repo", eventCursor(1));
-        await sync.reconcileExternalEvent(event, "/repo", eventCursor(1));
+        await sync.reconcileExternalEvent(event, eventCursor(1));
+        await sync.reconcileExternalEvent(event, eventCursor(1));
         expect(queryClient.getQueryData<typeof payload>(options.queryKey)).toEqual(payload);
         expect(loadFreshDocument).toHaveBeenCalledTimes(1);
         expect(listTasks).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ describe("TaskViewSync", () => {
         staleTime: Infinity,
       }).subscribe(() => {});
       try {
-        await sync.reconcileExternalEvent(boardEvent(repoPath, [card]), "/repo", eventCursor());
+        await sync.reconcileExternalEvent(boardEvent(repoPath, [card]), eventCursor());
         const data = queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData(repoPath))!;
         expect(data.tasks).toContainEqual(card);
         expect(data.tasks).toContainEqual(other);
@@ -189,13 +189,13 @@ describe("TaskViewSync", () => {
     queryClient.setQueryData(planKey, { markdown: "# Old", updatedAt: null });
     const unsubscribe = observeDocument(queryClient, specKey);
     try {
-      await sync.reconcileExternalEvent(boardEvent("/repo", [card]), "/repo", eventCursor());
+      await sync.reconcileExternalEvent(boardEvent("/repo", [card]), eventCursor());
       expect(loadFreshDocument.mock.calls).toEqual([["/repo", "task-1", "spec"]]);
       expect(
         queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(specKey),
       ).toEqual({ markdown: "# Fresh", updatedAt });
       expect(queryClient.getQueryState(planKey)?.isInvalidated).toBe(true);
-      await sync.reconcileExternalEvent(boardEvent("/repo", [card]), "/repo", eventCursor());
+      await sync.reconcileExternalEvent(boardEvent("/repo", [card]), eventCursor());
       expect(loadFreshDocument).toHaveBeenCalledTimes(1);
     } finally {
       unsubscribe();
@@ -210,7 +210,6 @@ describe("TaskViewSync", () => {
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [card] });
     await sync.reconcileExternalEvent(
       { ...boardEvent("/repo", [card]), boardChanges: null },
-      "/repo",
       eventCursor(),
     );
     expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))).toEqual({
@@ -230,7 +229,6 @@ describe("TaskViewSync", () => {
     try {
       await sync.reconcileExternalEvent(
         boardEvent("/repo", [createTaskCardFixture({ id: "task-1" })]),
-        "/repo",
         eventCursor(),
       );
       expect(queryClient.getQueryData<typeof saved>(key)).toEqual(saved);
@@ -273,7 +271,6 @@ describe("TaskViewSync", () => {
     if (event.kind !== "tasks_updated") throw new Error("Expected update");
     await sync.reconcileExternalEvent(
       { ...event, taskIds: ["epic", "deleted"], removedTaskIds: ["deleted"] },
-      "/repo",
       eventCursor(),
     );
     expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))?.tasks).toEqual([
@@ -292,7 +289,6 @@ describe("TaskViewSync", () => {
     const { queryClient, sync } = createSync(createPorts());
     await sync.reconcileExternalEvent(
       boardEvent("/repo", [createTaskCardFixture({ id: "task-1" })]),
-      "/repo",
       eventCursor(),
     );
     expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))).toBeUndefined();
@@ -308,7 +304,6 @@ describe("TaskViewSync", () => {
     );
     await sync.reconcileExternalEvent(
       boardEvent("/repo", [createTaskCardFixture({ id: "task-1" })]),
-      "/repo",
       eventCursor(),
     );
     result.resolve({ markdown: "# Removed spec", updatedAt: "2026-04-10T13:09:00.000Z" });
@@ -335,7 +330,6 @@ describe("TaskViewSync", () => {
     try {
       await sync.reconcileExternalEvent(
         boardEvent("/repo", [createTaskCardFixture()]),
-        "/repo",
         eventCursor(),
       );
       const card = createTaskCardFixture({
@@ -347,7 +341,6 @@ describe("TaskViewSync", () => {
       });
       await sync.reconcileExternalEvent(
         { ...boardEvent("/repo", [card]), emittedAt: restored.updatedAt },
-        "/repo",
         eventCursor(),
       );
       oldRead.resolve({ markdown: "# Removed", updatedAt: "2026-04-10T13:09:00.000Z" });
@@ -369,7 +362,6 @@ describe("TaskViewSync", () => {
     );
     await sync.reconcileExternalEvent(
       boardEvent("/repo", [createTaskCardFixture()]),
-      "/repo",
       eventCursor(),
     );
     const saved = { markdown: "# Saved", updatedAt: "2026-04-10T13:11:00.000Z" };
@@ -424,7 +416,6 @@ describe("TaskViewSync", () => {
         try {
           const reconciliation = sync.reconcileExternalEvent(
             boardEvent("/repo", [changed]),
-            "/repo",
             eventCursor(),
           );
           // Let the event reach the pending document before releasing its first read.
@@ -547,7 +538,7 @@ describe("TaskViewSync", () => {
         const error = new Error("document read unavailable");
         let settlement: Error | null | undefined;
         const completion = sync
-          .reconcileExternalEvent(boardEvent("/repo", [card]), "/repo", eventCursor())
+          .reconcileExternalEvent(boardEvent("/repo", [card]), eventCursor())
           .then(
             () => {
               settlement = null;
@@ -740,7 +731,7 @@ describe("TaskViewSync", () => {
       updatedAt: null,
     });
 
-    await sync.reconcileStreamSnapshot("/repo");
+    await sync.reconcileStreamSnapshot(["/repo"]);
 
     expect(loadFreshDocument).not.toHaveBeenCalled();
     expect(listTasks).toHaveBeenCalledWith("/repo");
@@ -761,7 +752,10 @@ describe("TaskViewSync", () => {
     const unsubscribe = observeDocument(queryClient, documentKey);
 
     try {
-      await expect(sync.reconcileStreamSnapshot("/repo")).resolves.toEqual([]);
+      await expect(sync.reconcileStreamSnapshot(["/repo"])).resolves.toEqual({
+        taskIdsByRepo: new Map([["/repo", []]]),
+        failures: new Map(),
+      });
 
       expect(listTasks).toHaveBeenCalledWith("/repo");
       expect(listTasks).toHaveBeenCalledTimes(1);
@@ -797,7 +791,7 @@ describe("TaskViewSync", () => {
     let settled = false;
 
     try {
-      const snapshot = sync.reconcileStreamSnapshot("/repo").then(() => {
+      const snapshot = sync.reconcileStreamSnapshot(["/repo"]).then(() => {
         settled = true;
       });
       await freshDocumentStarted.promise;
@@ -828,7 +822,52 @@ describe("TaskViewSync", () => {
     }
   });
 
-  test("invalidates inactive snapshot documents without fetching their repository", async () => {
+  test("waits for every observed document of a snapshot when one document read fails", async () => {
+    const pendingPlan = deferred<{ markdown: string; updatedAt: string | null }>();
+    const planStarted = deferred<void>();
+    const readFailure = new Error("spec unavailable");
+    const loadFreshDocument = mock(async (_repoPath: string, _taskId: string, section: string) => {
+      if (section === "spec") throw readFailure;
+      planStarted.resolve();
+      return pendingPlan.promise;
+    });
+    const { queryClient, sync } = createSync(createPorts({ loadFreshDocument }));
+    const specKey = documentQueryKeys.spec("/repo", "task-1");
+    const planKey = documentQueryKeys.plan("/repo", "task-1");
+    for (const key of [specKey, planKey]) {
+      queryClient.setQueryData(key, { markdown: "# Stale", updatedAt: null });
+    }
+    const unsubscribe = [specKey, planKey].map((key) => observeDocument(queryClient, key));
+    let settled = false;
+
+    try {
+      const snapshot = sync.reconcileStreamSnapshot(["/repo"]).then((result) => {
+        settled = true;
+        return result;
+      });
+      await planStarted.promise;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(settled).toBe(false);
+
+      const fresh = { markdown: "# Fresh plan", updatedAt: "2026-04-10T13:10:00.000Z" };
+      pendingPlan.resolve(fresh);
+      expect(await snapshot).toEqual({
+        taskIdsByRepo: new Map([["/repo", ["task-1"]]]),
+        failures: new Map(),
+      });
+      expect(queryClient.getQueryState(specKey)).toMatchObject({
+        status: "error",
+        error: readFailure,
+      });
+      expect(
+        queryClient.getQueryData<{ markdown: string; updatedAt: string | null }>(planKey),
+      ).toEqual(fresh);
+    } finally {
+      for (const stopObserving of unsubscribe) stopObserving();
+    }
+  });
+
+  test("invalidates snapshot documents of a workspace that is not open without fetching its tasks", async () => {
     const listTasks = mock(async () => []);
     const loadFreshDocument = mock(async () => ({ markdown: "# Snapshot", updatedAt: null }));
     const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
@@ -838,7 +877,7 @@ describe("TaskViewSync", () => {
       updatedAt: null,
     });
 
-    await sync.reconcileStreamSnapshot("/repo");
+    await sync.reconcileStreamSnapshot(["/repo"]);
 
     expect(listTasks).toHaveBeenCalledWith("/repo");
     expect(listTasks).not.toHaveBeenCalledWith("/inactive");
@@ -848,7 +887,7 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
-  test("cancels snapshot document and inactive task queries before invalidating", async () => {
+  test("cancels snapshot document and closed workspace task queries before invalidating", async () => {
     const { queryClient, sync } = createSync(createPorts());
     const calls = recordQueryOperations(queryClient);
     queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks: [] });
@@ -862,9 +901,193 @@ describe("TaskViewSync", () => {
       updatedAt: null,
     });
 
-    await sync.reconcileStreamSnapshot("/repo");
+    await sync.reconcileStreamSnapshot(["/repo"]);
 
     expect(calls.indexOf("cancel:documents")).toBeLessThan(calls.indexOf("invalidate:documents"));
     expect(calls.indexOf("cancel:tasks")).toBeLessThan(calls.indexOf("invalidate:tasks"));
+  });
+
+  test("reconciles the task list and observed documents of every open workspace", async () => {
+    const listTasks = mock(async (repoPath: string) => [
+      createTaskCardFixture({ id: `${repoPath}-task` }),
+    ]);
+    const loadFreshDocument = mock(async () => ({
+      markdown: "# Fresh",
+      updatedAt: "2026-04-10T13:10:00.000Z",
+    }));
+    const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
+    const documentKey = documentQueryKeys.spec("/repo-b", "/repo-b-task");
+    queryClient.setQueryData(documentKey, { markdown: "# Stale", updatedAt: null });
+    const unsubscribe = observeDocument(queryClient, documentKey);
+
+    try {
+      await expect(sync.reconcileStreamSnapshot(["/repo-a", "/repo-b"])).resolves.toEqual({
+        taskIdsByRepo: new Map([
+          ["/repo-a", ["/repo-a-task"]],
+          ["/repo-b", ["/repo-b-task"]],
+        ]),
+        failures: new Map(),
+      });
+
+      expect(listTasks.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(
+        queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-b"))?.tasks,
+      ).toEqual([createTaskCardFixture({ id: "/repo-b-task" })]);
+      expect(loadFreshDocument).toHaveBeenCalledWith("/repo-b", "/repo-b-task", "spec");
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("keeps a failed snapshot task read in its own workspace through later events", async () => {
+    const readFailure = new Error("task store unavailable");
+    const listTasks = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-b") throw readFailure;
+      return [createTaskCardFixture({ id: "task-a" })];
+    });
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    const beforeGap = [createTaskCardFixture({ id: "deleted-during-gap" })];
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: beforeGap });
+
+    await expect(sync.reconcileStreamSnapshot(["/repo-a", "/repo-b"])).resolves.toEqual({
+      taskIdsByRepo: new Map([["/repo-a", ["task-a"]]]),
+      failures: new Map([["/repo-b", readFailure]]),
+    });
+    // The list from before the gap cannot take a later change as current.
+    await sync.reconcileExternalEvent(
+      boardEvent("/repo-b", [createTaskCardFixture({ id: "task-b" })]),
+      eventCursor(),
+    );
+
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))).toMatchObject({
+      status: "error",
+      error: readFailure,
+      data: { tasks: beforeGap },
+    });
+  });
+
+  test("keeps applying events to a current list after a failed manual refresh", async () => {
+    const { queryClient, sync } = createSync(
+      createPorts({
+        listTasks: async () => {
+          throw new Error("task store busy");
+        },
+      }),
+    );
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+      tasks: [createTaskCardFixture({ id: "task-1", title: "Before" })],
+    });
+    await expect(sync.refreshManually("/repo")).rejects.toThrow("task store busy");
+
+    const changed = createTaskCardFixture({ id: "task-1", title: "Changed" });
+    await sync.reconcileExternalEvent(boardEvent("/repo", [changed]), eventCursor());
+
+    expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo"))?.tasks).toEqual([
+      changed,
+    ]);
+  });
+
+  test("reads the lists of every open workspace again after a retention change", async () => {
+    const listTasks = mock(async (repoPath: string) => [
+      createTaskCardFixture({ id: `${repoPath}-task` }),
+    ]);
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    for (const repoPath of ["/repo-a", "/repo-b", "/closed"]) {
+      queryClient.setQueryData(taskQueryKeys.repoData(repoPath), { tasks: [] });
+    }
+
+    await sync.refreshAfterTaskRetentionChange(["/repo-a", "/repo-b"]);
+
+    expect(listTasks.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+    expect(
+      queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-b"))?.tasks,
+    ).toEqual([createTaskCardFixture({ id: "/repo-b-task" })]);
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/closed"))?.isInvalidated).toBe(true);
+  });
+
+  test("drops the task lists and documents of a released workspace", async () => {
+    const { queryClient, sync } = createSync(createPorts());
+    queryClient.setQueryData(taskQueryKeys.repoData("/closed"), { tasks: [] });
+    queryClient.setQueryData(taskQueryKeys.ids("/closed"), ["task-1"]);
+    queryClient.setQueryData(documentQueryKeys.plan("/closed", "task-1"), {
+      markdown: "# Plan",
+      updatedAt: null,
+    });
+    queryClient.setQueryData(taskQueryKeys.repoData("/open"), { tasks: [] });
+
+    await sync.releaseWorkspace("/closed");
+
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/closed"))).toBeUndefined();
+    expect(queryClient.getQueryState(taskQueryKeys.ids("/closed"))).toBeUndefined();
+    expect(queryClient.getQueryState(documentQueryKeys.plan("/closed", "task-1"))).toBeUndefined();
+    expect(queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/open"))).toEqual({
+      tasks: [],
+    });
+
+    await sync.reconcileExternalEvent(
+      boardEvent("/closed", [createTaskCardFixture({ id: "task-1" })]),
+      eventCursor(),
+    );
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/closed"))).toBeUndefined();
+  });
+
+  test("releases a workspace at once while its task read is pending", async () => {
+    const pendingRead = deferred<TaskCard[]>();
+    const readStarted = deferred<void>();
+    const listTasks = mock(async () => {
+      readStarted.resolve();
+      return pendingRead.promise;
+    });
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    const load = sync.loadWorkspace("/closed").then(
+      () => null,
+      (error: Error) => error,
+    );
+    await readStarted.promise;
+    // Queued behind the pending read.
+    const snapshot = sync.reconcileStreamSnapshot(["/closed"]);
+
+    await sync.releaseWorkspace("/closed");
+
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/closed"))).toBeUndefined();
+    expect(await load).toBeInstanceOf(CancelledError);
+    // The release superseded the queued snapshot read, so it reports neither tasks nor a failure.
+    expect(await snapshot).toEqual({ taskIdsByRepo: new Map(), failures: new Map() });
+
+    pendingRead.resolve([createTaskCardFixture({ id: "late" })]);
+    await Promise.resolve();
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/closed"))).toBeUndefined();
+
+    // A load requested after the release reads the workspace again.
+    await sync.loadWorkspace("/closed");
+    expect(listTasks).toHaveBeenCalledTimes(2);
+  });
+
+  test("keeps the list of a failed retention reload incomplete through later events", async () => {
+    const tasks = [createTaskCardFixture({ id: "open-task", title: "Before" })];
+    let failReads = true;
+    const listTasks = mock(async () => {
+      if (failReads) throw new Error("task store busy");
+      return tasks;
+    });
+    const { queryClient, sync } = createSync(createPorts({ listTasks }));
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo"), { tasks });
+
+    await sync.refreshAfterTaskRetentionChange(["/repo"]);
+    failReads = false;
+    await sync.reconcileExternalEvent(
+      boardEvent("/repo", [createTaskCardFixture({ id: "open-task", title: "Edited" })]),
+      eventCursor(),
+    );
+
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))).toMatchObject({
+      status: "error",
+      data: { tasks },
+    });
+    await sync.loadWorkspace("/repo");
+    expect(listTasks).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo"))?.status).toBe("success");
   });
 });

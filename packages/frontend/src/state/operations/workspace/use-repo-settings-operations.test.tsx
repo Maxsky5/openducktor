@@ -1249,6 +1249,52 @@ describe("use-repo-settings-operations", () => {
     }
   });
 
+  test("reads the task lists of every open workspace after retention settings change", async () => {
+    const openWorkspaces = [
+      createWorkspaceRecord("/repo-a"),
+      { ...createWorkspaceRecord("/repo-b"), isActive: false },
+    ];
+    const normalizedSnapshot = createSettingsSnapshotFixture({ kanban: { doneVisibleDays: 7 } });
+    const workspaceSaveSettingsSnapshot = mock(async () => savedResult(openWorkspaces));
+    const workspaceGetSettingsSnapshot = mock(async () => normalizedSnapshot);
+    const tasksList = mock(async (_repoPath: string) => []);
+    const original = {
+      tasksList: host.tasksList,
+      workspaceSaveSettingsSnapshot: host.workspaceSaveSettingsSnapshot,
+      workspaceGetSettingsSnapshot: host.workspaceGetSettingsSnapshot,
+    };
+    host.tasksList = tasksList;
+    host.workspaceSaveSettingsSnapshot = workspaceSaveSettingsSnapshot;
+    host.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
+    const harness = createHookHarness({
+      activeWorkspace: createWorkspaceRecord(),
+      applyWorkspaceRecords: mock(() => {}),
+      applyWorkspaceRecord: mock(() => {}),
+    });
+
+    try {
+      await harness.mount();
+      const queryClient = harness.getQueryClient();
+      queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), createSettingsSnapshot());
+      queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
+
+      await expect(
+        harness.getLatest().saveSettingsSnapshot(normalizedSnapshot),
+      ).resolves.toMatchObject({ type: "saved" });
+
+      expect(tasksList.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))).toMatchObject({
+        isInvalidated: false,
+        status: "success",
+      });
+    } finally {
+      await harness.unmount();
+      host.tasksList = original.tasksList;
+      host.workspaceSaveSettingsSnapshot = original.workspaceSaveSettingsSnapshot;
+      host.workspaceGetSettingsSnapshot = original.workspaceGetSettingsSnapshot;
+    }
+  });
+
   test("refreshes the rebound active repository after retention settings change", async () => {
     const taskRefreshFailure = new Error("task refresh failed");
     const reboundWorkspace = {

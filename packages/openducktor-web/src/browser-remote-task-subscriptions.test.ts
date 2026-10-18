@@ -132,11 +132,13 @@ test("restores task delivery after disconnect during acknowledgement and after i
       if (event.kind === "external_task_created" && event.taskSnapshot.title === "After foreground")
         updateApplied.resolve();
     },
-    reconcileStreamSnapshot: async () => [],
+    reconcileStreamSnapshot: async () => ({ taskIdsByRepo: new Map(), failures: new Map() }),
+    releaseWorkspace: async () => {},
   };
   const agentSessionViewSync: AgentSessionViewSync = {
     cancelReads: () => {},
-    reconcileStreamSnapshot: async () => {},
+    releaseWorkspace: async () => {},
+    reconcileStreamSnapshot: async () => new Map(),
     completeExternalEvents: async (changes) => {
       await Promise.all(changes);
     },
@@ -146,8 +148,9 @@ test("restores task delivery after disconnect during acknowledgement and after i
     transport: subscriptions,
     taskViewSync,
     agentSessionViewSync,
-    getActiveRepoPath: () => null,
+    getOpenRepoPaths: () => [],
     onDegraded: () => {},
+    onWorkspaceFailures: () => {},
   });
   let started: Promise<void> | null = null;
   try {

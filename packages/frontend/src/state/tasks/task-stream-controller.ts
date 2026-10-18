@@ -28,24 +28,30 @@ type OwnedSubscription = {
 export type TaskStreamController = {
   start(): Promise<void>;
   stop(): Promise<void>;
+  /** Drop the task data of a workspace that closed. */
+  releaseWorkspace(repoPath: string): Promise<void>;
 };
 
 export const createTaskStreamController = ({
   transport,
   taskViewSync,
   agentSessionViewSync,
-  getActiveRepoPath,
+  getOpenRepoPaths,
   onDegraded,
   onSnapshotFinished,
   onSnapshotStarted,
+  onWorkspaceFailures,
 }: {
   transport: TaskStreamTransport;
   taskViewSync: TaskViewSync;
   agentSessionViewSync: AgentSessionViewSync;
-  getActiveRepoPath: () => string | null;
+  /** The workspaces that a snapshot reconciles. */
+  getOpenRepoPaths: () => readonly string[];
   onDegraded: (cause: unknown) => void;
-  onSnapshotFinished?: (repoPath: string | null, succeeded: boolean) => void;
-  onSnapshotStarted?: (repoPath: string | null) => void;
+  onSnapshotFinished?: (repoPath: string, succeeded: boolean) => void;
+  onSnapshotStarted?: (repoPath: string) => void;
+  /** Open workspaces that a snapshot could not reconcile. The stream and other workspaces are current. */
+  onWorkspaceFailures: (failures: ReadonlyMap<string, unknown>) => void;
 }): TaskStreamController => {
   let current: OwnedSubscription | null = null;
   let acquiring: OwnedSubscription | null = null;
@@ -166,9 +172,9 @@ export const createTaskStreamController = ({
         for (const frame of frames) {
           // A replacement snapshot supersedes the rest of the run.
           if (!isActive(owner, frameGeneration)) return;
-          // Task views apply in event order and read the active workspace when each event starts.
+          // Task views apply in event order.
           // react-doctor-disable-next-line react-doctor/async-await-in-loop
-          await taskViewSync.reconcileExternalEvent(frame.event, getActiveRepoPath(), frame.cursor);
+          await taskViewSync.reconcileExternalEvent(frame.event, frame.cursor);
         }
       })(),
       agentSessionViewSync.completeExternalEvents(
@@ -196,23 +202,48 @@ export const createTaskStreamController = ({
     frame: Extract<TaskStreamFrame, { type: "snapshot_required" }>,
     frameGeneration: number,
   ): Promise<boolean> => {
-    const activeRepoPath = getActiveRepoPath();
-    onSnapshotStarted?.(activeRepoPath);
+    const repoPaths = getOpenRepoPaths();
+    for (const repoPath of repoPaths) onSnapshotStarted?.(repoPath);
     let succeeded = false;
     try {
-      const taskIds = await taskViewSync.reconcileStreamSnapshot(activeRepoPath);
+      const tasks = await taskViewSync.reconcileStreamSnapshot(repoPaths);
       // A newer snapshot supersedes this one before it reconciles session lists.
       if (!isActive(owner, frameGeneration)) return false;
-      await agentSessionViewSync.reconcileStreamSnapshot(activeRepoPath, taskIds, () =>
-        isActive(owner, frameGeneration),
+      // A workspace that closes during the snapshot was released. Its sessions stay released.
+      const sessionFailures = await agentSessionViewSync.reconcileStreamSnapshot(
+        tasks.taskIdsByRepo,
+        () => isActive(owner, frameGeneration),
       );
       succeeded = true;
+      if (isActive(owner, frameGeneration)) {
+        // One workspace that fails does not stop the snapshot of the other workspaces.
+        reportWorkspaceFailures(new Map([...tasks.failures, ...sessionFailures]));
+      }
     } finally {
-      if (isActive(owner, frameGeneration)) onSnapshotFinished?.(activeRepoPath, succeeded);
+      if (isActive(owner, frameGeneration)) {
+        const openRepoPaths = new Set(getOpenRepoPaths());
+        // Only a failed snapshot recovers the stream. A workspace that failed on its own loads
+        // again when it becomes active.
+        for (const repoPath of repoPaths) {
+          if (openRepoPaths.has(repoPath)) onSnapshotFinished?.(repoPath, succeeded);
+        }
+      }
     }
     if (!isActive(owner, frameGeneration)) return false;
     processedCursor = frame.cursor;
     return acknowledge(owner, frame.cursor, frameGeneration);
+  };
+
+  /** Report the failures of the workspaces that are still open. */
+  const reportWorkspaceFailures = (failures: ReadonlyMap<string, unknown>): void => {
+    const openRepoPaths = new Set(getOpenRepoPaths());
+    const failed = new Map([...failures].filter(([repoPath]) => openRepoPaths.has(repoPath)));
+    if (failed.size === 0) return;
+    try {
+      onWorkspaceFailures(failed);
+    } catch {
+      // Reporting must not fail the snapshot or start a stream recovery.
+    }
   };
 
   const nextChange = (after: TaskEventCursor | null): ChangeFrame | null => {
@@ -507,6 +538,12 @@ export const createTaskStreamController = ({
         startPromise = acquire(acknowledgedCursor).then(() => drain());
       }
       return startPromise;
+    },
+    releaseWorkspace: async (repoPath): Promise<void> => {
+      await Promise.all([
+        taskViewSync.releaseWorkspace(repoPath),
+        agentSessionViewSync.releaseWorkspace(repoPath),
+      ]);
     },
     stop: (): Promise<void> => {
       if (!stopPromise) {

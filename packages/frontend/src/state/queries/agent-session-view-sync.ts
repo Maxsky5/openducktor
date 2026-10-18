@@ -9,6 +9,7 @@ import {
   cancelAgentSessionListReads,
   loadAgentSessionListsFromQuery,
   readAgentSessionOwnership,
+  releaseAgentSessionListQueries,
   removeAgentSessionListQueries,
   refreshAgentSessionLists,
 } from "./agent-sessions";
@@ -35,11 +36,17 @@ export type AgentSessionViewSync = {
   ) => Promise<void>;
   /** Supersede the session work of a replaced stream when a replacement snapshot arrives. */
   cancelReads: () => void;
+  /**
+   * Reconcile the session lists of each open workspace with the task IDs that its snapshot read.
+   * Returns the cause for each workspace whose own reads failed. A failed read of the observed
+   * lists fails the whole snapshot.
+   */
   reconcileStreamSnapshot: (
-    activeRepoPath: string | null,
-    taskIds: string[],
+    taskIdsByRepo: ReadonlyMap<string, string[]>,
     isCurrentOwner: () => boolean,
-  ) => Promise<void>;
+  ) => Promise<ReadonlyMap<string, unknown>>;
+  /** Drop the cached lists and the live refresh state of a workspace that closed. */
+  releaseWorkspace: (repoPath: string) => Promise<void>;
 };
 
 export const createAgentSessionViewSync = ({
@@ -48,6 +55,8 @@ export const createAgentSessionViewSync = ({
   listSessionTaskIds,
   removeTaskSessions,
   refreshLiveSessions,
+  isWorkspaceOpen,
+  isWorkspaceActive,
 }: {
   queryClient: QueryClient;
   readPort: AgentSessionViewReadPort;
@@ -55,6 +64,10 @@ export const createAgentSessionViewSync = ({
   listSessionTaskIds: (repoPath: string) => string[];
   removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
   refreshLiveSessions: (repoPath: string) => Promise<void>;
+  /** Only an open workspace starts session reads or a live refresh. */
+  isWorkspaceOpen: (repoPath: string) => boolean;
+  /** The agent orchestrator reads the lists of the active workspace from the cache. */
+  isWorkspaceActive: (repoPath: string) => boolean;
 }): AgentSessionViewSync => {
   const batch = getAgentSessionListBatch(queryClient);
   const liveRefreshes = new Map<string, LiveRefresh>();
@@ -87,6 +100,7 @@ export const createAgentSessionViewSync = ({
 
   return {
     admitExternalEvent: async (event) => {
+      const workspaceEpoch = batch.workspaceEpoch(event.repoPath);
       const { refreshedTaskIds, removedTaskIds } = toTaskChanges(event);
       // An event that keeps a task proves that the task exists.
       batch.markExisting(event.repoPath, refreshedTaskIds);
@@ -106,8 +120,16 @@ export const createAgentSessionViewSync = ({
         ...refreshedTaskIds,
         ...failedWithDeletion,
       ]);
-      const [, changedTaskIds] = await Promise.all([removal, refresh]);
-      return { repoPath: event.repoPath, changedTaskIds };
+      try {
+        const [, changedTaskIds] = await Promise.all([removal, refresh]);
+        return { repoPath: event.repoPath, changedTaskIds };
+      } catch (error) {
+        // The release of a workspace that closed cancelled these reads. Their result does not matter.
+        if (batch.workspaceEpoch(event.repoPath) !== workspaceEpoch) {
+          return { repoPath: event.repoPath, changedTaskIds: [] };
+        }
+        throw error;
+      }
     },
     completeExternalEvents: async (changes, isCurrentOwner) => {
       const results = await Promise.all(changes);
@@ -115,7 +137,7 @@ export const createAgentSessionViewSync = ({
       if (!isCurrentOwner()) return;
       const changedTaskIdsByRepo = new Map<string, Set<string>>();
       for (const { repoPath, changedTaskIds } of results) {
-        if (changedTaskIds.length === 0) continue;
+        if (changedTaskIds.length === 0 || !isWorkspaceOpen(repoPath)) continue;
         const repoTaskIds = changedTaskIdsByRepo.get(repoPath) ?? new Set<string>();
         for (const taskId of changedTaskIds) repoTaskIds.add(taskId);
         changedTaskIdsByRepo.set(repoPath, repoTaskIds);
@@ -129,38 +151,63 @@ export const createAgentSessionViewSync = ({
     cancelReads: () => {
       void cancelAgentSessionListReads(queryClient);
     },
-    reconcileStreamSnapshot: async (activeRepoPath, taskIds, isCurrentOwner) => {
-      const taskIdSet = new Set(taskIds);
-      // The Kanban list hides older done tasks, so a task that it omits can still exist.
-      const unlistedTaskIds = activeRepoPath
-        ? [
-            ...new Set([
-              ...cachedAgentSessionTaskIds(queryClient, activeRepoPath),
-              ...listSessionTaskIds(activeRepoPath),
-            ]),
-          ].filter((taskId) => !taskIdSet.has(taskId))
-        : [];
+    reconcileStreamSnapshot: async (taskIdsByRepo, isCurrentOwner) => {
+      const failures = new Map<string, unknown>();
+      /**
+       * Run the work of each open workspace. Keep the workspaces whose work succeeded, and record
+       * the cause of each other workspace. A release during the work supersedes its result.
+       */
+      const runForOpenRepos = async <Repo extends { repoPath: string }, Result>(
+        repos: Repo[],
+        work: (repo: Repo) => Promise<Result>,
+      ): Promise<Result[]> => {
+        const started = repos
+          .filter(({ repoPath }) => isWorkspaceOpen(repoPath))
+          .map((repo) => ({ repo, workspaceEpoch: batch.workspaceEpoch(repo.repoPath) }));
+        const results = await Promise.allSettled(started.map(({ repo }) => work(repo)));
+        return results.flatMap((result, index) => {
+          const { repo, workspaceEpoch } = started[index]!;
+          if (batch.workspaceEpoch(repo.repoPath) !== workspaceEpoch) return [];
+          if (result.status === "fulfilled") return [result.value];
+          failures.set(repo.repoPath, result.reason);
+          return [];
+        });
+      };
+      const snapshotRepos = [...taskIdsByRepo].map(([repoPath, taskIds]) => {
+        const taskIdSet = new Set(taskIds);
+        // The Kanban list hides older done tasks, so a task that it omits can still exist.
+        const unlistedTaskIds = [
+          ...new Set([
+            ...cachedAgentSessionTaskIds(queryClient, repoPath),
+            ...listSessionTaskIds(repoPath),
+          ]),
+        ].filter((taskId) => !taskIdSet.has(taskId));
+        return { repoPath, taskIds, unlistedTaskIds };
+      });
       await cancelAgentSessionListReads(queryClient);
       const epoch = batch.epoch();
       // Confirm deletions before the lists read again, so a view cannot read a deleted task.
-      const existingTaskIds = new Set(
-        activeRepoPath && unlistedTaskIds.length > 0
-          ? await queryClient.fetchQuery({
-              ...repoTaskIdsQueryOptions(activeRepoPath, readPort),
-              staleTime: 0,
-            })
-          : [],
-      );
+      const confirmed = await runForOpenRepos(snapshotRepos, async (repo) => ({
+        ...repo,
+        existingTaskIds: new Set(
+          repo.unlistedTaskIds.length > 0
+            ? await queryClient.fetchQuery({
+                ...repoTaskIdsQueryOptions(repo.repoPath, readPort),
+                staleTime: 0,
+              })
+            : [],
+        ),
+      }));
       // A newer snapshot or a stopped stream owns the lists. The stream ignores this result.
-      if (batch.epoch() !== epoch || !isCurrentOwner()) return;
-      const deletedTaskIds = unlistedTaskIds.filter((taskId) => !existingTaskIds.has(taskId));
-      let removal: Promise<void> | undefined;
-      if (activeRepoPath) {
-        batch.markExisting(activeRepoPath, [...taskIds, ...existingTaskIds]);
+      if (batch.epoch() !== epoch || !isCurrentOwner()) return failures;
+      const removals = confirmed.map(({ repoPath, taskIds, unlistedTaskIds, existingTaskIds }) => {
+        const deletedTaskIds = unlistedTaskIds.filter((taskId) => !existingTaskIds.has(taskId));
+        batch.markExisting(repoPath, [...taskIds, ...existingTaskIds]);
         // A mounted view of a deleted task keeps its query and receives the empty list.
-        removal = removeAgentSessionListQueries(queryClient, activeRepoPath, deletedTaskIds);
-        removeTaskSessions(activeRepoPath, deletedTaskIds);
-      }
+        const removal = removeAgentSessionListQueries(queryClient, repoPath, deletedTaskIds);
+        removeTaskSessions(repoPath, deletedTaskIds);
+        return removal;
+      });
       // Mounted views keep their queries, which read again in place. Every other list reloads
       // when it is next read.
       void queryClient.invalidateQueries({
@@ -171,22 +218,31 @@ export const createAgentSessionViewSync = ({
         queryKey: agentSessionQueryKeys.all,
         predicate: (query) => query.getObserversCount() === 0,
       });
-      await Promise.all([
-        removal,
+      const [, , loaded] = await Promise.all([
+        Promise.all(removals),
         queryClient.refetchQueries(
           { queryKey: agentSessionQueryKeys.all, type: "active" },
           { throwOnError: true, cancelRefetch: false },
         ),
-        activeRepoPath
-          ? loadAgentSessionListsFromQuery(queryClient, activeRepoPath, taskIds, {
+        runForOpenRepos(confirmed, async (repo) => {
+          // Views read the lists that they observe. The active workspace reads all of its lists.
+          if (isWorkspaceActive(repo.repoPath)) {
+            await loadAgentSessionListsFromQuery(queryClient, repo.repoPath, repo.taskIds, {
               forceFresh: true,
               readPort,
-            })
-          : undefined,
+            });
+          }
+          return repo;
+        }),
       ]);
-      if (activeRepoPath && batch.epoch() === epoch && isCurrentOwner()) {
-        await startLiveRefresh(activeRepoPath);
+      if (batch.epoch() === epoch && isCurrentOwner()) {
+        await runForOpenRepos(loaded, ({ repoPath }) => startLiveRefresh(repoPath));
       }
+      return failures;
+    },
+    releaseWorkspace: (repoPath) => {
+      liveRefreshes.delete(repoPath);
+      return releaseAgentSessionListQueries(queryClient, repoPath);
     },
   };
 };

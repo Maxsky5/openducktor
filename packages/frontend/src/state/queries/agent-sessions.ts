@@ -31,8 +31,9 @@ export const normalizeAgentSessionTaskIds = (taskIds: string[]): string[] =>
 
 export const agentSessionQueryKeys = {
   all: ["agent-sessions"] as const,
+  repoLists: (repoPath: string) => [...agentSessionQueryKeys.all, "list", repoPath] as const,
   list: (repoPath: string, taskId: string) =>
-    [...agentSessionQueryKeys.all, "list", repoPath, taskId] as const,
+    [...agentSessionQueryKeys.repoLists(repoPath), taskId] as const,
 };
 
 /** A committed host update replaces the full task list and the read in progress for it. */
@@ -114,6 +115,7 @@ const readCurrentList = (
   const batch = getAgentSessionListBatch(queryClient);
   const queryKey = agentSessionQueryKeys.list(repoPath, taskId);
   const epoch = batch.epoch();
+  const workspaceEpoch = batch.workspaceEpoch(repoPath);
   const readCurrent = async (): Promise<AgentSessionRecord[]> => {
     for (let force = false; ; force = true) {
       let records: AgentSessionRecord[];
@@ -129,7 +131,10 @@ const readCurrentList = (
         }
         throw error;
       }
-      if (batch.epoch() !== epoch) throw new CancelledError({ revert: true });
+      // A stream snapshot or the release of a closed workspace supersedes this read.
+      if (batch.epoch() !== epoch || batch.workspaceEpoch(repoPath) !== workspaceEpoch) {
+        throw new CancelledError({ revert: true });
+      }
       if (batch.isDeleted(repoPath, taskId)) return [];
       if (batch.isCurrent(repoPath, taskId, batch.revision(repoPath, taskId))) {
         // A committed update stays stored over an older read result.
@@ -244,6 +249,18 @@ export const removeAgentSessionListQueries = async (
       queryClient.removeQueries({ queryKey, exact: true });
     }
   }
+  await cancelled;
+};
+
+/** Drop the cached lists and the pending reads of a workspace that closed. */
+export const releaseAgentSessionListQueries = async (
+  queryClient: QueryClient,
+  repoPath: string,
+): Promise<void> => {
+  const queryKey = agentSessionQueryKeys.repoLists(repoPath);
+  const cancelled = queryClient.cancelQueries({ queryKey });
+  getAgentSessionListBatch(queryClient).release(repoPath);
+  queryClient.removeQueries({ queryKey });
   await cancelled;
 };
 

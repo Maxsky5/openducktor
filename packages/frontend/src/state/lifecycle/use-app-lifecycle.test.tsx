@@ -1,15 +1,23 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskStoreCheck } from "@openducktor/contracts";
-import type { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
-import { StrictMode, useMemo } from "react";
+import { type PropsWithChildren, StrictMode, useMemo } from "react";
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
-import { taskQueryKeys } from "@/state/queries/tasks";
-import type { TaskViewSync } from "@/state/queries/task-view-sync";
+import { type RepoTaskData, taskQueryKeys } from "@/state/queries/tasks";
+import {
+  createTaskViewSync,
+  type TaskSnapshotResult,
+  type TaskViewSync,
+} from "@/state/queries/task-view-sync";
+import { boardEvent, eventCursor } from "@/state/queries/task-view-sync.test-support";
 import { createTaskStreamController } from "@/state/tasks/task-stream-controller";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createTaskStoreCheckFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createTaskCardFixture,
+  createTaskStoreCheckFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { TaskStreamControllerFactory } from "./use-app-lifecycle";
 import { useAppLifecycle } from "./use-app-lifecycle";
 
@@ -21,6 +29,7 @@ const makeTaskStoreCheck = (): TaskStoreCheck => createTaskStoreCheckFixture();
 
 const lifecycleArgs = {
   activeWorkspace: null,
+  openWorkspaces: [],
   refreshBranches: async () => {},
   refreshTaskStoreCheckForRepo: async () => makeTaskStoreCheck(),
   loadWorkspaceTasks: async () => {},
@@ -33,7 +42,8 @@ const taskViewSync: TaskViewSync = {
   refreshAfterTaskRetentionChange: async () => {},
   refreshDocumentsForTasks: async () => {},
   reconcileExternalEvent: async () => {},
-  reconcileStreamSnapshot: async () => [],
+  reconcileStreamSnapshot: async () => ({ taskIdsByRepo: new Map(), failures: new Map() }),
+  releaseWorkspace: async () => {},
 };
 
 describe("useAppLifecycle task stream", () => {
@@ -49,7 +59,11 @@ describe("useAppLifecycle task stream", () => {
       },
       refreshBranches,
       refreshTaskStoreCheckForRepo,
-      taskStreamControllerFactory: () => ({ start: async () => {}, stop: async () => {} }),
+      taskStreamControllerFactory: () => ({
+        start: async () => {},
+        stop: async () => {},
+        releaseWorkspace: async () => {},
+      }),
     };
     const harness = createHookHarness(
       (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
@@ -73,13 +87,10 @@ describe("useAppLifecycle task stream", () => {
   });
   test("loads tasks after switching to a repository the stream has not claimed", async () => {
     const loadWorkspaceTasks = mock(async () => {});
-    const factory = ({
-      onSnapshotStarted,
-    }: {
-      onSnapshotStarted?: (repoPath: string | null) => void;
-    }) => ({
-      start: async () => onSnapshotStarted?.("/repo-a"),
+    const factory: TaskStreamControllerFactory = ({ onSnapshotStarted }) => ({
+      start: async () => onSnapshotStarted("/repo-a"),
       stop: async () => {},
+      releaseWorkspace: async () => {},
     });
     const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
       ...lifecycleArgs,
@@ -121,9 +132,12 @@ describe("useAppLifecycle task stream", () => {
 
   test("loads tasks when a repository becomes active after an empty stream snapshot", async () => {
     const loadWorkspaceTasks = mock(async () => {});
-    const factory: TaskStreamControllerFactory = ({ onSnapshotStarted }) => ({
-      start: async () => onSnapshotStarted(null),
+    const factory: TaskStreamControllerFactory = ({ getOpenRepoPaths, onSnapshotStarted }) => ({
+      start: async () => {
+        for (const repoPath of getOpenRepoPaths()) onSnapshotStarted(repoPath);
+      },
       stop: async () => {},
+      releaseWorkspace: async () => {},
     });
     const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
       ...lifecycleArgs,
@@ -174,6 +188,7 @@ describe("useAppLifecycle task stream", () => {
           onSnapshotFinished("/repo-a", true);
         },
         stop: async () => {},
+        releaseWorkspace: async () => {},
       };
     };
     const activeWorkspace = {
@@ -219,6 +234,7 @@ describe("useAppLifecycle task stream", () => {
     const factory: TaskStreamControllerFactory = ({ onSnapshotStarted }) => ({
       start: async () => onSnapshotStarted("/repo"),
       stop: async () => {},
+      releaseWorkspace: async () => {},
     });
     const args = {
       ...lifecycleArgs,
@@ -249,7 +265,7 @@ describe("useAppLifecycle task stream", () => {
 
   test("does not add a repository retry when initial snapshot recovery fails", async () => {
     const snapshotFailure = new Error("snapshot failed");
-    const reconcileStreamSnapshot = mock(async (): Promise<string[]> => {
+    const reconcileStreamSnapshot = mock(async (): Promise<TaskSnapshotResult> => {
       throw snapshotFailure;
     });
     const loadWorkspaceTasks = mock(async () => {});
@@ -273,10 +289,11 @@ describe("useAppLifecycle task stream", () => {
       ),
     );
     const factory: TaskStreamControllerFactory = ({
-      getActiveRepoPath,
+      getOpenRepoPaths,
       onDegraded,
       onSnapshotFinished,
       onSnapshotStarted,
+      onWorkspaceFailures,
     }) =>
       createTaskStreamController({
         transport: {
@@ -304,12 +321,14 @@ describe("useAppLifecycle task stream", () => {
           }),
           completeExternalEvents: async () => {},
           cancelReads: () => {},
-          reconcileStreamSnapshot: async () => {},
+          reconcileStreamSnapshot: async () => new Map(),
+          releaseWorkspace: async () => {},
         },
-        getActiveRepoPath,
+        getOpenRepoPaths,
         onDegraded,
         onSnapshotFinished,
         onSnapshotStarted,
+        onWorkspaceFailures,
       });
     const args = {
       ...lifecycleArgs,
@@ -344,6 +363,7 @@ describe("useAppLifecycle task stream", () => {
         throw streamFailure;
       },
       stop: async () => {},
+      releaseWorkspace: async () => {},
     });
     const args = {
       ...lifecycleArgs,
@@ -374,7 +394,7 @@ describe("useAppLifecycle task stream", () => {
     const factory = mock<TaskStreamControllerFactory>(({ queryClient }) => {
       factoryState.queryClient = queryClient;
       queryClient.setQueryData(["task-stream-factory"], "isolated");
-      return { start, stop: unsubscribe };
+      return { start, stop: unsubscribe, releaseWorkspace: async () => {} };
     });
     const args = { ...lifecycleArgs, taskStreamControllerFactory: factory };
 
@@ -393,7 +413,7 @@ describe("useAppLifecycle task stream", () => {
     expect(factoryState.queryClient?.getQueryData<string>(["task-stream-factory"])).toBe(
       "isolated",
     );
-    expect(factoryInput?.getActiveRepoPath()).toBeNull();
+    expect(factoryInput?.getOpenRepoPaths()).toEqual([]);
     expect(start).toHaveBeenCalledTimes(1);
 
     await harness.unmount();
@@ -403,7 +423,11 @@ describe("useAppLifecycle task stream", () => {
   test("reports identical degradation episodes after controller recovery", async () => {
     const start = mock(async () => {});
     const stop = mock(async () => {});
-    const factory = mock<TaskStreamControllerFactory>(() => ({ start, stop }));
+    const factory = mock<TaskStreamControllerFactory>(() => ({
+      start,
+      stop,
+      releaseWorkspace: async () => {},
+    }));
     const toastError = mock(() => "task-stream-toast");
     const originalToastError = toast.error;
     toast.error = toastError;
@@ -431,6 +455,82 @@ describe("useAppLifecycle task stream", () => {
     }
   });
 
+  test("gives the stream controller the open workspaces and the active one", async () => {
+    const factory = mock<TaskStreamControllerFactory>(() => ({
+      start: async () => {},
+      stop: async () => {},
+      releaseWorkspace: async () => {},
+    }));
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: { workspaceId: "workspace-a", workspaceName: "A", repoPath: "/repo-a" },
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      taskStreamControllerFactory: factory,
+    };
+    const harness = createHookHarness(
+      (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
+      initialArgs,
+      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+    );
+
+    try {
+      await harness.mount();
+      const input = factory.mock.calls[0]?.[0];
+      if (!input) throw new Error("Expected a task stream controller.");
+      expect(input.getOpenRepoPaths()).toEqual(["/repo-a", "/repo-b"]);
+      expect(input.getActiveRepoPath()).toBe("/repo-a");
+
+      await harness.update({
+        ...initialArgs,
+        activeWorkspace: { workspaceId: "workspace-b", workspaceName: "B", repoPath: "/repo-b" },
+        openWorkspaces: [
+          { repoPath: "/repo-a", isActive: false },
+          { repoPath: "/repo-b", isActive: true },
+        ],
+      });
+      expect(input.getActiveRepoPath()).toBe("/repo-b");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("names the workspaces that a snapshot could not refresh", async () => {
+    const factory = mock<TaskStreamControllerFactory>(() => ({
+      start: async () => {},
+      stop: async () => {},
+      releaseWorkspace: async () => {},
+    }));
+    const toastError = mock<typeof toast.error>(() => "toast");
+    const originalToastError = toast.error;
+    toast.error = toastError;
+    const args = {
+      ...lifecycleArgs,
+      activeWorkspace: { workspaceId: "workspace-a", workspaceName: "A", repoPath: "/repo-a" },
+      taskStreamControllerFactory: factory,
+    };
+    const harness = createHookHarness(() => useAppLifecycle(args), undefined, {
+      wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
+    });
+
+    try {
+      await harness.mount();
+      const input = factory.mock.calls[0]?.[0];
+      if (!input) throw new Error("Expected a task stream controller.");
+
+      input.onWorkspaceFailures(new Map([["/repo-b", new Error("Task not readable")]]));
+
+      expect(toastError).toHaveBeenCalledWith("Workspaces did not refresh", {
+        description: "/repo-b: Task not readable",
+      });
+    } finally {
+      toast.error = originalToastError;
+      await harness.unmount();
+    }
+  });
+
   test("StrictMode cleans up subscriptions acquired after lifecycle cleanup", async () => {
     const pendingSubscriptions: Array<{
       resolve: (value: {
@@ -440,7 +540,11 @@ describe("useAppLifecycle task stream", () => {
       }) => void;
       unsubscribe: ReturnType<typeof mock>;
     }> = [];
-    const factory: TaskStreamControllerFactory = ({ getActiveRepoPath, onDegraded }) =>
+    const factory: TaskStreamControllerFactory = ({
+      getOpenRepoPaths,
+      onDegraded,
+      onWorkspaceFailures,
+    }) =>
       createTaskStreamController({
         transport: {
           subscribeTaskStream: async () =>
@@ -461,10 +565,12 @@ describe("useAppLifecycle task stream", () => {
           }),
           completeExternalEvents: async () => {},
           cancelReads: () => {},
-          reconcileStreamSnapshot: async () => {},
+          reconcileStreamSnapshot: async () => new Map(),
+          releaseWorkspace: async () => {},
         },
-        getActiveRepoPath,
+        getOpenRepoPaths,
         onDegraded,
+        onWorkspaceFailures,
       });
     const Harness = () => {
       const lifecycle = useMemo(
@@ -501,5 +607,340 @@ describe("useAppLifecycle task stream", () => {
       },
       { timeout: 1000 },
     );
+  });
+});
+
+describe("useAppLifecycle open workspaces", () => {
+  const workspaceA = { workspaceId: "workspace-a", workspaceName: "A", repoPath: "/repo-a" };
+  const workspaceB = { workspaceId: "workspace-b", workspaceName: "B", repoPath: "/repo-b" };
+  const idleController: TaskStreamControllerFactory = () => ({
+    start: async () => {},
+    stop: async () => {},
+    releaseWorkspace: async () => {},
+  });
+
+  const renderLifecycle = (
+    queryClient: QueryClient,
+    initialArgs: Parameters<typeof useAppLifecycle>[0],
+  ) =>
+    createHookHarness(
+      (args: Parameters<typeof useAppLifecycle>[0]) => useAppLifecycle(args),
+      initialArgs,
+      {
+        wrapper: ({ children }: PropsWithChildren) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+  test("keeps an inactive open workspace current past its cache time and shows it at once", async () => {
+    // Without an observer, an unused list leaves the cache at once.
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const tasksList = mock(async (repoPath: string) => [
+      createTaskCardFixture({ id: `${repoPath}-task`, title: "Before" }),
+    ]);
+    const taskViewSync = createTaskViewSync({
+      queryClient,
+      ports: {
+        listTasks: tasksList,
+        loadFreshDocument: async () => ({ markdown: "", updatedAt: null }),
+      },
+    });
+    // The task store check of the first active workspace does not finish in this test.
+    const refreshTaskStoreCheckForRepo = mock((repoPath: string) =>
+      repoPath === "/repo-a"
+        ? new Promise<TaskStoreCheck>(() => {})
+        : Promise.resolve(makeTaskStoreCheck()),
+    );
+    const loadWorkspaceTasks = mock((repoPath: string) => taskViewSync.loadWorkspace(repoPath));
+    const factory = mock<TaskStreamControllerFactory>(idleController);
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      refreshTaskStoreCheckForRepo,
+      loadWorkspaceTasks,
+      taskStreamControllerFactory: factory,
+    };
+    const harness = renderLifecycle(queryClient, initialArgs);
+
+    try {
+      await harness.mount();
+      await waitFor(() =>
+        expect(queryClient.getQueryState(taskQueryKeys.repoData("/repo-b"))?.status).toBe(
+          "success",
+        ),
+      );
+      // The active workspace waits for its task store check.
+      expect(tasksList.mock.calls).toEqual([["/repo-b"]]);
+      // The list stays cached but does not join the reads of active queries, such as a reconnect.
+      const inactiveList = queryClient
+        .getQueryCache()
+        .find({ queryKey: taskQueryKeys.repoData("/repo-b"), exact: true });
+      expect(inactiveList?.getObserversCount()).toBe(1);
+      expect(inactiveList?.isActive()).toBe(false);
+      expect(factory.mock.calls[0]?.[0].getOpenRepoPaths()).toEqual(["/repo-a", "/repo-b"]);
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      const changed = createTaskCardFixture({ id: "/repo-b-task", title: "Changed while away" });
+      await taskViewSync.reconcileExternalEvent(boardEvent("/repo-b", [changed]), eventCursor());
+      expect(
+        queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-b"))?.tasks,
+      ).toEqual([changed]);
+
+      await harness.update({
+        ...initialArgs,
+        activeWorkspace: workspaceB,
+        openWorkspaces: [
+          { repoPath: "/repo-a", isActive: false },
+          { repoPath: "/repo-b", isActive: true },
+        ],
+      });
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo-b"));
+      expect(
+        queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-b"))?.tasks,
+      ).toEqual([changed]);
+      // The first workspace lost focus before its first load. It now loads as an inactive one.
+      await waitFor(() => expect(tasksList.mock.calls).toEqual([["/repo-b"], ["/repo-a"]]));
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  const releasingController = () => {
+    const releaseWorkspace = mock(async (_repoPath: string) => {});
+    const factory: TaskStreamControllerFactory = () => ({
+      start: async () => {},
+      stop: async () => {},
+      releaseWorkspace,
+    });
+    return { factory, releaseWorkspace };
+  };
+
+  test("releases the task data of a workspace that closes", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
+    const { factory, releaseWorkspace } = releasingController();
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      taskStreamControllerFactory: factory,
+    };
+    const harness = renderLifecycle(queryClient, initialArgs);
+
+    try {
+      await harness.mount();
+      expect(releaseWorkspace).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...initialArgs,
+        openWorkspaces: [{ repoPath: "/repo-a", isActive: true }],
+      });
+
+      expect(releaseWorkspace.mock.calls).toEqual([["/repo-b"]]);
+      // No observer keeps the released list.
+      expect(
+        queryClient
+          .getQueryCache()
+          .find({ queryKey: taskQueryKeys.repoData("/repo-b") })
+          ?.getObserversCount(),
+      ).toBe(0);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("keeps a closed active workspace until another workspace becomes active", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { factory, releaseWorkspace } = releasingController();
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      taskStreamControllerFactory: factory,
+    };
+    const harness = renderLifecycle(queryClient, initialArgs);
+
+    try {
+      await harness.mount();
+      const closedList = {
+        ...initialArgs,
+        openWorkspaces: [{ repoPath: "/repo-b", isActive: true }],
+      };
+      await harness.update(closedList);
+      expect(releaseWorkspace).not.toHaveBeenCalled();
+
+      await harness.update({ ...closedList, activeWorkspace: workspaceB });
+      expect(releaseWorkspace.mock.calls).toEqual([["/repo-a"]]);
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("leaves an inactive workspace to the stream snapshot that reads it", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const loadWorkspaceTasks = mock(async () => {});
+    const factory: TaskStreamControllerFactory = ({ onSnapshotFinished, onSnapshotStarted }) => ({
+      start: async () => {
+        onSnapshotStarted("/repo-b");
+        queryClient.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [] });
+        onSnapshotFinished("/repo-b", true);
+      },
+      stop: async () => {},
+      releaseWorkspace: async () => {},
+    });
+    const harness = renderLifecycle(queryClient, {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      loadWorkspaceTasks,
+      taskStreamControllerFactory: factory,
+    });
+
+    try {
+      await harness.mount();
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo-a"));
+      expect(loadWorkspaceTasks).not.toHaveBeenCalledWith("/repo-b");
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("does not read a failed inactive list again when the workspace records change", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await queryClient
+      .fetchQuery({
+        queryKey: taskQueryKeys.repoData("/repo-b"),
+        queryFn: async (): Promise<RepoTaskData> => {
+          throw new Error("task store unavailable");
+        },
+      })
+      .catch(() => {});
+    const loadWorkspaceTasks = mock(async () => {});
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      loadWorkspaceTasks,
+      taskStreamControllerFactory: idleController,
+    };
+    const harness = renderLifecycle(queryClient, initialArgs);
+
+    try {
+      await harness.mount();
+      await harness.update({
+        ...initialArgs,
+        openWorkspaces: [
+          { repoPath: "/repo-a", isActive: true },
+          { repoPath: "/repo-b", isActive: false },
+        ],
+      });
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo-a"));
+
+      expect(loadWorkspaceTasks).not.toHaveBeenCalledWith("/repo-b");
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("loads an inactive workspace when the task stream cannot start", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const loadWorkspaceTasks = mock(async () => {});
+    const factory: TaskStreamControllerFactory = ({ onSnapshotStarted }) => ({
+      start: async () => {
+        onSnapshotStarted("/repo-b");
+        throw new Error("stream unavailable");
+      },
+      stop: async () => {},
+      releaseWorkspace: async () => {},
+    });
+    const harness = renderLifecycle(queryClient, {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      loadWorkspaceTasks,
+      taskStreamControllerFactory: factory,
+    });
+
+    try {
+      await harness.mount();
+      // The stream claimed the workspace but cannot read it, so the lifecycle reads it.
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo-b"));
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
+  test("loads a reopened workspace whose earlier snapshot failed", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [] });
+    const loadWorkspaceTasks = mock(async () => {});
+    const factory: TaskStreamControllerFactory = ({ onSnapshotFinished, onSnapshotStarted }) => ({
+      start: async () => {
+        onSnapshotStarted("/repo-b");
+        onSnapshotFinished("/repo-b", false);
+      },
+      stop: async () => {},
+      releaseWorkspace: async () => {},
+    });
+    const initialArgs: Parameters<typeof useAppLifecycle>[0] = {
+      ...lifecycleArgs,
+      activeWorkspace: workspaceA,
+      openWorkspaces: [
+        { repoPath: "/repo-a", isActive: true },
+        { repoPath: "/repo-b", isActive: false },
+      ],
+      loadWorkspaceTasks,
+      taskStreamControllerFactory: factory,
+    };
+    const harness = renderLifecycle(queryClient, initialArgs);
+
+    try {
+      await harness.mount();
+      await harness.update({
+        ...initialArgs,
+        openWorkspaces: [{ repoPath: "/repo-a", isActive: true }],
+      });
+      await harness.update({
+        ...initialArgs,
+        activeWorkspace: workspaceB,
+        openWorkspaces: [
+          { repoPath: "/repo-a", isActive: false },
+          { repoPath: "/repo-b", isActive: true },
+        ],
+      });
+
+      await waitFor(() => expect(loadWorkspaceTasks).toHaveBeenCalledWith("/repo-b"));
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
   });
 });

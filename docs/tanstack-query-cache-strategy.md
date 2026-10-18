@@ -94,9 +94,26 @@ The `openducktor://runtime-changed` event stream owns host runtime status and MC
 
 Session records include the saved `lastActivityAt`. A `task_session_records_updated` event replaces the task's cached session list after commit. It also cancels the read in progress for that task. The query options use `structuralSharing` to keep a committed list when an older read result arrives after the update. A caller that joined the cancelled read receives the committed list. Workspace session updates use their existing record event. These updates do not trigger another read.
 
-A task event for an inactive workspace invalidates its task list and session lists. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot keeps the session-list queries that a view observes in every workspace, and reads the active ones again in place. It removes the other lists. A failed read of the observed lists fails the snapshot. The Kanban task list hides older done tasks. The snapshot checks the tasks that the Kanban list omits but that have a cached list or workflow session state. It reads `taskIdsList` and removes the session state only of the tasks that no longer exist.
+A task event updates the cached task list of its workspace, also when the workspace is inactive. It invalidates the session lists of its tasks. Only lists that a view observes read again at once, such as the session list in all-workspaces scope. A stream snapshot keeps the session-list queries that a view observes in every workspace, and reads them again in place. It removes the other lists. A failed read of the observed lists fails the snapshot. The Kanban task list hides older done tasks. In each open workspace, the snapshot checks the tasks that the Kanban list omits but that have a cached list or workflow session state. It reads `taskIdsList` and removes the session state only of the tasks that no longer exist.
 
 A confirmed deleted task keeps an empty list while a view observes it. Later reads of that task return the empty list without a host request, also after a live reconnection. An event that keeps the task or a snapshot that lists it ends this state.
+
+### Open workspace task lists
+
+The app keeps the task list of every open workspace in the cache, so a workspace switch shows its tasks at once. `useAppLifecycle`, `useOpenWorkspaceTaskLists`, and the task stream controller apply these rules.
+
+Only open workspaces get new reads and live work. When a workspace closes, its release supersedes the reads requested before it. These reads store no data and report no failure.
+
+- `useOpenWorkspaceTaskLists` observes the task list of each open workspace with a disabled observer. The cache does not remove an observed list, and an active-query read such as a reconnect skips it.
+- `useAppLifecycle` reads the list of an inactive open workspace that has no read yet, unless a stream snapshot reads it. This includes a workspace that lost focus before its first load as the active workspace. The active workspace reads its list after its task store check.
+- The task stream keeps these lists current. A stream gap or a Done-retention change can make a list miss changes. When its full reload fails, the list keeps its failure and applies task events only after its next successful read.
+- A stream snapshot reads the task list and the observed documents of every open workspace again. Then it updates the session lists of each open workspace, as the session rules above describe, and refreshes its live sessions.
+- The active workspace also reads all of its session lists after a snapshot, because the agent orchestrator reads them from the cache. Other workspaces read the lists that a view shows.
+- A failed task list read or document read of one workspace stays in its query and does not stop the snapshot of the other workspaces. The app names the failed workspaces in a "Workspaces did not refresh" notification and keeps the stream open. A failed read of an observed session list fails the whole snapshot, as the session rules above describe.
+- A workspace that failed on its own reads its list again when it becomes active. At startup, the lifecycle can read the active list once more after its task store check. After startup, the active workspace keeps the failure until a manual refresh.
+- A Done-retention change reads the task list of every open workspace again.
+- When a workspace closes, the task stream controller cancels its reads at once and removes its task lists, documents, and session lists. A snapshot or a task event batch that runs during the close does not update the sessions of the workspace. It starts no live refresh and reports no failure for that workspace. It still completes for the other workspaces.
+- The active workspace stays open until the next workspace becomes active.
 
 ### Checks and file data
 

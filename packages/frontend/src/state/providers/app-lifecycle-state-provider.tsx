@@ -21,7 +21,15 @@ const createProductionTaskStreamController =
   (
     sessionStore: Pick<AgentSessionsStore, "listSessionTaskIds" | "removeTaskSessions">,
   ): TaskStreamControllerFactory =>
-  ({ queryClient, getActiveRepoPath, onDegraded, onSnapshotFinished, onSnapshotStarted }) =>
+  ({
+    queryClient,
+    getOpenRepoPaths,
+    getActiveRepoPath,
+    onDegraded,
+    onSnapshotFinished,
+    onSnapshotStarted,
+    onWorkspaceFailures,
+  }) =>
     createTaskStreamController({
       transport: hostBridge,
       taskViewSync: getProductionTaskViewSync(queryClient),
@@ -31,15 +39,18 @@ const createProductionTaskStreamController =
         listSessionTaskIds: sessionStore.listSessionTaskIds,
         removeTaskSessions: sessionStore.removeTaskSessions,
         refreshLiveSessions: (repoPath) => hostClient.agentSessionLiveRefresh({ repoPath }),
+        isWorkspaceOpen: (repoPath) => getOpenRepoPaths().includes(repoPath),
+        isWorkspaceActive: (repoPath) => getActiveRepoPath() === repoPath,
       }),
-      getActiveRepoPath,
+      getOpenRepoPaths,
       onDegraded,
       onSnapshotFinished,
       onSnapshotStarted,
+      onWorkspaceFailures,
     });
 
 export function AppLifecycleStateProvider({ children }: PropsWithChildren): ReactElement {
-  const { activeWorkspace } = useRequiredContext(
+  const { activeWorkspace, workspaces } = useRequiredContext(
     WorkspaceStateContext,
     "AppLifecycleStateProvider",
   );
@@ -63,6 +74,7 @@ export function AppLifecycleStateProvider({ children }: PropsWithChildren): Reac
 
   useAppLifecycle({
     activeWorkspace,
+    openWorkspaces: workspaces,
     refreshBranches,
     refreshTaskStoreCheckForRepo,
     loadWorkspaceTasks,
