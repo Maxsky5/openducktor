@@ -1,5 +1,10 @@
 import { withoutTaskMutationProgress } from "./task-mutation-result";
-import type { TaskChangeSet } from "@openducktor/contracts";
+import type {
+  RepoPullRequestSyncRequest,
+  RepoPullRequestSyncResponse,
+  RepoPullRequestSyncSkipReason,
+  TaskChangeSet,
+} from "@openducktor/contracts";
 import {
   type AgentSessionRecord,
   type BuildSessionBootstrap,
@@ -187,12 +192,9 @@ export type TaskService = {
   qaRejected(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanRequestChanges(input: OptionalNoteInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanApprove(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
-  repoPullRequestSync(input: RepoPathInput): Effect.Effect<
-    {
-      ok: boolean;
-    },
-    TaskServiceError
-  >;
+  repoPullRequestSync(
+    input: RepoPullRequestSyncRequest,
+  ): Effect.Effect<RepoPullRequestSyncResponse, TaskServiceError>;
   repoPullRequestSyncDetailed(
     input: RepoPathInput,
   ): Effect.Effect<RepoPullRequestSyncResult, RepoPullRequestSyncDetailedError>;
@@ -253,10 +255,9 @@ export type TaskServiceWithMutationProgress = Omit<
     input: UpdateTaskInput,
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
 };
-export type RepoPullRequestSyncResult = {
-  ran: boolean;
-  changedTaskIds: string[];
-};
+export type RepoPullRequestSyncResult =
+  | { ran: true; changedTaskIds: string[] }
+  | { ran: false; changedTaskIds: []; reason: RepoPullRequestSyncSkipReason; message: string };
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {

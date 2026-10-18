@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
+import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 import {
   handlePaletteKeyDown,
   mainListEnterHint,
@@ -34,6 +35,7 @@ import type { WorkspaceIntent } from "./use-workspace-intent-runner";
 
 type CommandPaletteDialogProps = {
   open: boolean;
+  openPullRequestSync: (workspace: PullRequestSyncTarget | null) => void;
   platform: AppPlatform | null;
   shell: CommandPaletteShell;
   pageCommands: readonly CommandPalettePageCommand[];
@@ -73,6 +75,7 @@ function CommandPaletteView({
   runAfterClose,
   runIntent,
   previousFocus,
+  openPullRequestSync,
   onCloseAutoFocus,
   workspaces,
   scope,
@@ -87,6 +90,7 @@ function CommandPaletteView({
   const nav = useCommandPaletteNavigation(inputRef);
   const { actions, createFromQuery } = useCommandPaletteActions({
     scopeWorkspace: scope.workspace,
+    openPullRequestSync,
     query: nav.query,
     shell,
     pageCommands,

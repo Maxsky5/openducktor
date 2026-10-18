@@ -20,6 +20,40 @@ import {
   task,
 } from "./test-support/task-workflow-harness";
 
+test.each(["not_configured", "disabled"] as const)(
+  "reports a provider skip when it is %s",
+  async (reason) => {
+    const gitProviderResolver = Effect.runSync(createGitProviderResolver([]));
+    const service = createTaskService({
+      gitProviderResolver,
+      taskStore: {},
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { postComplete: [] },
+        git:
+          reason === "disabled"
+            ? {
+                provider: {
+                  id: "github",
+                  enabled: false,
+                  repository: { host: "github.com", owner: "openai", name: "openducktor" },
+                  autoDetected: false,
+                },
+              }
+            : {},
+      }),
+    });
+    expect(
+      await Effect.runPromise(service.repoPullRequestSync({ repoPath: "/repo" })),
+    ).toMatchObject({
+      ok: false,
+      reason,
+      message: expect.stringContaining("Git provider settings"),
+    });
+  },
+);
+
 const linkedPullRequest = (providerId: string): PullRequest => ({
   providerId,
   number: 42,

@@ -497,6 +497,8 @@ describe("createOdtMcpBridgeService", () => {
       publicationReporter: { report: () => Effect.void },
       onBackgroundFailure: () => Effect.void,
       workspaceSettingsService: {
+        getWorkspaceCatalog: () =>
+          Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
         listWorkspaces: () => Effect.succeed([]),
         getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
       },

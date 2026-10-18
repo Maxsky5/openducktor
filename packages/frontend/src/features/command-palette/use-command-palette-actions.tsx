@@ -42,11 +42,13 @@ import { taskCreationBlockedReason } from "@/pages/kanban/task-creation-availabi
 import { KANBAN_PATH } from "@/pages/kanban/kanban-task-link";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
+import { useManualPullRequestSyncState } from "@/state/providers/manual-pull-request-sync-provider";
 import {
   classifyDiagnosticsQueryError,
   taskStoreCheckQueryOptionsOrSkip,
 } from "@/state/queries/checks";
 import { repositoryGitProviderContextQueryOptionsOrSkip } from "@/state/queries/git-provider-context";
+import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 import type {
   CommandPalettePageCommand,
   CommandPaletteShell,
@@ -73,6 +75,7 @@ type ActionArgs = {
   /** The selected workspace of the scope. Without it, workspace actions use the active one. */
   scopeWorkspace: WorkspaceRecord | null;
   query: string;
+  openPullRequestSync: (workspace: PullRequestSyncTarget | null) => void;
   shell: CommandPaletteShell;
   pageCommands: readonly CommandPalettePageCommand[];
   runIntent: (intent: WorkspaceIntent) => void;
@@ -91,6 +94,7 @@ const icon = (Icon: typeof Plus): ReactNode => <Icon />;
 /** Every app action of the palette. Workspace actions run in the target workspace. */
 export function useCommandPaletteActions({
   scopeWorkspace,
+  openPullRequestSync,
   query,
   shell,
   pageCommands,
@@ -99,6 +103,11 @@ export function useCommandPaletteActions({
 }: ActionArgs): CommandPaletteActions {
   const { workspaces, activeWorkspace, closedWorkspaces } = useWorkspaceState();
   const target = scopeWorkspace ?? activeWorkspace;
+  const syncTarget = workspaces.find((entry) => entry.workspaceId === target?.workspaceId) ?? null;
+  const { pendingScope } = useManualPullRequestSyncState();
+  let syncDisabledReason: string | null = null;
+  if (workspaces.length === 0) syncDisabledReason = "Open a workspace to sync pull requests.";
+  if (pendingScope) syncDisabledReason = `Pull request sync is running for ${pendingScope.label}.`;
   const { themePreference, setThemePreference } = useTheme();
   const { taskCardView, changeTaskCardView } = useKanbanTaskCardView();
   const { openSettings } = useSettingsModal();
@@ -289,6 +298,14 @@ export function useCommandPaletteActions({
 
   const actions = [
     ...workspaceActions,
+    appAction(
+      "sync-pull-requests",
+      "Sync pull requests",
+      icon(RefreshCcw),
+      ["sync pull requests", "refresh pull requests", "sync PRs"],
+      () => openPullRequestSync(syncTarget),
+      { disabledReason: syncDisabledReason },
+    ),
     appAction(
       "settings",
       "Open settings",

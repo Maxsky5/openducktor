@@ -68,6 +68,33 @@ const sync = (
 });
 
 describe("createEventPublishingTaskService", () => {
+  test("passes the captured workspace to the gated sync and preserves its skip result", async () => {
+    const calls: unknown[] = [];
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({}),
+      taskSyncService: {
+        ...sync([]),
+        syncRepoPullRequests: (repoPath, expectedWorkspaceId) =>
+          Effect.sync(() => {
+            calls.push({ repoPath, expectedWorkspaceId });
+            return {
+              ran: false,
+              changedTaskIds: [],
+              reason: "workspace_closed",
+              message: "Reopen the workspace.",
+            };
+          }),
+      },
+    });
+    const input = { repoPath: "/repo", expectedWorkspaceId: "workspace-1" };
+    expect(await Effect.runPromise(service.repoPullRequestSync(input))).toEqual({
+      ok: false,
+      reason: "workspace_closed",
+      message: "Reopen the workspace.",
+    });
+    expect(calls).toEqual([input]);
+  });
+
   test("publishes a successful set-spec once and returns its document", async () => {
     const document = { markdown: "# Spec" };
     const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
@@ -310,6 +337,8 @@ describe("createEventPublishingTaskService", () => {
         publicationReporter: { report: () => Effect.void },
         onBackgroundFailure: () => Effect.void,
         workspaceSettingsService: {
+          getWorkspaceCatalog: () =>
+            Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
           listWorkspaces: () => Effect.succeed([]),
           getSettingsSnapshot: () => Effect.succeed(createDefaultGlobalConfig()),
         },

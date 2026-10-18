@@ -104,6 +104,10 @@ The host syncs pull requests for all open workspaces when it starts. It waits fi
 
 If one workspace sync fails, the host logs its repo path and the error, then continues with the other open workspaces. It tries the failed workspace again on the next interval.
 
+Use "Sync pull requests" in the command palette to start a manual sync. Each run asks you to choose the named workspace or all open workspaces. The named choice uses the palette workspace filter, then the active workspace. It stays disabled while provider details load or the provider cannot sync. A note beside the choice gives the reason. The batch choice counts and targets only open workspaces whose provider is configured, enabled, supports pull requests, and is available. It stays disabled while eligibility reads are pending or failed. The dialog names each failed read with its error. Cancel starts no sync.
+
+Manual sync keeps its chosen targets when you change pages or workspaces. The progress toast names the scope, and this client cannot start another manual run until it finishes. A batch run ignores workspaces without a configured, enabled Git provider. These workspaces do not cause a warning or appear in the result. If none can sync, the result explains that no open workspace has an enabled provider. Other skipped or failed workspaces remain in the result, with recovery instructions. A workspace that closes before its turn is skipped. Manual sync does not change the automatic schedule.
+
 Pull request sync records the merged pull request, stops task terminals, and removes the task worktree and local source branch before it closes the task. If cleanup fails, the task keeps its current status and the host reports the error.
 
 ## UI rules

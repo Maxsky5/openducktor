@@ -79,7 +79,7 @@ function DialogContent({
   );
   const renderedCloseButton =
     closeButton === undefined ? (
-      <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+      <DialogPrimitive.Close className="absolute right-4 top-4 z-20 rounded-sm p-1 text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
         <X className="size-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>

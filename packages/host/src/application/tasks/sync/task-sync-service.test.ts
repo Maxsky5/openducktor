@@ -20,13 +20,160 @@ const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
 });
 
 describe("task mutation gate and pull request sync", () => {
+  test.each(["closed", "missing", "moved", "replaced", "removing"] as const)(
+    "skips a captured workspace that is %s without starting provider work",
+    async (state) => {
+      const { eventBus, events } = createEventBus();
+      let attempts = 0;
+      const captured = workspace("/repo");
+      let openWorkspaces: WorkspaceRecord[] = [];
+      if (state === "moved") openWorkspaces = [{ ...captured, repoPath: "/new" }];
+      else if (state === "replaced") openWorkspaces = [{ ...captured, workspaceId: "replacement" }];
+      const service = createTaskSyncServiceForTest({
+        eventBus,
+        taskService: {
+          repoPullRequestSyncDetailed: () =>
+            Effect.sync(() => {
+              attempts++;
+              return { ran: true, changedTaskIds: [] };
+            }),
+        },
+        workspaceSettingsService: {
+          listWorkspaces: () => Effect.succeed([]),
+          getWorkspaceCatalog: () =>
+            Effect.succeed({
+              openWorkspaces,
+              closedWorkspaces: state === "closed" ? [captured] : [],
+              incompleteRemovals:
+                state === "removing"
+                  ? [
+                      {
+                        workspace: captured,
+                        record: {
+                          phase: "worktrees",
+                          removeTaskWorktrees: true,
+                          pendingWorktreePath: null,
+                        },
+                      },
+                    ]
+                  : [],
+            }),
+        },
+      });
+      const result = await Effect.runPromise(service.syncRepoPullRequests("/repo", "repo"));
+      expect(result).toMatchObject({
+        ran: false,
+        changedTaskIds: [],
+        reason: state === "closed" ? "workspace_closed" : "workspace_unavailable",
+        message: expect.any(String),
+      });
+      expect(attempts).toBe(0);
+      expect(events).toEqual([]);
+    },
+  );
+
+  test("checks the chosen workspace after the prior mutation releases the gate", async () => {
+    let closed = false;
+    let attempts = 0;
+    const service = createTaskSyncServiceForTest({
+      eventBus: createEventBus().eventBus,
+      taskService: {
+        repoPullRequestSyncDetailed: () =>
+          Effect.sync(() => {
+            attempts++;
+            return { ran: true, changedTaskIds: [] };
+          }),
+      },
+      workspaceSettingsService: {
+        listWorkspaces: () => Effect.succeed([]),
+        getWorkspaceCatalog: () =>
+          Effect.sync(() => ({
+            openWorkspaces: closed ? [] : [workspace("/repo")],
+            closedWorkspaces: closed ? [workspace("/repo")] : [],
+            incompleteRemovals: [],
+          })),
+      },
+    });
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const entered = yield* Deferred.make<void>();
+          const release = yield* Deferred.make<void>();
+          const mutation = yield* Effect.forkScoped(
+            service.runMutation(
+              "/repo",
+              Effect.gen(function* () {
+                yield* Deferred.succeed(entered, undefined);
+                yield* Deferred.await(release);
+                closed = true;
+              }),
+            ),
+          );
+          yield* Deferred.await(entered);
+          const sync = yield* Effect.forkScoped(service.syncRepoPullRequests("/repo", "repo"));
+          yield* Effect.yieldNow;
+          yield* Deferred.succeed(release, undefined);
+          yield* Fiber.join(mutation);
+          expect(yield* Fiber.join(sync)).toMatchObject({ ran: false, reason: "workspace_closed" });
+        }),
+      ),
+    );
+    expect(attempts).toBe(0);
+  });
+
+  test("propagates catalog read failures and permits a later manual sync", async () => {
+    const failure = new HostOperationError({
+      operation: "test.catalog",
+      message: "Cannot read workspace settings.",
+    });
+    let fail = true;
+    let attempts = 0;
+    const service = createTaskSyncServiceForTest({
+      eventBus: createEventBus().eventBus,
+      taskService: {
+        repoPullRequestSyncDetailed: () =>
+          Effect.sync(() => {
+            attempts++;
+            return { ran: true, changedTaskIds: [] };
+          }),
+      },
+      workspaceSettingsService: {
+        listWorkspaces: () => Effect.succeed([]),
+        getWorkspaceCatalog: () =>
+          fail
+            ? Effect.fail(failure)
+            : Effect.succeed({
+                openWorkspaces: [workspace("/repo")],
+                closedWorkspaces: [],
+                incompleteRemovals: [],
+              }),
+      },
+    });
+    expect(
+      await Effect.runPromise(service.syncRepoPullRequests("/repo", "repo").pipe(Effect.flip)),
+    ).toBe(failure);
+    expect(attempts).toBe(0);
+    fail = false;
+    expect(await Effect.runPromise(service.syncRepoPullRequests("/repo", "repo"))).toEqual({
+      ran: true,
+      changedTaskIds: [],
+    });
+    expect(attempts).toBe(1);
+  });
+
   test.each(["failure", "interruption"] as const)(
     "releases the repository mutation gate after %s",
     async (outcome) => {
       const sync = createTaskSyncServiceForTest({
         eventBus: createEventBus().eventBus,
         taskService: {
-          repoPullRequestSyncDetailed: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+          repoPullRequestSyncDetailed: () =>
+            Effect.succeed({
+              ran: false,
+              changedTaskIds: [],
+              reason: "not_configured",
+              message: "Configure a Git provider.",
+            }),
         },
         workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
       });

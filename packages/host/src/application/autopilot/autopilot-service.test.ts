@@ -195,6 +195,8 @@ const createAutopilotHarness = async ({
         backgroundFailures.push(failure);
       }),
     workspaceSettingsService: {
+      getWorkspaceCatalog: () =>
+        Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
       getSettingsSnapshot: () => Effect.succeed(saved),
       listWorkspaces: () => Effect.succeed([]),
     },

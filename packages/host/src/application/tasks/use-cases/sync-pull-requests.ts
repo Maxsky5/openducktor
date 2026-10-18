@@ -11,7 +11,12 @@ import { validateTaskTransitionEffect } from "../support/task-validation-effects
 import { taskListWithCurrent } from "../support/task-workflow-helpers";
 import { cleanupMergedTaskState } from "../support/task-worktree-cleanup";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { CreateTaskServiceInput, TaskService, TaskServiceError } from "../task-service";
+import type {
+  CreateTaskServiceInput,
+  RepoPullRequestSyncResult,
+  TaskService,
+  TaskServiceError,
+} from "../task-service";
 
 export const createTaskPullRequestSyncUseCases = ({
   gitPort,
@@ -29,8 +34,8 @@ export const createTaskPullRequestSyncUseCases = ({
 > => {
   const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) => {
     const changedTaskIds = new Set<string>();
-    const sync: Effect.Effect<{ ran: boolean; changedTaskIds: string[] }, TaskServiceError> =
-      Effect.gen(function* () {
+    const sync: Effect.Effect<RepoPullRequestSyncResult, TaskServiceError> = Effect.gen(
+      function* () {
         const { repoPath } = input;
         const dependencies = yield* requireDependencies(() =>
           requirePullRequestSyncDependencies({
@@ -49,7 +54,12 @@ export const createTaskPullRequestSyncUseCases = ({
             providerResult.failure.reason === "not_configured" ||
             providerResult.failure.reason === "disabled"
           ) {
-            return { ran: false, changedTaskIds: [] };
+            return {
+              ran: false,
+              changedTaskIds: [],
+              reason: providerResult.failure.reason,
+              message: `${providerResult.failure.message} Open Git provider settings to configure or enable the provider.`,
+            };
           }
           return yield* Effect.fail(providerResult.failure);
         }
@@ -131,7 +141,8 @@ export const createTaskPullRequestSyncUseCases = ({
         }
 
         return { ran: true, changedTaskIds: [...changedTaskIds] };
-      });
+      },
+    );
     return Effect.gen(function* () {
       const result = yield* Effect.result(sync);
       if (result._tag === "Success") {
@@ -159,7 +170,9 @@ export const createTaskPullRequestSyncUseCases = ({
             Effect.fail(partialFailure.failure),
           ),
         );
-        return { ok: result.ran };
+        return result.ran
+          ? { ok: true }
+          : { ok: false, reason: result.reason, message: result.message };
       });
     },
     repoPullRequestSyncDetailed,

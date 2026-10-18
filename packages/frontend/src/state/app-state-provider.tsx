@@ -43,6 +43,7 @@ import { ChecksStateProvider } from "./providers/checks-state-provider";
 import { DelegationStateProvider } from "./providers/delegation-state-provider";
 import { DiagnosticsAutoOpenProvider } from "./providers/diagnostics-auto-open-provider";
 import { HostRuntimeStatusProvider } from "./providers/host-runtime-status-provider";
+import { ManualPullRequestSyncProvider } from "./providers/manual-pull-request-sync-provider";
 import { SpecStateProvider } from "./providers/spec-state-provider";
 import { TasksStateProvider } from "./providers/tasks-state-provider";
 import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
@@ -82,7 +83,11 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
                         <AgentStudioStateProvider agentEngine={agentEngine}>
                           <AppLifecycleStateProvider>
                             <TerminalActivityProvider>
-                              <AutopilotProvider>{children}</AutopilotProvider>
+                              <AutopilotProvider>
+                                <ManualPullRequestSyncProvider>
+                                  {children}
+                                </ManualPullRequestSyncProvider>
+                              </AutopilotProvider>
                             </TerminalActivityProvider>
                           </AppLifecycleStateProvider>
                         </AgentStudioStateProvider>

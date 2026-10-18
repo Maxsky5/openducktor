@@ -278,7 +278,13 @@ describe("task event publication", () => {
           Effect.fail(
             new HostOperationError({ operation: "test.snapshot", message: "Snapshot read failed" }),
           ),
-        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+        repoPullRequestSyncDetailed: () =>
+          Effect.succeed({
+            ran: false,
+            changedTaskIds: [],
+            reason: "not_configured",
+            message: "Configure a Git provider.",
+          }),
       },
       workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
     });

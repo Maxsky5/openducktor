@@ -83,7 +83,13 @@ describe("createTaskService planning", () => {
                     : entry,
                 );
             }),
-          repoPullRequestSyncDetailed: () => Effect.succeed({ ran: false, changedTaskIds: [] }),
+          repoPullRequestSyncDetailed: () =>
+            Effect.succeed({
+              ran: false,
+              changedTaskIds: [],
+              reason: "not_configured",
+              message: "Configure a Git provider.",
+            }),
         },
         workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
       });

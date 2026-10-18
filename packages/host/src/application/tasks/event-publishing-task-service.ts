@@ -442,8 +442,14 @@ export const createEventPublishingTaskService = ({
       ),
     repoPullRequestSync: (input) =>
       taskSyncService
-        .syncRepoPullRequests(input.repoPath)
-        .pipe(Effect.map((result) => ({ ok: result.ran }))),
+        .syncRepoPullRequests(input.repoPath, input.expectedWorkspaceId)
+        .pipe(
+          Effect.map((result) =>
+            result.ran
+              ? { ok: true as const }
+              : { ok: false as const, reason: result.reason, message: result.message },
+          ),
+        ),
     repoPullRequestSyncDetailed: (input) => taskService.repoPullRequestSyncDetailed(input),
   };
 };
