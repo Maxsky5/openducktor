@@ -444,6 +444,12 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(
       await h.router.invoke("workspace_session_list_archived", { workspaceId: "fairnest" }),
     ).toEqual([result]);
+    expect(
+      await h.router.invoke("workspace_session_ids_list", {
+        workspaceId: "fairnest",
+      }),
+    ).toEqual([result.id]);
+    await expect(h.router.invoke("workspace_session_ids_list", {})).rejects.toThrow("workspaceId");
   }, 15_000);
 
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.

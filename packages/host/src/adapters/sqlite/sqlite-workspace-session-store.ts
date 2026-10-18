@@ -189,6 +189,15 @@ export const createSqliteWorkspaceSessionStore = (
       withDatabase(input, "workspaceSessionStore.get", (session) =>
         getRecord(session, input.sessionId),
       ),
+    listIds: (input) =>
+      withDatabase(input, "workspaceSessionStore.listIds", (session) =>
+        session
+          .execute(
+            (database) => database.select({ id: workspaceSessions.id }).from(workspaceSessions),
+            "workspaceSessionStore.listIds",
+          )
+          .pipe(Effect.map((rows) => rows.map(({ id }) => id))),
+      ),
     listActive: (input) =>
       withDatabase(input, "workspaceSessionStore.listActive", (session) =>
         Effect.gen(function* () {

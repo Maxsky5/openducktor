@@ -31,6 +31,10 @@ export const createWorkspaceSessionCommandHandlers = (
   publishUpdated: WorkspaceSessionUpdatedPublisher,
 ) =>
   ({
+    workspace_session_ids_list: (args) =>
+      parseInput(workspaceSessionListInputSchema, args).pipe(
+        Effect.flatMap(({ workspaceId }) => service.listIds(workspaceId)),
+      ),
     workspace_session_list_active: (args) =>
       parseInput(workspaceSessionListInputSchema, args).pipe(
         Effect.flatMap(({ workspaceId }) => service.listActive(workspaceId)),

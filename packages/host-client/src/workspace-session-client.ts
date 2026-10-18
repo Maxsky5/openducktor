@@ -49,6 +49,14 @@ export class HostWorkspaceSessionClient {
     return this.invoke("workspace_session_import", input, workspaceSessionImportResultSchema);
   }
 
+  workspaceSessionIdsList(workspaceId: string): Promise<string[]> {
+    return this.invoke(
+      "workspace_session_ids_list",
+      { workspaceId },
+      arrayResultSchema(z.string(), "workspace_session_ids_list"),
+    );
+  }
+
   workspaceSessionListActive(workspaceId: string): Promise<WorkspaceSession[]> {
     return this.invoke(
       "workspace_session_list_active",

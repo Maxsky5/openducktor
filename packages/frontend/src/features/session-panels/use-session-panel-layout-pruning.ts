@@ -1,9 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { type QueryObserverResult, useQueries } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useWorkspacePresence, useWorkspaceState } from "@/state/app-state-provider";
 import { repoTaskIdsQueryOptions } from "@openducktor/frontend-core/queries/tasks";
-import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { workspaceSessionIdsQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useSessionPanelLayoutStore } from "./session-panel-layout-store";
+
+type WorkspaceLists = {
+  taskIds: string[] | null;
+  chatIds: string[] | null;
+};
 
 /**
  * Removes the saved panel layouts of tasks, chats, and workspaces that no longer exist. It waits
@@ -13,20 +18,35 @@ export function useSessionPanelLayoutPruning(): void {
   const layoutStore = useSessionPanelLayoutStore();
   const { workspaces, closedWorkspaces, activeWorkspace } = useWorkspaceState();
   const { workspaceRecordsAreCurrent } = useWorkspacePresence();
-  const workspaceId = activeWorkspace?.workspaceId ?? null;
-  const repoPath = activeWorkspace?.repoPath ?? null;
+  // The active workspace stays open until the next workspace becomes active.
+  const openWorkspaces = useMemo(
+    () =>
+      activeWorkspace &&
+      !workspaces.some(({ workspaceId }) => workspaceId === activeWorkspace.workspaceId)
+        ? [...workspaces, activeWorkspace]
+        : workspaces,
+    [activeWorkspace, workspaces],
+  );
+  // Key combined results by workspace so Query keeps each list stable across workspace reorders.
+  const combineCurrentLists = useCallback(
+    <T>(lists: QueryObserverResult<T>[]): Record<string, T | null> =>
+      Object.fromEntries(
+        openWorkspaces.map(({ workspaceId }, index) => {
+          const list = lists[index];
+          return [workspaceId, list?.isSuccess && !list.isFetching ? list.data : null];
+        }),
+      ),
+    [openWorkspaces],
+  );
   // The Kanban task list hides old closed tasks, so pruning reads the IDs of all tasks.
-  const taskIdList = useQuery({
-    ...repoTaskIdsQueryOptions(repoPath ?? ""),
-    enabled: repoPath !== null,
+  const taskLists = useQueries({
+    queries: openWorkspaces.map(({ repoPath }) => repoTaskIdsQueryOptions(repoPath)),
+    combine: combineCurrentLists<string[]>,
   });
-  const activeChats = useQuery({
-    ...workspaceSessionListQueryOptions(workspaceId ?? "", false),
-    enabled: workspaceId !== null,
-  });
-  const archivedChats = useQuery({
-    ...workspaceSessionListQueryOptions(workspaceId ?? "", true),
-    enabled: workspaceId !== null,
+  // The archive display is capped, so it cannot establish which chats still exist.
+  const chatLists = useQueries({
+    queries: openWorkspaces.map(({ workspaceId }) => workspaceSessionIdsQueryOptions(workspaceId)),
+    combine: combineCurrentLists<string[]>,
   });
 
   // The open and closed lists load and refresh apart, so a closed workspace can miss from both.
@@ -37,38 +57,34 @@ export function useSessionPanelLayoutPruning(): void {
         : null,
     [closedWorkspaces, workspaceRecordsAreCurrent, workspaces],
   );
-  const isTaskListCurrent = taskIdList.isSuccess && !taskIdList.isFetching;
-  const taskIds = useMemo(
-    () => (isTaskListCurrent ? new Set(taskIdList.data) : null),
-    [isTaskListCurrent, taskIdList.data],
-  );
-  const isChatListCurrent =
-    activeChats.isSuccess &&
-    archivedChats.isSuccess &&
-    !activeChats.isFetching &&
-    !archivedChats.isFetching;
-  const chatIds = useMemo(
-    () =>
-      isChatListCurrent
-        ? new Set(
-            [...(activeChats.data ?? []), ...(archivedChats.data ?? [])].map((chat) => chat.id),
-          )
-        : null,
-    [activeChats.data, archivedChats.data, isChatListCurrent],
-  );
-
-  // Each list prunes only when it changes, so a refresh of one list never acts on an older copy
-  // of another list, such as a task list that does not have a new task yet.
   useEffect(() => {
     if (workspaceIds === null) return;
     layoutStore.prune({ kind: "workspaces", ids: workspaceIds });
   }, [layoutStore, workspaceIds]);
+
+  const previousLists = useRef(new Map<string, WorkspaceLists>());
   useEffect(() => {
-    if (workspaceId === null || taskIds === null) return;
-    layoutStore.prune({ kind: "tasks", workspaceId, ids: taskIds });
-  }, [layoutStore, taskIds, workspaceId]);
+    previousLists.current.clear();
+  }, [layoutStore]);
+  // Each list prunes only when it changes. Other lists can still lack a newly created owner.
   useEffect(() => {
-    if (workspaceId === null || chatIds === null) return;
-    layoutStore.prune({ kind: "chats", workspaceId, ids: chatIds });
-  }, [chatIds, layoutStore, workspaceId]);
+    const nextLists = new Map<string, WorkspaceLists>();
+    for (const { workspaceId } of openWorkspaces) {
+      const taskIds = taskLists[workspaceId] ?? null;
+      const chatIds = chatLists[workspaceId] ?? null;
+      const previous = previousLists.current.get(workspaceId);
+      if (taskIds !== null && taskIds !== previous?.taskIds) {
+        layoutStore.prune({ kind: "tasks", workspaceId, ids: new Set(taskIds) });
+      }
+      if (chatIds !== null && chatIds !== previous?.chatIds) {
+        layoutStore.prune({
+          kind: "chats",
+          workspaceId,
+          ids: new Set(chatIds),
+        });
+      }
+      nextLists.set(workspaceId, { taskIds, chatIds });
+    }
+    previousLists.current = nextLists;
+  }, [chatLists, layoutStore, openWorkspaces, taskLists]);
 }

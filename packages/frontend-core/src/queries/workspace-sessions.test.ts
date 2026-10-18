@@ -5,6 +5,7 @@ import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import {
   updateWorkspaceSessionQueries,
+  workspaceSessionIdsQueryOptions,
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
 } from "./workspace-sessions";
@@ -24,6 +25,72 @@ const session = (id: string, updatedAt = 1000): WorkspaceSession => ({
 });
 
 describe("Workspace Session query cache", () => {
+  test.each(["pending", "handoff"] as const)(
+    "keeps chat IDs from events during the %s of a complete read",
+    async (phase) => {
+      const baseline = Promise.withResolvers<string[]>();
+      const { queryClient: client } = createTestClientConnection({
+        client: { workspaceSessionIdsList: () => baseline.promise },
+      });
+      const options = workspaceSessionIdsQueryOptions("A");
+      client.setQueryData(workspaceSessionQueryKeys.ids("B"), ["other"]);
+      try {
+        const read = client.fetchQuery(options);
+        if (phase === "handoff") {
+          baseline.resolve(["existing"]);
+          await Promise.resolve();
+        }
+        updateWorkspaceSessionQueries(client, "A", {
+          ...session("new"),
+          archivedAt: 2000,
+        });
+        expect(client.getQueryData<string[]>(options.queryKey)).toBeUndefined();
+        if (phase === "pending") baseline.resolve(["existing"]);
+        await read;
+        expect(client.getQueryData<string[]>(options.queryKey)).toEqual(["existing", "new"]);
+        updateWorkspaceSessionQueries(client, "A", session("new"));
+        expect(client.getQueryData<string[]>(options.queryKey)).toEqual(["existing", "new"]);
+        updateWorkspaceSessionQueries(client, "A", session("late"));
+        expect(client.getQueryData<string[]>(options.queryKey)).toEqual([
+          "existing",
+          "new",
+          "late",
+        ]);
+        expect(client.getQueryData<string[]>(workspaceSessionQueryKeys.ids("B"))).toEqual([
+          "other",
+        ]);
+      } finally {
+        client.clear();
+      }
+    },
+  );
+
+  test("a record event cannot make a failed complete ID read current", async () => {
+    let unavailable = true;
+    const { queryClient: client } = createTestClientConnection({
+      client: {
+        workspaceSessionIdsList: async () => {
+          if (unavailable) throw new Error("IDs unavailable");
+          return ["existing", "new"];
+        },
+      },
+    });
+    const key = workspaceSessionQueryKeys.ids("A");
+    client.setQueryData(key, ["existing"]);
+    try {
+      await client.fetchQuery(workspaceSessionIdsQueryOptions("A")).catch(() => undefined);
+      updateWorkspaceSessionQueries(client, "A", session("new"));
+      expect(client.getQueryState(key)?.status).toBe("error");
+      expect(client.getQueryData<string[]>(key)).toEqual(["existing"]);
+      unavailable = false;
+      await client.fetchQuery(workspaceSessionIdsQueryOptions("A"));
+      expect(client.getQueryState(key)?.status).toBe("success");
+      expect(client.getQueryData<string[]>(key)).toEqual(["existing", "new"]);
+    } finally {
+      client.clear();
+    }
+  });
+
   test("a cancelled read that later rejects cannot remove the next read's event buffer", async () => {
     const old = Promise.withResolvers<WorkspaceSession[]>();
     const next = Promise.withResolvers<WorkspaceSession[]>();

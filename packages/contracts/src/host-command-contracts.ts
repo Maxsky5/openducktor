@@ -170,6 +170,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_session_external_list",
   "workspace_session_external_release",
   "workspace_session_get",
+  "workspace_session_ids_list",
   "workspace_session_import",
   "workspace_session_launch",
   "workspace_session_list_active",

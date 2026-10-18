@@ -503,7 +503,7 @@ describe("SQLite Workspace Session store", () => {
     });
   });
 
-  test("limits archived sessions to the latest 100 without limiting active sessions", async () => {
+  test("lists every chat ID while the archive display stays limited to 100", async () => {
     const repository = store();
     for (let index = 0; index < 102; index += 1) {
       await Effect.runPromise(
@@ -518,6 +518,15 @@ describe("SQLite Workspace Session store", () => {
     expect(archived).toHaveLength(100);
     expect(archived[0]?.id).toBe("101");
     expect(archived[99]?.id).toBe("2");
+    await Effect.runPromise(
+      repository.create({
+        ...scope(),
+        session: { ...makeSession("draft"), externalSessionId: null },
+      }),
+    );
+    expect((await Effect.runPromise(repository.listIds(scope()))).sort()).toEqual(
+      [...Array.from({ length: 102 }, (_, index) => String(index)), "draft"].sort(),
+    );
   });
 
   test("surfaces corrupt stored JSON instead of hiding the record", async () => {

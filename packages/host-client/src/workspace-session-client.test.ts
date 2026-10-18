@@ -16,6 +16,24 @@ const makeDraft = (): WorkspaceSession => ({
   archivedAt: null,
 });
 
+test("reads complete chat IDs through the typed host boundary", async () => {
+  const calls: Array<{ command: HostCommandName; args: unknown }> = [];
+  let malformed = false;
+  const client = createHostClient(async (command, args, schema) => {
+    calls.push({ command, args });
+    return schema.parse(malformed ? ["draft", 42] : ["draft", "old-archived"]);
+  });
+  expect(await client.workspaceSessionIdsList("workspace")).toEqual(["draft", "old-archived"]);
+  expect(calls).toEqual([
+    {
+      command: "workspace_session_ids_list",
+      args: { workspaceId: "workspace" },
+    },
+  ]);
+  malformed = true;
+  await expect(client.workspaceSessionIdsList("workspace")).rejects.toThrow();
+});
+
 test("creates a draft, starts it, and saves draft models through separate host commands", async () => {
   const draft = makeDraft();
   const selectedModel = { runtimeKind: "codex" as const, providerId: "openai", modelId: "model" };
