@@ -4,6 +4,7 @@ import {
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_CHAT_SETTINGS,
   CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type WorkspaceSession,
 } from "@openducktor/contracts";
@@ -397,6 +398,110 @@ const createPresentationScenario = (
   };
 };
 
+test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR])(
+  "keeps the $kind composer and session settings stable while a selected session prepares",
+  async (descriptor) => {
+    const { Harness, connection, workspace, entry, session, store, definitions } =
+      createPresentationScenario(descriptor.kind);
+    definitions.runtimeDefinitions = [descriptor];
+    definitions.availableRuntimeDefinitions = [descriptor];
+    const selections: NonNullable<WorkspaceSession["selectedModel"]>[] = [
+      { runtimeKind: descriptor.kind, providerId: "provider", modelId: "first", variant: "low" },
+      {
+        runtimeKind: descriptor.kind,
+        providerId: "provider",
+        modelId: "second",
+        variant: "high",
+        speed: "fast",
+      },
+    ];
+    entry.selectedModel = selections[0]!;
+    session.contextUsage = { totalTokens: 10_000, contextWindow: 100_000 };
+    store.replaceSession(session);
+    const second = {
+      ...entry,
+      id: "second-session",
+      externalSessionId: "second-native",
+      selectedModel: selections[1]!,
+    };
+    store.replaceSession({
+      ...session,
+      externalSessionId: second.externalSessionId,
+      messages: createSessionMessagesState(second.externalSessionId),
+      selectedModel: selections[1]!,
+      contextUsage: { totalTokens: 20_000, contextWindow: 100_000 },
+    });
+    definitions.loadRepoRuntimeCatalog = async () => ({
+      models: {
+        status: "available",
+        catalog: {
+          models: ["first", "second"].map((modelId) => ({
+            id: `provider/${modelId}`,
+            providerId: "provider",
+            providerName: "Provider",
+            modelId,
+            modelName: modelId,
+            variants: ["low", "high"],
+            speedLevels: [{ id: "fast", label: "Fast" }],
+          })),
+          defaultModelsByProvider: {},
+        },
+      },
+    });
+    const start = mock<ReturnType<typeof preparedChatClient>["workspaceSessionStart"]>(
+      () => new Promise(() => {}),
+    );
+    connection.host.client.workspaceSessionStart = start;
+    const chat = (record: WorkspaceSession, visitKey: number) => (
+      <Harness>
+        <WorkspaceSessionChat
+          workspace={workspace}
+          record={record}
+          visitKey={visitKey}
+          chatSettings={DEFAULT_CHAT_SETTINGS}
+          reusablePrompts={[]}
+          onToolRefresh={() => {}}
+          isMounted={() => true}
+        />
+      </Harness>
+    );
+    const view = render(chat(entry, 0));
+    try {
+      await view.findByRole("button", { name: `Select model, ${descriptor.label}, first` });
+      await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+      const editor = view.getByRole("combobox", { name: "Message composer" });
+      const card = editor.closest(".rounded-xl");
+      const cardClass = card?.className;
+      for (const [record, effort, speed, context] of [
+        [second, "high", "Fast", "20.0% used, 20K tokens"],
+        [entry, "low", "Standard", "10.0% used, 10K tokens"],
+      ] as const) {
+        view.rerender(chat(record, 1));
+        expect(view.getByRole("combobox", { name: "Message composer" })).toBe(editor);
+        expect(editor.getAttribute("aria-disabled")).toBe("false");
+        expect(editor.getAttribute("contenteditable")).toBe("true");
+        expect(card?.className).toBe(cardClass);
+        expect(view.queryByText("Preparing the session...") === null).toBe(true);
+        for (const name of [
+          `Select model, ${descriptor.label}, ${record.selectedModel!.modelId}`,
+          effort,
+          `Session context: ${context}`,
+          ...(descriptor.kind === "opencode" ? [] : [`Speed: ${speed}`]),
+        ]) {
+          expect(view.getByRole("button", { name }).hasAttribute("disabled")).toBe(false);
+        }
+        typeIntoComposer(view.container, `Draft for ${record.id}`);
+        expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
+          true,
+        );
+      }
+      expect(start).toHaveBeenCalledTimes(3);
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
 test.each(["model", "effort", "profile"] as const)(
   "keeps the workspace draft editor active and gates supported Resume controls while saving %s",
   async (control) => {
@@ -566,7 +671,7 @@ test.each(["light", "dark"] as const)(
   "workspace child attention follows live input and full identity in the %s theme",
   async (theme) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    const { Harness, entry, store, session } = createPresentationScenario("opencode", [
+    const { Harness, store, session } = createPresentationScenario("opencode", [
       buildMessage("assistant", "Inspect the code", {
         id: "subagent-message",
         meta: {
@@ -652,26 +757,23 @@ test.each(["light", "dark"] as const)(
   async (theme) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     const skill = { id: "review", name: "review", path: "review", title: "Review code" };
-    const { Harness, entry, session, definitions, operations } = createPresentationScenario(
-      "claude",
-      [
-        buildMessage("user", "/review", { id: "plain", meta: { kind: "user", state: "read" } }),
-        buildMessage("user", "/review", {
-          id: "structured",
-          meta: {
-            kind: "user",
-            state: "read",
-            parts: [
-              {
-                kind: "skill_mention",
-                skill,
-                sourceText: { value: "/review", start: 0, end: 7 },
-              },
-            ],
-          },
-        }),
-      ],
-    );
+    const { Harness, definitions, operations } = createPresentationScenario("claude", [
+      buildMessage("user", "/review", { id: "plain", meta: { kind: "user", state: "read" } }),
+      buildMessage("user", "/review", {
+        id: "structured",
+        meta: {
+          kind: "user",
+          state: "read",
+          parts: [
+            {
+              kind: "skill_mention",
+              skill,
+              sourceText: { value: "/review", start: 0, end: 7 },
+            },
+          ],
+        },
+      }),
+    ]);
     definitions.runtimeDefinitions = [CLAUDE_RUNTIME_DESCRIPTOR];
     definitions.availableRuntimeDefinitions = [CLAUDE_RUNTIME_DESCRIPTOR];
     definitions.loadRepoRuntimeCatalog = async () => ({

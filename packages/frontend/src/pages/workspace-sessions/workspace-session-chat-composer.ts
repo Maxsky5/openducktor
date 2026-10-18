@@ -19,7 +19,7 @@ type WorkspaceSessionComposerInput = {
   identity: AgentSessionIdentity | null;
   actions: Pick<
     ReturnType<typeof useWorkspaceSessionChatActions>,
-    "isStarting" | "isSavingModel" | "isResumingSession" | "isPrepared" | "error"
+    "isStarting" | "isSavingModel" | "isResumingSession"
   >;
   delivery: ReturnType<typeof useAgentChatSend>;
   reviewComments: Pick<ReturnType<typeof useReviewCommentComposer>, "onSend" | "pendingSendItems">;
@@ -55,15 +55,12 @@ export function buildWorkspaceSessionComposer({
     canStopSession: state.canStopSession,
     stopAgentSession: stopSession,
     isResumingSession: actions.isResumingSession,
-    isReadOnly: state.isReadOnly || !actions.isPrepared,
-    readOnlyReason:
-      state.readOnlyReason ??
-      actions.error ??
-      (!actions.isPrepared ? "Preparing the session..." : null),
+    isReadOnly: state.isReadOnly,
+    readOnlyReason: state.readOnlyReason,
     draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
     onSend: reviewComments.onSend,
     pendingSendItems: reviewComments.pendingSendItems ?? undefined,
-    isStarting: actions.isStarting,
+    isStarting: identity === null && actions.isStarting,
     isSavingModel: actions.isSavingModel,
     contextUsage,
     selectedModelSelection: picker.selection,

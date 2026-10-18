@@ -27,7 +27,7 @@ import {
   type AgentStudioRouteSessionResolution,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
-import { host } from "@/state/operations/host";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useChatSessionPreparation } from "@/features/agent-chat-composer/use-chat-session-preparation";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
 import {
@@ -70,6 +70,7 @@ export function useAgentStudioSelectedSessionView({
   repoSettings,
   isLoadingRepoSettings,
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
+  const host = useHostClient();
   const { readSessionTodos } = useAgentOperations();
   const { allRuntimeDefinitions: runtimeDefinitions, loadRepoRuntimeCatalog } =
     useRuntimeAvailabilityContext();
@@ -205,7 +206,7 @@ export function useAgentStudioSelectedSessionView({
       sessionScope: { kind: "workflow", taskId, role },
       resumeMode: "reattach",
     });
-  }, [workspaceRepoPath, runtimeKind, externalSessionId, workingDirectory, taskId, role]);
+  }, [host, workspaceRepoPath, runtimeKind, externalSessionId, workingDirectory, taskId, role]);
   const preparation = useChatSessionPreparation({
     identity: selectedSessionIdentity,
     targetKey: JSON.stringify([workspaceRepoPath, selectedSessionIdentity, taskId, role]),

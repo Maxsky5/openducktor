@@ -382,7 +382,6 @@ test.each([
     queryClient,
     client: {
       workspaceSessionStart: async () => ({ session: record, runtimeSession: null }),
-      },
       workspaceSessionSetDraftModel: async () => {
         await pending.promise;
         return bound;

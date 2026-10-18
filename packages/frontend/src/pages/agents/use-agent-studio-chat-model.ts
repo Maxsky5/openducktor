@@ -323,12 +323,6 @@ export function useAgentStudioChatModel({
   const pendingSendItems = reviewCommentComposer.pendingSendItems;
 
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
-    let preparationReason: string | null = null;
-    if (selectedSessionIdentity === null) {
-      preparationReason = "Start a session before sending a message.";
-    } else if (!selectedSessionState.preparation.ready) {
-      preparationReason = "Preparing the session...";
-    }
     const config: AgentChatComposerConfig = {
       ...messageDelivery,
       displayedSessionKey: selectedSessionKey,
@@ -345,14 +339,8 @@ export function useAgentStudioChatModel({
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
       isResumingSession: sessionActions.isResumingSession,
-      isReadOnly:
-        surfaceState.composerReadOnly ||
-        selectedSessionIdentity === null ||
-        !selectedSessionState.preparation.ready,
-      readOnlyReason:
-        surfaceState.composerReadOnlyReason ??
-        selectedSessionState.preparation.error ??
-        preparationReason,
+      isReadOnly: surfaceState.composerReadOnly || selectedSessionState.preparation.error !== null,
+      readOnlyReason: surfaceState.composerReadOnlyReason ?? selectedSessionState.preparation.error,
       draftScope: composerDraftScope,
       onSend: reviewCommentComposer.onSend,
       isStarting: sessionActions.isStarting,
@@ -399,7 +387,6 @@ export function useAgentStudioChatModel({
   }, [
     chatContextUsage,
     composerDraftScope,
-    selectedSessionState.preparation.ready,
     selectedSessionState.preparation.error,
     modelSelection.agentOptions,
     modelSelection.isSelectionCatalogLoading,

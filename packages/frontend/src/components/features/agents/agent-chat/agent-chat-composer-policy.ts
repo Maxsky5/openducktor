@@ -51,6 +51,7 @@ export function useComposerPolicy({
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
 
   const sendInputBlocked =
+    model.canSend === false ||
     isSubmitting ||
     Boolean(model.isSavingModel) ||
     isComposerInputDisabled ||
@@ -64,9 +65,9 @@ export function useComposerPolicy({
     : "Load chat settings before sending. Use Retry settings if the read failed.";
   const sendDisabled =
     !settingsReady ||
-    (steersTurn
-      ? sendInputBlocked || steerBlockedReason !== null || Object.keys(attachmentErrors).length > 0
-      : defaultSendDisabled);
+    sendInputBlocked ||
+    steerBlockedReason !== null ||
+    Object.keys(attachmentErrors).length > 0;
 
   return {
     isSubmitting,
@@ -92,6 +93,7 @@ type ComposerPolicyModel = Pick<
   | "isSavingModel"
   | "isInteractionEnabled"
   | "isReadOnly"
+  | "canSend"
   | "isWaitingInput"
   | "isResumingSession"
   | "speed"

@@ -1,11 +1,11 @@
 import { expect, mock, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import { applyAgentSessionLiveDelta } from "@/state/operations/agent-orchestrator/session-read-model/agent-session-live-projection";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { applyAgentSessionLiveDelta } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/agent-session-live-projection";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useChatSessionPreparation } from "./use-chat-session-preparation";
 
 const identity: AgentSessionIdentity = {

@@ -72,7 +72,7 @@ type UseAgentChatSendArgs = {
 /** The send state and actions that a chat composer reads. */
 export type AgentChatSend = Pick<
   AgentChatComposerModel,
-  "messageQueue" | "steerBlockedReason" | "runningTurnModel" | "isSending" | "onSend"
+  "messageQueue" | "steerBlockedReason" | "runningTurnModel" | "isSending" | "onSend" | "canSend"
 >;
 
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = [];
@@ -214,6 +214,7 @@ export function useAgentChatSend({
   );
 
   const isSending = target.activity.isActive(target.activityKey);
+  const canSend = target.canSend();
   // Chats spread this into memoized composer models, so it changes only with its values.
   return useMemo(
     () => ({
@@ -221,8 +222,9 @@ export function useAgentChatSend({
       steerBlockedReason,
       runningTurnModel,
       isSending,
+      canSend,
       onSend,
     }),
-    [isSending, messageQueue, onSend, runningTurnModel, steerBlockedReason],
+    [canSend, isSending, messageQueue, onSend, runningTurnModel, steerBlockedReason],
   );
 }
