@@ -87,12 +87,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
         ]);
       });
     }
-  }
 
-  for (const sessionScope of [
-    { kind: "repository" },
-    { kind: "workflow", taskId: "task-1", role: "build" },
-  ] as const) {
     test(`does not create a ${sessionScope.kind} thread after cancellation during preparation`, async () => {
       const entered = createDeferred<void>();
       const release = createDeferred<void>();
