@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactElement } from "react";
-import { CompactSearchField, SearchField } from "./search-field";
+import { createRef, type ReactElement } from "react";
+import { ToolbarSearchField, SearchField } from "./search-field";
 
 afterEach(() => {
   cleanup();
@@ -33,10 +33,10 @@ describe("SearchField", () => {
   });
 });
 
-describe("CompactSearchField", () => {
+describe("ToolbarSearchField", () => {
   test("names the field with a label that only screen readers show", () => {
     renderInParent(
-      <CompactSearchField
+      <ToolbarSearchField
         id="search"
         label="Search"
         value=""
@@ -51,7 +51,7 @@ describe("CompactSearchField", () => {
   test("clears the text with Escape and stops the event", () => {
     const onValueChange = mock((_value: string) => {});
     const { onParentKeyDown, input } = renderInParent(
-      <CompactSearchField
+      <ToolbarSearchField
         id="search"
         label="Search"
         value="main"
@@ -64,5 +64,22 @@ describe("CompactSearchField", () => {
 
     expect(onValueChange).toHaveBeenCalledWith("");
     expect(onParentKeyDown).not.toHaveBeenCalled();
+  });
+
+  test("gives its input through the ref, so a shortcut can focus it", () => {
+    const ref = createRef<HTMLInputElement>();
+    const { input } = renderInParent(
+      <ToolbarSearchField
+        ref={ref}
+        id="search"
+        label="Search"
+        value=""
+        placeholder="Search"
+        onValueChange={() => {}}
+      />,
+    );
+
+    if (!(input instanceof HTMLInputElement)) throw new Error("Expected the search input.");
+    expect(ref.current).toBe(input);
   });
 });
