@@ -3,9 +3,10 @@ import type {
   GitTargetBranch,
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
-  TaskCard,
 } from "@openducktor/contracts";
 import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
+import type { ComponentProps } from "react";
+import type { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskActivityState,
@@ -163,10 +164,5 @@ export type KanbanPageModels = {
   header: KanbanPageHeaderModel;
   content: KanbanPageContentModel;
   activeWorkspace: ActiveWorkspace | null;
-  mergedPullRequestModal: {
-    pullRequest: NonNullable<TaskCard["pullRequest"]>;
-    isLinking: boolean;
-    onCancel: () => void;
-    onConfirm: () => void;
-  } | null;
+  mergedPullRequestModal: ComponentProps<typeof MergedPullRequestConfirmDialog> | null;
 };

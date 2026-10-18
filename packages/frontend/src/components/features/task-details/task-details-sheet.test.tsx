@@ -15,6 +15,7 @@ import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import type { TaskStopImpactState, useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 enableReactActEnvironment();
@@ -134,8 +135,8 @@ const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
   onConfirmTaskAction: mock(() => {}),
   onDetectPullRequest: mock(() => {}),
   onUnlinkPullRequest: mock(() => {}),
-  detectingPullRequestTaskId: null,
-  unlinkingPullRequestTaskId: null,
+  detectingPullRequestTaskIds: new Set<string>(),
+  unlinkingPullRequestTaskIds: new Set<string>(),
   gitProviderContext: undefined,
   gitProviderReadError: null,
   registerTaskDetailsClose: mock(() => () => {}),
@@ -144,6 +145,63 @@ const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
 });
 
 describe("TaskDetailsSheet", () => {
+  test.each(["detect", "unlink"] as const)(
+    "shows each task's %s progress without locking idle tasks",
+    async (kind) => {
+      const { TaskDetailsSheet } = await import("./task-details-sheet");
+      const { TaskWorkflowActionsContext } =
+        await import("@/features/task-workflow/task-workflow-actions-context");
+      const actions = createTaskWorkflowActionsValue();
+      actions.gitProviderContext = createGitProviderContextFixture();
+      const busyTaskIds = new Set(["TASK-1", "TASK-2"]);
+      if (kind === "detect") actions.detectingPullRequestTaskIds = busyTaskIds;
+      else actions.unlinkingPullRequestTaskIds = busyTaskIds;
+      const task = createTaskCardFixture({
+        id: "TASK-1",
+        status: "human_review",
+        pullRequest:
+          kind === "unlink"
+            ? {
+                providerId: "github",
+                number: 42,
+                url: "https://github.com/openai/openducktor/pull/42",
+                state: "open",
+                createdAt: "2026-10-18T08:00:00Z",
+                updatedAt: "2026-10-18T08:00:00Z",
+              }
+            : undefined,
+      });
+      task.agentWorkflows.builder.completed = true;
+      const sheet = (taskId: string) => {
+        const shownTask = { ...task, id: taskId };
+        return (
+          <IsolatedProviders>
+            <TaskWorkflowActionsContext.Provider value={actions}>
+              <TaskDetailsSheet
+                task={shownTask}
+                allTasks={[shownTask]}
+                open
+                onOpenChange={() => {}}
+              />
+            </TaskWorkflowActionsContext.Provider>
+          </IsolatedProviders>
+        );
+      };
+      const view = render(sheet("TASK-1"));
+      try {
+        const buttonId =
+          kind === "detect" ? "task-details-detect-pr-button" : "task-details-unlink-pr-button";
+        expect(screen.getByTestId(buttonId).hasAttribute("disabled")).toBe(true);
+        view.rerender(sheet("TASK-2"));
+        expect(screen.getByTestId(buttonId).hasAttribute("disabled")).toBe(true);
+        view.rerender(sheet("TASK-3"));
+        expect(screen.getByTestId(buttonId).hasAttribute("disabled")).toBe(false);
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   test("passes activeWorkspace into task details view model", async () => {
     const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
 

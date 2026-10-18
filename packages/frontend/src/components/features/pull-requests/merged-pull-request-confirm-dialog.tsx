@@ -5,6 +5,8 @@ import { GitConfirmationDialog } from "@/components/features/agents/agent-studio
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 
 type MergedPullRequestConfirmDialogProps = {
+  taskId: string;
+  taskTitle: string | null;
   pullRequest: PullRequest | null;
   isLinking: boolean;
   onCancel: () => void;
@@ -26,6 +28,8 @@ function formatMergedAt(value: string): string {
 }
 
 export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestConfirmDialog({
+  taskId,
+  taskTitle,
   pullRequest,
   isLinking,
   onCancel,
@@ -63,6 +67,13 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
       contentTestId="merged-pr-dialog"
     >
       <div className="grid gap-4">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">Task to mark done</p>
+          {taskTitle ? (
+            <p className="break-words font-medium text-foreground">{taskTitle}</p>
+          ) : null}
+          <p className="break-words font-mono text-sm text-muted-foreground">{taskId}</p>
+        </div>
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">

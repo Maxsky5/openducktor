@@ -14,7 +14,7 @@ type UseAgentStudioRightPanelBridgeArgs = {
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
-  detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
+  detectingPullRequestTaskIds: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskIds"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
   gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
   gitProviderReadError?: UseAgentsPageRightPanelModelArgs["gitProviderReadError"];
@@ -30,7 +30,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   selectedFile: UseAgentsPageRightPanelModelArgs["selectedFile"];
   onSelectFile: UseAgentsPageRightPanelModelArgs["onSelectFile"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
-  detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
+  detectingPullRequestTaskIds: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskIds"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
   gitProviderContext?: UseAgentsPageRightPanelModelArgs["gitProviderContext"];
   gitProviderReadError: string | null;
@@ -69,7 +69,7 @@ export function useAgentStudioRightPanelBridge({
   selectedFile,
   onSelectFile,
   setTaskTargetBranch,
-  detectingPullRequestTaskId,
+  detectingPullRequestTaskIds,
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError = null,
@@ -100,7 +100,7 @@ export function useAgentStudioRightPanelBridge({
         selectedFile,
         onSelectFile,
         setTaskTargetBranch,
-        detectingPullRequestTaskId,
+        detectingPullRequestTaskIds,
         onDetectPullRequest,
         gitProviderContext,
         gitProviderReadError,
@@ -109,7 +109,7 @@ export function useAgentStudioRightPanelBridge({
   }, [
     activeWorkspace,
     buildTools,
-    detectingPullRequestTaskId,
+    detectingPullRequestTaskIds,
     documentsModel,
     gitProviderContext,
     gitProviderReadError,

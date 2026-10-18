@@ -115,8 +115,8 @@ export function TaskDetailsSheetContent(
     task,
     onDetectPullRequest: workflowActions?.onDetectPullRequest,
     onUnlinkPullRequest: workflowActions?.onUnlinkPullRequest,
-    detectingPullRequestTaskId: workflowActions?.detectingPullRequestTaskId ?? null,
-    unlinkingPullRequestTaskId: workflowActions?.unlinkingPullRequestTaskId ?? null,
+    detectingPullRequestTaskIds: workflowActions?.detectingPullRequestTaskIds,
+    unlinkingPullRequestTaskIds: workflowActions?.unlinkingPullRequestTaskIds,
   });
   const historicalSessionRoles = resolveTaskHistoricalSessionRoles(task, historicalSessions);
   const footerProps = getTaskDetailsFooterProps({
@@ -281,14 +281,14 @@ function getPullRequestHeaderProps({
   task,
   onDetectPullRequest,
   onUnlinkPullRequest,
-  detectingPullRequestTaskId,
-  unlinkingPullRequestTaskId,
+  detectingPullRequestTaskIds,
+  unlinkingPullRequestTaskIds,
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
   onDetectPullRequest: TaskWorkflowActions["onDetectPullRequest"] | undefined;
   onUnlinkPullRequest: TaskWorkflowActions["onUnlinkPullRequest"] | undefined;
-  detectingPullRequestTaskId: string | null;
-  unlinkingPullRequestTaskId: string | null;
+  detectingPullRequestTaskIds: ReadonlySet<string> | undefined;
+  unlinkingPullRequestTaskIds: ReadonlySet<string> | undefined;
 }): TaskDetailsPullRequestHeaderProps {
   const props: TaskDetailsPullRequestHeaderProps = {};
   if (onDetectPullRequest && canDetectTaskPullRequest(task)) {
@@ -297,10 +297,10 @@ function getPullRequestHeaderProps({
   if (onUnlinkPullRequest) {
     props.onUnlinkPullRequest = () => onUnlinkPullRequest(task.id);
   }
-  if (detectingPullRequestTaskId === task.id) {
+  if (detectingPullRequestTaskIds?.has(task.id)) {
     props.isDetectingPullRequest = true;
   }
-  if (unlinkingPullRequestTaskId === task.id) {
+  if (unlinkingPullRequestTaskIds?.has(task.id)) {
     props.isUnlinkingPullRequest = true;
   }
   return props;

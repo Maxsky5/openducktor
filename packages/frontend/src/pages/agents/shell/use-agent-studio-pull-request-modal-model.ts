@@ -31,7 +31,7 @@ export function useAgentStudioPullRequestModalModel({
     }
 
     return {
-      pullRequest: pendingMergedPullRequest.pullRequest,
+      ...pendingMergedPullRequest,
       isLinking: pendingMergedPullRequest.taskId === linkingMergedPullRequestTaskId,
       onCancel: onCancelLinkMergedPullRequest,
       onConfirm: handleConfirm,

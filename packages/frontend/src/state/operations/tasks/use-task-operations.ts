@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
@@ -61,39 +61,27 @@ export function useTaskOperations({
   const pullRequestOperations = useTaskPullRequestOperations({
     activeRepoPath,
     activeWorkspaceId,
+    tasks: taskReadFlow.tasks,
     refreshTaskData: taskReadFlow.refreshTaskData,
     runTaskMutation: mutationRunner.runTaskMutation,
     pullRequestHostPort,
     notificationPort: pullRequestNotificationPort,
     taskChatDraftCleanup: pullRequestChatDraftCleanup,
   });
-  const { clearPullRequestState } = pullRequestOperations;
-
-  const clearTaskData = useCallback(() => {
-    clearTaskReadState();
-    clearPullRequestState();
-  }, [clearPullRequestState, clearTaskReadState]);
 
   return {
+    ...pullRequestOperations,
     tasks: taskReadFlow.tasks,
     tasksAreCurrent: taskReadFlow.tasksAreCurrent,
     isForegroundLoadingTasks: taskReadFlow.isForegroundLoadingTasks,
     isRefreshingTasksInBackground: taskReadFlow.isRefreshingTasksInBackground,
     isLoadingTasks: taskReadFlow.isLoadingTasks,
-    detectingPullRequestTaskId: pullRequestOperations.detectingPullRequestTaskId,
-    linkingMergedPullRequestTaskId: pullRequestOperations.linkingMergedPullRequestTaskId,
-    unlinkingPullRequestTaskId: pullRequestOperations.unlinkingPullRequestTaskId,
-    pendingMergedPullRequest: pullRequestOperations.pendingMergedPullRequest,
     setIsLoadingTasks: taskReadFlow.setIsLoadingTasks,
-    clearTaskData,
+    clearTaskData: clearTaskReadState,
     refreshTaskData: taskReadFlow.refreshTaskData,
     loadWorkspaceTasks: taskReadFlow.loadWorkspaceTasks,
     refreshTasksWithOptions: taskReadFlow.refreshTasksWithOptions,
     refreshTasks: taskReadFlow.refreshTasks,
-    syncPullRequests: pullRequestOperations.syncPullRequests,
-    linkMergedPullRequest: pullRequestOperations.linkMergedPullRequest,
-    cancelLinkMergedPullRequest: pullRequestOperations.cancelLinkMergedPullRequest,
-    unlinkPullRequest: pullRequestOperations.unlinkPullRequest,
     createTask: mutationCommands.createTask,
     updateTask: mutationCommands.updateTask,
     setTaskTargetBranch: mutationCommands.setTaskTargetBranch,

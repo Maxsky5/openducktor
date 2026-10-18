@@ -42,7 +42,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectFile: (file: TaskExecutionSelectedFile) => TaskExecutionFileSelectionResult;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
-  detectingPullRequestTaskId: string | null;
+  detectingPullRequestTaskIds: ReadonlySet<string>;
   onDetectPullRequest: (taskId: string) => void;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
@@ -59,7 +59,7 @@ type BuildAgentsPageDiffModelArgs<GitActions extends object> = {
   gitActions: GitActions;
   selectedTask: BuildToolsSelectedView["selectedTask"];
   commentOwner?: InlineCommentOwner | null;
-  detectingPullRequestTaskId: string | null;
+  detectingPullRequestTaskIds: ReadonlySet<string>;
   onDetectPullRequest: (taskId: string) => void;
   gitProviderContext?: RepositoryGitProviderContext | undefined;
   gitProviderReadError?: string | null;
@@ -101,7 +101,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   gitActions,
   selectedTask,
   commentOwner = null,
-  detectingPullRequestTaskId,
+  detectingPullRequestTaskIds,
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError = null,
@@ -125,7 +125,7 @@ export function buildAgentsPageDiffModel<GitActions extends object>({
   if (openInTargetPath) {
     optionalModel.openDirectoryInTool = (toolId) => openDirectoryInTool(openInTargetPath, toolId);
   }
-  if (selectedTask && detectingPullRequestTaskId === selectedTask.id) {
+  if (selectedTask && detectingPullRequestTaskIds.has(selectedTask.id)) {
     optionalModel.isDetectingPullRequest = true;
   }
   if (pullRequestDetectionTask) {
@@ -222,7 +222,7 @@ export function useAgentsPageRightPanelModel({
   selectedFile,
   onSelectFile,
   setTaskTargetBranch,
-  detectingPullRequestTaskId,
+  detectingPullRequestTaskIds,
   onDetectPullRequest,
   gitProviderContext,
   gitProviderReadError = null,
@@ -409,7 +409,7 @@ export function useAgentsPageRightPanelModel({
       gitActions,
       selectedTask: selectedView.selectedTask,
       commentOwner,
-      detectingPullRequestTaskId,
+      detectingPullRequestTaskIds,
       onDetectPullRequest,
       gitProviderContext,
       gitProviderReadError,
@@ -437,7 +437,7 @@ export function useAgentsPageRightPanelModel({
     gitProviderContext,
     gitProviderReadError,
     gitPanelSubjectKey,
-    detectingPullRequestTaskId,
+    detectingPullRequestTaskIds,
     selectedView.selectedTask,
   ]);
   useGitCommentDraftValidation(diffModel);

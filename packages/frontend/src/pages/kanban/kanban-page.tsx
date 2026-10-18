@@ -29,12 +29,7 @@ export function KanbanPage(): ReactElement {
       <KanbanPageHeader model={models.header} />
       <KanbanPageContent model={models.content} />
       {models.mergedPullRequestModal ? (
-        <MergedPullRequestConfirmDialog
-          pullRequest={models.mergedPullRequestModal.pullRequest}
-          isLinking={models.mergedPullRequestModal.isLinking}
-          onCancel={models.mergedPullRequestModal.onCancel}
-          onConfirm={models.mergedPullRequestModal.onConfirm}
-        />
+        <MergedPullRequestConfirmDialog {...models.mergedPullRequestModal} />
       ) : null}
     </div>
   );

@@ -32,8 +32,8 @@ export type TaskWorkflowActions = {
   onConfirmTaskAction: (taskId: string, action: TaskConfirmRequestAction) => void;
   onDetectPullRequest: (taskId: string) => void;
   onUnlinkPullRequest: (taskId: string) => void;
-  detectingPullRequestTaskId: string | null;
-  unlinkingPullRequestTaskId: string | null;
+  detectingPullRequestTaskIds: ReadonlySet<string>;
+  unlinkingPullRequestTaskIds: ReadonlySet<string>;
   gitProviderContext: RepositoryGitProviderContext | undefined;
   gitProviderReadError: string | null;
   registerTaskDetailsClose: (taskId: string, close: () => void) => () => void;

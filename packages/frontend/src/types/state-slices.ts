@@ -5,7 +5,6 @@ import type {
   GitProviderRepository,
   GitTargetBranch,
   GlobalGitConfig,
-  PullRequest,
   RepoActions,
   RuntimeApprovalReplyOutcome,
   HostRuntimeEvent,
@@ -40,6 +39,7 @@ import type {
   PolicyBoundSessionRef,
 } from "@openducktor/core";
 import type { RepoAgentDefaultRole, ModelDefaultDraft } from "@/lib/repo-agent-defaults";
+import type { TaskPullRequestOperations } from "./task-pull-request";
 import type {
   AgentMessageSendOptions,
   AgentMessageSendReceipt,
@@ -202,24 +202,13 @@ export type HostRuntimeStatusContextValue = {
   runtimeEvents: HostRuntimeEvents;
 };
 
-export type TasksStateContextValue = {
+export type TasksStateContextValue = TaskPullRequestOperations & {
   tasksAreCurrent: boolean;
   isForegroundLoadingTasks: boolean;
   isRefreshingTasksInBackground: boolean;
   isLoadingTasks: boolean;
-  detectingPullRequestTaskId: string | null;
-  linkingMergedPullRequestTaskId: string | null;
-  unlinkingPullRequestTaskId: string | null;
-  pendingMergedPullRequest: {
-    taskId: string;
-    pullRequest: PullRequest;
-  } | null;
   tasks: TaskCard[];
   refreshTasks: () => Promise<void>;
-  syncPullRequests: (taskId: string) => Promise<void>;
-  linkMergedPullRequest: () => Promise<void>;
-  cancelLinkMergedPullRequest: () => void;
-  unlinkPullRequest: (taskId: string) => Promise<void>;
   createTask: (input: TaskCreateInput, assets?: TaskAssetDescriptionMutation) => Promise<void>;
   updateTask: (
     taskId: string,
