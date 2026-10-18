@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { canResolveAgentStudioSendTargetSession } from "./agent-studio-send-target";
 
 const sessionIdentity = (externalSessionId: string): AgentSessionIdentity => ({

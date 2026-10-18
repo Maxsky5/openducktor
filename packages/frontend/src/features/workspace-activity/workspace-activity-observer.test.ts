@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { buildSessionNavigationModel } from "@/state/read-models/session-navigation-read-model";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createWorkspaceActivityObserver,
   type WorkspaceActivityArchivedSessionsPort,
-} from "./workspace-activity-observer";
-import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
+import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
 
 const runtimeKind = "codex" as const;
 

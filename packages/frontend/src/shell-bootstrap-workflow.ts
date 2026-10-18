@@ -1,4 +1,4 @@
-import type { ThemePreference } from "@openducktor/contracts";
+import type { QueryClient } from "@tanstack/react-query";
 import type { LocalHost } from "./lib/host-location";
 import type { ShellBridge } from "./lib/shell-bridge";
 
@@ -6,25 +6,20 @@ const DEFAULT_ROOT_ID = "root";
 
 export type OpenDucktorShellBootstrapOptions = {
   createShellBridge: () => ShellBridge;
-  hosts?: {
+  hosts: {
     localHost: LocalHost | null;
     defaultEndpoint?: string | undefined;
-    createRemoteBridge: (endpoint: string, local: ShellBridge | undefined) => ShellBridge;
+    createRemoteBridge: (
+      endpoint: string,
+      local: ShellBridge | undefined,
+      queryClient: QueryClient,
+    ) => ShellBridge;
     navigate?: () => Promise<void>;
   };
   prepare?: () => void | Promise<void>;
   rootElement?: HTMLElement | null | undefined;
   rootId?: string;
   routerMode?: "browser" | "hash";
-};
-
-export type ShellBootstrapDependencies = {
-  configureBridge: (bridge: ShellBridge) => void;
-  getRootById: (rootId: string) => HTMLElement | null;
-  loadSettingsSnapshot: () => Promise<{ theme: ThemePreference }>;
-  applyTheme: (preference: ThemePreference) => void;
-  renderApp: (rootElement: HTMLElement) => void;
-  reportSettingsPreloadError: (cause: unknown) => void;
 };
 
 const rootMissingMessage = (rootId: string): string =>
@@ -35,7 +30,7 @@ const explicitNullRootMessage = (): string =>
 
 export const resolveRootElement = (
   options: OpenDucktorShellBootstrapOptions,
-  getRootById: ShellBootstrapDependencies["getRootById"],
+  getRootById: (rootId: string) => HTMLElement | null,
 ): HTMLElement => {
   const rootId = options.rootId ?? DEFAULT_ROOT_ID;
   if (options.rootElement === null) {
@@ -53,24 +48,4 @@ export const resolveRootElement = (
   }
 
   return rootElement;
-};
-
-export const runOpenDucktorShellBootstrap = async (
-  options: OpenDucktorShellBootstrapOptions,
-  dependencies: ShellBootstrapDependencies,
-): Promise<void> => {
-  await options.prepare?.();
-
-  const rootElement = resolveRootElement(options, dependencies.getRootById);
-  const bridge = options.createShellBridge();
-  dependencies.configureBridge(bridge);
-
-  try {
-    const settingsSnapshot = await dependencies.loadSettingsSnapshot();
-    dependencies.applyTheme(settingsSnapshot.theme);
-  } catch (error) {
-    dependencies.reportSettingsPreloadError(error);
-  }
-
-  dependencies.renderApp(rootElement);
 };

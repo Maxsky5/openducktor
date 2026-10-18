@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   assistantRoleFromMessage,
   buildToolSummary,

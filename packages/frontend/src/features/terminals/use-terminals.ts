@@ -14,12 +14,11 @@ import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useSyncExternalStore } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
-import { host } from "@/state/operations/host";
-import { platformQueryOptions } from "@/state/queries/system";
+import { platformQueryOptions } from "@openducktor/frontend-core/queries/system";
 import {
   invalidateTerminalList,
   terminalListByFilterQueryOptions,
-} from "@/state/queries/terminals";
+} from "@openducktor/frontend-core/queries/terminals";
 import { terminalActivityOwnerKey } from "./terminal-activity-store";
 import {
   createTerminalPresentationState,
@@ -29,14 +28,13 @@ import {
 } from "./terminal-presentation-state";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { useTerminalTransport } from "./use-terminal-transport";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { HostClient } from "@openducktor/host-client";
 
 export type { TerminalTab } from "./terminal-presentation-state";
 
 export type TerminalDependencies = {
-  hostClient: Pick<
-    typeof host,
-    "systemGetPlatform" | "terminalClose" | "terminalCreate" | "terminalList" | "terminalRunAction"
-  >;
+  hostClient: Pick<HostClient, "terminalClose" | "terminalCreate" | "terminalRunAction">;
   terminalBridge: ReturnType<typeof getShellBridge>["terminals"];
 };
 
@@ -112,8 +110,13 @@ export const useTerminals = (
     isScopeLoading: boolean;
     mountedScopeKeys: readonly string[];
   },
-  dependencies = defaultDependencies(),
+  suppliedDependencies?: TerminalDependencies,
 ): TerminalSessionsModel => {
+  const hostClient = useHostClient();
+  const dependencies = suppliedDependencies ?? {
+    hostClient,
+    terminalBridge: getShellBridge().terminals,
+  };
   const scopeKey = scope?.key ?? null;
   const queryClient = useQueryClient();
   const [presentation, dispatch] = useReducer(
@@ -127,10 +130,9 @@ export const useTerminals = (
   const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
   const terminalOptions = terminalListByFilterQueryOptions({
     filter: scope === null ? null : listFilter,
-    hostClient: dependencies.hostClient,
   });
   const terminalQuery = useQuery<TerminalListResponse>(terminalOptions);
-  const platformQuery = useQuery(platformQueryOptions(dependencies.hostClient));
+  const platformQuery = useQuery(platformQueryOptions());
 
   // Switch scopes during render so the next commit cannot show the old scope.
   if (presentation.activeScopeKey !== scopeKey) {
@@ -430,11 +432,6 @@ const terminalStartBlockedReason = ({
   }
   return null;
 };
-
-const defaultDependencies = (): TerminalDependencies => ({
-  hostClient: host,
-  terminalBridge: getShellBridge().terminals,
-});
 
 const filterForContext = (context: TerminalOwnedContext | null): TerminalListFilter => {
   if (context === null) return { kind: "all" };

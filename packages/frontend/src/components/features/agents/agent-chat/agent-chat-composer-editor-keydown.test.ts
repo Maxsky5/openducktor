@@ -10,9 +10,9 @@ import {
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
-import { isApplePlatform } from "@/lib/steer-shortcut";
+import { isApplePlatform } from "@/lib/device-platform";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import type {
   ReferenceMenuItem,

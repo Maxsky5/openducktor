@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import {
   buildAgentStudioQuickActions,

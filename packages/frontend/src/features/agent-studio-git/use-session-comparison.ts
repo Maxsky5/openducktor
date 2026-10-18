@@ -7,22 +7,22 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useId, useMemo, useState } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
-import { hostClient } from "@/lib/host-client";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   canonicalTargetBranch,
   targetBranchFromSelection,
   targetBranchSelectionValue,
-} from "@/lib/target-branch";
+} from "@openducktor/frontend-core/lib/target-branch";
 import {
   continuedCheckoutRead,
   gitComparisonTargetQueryOptions,
   invalidateRepoBranchesQuery,
   gitQueryKeys,
   repoBranchesQueryOptions,
-} from "@/state/queries/git";
-import { renewWorkspaceReadContext } from "@/state/queries/workspace-refresh";
+} from "@openducktor/frontend-core/queries/git";
+import { renewWorkspaceReadContext } from "@openducktor/frontend-core/queries/workspace-refresh";
 import type { GitRefreshComparison } from "./refresh/git-refresh-coordinator";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 export type SessionComparisonInput = {
   enabled: boolean;
@@ -100,7 +100,11 @@ function comparisonRefreshStep(
     // Fetch also updates the current branch's upstream when the comparison target is fixed.
     fetchKey: JSON.stringify([repoPath, workingDirectory, targetBranch, branchKey]),
     fetch: async () => {
-      const result = await hostClient.gitFetchRemote(repoPath, targetBranch, workingDirectory);
+      const result = await connectionHost(queryClient).gitFetchRemote(
+        repoPath,
+        targetBranch,
+        workingDirectory,
+      );
       renewWorkspaceReadContext(queryClient, workingDirectory);
       if (result.outcome !== "fetched") return;
       await invalidateRepoBranchesQuery(queryClient, repoPath);

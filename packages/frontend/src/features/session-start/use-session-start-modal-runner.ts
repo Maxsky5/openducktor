@@ -3,14 +3,14 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { errorMessage } from "@/lib/errors";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   INVALID_TASK_TARGET_BRANCH_LABEL,
   targetBranchFromSelection,
   taskTargetBranchValidationError,
-} from "@/lib/target-branch";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/lib/target-branch";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import { isSessionStartFailureFeedbackHandled } from "./session-start-orchestration";
@@ -19,7 +19,7 @@ import type {
   ReuseSessionStartDecision,
   SessionStartExistingSessionOption,
 } from "./session-start-types";
-import { STANDARD_SPEED, withSpeed } from "@/lib/model-catalog-selection";
+import { STANDARD_SPEED, withSpeed } from "@openducktor/frontend-core/lib/model-catalog-selection";
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";

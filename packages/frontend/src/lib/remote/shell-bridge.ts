@@ -1,183 +1,45 @@
-import { createBrowserRemoteTaskSubscriptions, waitForRemoteAdmission } from "./task-subscriptions";
-import { createNotificationFrameRelay } from "./notification-frame-relay";
-import { synchronizeBrowserState } from "./state-recovery";
+import { createRemoteHostConnection } from "@openducktor/frontend-core/recovery/remote-host-connection";
 import {
-  REMOTE_BASELINE_CAPABILITIES,
-  type AgentSessionLiveAttachInput,
-  type AgentSessionLiveEnvelope,
-} from "@openducktor/contracts";
-import { createAgentSessionLiveAttachment } from "@openducktor/host-client";
-import {
-  createRemoteHostClient,
   remoteError,
   type RemoteHostClient,
-  type RemoteSynchronizationContext,
+  type RemoteTransport,
 } from "@openducktor/host-client/remote";
-import {
-  createDisabledAppUpdateBridge,
-  observeShellEventResult,
-  type BrowserLiveControlListener,
-  type ShellBridge,
-} from "../shell-bridge";
-import { appQueryClient } from "../query-client";
-import { browserLiveStreamWarningEvent } from "../browser-live-control-events";
-import type { RemoteTransport } from "@openducktor/host-client/remote";
+import type { QueryClient } from "@tanstack/react-query";
+import { createDisabledAppUpdateBridge, type ShellBridge } from "../shell-bridge";
 
-type LiveOwner = {
-  input: AgentSessionLiveAttachInput;
-  attachment: ReturnType<typeof createAgentSessionLiveAttachment>;
-  restoring: Promise<void> | null;
-};
-/** Shares one host connection across views and waits for their recovery before work unlocks. */
+/** Creates the browser shell of a remote host. The frontend core owns the connection recovery. */
 export const createRemoteShellBridge = ({
   endpoint,
   version,
   transport,
-  notifications: notificationBridge,
+  notifications,
+  queryClient,
 }: {
   endpoint: string;
   version: string;
   transport: RemoteTransport;
   notifications: ShellBridge["notifications"];
+  queryClient: QueryClient;
 }): ShellBridge => {
-  const notifications = createNotificationFrameRelay();
-  const live = new Set<LiveOwner>();
-  const terminalRecoveries = new Set<(signal: AbortSignal) => Promise<void>>();
-  const controls = new Set<BrowserLiveControlListener>();
-  const waitForAdmission = (signal?: AbortSignal) => waitForRemoteAdmission(remote, signal);
-  const restoreLive = (owner: LiveOwner): Promise<void> => {
-    if (owner.restoring) return owner.restoring;
-    owner.attachment.restart();
-    const restoring = waitForAdmission()
-      .then(() => remote.client.agentSessionLiveAttach(owner.input))
-      .then((snapshot) => {
-        if (live.has(owner)) owner.attachment.install(snapshot);
-      });
-    owner.restoring = restoring;
-    void restoring
-      .finally(() => {
-        if (owner.restoring === restoring) owner.restoring = null;
-      })
-      .catch(() => {});
-    return restoring;
-  };
-  const synchronize = async (context: RemoteSynchronizationContext) => {
-    // State owners must apply stream snapshots before current-state reads.
-    await taskOwners.synchronize();
-    await Promise.all([...live].map(restoreLive));
-    await Promise.all([...terminalRecoveries].map((recover) => recover(context.signal)));
-    context.signal.throwIfAborted();
-    // Fresh bootstrap reads can await connect; later attempts must recover owners that failed.
-    if (context.generation > 1 || context.previousHostInstanceId !== null) {
-      const missed =
-        context.previousHostInstanceId === null ||
-        context.previousHostInstanceId !== context.host.hostInstanceId ||
-        context.hostReplay.hostChanged ||
-        context.hostReplay.gaps.length > 0;
-      await synchronizeBrowserState(appQueryClient, controls, missed);
-      context.signal.throwIfAborted();
-    }
-  };
-  const remote = createRemoteHostClient(
+  const { remote, waitForAdmission, subscribeRecovery, ...host } = createRemoteHostConnection({
     endpoint,
-    {
-      appVersion: version,
-      supportedProtocolVersions: [1],
-      requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
-      optionalCapabilities: [],
-    },
+    version,
     transport,
-    synchronize,
-  );
-  const taskOwners = createBrowserRemoteTaskSubscriptions(remote);
-  remote.subscribeState((state) => {
-    if (state.status === "disconnected" || state.status === "failed" || state.status === "idle") {
-      notifications.fail(new Error(state.failure?.message ?? "The remote connection was lost."));
-      taskOwners.invalidate();
-      for (const owner of live) owner.attachment.restart();
-      for (const listener of controls)
-        observeShellEventResult(listener(browserLiveStreamWarningEvent(state.failure?.message)));
-    }
+    queryClient,
   });
-  remote.subscribeNotifications((frame) => notifications.accept(frame));
-  remote.subscribeHostEvents((event) => {
-    if (event.channel === "openducktor://agent-session-live-event")
-      for (const owner of live) owner.attachment.accept(event.payload);
-  });
-  const subscribe = async (
-    listener: (event: import("@openducktor/contracts").HostEventEnvelope) => void,
-    controlListener?: BrowserLiveControlListener,
-  ) => {
-    const stop = remote.subscribeHostEvents(listener);
-    if (controlListener) controls.add(controlListener);
-    return () => {
-      stop();
-      if (controlListener) controls.delete(controlListener);
-    };
-  };
-  // Admission starts before mounting. View owners add their synchronization work as they mount.
-  void remote.connect().catch((cause) => console.error("Remote browser connection failed", cause));
   return {
-    client: remote.client,
+    ...host,
     remoteConnection: remote,
     dispose: () => remote.disconnect(),
     setActive: (active) => remote.setActive(active),
     capabilities: { canOpenExternalUrls: true, canPreviewLocalAttachments: true },
-    notifications: notificationBridge,
+    notifications,
     appUpdates: createDisabledAppUpdateBridge({
       status: "disabled",
       currentVersion: version,
       disabledCode: "unsupported_web_runner",
       disabledReason: "Use the local shell to install app updates.",
     }),
-    subscribeRuntimeChanges: (listener) =>
-      subscribe((event) => {
-        if (event.channel === "openducktor://runtime-changed")
-          observeShellEventResult(listener(event.payload));
-      }, listener),
-    subscribeRunEvents: (listener) =>
-      subscribe((event) => {
-        if (event.channel === "openducktor://run-event")
-          observeShellEventResult(listener(event.payload));
-      }, listener),
-    subscribeWorkspaceSessionUpdates: (listener) =>
-      subscribe((event) => {
-        if (event.channel === "openducktor://workspace-session-updated")
-          observeShellEventResult(listener(event.payload));
-      }, listener),
-    subscribeAzureDevOpsConnectionUpdates: (listener) =>
-      subscribe((event) => {
-        if (event.channel === "openducktor://azure-devops-connection-updated")
-          listener(event.payload);
-      }),
-    subscribeWorkspaceProviderSetupUpdates: (listener) =>
-      subscribe((event) => {
-        if (event.channel === "openducktor://workspace-provider-setup-updated")
-          listener(event.payload);
-      }),
-    observeAgentSessionLive: async (
-      input,
-      listener: (envelope: AgentSessionLiveEnvelope) => void,
-    ) => {
-      const owner: LiveOwner = {
-        input,
-        attachment: createAgentSessionLiveAttachment(input.repoPath, listener),
-        restoring: null,
-      };
-      live.add(owner);
-      try {
-        await restoreLive(owner);
-      } catch (cause) {
-        live.delete(owner);
-        throw cause;
-      }
-      return () => {
-        live.delete(owner);
-      };
-    },
-    subscribeNotificationStream: async (input, onFrame, onFailure) =>
-      notifications.subscribe(input, onFrame, onFailure),
-    subscribeTaskStream: taskOwners.subscribeTaskStream,
     openExternalUrl: async (url) => {
       const parsed = new URL(url);
       if (!["http:", "https:"].includes(parsed.protocol))
@@ -196,12 +58,7 @@ export const createRemoteShellBridge = ({
       };
     },
     terminals: {
-      subscribeRecovery: (recover) => {
-        terminalRecoveries.add(recover);
-        return () => {
-          terminalRecoveries.delete(recover);
-        };
-      },
+      subscribeRecovery,
       connect: async (onFrame, onState, onFailure) => {
         const abort = new AbortController();
         await waitForAdmission();

@@ -1,42 +1,28 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { GitFileDiff } from "@openducktor/contracts";
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import type { DiffScope } from "@/features/agent-studio-git";
 import { toFailedScopeState } from "@/features/agent-studio-git/model/scope-state";
 import type { AgentStudioGitPanelModel } from "./types";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createBuildToolsSnapshotFixture,
   createEmptyScopeStateFixture,
 } from "@/pages/agents/shell/agents-page-build-tools.test-support";
-import { readInlineCommentDraftsFromStorage } from "@/state/inline-comment-draft-storage";
+import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { readInlineCommentDraftsFromStorage } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import {
   type AddInlineCommentDraftInput,
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
   toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+} from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
 import { useGitCommentDraftValidation } from "./use-git-comment-draft-validation";
-type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
-
-const createMemoryStorage = (): TestStorage => {
-  const values = new Map<string, string>();
-  return {
-    get length() {
-      return values.size;
-    },
-    key: (index) => Array.from(values.keys())[index] ?? null,
-    getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => {
-      values.set(key, value);
-    },
-    removeItem: (key) => {
-      values.delete(key);
-    },
-  };
-};
 
 const createFileDiff = (file: string): GitFileDiff => ({
   file,
@@ -69,19 +55,34 @@ const requireOwnerKey = (value: string | null): string => {
 
 let COMMENT_OWNER_KEY: string;
 
-const setCommentStorage = (storage: TestStorage): void => {
-  setInlineCommentDraftScheduleTaskForTests(() => () => {});
-  setInlineCommentDraftStorageForTests(storage);
+// Each connection stands for one app session. A reload opens a new one over the same storage.
+const connections: ClientConnection[] = [];
+
+const currentConnection = (): ClientConnection => {
+  const connection = connections.at(-1);
+  if (!connection) throw new Error("Open a comment connection first.");
+  return connection;
 };
 
-const reloadCommentStore = (storage: TestStorage): void => {
-  resetInlineCommentDraftStoreForTests();
+const commentDrafts = () => currentConnection().drafts.inlineComments;
+
+function CommentConnection({ children }: PropsWithChildren): ReactElement {
+  return createElement(ClientConnectionProvider, { connection: currentConnection() }, children);
+}
+
+const harnessOptions = { wrapper: CommentConnection };
+
+const setCommentStorage = (storage: ClientStorage): void => {
+  connections.push(createTestClientConnection({ storage, scheduleTask: () => () => {} }));
+};
+
+const reloadCommentStore = (storage: ClientStorage): void => {
   setCommentStorage(storage);
-  useInlineCommentDraftStore.getState().hydrate(COMMENT_OWNER_KEY);
+  commentDrafts().getState().hydrate(COMMENT_OWNER_KEY);
 };
 
 const seedStoredComments = (inputs: AddInlineCommentDraftInput[]): void => {
-  const store = useInlineCommentDraftStore.getState();
+  const store = commentDrafts().getState();
   for (const input of inputs) {
     store.addDraft(COMMENT_OWNER_KEY, input);
   }
@@ -89,7 +90,7 @@ const seedStoredComments = (inputs: AddInlineCommentDraftInput[]): void => {
 };
 
 const pendingCommentPaths = (): string[] =>
-  useInlineCommentDraftStore
+  commentDrafts()
     .getState()
     .getPendingDrafts(COMMENT_OWNER_KEY)
     .map((draft) => draft.filePath);
@@ -118,12 +119,13 @@ for (const owner of [
 ] satisfies InlineCommentOwner[]) {
   describe(`Git comment draft validation for ${owner.kind}`, () => {
     beforeEach(() => {
-      resetInlineCommentDraftStoreForTests();
       COMMENT_OWNER_KEY = requireOwnerKey(toInlineCommentDraftOwnerKey(owner));
     });
-    afterEach(() => resetInlineCommentDraftStoreForTests());
+    afterEach(async () => {
+      await Promise.all(connections.splice(0).map((connection) => connection.dispose()));
+    });
     test("drops restored comments for files missing from a loaded scope and persists the drop", async () => {
-      const storage = createMemoryStorage();
+      const storage = createMemoryClientStorage();
       setCommentStorage(storage);
       seedStoredComments([
         createCommentInput({ filePath: "src/present.ts" }),
@@ -138,7 +140,7 @@ for (const owner of [
         fileDiffs: [createFileDiff("src/present.ts")],
       });
 
-      const harness = createHookHarness(useGitCommentDraftValidation, snapshot);
+      const harness = createHookHarness(useGitCommentDraftValidation, snapshot, harnessOptions);
       await harness.mount();
 
       expect(pendingCommentPaths()).toEqual(["src/present.ts"]);
@@ -152,7 +154,7 @@ for (const owner of [
     });
 
     test("skips unloaded and failed scopes and validates each owner scope once", async () => {
-      const storage = createMemoryStorage();
+      const storage = createMemoryClientStorage();
       setCommentStorage(storage);
       seedStoredComments([
         createCommentInput({ filePath: "src/missing-uncommitted.ts" }),
@@ -163,7 +165,7 @@ for (const owner of [
       const snapshot = createModel(owner);
       snapshot.loadedScopesByScope = { target: false, uncommitted: false };
 
-      const harness = createHookHarness(useGitCommentDraftValidation, snapshot);
+      const harness = createHookHarness(useGitCommentDraftValidation, snapshot, harnessOptions);
       await harness.mount();
       expect(pendingCommentPaths()).toEqual([
         "src/missing-target.ts",
@@ -187,7 +189,7 @@ for (const owner of [
       await harness.update({ ...snapshot });
       expect(pendingCommentPaths()).toEqual([]);
 
-      useInlineCommentDraftStore
+      commentDrafts()
         .getState()
         .addDraft(
           COMMENT_OWNER_KEY,
@@ -208,7 +210,7 @@ for (const owner of [
     ])(
       "keeps target drafts when the comparison is unavailable: $targetBranch",
       async (comparison) => {
-        const storage = createMemoryStorage();
+        const storage = createMemoryClientStorage();
         setCommentStorage(storage);
         seedStoredComments([createCommentInput({ diffScope: "target" })]);
         reloadCommentStore(storage);
@@ -221,7 +223,7 @@ for (const owner of [
           target: createEmptyScopeStateFixture(),
           uncommitted: createEmptyScopeStateFixture(),
         };
-        const harness = createHookHarness(useGitCommentDraftValidation, model);
+        const harness = createHookHarness(useGitCommentDraftValidation, model, harnessOptions);
         await harness.mount();
         expect(pendingCommentPaths()).toEqual(["src/file.ts"]);
         await harness.unmount();
@@ -231,7 +233,7 @@ for (const owner of [
     test.each(["target", "uncommitted"] satisfies DiffScope[])(
       "keeps restored %s comments through a failed read and other-scope reads until recovery",
       async (failedScope) => {
-        const storage = createMemoryStorage();
+        const storage = createMemoryClientStorage();
         setCommentStorage(storage);
         seedStoredComments([createCommentInput({ diffScope: failedScope })]);
         reloadCommentStore(storage);
@@ -259,6 +261,7 @@ for (const owner of [
         const harness = createHookHarness(
           useGitCommentDraftValidation,
           model({ [failedScope]: failed }),
+          harnessOptions,
         );
         await harness.mount();
         try {

@@ -1,7 +1,7 @@
 import type { MouseEvent } from "react";
 import type { Components } from "react-markdown";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 

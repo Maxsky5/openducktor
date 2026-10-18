@@ -5,16 +5,19 @@ import {
 } from "@openducktor/core";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { subscribeAzureDevOpsConnectionUpdates } from "@/lib/host-client";
-import { host } from "@/state/operations/shared/host";
-import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import {
   azureDevOpsHttpConsentCollectionUrl,
   isAzureDevOpsConnectionEventCurrent,
 } from "./azure-devops-git-provider-form-model";
 import type { GitProviderState } from "./use-repository-git-section-model";
+import {
+  connectionHost,
+  connectionOf,
+} from "@openducktor/frontend-core/connection/client-connection";
+import type { HostClient } from "@openducktor/host-client";
 
 export type AzureDevOpsConnectionInput = {
   repoPath: string;
@@ -61,22 +64,23 @@ const useAzureDevOpsConnectionUpdates = ({
     let active = true;
     let unsubscribe: (() => void) | undefined;
     setUpdatesReady(false);
-    void subscribeAzureDevOpsConnectionUpdates((event) => {
-      if (
-        isAzureDevOpsConnectionEventCurrent(event, {
-          workspaceId,
-          repoPath: selectedRepoPath,
-          configurationFingerprint,
-          attemptId: activeAttemptIdRef.current,
-        })
-      ) {
-        queryClient.setQueryData(connectionKey(configurationFingerprint), event.state);
-        if (event.state.status !== "pending") {
-          activeAttemptIdRef.current = null;
-          void invalidateProviderContext();
+    void connectionOf(queryClient)
+      .host.subscribeAzureDevOpsConnectionUpdates((event) => {
+        if (
+          isAzureDevOpsConnectionEventCurrent(event, {
+            workspaceId,
+            repoPath: selectedRepoPath,
+            configurationFingerprint,
+            attemptId: activeAttemptIdRef.current,
+          })
+        ) {
+          queryClient.setQueryData(connectionKey(configurationFingerprint), event.state);
+          if (event.state.status !== "pending") {
+            activeAttemptIdRef.current = null;
+            void invalidateProviderContext();
+          }
         }
-      }
-    })
+      })
       .then((stop) => {
         if (!active) {
           stop();
@@ -111,6 +115,7 @@ const useAzureDevOpsConnectionUpdates = ({
 };
 
 type ConnectionActionDependencies = {
+  host: HostClient;
   activeAttemptIdRef: RefObject<string | null>;
   canManageConnection: boolean;
   configurationFingerprint: string | null;
@@ -128,6 +133,7 @@ type ConnectionActionDependencies = {
 };
 
 const createConnectionActions = ({
+  host,
   activeAttemptIdRef,
   canManageConnection,
   configurationFingerprint,
@@ -219,7 +225,8 @@ export const useAzureDevOpsConnectionController = ({
   const connectionQuery = useQuery({
     queryKey: connectionKey(configurationFingerprint),
     enabled: canManageConnection && connectionInput !== null,
-    queryFn: () => host.workspaceGetAzureDevOpsConnection(connectionInput!),
+    queryFn: ({ client }) =>
+      connectionHost(client).workspaceGetAzureDevOpsConnection(connectionInput!),
     retry: false,
     staleTime: 30_000,
   });
@@ -287,6 +294,7 @@ export const useAzureDevOpsConnectionController = ({
     },
     setPat,
     ...createConnectionActions({
+      host: connectionHost(queryClient),
       activeAttemptIdRef,
       canManageConnection,
       configurationFingerprint,

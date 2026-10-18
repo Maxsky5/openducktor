@@ -4,9 +4,16 @@ import {
   issueTypeSchema,
   type TaskPriority,
 } from "@openducktor/contracts";
-import { useQuery } from "@tanstack/react-query";
 import { Blocks, Flag, Tag, X } from "lucide-react";
-import { type ReactElement, useEffect, useEffectEvent, useId, useMemo, useRef } from "react";
+import {
+  type ReactElement,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   KanbanFilterMenu,
   type KanbanFilterOption,
@@ -21,7 +28,7 @@ import { hasOpenDialog } from "@/components/ui/open-dialogs";
 import { ToolbarSearchField } from "@/components/ui/search-field";
 import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
-import { platformQueryOptions } from "@/state/queries/system";
+import { readDevicePlatform } from "@/lib/device-platform";
 import type { KanbanBoardFilterModel } from "./kanban-page-model-types";
 
 type KanbanBoardFilterBarProps = {
@@ -35,8 +42,8 @@ type KanbanBoardFilterBarProps = {
 export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): ReactElement {
   const searchId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
-  // The command palette reports a failed platform read, so this shortcut stays off without a toast.
-  const platform = useQuery(platformQueryOptions()).data ?? null;
+  // The shortcut follows the keys of this device, not the platform of the selected host.
+  const [platform] = useState(readDevicePlatform);
   const onShortcut = useEffectEvent((event: KeyboardEvent, keyPlatform: AppPlatform): void => {
     if (!isPlatformChord(event, "f", keyPlatform) || filter.isDisabled || hasOpenDialog()) return;
     event.preventDefault();
@@ -44,7 +51,6 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
     searchRef.current?.select();
   });
   useEffect(() => {
-    if (!platform) return;
     const onKeyDown = (event: KeyboardEvent): void => onShortcut(event, platform);
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

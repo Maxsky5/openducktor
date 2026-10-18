@@ -1,6 +1,9 @@
 import type { AgentRole } from "@openducktor/core";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate,

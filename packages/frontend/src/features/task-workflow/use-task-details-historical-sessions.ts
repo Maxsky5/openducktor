@@ -2,9 +2,9 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import type { AgentSessionReadPort } from "@/state/queries/agent-sessions";
-import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import type { AgentSessionReadPort } from "@openducktor/frontend-core/queries/agent-sessions";
+import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 
 export const TASK_SESSION_HISTORY_ERROR_TOAST_ID = "task-session-history-error";
 

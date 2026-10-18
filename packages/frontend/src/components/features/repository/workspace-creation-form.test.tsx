@@ -1,14 +1,5 @@
-import { beforeAll, afterAll } from "bun:test";
-import {
-  installLocalOnlyProviderSetup,
-  localOnlyWorkspaceDetails,
-} from "@/test-utils/workspace-provider-setup-fixture";
-let releaseProviderFixture: (() => void) | undefined;
-beforeAll(() => {
-  releaseProviderFixture = installLocalOnlyProviderSetup();
-});
-afterAll(() => releaseProviderFixture?.());
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -18,11 +9,15 @@ import {
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import type { HostClient } from "@openducktor/host-client";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { hostClient } from "@/lib/host-client";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { PropsWithChildren, ReactElement } from "react";
+import { QueryProvider } from "@/test-utils/query-provider";
+import {
+  localOnlyProviderSetupClient,
+  localOnlyWorkspaceDetails,
+} from "@/test-utils/workspace-provider-setup-fixture";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import type {
   WorkspaceStateContextValue,
   WorkspaceSelectionOperationsInput,
@@ -161,11 +156,24 @@ function CreationHarness({
     </>
   );
 }
-const renderHarness = (props: Parameters<typeof CreationHarness>[0]) => {
+/** Wraps a tree in a test connection whose provider setup detects no provider. */
+const providerSetupWrapper = (client: Partial<HostClient> = {}) => {
+  const connection = createTestClientConnection({
+    client: { ...localOnlyProviderSetupClient(), ...client },
+  });
+  return ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider connection={connection}>{children}</QueryProvider>
+  );
+};
+const renderHarness = (
+  props: Parameters<typeof CreationHarness>[0],
+  client?: Partial<HostClient>,
+) => {
+  const Wrapper = providerSetupWrapper(client);
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <Wrapper>
       <CreationHarness {...props} />
-    </QueryProvider>,
+    </Wrapper>,
   );
   views.add(view);
   return view;
@@ -268,9 +276,7 @@ describe("workspace creation", () => {
             onSuccess: success,
           }),
         {},
-        {
-          wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider>,
-        },
+        { wrapper: providerSetupWrapper() },
       );
       await harness.mount();
       try {
@@ -362,6 +368,8 @@ describe("workspace creation", () => {
         return { ...result, phase: "credentials" as const, error: "Credential transfer failed" };
       });
       const success = mock(() => {});
+      const discard = localOnlyProviderSetupClient().workspaceProviderSetupDiscard;
+      const cleanup = mock(discard);
       const h = createHookHarness(
         () =>
           useWorkspaceCreation({
@@ -370,12 +378,13 @@ describe("workspace creation", () => {
             onSuccess: success,
           }),
         {},
-        { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+        {
+          wrapper: providerSetupWrapper({
+            workspaceProviderSetupDiscard: (ref) =>
+              ref.setupId === ownedId ? cleanup(ref) : discard(ref),
+          }),
+        },
       );
-      const discard = hostClient.workspaceProviderSetupDiscard;
-      const cleanup = mock(discard);
-      hostClient.workspaceProviderSetupDiscard = (ref) =>
-        ref.setupId === ownedId ? cleanup(ref) : discard(ref);
       let submission: Promise<void> | undefined;
       await h.mount();
       try {
@@ -400,13 +409,15 @@ describe("workspace creation", () => {
         pending.resolve();
         await submission;
         await h.unmount();
-        hostClient.workspaceProviderSetupDiscard = discard;
       }
     },
   );
   test("checks a detected provider before Continue and checks again after edits", async () => {
-    const detect = hostClient.workspaceProviderSetupDetect;
-    const status = hostClient.workspaceProviderSetupStatus;
+    const {
+      workspaceProviderSetupBegin: begin,
+      workspaceProviderSetupDetect: detect,
+      workspaceProviderSetupStatus: status,
+    } = localOnlyProviderSetupClient();
     const reads = mock(async () => ({
       health: {
         providerId: "github" as const,
@@ -421,7 +432,7 @@ describe("workspace creation", () => {
       connection: null,
     }));
     let ownedId: string | undefined;
-    hostClient.workspaceProviderSetupDetect = async (ref) =>
+    const workspaceProviderSetupDetect: HostClient["workspaceProviderSetupDetect"] = async (ref) =>
       ref.setupId === ownedId
         ? {
             outcome: "detected",
@@ -438,10 +449,6 @@ describe("workspace creation", () => {
             ],
           }
         : detect(ref);
-    hostClient.workspaceProviderSetupStatus = async (ref) => {
-      if (ref.setupId !== ownedId) return status(ref);
-      return reads();
-    };
     const h = createHookHarness(
       () =>
         useWorkspaceCreation({
@@ -449,15 +456,21 @@ describe("workspace creation", () => {
           commitWorkspaceProviderSetup: mock(async (input) => outcome(input)),
         }),
       {},
-      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+      {
+        wrapper: providerSetupWrapper({
+          workspaceProviderSetupBegin: async (input) => {
+            const ref = await begin(input);
+            if (input.repoPath === "/early-provider-check") ownedId = ref.setupId;
+            return ref;
+          },
+          workspaceProviderSetupDetect,
+          workspaceProviderSetupStatus: async (ref) => {
+            if (ref.setupId !== ownedId) return status(ref);
+            return reads();
+          },
+        }),
+      },
     );
-    // Capture only this setup so other parallel tests keep their own host fake.
-    const begin = hostClient.workspaceProviderSetupBegin;
-    hostClient.workspaceProviderSetupBegin = async (input) => {
-      const ref = await begin(input);
-      if (input.repoPath === "/early-provider-check") ownedId = ref.setupId;
-      return ref;
-    };
     await h.mount();
     try {
       await h.run(async (state) => {
@@ -499,9 +512,6 @@ describe("workspace creation", () => {
       expect(h.getLatest().stage).toBe("information");
     } finally {
       await h.unmount();
-      hostClient.workspaceProviderSetupBegin = begin;
-      hostClient.workspaceProviderSetupDetect = detect;
-      hostClient.workspaceProviderSetupStatus = status;
     }
   });
   test("keeps cleanup failure visible before reopening a closed workspace", async () => {
@@ -512,6 +522,9 @@ describe("workspace creation", () => {
     const reopen = mock(async () => {});
     const success = mock(() => {});
     let allowChange = false;
+    const originalDiscard = localOnlyProviderSetupClient().workspaceProviderSetupDiscard;
+    let failCleanup = true;
+    let ownedId: string | undefined;
     const h = createHookHarness(
       () =>
         useWorkspaceCreation({
@@ -530,16 +543,16 @@ describe("workspace creation", () => {
           },
         }),
       {},
-      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+      {
+        wrapper: providerSetupWrapper({
+          workspaceProviderSetupDiscard: async (ref) => {
+            if (ref.setupId === ownedId && failCleanup) throw new Error("Cleanup unavailable");
+            return originalDiscard(ref);
+          },
+        }),
+      },
     );
     await h.mount();
-    const originalDiscard = hostClient.workspaceProviderSetupDiscard;
-    let failCleanup = true;
-    let ownedId: string | undefined;
-    hostClient.workspaceProviderSetupDiscard = async (ref) => {
-      if (ref.setupId === ownedId && failCleanup) throw new Error("Cleanup unavailable");
-      return originalDiscard(ref);
-    };
     try {
       await h.run(async (state) => {
         await state.confirmRepo("/new-reopen-test");
@@ -569,7 +582,6 @@ describe("workspace creation", () => {
       expect(success).toHaveBeenCalledTimes(1);
       expect(h.getLatest().provider.session).toBeNull();
     } finally {
-      hostClient.workspaceProviderSetupDiscard = originalDiscard;
       await h.unmount();
     }
   });
@@ -581,7 +593,7 @@ describe("workspace creation", () => {
           commitWorkspaceProviderSetup: mock(async (input) => outcome(input)),
         }),
       {},
-      { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+      { wrapper: providerSetupWrapper() },
     );
     await h.mount();
     try {
@@ -703,6 +715,15 @@ describe("workspace creation", () => {
         return result;
       });
       const success = mock(() => {});
+      const discard = localOnlyProviderSetupClient().workspaceProviderSetupDiscard;
+      const acknowledge = mock(async (ref: Parameters<typeof discard>[0]) => {
+        if (failAcknowledgement) {
+          failAcknowledgement = false;
+          if (failure === "acknowledgement reply") await discard(ref);
+          throw new Error("Acknowledgement unavailable");
+        }
+        return discard(ref);
+      });
       const h = createHookHarness(
         () =>
           useWorkspaceCreation({
@@ -711,19 +732,13 @@ describe("workspace creation", () => {
             onSuccess: success,
           }),
         {},
-        { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+        {
+          wrapper: providerSetupWrapper({
+            workspaceProviderSetupDiscard: (ref) =>
+              ref.setupId === ownedId ? acknowledge(ref) : discard(ref),
+          }),
+        },
       );
-      const discard = hostClient.workspaceProviderSetupDiscard;
-      const acknowledge = mock(async (ref) => {
-        if (failAcknowledgement) {
-          failAcknowledgement = false;
-          if (failure === "acknowledgement reply") await discard(ref);
-          throw new Error("Acknowledgement unavailable");
-        }
-        return discard(ref);
-      });
-      hostClient.workspaceProviderSetupDiscard = (ref) =>
-        ref.setupId === ownedId ? acknowledge(ref) : discard(ref);
       await h.mount();
       try {
         await h.run(async (state) => {
@@ -757,7 +772,6 @@ describe("workspace creation", () => {
         expect(h.getLatest().error).toBeNull();
       } finally {
         await h.unmount();
-        hostClient.workspaceProviderSetupDiscard = discard;
       }
     },
   );
@@ -770,14 +784,18 @@ describe("workspace creation", () => {
     const onSuccess = mock((): void => {
       throw new Error("Opening unavailable");
     });
-    const discard = hostClient.workspaceProviderSetupDiscard;
+    const discard = localOnlyProviderSetupClient().workspaceProviderSetupDiscard;
     const acknowledgement = Promise.withResolvers<void>();
-    hostClient.workspaceProviderSetupDiscard = async (ref) => {
-      if (ref.setupId === ownedId) await acknowledgement.promise;
-      await discard(ref);
-    };
     try {
-      renderHarness({ commit, onSuccess });
+      renderHarness(
+        { commit, onSuccess },
+        {
+          workspaceProviderSetupDiscard: async (ref) => {
+            if (ref.setupId === ownedId) await acknowledgement.promise;
+            await discard(ref);
+          },
+        },
+      );
       await advanceToModels();
       fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
       await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
@@ -790,7 +808,6 @@ describe("workspace creation", () => {
       expect(commit).toHaveBeenCalledTimes(1);
     } finally {
       acknowledgement.resolve();
-      hostClient.workspaceProviderSetupDiscard = discard;
     }
   });
   test("blocks blank names but saves unavailable optional defaults with a warning", async () => {

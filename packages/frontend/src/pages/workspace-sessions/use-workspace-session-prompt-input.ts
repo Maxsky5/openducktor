@@ -2,7 +2,7 @@ import type { ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveChatComposerPromptInputRuntime } from "@/features/agent-chat-composer/prompt-input/chat-composer-prompt-input-runtime";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";

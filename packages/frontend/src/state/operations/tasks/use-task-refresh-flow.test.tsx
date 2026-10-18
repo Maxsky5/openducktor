@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { act, createRef } from "react";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createTaskRefreshController } from "./task-refresh-controller";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 

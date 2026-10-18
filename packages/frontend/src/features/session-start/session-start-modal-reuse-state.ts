@@ -8,9 +8,9 @@ import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } fr
 import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
-} from "@/lib/agent-runtime";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/lib/agent-runtime";
+import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveLaunchStartMode } from "./session-start-mode";

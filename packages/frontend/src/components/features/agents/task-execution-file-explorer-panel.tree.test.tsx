@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { WorkspaceFileTree, WorkspaceFileTreeEntry } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { workspaceFileTreeQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { TaskExecutionFileExplorerPanel } from "./task-execution-file-explorer-panel";
 import { SessionPanel } from "@/features/session-panels";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
@@ -51,7 +51,8 @@ afterEach(() => {
 });
 
 const renderPanel = () => {
-  const client = createQueryClient();
+  const connection = createTestClientConnection();
+  const client = connection.queryClient;
   client.setQueryData(workspaceFileTreeQueryOptions(ROOT_PATH, null).queryKey, TREE);
   function Tools({ rootPath }: { rootPath: string }) {
     const [activeTabId, setActiveTabId] = useState("files");
@@ -78,9 +79,9 @@ const renderPanel = () => {
     );
   }
   const panel = (rootPath: string) => (
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <Tools rootPath={rootPath} />
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(panel(ROOT_PATH));
   return { client, setRootPath: (rootPath: string) => view.rerender(panel(rootPath)) };

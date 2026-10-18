@@ -2,7 +2,7 @@ import { deriveAgentChatReadiness } from "@/components/features/agents/agent-cha
 import { resolveAgentChatTranscriptPresentation } from "@/components/features/agents/agent-chat/agent-chat-transcript-presentation";
 import { useFailedTranscriptAction } from "@/components/features/agents/agent-chat/use-failed-transcript-action";
 import type { RuntimeReadiness } from "@/lib/use-runtime-readiness";
-import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
+import type { AgentSessionTransientFault } from "@openducktor/frontend-core/types/agent-session-transient-fault";
 import type { useAgentChatPresentation } from "@/components/features/agents/agent-chat/use-agent-chat-presentation";
 import type {
   AgentOperationsContextValue,

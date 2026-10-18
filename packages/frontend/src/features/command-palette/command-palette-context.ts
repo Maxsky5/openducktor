@@ -6,7 +6,7 @@ export type CommandPaletteContextValue = {
   open: () => void;
   /** Add a command while the page is mounted. The returned function removes it. */
   registerPageCommand: (command: CommandPalettePageCommand) => () => void;
-  /** The host platform, or null until it is known. Key caps depend on it. */
+  /** The platform of this device. Key caps depend on it. */
   platform: AppPlatform | null;
 };
 

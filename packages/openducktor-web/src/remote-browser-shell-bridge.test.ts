@@ -1,3 +1,4 @@
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { expect, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -96,6 +97,7 @@ test.each(["restored", "lost", "failure"])(
         version: "test-browser",
         transport,
         notifications: createUnavailableShellBridge().notifications,
+        queryClient: createClientQueryClient(),
       });
       const connection = bridge.remoteConnection!;
       const initial = Promise.withResolvers<void>();

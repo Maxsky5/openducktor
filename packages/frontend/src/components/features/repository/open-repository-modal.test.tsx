@@ -1,16 +1,8 @@
-import { beforeAll, afterAll } from "bun:test";
-import {
-  installLocalOnlyProviderSetup,
-  localOnlyWorkspaceDetails,
-} from "@/test-utils/workspace-provider-setup-fixture";
-let releaseProviderFixture: (() => void) | undefined;
-beforeAll(() => {
-  releaseProviderFixture = installLocalOnlyProviderSetup();
-});
-afterAll(() => releaseProviderFixture?.());
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { DEFAULT_AGENT_RUNTIMES, type WorkspaceRecord } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import type { HostClient } from "@openducktor/host-client";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
@@ -18,21 +10,20 @@ import {
   useWorkspacePreviewTransitionGuard,
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
-import { createQueryClient } from "@/lib/query-client";
-import { hostBridge, hostClient } from "@/lib/host-client";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
-import {
-  HostRuntimeStatusContext,
-  RuntimeDefinitionsContext,
-  WorkspaceStateContext,
-} from "@/state/app-state-contexts";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { RuntimeDefinitionsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import {
   createDeferred,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
+import {
+  localOnlyProviderSetupClient,
+  localOnlyWorkspaceDetails,
+} from "@/test-utils/workspace-provider-setup-fixture";
 import type {
   WorkspaceSelectionOperationsInput,
   WorkspaceStateContextValue,
@@ -128,6 +119,24 @@ const runtimeDefinitionsValue = {
   loadRepoRuntimeFileSearch: async () => [],
 };
 
+const createModalConnection = (client: Partial<HostClient> = {}) => {
+  const connection = createTestClientConnection({
+    client: { ...localOnlyProviderSetupClient(), ...client },
+  });
+  connection.queryClient.setQueryData(filesystemQueryKeys.directory(), {
+    currentPath: "/repo",
+    currentPathIsGitRepo: true,
+    parentPath: "/",
+    homePath: "/repo",
+    entries: [],
+  });
+  connection.queryClient.setQueryData(
+    settingsSnapshotQueryOptions().queryKey,
+    createSettingsSnapshotFixture(),
+  );
+  return connection;
+};
+
 const renderModal = ({
   state = workspaceState(),
   onOpenChange = () => {},
@@ -135,6 +144,7 @@ const renderModal = ({
   canClose = true,
   open = true,
   initialView,
+  client,
 }: {
   state?: WorkspaceStateContextValue;
   onOpenChange?: (open: boolean) => void;
@@ -142,19 +152,12 @@ const renderModal = ({
   canClose?: boolean;
   open?: boolean;
   initialView?: OpenRepositoryModalView;
+  client?: Partial<HostClient>;
 } = {}) => {
-  const client = createQueryClient();
-  client.setQueryData(filesystemQueryKeys.directory(), {
-    currentPath: "/repo",
-    currentPathIsGitRepo: true,
-    parentPath: "/",
-    homePath: "/repo",
-    entries: [],
-  });
-  client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
+  const connection = createModalConnection(client);
   const runtimeStatus = createHostRuntimeStatusContextValue();
   const tree = (isOpen: boolean) => (
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
         <HostRuntimeStatusContext value={runtimeStatus}>
           <WorkspaceStateContext.Provider value={state}>
@@ -168,7 +171,7 @@ const renderModal = ({
           </WorkspaceStateContext.Provider>
         </HostRuntimeStatusContext>
       </RuntimeDefinitionsContext.Provider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(tree(open));
   views.add(view);
@@ -201,17 +204,9 @@ function GuardedModal() {
 }
 
 const renderGuardedModal = (state: WorkspaceStateContextValue) => {
-  const client = createQueryClient();
-  client.setQueryData(filesystemQueryKeys.directory(), {
-    currentPath: "/repo",
-    currentPathIsGitRepo: true,
-    parentPath: "/",
-    homePath: "/repo",
-    entries: [],
-  });
-  client.setQueryData(settingsSnapshotQueryOptions().queryKey, createSettingsSnapshotFixture());
+  const connection = createModalConnection();
   const view = render(
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue}>
         <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
           <WorkspaceStateContext.Provider value={state}>
@@ -222,7 +217,7 @@ const renderGuardedModal = (state: WorkspaceStateContextValue) => {
           </WorkspaceStateContext.Provider>
         </HostRuntimeStatusContext>
       </RuntimeDefinitionsContext.Provider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   views.add(view);
   return view;
@@ -240,10 +235,9 @@ const chooseRepository = async () => {
 describe("OpenRepositoryModal", () => {
   test("offers cancellation during sign-in startup and keeps cleanup failures open", async () => {
     const startup =
-      createDeferred<Awaited<ReturnType<typeof hostClient.workspaceProviderSetupSignIn>>>();
-    const originalSignIn = hostClient.workspaceProviderSetupSignIn;
-    const originalDiscard = hostClient.workspaceProviderSetupDiscard;
-    const originalSubscribe = hostBridge.subscribeWorkspaceProviderSetupUpdates;
+      createDeferred<Awaited<ReturnType<HostClient["workspaceProviderSetupSignIn"]>>>();
+    const providerSetup = localOnlyProviderSetupClient();
+    const originalDiscard = providerSetup.workspaceProviderSetupDiscard;
     let ownedId: string | undefined;
     let failCleanup = true;
     const cleanup = mock(async (ref: { setupId: string }) => {
@@ -251,12 +245,6 @@ describe("OpenRepositoryModal", () => {
       if (failCleanup) throw new Error("Sign-in cleanup unavailable");
       return originalDiscard(ref);
     });
-    hostClient.workspaceProviderSetupSignIn = (ref) => {
-      ownedId = ref.setupId;
-      return startup.promise;
-    };
-    hostClient.workspaceProviderSetupDiscard = cleanup;
-    hostBridge.subscribeWorkspaceProviderSetupUpdates = async () => () => {};
     const onOpenChange = mock((_open: boolean) => {});
     const commit = mock(async () => {
       throw new Error("No workspace should be created");
@@ -264,6 +252,14 @@ describe("OpenRepositoryModal", () => {
     const view = renderModal({
       state: workspaceState({ commitWorkspaceProviderSetup: commit }),
       onOpenChange,
+      client: {
+        ...providerSetup,
+        workspaceProviderSetupSignIn: (ref) => {
+          ownedId = ref.setupId;
+          return startup.promise;
+        },
+        workspaceProviderSetupDiscard: cleanup,
+      },
     });
     try {
       fireEvent.click(await screen.findByRole("button", { name: "Choose This Folder" }));
@@ -306,9 +302,6 @@ describe("OpenRepositoryModal", () => {
       failCleanup = false;
       await act(async () => startup.reject(new Error("Sign-in was cancelled")));
       view.unmount();
-      hostClient.workspaceProviderSetupSignIn = originalSignIn;
-      hostClient.workspaceProviderSetupDiscard = originalDiscard;
-      hostBridge.subscribeWorkspaceProviderSetupUpdates = originalSubscribe;
     }
   });
   test("opens the folder picker directly when no workspaces are closed", async () => {

@@ -10,8 +10,8 @@ import {
   filterRuntimeDefinitionsForDefaultSelection,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
-} from "@/lib/agent-runtime";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+} from "@openducktor/frontend-core/lib/agent-runtime";
+import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import { ensureDraftAgentDefault } from "./model-defaults-model";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";

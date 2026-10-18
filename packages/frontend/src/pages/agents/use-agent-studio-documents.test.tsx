@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentToolData } from "@openducktor/contracts";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,

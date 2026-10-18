@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { createHostRuntimeStatusOwner } from "../../frontend/src/state/host-runtime/host-runtime-status-owner";
+import { createHostRuntimeStatusOwner } from "@openducktor/frontend-core/runtime/host-runtime-status-owner";
 import {
   hostRuntimeStatusQueryOptions,
   hostRuntimeStatusQueryKeys,
-} from "../../frontend/src/state/queries/host-runtime-status";
+} from "@openducktor/frontend-core/queries/host-runtime-status";
 import { createHostMcpBridgeStatusFixture } from "../../frontend/src/test-utils/shared-test-fixtures";
-import { browserLiveStreamWarningEvent } from "@openducktor/frontend/lib/browser-live-control-events";
-import type { RuntimeChangeListener } from "@openducktor/frontend/lib/shell-bridge";
+import { connectionStreamWarningEvent } from "@openducktor/frontend-core/recovery/connection-control-events";
+import type { RuntimeChangeListener } from "@openducktor/frontend-core/connection/host-connection";
 import type { HostRuntimeSnapshot } from "@openducktor/contracts";
-import { synchronizeBrowserState } from "@openducktor/frontend/lib/remote/state-recovery";
+import { synchronizeConnectionState } from "@openducktor/frontend-core/recovery/state-recovery";
+import { remoteAccessStateQueryOptions } from "@openducktor/frontend-core/queries/remote-access";
 import { resourceSourceQueryOptions } from "../../frontend/src/state/queries/resource-sources";
 
 test.each(["resource", "shell"])(
@@ -22,19 +23,24 @@ test.each(["resource", "shell"])(
       reads += 1;
       throw new Error("The independent read failed.");
     };
-    const observer = new QueryObserver(
-      client,
-      kind === "resource"
-        ? resourceSourceQueryOptions(["missing-image"], 1, read)
-        : { queryKey: ["shell", "remote-access"], queryFn: read },
-    );
-    const stop = observer.subscribe((result) => {
+    const onResult = (result: { isError: boolean }) => {
       if (result.isError) failed.resolve();
-    });
+    };
+    const stop =
+      kind === "resource"
+        ? new QueryObserver(
+            client,
+            resourceSourceQueryOptions(["missing-image"], 1, read),
+          ).subscribe(onResult)
+        : new QueryObserver(client, {
+            ...remoteAccessStateQueryOptions(undefined),
+            queryFn: read,
+          }).subscribe(onResult);
     try {
       await failed.promise;
-      await synchronizeBrowserState(client, [], true);
-      expect(observer.getCurrentResult().error?.message).toBe("The independent read failed.");
+      await synchronizeConnectionState(client, [], true);
+      const [query] = client.getQueryCache().getAll();
+      expect(query?.state.error?.message).toBe("The independent read failed.");
       expect(reads).toBe(1);
     } finally {
       stop();
@@ -90,9 +96,9 @@ test.each(["success", "failure", "superseded"])(
     try {
       owner.start();
       await baseline.promise;
-      listener(browserLiveStreamWarningEvent("Disconnected"));
+      listener(connectionStreamWarningEvent("Disconnected"));
       let settled = false;
-      const recovery = synchronizeBrowserState(queryClient, [listener], true);
+      const recovery = synchronizeConnectionState(queryClient, [listener], true);
       const outcome = recovery.then(
         () => {
           settled = true;

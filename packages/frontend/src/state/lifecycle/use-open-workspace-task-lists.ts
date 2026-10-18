@@ -1,7 +1,7 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 
 /**
  * Keep the task list of every open workspace cached, so a workspace switch shows it at once.

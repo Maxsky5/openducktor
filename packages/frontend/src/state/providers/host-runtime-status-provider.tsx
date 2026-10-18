@@ -7,21 +7,19 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { hostBridge, hostClient } from "@/lib/host-client";
 import {
   createHostRuntimeStatusOwner,
   type HostRuntimeStatusOwnerPorts,
   type RuntimeGenerationChangeHandler,
-} from "@/state/host-runtime/host-runtime-status-owner";
-import { hostRuntimeStatusQueryOptions } from "@/state/queries/host-runtime-status";
-import type { HostRuntimeStatusMap, HostStatusSnapshot } from "@/types/diagnostics";
+} from "@openducktor/frontend-core/runtime/host-runtime-status-owner";
+import { hostRuntimeStatusQueryOptions } from "@openducktor/frontend-core/queries/host-runtime-status";
+import type {
+  HostRuntimeStatusMap,
+  HostStatusSnapshot,
+} from "@openducktor/frontend-core/types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
-import { HostRuntimeStatusContext } from "../app-state-contexts";
-
-const productionPorts: HostRuntimeStatusOwnerPorts = {
-  subscribeRuntimeChanges: (listener) => hostBridge.subscribeRuntimeChanges(listener),
-  runtimeStatus: () => hostClient.runtimeStatus(),
-};
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type HostRuntimeStatusProviderProps = PropsWithChildren<{
   ports?: HostRuntimeStatusOwnerPorts;
@@ -34,10 +32,18 @@ type HostRuntimeStatusProviderProps = PropsWithChildren<{
  */
 export function HostRuntimeStatusProvider({
   children,
-  ports = productionPorts,
+  ports: suppliedPorts,
   onRuntimeGenerationChange,
 }: HostRuntimeStatusProviderProps): ReactElement {
   const queryClient = useQueryClient();
+  const host = useHostConnection();
+  const [ports] = useState<HostRuntimeStatusOwnerPorts>(
+    () =>
+      suppliedPorts ?? {
+        subscribeRuntimeChanges: host.subscribeRuntimeChanges,
+        runtimeStatus: host.client.runtimeStatus,
+      },
+  );
   const [owner] = useState(() =>
     createHostRuntimeStatusOwner(
       onRuntimeGenerationChange === undefined

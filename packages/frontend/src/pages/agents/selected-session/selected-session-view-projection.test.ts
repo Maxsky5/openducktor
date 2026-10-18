@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
-} from "@/types/agent-session-read-model";
+} from "@openducktor/frontend-core/types/agent-session-read-model";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,

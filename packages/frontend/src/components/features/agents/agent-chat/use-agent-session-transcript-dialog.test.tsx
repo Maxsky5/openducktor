@@ -1,8 +1,6 @@
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as diffWorkers from "@/contexts/DiffWorkerProvider";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import type { ComponentProps } from "react";
 import { useTaskExecutionFilePreviewController } from "../file-preview/use-task-execution-file-preview-controller";
 import { describe, expect, test, spyOn } from "bun:test";
@@ -11,32 +9,31 @@ import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
 } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type PropsWithChildren, type ReactElement } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createHostRuntimeStatusContextValue,
   createRuntimeDefinitionsContextValue,
 } from "@/pages/agents/agent-studio-test-utils";
 import { toAgentStudioTranscriptTarget } from "@/pages/agents/agent-studio-transcript";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { ActiveWorkspaceContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
-  ActiveWorkspaceContext,
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
   HostRuntimeStatusContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   appendSessionMessage,
   createSessionMessagesState,
-} from "@/state/operations/agent-orchestrator/support/messages";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import {
   createAgentSessionFixture,
@@ -137,7 +134,20 @@ describe("AgentSessionTranscriptDialogHost", () => {
         ]),
       });
       sessionStore.replaceSession(childSession);
-      const queryClient = createQueryClient();
+      const connection = createTestClientConnection({
+        client: {
+          gitCanonicalizePath: async (path) => path,
+          filesystemReadTextFile: async (file) => ({
+            kind: "unsupported",
+            ...file,
+            reason: "binary",
+            message: "Binary child file",
+            size: 3,
+            mtimeMs: 1,
+          }),
+        },
+      });
+      const queryClient = connection.queryClient;
       queryClient.setQueryData(
         settingsSnapshotQueryOptions().queryKey,
         createSettingsSnapshotFixture(),
@@ -178,7 +188,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         answerAgentQuestion: async () => undefined,
       };
       const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-        <QueryClientProvider client={queryClient}>
+        <ClientConnectionProvider connection={connection}>
           <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
             <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
               <AgentSessionsContext.Provider value={sessionStore}>
@@ -201,27 +211,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
               </AgentSessionsContext.Provider>
             </HostRuntimeStatusContext.Provider>
           </RuntimeDefinitionsContext.Provider>
-        </QueryClientProvider>
+        </ClientConnectionProvider>
       );
       queryClient.setQueryData(
         taskWorktreeQueryOptions({ repoPath: "/repo-a", taskId: "task-1" }).queryKey,
         () => ({ workingDirectory: "/repo-a/task-worktree" }),
-      );
-      const previousBridge = getShellBridge();
-      configureShellBridge(
-        createShellBridgeFixture({
-          client: {
-            gitCanonicalizePath: async (path) => path,
-            filesystemReadTextFile: async (file) => ({
-              kind: "unsupported",
-              ...file,
-              reason: "binary",
-              message: "Binary child file",
-              size: 3,
-              mtimeMs: 1,
-            }),
-          },
-        }),
       );
       const workerSpy = spyOn(diffWorkers, "DiffWorkerProvider").mockImplementation(
         ({ children }) => <>{children}</>,
@@ -271,7 +265,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
       } finally {
         rendered.unmount();
         workerSpy.mockRestore();
-        configureShellBridge(previousBridge);
         queryClient.clear();
       }
     });
@@ -279,7 +272,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
   test("retries failed runtime transcript history from the error notice", async () => {
     const sessionStore = createAgentSessionsStore("/repo-a");
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
@@ -336,7 +330,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       answerAgentQuestion: async () => undefined,
     };
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
           <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
             <AgentSessionsContext.Provider value={sessionStore}>
@@ -359,7 +353,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             </AgentSessionsContext.Provider>
           </HostRuntimeStatusContext.Provider>
         </RuntimeDefinitionsContext.Provider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const rendered = render(
       <AgentSessionTranscriptDialog
@@ -387,7 +381,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
   test("retries a failed skill catalog from the transcript notice", async () => {
     const sessionStore = createAgentSessionsStore("/repo-a");
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
@@ -436,7 +431,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       answerAgentQuestion: async () => undefined,
     };
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsContext}>
           <HostRuntimeStatusContext.Provider value={hostRuntimeStatusContext}>
             <AgentSessionsContext.Provider value={sessionStore}>
@@ -459,7 +454,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             </AgentSessionsContext.Provider>
           </HostRuntimeStatusContext.Provider>
         </RuntimeDefinitionsContext.Provider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const rendered = render(
       <AgentSessionTranscriptDialog
@@ -542,7 +537,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <ActiveWorkspaceTestProvider>
-        <QueryProvider useIsolatedClient>
+        <QueryProvider>
           <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
         </QueryProvider>
       </ActiveWorkspaceTestProvider>
@@ -584,7 +579,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <ActiveWorkspaceTestProvider>
-        <QueryProvider useIsolatedClient>
+        <QueryProvider>
           <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
         </QueryProvider>
       </ActiveWorkspaceTestProvider>
@@ -611,7 +606,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     const { AgentChatMessageCard } = await import("./agent-chat-message-card");
     let request: OpenAgentSessionTranscriptRequest | null = null;
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <TranscriptRequestCaptureProvider
           onOpen={(nextRequest) => {
             request = nextRequest;
@@ -700,7 +695,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <TranscriptRequestCaptureProvider
           onOpen={(nextRequest) => {
             request = nextRequest;

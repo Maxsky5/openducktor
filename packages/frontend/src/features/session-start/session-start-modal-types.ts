@@ -1,6 +1,6 @@
 import type { GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import type { SessionStartPostAction } from "./session-start-workflow";

@@ -4,20 +4,20 @@ import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
+import { createWorkspaceActivityObserver } from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
 import { sessionNavigationTargetKey } from "@/features/session-navigation/session-navigation-target";
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
 import { SessionReadStateProvider } from "@/features/session-navigation/session-read-state";
 import type { HostClient } from "@openducktor/host-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
+import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
-import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,
@@ -114,10 +114,12 @@ const fixtureEntry = () => {
 };
 
 const observers: ReturnType<typeof createWorkspaceActivityObserver>[] = [];
+// Host commands for the next mounted sidebar. Each test sets the commands it needs.
+let hostClient: Partial<HostClient> = {};
 afterEach(() => {
   observers.splice(0).forEach((observer) => observer.dispose());
   mock.restore();
-  configureShellBridge(createUnavailableShellBridge());
+  hostClient = {};
 });
 
 const mountSidebar = (
@@ -151,10 +153,11 @@ const mountSidebar = (
   emit({ type: "snapshot", messageQueues: [], repoPath: ref.repoPath, sessions });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   client.setQueryData(runtimeQueryKeys.definitions(), Object.values(RUNTIME_DESCRIPTORS_BY_KIND));
+  const connection = createTestClientConnection({ client: hostClient, queryClient: client });
   const onOpen = mock(() => {});
   const other = workspaceSessionEntry("other");
   render(
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <HostRuntimeStatusContext value={runtimeStatus}>
         <SessionMenuProvider>
           <WorkspaceActivityContext value={observer}>
@@ -172,7 +175,7 @@ const mountSidebar = (
           </WorkspaceActivityContext>
         </SessionMenuProvider>
       </HostRuntimeStatusContext>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   return {
     client,
@@ -218,9 +221,7 @@ describe("Sidebar session previews", () => {
     const loadCatalog = mock(
       async (_input: Parameters<HostClient["agentRuntimeLoadCatalog"]>[0]) => catalog,
     );
-    configureShellBridge(
-      createShellBridgeFixture({ client: { agentRuntimeLoadCatalog: loadCatalog } }),
-    );
+    hostClient = { agentRuntimeLoadCatalog: loadCatalog };
     const { client, row, onOpen } = mountSidebar([], {
       ...entry,
       target,
@@ -261,9 +262,7 @@ describe("Sidebar session previews", () => {
     const loadCatalog = mock(async () =>
       createRuntimeCatalogFixture({ models: { models: [], defaultModelsByProvider: {} } }),
     );
-    configureShellBridge(
-      createShellBridgeFixture({ client: { agentRuntimeLoadCatalog: loadCatalog } }),
-    );
+    hostClient = { agentRuntimeLoadCatalog: loadCatalog };
     const { row } = mountSidebar(
       [],
       fixtureEntry(),
@@ -288,30 +287,26 @@ describe("Sidebar session previews", () => {
     const history = mock(async () => {
       throw new Error("A preview must not load history.");
     });
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          agentRuntimeLoadSessionHistory: history,
-          agentRuntimeLoadCatalog: async () =>
-            createRuntimeCatalogFixture({
-              models: {
-                models: [
-                  {
-                    id: "gpt-5.5",
-                    providerId: "openai",
-                    providerName: "OpenAI",
-                    modelId: "gpt-5.5",
-                    modelName: "GPT-5.5",
-                    variants: ["xhigh", "medium"],
-                    attachmentSupport: { image: true, audio: false, video: false, pdf: true },
-                  },
-                ],
-                defaultModelsByProvider: { openai: "gpt-5.5" },
+    hostClient = {
+      agentRuntimeLoadSessionHistory: history,
+      agentRuntimeLoadCatalog: async () =>
+        createRuntimeCatalogFixture({
+          models: {
+            models: [
+              {
+                id: "gpt-5.5",
+                providerId: "openai",
+                providerName: "OpenAI",
+                modelId: "gpt-5.5",
+                modelName: "GPT-5.5",
+                variants: ["xhigh", "medium"],
+                attachmentSupport: { image: true, audio: false, video: false, pdf: true },
               },
-            }),
-        },
-      }),
-    );
+            ],
+            defaultModelsByProvider: { openai: "gpt-5.5" },
+          },
+        }),
+    };
     const { row, observe, emit } = mountSidebar([
       session({ model: { providerId: "openai", modelId: "gpt-5.5", variant: "xhigh" } }),
     ]);
@@ -439,16 +434,12 @@ describe("Sidebar session previews", () => {
     const reply = mock(
       async (_input: Parameters<HostClient["agentSessionLiveReplyQuestion"]>[0]) => {},
     );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          agentSessionLiveReplyQuestion: reply,
-          agentRuntimeLoadCatalog: async () => {
-            throw new Error("Model catalog disconnected.");
-          },
-        },
-      }),
-    );
+    hostClient = {
+      agentSessionLiveReplyQuestion: reply,
+      agentRuntimeLoadCatalog: async () => {
+        throw new Error("Model catalog disconnected.");
+      },
+    };
     const { row, onOpen } = mountSidebar([session({ pendingQuestions: [question] })]);
     const preview = await openPreview(row);
     const configuration = within(preview).getByLabelText("Session configuration");
@@ -471,9 +462,7 @@ describe("Sidebar session previews", () => {
     )
       .mockRejectedValueOnce(new Error("Runtime disconnected. Try again."))
       .mockResolvedValue(undefined);
-    configureShellBridge(
-      createShellBridgeFixture({ client: { agentSessionLiveReplyQuestion: reply } }),
-    );
+    hostClient = { agentSessionLiveReplyQuestion: reply };
     const { row, onOpen, emit } = mountSidebar([
       session(),
       session({
@@ -528,9 +517,7 @@ describe("Sidebar session previews", () => {
     )
       .mockRejectedValueOnce(new Error("Permission reply failed."))
       .mockResolvedValue(undefined);
-    configureShellBridge(
-      createShellBridgeFixture({ client: { agentSessionLiveReplyApproval: reply } }),
-    );
+    hostClient = { agentSessionLiveReplyApproval: reply };
     const { row, onOpen } = mountSidebar([
       session({
         pendingApprovals: [
@@ -569,9 +556,7 @@ describe("Sidebar session previews", () => {
     const reply = mock(
       async (_input: Parameters<HostClient["agentSessionLiveReplyQuestion"]>[0]) => {},
     );
-    configureShellBridge(
-      createShellBridgeFixture({ client: { agentSessionLiveReplyQuestion: reply } }),
-    );
+    hostClient = { agentSessionLiveReplyQuestion: reply };
     const child = (id: string, prompt: string) =>
       session({
         ref: { ...ref, externalSessionId: id },
@@ -647,15 +632,11 @@ describe("Sidebar session previews", () => {
     const reply = mock(
       async (_input: Parameters<HostClient["agentSessionLiveReplyQuestion"]>[0]) => {},
     );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          agentSessionLiveReplyQuestion: reply,
-          agentRuntimeLoadCatalog: async () =>
-            createRuntimeCatalogFixture({ models: { models: [], defaultModelsByProvider: {} } }),
-        },
-      }),
-    );
+    hostClient = {
+      agentSessionLiveReplyQuestion: reply,
+      agentRuntimeLoadCatalog: async () =>
+        createRuntimeCatalogFixture({ models: { models: [], defaultModelsByProvider: {} } }),
+    };
     const { row, emit } = mountSidebar([session({ pendingQuestions: [question] })]);
     const preview = await openPreview(row);
     fireEvent.change(within(preview).getByRole("textbox"), {

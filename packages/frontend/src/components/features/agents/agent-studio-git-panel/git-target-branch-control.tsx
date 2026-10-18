@@ -2,7 +2,7 @@ import { ChevronDown, LoaderCircle, Target } from "lucide-react";
 import { type ReactElement, useId, useLayoutEffect, useRef, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import {
   BRANCH_CHIP_BUTTON_CLASS_NAME,

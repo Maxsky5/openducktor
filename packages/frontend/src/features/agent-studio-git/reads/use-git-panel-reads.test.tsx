@@ -1,11 +1,9 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import type { GitLocalChanges, GitWorktreeStatus } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { toLocalChanges } from "../test-support/local-changes-fixture";
 import { type GitPanelReadsInput, useGitPanelReads } from "./use-git-panel-reads";
 
@@ -42,23 +40,19 @@ const renderReads = (
   },
   initialProps: GitPanelReadsInput = input,
 ) => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetWorktreeStatus: async () => status("src/branch.ts", "target"),
-        ...client,
-      },
-    }),
-  );
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection({
+    client: {
+      gitGetWorktreeStatus: async () => status("src/branch.ts", "target"),
+      ...client,
+    },
+  });
+  const { queryClient } = connection;
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
   );
   const hook = renderHook(useGitPanelReads, { initialProps, wrapper });
   return { hook, queryClient };
 };
-
-afterEach(() => configureShellBridge(createUnavailableShellBridge()));
 
 test("reads local changes and Branch changes once the comparison is known", async () => {
   const readTarget = mock(async () => status("src/branch.ts", "target"));

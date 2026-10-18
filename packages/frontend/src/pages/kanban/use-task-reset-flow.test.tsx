@@ -6,7 +6,7 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import * as stopImpactModule from "@/state/queries/use-task-stop-impact";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useTaskResetFlow } from "./use-task-reset-flow";
 
 enableReactActEnvironment();

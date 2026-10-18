@@ -6,9 +6,8 @@ import {
 } from "@openducktor/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/shared/host";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import {
   type AzureRemoteMappingDraft,
   type AzureRepositoryDraft,
@@ -25,6 +24,8 @@ import {
   useAzureDevOpsConnectionController,
 } from "./use-azure-devops-connection-controller";
 import type { GitProviderState } from "./use-repository-git-section-model";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 type ConfiguredProvider = SettingsRepoConfig["git"]["provider"];
 
@@ -60,6 +61,7 @@ export const useAzureDevOpsGitProviderForm = ({
   onUpdateSelectedRepoConfig,
   onValidationChange,
 }: UseAzureDevOpsGitProviderFormInput) => {
+  const host = useHostClient();
   const configuredProvider = selectedRepoConfig.git.provider;
   const configuredRepository = configuredAzureRepository(configuredProvider);
   const configuredRepositoryRef = useRef(configuredRepository);
@@ -321,9 +323,10 @@ const useAzureDevOpsAreaPaths = ({
   const areasQuery = useQuery({
     queryKey: ["azure-devops", "area-paths", selectedRepoPath, configurationFingerprint],
     enabled: canLoadAreaPaths && parsedRepository !== undefined,
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
       if (!parsedRepository)
         throw new Error("Set an Azure DevOps project before loading its areas.");
+      const host = connectionHost(client);
       const saved = await host.workspaceGetRepoConfig(selectedRepoConfig.workspaceId);
       const savedRepository = configuredAzureRepository(saved.git.provider);
       if (!savedRepository || !sameAzureProject(savedRepository, parsedRepository)) {

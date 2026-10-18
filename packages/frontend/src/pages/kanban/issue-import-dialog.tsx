@@ -14,10 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import { host } from "@/state/operations/shared/host";
-import { issueItemsQueryKeys } from "@/state/queries/issue-items";
+import { issueItemsQueryKeys } from "@openducktor/frontend-core/queries/issue-items";
 import {
   useIssueImportSearch,
   useIssueImportSubmission,
@@ -26,6 +25,7 @@ import {
 import { IssueReviewStep } from "./issue-import-review-step";
 import { IssueSelectionStep } from "./issue-import-selection-step";
 import { issueImportSourceLabel } from "./issue-import-provider";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 type IssueImportDialogProps = {
   open: boolean;
@@ -71,7 +71,8 @@ function IssueImportDialogSession({
       cursors[pageIndex],
     ],
     enabled: !unavailable && !searchPending,
-    queryFn: () => host.issueItemsList({ repoPath, search, cursor: cursors[pageIndex] }),
+    queryFn: ({ client }) =>
+      connectionHost(client).issueItemsList({ repoPath, search, cursor: cursors[pageIndex] }),
   });
   const items = query.data?.items ?? [];
   const selectedItems = selectedItemsWithCurrentLinks(selected, items);

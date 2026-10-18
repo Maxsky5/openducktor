@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { AppPlatform } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { trackOpenDialog } from "@/components/ui/open-dialogs";
-import { createQueryClient } from "@/lib/query-client";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { systemQueryKeys } from "@/state/queries/system";
 import {
   EMPTY_KANBAN_BOARD_FILTER,
   isKanbanBoardFilterActive,
@@ -18,7 +14,11 @@ enableReactActEnvironment();
 
 afterEach(() => {
   cleanup();
+  Reflect.deleteProperty(globalThis.navigator, "platform");
 });
+
+// The search shortcut follows the platform of this device.
+const navigatorPlatforms = { darwin: "MacIntel", linux: "Linux x86_64" } as const;
 
 type HarnessProps = {
   initial?: Partial<KanbanBoardFilter>;
@@ -29,9 +29,11 @@ type HarnessProps = {
 const renderBar = ({
   platform = "darwin",
   ...props
-}: HarnessProps & { platform?: AppPlatform } = {}) => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(systemQueryKeys.platform(), platform);
+}: HarnessProps & { platform?: keyof typeof navigatorPlatforms } = {}) => {
+  Object.defineProperty(globalThis.navigator, "platform", {
+    configurable: true,
+    get: () => navigatorPlatforms[platform],
+  });
   const latest = { filter: EMPTY_KANBAN_BOARD_FILTER };
   function Harness({ initial, labelOptions = [], isDisabled = false }: HarnessProps): ReactElement {
     const [value, setValue] = useState<KanbanBoardFilter>({
@@ -52,11 +54,7 @@ const renderBar = ({
       />
     );
   }
-  render(
-    <QueryClientProvider client={queryClient}>
-      <Harness {...props} />
-    </QueryClientProvider>,
-  );
+  render(<Harness {...props} />);
   return {
     latest,
     search: screen.getByRole<HTMLInputElement>("textbox", { name: "Search tasks" }),

@@ -4,9 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import { loadTaskApprovalContextFromQuery } from "@/state/queries/task-approval";
+import { loadTaskApprovalContextFromQuery } from "@openducktor/frontend-core/queries/task-approval";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
   TaskApprovalModalModel,
@@ -33,6 +33,7 @@ import {
   resolveTaskApprovalSubmissionRoute,
 } from "./task-approval-transition-resolver";
 import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -77,6 +78,7 @@ export function useTaskApprovalFlow({
     );
   },
 }: UseTaskApprovalFlowArgs): UseTaskApprovalFlowResult {
+  const host = useHostClient();
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
@@ -329,6 +331,7 @@ export function useTaskApprovalFlow({
         }
 
         const pullRequestResult = await submitPullRequestApproval({
+          host,
           approval: approvalState,
           repoPath,
           requestPullRequestGeneration,
@@ -372,6 +375,7 @@ export function useTaskApprovalFlow({
       }
     })();
   }, [
+    host,
     humanApproveTask,
     gitProviderContext,
     gitProviderContextError,

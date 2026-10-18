@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect } from "react";
 import { toast } from "sonner";
-import type { NotificationDispatchFailure } from "./notification-policy";
+import type { NotificationDispatchFailure } from "@openducktor/frontend-core/notifications/notification-policy";
 
 export function NotificationFailurePrompt({
   failure,

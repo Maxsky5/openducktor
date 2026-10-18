@@ -10,22 +10,23 @@ import type {
   AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   runtimeCatalogQueryKeys,
   runtimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+} from "@openducktor/frontend-core/queries/runtime-catalog";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createDeferred,
   createHostRuntimeStatusContextValue,
@@ -35,6 +36,13 @@ import {
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 
 const readyRuntimeStatus = createHostRuntimeStatusContextValue();
+
+// Model favorites read the workspace settings through the host connection.
+const createSettingsConnection = (queryClient: QueryClient = createClientQueryClient()) =>
+  createTestClientConnection({
+    queryClient,
+    client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+  });
 
 test("allows a new workspace session model choice while a stale catalog refreshes", async () => {
   const catalog: AgentModelCatalog = {
@@ -76,17 +84,13 @@ test("allows a new workspace session model choice while a stale catalog refreshe
     loadRepoRuntimeCatalog: loadRuntimeCatalog,
     loadRepoRuntimeFileSearch: async () => [],
   };
+  const connection = createSettingsConnection(client);
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <RuntimeDefinitionsContext value={definitions}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
       </RuntimeDefinitionsContext>
-    </QueryClientProvider>
-  );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
+    </ClientConnectionProvider>
   );
   const harness = createHookHarness(() => useWorkspaceSessionModelPicker("/repo"), undefined, {
     wrapper,
@@ -114,7 +118,6 @@ test("allows a new workspace session model choice while a stale catalog refreshe
     refresh.resolve(runtimeCatalog);
     await harness.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -166,17 +169,13 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
     retry: async () => {},
     update,
   };
+  const connection = createSettingsConnection();
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <RuntimeDefinitionsContext value={definitions}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
       </RuntimeDefinitionsContext>
     </QueryProvider>
-  );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
   );
   const harness = createHookHarness(
     (session: typeof target) => useWorkspaceSessionModelPicker("/repo", session),
@@ -219,7 +218,6 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
     );
   } finally {
     await harness.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 }, 5000);
 
@@ -278,17 +276,13 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
       update,
       updateDraft,
     };
+    const connection = createSettingsConnection();
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <RuntimeDefinitionsContext value={definitions}>
           <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
         </RuntimeDefinitionsContext>
       </QueryProvider>
-    );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-      }),
     );
     const harness = createHookHarness(
       (session: typeof target) => useWorkspaceSessionModelPicker("/repo", session),
@@ -335,7 +329,6 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
       expect(update).toHaveBeenCalledWith(identity, expect.objectContaining({ variant: "high" }));
     } finally {
       await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -369,17 +362,13 @@ test("prefills the creation picker from the repository Default Model when its ca
     loadRepoRuntimeCatalog: async () => runtimeCatalog,
     loadRepoRuntimeFileSearch: async () => [],
   };
+  const connection = createSettingsConnection();
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <RuntimeDefinitionsContext value={definitions}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
       </RuntimeDefinitionsContext>
     </QueryProvider>
-  );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
   );
   const harness = createHookHarness(
     () =>
@@ -403,7 +392,6 @@ test("prefills the creation picker from the repository Default Model when its ca
     });
   } finally {
     await harness.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -471,17 +459,13 @@ test("refreshes a stale session catalog when the model picker opens", async () =
     retry: async () => {},
     update: mock(() => {}),
   };
+  const connection = createSettingsConnection(client);
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <RuntimeDefinitionsContext value={definitions}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
       </RuntimeDefinitionsContext>
-    </QueryClientProvider>
-  );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
+    </ClientConnectionProvider>
   );
   const harness = createHookHarness(
     (session: typeof target) => useWorkspaceSessionModelPicker("/repo", session),
@@ -499,7 +483,6 @@ test("refreshes a stale session catalog when the model picker opens", async () =
   } finally {
     await harness.unmount();
     client.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -520,17 +503,13 @@ test("does not prefill the creation picker when the Default Model runtime is una
     },
     loadRepoRuntimeFileSearch: async () => [],
   };
+  const connection = createSettingsConnection();
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <RuntimeDefinitionsContext value={definitions}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
       </RuntimeDefinitionsContext>
     </QueryProvider>
-  );
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
-    }),
   );
   const harness = createHookHarness(
     () =>
@@ -549,6 +528,5 @@ test("does not prefill the creation picker when the Default Model runtime is una
     expect(harness.getLatest().selection).toBeNull();
   } finally {
     await harness.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });

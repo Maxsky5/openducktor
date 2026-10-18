@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { createFileReferenceSegment, createTextSegment } from "./agent-chat-composer-draft";
+import {
+  createFileReferenceSegment,
+  createTextSegment,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { readComposerSelectionRange } from "./agent-chat-composer-selection-range";
 
 const testFile = {

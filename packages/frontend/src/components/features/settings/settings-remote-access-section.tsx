@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, Radio } from "lucide-react";
 import { useRemoteAccess } from "@/state/remote-access-provider";
-import { remoteAccessNetworksQueryOptions } from "@/state/queries/remote-access";
+import { remoteAccessNetworksQueryOptions } from "@openducktor/frontend-core/queries/remote-access";
 import { useRemoteAccessAction } from "@/state/operations/remote-access";
 import { RemoteAccessForm } from "./settings-remote-access-form";
 import { RemoteAddress } from "../remote-control/remote-address";

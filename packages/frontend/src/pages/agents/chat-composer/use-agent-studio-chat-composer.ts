@@ -49,12 +49,12 @@ import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-inp
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { useChatComposerSubagents } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-subagents";
 import { availableDefaultSessionSelectionFor } from "@/features/session-start/session-start-selection";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
-import { useRuntimeModelCatalogs } from "@/state/queries/use-runtime-model-catalogs";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { retryRuntimeCatalog } from "@openducktor/frontend-core/queries/runtime-catalog";
+import { useRuntimeModelCatalogs } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioSelectedSessionState } from "../selected-session/selected-session-state";
 

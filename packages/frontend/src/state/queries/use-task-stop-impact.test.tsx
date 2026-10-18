@@ -1,10 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { TaskStopImpact } from "@openducktor/contracts";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
@@ -69,11 +71,11 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   },
 });
 
-const createWrapper = () => {
+const createWrapper = (connection: ClientConnection) => {
   const workspaceState = createWorkspaceState();
   return function Wrapper({ children }: PropsWithChildren) {
     return (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceStateContext.Provider value={workspaceState}>
           {children}
         </WorkspaceStateContext.Provider>
@@ -85,9 +87,11 @@ const createWrapper = () => {
 type HarnessProps = {
   enabled: boolean;
   taskIds: string[];
-  taskStopImpactGet: () => Promise<TaskStopImpact>;
 };
-const createHarness = (initialProps: HarnessProps) =>
+const createHarness = (
+  initialProps: HarnessProps,
+  taskStopImpactGet: HostClient["taskStopImpactGet"],
+) =>
   createHookHarness(
     (props: HarnessProps) => {
       const queryClient = useQueryClient();
@@ -95,18 +99,17 @@ const createHarness = (initialProps: HarnessProps) =>
         taskIds: props.taskIds,
         operation: "delete",
         enabled: props.enabled,
-        readPort: { taskStopImpactGet: props.taskStopImpactGet },
       });
       return { stopImpact, queryClient };
     },
     initialProps,
-    { wrapper: createWrapper() },
+    { wrapper: createWrapper(createTestClientConnection({ client: { taskStopImpactGet } })) },
   );
 
 describe("useTaskStopImpact", () => {
   test("issues no host command while disabled", async () => {
     const taskStopImpactGet = mock(async () => ({ stoppableSessionCount: 1 }));
-    const harness = createHarness({ enabled: false, taskIds: ["task-1"], taskStopImpactGet });
+    const harness = createHarness({ enabled: false, taskIds: ["task-1"] }, taskStopImpactGet);
 
     try {
       await harness.mount();
@@ -123,11 +126,7 @@ describe("useTaskStopImpact", () => {
 
   test("stays pending without a count until the authoritative read resolves", async () => {
     const deferred = createDeferred<{ stoppableSessionCount: number }>();
-    const harness = createHarness({
-      enabled: true,
-      taskIds: ["task-1"],
-      taskStopImpactGet: () => deferred.promise,
-    });
+    const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, () => deferred.promise);
 
     try {
       await harness.mount();
@@ -155,16 +154,12 @@ describe("useTaskStopImpact", () => {
     const secondRead = createDeferred<{ stoppableSessionCount: number }>();
     const reads = [firstRead.promise, secondRead.promise];
     let readCount = 0;
-    const initialProps: HarnessProps = {
-      enabled: true,
-      taskIds: ["task-1"],
-      taskStopImpactGet: () => {
-        const promise = reads[Math.min(readCount, reads.length - 1)]!;
-        readCount += 1;
-        return promise;
-      },
-    };
-    const harness = createHarness(initialProps);
+    const initialProps: HarnessProps = { enabled: true, taskIds: ["task-1"] };
+    const harness = createHarness(initialProps, () => {
+      const promise = reads[Math.min(readCount, reads.length - 1)]!;
+      readCount += 1;
+      return promise;
+    });
 
     try {
       await harness.mount();
@@ -199,12 +194,8 @@ describe("useTaskStopImpact", () => {
   });
 
   test("surfaces preview failures instead of hiding them behind a null count", async () => {
-    const harness = createHarness({
-      enabled: true,
-      taskIds: ["task-1"],
-      taskStopImpactGet: async () => {
-        throw new Error("host unavailable");
-      },
+    const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, async () => {
+      throw new Error("host unavailable");
     });
 
     try {

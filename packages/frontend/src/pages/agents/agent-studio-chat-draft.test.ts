@@ -1,39 +1,40 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   toAgentChatDraftStorageKey,
   writeAgentChatDraftToStorage,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
+} from "@openducktor/frontend-core/drafts/agent-chat-draft-storage";
 import {
-  resetAgentChatDraftStoreForTests,
-  setAgentChatDraftNowProviderForTests,
-  setAgentChatDraftStorageForTests,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+  type AgentChatDraftStore,
+  createAgentChatDraftStore,
+} from "@openducktor/frontend-core/drafts/agent-chat-draft-store";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentStudioChatDraftScope,
   agentStudioChatDraftScopeKey,
   createAgentStudioChatDraftPersistence,
 } from "./agent-studio-chat-draft";
 
-type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+const stores: AgentChatDraftStore[] = [];
 
-const createMemoryStorage = (): TestStorage => {
-  const values = new Map<string, string>();
-  return {
-    get length() {
-      return values.size;
+const createDraftStore = ({
+  storage = createMemoryClientStorage(),
+  now = () => new Date(),
+}: { storage?: ClientStorage; now?: () => Date } = {}): AgentChatDraftStore => {
+  const store = createAgentChatDraftStore({
+    storage,
+    stageAttachment: async (file) => {
+      throw new Error(`The test draft store cannot stage '${file.name}'.`);
     },
-    key: (index) => Array.from(values.keys())[index] ?? null,
-    getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => {
-      values.set(key, value);
-    },
-    removeItem: (key) => {
-      values.delete(key);
-    },
-  };
+    now,
+  });
+  stores.push(store);
+  return store;
 };
 
 const session = (externalSessionId: string): AgentSessionIdentity => ({
@@ -50,7 +51,9 @@ const scope = (overrides: Partial<AgentStudioChatDraftScope> = {}): AgentStudioC
 });
 
 afterEach(() => {
-  resetAgentChatDraftStoreForTests();
+  for (const store of stores.splice(0)) {
+    store.dispose();
+  }
 });
 
 describe("Agent Studio chat draft adapter", () => {
@@ -73,17 +76,21 @@ describe("Agent Studio chat draft adapter", () => {
 
   test("uses stable persistence targets for equivalent session identities", () => {
     const selectedSession = session("session-1");
+    const drafts = createDraftStore();
     const first = createAgentStudioChatDraftPersistence({
+      drafts,
       workspaceId: "workspace",
       taskId: "task-1",
       session: selectedSession,
     });
     const refreshed = createAgentStudioChatDraftPersistence({
+      drafts,
       workspaceId: "workspace",
       taskId: "task-1",
       session: { ...selectedSession },
     });
     const otherWorkspace = createAgentStudioChatDraftPersistence({
+      drafts,
       workspaceId: "other-workspace",
       taskId: "task-1",
       session: selectedSession,
@@ -100,15 +107,17 @@ describe("Agent Studio chat draft adapter", () => {
   });
 
   test("reads an existing version 2 payload without migration", () => {
-    const storage = createMemoryStorage();
+    const storage = createMemoryClientStorage();
     const selectedSession = session("session-1");
     const identity = { workspaceId: "workspace", ...selectedSession };
     const draft = {
       segments: [createTextSegment("persisted", "text-1")],
       attachments: [],
     };
-    setAgentChatDraftStorageForTests(storage);
-    setAgentChatDraftNowProviderForTests(() => new Date("2026-07-08T10:00:01.000Z"));
+    const drafts = createDraftStore({
+      storage,
+      now: () => new Date("2026-07-08T10:00:01.000Z"),
+    });
     writeAgentChatDraftToStorage({
       storage,
       identity,
@@ -119,6 +128,7 @@ describe("Agent Studio chat draft adapter", () => {
     const existingPayload = storage.getItem(toAgentChatDraftStorageKey(identity));
 
     const persistence = createAgentStudioChatDraftPersistence({
+      drafts,
       workspaceId: "workspace",
       taskId: "task-1",
       session: selectedSession,

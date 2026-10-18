@@ -1,31 +1,33 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { useSidebarSessionGrouping } from "./use-sidebar-session-grouping";
 
-const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-  <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
-);
+const createWrapper = (client: Partial<HostClient>) => {
+  const connection = createTestClientConnection({ client });
+  return ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider connection={connection}>{children}</QueryProvider>
+  );
+};
 
 describe("Sidebar session grouping preference", () => {
   test("starts grouped and prevents writes until settings are loaded", async () => {
     const read = createDeferred<SettingsSnapshot>();
     const saved = createSettingsSnapshotFixture();
     const workspaceUpdateSidebarSessionGrouping = mock(async () => saved);
-    const harness = createHookHarness(
-      () =>
-        useSidebarSessionGrouping({
-          workspaceGetSettingsSnapshot: async () => read.promise,
-          workspaceUpdateSidebarSessionGrouping,
-        }),
-      undefined,
-      { wrapper },
-    );
+    const harness = createHookHarness(() => useSidebarSessionGrouping(), undefined, {
+      wrapper: createWrapper({
+        workspaceGetSettingsSnapshot: async () => read.promise,
+        workspaceUpdateSidebarSessionGrouping,
+      }),
+    });
     try {
       await harness.mount();
       expect(harness.getLatest().grouping).toBe("task");
@@ -50,15 +52,14 @@ describe("Sidebar session grouping preference", () => {
       const write = createDeferred<SettingsSnapshot>();
       const workspaceUpdateSidebarSessionGrouping = mock(async () => write.promise);
       const harness = createHookHarness(
-        () => ({
-          ...useSidebarSessionGrouping({
+        () => ({ ...useSidebarSessionGrouping(), queryClient: useQueryClient() }),
+        undefined,
+        {
+          wrapper: createWrapper({
             workspaceGetSettingsSnapshot: async () => initial,
             workspaceUpdateSidebarSessionGrouping,
           }),
-          queryClient: useQueryClient(),
-        }),
-        undefined,
-        { wrapper },
+        },
       );
       try {
         await harness.mount();

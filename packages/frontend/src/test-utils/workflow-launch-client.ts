@@ -18,7 +18,7 @@ import type {
   AgentMessageSendOptions,
   AgentMessageSendReceipt,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type SendAgentMessage = (
   session: AgentSessionIdentity,

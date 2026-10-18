@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -84,7 +84,7 @@ test("the task card opens and closes the real detail sheet without leaving chat"
   };
   const url = window.location.href;
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <WorkspaceStateContext value={workspace}>
         <ActiveWorkspaceContext
           value={{ activeWorkspace: workspace.activeWorkspace, setActiveWorkspace: () => {} }}

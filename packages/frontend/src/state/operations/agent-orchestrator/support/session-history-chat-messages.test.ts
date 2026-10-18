@@ -4,12 +4,15 @@ import {
   createSessionMessagesFixture,
   findSessionMessageForTest,
   sessionMessageAt,
-} from "@/test-utils/session-message-test-helpers";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/test-support/session-message-test-helpers";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { getToolDuration } from "@/components/features/agents/agent-chat/tool-duration";
-import { applyLoadedSessionHistory, historyToChatMessages } from "./session-history-chat-messages";
-import { createSessionMessagesState } from "./messages";
+import {
+  applyLoadedSessionHistory,
+  historyToChatMessages,
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 
 const historyOwner = (messages: AgentChatMessage[]) => ({
   externalSessionId: "external-1",

@@ -1,6 +1,6 @@
 import { buildGitConflictAssistancePrompt } from "@openducktor/core";
 import type { GitConflict } from "@/features/agent-studio-git";
-import type { AgentMessageSendReceipt } from "@/types/agent-orchestrator";
+import type { AgentMessageSendReceipt } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export class GitConflictRequestCancelled extends Error {
   constructor() {

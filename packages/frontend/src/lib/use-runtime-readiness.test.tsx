@@ -6,11 +6,11 @@ import {
 } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import {
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "@/state/app-state-contexts";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,

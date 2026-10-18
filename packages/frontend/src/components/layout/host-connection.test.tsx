@@ -3,7 +3,7 @@ import { act } from "react";
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
 import type { RemoteAccessBridge, RemoteAccessState } from "@openducktor/contracts";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { ShellStateProvider } from "@/state/app-state-provider";
 import { SettingsRemoteAccessSection } from "../features/settings/settings-remote-access-section";
 import { HostConnectionProvider, HostSwitcher } from "./host-connection";
@@ -39,7 +39,7 @@ test("the rail, host modal, and Settings share live client counts and host addre
     disconnect: async () => {},
   };
   const content = (settings: boolean, remote: boolean) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ShellStateProvider remoteAccess={bridge}>
         <HostConnectionProvider
           selection={
@@ -164,7 +164,7 @@ test("opens remote control settings without changing the selected host", async (
     subscribeState: async () => () => {},
   };
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ShellStateProvider remoteAccess={bridge}>
         <HostConnectionProvider
           selection={{

@@ -11,15 +11,18 @@ import {
 import { toast } from "sonner";
 import { createAutopilotOutcomePresenter } from "@/features/autopilot/autopilot-outcome-presenter";
 import { toAgentUserMessageParts } from "@/features/session-start/session-start-workflow";
-import { BROWSER_LIVE_RECONNECTED_EVENT_KIND } from "@/lib/browser-live/constants";
-import { errorMessage } from "@/lib/errors";
-import { hostBridge } from "@/lib/host-client";
+import { CONNECTION_RECONNECTED_EVENT_KIND } from "@openducktor/frontend-core/recovery/connection-control-events";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useNotificationContext } from "@/state/notifications/notification-context";
-import { useAgentOperationsContext, useWorkspaceStateContext } from "../app-state-contexts";
-import { host } from "../operations/shared/host";
-import { autopilotQueryKeys, autopilotStateQueryOptions } from "../queries/autopilot";
-import { taskWorktreeQueryKeys } from "../queries/build-runtime";
-import { invalidateTerminalList } from "../queries/terminals";
+import { useWorkspaceStateContext } from "../app-state-contexts";
+import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import {
+  autopilotQueryKeys,
+  autopilotStateQueryOptions,
+} from "@openducktor/frontend-core/queries/autopilot";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
+import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 /**
  * Shows the outcomes of host Autopilot from every workspace. The host detects task changes and
@@ -27,6 +30,7 @@ import { invalidateTerminalList } from "../queries/terminals";
  */
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
+  const host = useHostConnection();
   const { activeWorkspace, workspaces, closedWorkspaces } = useWorkspaceStateContext();
   const { sendAgentMessage } = useAgentOperationsContext();
   const { sessionStartNotifications } = useNotificationContext();
@@ -44,7 +48,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   const presenter = useMemo(
     () =>
       createAutopilotOutcomePresenter({
-        claimRecovery: (input) => host.autopilotRecoveryClaim(input),
+        claimRecovery: (input) => host.client.autopilotRecoveryClaim(input),
         sendMessage: async (session, instruction) => {
           await sendAgentMessageRef.current(session, toAgentUserMessageParts(instruction), {
             preserveTextWhitespace: true,
@@ -56,7 +60,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
         refreshTaskViews: (repoPath, taskId) =>
           refreshLaunchedTaskViews(queryClient, repoPath, taskId),
       }),
-    [queryClient],
+    [host, queryClient],
   );
 
   // The host keeps failed and skipped outcomes, so a client that attaches or selects a workspace
@@ -80,11 +84,11 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     const reloadSavedRules = () => {
       void queryClient.invalidateQueries({ queryKey: autopilotQueryKeys.settings() });
     };
-    hostBridge
+    host
       .subscribeRunEvents((payload) => {
-        if ("__openducktorBrowserLive" in payload) {
+        if ("__openducktorConnectionControl" in payload) {
           const workspaceId = activeWorkspaceIdRef.current;
-          if (payload.kind !== BROWSER_LIVE_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
+          if (payload.kind !== CONNECTION_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
           // A missed settings event can leave old Autopilot rules in the cache.
           reloadSavedRules();
           if (workspaceId) {
@@ -129,7 +133,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
       unsubscribe?.();
       setSubscribed(false);
     };
-  }, [presenter, queryClient, readHeldOutcomes]);
+  }, [host, presenter, queryClient, readHeldOutcomes]);
 
   useEffect(() => {
     if (subscribed && activeWorkspaceId)

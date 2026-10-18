@@ -1,4 +1,4 @@
-import type { AgentChatMessageMeta } from "@/types/agent-orchestrator";
+import type { AgentChatMessageMeta } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { z } from "zod";
 
 export type ToolMessageMeta = Extract<NonNullable<AgentChatMessageMeta>, { kind: "tool" }>;

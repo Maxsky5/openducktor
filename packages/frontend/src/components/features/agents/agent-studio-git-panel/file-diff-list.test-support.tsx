@@ -1,13 +1,11 @@
 import { afterAll, afterEach, beforeEach, mock, spyOn } from "bun:test";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { cleanup, fireEvent } from "@testing-library/react";
 import { act, type ReactElement } from "react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import type { InlineCommentDraftStoreApi } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import type { PierreHunkAction } from "@/components/features/agents/pierre-diff-viewer";
-import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
-import {
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
-} from "@/state/use-inline-comment-draft-store";
 import { FILE_LIST_ROW_HEIGHT } from "./constants";
 
 export const OWNER_KEY = toInlineCommentDraftStorageKey({
@@ -15,24 +13,19 @@ export const OWNER_KEY = toInlineCommentDraftStorageKey({
   taskId: "task-1",
 });
 
-type TestStorage = Pick<Storage, "length" | "key" | "getItem" | "setItem" | "removeItem">;
+let testConnection: ClientConnection | null = null;
 
-const createMemoryStorage = (): TestStorage => {
-  const store = new Map<string, string>();
-  return {
-    get length() {
-      return store.size;
-    },
-    key: (index) => Array.from(store.keys())[index] ?? null,
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-  };
+/** The client connection that `setupFileDiffListTests` creates for the current test. */
+export const fileDiffListConnection = (): ClientConnection => {
+  if (!testConnection) {
+    throw new Error("Call setupFileDiffListTests() before rendering a file diff list.");
+  }
+  return testConnection;
 };
+
+/** The inline comment drafts of the current test connection. */
+export const fileDiffListDrafts = (): InlineCommentDraftStoreApi =>
+  fileDiffListConnection().drafts.inlineComments;
 
 const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
 type RestorableSpy = { mockRestore(): void };
@@ -149,14 +142,12 @@ export const viewerMock = mock(
   ),
 );
 
-/** Mocks the Pierre viewers and gives each test an empty inline comment store. */
+/** Mocks the Pierre viewers and gives each test a connection with empty inline comment drafts. */
 export function setupFileDiffListTests(): void {
   beforeEach(() => {
     reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
-    resetInlineCommentDraftStoreForTests();
-    setInlineCommentDraftStorageForTests(createMemoryStorage());
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    testConnection = createTestClientConnection({ scheduleTask: () => () => {} });
 
     pierreViewerSpies = [
       spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
@@ -180,14 +171,15 @@ export function setupFileDiffListTests(): void {
     ];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const pierreViewerSpy of pierreViewerSpies) pierreViewerSpy.mockRestore();
     pierreViewerSpies = [];
     cleanup();
     preloaderMock.mockClear();
     viewerMock.mockClear();
     fileViewerMock.mockClear();
-    resetInlineCommentDraftStoreForTests();
+    await testConnection?.dispose();
+    testConnection = null;
   });
 
   afterAll(() => {

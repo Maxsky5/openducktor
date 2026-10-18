@@ -6,17 +6,17 @@ import type {
   SettingsSnapshot,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider, QueryObserver } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { RunEventListener } from "@openducktor/frontend-core/connection/host-connection";
 import {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-  type RunEventListener,
-  type ShellBridge,
-} from "@/lib/shell-bridge";
-import { AgentOperationsContext, WorkspaceStateContext } from "@/state/app-state-contexts";
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { WorkspaceStateContext } from "@/state/app-state-contexts";
+import { AgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   NotificationContext,
   type NotificationContextValue,
@@ -26,10 +26,10 @@ import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { taskWorktreeQueryKeys } from "../queries/build-runtime";
-import { autopilotSettingsQueryOptions } from "../queries/autopilot";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { AutopilotProvider } from "./autopilot-provider";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", repoPath: "/repos/alpha" });
 const beta = createWorkspaceRecordFixture({
@@ -77,16 +77,13 @@ const notifications: NotificationContextValue = {
 
 const agentOperations = createAgentOperationsFixture();
 
-let originalBridge: ShellBridge;
 let info: ReturnType<typeof spyOn<typeof toast, "info">>;
 let dismiss: ReturnType<typeof spyOn<typeof toast, "dismiss">>;
 beforeEach(() => {
-  originalBridge = getShellBridge();
   info = spyOn(toast, "info").mockReturnValue("info");
   dismiss = spyOn(toast, "dismiss").mockReturnValue("dismiss");
 });
 afterEach(() => {
-  configureShellBridge(originalBridge);
   info.mockRestore();
   dismiss.mockRestore();
 });
@@ -99,26 +96,28 @@ const renderProvider = (
 ) => {
   const calls: string[] = [];
   const listeners: RunEventListener[] = [];
-  const bridge = createUnavailableShellBridge();
-  bridge.subscribeRunEvents = async (listener) => {
-    calls.push("subscribe");
-    listeners.push(listener);
-    return () => {
-      listeners.splice(listeners.indexOf(listener), 1);
-    };
-  };
   const readState = mock(
     async ({ workspaceId }: { workspaceId: string }): Promise<AutopilotState> => {
       calls.push(`read:${workspaceId}`);
       return held[workspaceId] ?? { outcomes: [], failure: null };
     },
   );
-  bridge.client.autopilotStateRead = readState;
-  bridge.client.workspaceGetSettingsSnapshot = mock(readSettings);
-  configureShellBridge(bridge);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const connection = createTestClientConnection({
+    queryClient,
+    host: createTestHostConnection({
+      client: { autopilotStateRead: readState, workspaceGetSettingsSnapshot: mock(readSettings) },
+      subscribeRunEvents: async (listener) => {
+        calls.push("subscribe");
+        listeners.push(listener);
+        return () => {
+          listeners.splice(listeners.indexOf(listener), 1);
+        };
+      },
+    }),
+  });
   const view = (activeWorkspace: WorkspaceRecord, workspaces: WorkspaceRecord[]) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <WorkspaceStateContext value={createWorkspaceStateFixture({ activeWorkspace, workspaces })}>
         <AgentOperationsContext value={agentOperations}>
           <NotificationContext value={notifications}>
@@ -126,7 +125,7 @@ const renderProvider = (
           </NotificationContext>
         </AgentOperationsContext>
       </WorkspaceStateContext>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const rendered = render(view(alpha, [alpha, beta]));
   const emit: RunEventListener = (payload) => {
@@ -161,7 +160,7 @@ describe("AutopilotProvider", () => {
         // Query has no observer for this read. The reconnect owner must await its application.
         provider.readState.mockImplementationOnce(() => replacement.promise);
         const recovery = provider.emit({
-          __openducktorBrowserLive: true,
+          __openducktorConnectionControl: true,
           kind: "reconnected",
           missedEvents: true,
         });
@@ -220,8 +219,16 @@ describe("AutopilotProvider", () => {
       const event = { type: "autopilot_outcome" as const, outcome: skipped("beta-live", beta) };
       provider.emit(event);
       provider.emit(event);
-      provider.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: false });
-      provider.emit({ __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true });
+      provider.emit({
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: false,
+      });
+      provider.emit({
+        __openducktorConnectionControl: true,
+        kind: "reconnected",
+        missedEvents: true,
+      });
       await waitFor(() => expect(provider.calls).toHaveLength(3));
 
       expect(shownToastIds()).toEqual(["autopilot:beta-live"]);
@@ -321,7 +328,7 @@ describe("AutopilotProvider", () => {
     {
       name: "a reconnect after missed events",
       payload: {
-        __openducktorBrowserLive: true as const,
+        __openducktorConnectionControl: true as const,
         kind: "reconnected" as const,
         missedEvents: true,
       },

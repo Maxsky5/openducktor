@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { documentQueryKeys } from "@/state/queries/documents";
-import { taskQueryKeys } from "@/state/queries/tasks";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { documentQueryKeys } from "@openducktor/frontend-core/queries/documents";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { useTaskMutationRunner } from "./task-mutation-runner";
 
 describe("task mutation runner", () => {
@@ -15,7 +15,7 @@ describe("task mutation runner", () => {
         queryClient: useQueryClient(),
       }),
       undefined,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: QueryProvider },
     );
     try {
       await harness.mount();

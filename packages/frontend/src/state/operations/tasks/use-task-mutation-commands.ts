@@ -12,11 +12,10 @@ import { useMemo } from "react";
 import {
   type AgentSessionReadPort,
   removeAgentSessionListQueries,
-} from "@/state/queries/agent-sessions";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { invalidateRepoIssueItemsQueries } from "@/state/queries/issue-items";
-import { taskStopImpactQueryKeys } from "@/state/queries/task-stop-impact";
-import { host } from "../shared/host";
+} from "@openducktor/frontend-core/queries/agent-sessions";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import { invalidateRepoIssueItemsQueries } from "@openducktor/frontend-core/queries/issue-items";
+import { taskStopImpactQueryKeys } from "@openducktor/frontend-core/queries/task-stop-impact";
 import {
   createProductionTaskChatDraftCleanup,
   type TaskChatDraftCleanup,
@@ -28,6 +27,8 @@ import {
   toNormalizedTitle,
   toUpdateSuccessDescription,
 } from "./task-operations-model";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { HostClient } from "@openducktor/host-client";
 
 type UseTaskMutationCommandsArgs = {
   activeRepoPath: string | null;
@@ -76,7 +77,7 @@ export type TaskMutationCommandHostPort = {
   humanRequestChanges: (repoPath: string, taskId: string, note?: string) => Promise<void>;
 };
 
-const productionTaskMutationHostPort: TaskMutationCommandHostPort = {
+const createHostTaskMutationPort = (host: HostClient): TaskMutationCommandHostPort => ({
   taskCreate: async (...args) => {
     await host.taskCreate(...args);
   },
@@ -96,7 +97,7 @@ const productionTaskMutationHostPort: TaskMutationCommandHostPort = {
   humanRequestChanges: async (...args) => {
     await host.humanRequestChanges(...args);
   },
-};
+});
 
 export type TaskMutationCommandCacheImpact = {
   removeDeletedTaskCaches: (repoPath: string, taskIds: string[]) => Promise<void>;
@@ -305,6 +306,8 @@ export function useTaskMutationCommands({
   agentSessionReadPort,
 }: UseTaskMutationCommandsArgs): TaskMutationCommands {
   const queryClient = useQueryClient();
+  const host = useHostClient();
+  const hostPort = useMemo(() => createHostTaskMutationPort(host), [host]);
   const taskChatDraftCleanup = useMemo(
     () => createProductionTaskChatDraftCleanup(agentSessionReadPort),
     [agentSessionReadPort],
@@ -330,7 +333,7 @@ export function useTaskMutationCommands({
         activeWorkspaceId,
         tasks,
         runTaskMutation,
-        hostPort: productionTaskMutationHostPort,
+        hostPort,
         queryClient,
         cacheImpact,
         taskChatDraftCleanup,
@@ -339,6 +342,7 @@ export function useTaskMutationCommands({
       activeRepoPath,
       activeWorkspaceId,
       cacheImpact,
+      hostPort,
       runTaskMutation,
       taskChatDraftCleanup,
       tasks,

@@ -27,20 +27,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { repoDefaultModelSelectionFor } from "@/features/session-start/session-start-selection";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
-import { host } from "@/state/operations/host";
-import { invalidateRepoBranchesQuery, repoBranchesQueryOptions } from "@/state/queries/git";
+import {
+  invalidateRepoBranchesQuery,
+  repoBranchesQueryOptions,
+} from "@openducktor/frontend-core/queries/git";
 import {
   customAgentRolesQueryOptions,
   updateWorkspaceSessionQueries,
-} from "@/state/queries/workspace-sessions";
-import { invalidateTerminalList } from "@/state/queries/terminals";
-import { repoConfigQueryOptions, toRepoSettingsInput } from "@/state/queries/workspace";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
+import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
+import {
+  repoConfigQueryOptions,
+  toRepoSettingsInput,
+} from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useMountedRef } from "./use-mounted-ref";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type WorkspaceSessionCreateDialogProps = {
   open?: boolean;
@@ -57,6 +63,7 @@ export function WorkspaceSessionCreateDialog({
   onCreated,
   onCloseAutoFocus,
 }: WorkspaceSessionCreateDialogProps): ReactElement {
+  const host = useHostClient();
   const queryClient = useQueryClient();
   const roles = useQuery(customAgentRolesQueryOptions());
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));

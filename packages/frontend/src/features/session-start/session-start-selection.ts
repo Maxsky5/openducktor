@@ -6,9 +6,9 @@ import type {
   AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
-import { resolveRuntimeCatalogSurface } from "@/state/queries/runtime-catalog";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import { errorMessage } from "@/lib/errors";
+import { resolveRuntimeCatalogSurface } from "@openducktor/frontend-core/queries/runtime-catalog";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   pickRepoAgentDefault,
   type RepoAgentDefaultDraft,

@@ -5,9 +5,9 @@ import {
   getRepoStoreHealth,
   getRepoStoreStatusLabel,
   isRepoStoreReady,
-} from "@/lib/repo-store-health";
+} from "@openducktor/frontend-core/lib/repo-store-health";
 import { hasTaskStoreCheckFailure } from "@/state/operations/workspace/check-diagnostics";
-import type { ObservedCheck } from "@/types/diagnostics";
+import type { ObservedCheck } from "@openducktor/frontend-core/types/diagnostics";
 import {
   buildRefreshFailedCheck,
   LOADING_STATUS,

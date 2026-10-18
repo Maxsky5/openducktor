@@ -57,6 +57,14 @@
       }
     },
     {
+      "files": ["packages/frontend-core/**/*.ts", "packages/frontend-core/**/*.tsx"],
+      "plugins": ["oxc", "react", "typescript", "unicorn"],
+      "rules": {
+        "react/exhaustive-deps": "warn",
+        "react/rules-of-hooks": "warn"
+      }
+    },
+    {
       "files": ["packages/host/src/**/*.ts"],
       "rules": {
         "max-lines": [
@@ -182,6 +190,119 @@
       "files": ["packages/runtime-orchestration/src/**/*.test.ts"],
       "rules": {
         "max-lines": "off"
+      }
+    },
+    {
+      "files": ["packages/frontend/src/**/*.ts", "packages/frontend/src/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@openducktor/electron",
+                  "@openducktor/electron/*",
+                  "@openducktor/web",
+                  "@openducktor/web/*",
+                  "**/apps/electron/**",
+                  "**/packages/openducktor-web/**"
+                ],
+                "message": "Shared frontend code must not import shell internals. Use the shell bridge instead."
+              },
+              {
+                "group": ["@openducktor/frontend-core/test-support/*"],
+                "message": "Production frontend code must not import frontend core test support."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/frontend/src/**/*.test.ts",
+        "packages/frontend/src/**/*.test.tsx",
+        "packages/frontend/src/**/*.test-*.ts",
+        "packages/frontend/src/**/*.test-*.tsx",
+        "packages/frontend/src/**/*-test-*.ts",
+        "packages/frontend/src/**/*-test-*.tsx",
+        "packages/frontend/src/**/*.fixture.ts",
+        "packages/frontend/src/**/*.fixture.tsx",
+        "packages/frontend/src/test-utils/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@openducktor/electron",
+                  "@openducktor/electron/*",
+                  "@openducktor/web",
+                  "@openducktor/web/*",
+                  "**/apps/electron/**",
+                  "**/packages/openducktor-web/**"
+                ],
+                "message": "Shared frontend code must not import shell internals. Use the shell bridge instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/electron/src/renderer/**"],
+      "rules": {
+        "architecture/restricted-file-paths": [
+          "error",
+          {
+            "pattern": "/apps/electron/src/renderer/(?!(?:electron-api\\.d|electron-shell-bridge(?:\\.test)?)\\.ts$|main\\.tsx$)",
+            "message": "The Electron renderer stays a thin shell. Move shared UI and runtime code to packages/frontend/src."
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/frontend-core/src/**/*.ts",
+        "packages/frontend-core/src/**/*.tsx",
+        "packages/frontend-core/expo-compat/**/*.ts"
+      ],
+      "rules": {
+        "architecture/allowed-imports": [
+          "error",
+          {
+            "root": "packages/frontend-core",
+            "packages": [
+              "@openducktor/contracts",
+              "@openducktor/core",
+              "@openducktor/frontend-core",
+              "@openducktor/host-client",
+              "@openducktor/path-support",
+              "@tanstack/react-query",
+              "react",
+              "zod",
+              "zustand"
+            ],
+            "message": "The frontend core runs in Electron, browsers, and React Native. Import only portable packages, or add a platform port."
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/frontend-core/src/**/*.test.ts",
+        "packages/frontend-core/src/**/*.test.tsx",
+        "packages/frontend-core/src/**/*.test-*.ts",
+        "packages/frontend-core/src/**/*.test-*.tsx",
+        "packages/frontend-core/src/**/*-test-*.ts",
+        "packages/frontend-core/src/**/test-utils.ts",
+        "packages/frontend-core/src/test-support/**"
+      ],
+      "rules": {
+        "architecture/allowed-imports": "off"
       }
     }
   ],

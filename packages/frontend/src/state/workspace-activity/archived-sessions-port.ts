@@ -3,14 +3,14 @@ import type { QueryClient } from "@tanstack/react-query";
 import type {
   WorkspaceActivityArchivedSessions,
   WorkspaceActivityArchivedSessionsPort,
-} from "@/features/workspace-activity/workspace-activity-observer";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { errorMessage } from "@/lib/errors";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-observer";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
-} from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/queries/workspace-sessions";
 
 const archivedSessionKeysByRecords = new WeakMap<
   readonly WorkspaceSession[],

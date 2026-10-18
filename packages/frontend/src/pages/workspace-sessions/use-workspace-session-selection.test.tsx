@@ -1,37 +1,46 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { act, renderHook } from "@testing-library/react";
-import { useLayoutEffect } from "react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { type ReactNode, useLayoutEffect } from "react";
 import {
   useWorkspaceSessionSelection,
   workspaceSessionSelectionStorageKey,
 } from "./use-workspace-session-selection";
 
-const overrideStorage = (overrides: Partial<Pick<Storage, "getItem" | "setItem">>) => {
-  const storage = localStorage;
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: {
-      get length() {
-        return storage.length;
-      },
-      clear: () => storage.clear(),
-      key: (index: number) => storage.key(index),
-      getItem: (key: string) => storage.getItem(key),
-      setItem: (key: string, value: string) => storage.setItem(key, value),
-      removeItem: (key: string) => storage.removeItem(key),
-      ...overrides,
-    } satisfies Storage,
-  });
+// `saved` keeps the records. The connection reads them through `hostStorage`, whose methods a test
+// can replace with `overrideStorage`.
+let saved: ClientStorage;
+let hostStorage: ClientStorage;
+let connection: ClientConnection;
+beforeEach(() => {
+  const records = createMemoryClientStorage();
+  saved = records;
+  hostStorage = {
+    get length() {
+      return records.length;
+    },
+    key: (index) => records.key(index),
+    getItem: (key) => records.getItem(key),
+    setItem: (key, value) => records.setItem(key, value),
+    removeItem: (key) => records.removeItem(key),
+  };
+  connection = createTestClientConnection({ storage: hostStorage });
+});
+
+const overrideStorage = (overrides: Partial<Pick<ClientStorage, "getItem" | "setItem">>) => {
+  Object.assign(hostStorage, overrides);
 };
 
-let storageDescriptor: PropertyDescriptor | undefined;
-beforeEach(() => {
-  storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-});
-afterEach(() => {
-  if (storageDescriptor) Object.defineProperty(globalThis, "localStorage", storageDescriptor);
-});
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
+);
 
 const record = (id: string): WorkspaceSession => ({
   id,
@@ -50,7 +59,7 @@ const record = (id: string): WorkspaceSession => ({
 test("selection commits before the scheduled storage write and unmount flushes the last ID", () => {
   const workspaceId = crypto.randomUUID();
   const key = workspaceSessionSelectionStorageKey(workspaceId);
-  localStorage.setItem(key, "First");
+  saved.setItem(key, "First");
   const commits: Array<{ selected: string | undefined; stored: string | null }> = [];
   const sessions = [record("First"), record("Second")];
   const h = renderHook<WorkspaceSession | null, string | undefined>(
@@ -61,70 +70,72 @@ test("selection commits before the scheduled storage write and unmount flushes t
         requestedSessionId,
       });
       useLayoutEffect(() => {
-        commits.push({ selected: selected?.id, stored: localStorage.getItem(key) });
+        commits.push({ selected: selected?.id, stored: saved.getItem(key) });
       }, [selected]);
       return selected;
     },
-    { initialProps: undefined },
+    { initialProps: undefined, wrapper },
   );
   try {
     h.rerender("Second");
     expect(h.result.current?.id).toBe("Second");
     expect(commits.at(-1)).toEqual({ selected: "Second", stored: "First" });
-    expect(localStorage.getItem(key)).toBe("First");
+    expect(saved.getItem(key)).toBe("First");
     h.unmount();
-    expect(localStorage.getItem(key)).toBe("Second");
+    expect(saved.getItem(key)).toBe("Second");
   } finally {
     h.unmount();
-    localStorage.removeItem(key);
+    saved.removeItem(key);
   }
 });
 
 test("replaces a stale saved ID and clears it only after the loaded list becomes empty", () => {
   const workspaceId = crypto.randomUUID();
   const key = workspaceSessionSelectionStorageKey(workspaceId);
-  localStorage.setItem(key, "Archived");
+  saved.setItem(key, "Archived");
   const h = renderHook<WorkspaceSession | null, WorkspaceSession[] | undefined>(
     (sessions: WorkspaceSession[] | undefined) =>
       useWorkspaceSessionSelection({ workspaceId, sessions, requestedSessionId: undefined })
         .selected,
-    { initialProps: undefined },
+    { initialProps: undefined, wrapper },
   );
   try {
-    expect(localStorage.getItem(key)).toBe("Archived");
+    expect(saved.getItem(key)).toBe("Archived");
     h.rerender([record("First")]);
     expect(h.result.current?.id).toBe("First");
     act(() => window.dispatchEvent(new Event("pagehide")));
-    expect(localStorage.getItem(key)).toBe("First");
+    expect(saved.getItem(key)).toBe("First");
     h.rerender([]);
     expect(h.result.current).toBeNull();
     act(() => window.dispatchEvent(new Event("pagehide")));
-    expect(localStorage.getItem(key)).toBeNull();
+    expect(saved.getItem(key)).toBeNull();
   } finally {
     h.unmount();
-    localStorage.removeItem(key);
+    saved.removeItem(key);
   }
 });
 
 test("keeps a missing requested chat unselected and keeps the saved selection", () => {
   const workspaceId = crypto.randomUUID();
   const key = workspaceSessionSelectionStorageKey(workspaceId);
-  localStorage.setItem(key, "First");
-  const h = renderHook(() =>
-    useWorkspaceSessionSelection({
-      workspaceId,
-      sessions: [record("First"), record("Second")],
-      requestedSessionId: "Archived",
-    }),
+  saved.setItem(key, "First");
+  const h = renderHook(
+    () =>
+      useWorkspaceSessionSelection({
+        workspaceId,
+        sessions: [record("First"), record("Second")],
+        requestedSessionId: "Archived",
+      }),
+    { wrapper },
   );
   try {
     expect(h.result.current.selected).toBeNull();
     expect(h.result.current.missingSessionId).toBe("Archived");
     act(() => window.dispatchEvent(new Event("pagehide")));
-    expect(localStorage.getItem(key)).toBe("First");
+    expect(saved.getItem(key)).toBe("First");
   } finally {
     h.unmount();
-    localStorage.removeItem(key);
+    saved.removeItem(key);
   }
 });
 
@@ -136,7 +147,7 @@ test.each(["idle", "pending"])(
     const workspaceB = crypto.randomUUID();
     const keyA = workspaceSessionSelectionStorageKey(workspaceA);
     const keyB = workspaceSessionSelectionStorageKey(workspaceB);
-    const storage = localStorage;
+    const storage = saved;
     storage.setItem(keyA, "First");
     storage.setItem(keyB, "Second");
     let writes = 0;
@@ -163,6 +174,7 @@ test.each(["idle", "pending"])(
           workspaceId: workspaceA,
           requestedSessionId: pendingSave ? "Second" : undefined,
         },
+        wrapper,
       },
     );
     try {
@@ -188,9 +200,9 @@ test.each([undefined, "Second", "First"])(
   (requestedSessionId) => {
     const workspaceId = crypto.randomUUID();
     const key = workspaceSessionSelectionStorageKey(workspaceId);
-    localStorage.setItem(key, "Second");
-    const getItem = localStorage.getItem.bind(localStorage);
-    const setItem = localStorage.setItem.bind(localStorage);
+    saved.setItem(key, "Second");
+    const getItem = saved.getItem;
+    const setItem = saved.setItem;
     let denied = true;
     let writes = 0;
     overrideStorage({
@@ -206,12 +218,14 @@ test.each([undefined, "Second", "First"])(
         setItem(storageKey, value);
       },
     });
-    const h = renderHook(() =>
-      useWorkspaceSessionSelection({
-        workspaceId,
-        sessions: [record("First"), record("Second")],
-        requestedSessionId,
-      }),
+    const h = renderHook(
+      () =>
+        useWorkspaceSessionSelection({
+          workspaceId,
+          sessions: [record("First"), record("Second")],
+          requestedSessionId,
+        }),
+      { wrapper },
     );
     try {
       expect(h.result.current.selected).toBeNull();
@@ -234,7 +248,7 @@ test.each([undefined, "Second", "First"])(
       }
     } finally {
       h.unmount();
-      localStorage.removeItem(key);
+      saved.removeItem(key);
     }
   },
 );
@@ -244,7 +258,7 @@ test("a failed write retries the intended chat and a workspace switch keeps erro
   const workspaceB = crypto.randomUUID();
   const keyA = workspaceSessionSelectionStorageKey(workspaceA);
   const keyB = workspaceSessionSelectionStorageKey(workspaceB);
-  const storage = localStorage;
+  const storage = saved;
   storage.setItem(keyA, "First");
   storage.setItem(keyB, "First");
   let denied = true;
@@ -266,7 +280,7 @@ test("a failed write retries the intended chat and a workspace switch keeps erro
         sessions,
         requestedSessionId: "Second",
       }),
-    { initialProps: workspaceA },
+    { initialProps: workspaceA, wrapper },
   );
   try {
     act(() => window.dispatchEvent(new Event("pagehide")));

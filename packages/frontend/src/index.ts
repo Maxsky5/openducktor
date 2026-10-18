@@ -1,10 +1,12 @@
+export type {
+  AzureDevOpsConnectionUpdateListener,
+  HostConnection,
+  RunEventListener,
+} from "@openducktor/frontend-core/connection/host-connection";
+export type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
 export {
-  type AzureDevOpsConnectionUpdateListener,
   type AppUpdateBridge,
   createDisabledAppUpdateBridge,
-  type HostBridge,
-  type NotificationBridge,
-  type RunEventListener,
   type ShellBridge,
   type ShellCapabilities,
   type TerminalBridge,

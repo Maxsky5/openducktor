@@ -11,15 +11,15 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { hostBridge } from "@/lib/host-client";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { applyThemeToDocument, readDocumentTheme } from "./theme-dom";
 import {
   readSystemAppearance,
   resolveThemePreference,
   subscribeToSystemAppearance,
 } from "./theme-preference";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -46,6 +46,7 @@ const replaceTheme = (
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
   const queryClient = useQueryClient();
+  const hostClient = useHostClient();
   const { data: settingsSnapshot, fetchStatus } = useQuery(settingsSnapshotQueryOptions());
   const fallbackTheme = useMemo(() => readDocumentTheme(defaultTheme), [defaultTheme]);
   const loadedTheme = settingsSnapshot?.theme ?? fallbackTheme;
@@ -155,7 +156,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
         }
 
         try {
-          await hostBridge.client.setTheme(nextTheme);
+          await hostClient.setTheme(nextTheme);
         } catch (error) {
           console.error("Failed to persist theme change.", error);
           if (pendingThemeRef.current === null) {
@@ -186,7 +187,7 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
     } finally {
       isPersistingRef.current = false;
     }
-  }, [queryClient, refreshSettingsSnapshot, writePersistedThemeToCache]);
+  }, [hostClient, queryClient, refreshSettingsSnapshot, writePersistedThemeToCache]);
 
   const selectThemePreference = useCallback(
     (preference: ThemePreference): void => {

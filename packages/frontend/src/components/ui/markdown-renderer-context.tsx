@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { createElement, isValidElement, useState, type ReactNode } from "react";
 import { type Components, defaultUrlTransform, type UrlTransform } from "react-markdown";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { useResourceSource } from "@/lib/use-resource-source";

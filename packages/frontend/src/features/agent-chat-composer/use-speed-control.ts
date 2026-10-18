@@ -2,8 +2,11 @@ import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/cont
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useState } from "react";
 import type { SpeedControlModel } from "@/components/features/agents/speed-select";
-import { errorMessage } from "@/lib/errors";
-import { findCatalogModel, STANDARD_SPEED } from "@/lib/model-catalog-selection";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import {
+  findCatalogModel,
+  STANDARD_SPEED,
+} from "@openducktor/frontend-core/lib/model-catalog-selection";
 
 type SpeedChange = { key: string; choice: string; pending: boolean; error: string | null };
 

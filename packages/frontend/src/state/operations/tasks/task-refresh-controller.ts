@@ -1,5 +1,5 @@
 import type { TaskRefreshOptions } from "@/state/app-state-contexts";
-import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import { summarizeTaskLoadError } from "@openducktor/frontend-core/tasks/task-load-errors";
 
 type TaskToastDedupeRef = {
   current: { repoPath: string; description: string } | null;

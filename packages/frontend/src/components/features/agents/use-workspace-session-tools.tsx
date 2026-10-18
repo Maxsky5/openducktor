@@ -14,10 +14,10 @@ import { useGitRefresh } from "@/features/agent-studio-git/refresh/use-git-refre
 import type { GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useMemo } from "react";
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import { collectUnmergedFilePaths } from "@/features/agent-studio-git";
-import { canonicalTargetBranch } from "@/lib/target-branch";
-import { checkoutReadIdentity } from "@/state/queries/git";
+import { canonicalTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
+import { checkoutReadIdentity } from "@openducktor/frontend-core/queries/git";
 import type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionSelectedFile,

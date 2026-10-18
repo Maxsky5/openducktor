@@ -9,7 +9,7 @@ import {
   removeAgentSession,
   replaceAgentSession,
   replaceAgentSessionByIdentity,
-} from "./agent-session-collection";
+} from "@openducktor/frontend-core/sessions/agent-session-collection";
 
 describe("agent-session-collection", () => {
   test("replaces only the matching session identity", () => {

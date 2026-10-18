@@ -26,7 +26,7 @@ import {
   useWorkspacePresence,
   useWorkspaceState,
 } from "@/state/app-state-provider";
-import { repoConfigQueryOptions } from "@/state/queries/workspace";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
 

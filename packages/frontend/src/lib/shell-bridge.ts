@@ -1,91 +1,13 @@
 import type { ResourceData } from "@/types/resource-source";
 import type {
-  AgentSessionLiveEnvelope,
-  AgentSessionLiveAttachInput,
   AppUpdateCommandResult,
   AppUpdateState,
-  HostEventPayload,
-  NotificationClickEvent,
-  NotificationDeliveryResult,
-  NotificationOccurrence,
-  NotificationOsCapability,
-  NotificationOsDeliveryRequest,
-  NotificationSettings,
   TaskAssetRenderContext,
-  NotificationCursor,
-  NotificationStreamFrame,
-  TaskEventCursor,
-  TaskEventStreamFrame,
   TerminalFailure,
 } from "@openducktor/contracts";
-import { createHostClient, type HostClient } from "@openducktor/host-client";
-import type { BrowserLiveControlEvent } from "@/types";
-
-/** Reconnect handlers return the recovery that must finish before remote work unlocks. */
-export type BrowserLiveControlListener = (payload: BrowserLiveControlEvent) => void | Promise<void>;
-
-/** Observe async event failures when the transport cannot await a listener. */
-export const observeShellEventResult = (result: void | Promise<void>): void => {
-  void Promise.resolve(result).catch((cause: unknown) => {
-    console.error("Shell event listener failed", cause);
-  });
-};
-
-/** Run events, such as Autopilot outcomes. Browser control events report stream loss and reconnects. */
-export type RunEventListener = (
-  payload: HostEventPayload<"openducktor://run-event"> | BrowserLiveControlEvent,
-) => void | Promise<void>;
-export type AzureDevOpsConnectionUpdateListener = (
-  payload: HostEventPayload<"openducktor://azure-devops-connection-updated">,
-) => void;
-export type WorkspaceProviderSetupUpdateListener = (
-  payload: HostEventPayload<"openducktor://workspace-provider-setup-updated">,
-) => void;
-export type WorkspaceSessionUpdateListener = (
-  payload: HostEventPayload<"openducktor://workspace-session-updated"> | BrowserLiveControlEvent,
-) => void | Promise<void>;
-/** Host runtime lifecycle changes. Browser control events report stream loss and reconnects. */
-export type RuntimeChangeListener = (
-  payload: HostEventPayload<"openducktor://runtime-changed"> | BrowserLiveControlEvent,
-) => void | Promise<void>;
-
-export type TaskStreamFrame = TaskEventStreamFrame;
-
-export type TaskStreamSubscription = {
-  subscriptionId: string;
-  acknowledge(cursor: TaskEventCursor): Promise<void>;
-  unsubscribe(): void | Promise<void>;
-};
-
-export type HostBridge = {
-  subscribeWorkspaceProviderSetupUpdates: (
-    listener: WorkspaceProviderSetupUpdateListener,
-  ) => Promise<() => void>;
-  client: HostClient;
-  subscribeWorkspaceSessionUpdates: (
-    listener: WorkspaceSessionUpdateListener,
-  ) => Promise<() => void>;
-  subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
-  subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
-  subscribeAzureDevOpsConnectionUpdates: (
-    listener: AzureDevOpsConnectionUpdateListener,
-  ) => Promise<() => void>;
-  observeAgentSessionLive: (
-    input: AgentSessionLiveAttachInput,
-    listener: (envelope: AgentSessionLiveEnvelope) => void,
-  ) => Promise<() => void>;
-  subscribeNotificationStream: (
-    input: { cursor: NotificationCursor | null },
-    onFrame: (frame: NotificationStreamFrame) => void,
-    onFailure: (cause: unknown) => void,
-  ) => Promise<() => void>;
-  subscribeTaskStream: (
-    input: { cursor: TaskEventCursor | null },
-    onFrame: (frame: TaskStreamFrame) => void,
-    onTerminalFailure?: (cause: unknown) => void,
-    signal?: AbortSignal,
-  ) => Promise<TaskStreamSubscription>;
-};
+import { createHostClient } from "@openducktor/host-client";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import type { NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
 
 export type ShellCapabilities = {
   canOpenExternalUrls: boolean;
@@ -117,28 +39,7 @@ export type TerminalBridge = {
   ): Promise<TerminalTransportConnection>;
 };
 
-export type NotificationBridge = {
-  getCapability(): Promise<NotificationOsCapability>;
-  requestPermission(): Promise<NotificationOsCapability>;
-  openSystemSettings(): Promise<void>;
-  isAppFocused(): Promise<boolean>;
-  withExternalDeliveryOwnership(
-    occurrenceId: string,
-    dispatch: (externalDeliveryOwner: boolean) => Promise<void>,
-  ): Promise<void>;
-  showOsNotification(request: NotificationOsDeliveryRequest): Promise<NotificationDeliveryResult>;
-  publishOccurrence(
-    occurrence: NotificationOccurrence,
-    settings: NotificationSettings,
-  ): Promise<{ occurrence: NotificationOccurrence; settings: NotificationSettings }>;
-  subscribeOccurrences(
-    listener: (occurrence: NotificationOccurrence, settings: NotificationSettings) => void,
-  ): () => void;
-  subscribeClicks(listener: (event: NotificationClickEvent) => void): () => void;
-  dispose(): void;
-};
-
-export type ShellBridge = HostBridge & {
+export type ShellBridge = HostConnection & {
   dispose?: () => Promise<void>;
   setActive?: (active: boolean) => void;
   remoteAccess?: import("@openducktor/contracts").RemoteAccessBridge;
@@ -273,4 +174,7 @@ export const configureShellBridge = (bridge: ShellBridge): void => {
   configuredShellBridge = bridge;
 };
 
-export const getShellBridge = (): ShellBridge => configuredShellBridge;
+/** The shell parts that are not the host. Code reaches the host only through its client connection. */
+export type ShellPlatform = Omit<ShellBridge, keyof HostConnection>;
+
+export const getShellBridge = (): ShellPlatform => configuredShellBridge;

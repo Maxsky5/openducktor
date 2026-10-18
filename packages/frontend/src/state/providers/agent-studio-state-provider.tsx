@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   type PropsWithChildren,
   type ReactElement,
@@ -9,32 +9,35 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   loadingAgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
-} from "@/types/agent-session-read-model";
+} from "@openducktor/frontend-core/types/agent-session-read-model";
 import {
   createAgentMessageQueuesStore,
   type AgentMessageQueuesStore,
-} from "../agent-message-queues-store";
-import { createAgentSessionsStore } from "../agent-sessions-store";
+} from "@openducktor/frontend-core/sessions/agent-message-queues-store";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import {
+  useRequiredContext,
+  useTaskControlContext,
+  WorkspaceStateContext,
+} from "../app-state-contexts";
 import {
   AgentMessageQueuesContext,
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
-  useRequiredContext,
-  useTaskControlContext,
-  WorkspaceStateContext,
-} from "../app-state-contexts";
-import { useAgentOrchestratorOperations } from "../operations/agent-orchestrator/use-agent-orchestrator-operations";
-import { createDefaultAgentOrchestratorDependencies } from "../operations/agent-orchestrator/support/orchestrator-dependency-defaults";
-import type { AgentOrchestratorDependencies } from "../operations/agent-orchestrator/support/orchestrator-ports";
-import { repoTaskDataQueryOptions } from "../queries/tasks";
-import { getSessionHistoryFreshnessTracker } from "../queries/agent-session-history-freshness-tracker";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { useAgentOrchestratorOperations } from "@openducktor/frontend-core/sessions/agent-orchestrator/use-agent-orchestrator-operations";
+import { createAgentOrchestratorDependencies } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/orchestrator-dependencies";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { AgentOrchestratorDependencies } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/orchestrator-ports";
+import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
+import { getSessionHistoryFreshnessTracker } from "@openducktor/frontend-core/queries/agent-session-history-freshness-tracker";
 import {
   createWorkspaceAgentSessions,
   type WorkspaceAgentSessions,
@@ -56,20 +59,19 @@ export function AgentStudioStateProvider({
     WorkspaceSessionLiveSourceContext,
     "AgentStudioStateProvider",
   );
-  const queryClient = useQueryClient();
+  const connection = useClientConnection();
   const [registry] = useState(createWorkspaceAgentSessions);
   const [messageQueues] = useState(createAgentMessageQueuesStore);
   const dependencies = useMemo(() => {
-    const defaults = createDefaultAgentOrchestratorDependencies();
+    const defaults = createAgentOrchestratorDependencies(connection);
     return {
       ...defaults,
-      queryClient,
       liveSessionHostPort: {
         ...defaults.liveSessionHostPort,
         observeAgentSessionLive: liveSource.observeAgentSessionLive,
       },
     };
-  }, [liveSource, queryClient]);
+  }, [connection, liveSource]);
   const unselected = useAgentOrchestratorOperations({
     activeWorkspace: null,
     tasks: EMPTY_TASKS,

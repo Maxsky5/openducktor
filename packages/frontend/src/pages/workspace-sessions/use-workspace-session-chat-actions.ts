@@ -10,29 +10,32 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
-import { hasSettledLatestTurn } from "@/lib/agent-session-interrupted-turn";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { errorMessage } from "@/lib/errors";
+import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { AgentChatSendTarget } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
-import { getAgentSessionResumeFailureNotice } from "@/state/agent-runtime-services";
-import { useAgentSessionsContext } from "@/state/app-state-contexts";
+import { getAgentSessionResumeFailureNotice } from "@openducktor/frontend-core/sessions/agent-runtime-services";
+import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useAgentOperations, useAgentSession } from "@/state/app-state-provider";
 import {
   workspaceSessionIdentity,
   workspaceSessionTitle,
-} from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { host } from "@/state/operations/host";
-import { updateWorkspaceSessionQueries } from "@/state/queries/workspace-sessions";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { updateWorkspaceSessionQueries } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
   AgentSessionIdentity,
   AgentMessageSendReceipt,
   AgentMessageSendOptions,
-} from "@/types/agent-orchestrator";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import { launchWorkspaceSession } from "./launch-workspace-session";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 const CHAT_UNAVAILABLE = "The original chat is no longer available. Reopen it to send your draft.";
 const CONFLICT_MESSAGE_NOT_ACCEPTED =
@@ -43,6 +46,7 @@ export function useWorkspaceSessionChatActions(
   record: WorkspaceSession,
   isMounted: () => boolean,
 ) {
+  const host = useHostClient();
   const store = useAgentSessionsContext();
   const operations = useAgentOperations();
   const queryClient = useQueryClient();
@@ -209,7 +213,7 @@ export function useWorkspaceSessionChatActions(
           selectedModel: { ...selection, runtimeKind: record.runtimeKind },
         })
         .then((saved) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved)),
-    [queryClient, record.id, record.runtimeKind, workspace.workspaceId],
+    [host, queryClient, record.id, record.runtimeKind, workspace.workspaceId],
   );
 
   const updateDraftModel = useCallback(

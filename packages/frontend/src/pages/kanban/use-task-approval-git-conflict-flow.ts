@@ -6,7 +6,7 @@ import {
   GitConflictRequestCancelled,
   type GitConflictAssistanceResult,
 } from "@/features/git-conflict-resolution/conflict-assistance";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type {
   TaskApprovalOpenOptions,
   TaskGitConflictDialogModel,
@@ -15,6 +15,7 @@ import {
   abortTaskApprovalGitConflict,
   askBuilderToResolveTaskApprovalGitConflict,
 } from "./task-approval-flow-git-conflict";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 interface TaskApprovalGitConflictState {
   open: boolean;
@@ -48,6 +49,7 @@ export function useTaskApprovalGitConflictFlow({
   reset,
   workspaceRepoPath,
 }: UseTaskApprovalGitConflictFlowArgs) {
+  const host = useHostClient();
   const [gitConflictState, setGitConflictState] = useState(INITIAL_GIT_CONFLICT_STATE);
   const isHandlingConflict = gitConflictState.conflictAction !== null;
   const reservation = useRef(false);
@@ -79,7 +81,7 @@ export function useTaskApprovalGitConflictFlow({
         conflictAction: "abort",
       }));
       try {
-        await abortTaskApprovalGitConflict(workspaceRepoPath, conflict);
+        await abortTaskApprovalGitConflict(host, workspaceRepoPath, conflict);
         toast.success(getGitConflictCopy(conflict.operation).abortedToastTitle);
         closeGitConflict();
         if (taskId) {
@@ -100,7 +102,7 @@ export function useTaskApprovalGitConflictFlow({
         reservation.current = false;
       }
     })();
-  }, [workspaceRepoPath, closeGitConflict, gitConflictState, openTaskApproval]);
+  }, [host, workspaceRepoPath, closeGitConflict, gitConflictState, openTaskApproval]);
 
   const askBuilderToResolveGitConflict = useCallback((): void => {
     if (!gitConflictState.conflict || !gitConflictState.taskId || reservation.current) {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
-import { createAgentSessionCollection } from "./agent-session-collection";
-import { getAgentSessionVisiblePendingInput } from "./agent-session-visible-pending-input";
+import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
+import { getAgentSessionVisiblePendingInput } from "@openducktor/frontend-core/sessions/agent-session-visible-pending-input";
 
 const createSubagentApprovalFixture = ({
   childExternalSessionId,

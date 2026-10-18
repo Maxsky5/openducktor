@@ -1,5 +1,5 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
@@ -8,17 +8,21 @@ import {
   createComposerAttachment,
   createSlashCommandSegment,
   createTextSegment,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { hostClient } from "@/lib/host-client";
-import { clearAppQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createBrowserAttachmentStager } from "@/lib/local-attachment-files";
+import { QueryProvider } from "@/test-utils/query-provider";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostClient } from "@openducktor/host-client";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createAgentSessionFixture,
   createChecksStateContextValue,
@@ -32,22 +36,27 @@ import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions
 enableReactActEnvironment();
 
 const stageLocalAttachmentFileMock = mock(
-  async (_args: Parameters<typeof hostClient.workspaceStageLocalAttachment>[0]) =>
+  async (_args: Parameters<HostClient["workspaceStageLocalAttachment"]>[0]) =>
     "/tmp/staged-brief.pdf",
 );
-const originalWorkspaceStageLocalAttachment = hostClient.workspaceStageLocalAttachment;
 
-beforeEach(async () => {
-  await clearAppQueryClient();
+beforeEach(() => {
   stageLocalAttachmentFileMock.mockClear();
-  hostClient.workspaceStageLocalAttachment = async (args) => ({
-    path: await stageLocalAttachmentFileMock(args),
-  });
 });
 
-afterEach(() => {
-  hostClient.workspaceStageLocalAttachment = originalWorkspaceStageLocalAttachment;
-});
+const createAttachmentConnection = () => {
+  const host = createTestHostConnection({
+    client: {
+      workspaceStageLocalAttachment: async (args) => ({
+        path: await stageLocalAttachmentFileMock(args),
+      }),
+    },
+  });
+  return createTestClientConnection({
+    host,
+    stageAttachment: createBrowserAttachmentStager(host.client),
+  });
+};
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
@@ -84,6 +93,7 @@ const localSessionIdentity = (externalSessionId: string) =>
   toAgentSessionIdentity(createAgentSessionFixture({ externalSessionId }));
 
 const createHookHarness = (initialProps: HookArgs) => {
+  const connection = createAttachmentConnection();
   const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -95,7 +105,7 @@ const createHookHarness = (initialProps: HookArgs) => {
       },
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(
           ChecksStateContext.Provider,
           { value: checksStateContextValue },

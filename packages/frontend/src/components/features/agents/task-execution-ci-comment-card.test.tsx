@@ -4,7 +4,7 @@ import { fireEvent, render } from "@testing-library/react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   TaskExecutionCiCommentCard,
   TaskExecutionCiMarkdownLink,
@@ -93,7 +93,7 @@ test("uses review-specific accessible action names and external link text", () =
 
 test.each(["light", "dark"] as const)("renders review outcome text in the %s theme", (theme) => {
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ThemeProvider defaultTheme={theme}>
         <TooltipProvider>
           <TaskExecutionCiCommentCard comment={createReview("dismissed")} isBot={false} />
@@ -171,7 +171,7 @@ test("opens links in review markdown through the external URL shell bridge", () 
 
 test("labels suggested changes as a distinct review section", () => {
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <TaskExecutionCiCommentCard

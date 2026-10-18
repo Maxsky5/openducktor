@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
 import {
   ActiveWorkspaceContext,
@@ -10,7 +10,7 @@ import {
   WorkspaceStateContext,
   type TaskSnapshotContextValue,
 } from "@/state/app-state-contexts";
-import { taskQueryKeys, type RepoTaskData } from "@/state/queries/tasks";
+import { taskQueryKeys, type RepoTaskData } from "@openducktor/frontend-core/queries/tasks";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { AgentChatTaskTool } from "../agents/agent-chat/agent-chat-task-tool";
@@ -109,7 +109,7 @@ function createHarness(
   );
   const h = render(sheet(true), {
     wrapper: ({ children }) => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <Providers>{children}</Providers>
       </QueryProvider>
     ),
@@ -246,7 +246,7 @@ function renderChatTaskTool(
     documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
   };
   return render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <ActiveWorkspaceContext value={{ activeWorkspace, setActiveWorkspace: () => {} }}>
         <WorkspaceStateContext value={createWorkspaceState()}>
           <TaskSnapshotContext value={snapshot}>

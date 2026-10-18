@@ -5,8 +5,8 @@ import {
 } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { errorMessage } from "@/lib/errors";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { AGENT_MODEL_FAVORITES_MUTATION_KEY } from "./agent-model-favorites";
 
 type UseAgentModelFavoritesArgs = {

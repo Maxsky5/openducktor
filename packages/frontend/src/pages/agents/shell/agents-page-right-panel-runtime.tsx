@@ -6,7 +6,7 @@ import { RepositoryBranchSwitcher } from "@/components/features/repository/repos
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { SessionPanel } from "@/features/session-panels";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,

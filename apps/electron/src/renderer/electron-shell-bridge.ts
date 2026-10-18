@@ -5,7 +5,7 @@ import {
   type ThemePreference,
 } from "@openducktor/contracts";
 import type { ShellBridge } from "@openducktor/frontend";
-import { observeShellEventResult } from "@openducktor/frontend/lib/shell-bridge";
+import { logListenerFailure } from "@openducktor/frontend-core/connection/host-connection";
 import {
   createAgentSessionLiveAttachment,
   createHostClient,
@@ -27,8 +27,7 @@ export function withElectronNativeTheme(
   client: HostClient,
   applyTheme: (theme: ThemePreference) => Promise<void>,
 ): HostClient {
-  return {
-    ...client,
+  const themed: Pick<HostClient, "workspaceGetSettingsSnapshot" | "setTheme"> = {
     async workspaceGetSettingsSnapshot() {
       const snapshot = await client.workspaceGetSettingsSnapshot();
       await applyTheme(snapshot.theme);
@@ -39,6 +38,9 @@ export function withElectronNativeTheme(
       await applyTheme(themePreferenceSchema.unwrap().parse(theme));
     },
   };
+  // The host client methods are not enumerable, so a spread would drop them.
+  // SAFETY: The prototype is `client`, so the object has every host client method.
+  return Object.assign(Object.create(client) as HostClient, themed);
 }
 
 export class ElectronPreloadBridgeUnavailableError extends Error {
@@ -66,7 +68,7 @@ const subscribeElectronEvent =
   ): ShellBridge["subscribeRunEvents"] =>
   async (listener) =>
     electronApi.subscribe(channel, (payload: HostEventPayload<typeof RUN_EVENT_CHANNEL>) =>
-      observeShellEventResult(listener(payload)),
+      logListenerFailure(listener(payload)),
     );
 
 export const createElectronShellBridge = (): ShellBridge => {
@@ -89,13 +91,13 @@ export const createElectronShellBridge = (): ShellBridge => {
       electronApi.subscribe(
         "openducktor://workspace-session-updated",
         (payload: HostEventPayload<"openducktor://workspace-session-updated">) =>
-          observeShellEventResult(listener(payload)),
+          logListenerFailure(listener(payload)),
       ),
     subscribeRuntimeChanges: async (listener) =>
       electronApi.subscribe(
         RUNTIME_CHANGED_EVENT_CHANNEL,
         (payload: HostEventPayload<typeof RUNTIME_CHANGED_EVENT_CHANNEL>) =>
-          observeShellEventResult(listener(payload)),
+          logListenerFailure(listener(payload)),
       ),
     capabilities: {
       canOpenExternalUrls: true,

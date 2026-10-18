@@ -3,7 +3,7 @@ import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
-} from "@/types/agent-session-read-model";
+} from "@openducktor/frontend-core/types/agent-session-read-model";
 import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {

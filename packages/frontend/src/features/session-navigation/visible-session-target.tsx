@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { sessionReadStateKey } from "./session-read-state-store";
 import {
   type SessionNavigationTarget,

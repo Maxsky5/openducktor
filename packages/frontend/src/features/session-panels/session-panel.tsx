@@ -30,7 +30,6 @@ import {
   terminalTabLifecycle,
 } from "@/features/terminals";
 import { cn } from "@/lib/utils";
-import { hostClient } from "@/lib/host-client";
 import {
   PANEL_NAMES,
   PANEL_TAB_KIND_RULES,
@@ -43,6 +42,7 @@ import { type PanelTabPresentation, panelTabPresentation } from "./session-panel
 import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
 import type { SessionPanelModel } from "./use-session-panels";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 /** The content and tab decorations that a page gives for one tool tab kind. */
 export type ToolTabView = {
@@ -152,6 +152,7 @@ function PanelTabContent({
 }
 
 function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElement {
+  const hostClient = useHostClient();
   const stripData: PanelDragData = { type: "strip", panel: model.panel };
   const { setNodeRef } = useDroppable({ id: `strip:${model.panel}`, data: stripData });
   const dropState = useSessionPanelMoves().dropState(model.panel);

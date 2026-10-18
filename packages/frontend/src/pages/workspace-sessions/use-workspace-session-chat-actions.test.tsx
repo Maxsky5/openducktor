@@ -5,26 +5,29 @@ import {
   type WorkspaceSessionLaunchRequest,
   type WorkspaceSessionLaunchResult,
 } from "@openducktor/contracts";
-import { HostInvokeError } from "@openducktor/host-client";
+import { type HostClient, HostInvokeError } from "@openducktor/host-client";
 import { act, render, renderHook } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { Activity, type PropsWithChildren } from "react";
 import { toast } from "sonner";
-import { createTextSegment } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
-import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import type { AgentMessageSendReceipt, AgentChatMessage } from "@/types/agent-orchestrator";
+import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
+import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import type {
+  AgentMessageSendReceipt,
+  AgentChatMessage,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentOperationsContextValue } from "@/types/state-slices";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -32,13 +35,13 @@ import {
 import {
   createSessionMessagesFixture,
   sessionMessagesToArray,
-} from "@/test-utils/session-message-test-helpers";
+} from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import * as sessionChat from "./workspace-session-chat";
 import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
-import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import { requestWorkspaceGitConflictAssistance } from "./workspace-git-conflict-assistance";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 
 /** A workspace chat as the page wires it: its actions with the shared send rules. */
 const useWorkspaceChat = (
@@ -70,14 +73,16 @@ const renderWorkspaceChat = <Result,>(
   useChat: () => Result,
   operations: AgentOperationsContextValue,
   store = createAgentSessionsStore("/repo"),
+  client: Partial<HostClient> = {},
 ) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const connection = createTestClientConnection({ queryClient, client });
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <AgentSessionsContext value={store}>
         <AgentChatSendProviders operations={operations}>{children}</AgentChatSendProviders>
       </AgentSessionsContext>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = renderHook(useChat, { wrapper });
   return {
@@ -457,20 +462,19 @@ test.each([
       return null;
     },
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionLaunch: async (request) => {
-          await pending.promise;
-          return launchOutcome(request, bound);
-        },
-        workspaceSessionSetDraftModel: async () => {
-          await pending.promise;
-          return bound;
-        },
+  const connection = createTestClientConnection({
+    queryClient,
+    client: {
+      workspaceSessionLaunch: async (request) => {
+        await pending.promise;
+        return launchOutcome(request, bound);
       },
-    }),
-  );
+      workspaceSessionSetDraftModel: async () => {
+        await pending.promise;
+        return bound;
+      },
+    },
+  });
   let sendResult: Promise<AgentChatSendResult> | undefined;
   let actions!: ReturnType<typeof useWorkspaceChat>;
   const Probe = () => {
@@ -478,7 +482,7 @@ test.each([
     return null;
   };
   const view = (mode: "visible" | "hidden") => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <AgentSessionsContext value={store}>
         <AgentChatSendProviders operations={operations}>
           <Activity mode={mode}>
@@ -486,7 +490,7 @@ test.each([
           </Activity>
         </AgentChatSendProviders>
       </AgentSessionsContext>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const rendered = render(view("visible"));
   try {
@@ -514,7 +518,6 @@ test.each([
   } finally {
     rendered.unmount();
     queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -528,12 +531,11 @@ test.each([false, true])("saves a speed change without the model lock, live=%p",
   const updateLive = mock(async () => {
     await pending.promise;
   });
-  configureShellBridge(
-    createShellBridgeFixture({ client: { workspaceSessionSetDraftModel: saveDraft } }),
-  );
   const view = renderWorkspaceChat(
     () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
     createAgentOperationsFixture({ updateAgentSessionModel: updateLive }),
+    undefined,
+    { workspaceSessionSetDraftModel: saveDraft },
   );
   const identity = live
     ? workspaceSessionIdentity({ ...record, externalSessionId: "native" })
@@ -553,7 +555,6 @@ test.each([false, true])("saves a speed change without the model lock, live=%p",
     expect((live ? saveDraft : updateLive).mock.calls).toHaveLength(0);
   } finally {
     view.dispose();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -670,10 +671,11 @@ test.each(firstSendCases)("first draft send: $name", async (testCase) => {
   const launch = mock(async (request: WorkspaceSessionLaunchRequest) =>
     testCase.launch(request, bound),
   );
-  configureShellBridge(createShellBridgeFixture({ client: { workspaceSessionLaunch: launch } }));
   const view = renderWorkspaceChat(
     () => useWorkspaceChat(WORKSPACE, record, () => true),
     createAgentOperationsFixture({ sendAgentMessage: browserSend }),
+    undefined,
+    { workspaceSessionLaunch: launch },
   );
   try {
     let sent: AgentChatSendResult | undefined;
@@ -700,7 +702,6 @@ test.each(firstSendCases)("first draft send: $name", async (testCase) => {
     );
   } finally {
     view.dispose();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -933,13 +934,12 @@ function renderChatPanes(
     createSettingsSnapshotFixture(),
   );
   queryClient.setQueryData(workspaceSessionQueryKeys.list(workspace.workspaceId, false), [record]);
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionLaunch: async (request) => launchOutcome(request, (await start()).session),
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    queryClient,
+    client: {
+      workspaceSessionLaunch: async (request) => launchOutcome(request, (await start()).session),
+    },
+  });
   let actions!: ReturnType<typeof useWorkspaceChat>;
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation((props) => {
     const current = useWorkspaceChat(props.workspace, props.record, props.isMounted);
@@ -950,7 +950,7 @@ function renderChatPanes(
   const selectFile = () => {};
   let sessionIds = [record.id];
   const content = (current: WorkspaceSession) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <AgentSessionsContext value={store}>
         <AgentChatSendProviders operations={operations}>
           <WorkspaceSessionChatPanes
@@ -964,7 +964,7 @@ function renderChatPanes(
           />
         </AgentChatSendProviders>
       </AgentSessionsContext>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(content(record));
   return {
@@ -982,7 +982,6 @@ function renderChatPanes(
       view.unmount();
       chat.mockRestore();
       queryClient.clear();
-      configureShellBridge(createUnavailableShellBridge());
     },
   };
 }

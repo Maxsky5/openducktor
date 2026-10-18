@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { MessageBody } from "./agent-chat-message-card-content";
 
 enableReactActEnvironment();

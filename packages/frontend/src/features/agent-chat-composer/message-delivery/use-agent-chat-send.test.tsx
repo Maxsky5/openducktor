@@ -7,9 +7,11 @@ import {
   type AgentChatComposerDraft,
   createComposerAttachment,
   createTextSegment,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { hostClient } from "@/lib/host-client";
-import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createAgentMessageQueuesStore } from "@openducktor/frontend-core/sessions/agent-message-queues-store";
 import {
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,
@@ -20,11 +22,11 @@ import type {
   AgentChatMessage,
   AgentMessageSendOptions,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
-import { createAgentMessageQueueSnapshot } from "@/test-utils/agent-message-send-fixture";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+import { createAgentMessageQueueSnapshot } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { AgentChatResolvedTarget, AgentChatSendTarget } from "./use-agent-chat-send";
 
@@ -106,9 +108,14 @@ const existingSession = async (): Promise<AgentChatResolvedTarget> => ({
   identity: SESSION,
 });
 
+const stageBriefOnHost: AttachmentStager = async () => "/staged/brief.pdf";
+
 const renderChatSend = (
   initialProps: Partial<HookProps> = {},
-  { runtimeVersion = "2.0.24" }: { runtimeVersion?: string | null } = {},
+  {
+    runtimeVersion = "2.0.24",
+    stageAttachment,
+  }: { runtimeVersion?: string | null; stageAttachment?: AttachmentStager } = {},
 ) => {
   const manageAgentMessageQueue = mock(
     async (_session: AgentSessionIdentity, _action: AgentMessageQueueAction) => {},
@@ -124,10 +131,13 @@ const renderChatSend = (
     },
   });
   const queues = createAgentMessageQueuesStore();
+  const connection = createTestClientConnection(stageAttachment ? { stageAttachment } : {});
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <AgentChatSendProviders operations={operations} runtimeStatus={runtimeStatus} queues={queues}>
-      {children}
-    </AgentChatSendProviders>
+    <QueryProvider connection={connection}>
+      <AgentChatSendProviders operations={operations} runtimeStatus={runtimeStatus} queues={queues}>
+        {children}
+      </AgentChatSendProviders>
+    </QueryProvider>
   );
   const view = renderHook((props: HookProps) => useTestChatSend(props), {
     wrapper,
@@ -185,12 +195,13 @@ describe("useAgentChatSend", () => {
   });
 
   test("checks an edited attachment against the model that the queued message captured", async () => {
-    const originalStage = hostClient.workspaceStageLocalAttachment;
-    hostClient.workspaceStageLocalAttachment = async () => ({ path: "/staged/brief.pdf" });
-    const captured = renderChatSend();
-    const textOnly = renderChatSend({
-      modelCatalog: { ...MODEL_CATALOG, models: [{ ...PDF_MODEL, attachmentSupport: NO_FILES }] },
-    });
+    const captured = renderChatSend({}, { stageAttachment: stageBriefOnHost });
+    const textOnly = renderChatSend(
+      {
+        modelCatalog: { ...MODEL_CATALOG, models: [{ ...PDF_MODEL, attachmentSupport: NO_FILES }] },
+      },
+      { stageAttachment: stageBriefOnHost },
+    );
     try {
       act(() => captured.queues.apply(queuedFollowUp()));
       act(() => textOnly.queues.apply(queuedFollowUp()));
@@ -213,7 +224,6 @@ describe("useAgentChatSend", () => {
       });
       expect(textOnly.manageAgentMessageQueue).not.toHaveBeenCalled();
     } finally {
-      hostClient.workspaceStageLocalAttachment = originalStage;
       captured.view.unmount();
       textOnly.view.unmount();
     }
@@ -328,8 +338,6 @@ describe("useAgentChatSend", () => {
     });
 
     test("checks a steer against the model of the running turn", async () => {
-      const originalStage = hostClient.workspaceStageLocalAttachment;
-      hostClient.workspaceStageLocalAttachment = async () => ({ path: "/staged/brief.pdf" });
       const textOnly = {
         ...PDF_MODEL,
         id: "openai/gpt-text",
@@ -338,18 +346,24 @@ describe("useAgentChatSend", () => {
       };
       const catalog = { ...MODEL_CATALOG, models: [PDF_MODEL, textOnly] };
       // The composer selects a text-only model while the running turn reads PDF files.
-      const pdfTurn = renderChatSend({
-        isSessionWorking: true,
-        modelCatalog: catalog,
-        messages: [userMessageWithModel("gpt-5")],
-        selectedModelDescriptor: textOnly,
-      });
-      const textTurn = renderChatSend({
-        isSessionWorking: true,
-        modelCatalog: catalog,
-        messages: [userMessageWithModel("gpt-text")],
-        selectedModelDescriptor: PDF_MODEL,
-      });
+      const pdfTurn = renderChatSend(
+        {
+          isSessionWorking: true,
+          modelCatalog: catalog,
+          messages: [userMessageWithModel("gpt-5")],
+          selectedModelDescriptor: textOnly,
+        },
+        { stageAttachment: stageBriefOnHost },
+      );
+      const textTurn = renderChatSend(
+        {
+          isSessionWorking: true,
+          modelCatalog: catalog,
+          messages: [userMessageWithModel("gpt-text")],
+          selectedModelDescriptor: PDF_MODEL,
+        },
+        { stageAttachment: stageBriefOnHost },
+      );
       try {
         await act(async () => {
           expect(await pdfTurn.view.result.current.onSend(attachmentDraft(), "default")).toBe(
@@ -374,7 +388,6 @@ describe("useAgentChatSend", () => {
         ]);
         expect(textTurn.sendAgentMessage).not.toHaveBeenCalled();
       } finally {
-        hostClient.workspaceStageLocalAttachment = originalStage;
         pdfTurn.view.unmount();
         textTurn.view.unmount();
       }
@@ -404,11 +417,14 @@ describe("useAgentChatSend", () => {
     });
 
     test("ends the send when attachment staging fails", async () => {
-      const originalStage = hostClient.workspaceStageLocalAttachment;
-      hostClient.workspaceStageLocalAttachment = async () => {
-        throw new Error("staging failed");
-      };
-      const { view, sendAgentMessage } = renderChatSend();
+      const { view, sendAgentMessage } = renderChatSend(
+        {},
+        {
+          stageAttachment: async () => {
+            throw new Error("staging failed");
+          },
+        },
+      );
       try {
         await act(async () => {
           await expect(view.result.current.onSend(attachmentDraft(), "default")).rejects.toThrow(
@@ -419,7 +435,6 @@ describe("useAgentChatSend", () => {
         expect(view.result.current.isSending).toBe(false);
         expect(sendAgentMessage).not.toHaveBeenCalled();
       } finally {
-        hostClient.workspaceStageLocalAttachment = originalStage;
         view.unmount();
       }
     });

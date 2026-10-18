@@ -2,7 +2,7 @@ import { CheckCircle2, Circle, ListChecks } from "lucide-react";
 import type { ReactElement } from "react";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
   isAgentQuestionAnswered,

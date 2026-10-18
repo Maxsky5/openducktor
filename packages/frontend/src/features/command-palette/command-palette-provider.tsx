@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import type { AppPlatform } from "@openducktor/contracts";
 import {
   type PropsWithChildren,
@@ -13,16 +12,15 @@ import {
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { hasOpenDialog } from "@/components/ui/open-dialogs";
-import { errorMessage } from "@/lib/errors";
 import { isPlatformChord } from "@/lib/keyboard-shortcuts";
-import { platformQueryOptions } from "@/state/queries/system";
 import type { PullRequestSyncTarget } from "@/types/pull-request-sync";
 import { CommandPaletteContext, type CommandPaletteContextValue } from "./command-palette-context";
 import { CommandPaletteDialog } from "./command-palette-dialog";
 import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
 import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
-import { useRecentItemsStore } from "./recent-items";
+import { useRecentItems } from "./recent-items";
 import { useWorkspaceIntentRunner } from "./use-workspace-intent-runner";
+import { readDevicePlatform } from "@/lib/device-platform";
 
 /**
  * Owns the palette open state, its global shortcut, and the commands that pages add.
@@ -48,17 +46,9 @@ export function CommandPaletteProvider({
   /** True when this open ended with an action, which then owns focus. */
   const closedWithActionRef = useRef(false);
   const { runIntent, cancelIntent } = useWorkspaceIntentRunner();
-  const platformQuery = useQuery(platformQueryOptions());
-  const platform = platformQuery.data ?? null;
-  const platformError = platformQuery.error;
-  const recentLoadError = useRecentItemsStore((state) => state.loadError);
-
-  useEffect(() => {
-    if (!platformError) return;
-    toast.error("The command palette shortcut is off.", {
-      description: `OpenDucktor could not read the platform. Use the search button in the sidebar. ${errorMessage(platformError)}`,
-    });
-  }, [platformError]);
+  // Key caps and the shortcut follow this device, also while the client views another host.
+  const [platform] = useState(() => readDevicePlatform());
+  const recentLoadError = useRecentItems((state) => state.loadError);
   useEffect(() => {
     if (recentLoadError === null) return;
     toast.error("Could not restore recent tasks and chats.", {

@@ -1,0 +1,680 @@
+import type { AgentChatMessage, AgentChatMessageMeta } from "../../../types/agent-orchestrator";
+import {
+  applyPreferredMessageTimestamp,
+  type MessageTimestamp,
+  preferredMessageTimestamp,
+} from "./message-timestamp";
+import {
+  findLastSessionMessageByRole,
+  getSessionMessages,
+  removeSessionMessageById,
+  type SessionMessageOwner,
+  upsertSessionMessage,
+} from "./messages";
+
+export type SubagentMeta = Extract<AgentChatMessageMeta, { kind: "subagent" }>;
+export type SubagentMessage = AgentChatMessage & {
+  role: "system";
+  meta: SubagentMeta;
+};
+
+export const toSubagentMessageId = (correlationKey: string): string => `subagent:${correlationKey}`;
+
+const isTerminalSubagentStatus = (status: SubagentMeta["status"]): boolean => {
+  return status === "completed" || status === "cancelled" || status === "error";
+};
+
+export const isSubagentMessage = (
+  message: AgentChatMessage | null | undefined,
+): message is SubagentMessage => {
+  return message?.role === "system" && message.meta?.kind === "subagent";
+};
+
+const SUBAGENT_STATUS_PRECEDENCE = {
+  pending: 0,
+  running: 1,
+  completed: 2,
+  cancelled: 3,
+  error: 4,
+} satisfies Record<SubagentMeta["status"], number>;
+
+const resolveSubagentStatus = (
+  existingStatus: SubagentMeta["status"] | undefined,
+  incomingStatus: SubagentMeta["status"],
+): SubagentMeta["status"] => {
+  if (!existingStatus) {
+    return incomingStatus;
+  }
+  return SUBAGENT_STATUS_PRECEDENCE[incomingStatus] > SUBAGENT_STATUS_PRECEDENCE[existingStatus]
+    ? incomingStatus
+    : existingStatus;
+};
+
+const isLaterSubagentRestart = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+): boolean =>
+  incomingMeta.status === "running" &&
+  existingMeta?.endedAtMs !== undefined &&
+  incomingMeta.startedAtMs !== undefined &&
+  incomingMeta.startedAtMs > existingMeta.endedAtMs;
+
+const isPreviousRunTerminalUpdate = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+): boolean =>
+  existingMeta?.status === "running" &&
+  isTerminalSubagentStatus(incomingMeta.status) &&
+  existingMeta.startedAtMs !== undefined &&
+  incomingMeta.endedAtMs !== undefined &&
+  incomingMeta.endedAtMs < existingMeta.startedAtMs;
+
+export const formatSubagentContent = (meta: {
+  agent?: string;
+  prompt?: string;
+  description?: string;
+  externalSessionId?: string;
+}): string => {
+  const agentLabel = meta.agent?.trim() || "subagent";
+  const summary =
+    meta.description?.trim() ||
+    meta.prompt?.trim() ||
+    (meta.externalSessionId
+      ? `Session ${meta.externalSessionId.slice(0, 8)}`
+      : "Subagent activity");
+
+  return `Subagent (${agentLabel}): ${summary}`;
+};
+
+type CreateSubagentMessageInput = {
+  id?: string;
+  timestamp: string;
+  timestampIsApproximate?: true;
+  meta: SubagentMeta;
+};
+
+export const createSubagentMessage = ({
+  id,
+  timestamp,
+  timestampIsApproximate,
+  meta,
+}: CreateSubagentMessageInput): SubagentMessage => {
+  const message: SubagentMessage = {
+    id: id ?? toSubagentMessageId(meta.correlationKey),
+    role: "system",
+    content: formatSubagentContent(meta),
+    timestamp,
+    meta,
+  };
+  if (timestampIsApproximate) {
+    message.timestampIsApproximate = true;
+  }
+  return message;
+};
+
+const isPartScopedSubagentKey = (correlationKey: string): boolean =>
+  correlationKey.startsWith("part:");
+
+const isSessionScopedSubagentKey = (correlationKey: string): boolean =>
+  correlationKey.startsWith("session:");
+
+/**
+ * Lookup tables for the current subagent rows. Without them the merge scans the
+ * whole current transcript for every loaded subagent row, which is quadratic and
+ * stalls the renderer on long sessions.
+ */
+export type SubagentMessageIndex = {
+  byExternalSessionId: ReadonlyMap<string, readonly AgentChatMessage[]>;
+  byAgentPromptKey: ReadonlyMap<string, readonly AgentChatMessage[]>;
+};
+
+const subagentAgentPromptMatchKey = (message: AgentChatMessage): string | null => {
+  if (!isSubagentMessage(message)) {
+    return null;
+  }
+  const agent = message.meta.agent?.trim();
+  const prompt = message.meta.prompt?.trim();
+  if (!agent || !prompt) {
+    return null;
+  }
+  return `${agent}\u0001${prompt}`;
+};
+
+const appendSubagentIndexEntry = (
+  index: Map<string, AgentChatMessage[]>,
+  key: string,
+  message: AgentChatMessage,
+): void => {
+  const existing = index.get(key);
+  if (existing) {
+    existing.push(message);
+    return;
+  }
+  index.set(key, [message]);
+};
+
+export const buildSubagentMessageIndex = (
+  messages: readonly AgentChatMessage[],
+): SubagentMessageIndex => {
+  const byExternalSessionId = new Map<string, AgentChatMessage[]>();
+  const byAgentPromptKey = new Map<string, AgentChatMessage[]>();
+
+  // Walk backwards so every entry list keeps descending message order.
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || !isSubagentMessage(message)) {
+      continue;
+    }
+    const externalSessionId = message.meta.externalSessionId;
+    if (externalSessionId) {
+      appendSubagentIndexEntry(byExternalSessionId, externalSessionId, message);
+    }
+    const agentPromptKey = subagentAgentPromptMatchKey(message);
+    if (agentPromptKey !== null) {
+      appendSubagentIndexEntry(byAgentPromptKey, agentPromptKey, message);
+    }
+  }
+
+  return { byExternalSessionId, byAgentPromptKey };
+};
+
+const canLinkSessionScopedSubagentToPartScopedRow = (
+  incoming: Pick<SubagentMeta, "correlationKey" | "externalSessionId" | "agent" | "prompt">,
+  candidate: SubagentMessage,
+): boolean => {
+  return Boolean(
+    incoming.externalSessionId &&
+    isSessionScopedSubagentKey(incoming.correlationKey) &&
+    !candidate.meta.externalSessionId &&
+    isPartScopedSubagentKey(candidate.meta.correlationKey) &&
+    incoming.agent !== undefined &&
+    incoming.prompt !== undefined &&
+    candidate.meta.agent === incoming.agent &&
+    candidate.meta.prompt === incoming.prompt,
+  );
+};
+
+const findLastSubagentMessage = (
+  owner: SessionMessageOwner,
+  predicate: (message: SubagentMessage) => boolean,
+): SubagentMessage | undefined => {
+  const message = findLastSessionMessageByRole(
+    owner,
+    "system",
+    (message) => isSubagentMessage(message) && predicate(message),
+  );
+  return isSubagentMessage(message) ? message : undefined;
+};
+
+const resolveSubagentMessageUpdateTarget = (
+  owner: SessionMessageOwner,
+  incoming: Pick<SubagentMeta, "correlationKey" | "externalSessionId" | "agent" | "prompt">,
+) => {
+  const correlationMessage = findLastSubagentMessage(
+    owner,
+    (message) => message.meta.correlationKey === incoming.correlationKey,
+  );
+  const sessionMessage = incoming.externalSessionId
+    ? findLastSubagentMessage(
+        owner,
+        (message) =>
+          message.meta.externalSessionId === incoming.externalSessionId &&
+          !areDifferentCalls(message.meta, incoming),
+      )
+    : undefined;
+  const partScopedRowMatches =
+    correlationMessage || sessionMessage
+      ? []
+      : getSessionMessages(owner).filter(
+          (message): message is SubagentMessage =>
+            isSubagentMessage(message) &&
+            canLinkSessionScopedSubagentToPartScopedRow(incoming, message),
+        );
+  const bridgedPartScopedMessage =
+    partScopedRowMatches.length === 1 ? partScopedRowMatches[0] : undefined;
+  const message = correlationMessage ?? sessionMessage ?? bridgedPartScopedMessage;
+  const duplicateMessageId =
+    correlationMessage &&
+    sessionMessage &&
+    correlationMessage.id !== sessionMessage.id &&
+    message?.id === correlationMessage.id
+      ? sessionMessage.id
+      : null;
+
+  return { message, duplicateMessageId } satisfies {
+    message: SubagentMessage | undefined;
+    duplicateMessageId: string | null;
+  };
+};
+
+const mergeSubagentMeta = (
+  existingMeta: SubagentMeta | null | undefined,
+  incomingMeta: SubagentMeta,
+  options?: {
+    startedAtMsFallback?: number;
+  },
+): SubagentMeta => {
+  const isRestart = isLaterSubagentRestart(existingMeta, incomingMeta);
+  const isPreviousRunUpdate = isPreviousRunTerminalUpdate(existingMeta, incomingMeta);
+  const status =
+    isRestart || isPreviousRunUpdate
+      ? "running"
+      : resolveSubagentStatus(existingMeta?.status, incomingMeta.status);
+  const metadata =
+    existingMeta?.metadata && incomingMeta.metadata
+      ? { ...existingMeta.metadata, ...incomingMeta.metadata }
+      : (incomingMeta.metadata ?? existingMeta?.metadata);
+  let startedAtMs = incomingMeta.startedAtMs ?? existingMeta?.startedAtMs;
+  if (isRestart) {
+    startedAtMs = incomingMeta.startedAtMs;
+  } else if (isPreviousRunUpdate) {
+    startedAtMs = existingMeta?.startedAtMs;
+  } else if (
+    existingMeta?.status === "running" &&
+    incomingMeta.status === "running" &&
+    existingMeta.startedAtMs !== undefined &&
+    incomingMeta.startedAtMs !== undefined
+  ) {
+    startedAtMs = Math.max(existingMeta.startedAtMs, incomingMeta.startedAtMs);
+  } else if (existingMeta?.startedAtMs !== undefined && incomingMeta.startedAtMs !== undefined) {
+    startedAtMs = Math.min(existingMeta.startedAtMs, incomingMeta.startedAtMs);
+  } else {
+    startedAtMs ??= options?.startedAtMsFallback;
+  }
+
+  let endedAtMs: number | undefined;
+  if (isRestart || isPreviousRunUpdate) {
+    endedAtMs = undefined;
+  } else if (existingMeta?.endedAtMs !== undefined && incomingMeta.endedAtMs !== undefined) {
+    endedAtMs = Math.max(existingMeta.endedAtMs, incomingMeta.endedAtMs);
+  } else if (isTerminalSubagentStatus(status)) {
+    endedAtMs = incomingMeta.endedAtMs ?? existingMeta?.endedAtMs;
+  }
+  const agent = incomingMeta.agent ?? existingMeta?.agent;
+  const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
+  const description = existingMeta?.description ?? incomingMeta.description;
+  let error: string | undefined;
+  if (isRestart) {
+    error = incomingMeta.error;
+  } else if (isPreviousRunUpdate) {
+    error = existingMeta?.error;
+  } else {
+    error = incomingMeta.error ?? existingMeta?.error;
+  }
+  const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
+  const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
+  const sourceMessageId = incomingMeta.sourceMessageId ?? existingMeta?.sourceMessageId;
+
+  const meta: SubagentMeta = {
+    kind: "subagent",
+    partId: incomingMeta.partId,
+    correlationKey: incomingMeta.correlationKey,
+    status,
+  };
+  if (sourceMessageId) {
+    meta.sourceMessageId = sourceMessageId;
+  }
+  if (agent !== undefined) {
+    meta.agent = agent;
+  }
+  if (prompt !== undefined) {
+    meta.prompt = prompt;
+  }
+  if (description !== undefined) {
+    meta.description = description;
+  }
+  if (error !== undefined) {
+    meta.error = error;
+  }
+  if (externalSessionId !== undefined) {
+    meta.externalSessionId = externalSessionId;
+  }
+  if (executionMode) {
+    meta.executionMode = executionMode;
+  }
+  if (metadata) {
+    meta.metadata = metadata;
+  }
+  if (startedAtMs !== undefined) {
+    meta.startedAtMs = startedAtMs;
+  }
+  if (endedAtMs !== undefined) {
+    meta.endedAtMs = endedAtMs;
+  }
+  return meta;
+};
+
+export const upsertSubagentMessage = ({
+  owner,
+  incomingMeta,
+  timestamp,
+  startedAtMsFallback,
+}: {
+  owner: SessionMessageOwner;
+  incomingMeta: SubagentMeta;
+  timestamp: string;
+  startedAtMsFallback?: number;
+}): SessionMessageOwner["messages"] => {
+  const { message: existingMessage, duplicateMessageId } = resolveSubagentMessageUpdateTarget(
+    owner,
+    incomingMeta,
+  );
+  const nextMeta = mergeSubagentMeta(
+    existingMessage?.meta ?? null,
+    incomingMeta,
+    startedAtMsFallback !== undefined ? { startedAtMsFallback } : undefined,
+  );
+  const ownerWithoutDuplicate =
+    duplicateMessageId === null
+      ? owner
+      : { ...owner, messages: removeSessionMessageById(owner, duplicateMessageId) };
+  const nextTimestamp = preferredMessageTimestamp(existingMessage ?? { timestamp }, { timestamp });
+
+  return upsertSessionMessage(
+    ownerWithoutDuplicate,
+    createSubagentMessage({
+      id: existingMessage?.id ?? toSubagentMessageId(incomingMeta.correlationKey),
+      ...nextTimestamp,
+      meta: nextMeta,
+    }),
+  );
+};
+
+export const mergeSubagentMessages = (
+  loadedMessage: SubagentMessage,
+  currentMessage: SubagentMessage,
+): AgentChatMessage => {
+  const loadedMeta = loadedMessage.meta;
+  const currentMeta = currentMessage.meta;
+  const nextMeta = mergeSubagentMeta(loadedMeta, {
+    ...currentMeta,
+    partId: loadedMeta.partId,
+    correlationKey: loadedMeta.correlationKey,
+  });
+  const input: CreateSubagentMessageInput = {
+    id: loadedMessage.id,
+    timestamp: loadedMessage.timestamp,
+    meta: nextMeta,
+  };
+  if (loadedMessage.timestampIsApproximate) {
+    input.timestampIsApproximate = true;
+  }
+
+  return applyPreferredMessageTimestamp(
+    createSubagentMessage(input),
+    loadedMessage,
+    currentMessage,
+  );
+};
+
+const matchesLoadedSubagent = (
+  loadedMessage: AgentChatMessage,
+  candidate: AgentChatMessage,
+): boolean => {
+  if (!isSubagentMessage(loadedMessage) || !isSubagentMessage(candidate)) {
+    return false;
+  }
+  if (candidate.id === loadedMessage.id) {
+    return false;
+  }
+  if (areDifferentCalls(loadedMessage.meta, candidate.meta)) return false;
+
+  const loadedSessionId = loadedMessage.meta.externalSessionId;
+  if (loadedSessionId) {
+    return candidate.meta.externalSessionId === loadedSessionId;
+  }
+
+  return false;
+};
+
+const canAbsorbLoadedPartSubagentIntoCurrentSessionRow = (
+  loadedMessage: AgentChatMessage,
+  candidate: AgentChatMessage,
+): boolean => {
+  if (!isSubagentMessage(loadedMessage) || !isSubagentMessage(candidate)) {
+    return false;
+  }
+  if (loadedMessage.meta.externalSessionId || !candidate.meta.externalSessionId) {
+    return false;
+  }
+  if (!isPartScopedSubagentKey(loadedMessage.meta.correlationKey)) {
+    return false;
+  }
+  if (!isSessionScopedSubagentKey(candidate.meta.correlationKey)) {
+    return false;
+  }
+
+  const loadedAgent = loadedMessage.meta.agent?.trim();
+  const candidateAgent = candidate.meta.agent?.trim();
+  const loadedPrompt = loadedMessage.meta.prompt?.trim();
+  const candidatePrompt = candidate.meta.prompt?.trim();
+
+  if (!loadedAgent || !candidateAgent || !loadedPrompt || !candidatePrompt) {
+    return false;
+  }
+
+  return loadedAgent === candidateAgent && loadedPrompt === candidatePrompt;
+};
+
+export const findCurrentSubagentMessagesForLoadedHistory = ({
+  subagentIndex,
+  loadedMessage,
+  sameIdCurrentMessage,
+  absorbedCurrentMessageIds,
+}: {
+  subagentIndex: SubagentMessageIndex;
+  loadedMessage: SubagentMessage;
+  sameIdCurrentMessage: AgentChatMessage | undefined;
+  absorbedCurrentMessageIds: ReadonlySet<string>;
+}): AgentChatMessage[] => {
+  const matches: AgentChatMessage[] = [];
+  const seenIds = new Set<string>();
+  if (sameIdCurrentMessage && !absorbedCurrentMessageIds.has(sameIdCurrentMessage.id)) {
+    matches.push(sameIdCurrentMessage);
+    seenIds.add(sameIdCurrentMessage.id);
+  }
+
+  const loadedSessionId = loadedMessage.meta.externalSessionId;
+  if (loadedSessionId) {
+    for (const candidate of subagentIndex.byExternalSessionId.get(loadedSessionId) ?? []) {
+      if (seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
+        continue;
+      }
+      if (matchesLoadedSubagent(loadedMessage, candidate)) {
+        matches.push(candidate);
+        seenIds.add(candidate.id);
+      }
+    }
+    return matches;
+  }
+
+  const agentPromptKey = subagentAgentPromptMatchKey(loadedMessage);
+  if (agentPromptKey === null) {
+    return matches;
+  }
+  const bridgedSessionRows = (subagentIndex.byAgentPromptKey.get(agentPromptKey) ?? []).filter(
+    (candidate) =>
+      !seenIds.has(candidate.id) &&
+      !absorbedCurrentMessageIds.has(candidate.id) &&
+      canAbsorbLoadedPartSubagentIntoCurrentSessionRow(loadedMessage, candidate),
+  );
+
+  if (matches.length === 0 && bridgedSessionRows.length === 1) {
+    const [bridgedSessionRow] = bridgedSessionRows;
+    if (bridgedSessionRow) {
+      matches.push(bridgedSessionRow);
+    }
+  }
+
+  return matches;
+};
+
+const matchesLoadedSubagentMessage = (
+  existingMessage: SubagentMessage,
+  incomingMessage: SubagentMessage,
+): boolean => {
+  if (existingMessage.meta.correlationKey === incomingMessage.meta.correlationKey) {
+    return true;
+  }
+
+  const existingSessionId = existingMessage.meta.externalSessionId;
+  const incomingSessionId = incomingMessage.meta.externalSessionId;
+  return Boolean(existingSessionId && incomingSessionId && existingSessionId === incomingSessionId);
+};
+
+const matchesLoadedSubagentActivity = (
+  existingMessage: SubagentMessage,
+  incomingMessage: SubagentMessage,
+): boolean => {
+  const existingAgent = existingMessage.meta.agent;
+  const incomingAgent = incomingMessage.meta.agent;
+  const existingPrompt = existingMessage.meta.prompt;
+  const incomingPrompt = incomingMessage.meta.prompt;
+
+  return (
+    existingMessage.timestamp === incomingMessage.timestamp &&
+    existingAgent !== undefined &&
+    incomingAgent !== undefined &&
+    existingAgent === incomingAgent &&
+    existingPrompt !== undefined &&
+    incomingPrompt !== undefined &&
+    existingPrompt === incomingPrompt
+  );
+};
+
+const shouldIgnoreIncomingHistorySubagent = (
+  existingMessage: SubagentMessage,
+  incomingMessage: SubagentMessage,
+): boolean => {
+  if (areDifferentCalls(existingMessage.meta, incomingMessage.meta)) return false;
+  return Boolean(
+    existingMessage.meta.externalSessionId &&
+    !incomingMessage.meta.externalSessionId &&
+    existingMessage.meta.correlationKey !== incomingMessage.meta.correlationKey &&
+    matchesLoadedSubagentActivity(existingMessage, incomingMessage),
+  );
+};
+
+const canMergeHistorySubagentMessage = (
+  existingMessage: SubagentMessage,
+  incomingMessage: SubagentMessage,
+): boolean => {
+  if (areDifferentCalls(existingMessage.meta, incomingMessage.meta)) return false;
+  if (matchesLoadedSubagentMessage(existingMessage, incomingMessage)) {
+    return true;
+  }
+
+  return Boolean(
+    incomingMessage.meta.externalSessionId &&
+    !existingMessage.meta.externalSessionId &&
+    matchesLoadedSubagentActivity(existingMessage, incomingMessage),
+  );
+};
+
+const mergeHistorySubagentMessages = (
+  existingMessage: SubagentMessage,
+  incomingMessage: SubagentMessage,
+): SubagentMessage => {
+  const existingMeta = existingMessage.meta;
+  const incomingMeta = incomingMessage.meta;
+  const correlationKey = pickKey(existingMeta, incomingMeta);
+  const nextMeta = mergeSubagentMeta(existingMeta, {
+    ...incomingMeta,
+    correlationKey,
+  });
+
+  const timestamp: MessageTimestamp = preferredMessageTimestamp(existingMessage, incomingMessage);
+  return createSubagentMessage({
+    id: toSubagentMessageId(correlationKey),
+    ...timestamp,
+    meta: nextMeta,
+  });
+};
+
+const findLastHistorySubagentIndex = (
+  messages: AgentChatMessage[],
+  incomingMessage: SubagentMessage,
+  predicate: (existingMessage: SubagentMessage, incomingMessage: SubagentMessage) => boolean,
+): number => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const entry = messages[index];
+    if (!isSubagentMessage(entry)) {
+      continue;
+    }
+    if (predicate(entry, incomingMessage)) {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+export const appendHistorySubagentMessage = (
+  messages: AgentChatMessage[],
+  incomingMessage: SubagentMessage,
+): void => {
+  const ignoredIndex = findLastHistorySubagentIndex(
+    messages,
+    incomingMessage,
+    shouldIgnoreIncomingHistorySubagent,
+  );
+  if (ignoredIndex >= 0) {
+    return;
+  }
+
+  const existingIndex = findLastHistorySubagentIndex(
+    messages,
+    incomingMessage,
+    canMergeHistorySubagentMessage,
+  );
+  if (existingIndex >= 0) {
+    const existingMessage = messages[existingIndex];
+    if (isSubagentMessage(existingMessage)) {
+      messages[existingIndex] = mergeHistorySubagentMessages(existingMessage, incomingMessage);
+      return;
+    }
+  }
+
+  messages.push(incomingMessage);
+};
+
+const pickKey = (existingMeta: SubagentMeta, incomingMeta: SubagentMeta): string => {
+  if (existingMeta.correlationKey.startsWith("call:")) return existingMeta.correlationKey;
+  if (incomingMeta.correlationKey.startsWith("call:")) return incomingMeta.correlationKey;
+  if (
+    existingMeta.correlationKey !== incomingMeta.correlationKey &&
+    incomingMeta.externalSessionId &&
+    !existingMeta.externalSessionId
+  ) {
+    return incomingMeta.correlationKey;
+  }
+  if (
+    existingMeta.correlationKey !== incomingMeta.correlationKey &&
+    existingMeta.externalSessionId &&
+    !incomingMeta.externalSessionId
+  ) {
+    return existingMeta.correlationKey;
+  }
+  if (isPartScopedSubagentKey(existingMeta.correlationKey)) {
+    return existingMeta.correlationKey;
+  }
+  if (isPartScopedSubagentKey(incomingMeta.correlationKey)) {
+    return incomingMeta.correlationKey;
+  }
+  if (existingMeta.correlationKey.startsWith("spawn:")) {
+    return existingMeta.correlationKey;
+  }
+  if (incomingMeta.correlationKey.startsWith("spawn:")) {
+    return incomingMeta.correlationKey;
+  }
+
+  return existingMeta.correlationKey;
+};
+
+const areDifferentCalls = (
+  left: Pick<SubagentMeta, "correlationKey">,
+  right: Pick<SubagentMeta, "correlationKey">,
+): boolean =>
+  left.correlationKey.startsWith("call:") &&
+  right.correlationKey.startsWith("call:") &&
+  left.correlationKey !== right.correlationKey;

@@ -1,6 +1,6 @@
 import type { GitBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { repoBranchesQueryOptions } from "@/state/queries/git";
+import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
 
 type UseSettingsModalBranchesStateArgs = {
   open: boolean;

@@ -1,26 +1,20 @@
 import { useCallback, useState } from "react";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { host } from "../shared/host";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
-import type {
-  UseWorkspaceOperationsResult,
-  WorkspaceOperationsHostClient,
-} from "./workspace-operations-types";
+import type { UseWorkspaceOperationsResult } from "./workspace-operations-types";
 
 type UseWorkspaceOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
   clearTaskData: () => void;
-  hostClient?: WorkspaceOperationsHostClient;
 };
 
 export function useWorkspaceOperations({
   activeWorkspace,
   setActiveWorkspace,
   clearTaskData,
-  hostClient = host,
 }: UseWorkspaceOperationsArgs): UseWorkspaceOperationsResult {
   const activeRepo = activeWorkspace?.repoPath ?? null;
   const [branchSyncDegradedState, setBranchSyncDegradedState] = useState<{
@@ -49,7 +43,6 @@ export function useWorkspaceOperations({
     clearBranchData,
   } = useWorkspaceBranchOperations({
     activeRepo,
-    hostClient,
     updateBranchSyncDegradedForRepo,
   });
 
@@ -78,7 +71,6 @@ export function useWorkspaceOperations({
     setActiveWorkspace,
     clearTaskData,
     clearBranchData,
-    hostClient,
   });
 
   const branchSyncDegraded =
@@ -89,7 +81,6 @@ export function useWorkspaceOperations({
     isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
-    hostClient,
     setBranchSyncDegraded: updateBranchSyncDegradedForRepo,
   });
 

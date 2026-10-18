@@ -1,7 +1,7 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { useRuntimeModelCatalogQuery } from "@/state/queries/use-runtime-model-catalogs";
+import { useRuntimeModelCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { SessionModelTarget } from "./workspace-session-model-resources";
 
 /** Keeps catalog reads and model writes bound to the saved chat target. */

@@ -1,5 +1,7 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import {
   BottomPanelSplit,
@@ -127,9 +129,11 @@ describe("BottomPanelSplit", () => {
     });
     try {
       const view = render(
-        <BottomPanelSplit ids={ids} model={bottom} className="" mainClassName="">
-          <p>Chat content</p>
-        </BottomPanelSplit>,
+        <ClientConnectionProvider connection={createTestClientConnection()}>
+          <BottomPanelSplit ids={ids} model={bottom} className="" mainClassName="">
+            <p>Chat content</p>
+          </BottomPanelSplit>
+        </ClientConnectionProvider>,
       );
       expect(view.getByText("Chat content").parentElement?.hidden).toBe(true);
       fireEvent.click(view.getByRole("button", { name: "Back to workspace" }));

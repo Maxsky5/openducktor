@@ -9,15 +9,15 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
+import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   areSessionMessagesSameRevision,
   getSessionMessageCount,
   getSessionMessagesRevision,
-} from "@/state/operations/agent-orchestrator/support/messages";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { AgentChatTranscriptCacheContext } from "./agent-chat-transcript-cache-context";
 import { toAgentChatTranscriptSession } from "./agent-chat-transcript-session";

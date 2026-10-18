@@ -7,15 +7,16 @@ import type { PropsWithChildren } from "react";
 import {
   createBridge,
   workflowClosedOccurrence,
-} from "@/features/notifications/notification-runtime.test-support";
+} from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { type NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-  type NotificationBridge,
-  type ShellBridge,
-} from "@/lib/shell-bridge";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { WorkspaceStateContext } from "../app-state-contexts";
 import { useNotificationContext } from "../notifications/notification-context";
@@ -121,14 +122,13 @@ const createHarness = (
   status: "denied" | "failed",
   permission: "granted" | "denied" | "prompt" | "throw" = "granted",
 ) => {
-  const previousBridge = getShellBridge();
   const showOsNotification = mock(async () => ({
     status,
     message: "OS delivery is blocked.",
   }));
   let onOccurrence: Parameters<NotificationBridge["subscribeOccurrences"]>[0] | undefined;
-  let onFrame: Parameters<ShellBridge["subscribeNotificationStream"]>[1] | undefined;
-  let onStreamFailure: Parameters<ShellBridge["subscribeNotificationStream"]>[2] | undefined;
+  let onFrame: Parameters<HostConnection["subscribeNotificationStream"]>[1] | undefined;
+  let onStreamFailure: Parameters<HostConnection["subscribeNotificationStream"]>[2] | undefined;
   configureShellBridge({
     ...createUnavailableShellBridge(),
     notifications: createBridge({
@@ -148,17 +148,23 @@ const createHarness = (
         return () => {};
       },
     }),
-    subscribeNotificationStream: async (_input, listener, onFailure) => {
-      onFrame = listener;
-      onStreamFailure = onFailure;
-      return () => {};
-    },
+  });
+  const connection = createTestClientConnection({
+    host: createTestHostConnection({
+      subscribeNotificationStream: async (_input, listener, onFailure) => {
+        onFrame = listener;
+        onStreamFailure = onFailure;
+        return () => {};
+      },
+    }),
   });
   const workspace = createWorkspaceState();
   const wrapper = ({ children }: PropsWithChildren) => (
-    <WorkspaceStateContext.Provider value={workspace}>
-      <NotificationProvider>{children}</NotificationProvider>
-    </WorkspaceStateContext.Provider>
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceStateContext.Provider value={workspace}>
+        <NotificationProvider>{children}</NotificationProvider>
+      </WorkspaceStateContext.Provider>
+    </ClientConnectionProvider>
   );
   const hook = createHookHarness(useNotificationContext, undefined, {
     wrapper,
@@ -193,8 +199,9 @@ const createHarness = (
     async close(): Promise<void> {
       try {
         await hook.unmount();
+        await connection.dispose();
       } finally {
-        configureShellBridge(previousBridge);
+        configureShellBridge(createUnavailableShellBridge());
       }
     },
   };

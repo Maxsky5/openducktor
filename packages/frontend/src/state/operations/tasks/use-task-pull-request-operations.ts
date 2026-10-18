@@ -1,9 +1,9 @@
 import type { PullRequest, TaskCard, TaskPullRequestDetectResult } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { invalidatePullRequestReviewContextQueries } from "@/state/queries/pull-request-review";
-import { workspaceListQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { invalidatePullRequestReviewContextQueries } from "@openducktor/frontend-core/queries/pull-request-review";
+import { workspaceListQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type {
   PendingMergedPullRequest,
   TaskPullRequestOperations,

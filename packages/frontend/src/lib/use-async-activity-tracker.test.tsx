@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useAsyncActivityTracker } from "./use-async-activity-tracker";
 
 enableReactActEnvironment();

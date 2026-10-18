@@ -1,5 +1,5 @@
 import type { AgentSkillReference, AgentUserMessageDisplayPart } from "@openducktor/core";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 
 const REFERENCE_START_BOUNDARY_PATTERN = /[\s([{"']/u;

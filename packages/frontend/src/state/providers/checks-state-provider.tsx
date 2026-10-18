@@ -5,8 +5,8 @@ import {
   type ChecksOperationsContextValue,
   ChecksStateContext,
   useActiveWorkspaceContext,
-  useHostRuntimeStatusContext,
 } from "../app-state-contexts";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useChecks } from "../operations/workspace/use-checks";
 
 type ChecksStateProviderProps = PropsWithChildren;

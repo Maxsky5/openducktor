@@ -5,7 +5,7 @@ import { sessionNavigationTargetKey } from "@/features/session-navigation/sessio
 import { selectSessionEntry } from "./session-navigation-selection";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";
-import { SessionNavigationTestProvider } from "./session-navigation-test-provider";
+import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   betaWorkspace,
   NOW,

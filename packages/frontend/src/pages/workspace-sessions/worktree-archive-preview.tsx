@@ -2,7 +2,7 @@ import type { WorkspaceSessionArchivePreview } from "@openducktor/contracts";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 export function WorktreeArchivePreview({
   preview,

@@ -1,0 +1,55 @@
+import type {
+  AgentSessionContextUsage,
+  AgentSessionLiveLoadContextInput,
+  RuntimeKind,
+} from "@openducktor/contracts";
+import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
+import { normalizeWorkingDirectory } from "../lib/working-directory";
+
+export const SESSION_CONTEXT_STALE_TIME_MS = 0;
+
+export const agentSessionContextQueryKeys = {
+  all: ["agent-session-context"] as const,
+  usage: ({
+    repoPath,
+    runtimeKind,
+    workingDirectory,
+    externalSessionId,
+    sessionScope,
+  }: AgentSessionLiveLoadContextInput) =>
+    [
+      ...agentSessionContextQueryKeys.all,
+      normalizeWorkingDirectory(repoPath),
+      runtimeKind,
+      normalizeWorkingDirectory(workingDirectory),
+      externalSessionId,
+      sessionScope?.kind ?? null,
+      sessionScope?.kind === "workflow" ? sessionScope.taskId : null,
+      sessionScope?.kind === "workflow" ? sessionScope.role : null,
+    ] as const,
+  /** True for a context usage key of this runtime kind in any workspace or directory. */
+  matchesRuntimeKind: (key: QueryKey, runtimeKind: RuntimeKind): boolean =>
+    key[0] === agentSessionContextQueryKeys.all[0] && key[2] === runtimeKind,
+};
+
+type LoadAgentSessionContext = (
+  input: AgentSessionLiveLoadContextInput,
+) => Promise<AgentSessionContextUsage | null>;
+
+export const sessionContextQueryOptions = (
+  input: AgentSessionLiveLoadContextInput,
+  loadContext: LoadAgentSessionContext,
+) =>
+  queryOptions<AgentSessionContextUsage | null, Error, AgentSessionContextUsage | null, QueryKey>({
+    queryKey: agentSessionContextQueryKeys.usage(input),
+    queryFn: () => loadContext(input),
+    staleTime: SESSION_CONTEXT_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+  });
+
+export const loadAgentSessionContextFromQuery = (
+  queryClient: QueryClient,
+  input: AgentSessionLiveLoadContextInput,
+  loadContext: LoadAgentSessionContext,
+): Promise<AgentSessionContextUsage | null> =>
+  queryClient.fetchQuery(sessionContextQueryOptions(input, loadContext));

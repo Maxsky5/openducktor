@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 import { useHumanReviewFeedbackController } from "./use-human-review-feedback-controller";
 

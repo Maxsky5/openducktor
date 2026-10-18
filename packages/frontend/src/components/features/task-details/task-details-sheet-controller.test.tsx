@@ -6,21 +6,22 @@ import {
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
 import type { TaskCard } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { taskQueryKeys } from "@/state/queries/tasks";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   TaskWorkflowActionsContext,
   type TaskWorkflowActions,
 } from "@/features/task-workflow/task-workflow-actions-context";
-import { useRecentItemsStore } from "@/features/command-palette/recent-items";
+import { RECENT_ITEMS_STORAGE_KEY } from "@/features/command-palette/constants";
 import { collectDeleteImpactTaskIds, toSubtasks } from "./task-details-sheet-model";
 import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-controller";
 
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 const render = (element: ReactElement) =>
   renderUi(element, {
-    wrapper: ({ children }) => createElement(QueryProvider, { useIsolatedClient: true }, children),
+    wrapper: ({ children }) => createElement(QueryProvider, null, children),
   });
 enableReactActEnvironment();
 
@@ -79,7 +80,8 @@ describe("TaskDetailsSheetController", () => {
   test("does not report an unavailable task during deletion and a failed refresh", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "task-1" });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const connection = createTestClientConnection();
+    const client = connection.queryClient;
     const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
@@ -98,7 +100,7 @@ describe("TaskDetailsSheetController", () => {
         createElement(TaskDetailsSheetController, { ref, activeWorkspace, allTasks }),
       );
     const rendered = renderUi(controller([task]), {
-      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+      wrapper: ({ children }) => createElement(ClientConnectionProvider, { connection }, children),
     });
     try {
       await act(async () => ref.current?.openTask(task.id));
@@ -160,7 +162,8 @@ describe("TaskDetailsSheetController", () => {
   test("reports a task removed by another process while deletion fails", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "task-1" });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const connection = createTestClientConnection();
+    const client = connection.queryClient;
     const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
@@ -176,7 +179,7 @@ describe("TaskDetailsSheetController", () => {
         createElement(TaskDetailsSheetController, { ref, activeWorkspace, allTasks }),
       );
     const rendered = renderUi(controller([task]), {
-      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+      wrapper: ({ children }) => createElement(ClientConnectionProvider, { connection }, children),
     });
     try {
       await act(async () => ref.current?.openTask(task.id));
@@ -217,7 +220,8 @@ describe("TaskDetailsSheetController", () => {
     async (visibleOnBoard) => {
       const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
       const task = createTaskCardFixture({ id: "task-1", status: "closed" });
-      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const connection = createTestClientConnection();
+      const client = connection.queryClient;
       const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
       client.setQueryData(queryKey, { tasks: [task] });
       const ref = createRef<TaskDetailsSheetControllerHandle>();
@@ -227,7 +231,10 @@ describe("TaskDetailsSheetController", () => {
           activeWorkspace,
           allTasks: visibleOnBoard ? [task] : [],
         }),
-        { wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children) },
+        {
+          wrapper: ({ children }) =>
+            createElement(ClientConnectionProvider, { connection }, children),
+        },
       );
       try {
         await act(async () => ref.current?.openTask(task.id));
@@ -287,7 +294,8 @@ describe("TaskDetailsSheetController", () => {
       issueType: "epic",
       subtaskIds: [child.id],
     });
-    const client = new QueryClient();
+    const connection = createTestClientConnection();
+    const client = connection.queryClient;
     client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [task, child] });
     client.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
@@ -298,7 +306,7 @@ describe("TaskDetailsSheetController", () => {
         allTasks: [],
       });
     const rendered = renderUi(controller(activeWorkspace.repoPath), {
-      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+      wrapper: ({ children }) => createElement(ClientConnectionProvider, { connection }, children),
     });
     await act(async () => ref.current?.openTask(task.id));
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
@@ -390,13 +398,17 @@ describe("TaskDetailsSheetController", () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
-    useRecentItemsStore.setState({ items: [] });
-    const rendered = render(
+    const connection = createTestClientConnection();
+    const rendered = renderUi(
       createElement(TaskDetailsSheetController, {
         ref: controllerRef,
         activeWorkspace,
         allTasks: [task],
       }),
+      {
+        wrapper: ({ children }) =>
+          createElement(ClientConnectionProvider, { connection }, children),
+      },
     );
 
     try {
@@ -405,13 +417,17 @@ describe("TaskDetailsSheetController", () => {
       });
 
       expect(taskDetailsSheetRenderMock.mock.lastCall?.[0]).toMatchObject({ task, open: true });
-      expect(useRecentItemsStore.getState().items[0]).toMatchObject({
-        kind: "task",
-        workspaceId: activeWorkspace.workspaceId,
-        taskId: task.id,
-      });
+      const recentItems: unknown = JSON.parse(
+        connection.storage.getItem(RECENT_ITEMS_STORAGE_KEY) ?? "[]",
+      );
+      expect(recentItems).toMatchObject([
+        {
+          kind: "task",
+          workspaceId: activeWorkspace.workspaceId,
+          taskId: task.id,
+        },
+      ]);
     } finally {
-      useRecentItemsStore.setState({ items: [] });
       await act(async () => {
         rendered.unmount();
       });

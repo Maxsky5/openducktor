@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
-import { canonicalTargetBranch } from "@/lib/target-branch";
+import { canonicalTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { cn } from "@/lib/utils";
 import type {
   PullRequestDraftMode,

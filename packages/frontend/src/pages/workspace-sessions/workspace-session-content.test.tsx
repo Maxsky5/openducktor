@@ -1,9 +1,9 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, memo, type ReactElement, useEffect, useLayoutEffect, useState } from "react";
-import { createAgentMessageSendReceipt } from "@/test-utils/agent-message-send-fixture";
+import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-support/agent-message-send-fixture";
 import { workspaceConflictChatKey } from "./workspace-git-conflict-assistance";
 import { toast } from "sonner";
 import { Tabs } from "@/components/ui/tabs";
@@ -11,19 +11,21 @@ import {
   useWorkspacePreviewTransitionGuard,
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
+import { WorkspaceBranchStateContext } from "@/state/app-state-contexts";
+import { AgentSessionReadModelStateContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
-  AgentSessionReadModelStateContext,
-  WorkspaceBranchStateContext,
-} from "@/state/app-state-contexts";
-import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
-import { currentBranchQueryOptions } from "@/state/queries/git";
-import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+  filesystemQueryKeys,
+  invalidateWorkspaceFileQueries,
+} from "@openducktor/frontend-core/queries/filesystem";
+import { currentBranchQueryOptions } from "@openducktor/frontend-core/queries/git";
 import {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-} from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+  repoConfigQueryOptions,
+  settingsSnapshotQueryOptions,
+} from "@openducktor/frontend-core/queries/workspace";
+import type { HostClient } from "@openducktor/host-client";
+import { connectionOf } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import * as filePreview from "@/components/features/agents/task-execution-file-preview";
@@ -105,7 +107,7 @@ function renderClosedSession(
     currentRevision?: string,
     isSwitchingBranch = false,
   ) => (
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connectionOf(queryClient)}>
       <WorkspaceBranchStateContext.Provider
         value={{
           activeWorkspace: null,
@@ -140,7 +142,7 @@ function renderClosedSession(
           </Tabs>
         </WorkspacePreviewTransitionGuardProvider>
       </WorkspaceBranchStateContext.Provider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const view = render(content(branch, revision));
   return {
@@ -557,8 +559,10 @@ test("a failed switch keeps the dirty draft guarded until a new file opens", asy
   }
 });
 
-function newQueryClient() {
+function newQueryClient(client: Partial<HostClient> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Workspace queries find their host through the query client.
+  createTestClientConnection({ client, queryClient });
   queryClient.setQueryData(
     settingsSnapshotQueryOptions().queryKey,
     createSettingsSnapshotFixture(),
@@ -588,15 +592,10 @@ test.each([
 ])(
   "$name chat links open repo files and outside files",
   async ({ sessionRecord, rootPath, outsideRoot }) => {
-    const previousBridge = getShellBridge();
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          gitCanonicalizePath: async (path) => path,
-          gitGetCurrentBranch: async () => ({ name: "main", detached: false }),
-        },
-      }),
-    );
+    const hostClient: Partial<HostClient> = {
+      gitCanonicalizePath: async (path) => path,
+      gitGetCurrentBranch: async () => ({ name: "main", detached: false }),
+    };
     const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => (
       <AgentChatMarkdownRenderer markdown="[outside](../secret.md) [README](./README.md)" />
     ));
@@ -606,7 +605,7 @@ test.each([
         File preview<button onClick={model.onClose}>Close preview</button>
       </div>
     ));
-    const queryClient = newQueryClient();
+    const queryClient = newQueryClient(hostClient);
     queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
       name: "main",
       detached: false,
@@ -640,7 +639,6 @@ test.each([
       chat.mockRestore();
       preview.mockRestore();
       error.mockRestore();
-      configureShellBridge(previousBridge);
     }
   },
 );
@@ -738,7 +736,7 @@ test("the tools panel stays beside the chat", () => {
     repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
   );
   const view = render(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connectionOf(queryClient)}>
       <WorkspaceBranchStateContext.Provider
         value={{
           activeWorkspace: null,
@@ -763,7 +761,7 @@ test("the tools panel stays beside the chat", () => {
           </Tabs>
         </WorkspacePreviewTransitionGuardProvider>
       </WorkspaceBranchStateContext.Provider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     const panels = view.container.querySelectorAll('[data-slot="resizable-panel"]');
@@ -836,23 +834,19 @@ test("a closed worktree panel tracks branch changes without losing a draft", asy
   let branchError: Error | null = null;
   let holdBranchRead = false;
   let releaseBranchRead: (() => void) | null = null;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetCurrentBranch: async (_repoPath, workingDir) => {
-          if (holdBranchRead) {
-            await new Promise<void>((resolve) => (releaseBranchRead = resolve));
-          }
-          if (branchError) throw branchError;
-          return {
-            name: workingDir === worktreePath ? worktreeBranch : "repo-root",
-            detached: false,
-          };
-        },
-      },
-    }),
-  );
-  const queryClient = newQueryClient();
+  const hostClient: Partial<HostClient> = {
+    gitGetCurrentBranch: async (_repoPath, workingDir) => {
+      if (holdBranchRead) {
+        await new Promise<void>((resolve) => (releaseBranchRead = resolve));
+      }
+      if (branchError) throw branchError;
+      return {
+        name: workingDir === worktreePath ? worktreeBranch : "repo-root",
+        detached: false,
+      };
+    },
+  };
+  const queryClient = newQueryClient(hostClient);
   const worktreeRecord: WorkspaceSession = {
     ...record,
     executionTarget: {
@@ -905,7 +899,6 @@ test("a closed worktree panel tracks branch changes without losing a draft", asy
     queryClient.clear();
     chat.mockRestore();
     preview.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
@@ -931,18 +924,14 @@ test("a root chat checks the branch after a tool runs and keeps its draft on rea
   let branch = "feature";
   let branchError: Error | null = null;
   let releaseRead: (() => void) | null = null;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        gitGetCurrentBranch: async () => {
-          await new Promise<void>((resolve) => (releaseRead = resolve));
-          if (branchError) throw branchError;
-          return { name: branch, detached: false };
-        },
-      },
-    }),
-  );
-  const queryClient = newQueryClient();
+  const hostClient: Partial<HostClient> = {
+    gitGetCurrentBranch: async () => {
+      await new Promise<void>((resolve) => (releaseRead = resolve));
+      if (branchError) throw branchError;
+      return { name: branch, detached: false };
+    },
+  };
+  const queryClient = newQueryClient(hostClient);
   queryClient.setQueryData(currentBranchQueryOptions("/repo").queryKey, {
     name: "main",
     detached: false,
@@ -982,7 +971,6 @@ test("a root chat checks the branch after a tool runs and keeps its draft on rea
     queryClient.clear();
     chat.mockRestore();
     preview.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 

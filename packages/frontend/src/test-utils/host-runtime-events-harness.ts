@@ -1,8 +1,8 @@
 import type { HostRuntimeSnapshot } from "@openducktor/contracts";
-import { createHostMcpBridgeStatusFixture } from "./shared-test-fixtures";
+import { createHostMcpBridgeStatusFixture } from "@/test-utils/shared-test-fixtures";
 import { QueryClient } from "@tanstack/react-query";
-import type { RuntimeChangeListener } from "@/lib/shell-bridge";
-import { createHostRuntimeStatusOwner } from "@/state/host-runtime/host-runtime-status-owner";
+import type { RuntimeChangeListener } from "@openducktor/frontend-core/connection/host-connection";
+import { createHostRuntimeStatusOwner } from "@openducktor/frontend-core/runtime/host-runtime-status-owner";
 
 /**
  * Starts a host runtime status owner on a fake event transport. `emit` sends one transport

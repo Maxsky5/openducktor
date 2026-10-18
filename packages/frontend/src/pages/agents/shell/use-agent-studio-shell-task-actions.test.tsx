@@ -4,7 +4,7 @@ import {
   type TaskWorkflowActions,
   TaskWorkflowActionsContext,
 } from "@/features/task-workflow/task-workflow-actions-context";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";

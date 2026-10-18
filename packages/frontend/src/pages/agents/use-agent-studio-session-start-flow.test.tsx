@@ -1,5 +1,5 @@
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { RepoRuntimeRef } from "@openducktor/contracts";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -10,17 +10,18 @@ import {
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { type SessionStartWorkflowResult } from "@/features/session-start";
-import { QueryProvider } from "@/lib/query-provider";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/host";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostClient } from "@openducktor/host-client";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
   createRuntimeCatalogFixture,
@@ -151,7 +152,44 @@ const createModalCatalogForRuntime = (runtimeRef: RepoRuntimeRef): AgentRuntimeC
     models: runtimeRef.runtimeKind === "claude" ? createClaudeModalCatalog() : createModalCatalog(),
   });
 
+const createSessionStartHostClient = (): Partial<HostClient> => ({
+  workspaceList: async () => [
+    {
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      abbreviation: null,
+      tileColor: null,
+      repoPath: "/repo",
+      isActive: true,
+      hasConfig: true,
+      configuredWorktreeBasePath: null,
+      defaultWorktreeBasePath: "/repo/worktrees",
+      effectiveWorktreeBasePath: "/repo/worktrees",
+    },
+  ],
+  workspaceGetRepoConfig: async () =>
+    repoConfigSchema.parse({
+      workspaceId: "repo",
+      workspaceName: "Repo",
+      repoPath: "/repo",
+      branchPrefix: "codex/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      git: {},
+      hooks: { postComplete: [] },
+      actions: { items: [], defaultActionId: null },
+      worktreeCopyPaths: [],
+      agentDefaults: {},
+      promptOverrides: {},
+    }),
+  workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+  taskWorktreeGet: async () => ({
+    workingDirectory: "/repo/worktrees/task-1",
+    source: "builder_session",
+  }),
+});
+
 const createInternalModalHookHarness = (initialProps: HookArgs) => {
+  const connection = createTestClientConnection({ client: createSessionStartHostClient() });
   const checksStateContextValue = createChecksStateContextValue();
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -163,7 +201,7 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
       },
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(
           HostRuntimeStatusContext.Provider,
           {
@@ -361,54 +399,6 @@ const confirmSessionStartModal = async ({
 };
 
 describe("useAgentStudioSessionStartFlow", () => {
-  const originalWorkspaceList = host.workspaceList;
-  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
-  const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-
-  beforeEach(() => {
-    host.workspaceList = async () => [
-      {
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        abbreviation: null,
-        tileColor: null,
-        repoPath: "/repo",
-        isActive: true,
-        hasConfig: true,
-        configuredWorktreeBasePath: null,
-        defaultWorktreeBasePath: "/repo/worktrees",
-        effectiveWorktreeBasePath: "/repo/worktrees",
-      },
-    ];
-    host.workspaceGetRepoConfig = async () =>
-      repoConfigSchema.parse({
-        workspaceId: "repo",
-        workspaceName: "Repo",
-        repoPath: "/repo",
-        branchPrefix: "codex/",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {},
-        hooks: { postComplete: [] },
-        actions: { items: [], defaultActionId: null },
-        worktreeCopyPaths: [],
-        agentDefaults: {},
-        promptOverrides: {},
-      });
-    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
-    host.taskWorktreeGet = async () => ({
-      workingDirectory: "/repo/worktrees/task-1",
-      source: "builder_session",
-    });
-  });
-
-  afterEach(() => {
-    host.workspaceList = originalWorkspaceList;
-    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
-    host.taskWorktreeGet = originalBuildContinuationTargetGet;
-  });
-
   test("startSessionRequest starts a fresh session even when another session is active", async () => {
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const loadedSession = createSession({

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { workspaceSessionQueryKeys } from "@/state/queries/workspace-sessions";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { workspaceSessionQueryKeys } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { createWorkspaceArchivedSessionsPort } from "./archived-sessions-port";
 
 const archivedRecord = (externalSessionId: string): WorkspaceSession => ({

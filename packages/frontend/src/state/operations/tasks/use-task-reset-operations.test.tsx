@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { taskStopImpactQueryOptions } from "@/state/queries/task-stop-impact";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { taskStopImpactQueryOptions } from "@openducktor/frontend-core/queries/task-stop-impact";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionReadPort } from "../../queries/agent-sessions";
+import type { AgentSessionReadPort } from "@openducktor/frontend-core/queries/agent-sessions";
 import type { UseTaskOperationsResult } from "./task-operations-types";
 import { useTaskResetOperations } from "./use-task-reset-operations";
 
@@ -39,7 +39,7 @@ const createHarness = ({
       return { operations, queryClient };
     },
     undefined,
-    { wrapper: IsolatedQueryWrapper },
+    { wrapper: QueryProvider },
   );
 
   return {
@@ -108,7 +108,6 @@ describe("useTaskResetOperations", () => {
       repoPath: "/repo",
       taskIds: ["A"],
       operation: "reset_implementation",
-      readPort: { taskStopImpactGet: async () => ({ stoppableSessionCount: 1 }) },
     }).queryKey;
 
     try {

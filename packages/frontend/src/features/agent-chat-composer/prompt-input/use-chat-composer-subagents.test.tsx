@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/core";
 import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query-wrapper";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerSubagents } from "./use-chat-composer-subagents";

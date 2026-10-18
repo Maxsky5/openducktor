@@ -15,7 +15,7 @@ import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import {
   workspaceSessionTitle,
   workspaceSessionWorkingDirectory,
-} from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { WorkspaceSessionRenameDialog } from "./workspace-session-rename-dialog";
 

@@ -9,7 +9,7 @@ import { createFetchFixture } from "./test-support";
 import type {
   RunEventListener,
   RuntimeChangeListener,
-} from "@openducktor/frontend/lib/shell-bridge";
+} from "@openducktor/frontend-core/connection/host-connection";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -716,7 +716,7 @@ describe("local host SSE subscriptions", () => {
     expect(listener).toHaveBeenCalledTimes(4);
     for (const [index, missedEvents] of [false, false, true, true].entries()) {
       expect(listener).toHaveBeenNthCalledWith(index + 1, {
-        __openducktorBrowserLive: true,
+        __openducktorConnectionControl: true,
         kind: "reconnected",
         missedEvents,
       });
@@ -762,7 +762,7 @@ describe("local host SSE subscriptions", () => {
 
     expect(listener).toHaveBeenNthCalledWith(1, payload);
     expect(listener).toHaveBeenNthCalledWith(2, {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
     });
@@ -788,7 +788,7 @@ describe("local host SSE subscriptions", () => {
 
     expect(received).toEqual([
       payload,
-      { __openducktorBrowserLive: true, kind: "reconnected", missedEvents: true },
+      { __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true },
     ]);
     unsubscribe();
   });
@@ -821,7 +821,7 @@ describe("local host SSE subscriptions", () => {
     expect(first).toHaveBeenCalledTimes(1);
     expect(later).toHaveBeenCalledTimes(1);
     expect(later).toHaveBeenCalledWith({
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
     });
@@ -1014,7 +1014,7 @@ describe("local host SSE subscriptions", () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith({
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "stream-warning",
       message: "EventSource events reported an error before opening.",
     });
@@ -1024,7 +1024,7 @@ describe("local host SSE subscriptions", () => {
     // The first connection has no cursor, so consumers read a current baseline.
     expect(listener).toHaveBeenCalledTimes(2);
     expect(listener).toHaveBeenLastCalledWith({
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: true,
     });
@@ -1054,7 +1054,7 @@ describe("local host SSE subscriptions", () => {
     eventSource.emit("error", "lost connection");
 
     expect(listener).toHaveBeenNthCalledWith(1, {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "stream-warning",
       message: "EventSource events reported an error after opening.",
     });
@@ -1064,14 +1064,14 @@ describe("local host SSE subscriptions", () => {
 
     eventSource.connect();
     expect(listener).toHaveBeenNthCalledWith(2, {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
     });
 
     eventSource.emit("error", "lost again");
     expect(listener).toHaveBeenNthCalledWith(3, {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "stream-warning",
       message: "EventSource events reported an error after opening.",
     });
@@ -1095,7 +1095,7 @@ describe("local host SSE subscriptions", () => {
     const stopLate = await subscribeLocalHostRuntimeChanges(late);
 
     const warning = {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "stream-warning",
       message: "EventSource events reported an error after opening.",
     };
@@ -1106,7 +1106,7 @@ describe("local host SSE subscriptions", () => {
 
     eventSource.connect();
     const reconnected = {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: false,
     };
@@ -1140,7 +1140,7 @@ describe("local host SSE subscriptions", () => {
 
     expect(() => eventSource.emit("error", "lost connection")).toThrow("listener failed");
     expect(listener).toHaveBeenNthCalledWith(1, {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "stream-warning",
       message: "EventSource events reported an error after opening.",
     });
@@ -1172,7 +1172,7 @@ describe("local host SSE subscriptions", () => {
       "listener failed",
     );
     expect(listener).toHaveBeenNthCalledWith(1, {
-      __openducktorBrowserLive: true,
+      __openducktorConnectionControl: true,
       kind: "reconnected",
       missedEvents: true,
     });
@@ -1208,13 +1208,13 @@ describe("local host SSE subscriptions", () => {
 
         eventSource.connect({ hostChanged: false, gaps: ["message"] });
         expect(other).toHaveBeenCalledWith({
-          __openducktorBrowserLive: true,
+          __openducktorConnectionControl: true,
           kind: "reconnected",
           missedEvents: true,
         });
         recovery.reject(failure);
         await waitForCondition(() => report.mock.calls.length === 1);
-        expect(report).toHaveBeenCalledWith("Shell event listener failed", failure);
+        expect(report).toHaveBeenCalledWith("Host event listener failed", failure);
         expect(eventSource.closed).toBe(false);
       } finally {
         recovery.resolve();

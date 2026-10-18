@@ -9,7 +9,7 @@ import {
   type TaskExecutionFileSelectionResult,
 } from "@/components/features/agents/task-execution-file-explorer-model";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ReactNode } from "react";
 import type { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";

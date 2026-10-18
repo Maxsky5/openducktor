@@ -8,8 +8,8 @@ import type { AgentChatComposerModel } from "./agent-chat.types";
 import {
   type AttachmentToCheck,
   runningTurnAttachmentBlockedReason,
-} from "./agent-chat-attachments";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { isReusablePromptSlashCommand } from "./agent-chat-reusable-prompts";
 
 /** The session state that decides whether a queued message can steer the running work. */

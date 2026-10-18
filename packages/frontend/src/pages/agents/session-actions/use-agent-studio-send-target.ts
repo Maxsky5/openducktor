@@ -9,9 +9,12 @@ import type { AgentChatSendResult } from "@/components/features/agents/agent-cha
 import type { AgentChatSendTarget } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { isSessionStartFailureFeedbackHandled } from "@/features/session-start/session-start-orchestration";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
-import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  matchesAgentSessionIdentity,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useAsyncActivityTracker } from "@/lib/use-async-activity-tracker";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
 import { buildAgentStudioSessionActivityKey } from "../agent-studio-session-activity-key";
 import {

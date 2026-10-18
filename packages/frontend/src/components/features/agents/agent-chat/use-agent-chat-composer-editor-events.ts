@@ -13,8 +13,11 @@ import {
   useCallback,
 } from "react";
 import { z } from "zod";
-import { classifyAttachment } from "./agent-chat-attachments";
-import type { AgentChatComposerDraft, applyComposerDraftEdit } from "./agent-chat-composer-draft";
+import { classifyAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import type {
+  AgentChatComposerDraft,
+  applyComposerDraftEdit,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
 import { closeComposerAutocompleteMenus } from "./agent-chat-composer-menu-state";
 import {

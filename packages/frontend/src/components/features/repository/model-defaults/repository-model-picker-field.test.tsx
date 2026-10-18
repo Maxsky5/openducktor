@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
 
 enableReactActEnvironment();

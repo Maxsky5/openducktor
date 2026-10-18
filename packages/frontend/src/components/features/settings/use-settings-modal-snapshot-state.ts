@@ -1,6 +1,6 @@
 import type { SettingsRepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   chooseInitialSettingsWorkspaceId,
   type SettingsWorkspaceSelectionPolicy,

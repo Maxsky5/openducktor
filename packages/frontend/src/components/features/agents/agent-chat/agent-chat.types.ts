@@ -36,9 +36,9 @@ import type {
   AgentQuestionRequest,
   AgentSessionIdentity,
   SessionMessagesState,
-} from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import type { AgentChatComposerDraft } from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
+import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 

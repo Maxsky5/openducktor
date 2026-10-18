@@ -1,15 +1,14 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { host } from "@/state/operations/shared/host";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
+const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
 
 afterEach(() => {
   configureShellBridge(createUnavailableShellBridge());
@@ -17,48 +16,43 @@ afterEach(() => {
 
 describe("TaskDescriptionImageNode", () => {
   test("loads a linked GitHub issue image through the authenticated host request", async () => {
-    const originalImageGet = host.issueImageGet;
     const url = "https://github.com/user-attachments/assets/550e8400-e29b-41d4-a716-446655440000";
     const imageGet = mock(async () => ({
       mediaType: "image/png" as const,
       bytesBase64: "aW1hZ2U=",
     }));
-    host.issueImageGet = imageGet;
+    const connection = createTestClientConnection({ client: { issueImageGet: imageGet } });
+    const view = render(
+      <QueryProvider connection={connection}>
+        <TaskDescriptionImageContext.Provider
+          value={{
+            previews: new Map(),
+            renderContext: null,
+            issueImageContext: {
+              providerId: "github",
+              repoPath: "/workspace/repo",
+              sourceId: "132",
+            },
+          }}
+        >
+          <TaskDescriptionImageNode
+            node={{ attrs: { src: url, alt: "Issue image", title: null } }}
+            selected={false}
+            updateAttributes={() => {}}
+          />
+        </TaskDescriptionImageContext.Provider>
+      </QueryProvider>,
+    );
     try {
-      const view = render(
-        <QueryProvider useIsolatedClient>
-          <TaskDescriptionImageContext.Provider
-            value={{
-              previews: new Map(),
-              renderContext: null,
-              issueImageContext: {
-                providerId: "github",
-                repoPath: "/workspace/repo",
-                sourceId: "132",
-              },
-            }}
-          >
-            <TaskDescriptionImageNode
-              node={{ attrs: { src: url, alt: "Issue image", title: null } }}
-              selected={false}
-              updateAttributes={() => {}}
-            />
-          </TaskDescriptionImageContext.Provider>
-        </QueryProvider>,
-      );
-      try {
-        const image = await view.findByRole("img", { name: "Issue image" });
-        expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U=");
-        expect(imageGet).toHaveBeenCalledWith({
-          repoPath: "/workspace/repo",
-          sourceId: "132",
-          url,
-        });
-      } finally {
-        view.unmount();
-      }
+      const image = await view.findByRole("img", { name: "Issue image" });
+      expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U=");
+      expect(imageGet).toHaveBeenCalledWith({
+        repoPath: "/workspace/repo",
+        sourceId: "132",
+        url,
+      });
     } finally {
-      host.issueImageGet = originalImageGet;
+      view.unmount();
     }
   });
 

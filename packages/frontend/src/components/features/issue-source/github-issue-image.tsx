@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/shared/host";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 export type IssueImageContext = {
   repoPath: string;
@@ -33,8 +33,8 @@ export function GithubIssueImage({
       context.taskId ?? context.sourceId,
       src,
     ],
-    queryFn: () =>
-      host.issueImageGet(
+    queryFn: ({ client }) =>
+      connectionHost(client).issueImageGet(
         context.taskId
           ? { repoPath: context.repoPath, taskId: context.taskId, url: src }
           : { repoPath: context.repoPath, sourceId: context.sourceId, url: src },

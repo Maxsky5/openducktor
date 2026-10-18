@@ -9,10 +9,14 @@ import {
   type HostEventPayload,
 } from "@openducktor/contracts";
 import { azureDevOpsConnectionConfigurationFingerprint } from "@openducktor/core";
-import { QueryProvider } from "@/lib/query-provider";
-import { hostBridge } from "@/lib/host-client";
-import type { WorkspaceProviderSetupUpdateListener } from "@/lib/shell-bridge";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { WorkspaceProviderSetupUpdateListener } from "@openducktor/frontend-core/connection/host-connection";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { useWorkspaceProviderSetup } from "./use-workspace-provider-setup";
@@ -153,8 +157,8 @@ function fixture(
         throw new Error(`Unexpected setup command ${command}`);
     }
   });
-  const bridge = {
-    ...hostBridge,
+  const host: HostConnection = {
+    ...createTestHostConnection(),
     client,
     subscribeWorkspaceProviderSetupUpdates: async (
       listener: WorkspaceProviderSetupUpdateListener,
@@ -163,14 +167,20 @@ function fixture(
       return unsubscribe;
     },
   };
+  const hookConnection = createTestClientConnection({ host });
   const h = createHookHarness(
-    () => useWorkspaceProviderSetup(bridge),
+    () => useWorkspaceProviderSetup(),
     {},
-    { wrapper: ({ children }) => <QueryProvider useIsolatedClient>{children}</QueryProvider> },
+    {
+      wrapper: ({ children }) => (
+        <QueryProvider connection={hookConnection}>{children}</QueryProvider>
+      ),
+    },
   );
   return {
     h,
-    bridge,
+    /** A new connection to the same fake host, for a separately rendered tree. */
+    connect: () => createTestClientConnection({ host }),
     ref,
     selections,
     listeners,
@@ -262,8 +272,8 @@ describe("workspace provider draft ownership", () => {
   test("keeps provider fields editable until an action sends the latest draft", async () => {
     const f = fixture(undefined, { readStatus: async () => ready });
     const view = render(
-      <QueryProvider useIsolatedClient>
-        <ProviderSetup bridge={f.bridge} />
+      <QueryProvider connection={f.connect()}>
+        <ProviderSetup />
       </QueryProvider>,
     );
     try {
@@ -441,8 +451,8 @@ describe("workspace provider draft ownership", () => {
     const progress = Promise.withResolvers<void>();
     const f = fixture(undefined, { progress: () => progress.promise });
     const view = render(
-      <QueryProvider useIsolatedClient>
-        <ProviderSetup bridge={f.bridge} />
+      <QueryProvider connection={f.connect()}>
+        <ProviderSetup />
       </QueryProvider>,
     );
     try {
@@ -480,8 +490,8 @@ describe("workspace provider draft ownership", () => {
   test("shows and cancels a pending Microsoft sign-in in the shared Azure form", async () => {
     const f = fixture(undefined, { signInEvent: false });
     const view = render(
-      <QueryProvider useIsolatedClient>
-        <AzureSetup bridge={f.bridge} />
+      <QueryProvider connection={f.connect()}>
+        <AzureSetup />
       </QueryProvider>,
     );
     try {
@@ -512,8 +522,8 @@ describe("workspace provider draft ownership", () => {
       }),
     });
     const view = render(
-      <QueryProvider useIsolatedClient>
-        <AzureSetup bridge={f.bridge} />
+      <QueryProvider connection={f.connect()}>
+        <AzureSetup />
       </QueryProvider>,
     );
     try {
@@ -826,8 +836,8 @@ describe("workspace provider draft ownership", () => {
   });
 });
 
-function AzureSetup({ bridge }: { bridge: typeof hostBridge }) {
-  const provider = useWorkspaceProviderSetup(bridge);
+function AzureSetup() {
+  const provider = useWorkspaceProviderSetup();
   return (
     <>
       <button
@@ -848,8 +858,8 @@ function AzureSetup({ bridge }: { bridge: typeof hostBridge }) {
   );
 }
 
-function ProviderSetup({ bridge }: { bridge: typeof hostBridge }) {
-  const provider = useWorkspaceProviderSetup(bridge);
+function ProviderSetup() {
+  const provider = useWorkspaceProviderSetup();
   return (
     <>
       <button type="button" onClick={() => void provider.begin("/repo")}>

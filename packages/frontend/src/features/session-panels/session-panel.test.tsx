@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { TERMINAL_PROTOCOL_VERSION, type TerminalSummary } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 import type { TerminalTab } from "@/features/terminals";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createTerminalSessionsFixture,
   createSessionPanelFixture,
@@ -30,6 +32,9 @@ const terminal: TerminalTab = {
   requestState: "ready",
 };
 
+// The tab strip reads the host client of its connection for terminal restarts.
+const renderWithConnection = (ui: ReactElement) => render(ui, { wrapper: QueryProvider });
+
 const toolTabs = {
   diffs: { content: <p>Diff content</p> },
   files: { content: <p>File tree</p> },
@@ -37,7 +42,7 @@ const toolTabs = {
 
 describe("SessionPanel", () => {
   test("shows each tab with its label, the selected tab, and a close button", () => {
-    render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
+    renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
     const tablist = screen.getByRole("tablist", { name: "Right panel tabs" });
     expect(
@@ -52,7 +57,7 @@ describe("SessionPanel", () => {
   });
 
   test("rings a tab with the neutral color only for keyboard focus", () => {
-    render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
+    renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
     const tab = screen.getByRole("tab", { name: "Diffs" });
     expect(tab.className).toContain("outline-none");
@@ -88,7 +93,7 @@ describe("SessionPanel", () => {
       selectedTabId: "terminal-1",
       terminals: createTerminalSessionsFixture({ controller }),
     });
-    const view = render(<SessionPanel model={model} toolTabs={toolTabs} />);
+    const view = renderWithConnection(<SessionPanel model={model} toolTabs={toolTabs} />);
     const add = screen.getByRole("button", { name: "New tab in the right panel" });
     expect(
       add.parentElement?.contains(screen.getByRole("button", { name: "Restart command" })),
@@ -102,7 +107,7 @@ describe("SessionPanel", () => {
   });
 
   test("keeps Files mounted while another tab shows, and mounts other tools only when selected", () => {
-    render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
+    renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
     expect(screen.getByText("Diff content")).toBeDefined();
     expect(screen.getByText("File tree").closest("[hidden]")).not.toBeNull();
@@ -112,7 +117,7 @@ describe("SessionPanel", () => {
     const onSelect = mock((_entryId: string) => {});
     const onClose = mock((_entryId: string) => {});
     const onAddTab = mock(() => {});
-    render(
+    renderWithConnection(
       <SessionPanel
         model={createSessionPanelFixture({ onSelect, onClose, onAddTab })}
         toolTabs={toolTabs}
@@ -134,7 +139,7 @@ describe("SessionPanel", () => {
       { kind: "diffs" as const, disabledReason: null },
       { kind: "terminal" as const, disabledReason: "Close a terminal to start another." },
     ];
-    const view = render(
+    const view = renderWithConnection(
       <SessionPanel
         model={createSessionPanelFixture({ tabs: [], selectedTabId: null, launcher, onPick })}
       />,
@@ -174,7 +179,7 @@ describe("SessionPanel", () => {
       selectedTabId: "terminal:tab:terminal-1",
       onHide: () => {},
     });
-    render(
+    renderWithConnection(
       <SessionPanelsRoot
         panels={createSessionPanelsFixture({
           bottom,
@@ -195,7 +200,7 @@ describe("SessionPanel", () => {
   });
 
   test("does not offer a move for a tab that only one panel allows", async () => {
-    render(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
+    renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 
     await act(async () => {
       fireEvent.contextMenu(screen.getByRole("tab", { name: "Diffs" }));
@@ -214,7 +219,7 @@ describe("SessionPanel", () => {
       ],
       selectedTabId: "diffs",
     });
-    render(<SessionPanel model={bottom} toolTabs={toolTabs} />);
+    renderWithConnection(<SessionPanel model={bottom} toolTabs={toolTabs} />);
     const terminalTab = screen.getByRole("tab", { name: "bun run dev, Running" });
     const terminalLabel = within(terminalTab).getByText("bun run dev");
     // The test DOM has no layout, so the label width tells the tab that it cuts the label off.
@@ -237,7 +242,7 @@ describe("SessionPanel", () => {
   });
 
   test("names a tool tab with its status when the page gives one", () => {
-    render(
+    renderWithConnection(
       <SessionPanel
         model={createSessionPanelFixture({
           tabs: [{ id: "ci_checks", kind: "ci_checks" }],

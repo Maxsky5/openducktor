@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { renderHook } from "@testing-library/react";
 import { act, createRef } from "react";
-import { toInlineCommentDraftStorageKey } from "@/state/inline-comment-draft-storage";
-import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
-import { draftToSerializedText } from "./agent-chat-composer-draft";
+import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { draftToSerializedText } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { buildModelSelection, createComposerDraft } from "./agent-chat-test-fixtures";
 import {
   type AgentChatComposerConfig,
@@ -92,7 +93,9 @@ describe("useAgentChatComposerModel", () => {
       workspaceId: "workspace-1",
       taskId: "task-1",
     });
-    useInlineCommentDraftStore.setState({
+    const connection = createTestClientConnection();
+    const inlineComments = connection.drafts.inlineComments;
+    inlineComments.setState({
       draftsByOwner: {
         [ownerKey]: [
           {
@@ -119,18 +122,24 @@ describe("useAgentChatComposerModel", () => {
     const composerFormRef = createRef<HTMLFormElement>();
     const composerEditorRef = createRef<HTMLDivElement>();
     const scrollToBottomOnSendRef = createRef<() => void>();
-    const rendered = renderHook(() =>
-      useAgentChatComposerModel({
-        composer: buildComposerConfig(async (draft) => {
-          sentDraftText.current = draftToSerializedText(draft);
-          return true;
+    const rendered = renderHook(
+      () =>
+        useAgentChatComposerModel({
+          composer: buildComposerConfig(async (draft) => {
+            sentDraftText.current = draftToSerializedText(draft);
+            return true;
+          }),
+          interactionEnabled: true,
+          composerFormRef,
+          composerEditorRef,
+          resizeComposerEditor: () => {},
+          scrollToBottomOnSendRef,
         }),
-        interactionEnabled: true,
-        composerFormRef,
-        composerEditorRef,
-        resizeComposerEditor: () => {},
-        scrollToBottomOnSendRef,
-      }),
+      {
+        wrapper: ({ children }) => (
+          <QueryProvider connection={connection}>{children}</QueryProvider>
+        ),
+      },
     );
 
     try {
@@ -143,10 +152,10 @@ describe("useAgentChatComposerModel", () => {
       });
 
       expect(sentDraftText.current).toBe("Repository-only question");
-      expect(useInlineCommentDraftStore.getState().draftsByOwner[ownerKey]).toHaveLength(1);
+      expect(inlineComments.getState().draftsByOwner[ownerKey]).toHaveLength(1);
     } finally {
       rendered.unmount();
-      useInlineCommentDraftStore.setState({ draftsByOwner: {} });
+      await connection.dispose();
     }
   });
 });

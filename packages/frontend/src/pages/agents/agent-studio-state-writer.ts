@@ -1,22 +1,17 @@
 import type { RepoConfig, WorkspaceAgentStudioStateAction } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import { host } from "@/state/operations/host";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
-
-type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAction">;
-
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 const pendingWrites = new WeakMap<QueryClient, Map<string, Promise<void>>>();
 
 export const applyWorkspaceAgentStudioStateAction = ({
   queryClient,
   workspaceId,
   action,
-  hostClient = host,
 }: {
   queryClient: QueryClient;
   workspaceId: string;
   action: WorkspaceAgentStudioStateAction;
-  hostClient?: AgentStudioStateHost;
 }): Promise<RepoConfig> => {
   let workspaceWrites = pendingWrites.get(queryClient);
   if (!workspaceWrites) {
@@ -25,7 +20,10 @@ export const applyWorkspaceAgentStudioStateAction = ({
   }
   const previous = workspaceWrites.get(workspaceId) ?? Promise.resolve();
   const write = previous.then(async () => {
-    const repoConfig = await hostClient.workspaceApplyAgentStudioStateAction(workspaceId, action);
+    const repoConfig = await connectionHost(queryClient).workspaceApplyAgentStudioStateAction(
+      workspaceId,
+      action,
+    );
     const queryKey = workspaceQueryKeys.repoConfig(workspaceId);
     await queryClient.cancelQueries({ queryKey, exact: true }, { revert: false });
     queryClient.setQueryData(queryKey, repoConfig);

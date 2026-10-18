@@ -3,10 +3,9 @@ import type { DirectoryListing, FilesystemListDirectoryInput } from "@openduckto
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { z } from "zod";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 
 const actualScrollAreaModule = await import("@/components/ui/scroll-area");
 let scrollAreaSpy: { mockRestore(): void };
@@ -34,6 +33,8 @@ const pathFromInput = (input: ListDirectoryInput): string | undefined => {
 const filesystemListDirectoryMock = mock(
   async (_input?: ListDirectoryInput): Promise<DirectoryListing> => createListing(),
 );
+const createFolderPickerConnection = () =>
+  createTestClientConnection({ client: { filesystemListDirectory: filesystemListDirectoryMock } });
 
 // TanStack Query sends query updates on the next task.
 const flushQueryResult = async (result: Promise<unknown>): Promise<void> => {
@@ -62,11 +63,6 @@ describe("FolderPickerDialog", () => {
       createListing(),
     );
 
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: { filesystemListDirectory: filesystemListDirectoryMock },
-      }),
-    );
     scrollAreaSpy = spyOn(actualScrollAreaModule, "ScrollArea").mockImplementation(
       ({ children, ...props }: Parameters<typeof actualScrollAreaModule.ScrollArea>[0]) =>
         createElement("div", { ...props, "data-slot": "scroll-area" }, children ?? null),
@@ -77,7 +73,6 @@ describe("FolderPickerDialog", () => {
 
   afterEach(() => {
     scrollAreaSpy.mockRestore();
-    configureShellBridge(createUnavailableShellBridge());
   });
 
   const renderDialog = (
@@ -100,7 +95,7 @@ describe("FolderPickerDialog", () => {
       dialogProps.initialPath = props.initialPath;
     }
     return render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={createFolderPickerConnection()}>
         <FolderPickerDialog {...dialogProps} />
       </QueryProvider>,
     );
@@ -659,7 +654,7 @@ describe("FolderPickerDialog", () => {
     });
 
     const rendered = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={createFolderPickerConnection()}>
         <FolderPickerDialog
           open
           onOpenChange={() => {}}
@@ -777,7 +772,7 @@ describe("FolderPickerDialog", () => {
     const onOpenChange = mock((_open: boolean) => {});
 
     const rendered = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={createFolderPickerConnection()}>
         <FolderPickerDialog
           open
           onOpenChange={onOpenChange}

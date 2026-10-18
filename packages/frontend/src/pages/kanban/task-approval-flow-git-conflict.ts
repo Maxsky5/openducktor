@@ -1,8 +1,12 @@
 import type { GitConflictAssistanceResult } from "@/features/git-conflict-resolution/conflict-assistance";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { host } from "@/state/operations/shared/host";
+import type { HostClient } from "@openducktor/host-client";
 
-export const abortTaskApprovalGitConflict = (repoPath: string, conflict: GitConflict) => {
+export const abortTaskApprovalGitConflict = (
+  host: Pick<HostClient, "gitAbortConflict">,
+  repoPath: string,
+  conflict: GitConflict,
+) => {
   if (!conflict.operation || !conflict.workingDir)
     throw new Error("Restore the conflict operation and directory before aborting.");
   return host.gitAbortConflict(repoPath, conflict.operation, conflict.workingDir);

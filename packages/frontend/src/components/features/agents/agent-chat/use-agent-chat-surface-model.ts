@@ -1,8 +1,11 @@
 import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
 import { useMemo, useRef } from "react";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type {
   AgentChatEmptyStateModel,
   AgentChatInterruptedTurnResumeModel,

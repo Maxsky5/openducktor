@@ -5,8 +5,8 @@ import { useEffect } from "react";
 import {
   readRuntimeKindReadiness,
   type RuntimeStatusReadinessInput,
-} from "@/lib/runtime-readiness";
-import { runtimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
+} from "@openducktor/frontend-core/lib/runtime-readiness";
+import { runtimeCatalogQueryOptions } from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 type UseRuntimeCatalogBootstrapArgs = {

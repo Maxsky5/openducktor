@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   getComposerPopupOptionId,
   resolveAgentChatComposerReferenceMenuVisibility,

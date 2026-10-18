@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
 import { createHostClientFixture } from "@/test-utils/focused-fixture";
-import { resolveLocalAttachmentPreview, stageLocalAttachmentFile } from "./local-attachment-files";
+import {
+  createBrowserAttachmentStager,
+  resolveLocalAttachmentPreview,
+} from "./local-attachment-files";
 import {
   configureShellBridge,
   createDisabledAppUpdateBridge,
@@ -46,30 +49,37 @@ afterEach(() => {
 });
 
 describe("local-attachment-files", () => {
-  test("stageLocalAttachmentFile rejects oversized files before reading them", async () => {
+  test("browser attachment stager rejects oversized files before reading them", async () => {
+    const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/oversized.pdf" }));
+    const stage = createBrowserAttachmentStager({ workspaceStageLocalAttachment });
     const file = new File([], "oversized.pdf", { type: "application/pdf" });
     Object.defineProperty(file, "size", { value: LOCAL_ATTACHMENT_BYTE_LIMIT + 1 });
     const arrayBuffer = mock(file.arrayBuffer.bind(file));
     file.arrayBuffer = arrayBuffer;
 
-    await expect(stageLocalAttachmentFile(file)).rejects.toThrow(
-      "Attachments must total 32 MiB or less.",
-    );
+    await expect(stage(file)).rejects.toThrow("Attachments must total 32 MiB or less.");
     expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(workspaceStageLocalAttachment).not.toHaveBeenCalled();
   });
 
-  test("stageLocalAttachmentFile sends the exact file bytes as base64", async () => {
-    const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/bytes.bin" }));
-    configureShellBridge(
-      createTestShellBridge({
-        client: createHostClientFixture({ workspaceStageLocalAttachment }),
-      }),
+  test("browser attachment stager rejects a file reference that is not a browser file", async () => {
+    const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/notes.txt" }));
+    const stage = createBrowserAttachmentStager({ workspaceStageLocalAttachment });
+
+    await expect(stage({ name: "notes.txt", type: "text/plain", size: 5 })).rejects.toThrow(
+      'Attachment "notes.txt" is not a browser file.',
     );
+    expect(workspaceStageLocalAttachment).not.toHaveBeenCalled();
+  });
+
+  test("browser attachment stager sends the exact file bytes as base64", async () => {
+    const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/bytes.bin" }));
+    const stage = createBrowserAttachmentStager({ workspaceStageLocalAttachment });
     const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
 
-    await expect(
-      stageLocalAttachmentFile(new File([bytes], "bytes.bin", { type: "application/pdf" })),
-    ).resolves.toBe("/tmp/staged/bytes.bin");
+    await expect(stage(new File([bytes], "bytes.bin", { type: "application/pdf" }))).resolves.toBe(
+      "/tmp/staged/bytes.bin",
+    );
     expect(workspaceStageLocalAttachment).toHaveBeenCalledWith({
       name: "bytes.bin",
       base64Data: Buffer.from(bytes).toString("base64"),
@@ -77,17 +87,13 @@ describe("local-attachment-files", () => {
     });
   });
 
-  test("stageLocalAttachmentFile keeps exact bytes when the media type contains a comma", async () => {
+  test("browser attachment stager keeps exact bytes when the media type contains a comma", async () => {
     const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/diagram.png" }));
-    configureShellBridge(
-      createTestShellBridge({
-        client: createHostClientFixture({ workspaceStageLocalAttachment }),
-      }),
-    );
+    const stage = createBrowserAttachmentStager({ workspaceStageLocalAttachment });
     const bytes = Uint8Array.from({ length: 256 }, (_, index) => index);
     const type = 'image/png;foo="a,b"';
 
-    await stageLocalAttachmentFile(new File([bytes], "diagram.png", { type }));
+    await stage(new File([bytes], "diagram.png", { type }));
     expect(workspaceStageLocalAttachment).toHaveBeenCalledWith({
       name: "diagram.png",
       base64Data: Buffer.from(bytes).toString("base64"),

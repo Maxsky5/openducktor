@@ -1,5 +1,5 @@
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
@@ -10,14 +10,21 @@ import {
   createComposerAttachment,
   createSlashCommandSegment,
   createTextSegment,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { hostClient } from "@/lib/host-client";
+import { createBrowserAttachmentStager } from "@/lib/local-attachment-files";
 import { useAgentChatSendForTarget } from "@/test-utils/agent-chat-send-fixture";
 import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import type { HostClient } from "@openducktor/host-client";
+import type { PropsWithChildren } from "react";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { createDeferred, enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioSendTarget } from "./use-agent-studio-send-target";
 
@@ -54,8 +61,21 @@ const useTaskChatSend = ({ reusablePrompts, sendAgentMessage, ...targetArgs }: H
     sendAgentMessage,
   });
 
-const createTaskHarness = (args: HookArgs) =>
-  createHookHarness(useTaskChatSend, args, { wrapper: AgentChatSendProviders });
+type StagedLocalAttachment = Awaited<ReturnType<HostClient["workspaceStageLocalAttachment"]>>;
+
+const createTaskHarness = (args: HookArgs, client: Partial<HostClient> = {}) => {
+  const host = createTestHostConnection({ client });
+  const connection = createTestClientConnection({
+    host,
+    stageAttachment: createBrowserAttachmentStager(host.client),
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <ClientConnectionProvider connection={connection}>
+      <AgentChatSendProviders>{children}</AgentChatSendProviders>
+    </ClientConnectionProvider>
+  );
+  return createHookHarness(useTaskChatSend, args, { wrapper });
+};
 
 const createDraft = (text: string): AgentChatComposerDraft => ({
   segments: [createTextSegment(text)],
@@ -128,16 +148,6 @@ const createBaseArgs = (): HookArgs => ({
 });
 
 describe("useAgentStudioSendTarget", () => {
-  const originalWorkspaceStageLocalAttachment = hostClient.workspaceStageLocalAttachment;
-
-  beforeEach(() => {
-    hostClient.workspaceStageLocalAttachment = originalWorkspaceStageLocalAttachment;
-  });
-
-  afterEach(() => {
-    hostClient.workspaceStageLocalAttachment = originalWorkspaceStageLocalAttachment;
-  });
-
   test("blocks task Send until the required catalog read completes", async () => {
     const sendAgentMessage = mock(async () => null);
     const prepare = mock(async () => () => {});
@@ -165,20 +175,21 @@ describe("useAgentStudioSendTarget", () => {
   });
 
   test("checks the current send policy after attachment staging and before model preparation", async () => {
-    const staged =
-      createDeferred<Awaited<ReturnType<typeof hostClient.workspaceStageLocalAttachment>>>();
+    const staged = createDeferred<StagedLocalAttachment>();
     const stage = mock(() => staged.promise);
-    hostClient.workspaceStageLocalAttachment = stage;
     let blocked = false;
     const prepare = mock(async () => () => {});
     const send = mock(async () => null);
-    const harness = createTaskHarness({
-      ...createBaseArgs(),
-      assertCanPrepareSession: () => {
-        if (blocked) throw new Error("Answer the blocking question before sending.");
+    const harness = createTaskHarness(
+      {
+        ...createBaseArgs(),
+        assertCanPrepareSession: () => {
+          if (blocked) throw new Error("Answer the blocking question before sending.");
+        },
+        sendAgentMessage: send,
       },
-      sendAgentMessage: send,
-    });
+      { workspaceStageLocalAttachment: stage },
+    );
     let pending!: Promise<unknown>;
     try {
       await harness.mount();
@@ -457,10 +468,8 @@ describe("useAgentStudioSendTarget", () => {
   test.each(["workspace", "task", "role"] as const)(
     "cancels staged submission after a %s switch",
     async (context) => {
-      const staged =
-        createDeferred<Awaited<ReturnType<typeof hostClient.workspaceStageLocalAttachment>>>();
+      const staged = createDeferred<StagedLocalAttachment>();
       const stage = mock(() => staged.promise);
-      hostClient.workspaceStageLocalAttachment = stage;
       const startSession = mock(async () => sessionWorkflowResult("never"));
       const sendAgentMessage = mock(async () => null);
       const args: HookArgs = {
@@ -469,7 +478,7 @@ describe("useAgentStudioSendTarget", () => {
         startSession,
         sendAgentMessage,
       };
-      const harness = createTaskHarness(args);
+      const harness = createTaskHarness(args, { workspaceStageLocalAttachment: stage });
       let submitted!: Promise<AgentChatSendResult>;
       try {
         await harness.mount();

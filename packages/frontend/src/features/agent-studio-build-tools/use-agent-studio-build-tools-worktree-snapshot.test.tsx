@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
@@ -9,10 +9,10 @@ import {
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { toLocalChanges } from "@/features/agent-studio-git/test-support/local-changes-fixture";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { HostClient } from "@openducktor/host-client";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -20,10 +20,19 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { gitHistoryQueryOptions, refreshGitWorkingDirectory } from "@/state/queries/git";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import {
+  gitHistoryQueryOptions,
+  refreshGitWorkingDirectory,
+} from "@openducktor/frontend-core/queries/git";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "./use-agent-studio-build-tools-worktree-snapshot";
 
 enableReactActEnvironment();
@@ -131,19 +140,26 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
-const createHookHarness = (initialProps: HookArgs, options?: { queryClient?: QueryClient }) =>
-  createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, initialProps, options);
+/** The host of the next harness. A test replaces it before it creates its harness. */
+let gitClient: Partial<HostClient>;
 
-beforeEach(async () => {
-  await clearAppQueryClient();
+const gitConnection = (queryClient?: QueryClient) =>
+  createTestClientConnection(
+    queryClient ? { client: gitClient, queryClient } : { client: gitClient },
+  );
+
+const createHookHarness = (initialProps: HookArgs, options?: { queryClient?: QueryClient }) =>
+  createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, initialProps, {
+    connection: gitConnection(options?.queryClient),
+  });
+
+beforeEach(() => {
   taskWorktreeGetMock.mockClear();
   taskWorktreeGetMock.mockResolvedValue({ workingDirectory: "/repo/.worktrees/task-24" });
   readStatus.mockClear();
   readLocalChanges.mockClear();
-  configureShellBridge(createGitBridge());
+  gitClient = createGitClient();
 });
-
-afterEach(() => configureShellBridge(createUnavailableShellBridge()));
 
 describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test.each(["repository", "worktree"] as const)(
@@ -151,18 +167,16 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     async (mode) => {
       let branch = "main";
       const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
-      configureShellBridge(
-        createGitBridge({
-          client: {
-            gitGetCurrentBranch: async () => ({ name: branch, detached: false }),
-            gitGetComparisonTarget: async () => ({
-              kind: "available",
-              reference: `refs/remotes/origin/${mode === "repository" ? branch : "main"}`,
-            }),
-            gitFetchRemote: fetch,
-          },
-        }),
-      );
+      gitClient = createGitClient({
+        client: {
+          gitGetCurrentBranch: async () => ({ name: branch, detached: false }),
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: `refs/remotes/origin/${mode === "repository" ? branch : "main"}`,
+          }),
+          gitFetchRemote: fetch,
+        },
+      });
       const harness = createHookHarness(
         createBaseArgs({
           selectedView: createSelectedView({
@@ -217,19 +231,17 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       const branchRead = createDeferred<{ name: string; detached: boolean }>();
       let reading = false;
       const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
-      configureShellBridge(
-        createGitBridge({
-          client: {
-            gitGetCurrentBranch: async () =>
-              reading ? branchRead.promise : { name: "main", detached: false },
-            gitGetComparisonTarget: async () => ({
-              kind: "available",
-              reference: "refs/remotes/origin/main",
-            }),
-            gitFetchRemote: fetch,
-          },
-        }),
-      );
+      gitClient = createGitClient({
+        client: {
+          gitGetCurrentBranch: async () =>
+            reading ? branchRead.promise : { name: "main", detached: false },
+          gitGetComparisonTarget: async () => ({
+            kind: "available",
+            reference: "refs/remotes/origin/main",
+          }),
+          gitFetchRemote: fetch,
+        },
+      });
       const args = createBaseArgs({
         selectedView: createSelectedView({
           selectedTask: createTaskCardFixture({
@@ -273,18 +285,16 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
   test("scheduled task refresh keeps its saved target after checking the branch", async () => {
     const fetch = mock(async () => ({ outcome: "fetched" as const, output: "Fetched." }));
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/remotes/origin/release",
-          }),
-          gitFetchRemote: fetch,
-        },
-      }),
-    );
+    gitClient = createGitClient({
+      client: {
+        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+        gitFetchRemote: fetch,
+      },
+    });
     const harness = createHookHarness(
       createBaseArgs({
         repoSettingsError: new Error("Repair config permissions."),
@@ -330,33 +340,33 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       kind: "available" as const,
       reference: "refs/remotes/origin/main",
     }));
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
-          gitGetComparisonTarget: readComparison,
-          gitFetchRemote: async () => ({ outcome: "fetched", output: "Fetched." }),
-        },
-      }),
+    gitClient = createGitClient({
+      client: {
+        workspaceGetRepoConfig: readConfig,
+        workspaceGetGitProviderContext: async () => null,
+        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+        gitGetComparisonTarget: readComparison,
+        gitFetchRemote: async () => ({ outcome: "fetched", output: "Fetched." }),
+      },
+    });
+    const harness = createSharedHookHarness(
+      () => {
+        const settings = useAgentStudioRepoSettings({
+          activeWorkspaceId: "workspace-repo",
+          activeRepoPath: "/repo",
+        });
+        const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(
+          createBaseArgs({
+            repoSettings: settings.repoSettings,
+            repoSettingsError: settings.repoSettingsError,
+            loadRepoSettings: settings.loadRepoSettings,
+          }),
+        );
+        return { settings, snapshot };
+      },
+      undefined,
+      { connection: gitConnection() },
     );
-    const harness = createSharedHookHarness(() => {
-      const settings = useAgentStudioRepoSettings({
-        activeWorkspaceId: "workspace-repo",
-        activeRepoPath: "/repo",
-        hostClient: {
-          workspaceGetRepoConfig: readConfig,
-          workspaceGetGitProviderContext: async () => null,
-        },
-      });
-      const snapshot = useAgentStudioBuildToolsWorktreeSnapshot(
-        createBaseArgs({
-          repoSettings: settings.repoSettings,
-          repoSettingsError: settings.repoSettingsError,
-          loadRepoSettings: settings.loadRepoSettings,
-        }),
-      );
-      return { settings, snapshot };
-    }, undefined);
     try {
       await harness.mount();
       await harness.waitFor(
@@ -398,18 +408,16 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
         taskStatus(target, scope),
     );
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
-          gitGetComparisonTarget: async (_repo, _dir, target) =>
-            target.branch === "release"
-              ? { kind: "available", reference: "refs/heads/release" }
-              : nextComparison.promise,
-          gitGetWorktreeStatus: readStatus,
-        },
-      }),
-    );
+    gitClient = createGitClient({
+      client: {
+        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+        gitGetComparisonTarget: async (_repo, _dir, target) =>
+          target.branch === "release"
+            ? { kind: "available", reference: "refs/heads/release" }
+            : nextComparison.promise,
+        gitGetWorktreeStatus: readStatus,
+      },
+    });
     const args = createBaseArgs({
       selectedView: createSelectedView({
         selectedTask: createTaskCardFixture({
@@ -418,7 +426,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         }),
       }),
     });
-    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args);
+    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args, {
+      connection: gitConnection(),
+    });
     try {
       await harness.mount();
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
@@ -456,15 +466,13 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       async (_repo: string, target: string, scope: "target" | "uncommitted" = "uncommitted") =>
         taskStatus(target, scope),
     );
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: readBranch,
-          gitGetComparisonTarget: readComparison,
-          gitGetWorktreeStatus: readStatus,
-        },
-      }),
-    );
+    gitClient = createGitClient({
+      client: {
+        gitGetCurrentBranch: readBranch,
+        gitGetComparisonTarget: readComparison,
+        gitGetWorktreeStatus: readStatus,
+      },
+    });
     const argsFor = (sessionId: string) =>
       createBaseArgs({
         selectedView: createSelectedView({
@@ -482,6 +490,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const harness = createSharedHookHarness(
       useAgentStudioBuildToolsWorktreeSnapshot,
       argsFor("first"),
+      { connection: gitConnection() },
     );
     try {
       await harness.mount();
@@ -525,19 +534,17 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       if (holdStatus) await nextStatus.promise;
       return toLocalChanges(taskStatus("HEAD", "uncommitted"));
     });
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: readBranch,
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/heads/release",
-          }),
-          gitGetWorktreeStatus: readStatus,
-          gitGetLocalChanges: readLocal,
-        },
-      }),
-    );
+    gitClient = createGitClient({
+      client: {
+        gitGetCurrentBranch: readBranch,
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/heads/release",
+        }),
+        gitGetWorktreeStatus: readStatus,
+        gitGetLocalChanges: readLocal,
+      },
+    });
     const args = createBaseArgs({
       selectedView: createSelectedView({
         selectedTask: createTaskCardFixture({
@@ -546,7 +553,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         }),
       }),
     });
-    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args);
+    const harness = createSharedHookHarness(useAgentStudioBuildToolsWorktreeSnapshot, args, {
+      connection: gitConnection(),
+    });
     try {
       await harness.mount();
       await harness.waitFor((state) => state.diffData.comparisonReference === "refs/heads/release");
@@ -617,7 +626,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     taskWorktreeGetMock.mockImplementation(async (_repoPath, taskId) => ({
       workingDirectory: `/repo/.worktrees/${taskId}`,
     }));
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const harness = createHookHarness(createBaseArgs(), { queryClient });
     const otherTask = createSelectedView({
       taskId: "task-99",
@@ -648,18 +657,16 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
 
   test("a commit keeps every Git panel read on screen while it reads again", async () => {
     let revision = "first";
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false, revision }),
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/remotes/origin/release",
-          }),
-        },
-      }),
-    );
-    const queryClient = createQueryClient();
+    gitClient = createGitClient({
+      client: {
+        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false, revision }),
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+      },
+    });
+    const queryClient = createClientQueryClient();
     type Shown = { local: unknown; target: unknown; reference: string | null; pending: boolean };
     const renders: Shown[] = [];
     const harness = createSharedHookHarness(
@@ -682,7 +689,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           }),
         }),
       }),
-      { queryClient },
+      { connection: gitConnection(queryClient) },
     );
     try {
       await harness.mount();
@@ -737,7 +744,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("keeps cached task worktree context while the git tab is inactive", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     queryClient.setQueryData(
       taskWorktreeQueryKeys.taskWorktree({
         repoPath: "/repo",
@@ -984,7 +991,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("uses cached task worktree context while refetching canonical worktree", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const taskWorktreeFetch = createDeferred<{ workingDirectory: string } | null>();
     let didResolveTaskWorktreeFetch = false;
     queryClient.setQueryData(
@@ -1133,25 +1140,23 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   });
 
   test("keeps the selected detached revision for repository file reads", async () => {
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetCurrentBranch: async () => ({
-            detached: true,
-            revision: "head-before",
-          }),
-          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
-            ...taskStatus(target, scope),
+    gitClient = createGitClient({
+      client: {
+        gitGetCurrentBranch: async () => ({
+          detached: true,
+          revision: "head-before",
+        }),
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => ({
+          ...taskStatus(target, scope),
+          currentBranch: { detached: true, revision: "head-before" },
+        }),
+        gitGetLocalChanges: async () =>
+          toLocalChanges({
+            ...taskStatus("HEAD", "uncommitted"),
             currentBranch: { detached: true, revision: "head-before" },
           }),
-          gitGetLocalChanges: async () =>
-            toLocalChanges({
-              ...taskStatus("HEAD", "uncommitted"),
-              currentBranch: { detached: true, revision: "head-before" },
-            }),
-        },
-      }),
-    );
+      },
+    });
     const args = createBaseArgs({
       activeBranch: { detached: true, revision: "head-before" },
       selectedView: createSelectedView({
@@ -1232,34 +1237,32 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const reads: string[] = [];
     const fetchGate = createDeferred<void>();
     let holdFetch = false;
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/remotes/origin/release",
-          }),
-          gitFetchRemote: async () => {
-            reads.push("fetch");
-            if (holdFetch) await fetchGate.promise;
-            return { outcome: "skipped_no_remote", output: "" };
-          },
-          gitGetLocalChanges: async () => {
-            reads.push("local");
-            return toLocalChanges(taskStatus("HEAD", "uncommitted"));
-          },
-          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => {
-            reads.push(`status:${scope}`);
-            return taskStatus(target, scope);
-          },
-          gitGetHistoryPage: async () => {
-            reads.push("history");
-            return { outcome: "no_commits" };
-          },
+    gitClient = createGitClient({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+        gitFetchRemote: async () => {
+          reads.push("fetch");
+          if (holdFetch) await fetchGate.promise;
+          return { outcome: "skipped_no_remote", output: "" };
         },
-      }),
-    );
-    const queryClient = createQueryClient();
+        gitGetLocalChanges: async () => {
+          reads.push("local");
+          return toLocalChanges(taskStatus("HEAD", "uncommitted"));
+        },
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") => {
+          reads.push(`status:${scope}`);
+          return taskStatus(target, scope);
+        },
+        gitGetHistoryPage: async () => {
+          reads.push("history");
+          return { outcome: "no_commits" };
+        },
+      },
+    });
+    const queryClient = createClientQueryClient();
     const harness = createHistoryHarness(queryClient);
     let refresh: Promise<void> | undefined;
     try {
@@ -1300,29 +1303,27 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     let holdFetch = false;
     let localFails = false;
     let localReads = 0;
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/remotes/origin/release",
-          }),
-          gitFetchRemote: async () => {
-            if (holdFetch) await fetchGate.promise;
-            return { outcome: "skipped_no_remote", output: "" };
-          },
-          gitGetLocalChanges: async () => {
-            localReads += 1;
-            if (localFails) throw new Error("Early local read denied");
-            return toLocalChanges(taskStatus("HEAD", "uncommitted"));
-          },
-          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") =>
-            taskStatus(target, scope),
-          gitGetHistoryPage: async () => ({ outcome: "no_commits" }),
+    gitClient = createGitClient({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+        gitFetchRemote: async () => {
+          if (holdFetch) await fetchGate.promise;
+          return { outcome: "skipped_no_remote", output: "" };
         },
-      }),
-    );
-    const queryClient = createQueryClient();
+        gitGetLocalChanges: async () => {
+          localReads += 1;
+          if (localFails) throw new Error("Early local read denied");
+          return toLocalChanges(taskStatus("HEAD", "uncommitted"));
+        },
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") =>
+          taskStatus(target, scope),
+        gitGetHistoryPage: async () => ({ outcome: "no_commits" }),
+      },
+    });
+    const queryClient = createClientQueryClient();
     const harness = createHistoryHarness(queryClient);
     let refresh: Promise<void> | undefined;
     try {
@@ -1360,26 +1361,24 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
   test("a hard refresh reports a failed History read, and a soft refresh leaves it to History", async () => {
     let historyError: Error | null = null;
     let historyReads = 0;
-    configureShellBridge(
-      createGitBridge({
-        client: {
-          gitGetComparisonTarget: async () => ({
-            kind: "available",
-            reference: "refs/remotes/origin/release",
-          }),
-          gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
-          gitGetLocalChanges: async () => toLocalChanges(taskStatus("HEAD", "uncommitted")),
-          gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") =>
-            taskStatus(target, scope),
-          gitGetHistoryPage: async () => {
-            historyReads += 1;
-            if (historyError) throw historyError;
-            return { outcome: "no_commits" };
-          },
+    gitClient = createGitClient({
+      client: {
+        gitGetComparisonTarget: async () => ({
+          kind: "available",
+          reference: "refs/remotes/origin/release",
+        }),
+        gitFetchRemote: async () => ({ outcome: "skipped_no_remote", output: "" }),
+        gitGetLocalChanges: async () => toLocalChanges(taskStatus("HEAD", "uncommitted")),
+        gitGetWorktreeStatus: async (_repo, target, scope = "uncommitted") =>
+          taskStatus(target, scope),
+        gitGetHistoryPage: async () => {
+          historyReads += 1;
+          if (historyError) throw historyError;
+          return { outcome: "no_commits" };
         },
-      }),
-    );
-    const queryClient = createQueryClient();
+      },
+    });
+    const queryClient = createClientQueryClient();
     const harness = createHistoryHarness(queryClient);
     try {
       await harness.mount();
@@ -1435,7 +1434,7 @@ function createHistoryHarness(queryClient: QueryClient) {
         }),
       }),
     }),
-    { queryClient },
+    { connection: gitConnection(queryClient) },
   );
 }
 
@@ -1460,20 +1459,18 @@ function taskStatus(target: string, scope: "target" | "uncommitted"): GitWorktre
 
 test.each(["hard", "scheduled"] as const)("reports a failed %s task fetch once", async (mode) => {
   const report = spyOn(toast, "error").mockImplementation(() => "toast-id");
-  configureShellBridge(
-    createGitBridge({
-      client: {
-        gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
-        gitGetComparisonTarget: async () => ({
-          kind: "available",
-          reference: "refs/remotes/origin/release",
-        }),
-        gitFetchRemote: async () => {
-          throw new Error("Check the remote connection.");
-        },
+  gitClient = createGitClient({
+    client: {
+      gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+      gitGetComparisonTarget: async () => ({
+        kind: "available",
+        reference: "refs/remotes/origin/release",
+      }),
+      gitFetchRemote: async () => {
+        throw new Error("Check the remote connection.");
       },
-    }),
-  );
+    },
+  });
   const harness = createHookHarness(
     createBaseArgs({
       selectedView: createSelectedView({
@@ -1513,20 +1510,20 @@ const readLocalChanges = mock(
     toLocalChanges(taskStatus("HEAD", "uncommitted")),
 );
 
-function createGitBridge({ client = {} }: Parameters<typeof createShellBridgeFixture>[0] = {}) {
-  return createShellBridgeFixture({
-    client: {
-      taskWorktreeGet: taskWorktreeGetMock,
-      gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
-      gitGetComparisonTarget: async (_repo, _dir, target) => ({
-        kind: "available",
-        reference: target.remote
-          ? `refs/remotes/${target.remote}/${target.branch}`
-          : `refs/heads/${target.branch}`,
-      }),
-      gitGetWorktreeStatus: readStatus,
-      gitGetLocalChanges: readLocalChanges,
-      ...client,
-    },
-  });
+function createGitClient({
+  client = {},
+}: { client?: Partial<HostClient> } = {}): Partial<HostClient> {
+  return {
+    taskWorktreeGet: taskWorktreeGetMock,
+    gitGetCurrentBranch: async () => ({ name: "feature/task-24", detached: false }),
+    gitGetComparisonTarget: async (_repo, _dir, target) => ({
+      kind: "available",
+      reference: target.remote
+        ? `refs/remotes/${target.remote}/${target.branch}`
+        : `refs/heads/${target.branch}`,
+    }),
+    gitGetWorktreeStatus: readStatus,
+    gitGetLocalChanges: readLocalChanges,
+    ...client,
+  };
 }

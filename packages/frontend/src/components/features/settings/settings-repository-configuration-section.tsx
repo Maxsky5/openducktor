@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
-import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
+import {
+  canonicalTargetBranch,
+  targetBranchFromSelection,
+} from "@openducktor/frontend-core/lib/target-branch";
 import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
 type RepositoryConfigurationSectionProps = {

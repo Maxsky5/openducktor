@@ -3,7 +3,7 @@ import {
   findFirstChangedSessionMessageIndex,
   getSessionMessageAt,
   getSessionMessageCount,
-} from "@/state/operations/agent-orchestrator/support/messages";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import {
   type AgentChatTranscriptModel,

@@ -39,7 +39,7 @@ import type { DiffScope, GitChangeIntent } from "@/features/agent-studio-git";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
+import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import {
   FILE_LIST_ROW_CLASS_NAME,
   FILE_STATUS_COLOR,

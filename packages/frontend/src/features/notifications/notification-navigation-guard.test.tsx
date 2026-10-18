@@ -1,11 +1,11 @@
 import { expect, mock, test } from "bun:test";
 import type { NotificationNavigationTarget, WorkspaceRecord } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { MemoryRouter } from "react-router";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
@@ -14,16 +14,13 @@ import {
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { NotificationNavigationRegistrar } from "./notification-navigation";
 
 test("notification workspace selection keeps the draft on cancel and failure", async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { tasksList: async () => [createTaskCardFixture({ id: "task-1" })] },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: { tasksList: async () => [createTaskCardFixture({ id: "task-1" })] },
+  });
   const selectWorkspace = mock(async () => {});
   let navigateToNotification: ((target: NotificationNavigationTarget) => Promise<void>) | undefined;
 
@@ -133,10 +130,9 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     },
   } satisfies NotificationContextValue;
 
-  const queryClient = new QueryClient();
   const view = render(
     <MemoryRouter initialEntries={["/sessions?workspace=first&kind=workspace&session=first"]}>
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <WorkspaceStateContext.Provider value={workspaceState}>
           <NotificationContext.Provider value={notificationContext}>
             <SettingsModalProvider>
@@ -147,7 +143,7 @@ test("notification workspace selection keeps the draft on cancel and failure", a
             </SettingsModalProvider>
           </NotificationContext.Provider>
         </WorkspaceStateContext.Provider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     </MemoryRouter>,
   );
 
@@ -193,7 +189,6 @@ test("notification workspace selection keeps the draft on cancel and failure", a
     expect(screen.getByTestId("draft").textContent).toBe("draft.ts");
   } finally {
     view.unmount();
-    queryClient.clear();
-    configureShellBridge(createUnavailableShellBridge());
+    await connection.dispose();
   }
 });

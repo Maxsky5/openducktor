@@ -3,7 +3,7 @@ import { type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
+import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 
 const COMMENT_BODY_CLASS_NAME = "text-xs leading-5 text-foreground";
 

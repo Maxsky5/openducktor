@@ -8,8 +8,8 @@ import type { AgentStudioChatDraftScope } from "../agent-studio-chat-draft";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
-import { useAgentSessionsContext } from "@/state/app-state-contexts";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type UseAgentsPageOrchestrationShellModelArgs = {
   activeWorkspaceId: string | null;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { findRunningTurnModelEntry, resolveModelSelectionOptions } from "./model-selection-options";
 
 const makeSelectedSessionModel = (): AgentModelSelection => ({

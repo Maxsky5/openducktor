@@ -1,10 +1,10 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, type ComponentProps, type ReactElement } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import type { GitPanelTab } from "./constants";
 import { GitInfoHeader } from "./git-info-header";
 
@@ -59,7 +59,7 @@ const createGitInfoHeaderProps = (
 });
 
 const header = (props: GitInfoHeaderTestProps): ReactElement => (
-  <QueryProvider useIsolatedClient>
+  <QueryProvider>
     <TooltipProvider>
       <GitInfoHeader {...props} />
     </TooltipProvider>

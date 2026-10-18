@@ -5,7 +5,7 @@ import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
-} from "@/state/queries/use-runtime-model-catalogs";
+} from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 
 type UseSettingsModalCatalogStateArgs = {
   enabled: boolean;

@@ -1,12 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
@@ -71,11 +73,11 @@ const createWorkspaceState = (): WorkspaceStateContextValue => ({
   },
 });
 
-const createWrapper = () => {
+const createWrapper = (connection: ClientConnection) => {
   const workspaceState = createWorkspaceState();
   return function Wrapper({ children }: PropsWithChildren) {
     return (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceStateContext.Provider value={workspaceState}>
           {children}
         </WorkspaceStateContext.Provider>
@@ -93,7 +95,7 @@ const createSessionFixture = (): AgentSessionRecord => ({
   selectedModel: null,
 });
 
-const createReadPorts = () => {
+const createHost = () => {
   const sessionFixture = createSessionFixture();
   const agentSessionsList = mock(async () => [sessionFixture]);
   const agentSessionsListForTasks = mock(async (_repoPath: string, taskIds: string[]) =>
@@ -114,11 +116,9 @@ const createReadPorts = () => {
       taskWorktreeGet,
       terminalList,
     },
-    readPorts: {
-      agentSessions: { agentSessionsList, agentSessionsListForTasks },
-      taskWorktrees: { taskWorktreeGet },
-      terminals: { terminalList },
-    },
+    connection: createTestClientConnection({
+      client: { agentSessionsList, agentSessionsListForTasks, taskWorktreeGet, terminalList },
+    }),
     sessionFixture,
   };
 };
@@ -126,24 +126,23 @@ const createReadPorts = () => {
 type HarnessProps = {
   enabled: boolean;
   taskIds: string[];
-  readPorts: ReturnType<typeof createReadPorts>["readPorts"];
 };
 
-const createHarness = (initialProps: HarnessProps) =>
+const createHarness = (initialProps: HarnessProps, connection: ClientConnection) =>
   createHookHarness(
     (props: HarnessProps) => {
       const queryClient = useQueryClient();
-      const impact = useTaskCleanupImpact(props.taskIds, props.enabled, props.readPorts);
+      const impact = useTaskCleanupImpact(props.taskIds, props.enabled);
       return { impact, queryClient };
     },
     initialProps,
-    { wrapper: createWrapper() },
+    { wrapper: createWrapper(connection) },
   );
 
 describe("useTaskCleanupImpact", () => {
   test("issues no cleanup commands while disabled", async () => {
-    const { calls, readPorts } = createReadPorts();
-    const harness = createHarness({ enabled: false, taskIds: ["task-1"], readPorts });
+    const { calls, connection } = createHost();
+    const harness = createHarness({ enabled: false, taskIds: ["task-1"] }, connection);
 
     try {
       await harness.mount();
@@ -163,12 +162,8 @@ describe("useTaskCleanupImpact", () => {
   });
 
   test("uses one batch session command plus per-task worktree and terminal commands when cold", async () => {
-    const { calls, readPorts } = createReadPorts();
-    const harness = createHarness({
-      enabled: true,
-      taskIds: ["task-2", "task-1"],
-      readPorts,
-    });
+    const { calls, connection } = createHost();
+    const harness = createHarness({ enabled: true, taskIds: ["task-2", "task-1"] }, connection);
 
     try {
       await harness.mount();
@@ -184,9 +179,9 @@ describe("useTaskCleanupImpact", () => {
   });
 
   test("reuses warm session and worktree cache entries", async () => {
-    const { calls, readPorts, sessionFixture } = createReadPorts();
-    const initialProps = { enabled: false, taskIds: ["task-1"], readPorts };
-    const harness = createHarness(initialProps);
+    const { calls, connection, sessionFixture } = createHost();
+    const initialProps = { enabled: false, taskIds: ["task-1"] };
+    const harness = createHarness(initialProps, connection);
 
     try {
       await harness.mount();
@@ -212,13 +207,13 @@ describe("useTaskCleanupImpact", () => {
   });
 
   test("refreshes an invalidated session entry through its canonical per-task query", async () => {
-    const { calls, readPorts, sessionFixture } = createReadPorts();
+    const { calls, connection, sessionFixture } = createHost();
     const refresh = createDeferred<AgentSessionRecord[]>();
     calls.agentSessionsListForTasks.mockImplementation(async (_repo, ids) =>
       Promise.all(ids.map(async (taskId) => ({ taskId, agentSessions: await refresh.promise }))),
     );
-    const initialProps = { enabled: false, taskIds: ["task-1"], readPorts };
-    const harness = createHarness(initialProps);
+    const initialProps = { enabled: false, taskIds: ["task-1"] };
+    const harness = createHarness(initialProps, connection);
 
     try {
       await harness.mount();
@@ -244,11 +239,11 @@ describe("useTaskCleanupImpact", () => {
   });
 
   test("surfaces batch session hydration failures", async () => {
-    const { calls, readPorts } = createReadPorts();
+    const { calls, connection } = createHost();
     calls.agentSessionsListForTasks.mockImplementation(async () => {
       throw new Error("batch session read failed");
     });
-    const harness = createHarness({ enabled: true, taskIds: ["task-1"], readPorts });
+    const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, connection);
 
     try {
       await harness.mount();

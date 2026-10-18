@@ -11,6 +11,7 @@ Use this index to find the document for your task.
 - Read [the runtime integration guide](runtime-integration-guide.md) before you add a runtime or change runtime capabilities, sessions, history, approvals, prompts, or catalogs.
 - Read [the CLI and tool discovery guide](cli-tool-discovery.md) before you add a CLI tool or change how a shell finds one.
 - Read [the frontend guidelines](frontend-guidelines.md) before you change frontend state, forms, components, or themes.
+- Read [the frontend core](architecture-overview.md#frontend-core) before you change `packages/frontend-core` or how a client reaches the host.
 - Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) before you add or change a frontend read from the host or backend.
 - Read [the testing guide](testing.md) before you add or change tests.
 

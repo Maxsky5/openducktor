@@ -2,8 +2,11 @@ import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
 import { CancelledError, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { filesystemQueryKeys, invalidateWorkspaceFileQueries } from "../../queries/filesystem";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import {
+  filesystemQueryKeys,
+  invalidateWorkspaceFileQueries,
+} from "@openducktor/frontend-core/queries/filesystem";
 import {
   currentBranchQueryOptions,
   gitQueryKeys,
@@ -13,13 +16,12 @@ import {
   loadCurrentBranchFromQuery,
   loadRepoBranchesFromQuery,
   repoBranchesQueryOptions,
-} from "../../queries/git";
+} from "@openducktor/frontend-core/queries/git";
 import { shouldSkipBranchSwitch } from "./workspace-operations-model";
-import type { WorkspaceBranchOperationsHostClient } from "./workspace-operations-types";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseWorkspaceBranchOperationsArgs = {
   activeRepo: string | null;
-  hostClient: WorkspaceBranchOperationsHostClient;
   updateBranchSyncDegradedForRepo: (repoPath: string | null, value: boolean) => void;
 };
 
@@ -35,17 +37,17 @@ type UseWorkspaceBranchOperationsResult = {
 
 export function useWorkspaceBranchOperations({
   activeRepo,
-  hostClient,
   updateBranchSyncDegradedForRepo,
 }: UseWorkspaceBranchOperationsArgs): UseWorkspaceBranchOperationsResult {
   const queryClient = useQueryClient();
+  const hostClient = useHostClient();
   const queryRepoPath = activeRepo ?? "";
   const branchesQuery = useQuery({
-    ...repoBranchesQueryOptions(queryRepoPath, hostClient),
+    ...repoBranchesQueryOptions(queryRepoPath),
     enabled: false,
   });
   const currentBranchQuery = useQuery({
-    ...currentBranchQueryOptions(queryRepoPath, hostClient),
+    ...currentBranchQueryOptions(queryRepoPath),
     enabled: false,
   });
   const [switchingBranchRepoPaths, setSwitchingBranchRepoPaths] = useState<ReadonlySet<string>>(
@@ -92,8 +94,8 @@ export function useWorkspaceBranchOperations({
 
       try {
         await Promise.all([
-          loadCurrentBranchFromQuery(queryClient, repoPath, hostClient),
-          loadRepoBranchesFromQuery(queryClient, repoPath, hostClient),
+          loadCurrentBranchFromQuery(queryClient, repoPath),
+          loadRepoBranchesFromQuery(queryClient, repoPath),
         ]);
       } catch (error) {
         if (error instanceof CancelledError) {
@@ -107,7 +109,7 @@ export function useWorkspaceBranchOperations({
         updateBranchSyncDegradedForRepo(repoPath, false);
       }
     },
-    [hostClient, isCurrentBranchRequest, queryClient, updateBranchSyncDegradedForRepo],
+    [isCurrentBranchRequest, queryClient, updateBranchSyncDegradedForRepo],
   );
 
   const refreshBranches = useCallback(
@@ -227,7 +229,7 @@ export function useWorkspaceBranchOperations({
 
         try {
           await invalidateRepoBranchesQuery(queryClient, repoPath);
-          await loadRepoBranchesFromQuery(queryClient, repoPath, hostClient);
+          await loadRepoBranchesFromQuery(queryClient, repoPath);
         } catch (error) {
           if (isLatestSwitchRequest(repoPath, requestVersion)) {
             if (currentWorkspaceRepoPathRef.current === repoPath) {

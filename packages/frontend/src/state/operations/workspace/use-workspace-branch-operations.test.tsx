@@ -1,13 +1,25 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { GitBranch, GitCurrentBranch } from "@openducktor/contracts";
-import { QueryObserver, useQueryClient } from "@tanstack/react-query";
+import type { HostClient } from "@openducktor/host-client";
+import { QueryObserver } from "@tanstack/react-query";
+import type { PropsWithChildren } from "react";
 import { toast } from "sonner";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { filesystemQueryKeys, workspaceFileTreeQueryOptions } from "../../queries/filesystem";
-import { gitQueryKeys } from "../../queries/git";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  filesystemQueryKeys,
+  workspaceFileTreeQueryOptions,
+} from "@openducktor/frontend-core/queries/filesystem";
+import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
-import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
+
+enableReactActEnvironment();
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -19,26 +31,26 @@ type BranchHarnessArgs = {
   activeRepo: string | null;
 };
 
-const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
+const createBranchHarness = (initialArgs: BranchHarnessArgs, client: Partial<HostClient> = {}) => {
   let latest: ReturnType<typeof useWorkspaceBranchOperations> | null = null;
-  let queryClient: ReturnType<typeof useQueryClient> | null = null;
   let currentArgs = initialArgs;
+  // The connection uses `workspaceHost` itself, so a test can replace a command after it mounts.
+  const connection = createTestClientConnection({
+    host: { ...createTestHostConnection(), client: Object.assign(workspaceHost, client) },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryProvider connection={connection}>{children}</QueryProvider>
+  );
 
   const Harness = ({ args }: { args: BranchHarnessArgs }) => {
-    queryClient = useQueryClient();
     latest = useWorkspaceBranchOperations({
       activeRepo: args.activeRepo,
-      hostClient: workspaceHost,
       updateBranchSyncDegradedForRepo: () => {},
     });
     return null;
   };
 
-  const sharedHarness = createHookHarness(
-    Harness,
-    { args: currentArgs },
-    { wrapper: IsolatedQueryWrapper },
-  );
+  const sharedHarness = createHookHarness(Harness, { args: currentArgs }, { wrapper });
 
   return {
     mount: async () => {
@@ -67,13 +79,7 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
 
       return latest;
     },
-    getQueryClient: () => {
-      if (!queryClient) {
-        throw new Error("Hook not mounted");
-      }
-
-      return queryClient;
-    },
+    getQueryClient: () => connection.queryClient,
     waitFor: async (
       predicate: (value: ReturnType<typeof useWorkspaceBranchOperations>) => boolean,
     ) => {
@@ -139,48 +145,37 @@ describe("use-workspace-branch-operations", () => {
       branch = "feature";
       return { name: branch, detached: false };
     });
-    const harness = createBranchHarness({ activeRepo: "/repo-a" });
-    let stop: (() => void) | undefined;
     const reads: string[] = [];
+    const harness = createBranchHarness(
+      { activeRepo: "/repo-a" },
+      {
+        filesystemRefreshTree: async () => {
+          reads.push(branch);
+          return {
+            kind: "snapshot",
+            rootPath: "/repo-a",
+            context: {
+              rootPath: "/repo-a",
+              gitDirectory: "/repo-a/.git",
+              branch,
+              head: branch,
+              targetBranch: null,
+              targetRevision: null,
+              indexVersion: "index",
+              sparsePolicy: "policy",
+            },
+            cursor: { viewId: branch, revision: 0 },
+            entries: [],
+          };
+        },
+      },
+    );
+    let stop: (() => void) | undefined;
     try {
       await harness.mount();
       await harness.run((value) => value.refreshBranches());
       const client = harness.getQueryClient();
-      const options = workspaceFileTreeQueryOptions(
-        "/repo-a",
-        null,
-        {
-          filesystemListDirectory: async () => {
-            throw new Error("unexpected directory read");
-          },
-          filesystemReadTextFile: async () => {
-            throw new Error("unexpected text read");
-          },
-          filesystemWriteTextFile: async () => {
-            throw new Error("unexpected text write");
-          },
-          filesystemRefreshTree: async () => {
-            reads.push(branch);
-            return {
-              kind: "snapshot",
-              rootPath: "/repo-a",
-              context: {
-                rootPath: "/repo-a",
-                gitDirectory: "/repo-a/.git",
-                branch,
-                head: branch,
-                targetBranch: null,
-                targetRevision: null,
-                indexVersion: "index",
-                sparsePolicy: "policy",
-              },
-              cursor: { viewId: branch, revision: 0 },
-              entries: [],
-            };
-          },
-        },
-        "main",
-      );
+      const options = workspaceFileTreeQueryOptions("/repo-a", null, "main");
       await client.fetchQuery(options);
       stop = new QueryObserver(client, { ...options, refetchOnMount: false }).subscribe(() => {});
       await harness.run((value) => value.switchBranch("feature"));

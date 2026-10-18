@@ -5,7 +5,7 @@ import {
   type RuntimeDescriptor,
   type TaskCard,
 } from "@openducktor/contracts";
-import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   type ComponentProps,
   createElement,
@@ -13,19 +13,21 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
-import { createQueryClient } from "@/lib/query-client";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { getAvailableRuntimeDefinitions } from "@openducktor/frontend-core/lib/agent-runtime";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-export { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import type { AgentSessionTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+export { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   type AgentSessionFixtureOverrides,
   createSettingsSnapshotFixture,
@@ -36,7 +38,7 @@ import {
   createTaskCardFixture as createSharedTaskCardFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 
 type RuntimeDefinitionsContextValue = NonNullable<
@@ -47,6 +49,9 @@ type ChecksStateContextValue = NonNullable<
 >;
 
 type HookHarnessOptions = {
+  /** A connection that supplies host fakes. Its query client is the harness query client. */
+  connection?: ClientConnection;
+  /** A query client without a connection. The harness binds it to a new test connection. */
   queryClient?: QueryClient;
   runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
   runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
@@ -217,7 +222,13 @@ export const createHookHarness = <Props, State>(
   const hostRuntimeStatusContextRef = options?.hostRuntimeStatusContextRef ?? {
     current: options?.hostRuntimeStatusContext ?? createHostRuntimeStatusContextValue(),
   };
-  const queryClient = options?.queryClient ?? createQueryClient();
+  if (options?.connection && options.queryClient) {
+    throw new Error("Pass either connection or queryClient to the hook harness, not both.");
+  }
+  const connection =
+    options?.connection ??
+    createTestClientConnection(options?.queryClient ? { queryClient: options.queryClient } : {});
+  const queryClient = connection.queryClient;
   if (options?.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
@@ -226,7 +237,7 @@ export const createHookHarness = <Props, State>(
   }
 
   const renderQueryProvider = (children: ReactElement): ReactElement => {
-    return createElement(QueryClientProvider, { client: queryClient }, children);
+    return createElement(ClientConnectionProvider, { connection }, children);
   };
   const renderOwnerProviders = (children: ReactNode): ReactNode => {
     if (!options?.wrapper) {

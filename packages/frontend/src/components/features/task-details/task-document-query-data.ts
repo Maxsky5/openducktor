@@ -1,5 +1,5 @@
 import type { EnsureQueryDataOptions, QueryClient, QueryKey } from "@tanstack/react-query";
-import type { TaskDocumentPayload } from "@/types/task-documents";
+import type { TaskDocumentPayload } from "@openducktor/frontend-core/types/task-documents";
 
 export const ensureTaskDocumentQueryData = <TQueryKey extends QueryKey>(
   queryClient: QueryClient,

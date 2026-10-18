@@ -1,12 +1,17 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { errorMessage } from "@/lib/errors";
-import { checkoutReadIdentity, worktreeBranchQueryOptions } from "@/state/queries/git";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import {
+  checkoutReadIdentity,
+  worktreeBranchQueryOptions,
+} from "@openducktor/frontend-core/queries/git";
 import { useSessionComparison } from "../agent-studio-git/use-session-comparison";
 import { useComparisonView } from "../agent-studio-git/session-comparison-view";
-import { hostClient } from "@/lib/host-client";
-import { resolveTaskTargetBranchState, UPSTREAM_TARGET_BRANCH } from "@/lib/target-branch";
+import {
+  resolveTaskTargetBranchState,
+  UPSTREAM_TARGET_BRANCH,
+} from "@openducktor/frontend-core/lib/target-branch";
 import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
@@ -117,7 +122,6 @@ export function useAgentStudioBuildToolsWorktreeSnapshot({
     ],
   );
   const { worktree, queriedPath } = useBuildToolsWorktree({
-    host: hostClient,
     repoPath,
     taskId,
     contextMode: gitPanelContextMode,

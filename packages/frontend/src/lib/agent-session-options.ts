@@ -1,8 +1,11 @@
 import type { AgentRole } from "@openducktor/core";
-import { formatAgentSessionActivityStateLabel } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
+import { formatAgentSessionActivityStateLabel } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 
 export type AgentSessionRecencySummary = AgentSessionIdentity &
   Pick<AgentSessionState, "startedAt">;

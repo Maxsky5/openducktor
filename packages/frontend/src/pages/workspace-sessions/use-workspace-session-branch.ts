@@ -1,7 +1,7 @@
 import type { GitCurrentBranch } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
-import { invalidateWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { invalidateWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import {
   checkoutReadIdentity,
   currentBranchQueryOptions,
@@ -9,7 +9,7 @@ import {
   invalidateCurrentBranchQuery,
   loadCurrentBranchFromQuery,
   worktreeBranchQueryOptions,
-} from "@/state/queries/git";
+} from "@openducktor/frontend-core/queries/git";
 
 export function useWorkspaceSessionBranch({
   repoPath,

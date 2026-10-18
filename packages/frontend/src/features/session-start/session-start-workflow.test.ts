@@ -11,7 +11,7 @@ import type {
   AgentMessageSendReceipt,
   AgentSessionIdentity,
   AgentSessionState,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { startSessionWorkflow, WorkflowLaunchFailure } from "./session-start-workflow";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
 

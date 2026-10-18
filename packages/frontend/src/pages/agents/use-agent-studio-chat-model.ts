@@ -2,6 +2,7 @@ import type { AgentChatSend } from "@/features/agent-chat-composer/message-deliv
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type {
   AgentChatInterruptedTurnResumeModel,
   AgentChatModel,
@@ -16,9 +17,9 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
+import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { useActiveWorkspace, useAgentSessionReadModelState } from "@/state/app-state-provider";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import {
@@ -189,14 +190,16 @@ export function useAgentStudioChatModel({
       }),
     [selectedSession.role, selectedSession.taskId, stableSelectedSessionIdentity],
   );
+  const chatDrafts = useClientConnection().drafts.chat;
   const draftPersistence = useMemo(
     () =>
       createAgentStudioChatDraftPersistence({
+        drafts: chatDrafts,
         workspaceId: composer.workspaceId,
         taskId: selectedSession.taskId,
         session: stableSelectedSessionIdentity,
       }),
-    [composer.workspaceId, selectedSession.taskId, stableSelectedSessionIdentity],
+    [chatDrafts, composer.workspaceId, selectedSession.taskId, stableSelectedSessionIdentity],
   );
   const surfaceState = useMemo(
     () =>

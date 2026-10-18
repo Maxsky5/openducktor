@@ -4,7 +4,7 @@ import { TaskDetailsSheetContent } from "@/components/features/task-details/task
 import { TaskDetailsSheetPlaceholder } from "@/components/features/task-details/task-details-sheet-placeholder";
 import { useTaskSnapshotContext } from "@/state/app-state-contexts";
 import { useActiveWorkspace } from "@/state/app-state-provider";
-import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
+import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 
 type TaskDetailsSheetViewerProps = {
   taskId: string;

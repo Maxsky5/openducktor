@@ -1,3 +1,5 @@
+import { isApplePlatform } from "./device-platform";
+
 type SteerShortcutEvent = {
   key: string;
   metaKey: boolean;
@@ -5,10 +7,6 @@ type SteerShortcutEvent = {
   shiftKey: boolean;
   altKey: boolean;
 };
-
-/** Apple platforms use Command for shortcuts. Windows and Linux use Control. */
-export const isApplePlatform = (platform: string = globalThis.navigator?.platform ?? ""): boolean =>
-  /mac|iphone|ipad|ipod/i.test(platform);
 
 /** Command+Enter on macOS, or Control+Enter on Windows and Linux, steers the composed message. */
 export const isSteerShortcut = (

@@ -1,12 +1,12 @@
 import { HostInvokeError } from "@openducktor/host-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { errorMessage } from "@/lib/errors";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   getAgentSessionResumeFailureNotice,
   type AgentSessionResumeFailureNotice,
-} from "@/state/agent-runtime-services";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/sessions/agent-runtime-services";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type InterruptedTurnResumeController = {
   readonly resume: (identity: AgentSessionIdentity) => void;

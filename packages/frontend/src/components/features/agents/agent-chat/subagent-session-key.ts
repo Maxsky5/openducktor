@@ -1,5 +1,11 @@
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
 export type ParentSessionRuntimeContext = Pick<

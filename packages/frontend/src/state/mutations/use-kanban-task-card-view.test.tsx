@@ -1,16 +1,29 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { SettingsSnapshot } from "@openducktor/contracts";
+import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { loadSettingsSnapshotFromQuery, workspaceQueryKeys } from "@/state/queries/workspace";
+import {
+  loadSettingsSnapshotFromQuery,
+  workspaceQueryKeys,
+} from "@openducktor/frontend-core/queries/workspace";
 import { useKanbanTaskCardView } from "./use-kanban-task-card-view";
 
-const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-  <IsolatedQueryWrapper>{children}</IsolatedQueryWrapper>
-);
+const createKanbanTaskCardViewHarness = (client: Partial<HostClient>) => {
+  const connection = createTestClientConnection({ client });
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <QueryProvider connection={connection}>{children}</QueryProvider>
+  );
+  return createHookHarness(
+    () => ({ ...useKanbanTaskCardView(), queryClient: useQueryClient() }),
+    undefined,
+    { wrapper },
+  );
+};
 
 describe("useKanbanTaskCardView", () => {
   test("keeps the optimistic view out of the saved settings cache", async () => {
@@ -20,12 +33,10 @@ describe("useKanbanTaskCardView", () => {
     const write = createDeferred<never>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
-    const testHost = { workspaceGetSettingsSnapshot, workspaceUpdateKanbanTaskCardView };
-    const harness = createHookHarness(
-      () => ({ ...useKanbanTaskCardView(testHost), queryClient: useQueryClient() }),
-      undefined,
-      { wrapper },
-    );
+    const harness = createKanbanTaskCardViewHarness({
+      workspaceGetSettingsSnapshot,
+      workspaceUpdateKanbanTaskCardView,
+    });
 
     try {
       await harness.mount();
@@ -41,7 +52,6 @@ describe("useKanbanTaskCardView", () => {
 
       const settingsSnapshotWhilePending = await loadSettingsSnapshotFromQuery(
         harness.getLatest().queryClient,
-        testHost,
       );
       expect(settingsSnapshotWhilePending.kanban.taskCardView).toBe("normal");
 
@@ -83,12 +93,10 @@ describe("useKanbanTaskCardView", () => {
     const write = createDeferred<typeof savedSnapshot>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
-    const testHost = { workspaceGetSettingsSnapshot, workspaceUpdateKanbanTaskCardView };
-    const harness = createHookHarness(
-      () => ({ ...useKanbanTaskCardView(testHost), queryClient: useQueryClient() }),
-      undefined,
-      { wrapper },
-    );
+    const harness = createKanbanTaskCardViewHarness({
+      workspaceGetSettingsSnapshot,
+      workspaceUpdateKanbanTaskCardView,
+    });
 
     try {
       await harness.mount();
@@ -131,12 +139,10 @@ describe("useKanbanTaskCardView", () => {
       return initialSnapshot;
     });
     const workspaceUpdateKanbanTaskCardView = mock(async () => write.promise);
-    const testHost = { workspaceGetSettingsSnapshot, workspaceUpdateKanbanTaskCardView };
-    const harness = createHookHarness(
-      () => ({ ...useKanbanTaskCardView(testHost), queryClient: useQueryClient() }),
-      undefined,
-      { wrapper },
-    );
+    const harness = createKanbanTaskCardViewHarness({
+      workspaceGetSettingsSnapshot,
+      workspaceUpdateKanbanTaskCardView,
+    });
 
     try {
       await harness.mount();

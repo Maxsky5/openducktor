@@ -1,5 +1,5 @@
 import type { AgentRuntimeCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import { useRuntimeCatalogQuery } from "@/state/queries/use-runtime-catalog-query";
+import { useRuntimeCatalogQuery } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 
 type UseChatComposerRuntimeCatalogQueryArgs = {

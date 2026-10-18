@@ -12,13 +12,13 @@ import {
   type GitConflict,
   gitChangeIntentKey,
 } from "@/features/agent-studio-git";
-import { host } from "@/state/operations/shared/host";
-import { refreshWorkspaceFileQueries } from "@/state/queries/filesystem";
+import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import {
   CONFLICT_LOCK_REASON,
   type RefreshGitDiffData,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type PendingDiscard = AgentStudioPendingDiscard & {
   scopeKey: string;
@@ -87,6 +87,7 @@ export function useAgentStudioGitChangeActions({
   clearActionErrors,
   setChangeError,
 }: UseAgentStudioGitChangeActionsArgs) {
+  const host = useHostClient();
   const queryClient = useQueryClient();
   const scopeKey = JSON.stringify([repoPath, workingDir]);
   const [queued, setQueued] = useState<QueuedChange[]>([]);
@@ -196,6 +197,7 @@ export function useAgentStudioGitChangeActions({
       }
     },
     [
+      host,
       applyLocalChanges,
       clearActionErrors,
       endQueuedChanges,

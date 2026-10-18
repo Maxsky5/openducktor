@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createEmptyComposerDraft } from "./agent-chat-composer-draft";
+import { createEmptyComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 
 describe("agent chat draft scope", () => {

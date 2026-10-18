@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, createRef } from "react";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import { installReactActEnvironment } from "@/test-utils/react-act-environment";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { installReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
   AGENT_CHAT_ROW_WINDOW_SIZE,

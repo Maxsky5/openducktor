@@ -5,8 +5,8 @@ import {
 } from "@openducktor/contracts";
 import type { AgentSlashCommand, LoadAgentRuntimeCatalogInput } from "@openducktor/core";
 import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import {

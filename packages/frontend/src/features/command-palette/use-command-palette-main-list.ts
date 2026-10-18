@@ -9,7 +9,7 @@ import {
 } from "./command-palette-groups";
 import { rankActions, rankChats, rankTasks } from "./command-palette-search";
 import type { PaletteAction, PaletteChat, PaletteTask } from "./command-palette-types";
-import { useRecentItemsStore } from "./recent-items";
+import { useRecentItems } from "./recent-items";
 import type { CommandPaletteData } from "./use-command-palette-data";
 
 export type CommandPaletteMainList = {
@@ -39,7 +39,7 @@ export function useCommandPaletteMainList({
   actions: readonly PaletteAction[];
   createFromQuery: PaletteAction | null;
 }): CommandPaletteMainList {
-  const recentItems = useRecentItemsStore((state) => state.items);
+  const recentItems = useRecentItems((state) => state.items);
   const searchQuery = isShown ? query.trim() : "";
   const taskMatches = useMemo(
     () => (searchQuery ? rankTasks(data.tasks, searchQuery) : []),

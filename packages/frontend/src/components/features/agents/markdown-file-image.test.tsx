@@ -2,18 +2,14 @@ import { expect, mock, test } from "bun:test";
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { MarkdownFileImage } from "./markdown-file-image";
 
 test("bounds image reads, cancels queued reads on close, and releases unused image data", async () => {
-  const previousBridge = getShellBridge();
-  const client = createQueryClient();
   const names = ["one.png", "two.png", "three.png", "four.png"];
   const pending = new Map(
     names.map((name) => [name, createDeferred<WorkspaceTextFileReadResult>()]),
@@ -33,16 +29,15 @@ test("bounds image reads, cancels queued reads on close, and releases unused ima
     if (!request) throw new Error(`Unexpected image: ${relativePath}`);
     return request.promise;
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        filesystemResolvePath: async (path) => path,
-        filesystemReadTextFile: read,
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: {
+      filesystemResolvePath: async (path) => path,
+      filesystemReadTextFile: read,
+    },
+  });
+  const client = connection.queryClient;
   const view = render(
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       {names.map((name) => (
         <MarkdownFileImage
           key={name}
@@ -53,7 +48,7 @@ test("bounds image reads, cancels queued reads on close, and releases unused ima
           className="image"
         />
       ))}
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
   try {
     await waitFor(() => {
@@ -97,12 +92,10 @@ test("bounds image reads, cancels queued reads on close, and releases unused ima
     for (const [name, request] of pending) request.resolve(result(name));
     await Promise.all([...pending.values()].map((request) => request.promise));
     client.clear();
-    configureShellBridge(previousBridge);
   }
 });
 
 test("keeps each Markdown image tied to its file across pending reads and reports failures", async () => {
-  const previousBridge = getShellBridge();
   const pending = createDeferred<WorkspaceTextFileReadResult>();
   const resolvePath = mock<HostClient["filesystemResolvePath"]>(async (path) => {
     if (path === "/repo/docs/plot.png") return path;
@@ -124,15 +117,13 @@ test("keeps each Markdown image tied to its file across pending reads and report
       mtimeMs: 1,
     };
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { filesystemResolvePath: resolvePath, filesystemReadTextFile: read },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: { filesystemResolvePath: resolvePath, filesystemReadTextFile: read },
+  });
   const image = { src: "./plot.png", alt: "Plot", title: undefined, className: "image" };
   const file = { rootPath: "/repo", relativePath: "docs/a.md" };
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <MarkdownFileImage file={file} {...image} />
     </QueryProvider>,
   );
@@ -146,7 +137,7 @@ test("keeps each Markdown image tied to its file across pending reads and report
     );
     const nextFile = { rootPath: "C:/repo", relativePath: "notes/b.md", access: "local" as const };
     const nextView = (src: string) => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <MarkdownFileImage file={nextFile} {...image} src={src} />
       </QueryProvider>
     );
@@ -180,6 +171,5 @@ test("keeps each Markdown image tied to its file across pending reads and report
     expect(read).toHaveBeenCalledTimes(2);
   } finally {
     view.unmount();
-    configureShellBridge(previousBridge);
   }
 });

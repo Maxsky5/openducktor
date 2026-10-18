@@ -4,7 +4,10 @@ import type {
   AgentSessionLiveRef,
   RemoteAccessBridge,
 } from "@openducktor/contracts";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -17,24 +20,29 @@ import type {
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { createAgentRuntimeServices } from "./agent-runtime-services";
-import type { AgentSessionVisiblePendingInput } from "./agent-session-visible-pending-input";
-import type { AgentActivitySessionsSnapshot, AgentSessionSummary } from "./agent-sessions-store";
+import { createAgentRuntimeServices } from "@openducktor/frontend-core/sessions/agent-runtime-services";
+import type { AgentSessionVisiblePendingInput } from "@openducktor/frontend-core/sessions/agent-session-visible-pending-input";
+import type {
+  AgentActivitySessionsSnapshot,
+  AgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ChecksStateContext,
   DelegationStateContext,
   SpecStateContext,
   TasksStateContext,
   useActiveWorkspaceContext,
-  useAgentMessageQueuesContext,
-  useAgentOperationsContext,
-  useAgentSessionReadModelStateContext,
-  useAgentSessionsContext,
   useRequiredContext,
   useWorkspaceBranchStateContext,
   useWorkspacePresenceContext,
   useWorkspaceStateContext,
 } from "./app-state-contexts";
+import {
+  useAgentMessageQueuesContext,
+  useAgentOperationsContext,
+  useAgentSessionReadModelStateContext,
+  useAgentSessionsContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
 import { AppRuntimeProvider } from "./providers/app-runtime-provider";
@@ -52,8 +60,9 @@ import { WorkspaceActivityProvider } from "./providers/workspace-activity-provid
 import { TerminalActivityProvider } from "./providers/terminal-activity-provider";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { workspaceComparisonChoices } from "./workspace-comparison-choices";
+import { workspaceComparisonChoices } from "@openducktor/frontend-core/queries/workspace-comparison-choices";
 import { RemoteAccessProvider } from "./remote-access-provider";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function ShellStateProvider({
   children,
@@ -63,8 +72,13 @@ export function ShellStateProvider({
 }
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
-  workspaceComparisonChoices(useQueryClient());
-  const { agentEngine, runtimeCatalogOperations } = useMemo(() => createAgentRuntimeServices(), []);
+  const queryClient = useQueryClient();
+  workspaceComparisonChoices(queryClient);
+  const hostClient = useHostClient();
+  const { agentEngine, runtimeCatalogOperations } = useMemo(
+    () => createAgentRuntimeServices(hostClient, queryClient),
+    [hostClient, queryClient],
+  );
 
   return (
     <AppRuntimeProvider

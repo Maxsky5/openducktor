@@ -18,16 +18,16 @@ import {
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
 import { TASK_ACTION_ICON, taskActionLabel } from "@/components/features/kanban/task-action-ui";
-import type { WorkspaceSessionLiveState } from "@/features/workspace-activity/workspace-activity-state";
+import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { AGENT_ROLE_ICONS } from "@/lib/agent-role-presentation";
-import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   type SessionNavigationRead,
   sessionLiveFactsOf,
 } from "@/state/read-models/session-navigation-read-model";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { PaletteRowAction } from "./command-palette-types";
 
 export type TaskSessionTarget = { role: AgentRole; identity: AgentSessionIdentity };

@@ -1,4 +1,4 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type {
   AgentRuntimeCatalog,
@@ -10,8 +10,8 @@ import { IsolatedRuntimeQueryWrapper } from "@/test-utils/isolated-runtime-query
 import {
   runtimeCatalogQueryKeys,
   runtimeCatalogQueryOptions,
-} from "@/state/queries/runtime-catalog";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+} from "@openducktor/frontend-core/queries/runtime-catalog";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerSkills } from "./use-chat-composer-skills";

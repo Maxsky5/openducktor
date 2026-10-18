@@ -11,18 +11,22 @@ import {
   dialogTextFile,
 } from "@/components/features/agents/agent-chat/agent-session-dialog-preview-test-harness";
 import type { PullRequest } from "@openducktor/contracts";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { createQueryClient } from "@/lib/query-client";
-import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { filesystemQueryKeys, workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
-  toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+  type AgentSessionSummary,
+  toAgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import {
+  filesystemQueryKeys,
+  workspaceFileTreeQueryOptions,
+} from "@openducktor/frontend-core/queries/filesystem";
+import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createHookHarness,
@@ -39,12 +43,13 @@ enableReactActEnvironment();
 
 type UseAgentsPageRightPanelModel =
   (typeof import("./use-agents-page-right-panel-model"))["useAgentsPageRightPanelModel"];
-type PullRequestReviewQueriesModule = typeof import("@/state/queries/pull-request-review");
+type PullRequestReviewQueriesModule =
+  typeof import("@openducktor/frontend-core/queries/pull-request-review");
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
 const realPullRequestReviewQueries: PullRequestReviewQueriesModule =
-  await import("@/state/queries/pull-request-review");
+  await import("@openducktor/frontend-core/queries/pull-request-review");
 let testSpies: Array<{ mockRestore(): void }> = [];
 
 type BuildToolsSnapshot = HookArgs["buildTools"]["buildToolsSnapshot"];
@@ -154,7 +159,6 @@ const createSelectedView = (overrides: SelectedViewOverrides = {}): HookArgs["se
 };
 
 beforeEach(async () => {
-  resetInlineCommentDraftStoreForTests();
   prefetchPullRequestReviewContextMock.mockClear();
   refreshWorktreeMock.mockClear();
   buildToolsSnapshotState.current = createSnapshot();
@@ -170,7 +174,6 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  resetInlineCommentDraftStoreForTests();
   for (const testSpy of testSpies) testSpy.mockRestore();
   testSpies = [];
 });
@@ -208,28 +211,15 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 
 describe("useAgentsPageRightPanelModel", () => {
   test("validates task comments without mounting the Git tab", async () => {
-    const values = new Map<string, string>();
-    setInlineCommentDraftStorageForTests({
-      get length() {
-        return values.size;
-      },
-      key: (index) => Array.from(values.keys())[index] ?? null,
-      getItem: (key) => values.get(key) ?? null,
-      setItem: (key, value) => {
-        values.set(key, value);
-      },
-      removeItem: (key) => {
-        values.delete(key);
-      },
-    });
-    setInlineCommentDraftScheduleTaskForTests(() => () => {});
+    const connection = createTestClientConnection();
+    const drafts = connection.drafts.inlineComments;
     const ownerKey = toInlineCommentDraftOwnerKey({
       kind: "task",
       workspaceId: "workspace-repo",
       taskId: "task-1",
     });
     if (ownerKey === null) throw new Error("Expected a task comment owner.");
-    useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+    drafts.getState().addDraft(ownerKey, {
       filePath: "src/missing.ts",
       diffScope: "uncommitted",
       startLine: 1,
@@ -241,12 +231,14 @@ describe("useAgentsPageRightPanelModel", () => {
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
       createHookArgs({ panel: rightPanel("files", false) }),
+      { connection },
     );
     try {
       await harness.mount();
-      expect(useInlineCommentDraftStore.getState().getDraftCount(ownerKey)).toBe(0);
+      expect(drafts.getState().getDraftCount(ownerKey)).toBe(0);
     } finally {
       await harness.unmount();
+      await connection.dispose();
     }
   });
 
@@ -255,37 +247,33 @@ describe("useAgentsPageRightPanelModel", () => {
       ...createSnapshot(),
       repositoryBranchIdentityKey: "detached:head-before",
     };
-    const queryClient = createQueryClient();
+    let head = "head-before";
+    const connection = createTestClientConnection({
+      client: {
+        filesystemRefreshTree: async () => ({
+          kind: "snapshot" as const,
+          rootPath: "/repo",
+          context: {
+            rootPath: "/repo",
+            gitDirectory: "/repo/.git",
+            branch: null,
+            head,
+            targetBranch: "origin/main",
+            targetRevision: "target",
+            indexVersion: "index",
+            sparsePolicy: "",
+          },
+          cursor: { viewId: head, revision: 0 },
+          entries: [],
+        }),
+      },
+    });
+    const queryClient = connection.queryClient;
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
       createHookArgs({ panel: rightPanel("files", true) }),
-      { queryClient },
+      { connection },
     );
-    let head = "head-before";
-    const unused = async (): Promise<never> => {
-      throw new Error("Not used by the explorer read.");
-    };
-    const treeHost = {
-      filesystemListDirectory: unused,
-      filesystemReadTextFile: unused,
-      filesystemWriteTextFile: unused,
-      filesystemRefreshTree: async () => ({
-        kind: "snapshot" as const,
-        rootPath: "/repo",
-        context: {
-          rootPath: "/repo",
-          gitDirectory: "/repo/.git",
-          branch: null,
-          head,
-          targetBranch: "origin/main",
-          targetRevision: "target",
-          indexVersion: "index",
-          sparsePolicy: "",
-        },
-        cursor: { viewId: head, revision: 0 },
-        entries: [],
-      }),
-    };
 
     try {
       await harness.mount();
@@ -294,7 +282,6 @@ describe("useAgentsPageRightPanelModel", () => {
       const options = workspaceFileTreeQueryOptions(
         model.rootPath,
         model.targetBranch,
-        treeHost,
         model.branchKey,
       );
       await queryClient.fetchQuery(options);
@@ -343,7 +330,7 @@ describe("useAgentsPageRightPanelModel", () => {
   });
 
   test("prefetches CI review data in the background for linked pull requests", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const harness = createHookHarness(
       useAgentsPageRightPanelModel,
       createHookArgs({
@@ -372,7 +359,7 @@ describe("useAgentsPageRightPanelModel", () => {
   });
 
   test("refreshes Git and invalidates file explorer data after builder mutations", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const requestedRootPath = "/repo-link/.worktrees/task-1";
     const canonicalRootPath = "/repo/.worktrees/task-1";
     const snapshot = createSnapshot();
@@ -412,7 +399,7 @@ describe("useAgentsPageRightPanelModel", () => {
   });
 
   test("manual Git refresh clears inactive trees and refreshes selected content", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const rootPath = "/repo/.worktrees/task-1";
     const snapshot = createSnapshot();
     snapshot.gitPanelContextMode = "worktree";

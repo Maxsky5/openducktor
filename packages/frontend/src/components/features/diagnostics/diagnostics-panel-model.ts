@@ -6,7 +6,7 @@ import type {
   TaskStoreCheck,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { ObservedCheck } from "@/types/diagnostics";
+import type { ObservedCheck } from "@openducktor/frontend-core/types/diagnostics";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import { buildHostModel, collectHostState } from "./diagnostics-host-model";
 import { buildDiagnosticsSummary, type DiagnosticsSummary } from "./diagnostics-model";

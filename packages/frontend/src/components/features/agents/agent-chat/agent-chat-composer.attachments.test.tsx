@@ -1,17 +1,17 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { useAgentStudioSendTarget } from "@/pages/agents/session-actions/use-agent-studio-send-target";
-import { createAgentMessageQueuesStore } from "@/state/agent-message-queues-store";
+import { createAgentMessageQueuesStore } from "@openducktor/frontend-core/sessions/agent-message-queues-store";
 import {
   AgentMessageQueuesContext,
   AgentOperationsContext,
   HostRuntimeStatusContext,
-} from "@/state/app-state-contexts";
-import { createAgentOperationsFixture } from "@/test-utils/agent-operations-fixture";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { agentStudioChatDraftScopeKey } from "@/pages/agents/agent-studio-chat-draft";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { RenderOptions } from "@testing-library/react";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
@@ -21,17 +21,13 @@ import {
   type AgentChatDraftSessionIdentity,
   toAgentChatDraftStorageKey,
   writeAgentChatDraftToStorage,
-} from "./agent-chat-draft-storage";
+} from "@openducktor/frontend-core/drafts/agent-chat-draft-storage";
 import {
-  clearAgentChatDraft,
-  flushAgentChatDraft,
-  hydrateAgentChatDraft,
-  readAgentChatDraftVersion,
-  resetAgentChatDraftStoreForTests,
-  setAgentChatDraft,
-  setAgentChatDraftAttachmentStagerForTests,
-  setAgentChatDraftStorageForTests,
-} from "./agent-chat-draft-store";
+  type AgentChatDraftStore,
+  createAgentChatDraftStore,
+} from "@openducktor/frontend-core/drafts/agent-chat-draft-store";
+import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
 import {
   buildModel,
   createMemoryStorage,
@@ -39,7 +35,7 @@ import {
 } from "./agent-chat-composer-test-helpers";
 
 const render = (element: ReactNode, options?: RenderOptions) =>
-  renderView(element, { wrapper: IsolatedQueryWrapper, ...options });
+  renderView(element, { wrapper: QueryProvider, ...options });
 
 const sessionIdentity = (
   externalSessionId: string,
@@ -51,17 +47,34 @@ const sessionIdentity = (
   workingDirectory,
 });
 
-const persistedDraftScope = (key: string, identity: AgentChatDraftSessionIdentity) => ({
+const openDraftStores = new Set<AgentChatDraftStore>();
+
+const createDraftStore = (
+  storage: ClientStorage,
+  stageAttachment: AttachmentStager = async (file) => {
+    throw new Error(`The test draft store cannot stage '${file.name}'.`);
+  },
+): AgentChatDraftStore => {
+  const drafts = createAgentChatDraftStore({ storage, stageAttachment });
+  openDraftStores.add(drafts);
+  return drafts;
+};
+
+const persistedDraftScope = (
+  key: string,
+  identity: AgentChatDraftSessionIdentity,
+  drafts: AgentChatDraftStore,
+) => ({
   key,
   persistence: {
     targetKey: toAgentChatDraftStorageKey(identity),
-    hydrate: () => hydrateAgentChatDraft(identity, "task-1"),
-    set: (draft: Parameters<typeof setAgentChatDraft>[2]) =>
-      setAgentChatDraft(identity, "task-1", draft),
-    readVersion: () => readAgentChatDraftVersion(identity),
-    clear: (options?: Parameters<typeof clearAgentChatDraft>[1]) =>
-      clearAgentChatDraft(identity, options),
-    flush: () => flushAgentChatDraft(identity),
+    hydrate: () => drafts.hydrate(identity, "task-1"),
+    set: (draft: Parameters<AgentChatDraftStore["set"]>[2]) =>
+      drafts.set(identity, "task-1", draft),
+    readVersion: () => drafts.readVersion(identity),
+    clear: (options?: Parameters<AgentChatDraftStore["clear"]>[1]) =>
+      drafts.clear(identity, options),
+    flush: () => drafts.flush(identity),
   },
 });
 
@@ -102,12 +115,13 @@ const createClipboardData = ({ itemFile, files }: { itemFile?: File; files?: Fil
 
 describe("AgentChatComposer attachments", () => {
   afterEach(() => {
-    resetAgentChatDraftStoreForTests();
+    for (const drafts of openDraftStores) drafts.dispose();
+    openDraftStores.clear();
   });
 
   test("restores independent in-memory drafts when switching sessions", async () => {
     const storage = createMemoryStorage();
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     const sessionA = sessionIdentity("session-shared", "/repo-a");
     const sessionB = sessionIdentity("session-shared", "/repo-b");
     const { container, rerender } = render(
@@ -115,7 +129,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", sessionA),
+          draftScope: persistedDraftScope("draft-a", sessionA, drafts),
         }}
       />,
     );
@@ -126,7 +140,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-b",
-          draftScope: persistedDraftScope("draft-b", sessionB),
+          draftScope: persistedDraftScope("draft-b", sessionB, drafts),
         }}
       />,
     );
@@ -140,7 +154,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", sessionA),
+          draftScope: persistedDraftScope("draft-a", sessionA, drafts),
         }}
       />,
     );
@@ -154,7 +168,7 @@ describe("AgentChatComposer attachments", () => {
   test("does not reread localStorage after a session has hydrated into memory", async () => {
     const getItem = mock((_key: string) => {});
     const storage = createMemoryStorage({ getItem });
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     const sessionA = sessionIdentity("session-a");
     const sessionB = sessionIdentity("session-b");
 
@@ -163,7 +177,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", sessionA),
+          draftScope: persistedDraftScope("draft-a", sessionA, drafts),
         }}
       />,
     );
@@ -172,7 +186,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-b",
-          draftScope: persistedDraftScope("draft-b", sessionB),
+          draftScope: persistedDraftScope("draft-b", sessionB, drafts),
         }}
       />,
     );
@@ -181,7 +195,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", sessionA),
+          draftScope: persistedDraftScope("draft-a", sessionA, drafts),
         }}
       />,
     );
@@ -197,7 +211,7 @@ describe("AgentChatComposer attachments", () => {
   test("restores a persisted draft when the selected session loads", async () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     writeAgentChatDraftToStorage({
       storage,
       identity,
@@ -211,7 +225,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", identity),
+          draftScope: persistedDraftScope("draft-a", identity, drafts),
         }}
       />,
     );
@@ -225,20 +239,20 @@ describe("AgentChatComposer attachments", () => {
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
     const onSend = mock(async () => true);
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     const { container } = render(
       <AgentChatComposer
         model={{
           ...buildModel(),
           onSend,
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", identity),
+          draftScope: persistedDraftScope("draft-a", identity, drafts),
         }}
       />,
     );
 
     typeIntoComposer(container, "send me");
-    await flushAgentChatDraft(identity);
+    await drafts.flush(identity);
     expect(storage.getItem(toAgentChatDraftStorageKey(identity))).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
@@ -276,7 +290,7 @@ describe("AgentChatComposer attachments", () => {
     const identity = sessionIdentity("session-a");
     const sendResult = createDeferred<boolean>();
     const onSend = mock(() => sendResult.promise);
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     const slashCommand = {
       id: "review",
       trigger: "review",
@@ -288,7 +302,7 @@ describe("AgentChatComposer attachments", () => {
       ...buildModel(),
       onSend,
       displayedSessionKey: "session-a",
-      draftScope: persistedDraftScope("draft-a", identity),
+      draftScope: persistedDraftScope("draft-a", identity, drafts),
       slashCommandCatalog: { commands: [slashCommand] },
       slashCommands: [slashCommand],
     };
@@ -324,17 +338,17 @@ describe("AgentChatComposer attachments", () => {
     const identity = sessionIdentity("session-a");
     const sendResult = createDeferred<boolean>();
     const onSend = mock(() => sendResult.promise);
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     const buildPersistedModel = () => ({
       ...buildModel(),
       onSend,
       displayedSessionKey: "session-a",
-      draftScope: persistedDraftScope("draft-a", identity),
+      draftScope: persistedDraftScope("draft-a", identity, drafts),
     });
     const { container, rerender } = render(<AgentChatComposer model={buildPersistedModel()} />);
 
     typeIntoComposer(container, "send once");
-    await flushAgentChatDraft(identity);
+    await drafts.flush(identity);
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(
       () => {
@@ -364,15 +378,17 @@ describe("AgentChatComposer attachments", () => {
     const sendResult = createDeferred<boolean>();
     const onSend = mock(() => sendResult.promise);
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
-    setAgentChatDraftStorageForTests(storage);
-    setAgentChatDraftAttachmentStagerForTests(mock(() => stagedPath.promise));
+    const drafts = createDraftStore(
+      storage,
+      mock(() => stagedPath.promise),
+    );
     const { container } = render(
       <AgentChatComposer
         model={{
           ...buildModel(),
           onSend,
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", identity),
+          draftScope: persistedDraftScope("draft-a", identity, drafts),
           selectedModelDescriptor: {
             id: "openai/gpt-5.3-codex",
             providerId: "openai",
@@ -401,7 +417,7 @@ describe("AgentChatComposer attachments", () => {
       target: { files: [file] },
     });
     typeIntoComposer(container, "send with attachment");
-    const flushPromise = flushAgentChatDraft(identity);
+    const flushPromise = drafts.flush(identity);
 
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => {
@@ -429,14 +445,14 @@ describe("AgentChatComposer attachments", () => {
     );
     const storage = createMemoryStorage();
     const identity = sessionIdentity("session-a");
-    setAgentChatDraftStorageForTests(storage);
+    const drafts = createDraftStore(storage);
     const { container } = render(
       <AgentChatComposer
         model={{
           ...buildModel(),
           onSend,
           displayedSessionKey: "session-a",
-          draftScope: persistedDraftScope("draft-a", identity),
+          draftScope: persistedDraftScope("draft-a", identity, drafts),
         }}
       />,
     );
@@ -734,7 +750,7 @@ describe("AgentChatComposer attachments", () => {
 /** The contexts that the shared send hook reads. */
 function SendProviders({ children }: { children: ReactNode }) {
   return (
-    <IsolatedQueryWrapper>
+    <QueryProvider>
       <AgentOperationsContext value={createAgentOperationsFixture()}>
         <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
           <AgentMessageQueuesContext value={createAgentMessageQueuesStore()}>
@@ -742,7 +758,7 @@ function SendProviders({ children }: { children: ReactNode }) {
           </AgentMessageQueuesContext>
         </HostRuntimeStatusContext>
       </AgentOperationsContext>
-    </IsolatedQueryWrapper>
+    </QueryProvider>
   );
 }
 

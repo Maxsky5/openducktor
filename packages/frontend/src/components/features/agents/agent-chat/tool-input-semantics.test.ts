@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
-import { hasMeaningfulToolInput } from "@/state/operations/agent-orchestrator/events/session-helpers";
+import { hasMeaningfulToolInput } from "@openducktor/frontend-core/sessions/agent-orchestrator/events/session-helpers";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { hasNonEmptyInput, hasNonEmptyText } from "./tool-lifecycle";
 

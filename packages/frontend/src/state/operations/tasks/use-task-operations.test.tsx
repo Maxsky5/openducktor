@@ -1,19 +1,17 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord, TaskPullRequestDetectResult } from "@openducktor/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { PropsWithChildren } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { QueryClient } from "@tanstack/react-query";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createDeferred,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionReadPort } from "../../queries/agent-sessions";
-import { workspaceQueryKeys } from "../../queries/workspace";
-import { host } from "../shared/host";
+import type { AgentSessionReadPort } from "@openducktor/frontend-core/queries/agent-sessions";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { prepareTaskChatDraftCleanupTargets } from "./task-chat-draft-cleanup";
 import { useTaskOperations } from "./use-task-operations";
 import { useTaskResetOperations } from "./use-task-reset-operations";
@@ -21,22 +19,23 @@ import { useTaskResetOperations } from "./use-task-reset-operations";
 describe("useTaskOperations", () => {
   test("keeps pull request progress when workspace selection clears task reads", async () => {
     const detection = createDeferred<TaskPullRequestDetectResult>();
-    const originalDetect = host.taskPullRequestDetect;
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(
+    const connection = createTestClientConnection({
+      client: { taskPullRequestDetect: mock(() => detection.promise) },
+    });
+    connection.queryClient.setQueryData(
       workspaceQueryKeys.settingsSnapshot(),
       createSettingsSnapshotFixture(),
-    );
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
     const workspace = createWorkspaceRecordFixture();
     const harness = createHookHarness(
       ({ activeWorkspace }) => useTaskOperations({ activeWorkspace }),
       { activeWorkspace: workspace },
-      { wrapper },
+      {
+        wrapper: ({ children }) => (
+          <QueryProvider connection={connection}>{children}</QueryProvider>
+        ),
+      },
     );
-    host.taskPullRequestDetect = mock(() => detection.promise);
 
     try {
       await harness.mount();
@@ -65,8 +64,7 @@ describe("useTaskOperations", () => {
       expect(harness.getLatest().detectingPullRequestTaskIds).toEqual(new Set());
     } finally {
       await harness.unmount();
-      host.taskPullRequestDetect = originalDetect;
-      queryClient.clear();
+      connection.queryClient.clear();
     }
   });
 
@@ -78,7 +76,7 @@ describe("useTaskOperations", () => {
     const harness = createHookHarness(
       () => useTaskOperations({ activeWorkspace: null, agentSessionReadPort }),
       undefined,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: QueryProvider },
     );
 
     try {
@@ -119,7 +117,7 @@ describe("useTaskOperations", () => {
           notificationPort: { error: mock(() => "error-toast"), success },
         }),
       undefined,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: QueryProvider },
     );
 
     try {
@@ -159,7 +157,7 @@ describe("useTaskOperations", () => {
           notificationPort: { error, success: mock(() => "success-toast") },
         }),
       undefined,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: QueryProvider },
     );
 
     try {

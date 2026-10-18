@@ -4,7 +4,7 @@ import {
   type AgentChatComposerDraft,
   createEmptyComposerDraft,
   draftHasMeaningfulContent,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatDraftPersistence, AgentChatDraftScope } from "./agent-chat-draft-scope";
 
 type ComposerDraftState = {

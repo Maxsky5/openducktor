@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoAction, TerminalListResponse, TerminalSummary } from "@openducktor/contracts";
-import { HostTerminalClientError } from "@openducktor/host-client";
+import { type HostClient, HostTerminalClientError } from "@openducktor/host-client";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
-import { useLayoutEffect } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { type PropsWithChildren, useLayoutEffect } from "react";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useTerminals, type TerminalDependencies, type TerminalScope } from "./use-terminals";
 
 /** The tab ID that a start returns inside an act callback. */
@@ -158,23 +158,25 @@ describe("useTerminals", () => {
       },
     ];
     const filters: string[] = [];
+    const hostReads: Partial<HostClient> = {
+      systemGetPlatform: async () => "darwin",
+      terminalList: async ({ filter }) => {
+        filters.push(JSON.stringify(filter));
+        return {
+          hostInstanceId: "host-1",
+          terminals: terminals.filter(
+            (entry) =>
+              filter.kind === "workspace_session" &&
+              "kind" in entry.context &&
+              entry.context.workspaceId === filter.workspaceId &&
+              entry.context.sessionId === filter.sessionId,
+          ),
+        };
+      },
+    };
     const dependencies: NonNullable<Parameters<typeof useTerminals>[1]> = {
       hostClient: {
         ...unavailable.client,
-        systemGetPlatform: async () => "darwin",
-        terminalList: async ({ filter }) => {
-          filters.push(JSON.stringify(filter));
-          return {
-            hostInstanceId: "host-1",
-            terminals: terminals.filter(
-              (entry) =>
-                filter.kind === "workspace_session" &&
-                "kind" in entry.context &&
-                entry.context.workspaceId === filter.workspaceId &&
-                entry.context.sessionId === filter.sessionId,
-            ),
-          };
-        },
         terminalCreate: async (request) => {
           const terminalId = `session-terminal-${terminals.length}`;
           const summary: TerminalSummary = {
@@ -226,8 +228,9 @@ describe("useTerminals", () => {
       if (!latest) throw new Error("Terminal hook result is not ready.");
       return latest;
     };
+    const connection = createTestClientConnection({ client: hostReads });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <Harness sessionId="first" />
       </QueryProvider>,
     );
@@ -238,7 +241,7 @@ describe("useTerminals", () => {
       });
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-1"));
       view.rerender(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <Harness sessionId="second" />
         </QueryProvider>,
       );
@@ -249,14 +252,14 @@ describe("useTerminals", () => {
       });
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-2"));
       view.rerender(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <Harness sessionId="first" />
         </QueryProvider>,
       );
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-1"));
       expect(getLatest().mountedTabs).toHaveLength(2);
       view.rerender(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <Harness sessionId={null} />
         </QueryProvider>,
       );
@@ -265,8 +268,10 @@ describe("useTerminals", () => {
     } finally {
       view.unmount();
     }
+    // The remount gets a new query cache, so it reads the host list again.
+    const restoredConnection = createTestClientConnection({ client: hostReads });
     const restored = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={restoredConnection}>
         <Harness sessionId="second" />
       </QueryProvider>,
     );
@@ -429,12 +434,14 @@ describe("useTerminals", () => {
 
   test("commits the terminal consumer once when the scope changes", async () => {
     const unavailable = createUnavailableShellBridge();
-    const dependencies: NonNullable<Parameters<typeof useTerminals>[1]> = {
-      hostClient: {
-        ...unavailable.client,
+    const connection = createTestClientConnection({
+      client: {
         systemGetPlatform: async () => "darwin",
         terminalList: async () => ({ hostInstanceId: "host-1", terminals: [] }),
       },
+    });
+    const dependencies: NonNullable<Parameters<typeof useTerminals>[1]> = {
+      hostClient: unavailable.client,
       terminalBridge: {
         connect: async (_onFrame, onStateChange) => {
           onStateChange("connected");
@@ -471,7 +478,7 @@ describe("useTerminals", () => {
       return <TerminalConsumer />;
     };
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <Harness scopeKey="scope-a" />
       </QueryProvider>,
     );
@@ -479,19 +486,19 @@ describe("useTerminals", () => {
     try {
       await waitFor(() => expect(getLatest().isLoading).toBe(false));
       view.rerender(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <Harness scopeKey="scope-b" />
         </QueryProvider>,
       );
       view.rerender(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <Harness scopeKey="scope-a" />
         </QueryProvider>,
       );
       consumerCommits = 0;
 
       view.rerender(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider connection={connection}>
           <Harness scopeKey="scope-b" />
         </QueryProvider>,
       );
@@ -518,17 +525,18 @@ function existingTerminal(): TerminalSummary {
 }
 
 function renderModel(
-  terminalList: TerminalDependencies["hostClient"]["terminalList"],
+  terminalList: HostClient["terminalList"],
   workingDirectory: string | null = "/repo",
 ) {
   const unavailable = createUnavailableShellBridge();
   const terminalCreate = mock(unavailable.client.terminalCreate);
   const terminalRunAction = mock(unavailable.client.terminalRunAction);
+  const connection = createTestClientConnection({
+    client: { systemGetPlatform: async () => "darwin", terminalList },
+  });
   const dependencies: TerminalDependencies = {
     hostClient: {
       ...unavailable.client,
-      systemGetPlatform: async () => "darwin",
-      terminalList,
       terminalCreate,
       terminalRunAction,
     },
@@ -559,7 +567,9 @@ function renderModel(
         },
         isScopeLoading: false,
       },
-      wrapper: IsolatedQueryWrapper,
+      wrapper: ({ children }: PropsWithChildren) => (
+        <QueryProvider connection={connection}>{children}</QueryProvider>
+      ),
     },
   );
   return { ...view, terminalCreate, terminalRunAction };

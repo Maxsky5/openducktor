@@ -8,8 +8,7 @@ import type {
 import { azureDevOpsConnectionConfigurationFingerprint } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { hostBridge } from "@/lib/host-client";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   setupDetectionOptions,
   setupStatusOptions,
@@ -17,7 +16,7 @@ import {
   setupAreasOptions,
   setupProgressOptions,
   workspaceProviderSetupKeys,
-} from "@/state/queries/workspace-provider-setup";
+} from "@openducktor/frontend-core/queries/workspace-provider-setup";
 import {
   detectedWorkspaceProviderDraft,
   emptyWorkspaceProviderDraft,
@@ -25,11 +24,17 @@ import {
   httpConsentUrl,
   type WorkspaceProviderDraft,
 } from "./workspace-provider-draft";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type Operation = { label: string; signInStartup: boolean };
 
 /** Owns the unsaved draft and keeps its host setup until cleanup succeeds. */
-export function useWorkspaceProviderSetup(bridge = hostBridge) {
+export function useWorkspaceProviderSetup(
+  suppliedBridge?: Pick<HostConnection, "client" | "subscribeWorkspaceProviderSetupUpdates">,
+) {
+  const connectionBridge = useHostConnection();
+  const bridge = suppliedBridge ?? connectionBridge;
   const queryClient = useQueryClient();
   const client = bridge.client;
   const [session, setSession] = useState<WorkspaceProviderSetupSession | null>(null);

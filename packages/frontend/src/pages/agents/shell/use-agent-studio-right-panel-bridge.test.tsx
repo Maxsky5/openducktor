@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,

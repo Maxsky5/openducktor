@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type {
   TaskExecutionFilePreviewLeavePolicy,
   TaskExecutionFileSelectionResult,

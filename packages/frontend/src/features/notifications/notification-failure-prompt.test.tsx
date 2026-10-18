@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import type { NotificationDispatchFailure } from "./notification-policy";
+import type { NotificationDispatchFailure } from "@openducktor/frontend-core/notifications/notification-policy";
 import { NotificationFailurePrompt } from "./notification-failure-prompt";
 
 afterEach(cleanup);

@@ -45,6 +45,7 @@
     "@openducktor/build-tools": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/frontend": "workspace:*",
+    "@openducktor/frontend-core": "workspace:*",
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/remote-host": "workspace:*",

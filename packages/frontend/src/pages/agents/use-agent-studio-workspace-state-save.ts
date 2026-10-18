@@ -4,7 +4,6 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { host } from "@/state/operations/host";
 import { applyWorkspaceAgentStudioStateAction } from "./agent-studio-state-writer";
 
 export function useAgentStudioWorkspaceStateSave({
@@ -12,13 +11,11 @@ export function useAgentStudioWorkspaceStateSave({
   loadedState,
   state,
   enabled,
-  hostClient = host,
 }: {
   workspaceId: string | null;
   loadedState: WorkspaceAgentStudioState | null;
   state: WorkspaceAgentStudioState;
   enabled: boolean;
-  hostClient?: AgentStudioStateHost;
 }) {
   const queryClient = useQueryClient();
   const lastSaveRef = useRef<SaveRequest | null>(null);
@@ -31,7 +28,6 @@ export function useAgentStudioWorkspaceStateSave({
         queryClient,
         workspaceId: request.workspaceId,
         action: request.action,
-        hostClient,
       }).then(
         () => setFailure((current) => (current?.request === request ? null : current)),
         (cause: unknown) => {
@@ -46,7 +42,7 @@ export function useAgentStudioWorkspaceStateSave({
         },
       );
     },
-    [hostClient, queryClient],
+    [queryClient],
   );
   const currentFailure =
     failure &&
@@ -91,8 +87,6 @@ export function useAgentStudioWorkspaceStateSave({
 
   return { saveError: currentFailure?.error ?? null, retrySave };
 }
-
-type AgentStudioStateHost = Pick<typeof host, "workspaceApplyAgentStudioStateAction">;
 
 type SaveRequest = {
   workspaceId: string;

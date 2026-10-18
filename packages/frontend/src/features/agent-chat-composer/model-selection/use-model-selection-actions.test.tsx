@@ -1,8 +1,8 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { toast } from "sonner";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useModelSelectionActions } from "./use-model-selection-actions";
 
 type HookArgs = Parameters<typeof useModelSelectionActions>[0];

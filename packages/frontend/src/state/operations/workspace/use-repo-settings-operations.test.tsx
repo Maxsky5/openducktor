@@ -11,8 +11,12 @@ import {
 } from "@openducktor/contracts";
 import { type QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createDeferred,
   createGitProviderConfigFixture,
@@ -22,18 +26,28 @@ import {
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { checksQueryKeys } from "../../queries/checks";
-import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
-import { runtimeQueryKeys } from "../../queries/runtime";
-import { repoTaskDataQueryOptions, type RepoTaskData, taskQueryKeys } from "../../queries/tasks";
+import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
+import {
+  repoTaskDataQueryOptions,
+  type RepoTaskData,
+  taskQueryKeys,
+} from "@openducktor/frontend-core/queries/tasks";
 import {
   repoConfigQueryOptions,
   settingsSnapshotQueryOptions,
   workspaceQueryKeys,
-} from "../../queries/workspace";
-import { customAgentRolesQueryOptions } from "../../queries/workspace-sessions";
-import { host } from "../shared/host";
+} from "@openducktor/frontend-core/queries/workspace";
+import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
+
+/**
+ * The host of every harness in this file. Its commands fail until a test sets them. Each harness
+ * gets its own connection and query cache.
+ */
+const testHost = createTestHostConnection();
+const host = testHost.client;
 
 const savedResult = (workspaces: WorkspaceRecord[]): SettingsSnapshotSaveResult => ({
   type: "saved",
@@ -64,11 +78,12 @@ const createHookHarness = (initialArgs: HookArgs) => {
     return null;
   };
 
+  const connection = createTestClientConnection({ host: testHost });
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-    <IsolatedQueryWrapper>
+    <ClientConnectionProvider connection={connection}>
       <CaptureQueryClient />
       {children}
-    </IsolatedQueryWrapper>
+    </ClientConnectionProvider>
   );
 
   const sharedHarness = createSharedHookHarness(Harness, { args: currentArgs }, { wrapper });

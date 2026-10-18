@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import * as taskStopImpactModule from "@/state/queries/use-task-stop-impact";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   createTaskCardFixture,
   createWorkspaceStateFixture,
@@ -37,7 +37,7 @@ function Host(props: HostProps): ReactElement {
   const { onConfirmTaskAction, model } = useTaskConfirmDialogHost(props);
   confirmTaskAction = onConfirmTaskAction;
   return (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <WorkspaceStateContext.Provider value={createWorkspaceStateFixture()}>
         <button type="button">Before the palette</button>
         <TaskConfirmDialogHost model={model} />

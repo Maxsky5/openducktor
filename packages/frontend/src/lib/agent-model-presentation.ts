@@ -1,5 +1,8 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { findCatalogModel, resolveSavedModelAlias } from "./model-catalog-selection";
+import {
+  findCatalogModel,
+  resolveSavedModelAlias,
+} from "@openducktor/frontend-core/lib/model-catalog-selection";
 
 /** Model metadata shared by final chat messages and session previews. */
 export const agentModelInfoParts = (

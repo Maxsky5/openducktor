@@ -1,4 +1,8 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   emptySessionPanelLayout,
@@ -6,35 +10,29 @@ import {
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
 import {
-  pruneSessionPanelLayouts,
-  readSessionPanelLayout,
+  createSessionPanelLayoutStore,
+  type SessionPanelLayoutStore,
   sessionPanelLayoutStorageKey,
-  sessionPanelLayoutsSnapshot,
-  takeSessionPanelLayoutReadError,
-  updateSessionPanelLayout,
 } from "./session-panel-layout-store";
 
-const workspaceIds = new Set<string>();
+const taskOwner = (taskId = "task-1"): SessionPanelOwner => ({
+  kind: "task",
+  workspaceId: `workspace-${globalThis.crypto.randomUUID()}`,
+  taskId,
+});
 
-/** Each test uses its own workspace, because the store is shared by the test process. */
-const taskOwner = (taskId = "task-1"): SessionPanelOwner => {
-  const workspaceId = `workspace-${globalThis.crypto.randomUUID()}`;
-  workspaceIds.add(workspaceId);
-  return { kind: "task", workspaceId, taskId };
-};
+let storage: ClientStorage;
+let store: SessionPanelLayoutStore;
 
-afterEach(() => {
-  for (const workspaceId of workspaceIds) {
-    pruneSessionPanelLayouts({ kind: "tasks", workspaceId, ids: new Set() });
-    pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set() });
-  }
-  workspaceIds.clear();
+beforeEach(() => {
+  storage = createMemoryClientStorage();
+  store = createSessionPanelLayoutStore(storage);
 });
 
 describe("session panel layout store", () => {
   test("restores a saved layout once and keeps it in memory", () => {
     const owner = taskOwner();
-    localStorage.setItem(
+    storage.setItem(
       sessionPanelLayoutStorageKey(owner),
       JSON.stringify({
         version: 1,
@@ -44,37 +42,37 @@ describe("session panel layout store", () => {
       }),
     );
 
-    const layout = readSessionPanelLayout(owner);
+    const layout = store.read(owner);
 
     expect(layout.panels.right.map((entry) => entry.id)).toEqual(["files", "diffs"]);
     expect(layout.closedKinds).toEqual(["document"]);
     expect(layout.selectedRight).toEqual({ build: "files" });
-    localStorage.removeItem(sessionPanelLayoutStorageKey(owner));
-    expect(readSessionPanelLayout(owner)).toBe(layout);
-    expect(takeSessionPanelLayoutReadError(owner)).toBeNull();
+    storage.removeItem(sessionPanelLayoutStorageKey(owner));
+    expect(store.read(owner)).toBe(layout);
+    expect(store.takeReadError(owner)).toBeNull();
   });
 
   test("uses the default layout and reports a saved layout that it cannot read once", () => {
     const owner = taskOwner();
-    localStorage.setItem(
+    storage.setItem(
       sessionPanelLayoutStorageKey(owner),
       JSON.stringify({ version: 1, panels: { right: ["browser"], bottom: [] } }),
     );
 
-    expect(readSessionPanelLayout(owner)).toEqual(emptySessionPanelLayout());
-    expect(takeSessionPanelLayoutReadError(owner)).toBeString();
-    expect(takeSessionPanelLayoutReadError(owner)).toBeNull();
+    expect(store.read(owner)).toEqual(emptySessionPanelLayout());
+    expect(store.takeReadError(owner)).toBeString();
+    expect(store.takeReadError(owner)).toBeNull();
   });
 
   test("saves tool tab changes and keeps live terminal changes in memory only", () => {
     const owner = taskOwner();
     const key = sessionPanelLayoutStorageKey(owner);
 
-    updateSessionPanelLayout(owner, (layout) => ({
+    store.update(owner, (layout) => ({
       ...layout,
       panels: { ...layout.panels, right: [{ id: "diffs", kind: "diffs" }] },
     }));
-    const saved = localStorage.getItem(key);
+    const saved = storage.getItem(key);
     expect(JSON.parse(saved ?? "null")).toEqual({
       version: 1,
       panels: { right: ["diffs"], bottom: [] },
@@ -82,8 +80,8 @@ describe("session panel layout store", () => {
       selectedRight: {},
     });
 
-    localStorage.setItem(key, "unchanged marker");
-    updateSessionPanelLayout(owner, (layout) => ({
+    storage.setItem(key, "unchanged marker");
+    store.update(owner, (layout) => ({
       ...layout,
       panels: {
         ...layout.panels,
@@ -91,9 +89,10 @@ describe("session panel layout store", () => {
       },
     }));
 
-    expect(localStorage.getItem(key)).toBe("unchanged marker");
+    expect(storage.getItem(key)).toBe("unchanged marker");
     expect(
-      sessionPanelLayoutsSnapshot()
+      store
+        .snapshot()
         .get(sessionPanelOwnerKey(owner))
         ?.panels.bottom.map((entry) => entry.id),
     ).toEqual(["terminal:tab:1"]);
@@ -101,38 +100,23 @@ describe("session panel layout store", () => {
 
   test("keeps the layout working and reports a save failure once", async () => {
     const owner = taskOwner();
-    const realStorage = globalThis.localStorage;
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    const fullStorage: Storage = {
-      get length() {
-        return realStorage.length;
-      },
-      clear: () => realStorage.clear(),
-      key: (index) => realStorage.key(index),
-      getItem: (key) => realStorage.getItem(key),
-      removeItem: (key) => realStorage.removeItem(key),
+    const fullStore = createSessionPanelLayoutStore({
+      ...createMemoryClientStorage(),
       setItem: () => {
         throw new Error("The storage quota is full.");
       },
-    };
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: fullStorage });
-    try {
-      await withMockedToast(async ({ toastErrorMock }) => {
-        for (const kind of ["diffs", "files"] as const) {
-          updateSessionPanelLayout(owner, (layout) => ({
-            ...layout,
-            panels: { ...layout.panels, right: [{ id: kind, kind }] },
-          }));
-        }
+    });
+    await withMockedToast(async ({ toastErrorMock }) => {
+      for (const kind of ["diffs", "files"] as const) {
+        fullStore.update(owner, (layout) => ({
+          ...layout,
+          panels: { ...layout.panels, right: [{ id: kind, kind }] },
+        }));
+      }
 
-        expect(readSessionPanelLayout(owner).panels.right).toEqual([
-          { id: "files", kind: "files" },
-        ]);
-        expect(toastErrorMock).toHaveBeenCalledTimes(1);
-      });
-    } finally {
-      if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
-    }
+      expect(fullStore.read(owner).panels.right).toEqual([{ id: "files", kind: "files" }]);
+      expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   test("removes the layouts of tasks, chats, and workspaces that no longer exist", () => {
@@ -144,20 +128,20 @@ describe("session panel layout store", () => {
     const otherWorkspace = taskOwner("task-1");
     const owners = [kept, removedTask, keptChat, removedChat, otherWorkspace];
     for (const owner of owners) {
-      updateSessionPanelLayout(owner, (layout) => ({
+      store.update(owner, (layout) => ({
         ...layout,
         panels: { ...layout.panels, right: [{ id: "files", kind: "files" }] },
       }));
     }
 
-    pruneSessionPanelLayouts({ kind: "workspaces", ids: new Set([workspaceId]) });
-    pruneSessionPanelLayouts({ kind: "tasks", workspaceId, ids: new Set(["kept"]) });
-    pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set(["kept-chat"]) });
+    store.prune({ kind: "workspaces", ids: new Set([workspaceId]) });
+    store.prune({ kind: "tasks", workspaceId, ids: new Set(["kept"]) });
+    store.prune({ kind: "chats", workspaceId, ids: new Set(["kept-chat"]) });
 
     const stored = (owner: SessionPanelOwner) =>
-      localStorage.getItem(sessionPanelLayoutStorageKey(owner)) !== null;
+      storage.getItem(sessionPanelLayoutStorageKey(owner)) !== null;
     expect(owners.map(stored)).toEqual([true, false, true, false, false]);
-    const snapshot = sessionPanelLayoutsSnapshot();
+    const snapshot = store.snapshot();
     expect(owners.map((owner) => snapshot.has(sessionPanelOwnerKey(owner)))).toEqual([
       true,
       false,
@@ -168,25 +152,20 @@ describe("session panel layout store", () => {
   });
 
   test("reports a storage failure during cleanup instead of breaking the page", async () => {
-    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-    Object.defineProperty(globalThis, "localStorage", {
-      configurable: true,
-      get: () => {
+    const blockedStore = createSessionPanelLayoutStore({
+      ...createMemoryClientStorage(),
+      get length(): number {
         throw new Error("Site data is blocked.");
       },
     });
-    try {
-      await withMockedToast(async ({ toastErrorMock }) => {
-        const prune = () => pruneSessionPanelLayouts({ kind: "workspaces", ids: new Set() });
+    await withMockedToast(async ({ toastErrorMock }) => {
+      const prune = () => blockedStore.prune({ kind: "workspaces", ids: new Set() });
 
-        prune();
-        prune();
+      prune();
+      prune();
 
-        expect(toastErrorMock).toHaveBeenCalledTimes(1);
-      });
-    } finally {
-      if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
-    }
+      expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   test("removes with a task list only the task layouts of its own workspace", () => {
@@ -198,23 +177,23 @@ describe("session panel layout store", () => {
     };
     const otherTask = taskOwner();
     for (const owner of [task, chat, otherTask]) {
-      updateSessionPanelLayout(owner, (layout) => ({
+      store.update(owner, (layout) => ({
         ...layout,
         panels: { ...layout.panels, right: [{ id: "files", kind: "files" }] },
       }));
     }
 
-    pruneSessionPanelLayouts({ kind: "tasks", workspaceId: task.workspaceId, ids: new Set() });
+    store.prune({ kind: "tasks", workspaceId: task.workspaceId, ids: new Set() });
 
     const stored = (owner: SessionPanelOwner) =>
-      localStorage.getItem(sessionPanelLayoutStorageKey(owner)) !== null;
+      storage.getItem(sessionPanelLayoutStorageKey(owner)) !== null;
     expect([task, chat, otherTask].map(stored)).toEqual([false, true, true]);
   });
 
   test("saves tool tabs only, and a selected terminal as a selection whose tab is gone", () => {
     const owner = taskOwner();
 
-    updateSessionPanelLayout(owner, (layout) => ({
+    store.update(owner, (layout) => ({
       ...layout,
       panels: {
         right: [
@@ -228,13 +207,11 @@ describe("session panel layout store", () => {
       selectedRight: { build: "terminal:tab:1", spec: "files" },
     }));
 
-    expect(JSON.parse(localStorage.getItem(sessionPanelLayoutStorageKey(owner)) ?? "null")).toEqual(
-      {
-        version: 1,
-        panels: { right: ["diffs", "files"], bottom: [] },
-        closedKinds: ["document"],
-        selectedRight: { spec: "files", build: null },
-      },
-    );
+    expect(JSON.parse(storage.getItem(sessionPanelLayoutStorageKey(owner)) ?? "null")).toEqual({
+      version: 1,
+      panels: { right: ["diffs", "files"], bottom: [] },
+      closedKinds: ["document"],
+      selectedRight: { spec: "files", build: null },
+    });
   });
 });

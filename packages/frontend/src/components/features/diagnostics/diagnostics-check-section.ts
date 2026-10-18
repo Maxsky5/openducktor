@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { DiagnosticsFailureKind } from "@/types/diagnostics";
+import type { DiagnosticsFailureKind } from "@openducktor/frontend-core/types/diagnostics";
 import type {
   DiagnosticsCheckBase,
   DiagnosticsCheckModel,

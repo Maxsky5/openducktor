@@ -1,15 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { toAgentChatDraftStorageKey } from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
-import {
-  type AgentChatDraftCleanupTarget,
-  clearAgentChatDraftsForTargets,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
-import { errorMessage } from "@/lib/errors";
+import { toAgentChatDraftStorageKey } from "@openducktor/frontend-core/drafts/agent-chat-draft-storage";
+import { connectionOf } from "@openducktor/frontend-core/connection/client-connection";
+import type { AgentChatDraftCleanupTarget } from "@openducktor/frontend-core/drafts/agent-chat-draft-store";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   type AgentSessionReadPort,
   loadAgentSessionListsFromQuery,
-} from "../../queries/agent-sessions";
+} from "@openducktor/frontend-core/queries/agent-sessions";
 
 export type TaskChatDraftCleanupPlan = {
   targets: AgentChatDraftCleanupTarget[];
@@ -28,7 +26,7 @@ export type RunTaskMutationWithChatDraftCleanupInput<TResult> = TaskChatDraftCle
 };
 
 export type TaskChatDraftClearPort = {
-  clearDraftsForTargets: (targets: AgentChatDraftCleanupTarget[]) => void;
+  clearDraftsForTargets: (targets: AgentChatDraftCleanupTarget[], queryClient: QueryClient) => void;
 };
 
 export type TaskChatDraftCleanupNotificationPort = {
@@ -117,7 +115,7 @@ export const createTaskChatDraftCleanup = ({
     }
 
     try {
-      draftClearPort.clearDraftsForTargets(cleanupTargets.targets);
+      draftClearPort.clearDraftsForTargets(cleanupTargets.targets, input.queryClient);
     } catch (error) {
       reportFailure(error);
     }
@@ -132,7 +130,11 @@ export const createProductionTaskChatDraftCleanup = (
 ): TaskChatDraftCleanup =>
   createTaskChatDraftCleanup({
     agentSessionReadPort,
-    draftClearPort: { clearDraftsForTargets: clearAgentChatDraftsForTargets },
+    draftClearPort: {
+      // Drafts belong to the connection that owns the task reads.
+      clearDraftsForTargets: (targets, queryClient) =>
+        connectionOf(queryClient).drafts.chat.clearForTargets(targets),
+    },
     notificationPort: toast,
   });
 

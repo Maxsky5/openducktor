@@ -14,9 +14,14 @@ import type {
   SessionStartLaunchRequest,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
-import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
+import {
+  matchesAgentSessionIdentity,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
+import type {
+  AgentMessageSendOptions,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
 import {
   type AgentStudioQueryUpdate,
@@ -47,7 +52,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
       initialSourceSession?: AgentSessionIdentity | null;
     },
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  loadPromptOverrides?: ((workspaceId: string) => Promise<RepoPromptOverrides>) | undefined;
 };
 
 type UseAgentStudioRebaseConflictResolutionResult = {
@@ -60,7 +65,7 @@ export function useAgentStudioRebaseConflictResolution({
   selection,
   scheduleQueryUpdate,
   startSessionRequest,
-  loadPromptOverrides = loadEffectivePromptOverrides,
+  loadPromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
   const startConflictResolutionSession = useCallback(
     async (request: StartGitConflictResolutionSessionInput) => {

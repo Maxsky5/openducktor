@@ -1,19 +1,19 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { PullRequestReviewCheck, PullRequestReviewContext } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import * as externalUrl from "@/lib/open-external-url";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { host } from "@/state/operations/host";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   type PullRequestReviewContextQueryInput,
   pullRequestReviewQueryKeys,
-} from "@/state/queries/pull-request-review";
+} from "@openducktor/frontend-core/queries/pull-request-review";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import { TaskExecutionCiCheckCard } from "./task-execution-ci-check-card";
 import { TaskExecutionCiLoaded } from "./task-execution-ci-checks-content";
@@ -86,9 +86,9 @@ const noPullRequestContext = {
   reason: "No pull request found for the current branch.",
 } satisfies PullRequestReviewContext;
 
-const renderPanel = (queryClient = createQueryClient()): string => {
+const renderPanel = (connection: ClientConnection = createTestClientConnection()): string => {
   return renderToStaticMarkup(
-    <QueryClientProvider client={queryClient}>
+    <ClientConnectionProvider connection={connection}>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <TaskExecutionCiChecksPanel
@@ -99,13 +99,13 @@ const renderPanel = (queryClient = createQueryClient()): string => {
           />
         </TooltipProvider>
       </ThemeProvider>
-    </QueryClientProvider>,
+    </ClientConnectionProvider>,
   );
 };
 
 const renderPendingPanel = (): string => {
-  const queryClient = createQueryClient();
-  queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), {
+  const connection = createTestClientConnection();
+  connection.queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), {
     ...loadedContext,
     aggregateStatus: "pending",
     comments: [],
@@ -126,7 +126,7 @@ const renderPendingPanel = (): string => {
     },
   } satisfies PullRequestReviewContext);
 
-  return renderPanel(queryClient);
+  return renderPanel(connection);
 };
 
 const renderCheckCard = (
@@ -150,8 +150,11 @@ const renderCheckCard = (
 
 describe("TaskExecutionCiChecksPanel", () => {
   test("skips stable model inputs and renders changed query input", () => {
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), noPullRequestContext);
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(
+      pullRequestReviewQueryKeys.context(queryInput),
+      noPullRequestContext,
+    );
     let queryInputReadCount = 0;
     const stableModel: TaskExecutionCiChecksPanelModel = {
       isActive: false,
@@ -161,9 +164,9 @@ describe("TaskExecutionCiChecksPanel", () => {
       },
     };
     const panel = (model: TaskExecutionCiChecksPanelModel) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <TaskExecutionCiChecksPanel model={model} />
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const view = render(panel(stableModel));
     const initialQueryInputReadCount = queryInputReadCount;
@@ -187,9 +190,9 @@ describe("TaskExecutionCiChecksPanel", () => {
 
   test("renders the cold inactive state before the first enabled fetch", () => {
     const html = renderToStaticMarkup(
-      <QueryClientProvider client={createQueryClient()}>
+      <ClientConnectionProvider connection={createTestClientConnection()}>
         <TaskExecutionCiChecksPanel model={{ isActive: false, queryInput }} />
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
 
     expect(html).toContain("No CI data loaded");
@@ -197,10 +200,13 @@ describe("TaskExecutionCiChecksPanel", () => {
   });
 
   test("renders an actionable unavailable state with the provider reason", () => {
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(pullRequestReviewQueryKeys.context(queryInput), noPullRequestContext);
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(
+      pullRequestReviewQueryKeys.context(queryInput),
+      noPullRequestContext,
+    );
 
-    const html = renderPanel(queryClient);
+    const html = renderPanel(connection);
 
     expect(html).toContain("No pull request found");
     expect(html).toContain("Create or link a pull request");
@@ -227,33 +233,30 @@ describe("TaskExecutionCiChecksPanel", () => {
   });
 
   test("retries a failed review query through the panel", async () => {
-    const originalReviewContextGet = host.pullRequestReviewContextGet;
     const reviewContextGet = mock()
       .mockRejectedValueOnce(new Error("Failed to fetch"))
       .mockResolvedValueOnce(noPullRequestContext);
-    host.pullRequestReviewContextGet = reviewContextGet;
+    const connection = createTestClientConnection({
+      client: { pullRequestReviewContextGet: reviewContextGet },
+    });
 
-    try {
-      const view = render(
-        <QueryProvider useIsolatedClient>
-          <TaskExecutionCiChecksPanel model={{ isActive: true, queryInput }} />
-        </QueryProvider>,
-      );
+    const view = render(
+      <QueryProvider connection={connection}>
+        <TaskExecutionCiChecksPanel model={{ isActive: true, queryInput }} />
+      </QueryProvider>,
+    );
 
-      await waitFor(() => expect(view.getByText("Could not load CI checks")).toBeTruthy(), {
-        timeout: 1_000,
-      });
-      fireEvent.click(view.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(view.getByText("Could not load CI checks")).toBeTruthy(), {
+      timeout: 1_000,
+    });
+    fireEvent.click(view.getByRole("button", { name: "Retry" }));
 
-      await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), {
-        timeout: 1_000,
-      });
-      await waitFor(() => expect(view.getByText("No pull request found")).toBeTruthy(), {
-        timeout: 1_000,
-      });
-    } finally {
-      host.pullRequestReviewContextGet = originalReviewContextGet;
-    }
+    await waitFor(() => expect(reviewContextGet).toHaveBeenCalledTimes(2), {
+      timeout: 1_000,
+    });
+    await waitFor(() => expect(view.getByText("No pull request found")).toBeTruthy(), {
+      timeout: 1_000,
+    });
   });
 
   test("renders visible feedback while a state action is pending", () => {
@@ -277,7 +280,7 @@ describe("TaskExecutionCiChecksPanel", () => {
   test("renders provider-neutral PR, check, and review-thread metadata", async () => {
     await withAnimationFrameTestDriver(async (frameDriver) => {
       const view = render(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider>
           <ThemeProvider defaultTheme="light">
             <TooltipProvider>
               <TaskExecutionCiLoaded
@@ -403,7 +406,7 @@ describe("TaskExecutionCiChecksPanel", () => {
 
     try {
       const view = render(
-        <QueryProvider useIsolatedClient>
+        <QueryProvider>
           <ThemeProvider defaultTheme="light">
             <TooltipProvider>
               <TaskExecutionCiLoaded

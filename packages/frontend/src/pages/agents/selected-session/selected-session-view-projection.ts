@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
 import {
   inactiveRuntimeReadinessTarget,
@@ -9,18 +9,21 @@ import {
   type RuntimeReadinessTarget,
   runtimeReadinessTargetForRuntime,
   resolvingRuntimeReadinessTarget,
-} from "@/lib/runtime-readiness";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+} from "@openducktor/frontend-core/lib/runtime-readiness";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   type AgentSessionTranscriptState,
   deriveLoadedAgentSessionTranscriptState,
   derivePendingSelectedSessionTranscriptState,
   deriveSessionlessTaskTranscriptState,
-} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentSessionActivityState } from "@/types/agent-session-activity";
-import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
+import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
+import type { AgentSessionTransientFault } from "@openducktor/frontend-core/types/agent-session-transient-fault";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
 export type SelectedSessionViewProjection = {

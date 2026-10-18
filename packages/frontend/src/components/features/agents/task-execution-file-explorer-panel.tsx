@@ -16,9 +16,9 @@ import {
 import { useTheme } from "@/components/layout/theme-provider";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { ToolbarSearchField } from "@/components/ui/search-field";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
-import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
+import { workspaceFileTreeQueryOptions } from "@openducktor/frontend-core/queries/filesystem";
 import {
   buildTaskExecutionFileTreeGitStatusEntries,
   buildTaskExecutionFileTreeInputPaths,
@@ -232,7 +232,6 @@ export function TaskExecutionFileExplorerPanel({
     ...workspaceFileTreeQueryOptions(
       requestedRootPath ?? "__inactive_file_tree__",
       targetBranch,
-      undefined,
       branchKey,
     ),
     enabled: isActive && requestedRootPath !== null,

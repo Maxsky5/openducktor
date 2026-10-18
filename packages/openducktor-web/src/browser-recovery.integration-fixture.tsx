@@ -25,23 +25,28 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 });
 const { act, render, waitFor } = await import("@testing-library/react");
 const { useContext } = await import("react");
-const { QueryClientProvider } = await import("@tanstack/react-query");
 const { Toaster } = await import("../../frontend/src/components/ui/sonner");
 const { RemoteConnectionBoundary } =
   await import("../../frontend/src/components/layout/remote-connection-boundary");
-const { appQueryClient } = await import("@openducktor/frontend/lib/query-client");
-const { configureShellBridge, getShellBridge, createUnavailableShellBridge } =
+const { createClientQueryClient } =
+  await import("@openducktor/frontend-core/connection/client-query-client");
+const { createTestClientConnection } =
+  await import("@openducktor/frontend-core/test-support/test-client-connection");
+const { ClientConnectionProvider } =
+  await import("@openducktor/frontend-core/connection/client-connection-react");
+const { configureShellBridge, createUnavailableShellBridge } =
   await import("@openducktor/frontend/lib/shell-bridge");
 const { HostRuntimeStatusProvider } =
   await import("../../frontend/src/state/providers/host-runtime-status-provider");
 const { AutopilotProvider } = await import("../../frontend/src/state/providers/autopilot-provider");
-const { HostRuntimeStatusContext, WorkspaceStateContext, AgentOperationsContext } =
-  await import("../../frontend/src/state/app-state-contexts");
+const { WorkspaceStateContext } = await import("../../frontend/src/state/app-state-contexts");
+const { HostRuntimeStatusContext, AgentOperationsContext } =
+  await import("@openducktor/frontend-core/sessions/session-contexts");
 const { NotificationContext } =
   await import("../../frontend/src/state/notifications/notification-context");
 const fixtures = await import("../../frontend/src/test-utils/shared-test-fixtures");
 const { createAgentOperationsFixture } =
-  await import("../../frontend/src/test-utils/agent-operations-fixture");
+  await import("@openducktor/frontend-core/test-support/agent-operations-fixture");
 const { createTerminalTransportController } =
   await import("../../frontend/src/features/terminals/terminal-transport-controller");
 const { createRemoteShellBridge } = await import("@openducktor/frontend/lib/remote/shell-bridge");
@@ -190,13 +195,15 @@ try {
         };
       },
     };
-    const originalBridge = getShellBridge();
+    const queryClient = createClientQueryClient();
     const bridge = createRemoteShellBridge({
       endpoint: "https://host.test/remote",
       version: "test-browser",
       transport,
       notifications: createUnavailableShellBridge().notifications,
+      queryClient,
     });
+    const clientConnection = createTestClientConnection({ host: bridge, queryClient });
     configureShellBridge(bridge);
     const connection = bridge.remoteConnection!;
     const controller = createTerminalTransportController(bridge.terminals, () => {});
@@ -205,7 +212,7 @@ try {
       await waitFor(() => assert.equal(connection.readState().status, "connected"));
       await act(async () => {
         view = render(
-          <QueryClientProvider client={appQueryClient}>
+          <ClientConnectionProvider connection={clientConnection}>
             <WorkspaceStateContext
               value={fixtures.createWorkspaceStateFixture({
                 activeWorkspace: workspace,
@@ -250,7 +257,7 @@ try {
                 </NotificationContext>
               </AgentOperationsContext>
             </WorkspaceStateContext>
-          </QueryClientProvider>,
+          </ClientConnectionProvider>,
         );
       });
       await waitFor(() => {
@@ -378,8 +385,8 @@ try {
         await bridge.dispose?.();
       });
       bridge.notifications.dispose();
-      appQueryClient.clear();
-      configureShellBridge(originalBridge);
+      await clientConnection.dispose();
+      configureShellBridge(createUnavailableShellBridge());
     }
   }
 } finally {

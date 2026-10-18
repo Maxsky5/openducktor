@@ -4,7 +4,7 @@ import {
   canonicalTargetBranch,
   targetBranchFromSelection,
   UPSTREAM_TARGET_BRANCH,
-} from "@/lib/target-branch";
+} from "@openducktor/frontend-core/lib/target-branch";
 import type { DiffDataState } from "./contracts";
 import { toStatusSnapshotKey } from "./model/scope-state";
 import type { GitPanelReads } from "./reads/use-git-panel-reads";

@@ -8,13 +8,11 @@ import {
 } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { QueryProvider } from "@/lib/query-provider";
-import { createQueryClient } from "@/lib/query-client";
-import { host } from "@/state/operations/shared/host";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsGitSection } from "./settings-git-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
@@ -789,14 +787,15 @@ describe("settings git sections", () => {
         },
       },
     };
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
     const getConnection = mock(async () => ({ status: "disconnected" as const }));
     const saveSettings = mock(async () => true);
-    host.workspaceGetAzureDevOpsConnection = getConnection;
+    const connection = createTestClientConnection({
+      client: { workspaceGetAzureDevOpsConnection: getConnection },
+    });
     const rendered = render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: repoConfig,
@@ -825,7 +824,6 @@ describe("settings git sections", () => {
       await waitFor(() => expect(saveSettings).toHaveBeenCalledTimes(1));
     } finally {
       rendered.unmount();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
     }
   });
 
@@ -857,16 +855,17 @@ describe("settings git sections", () => {
         },
       },
     };
-    const queryClient = createQueryClient();
+    const getConnection = mock(async () => ({ status: "connected" as const, account: null }));
+    const connection = createTestClientConnection({
+      client: { workspaceGetAzureDevOpsConnection: getConnection },
+    });
+    const { queryClient } = connection;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture({ workspaces: { repo: savedConfig } }),
     );
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
-    const getConnection = mock(async () => ({ status: "connected" as const, account: null }));
-    host.workspaceGetAzureDevOpsConnection = getConnection;
     const rendered = render(
-      <QueryClientProvider client={queryClient}>
+      <QueryProvider connection={connection}>
         <RepositoryGitSection
           selectedRepoPath="/repo"
           selectedRepoConfig={draftConfig}
@@ -892,7 +891,7 @@ describe("settings git sections", () => {
           onSaveSettings={async () => true}
           onUpdateSelectedRepoConfig={() => draftConfig}
         />
-      </QueryClientProvider>,
+      </QueryProvider>,
     );
 
     try {
@@ -904,7 +903,6 @@ describe("settings git sections", () => {
     } finally {
       rendered.unmount();
       queryClient.clear();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
     }
   });
 
@@ -929,20 +927,21 @@ describe("settings git sections", () => {
         },
       },
     };
-    const queryClient = createQueryClient();
+    const azureConnection = createDeferred<{ status: "connected"; account: null }>();
+    const getConnection = mock(() => azureConnection.promise);
+    const listAreas = mock(async () => ["Desktop", "Desktop\\Team"]);
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetAzureDevOpsConnection: getConnection,
+        workspaceGetRepoConfig: async () => repoConfigSchema.parse(savedConfig),
+        azureAreaPathsList: listAreas,
+      },
+    });
+    const { queryClient } = connection;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture({ workspaces: { repo: savedConfig } }),
     );
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
-    const originalGetRepoConfig = host.workspaceGetRepoConfig;
-    const originalListAreas = host.azureAreaPathsList;
-    const connection = createDeferred<{ status: "connected"; account: null }>();
-    const getConnection = mock(() => connection.promise);
-    const listAreas = mock(async () => ["Desktop", "Desktop\\Team"]);
-    host.workspaceGetAzureDevOpsConnection = getConnection;
-    host.workspaceGetRepoConfig = async () => repoConfigSchema.parse(savedConfig);
-    host.azureAreaPathsList = listAreas;
     const saveSettings = mock(async () => true);
 
     const ControlledSection = () => {
@@ -981,14 +980,14 @@ describe("settings git sections", () => {
       );
     };
     const rendered = render(
-      <QueryClientProvider client={queryClient}>
+      <QueryProvider connection={connection}>
         <ControlledSection />
-      </QueryClientProvider>,
+      </QueryProvider>,
     );
 
     try {
       expect(listAreas).toHaveBeenCalledTimes(0);
-      await act(async () => connection.resolve({ status: "connected", account: null }));
+      await act(async () => azureConnection.resolve({ status: "connected", account: null }));
       await waitFor(() => expect(listAreas).toHaveBeenCalledTimes(1));
       const areaPicker = screen.getByRole("button", { name: "Area path" });
       expect(areaPicker.hasAttribute("disabled")).toBe(false);
@@ -1005,9 +1004,6 @@ describe("settings git sections", () => {
     } finally {
       rendered.unmount();
       queryClient.clear();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
-      host.workspaceGetRepoConfig = originalGetRepoConfig;
-      host.azureAreaPathsList = originalListAreas;
     }
   });
 
@@ -1025,7 +1021,7 @@ describe("settings git sections", () => {
     const rendered = render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: azureRepoConfig,
@@ -1105,11 +1101,7 @@ describe("settings git sections", () => {
       );
     };
     const rendered = render(
-      createElement(
-        QueryProvider,
-        { useIsolatedClient: true },
-        createElement(ControlledRepositoryGitSection),
-      ),
+      createElement(QueryProvider, null, createElement(ControlledRepositoryGitSection)),
     );
 
     try {
@@ -1208,11 +1200,7 @@ describe("settings git sections", () => {
       });
     };
     const rendered = render(
-      createElement(
-        QueryProvider,
-        { useIsolatedClient: true },
-        createElement(ControlledRepositoryGitSection),
-      ),
+      createElement(QueryProvider, null, createElement(ControlledRepositoryGitSection)),
     );
 
     try {
@@ -1267,15 +1255,18 @@ describe("settings git sections", () => {
         },
       },
     };
-    const originalDetect = host.workspaceDetectAzureDevOpsRepository;
-    host.workspaceDetectAzureDevOpsRepository = mock(async () => ({
-      providerId: "azure_devops" as const,
-      deployment: "services" as const,
-      serviceUrl: "https://dev.azure.com",
-      organization: "OpenDucktor",
-      project: "Desktop",
-      name: "app",
-    }));
+    const connection = createTestClientConnection({
+      client: {
+        workspaceDetectAzureDevOpsRepository: mock(async () => ({
+          providerId: "azure_devops" as const,
+          deployment: "services" as const,
+          serviceUrl: "https://dev.azure.com",
+          organization: "OpenDucktor",
+          project: "Desktop",
+          name: "app",
+        })),
+      },
+    });
 
     const ControlledRepositoryGitSection = (): ReturnType<typeof createElement> => {
       const [repoConfig, setRepoConfig] = useState(initialRepoConfig);
@@ -1294,11 +1285,7 @@ describe("settings git sections", () => {
       );
     };
     const rendered = render(
-      createElement(
-        QueryProvider,
-        { useIsolatedClient: true },
-        createElement(ControlledRepositoryGitSection),
-      ),
+      createElement(QueryProvider, { connection }, createElement(ControlledRepositoryGitSection)),
     );
 
     try {
@@ -1315,7 +1302,6 @@ describe("settings git sections", () => {
       );
     } finally {
       rendered.unmount();
-      host.workspaceDetectAzureDevOpsRepository = originalDetect;
     }
   });
 
@@ -1343,15 +1329,17 @@ describe("settings git sections", () => {
       },
     };
     const savedProvider = { ...repoConfig.git.provider!, settings: undefined };
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
-    const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
     const replacePat = mock(async () => ({ status: "connected" as const, account: null }));
-    host.workspaceGetAzureDevOpsConnection = async () => ({ status: "disconnected" });
-    host.workspaceReplaceAzureDevOpsPat = replacePat;
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetAzureDevOpsConnection: async () => ({ status: "disconnected" }),
+        workspaceReplaceAzureDevOpsPat: replacePat,
+      },
+    });
     const rendered = render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: repoConfig,
@@ -1390,8 +1378,6 @@ describe("settings git sections", () => {
       expect(screen.getByText(/Confirm the HTTP connection in Repository/)).toBeTruthy();
     } finally {
       rendered.unmount();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
-      host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
     }
   });
 
@@ -1414,19 +1400,21 @@ describe("settings git sections", () => {
         },
       },
     };
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
-    const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
     const replacePat = mock(async () => {
       throw new Error("Azure DevOps rejected the PAT.");
     });
-    host.workspaceGetAzureDevOpsConnection = async () => ({
-      status: "disconnected",
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetAzureDevOpsConnection: async () => ({
+          status: "disconnected",
+        }),
+        workspaceReplaceAzureDevOpsPat: replacePat,
+      },
     });
-    host.workspaceReplaceAzureDevOpsPat = replacePat;
     const rendered = render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: azureRepoConfig,
@@ -1478,8 +1466,6 @@ describe("settings git sections", () => {
       expect(patInput.value).toBe("rejected-pat");
     } finally {
       rendered.unmount();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
-      host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
     }
   });
 
@@ -1502,21 +1488,24 @@ describe("settings git sections", () => {
         },
       },
     };
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
-    const originalReplacePat = host.workspaceReplaceAzureDevOpsPat;
     const slowRefresh = createDeferred<{ status: "connected"; account: null }>();
     let patSaved = false;
-    host.workspaceGetAzureDevOpsConnection = mock(() =>
-      patSaved ? slowRefresh.promise : Promise.resolve({ status: "disconnected" as const }),
-    );
-    host.workspaceReplaceAzureDevOpsPat = mock(async () => {
+    const replacePat = mock(async () => {
       patSaved = true;
       return { status: "connected" as const, account: null };
+    });
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetAzureDevOpsConnection: mock(() =>
+          patSaved ? slowRefresh.promise : Promise.resolve({ status: "disconnected" as const }),
+        ),
+        workspaceReplaceAzureDevOpsPat: replacePat,
+      },
     });
     const rendered = render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: azureRepoConfig,
@@ -1549,14 +1538,12 @@ describe("settings git sections", () => {
       const setupCard = screen.getByRole("region", { name: "Azure DevOps setup" });
       fireEvent.change(patInput, { target: { value: "valid-pat" } });
       fireEvent.click(screen.getByRole("button", { name: "Save and validate PAT" }));
-      await waitFor(() => expect(host.workspaceReplaceAzureDevOpsPat).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(replacePat).toHaveBeenCalledTimes(1));
       expect(screen.getByText("Connected with a personal access token.")).toBeTruthy();
       expect(screen.getByRole("region", { name: "Azure DevOps setup" })).toBe(setupCard);
     } finally {
       slowRefresh.resolve({ status: "connected", account: null });
       rendered.unmount();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
-      host.workspaceReplaceAzureDevOpsPat = originalReplacePat;
     }
   });
 
@@ -1579,16 +1566,19 @@ describe("settings git sections", () => {
         },
       },
     };
-    const originalGetConnection = host.workspaceGetAzureDevOpsConnection;
     let failRead = true;
-    host.workspaceGetAzureDevOpsConnection = async () => {
-      if (failRead) throw new Error("Credential store unavailable");
-      return { status: "disconnected" };
-    };
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetAzureDevOpsConnection: async () => {
+          if (failRead) throw new Error("Credential store unavailable");
+          return { status: "disconnected" };
+        },
+      },
+    });
     const rendered = render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection },
         createElement(RepositoryGitSection, {
           selectedRepoPath: "/repo",
           selectedRepoConfig: azureRepoConfig,
@@ -1630,7 +1620,6 @@ describe("settings git sections", () => {
       );
     } finally {
       rendered.unmount();
-      host.workspaceGetAzureDevOpsConnection = originalGetConnection;
     }
   });
 });

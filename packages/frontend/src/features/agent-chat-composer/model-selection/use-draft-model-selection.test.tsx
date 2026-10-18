@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentModelSelection } from "@openducktor/core";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { useDraftModelSelectionState } from "./use-draft-model-selection";
 
 type HookArgs = Parameters<typeof useDraftModelSelectionState>[0];

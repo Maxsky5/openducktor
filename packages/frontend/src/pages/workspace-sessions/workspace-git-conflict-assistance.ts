@@ -5,7 +5,7 @@ import {
   GitConflictRequestCancelled,
   type GitConflictAssistanceResult,
 } from "@/features/git-conflict-resolution/conflict-assistance";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
+import { normalizeWorkingDirectory } from "@openducktor/frontend-core/lib/working-directory";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 

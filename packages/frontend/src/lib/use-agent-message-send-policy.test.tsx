@@ -1,23 +1,23 @@
 import { expect, test } from "bun:test";
 import { type PropsWithChildren } from "react";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   AgentSessionReadModelStateContext,
   HostRuntimeStatusContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   buildSession,
   createSessionActions,
   createSessionsRef,
   getSession,
-} from "@/state/operations/agent-orchestrator/handlers/session-actions.test-helpers";
-import { AgentRuntimeTestAdapter } from "../test-support/agent-runtime-test-adapter";
-import { acceptedUserMessage } from "@/state/operations/agent-orchestrator/handlers/session-actions-send.test-support";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/handlers/session-actions.test-helpers";
+import { AgentRuntimeTestAdapter } from "@openducktor/frontend-core/test-support/agent-runtime-test-adapter";
+import { acceptedUserMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/handlers/session-actions-send.test-support";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { useAgentMessageSendPolicy } from "./use-agent-message-send-policy";
-import type { AgentSessionTransientFault } from "@/types/agent-session-transient-fault";
+import type { AgentSessionTransientFault } from "@openducktor/frontend-core/types/agent-session-transient-fault";
 
 test("blocks a send while the session is still starting", async () => {
   let submissions = 0;

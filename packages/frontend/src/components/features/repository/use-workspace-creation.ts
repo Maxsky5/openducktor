@@ -5,7 +5,7 @@ import type {
   WorkspaceProviderSetupProgress,
 } from "@openducktor/contracts";
 import { useMemo, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { prepareModelDefaultsForSave } from "@/lib/repo-agent-defaults";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import {

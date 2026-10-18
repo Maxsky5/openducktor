@@ -10,15 +10,17 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
 import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   ChecksOperationsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
-import { host } from "@/state/operations/shared/host";
-import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import type { HostClient } from "@openducktor/host-client";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHookHarness as createCoreHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
@@ -113,8 +115,15 @@ const createModalCatalog = (): AgentModelCatalog => ({
   ],
 });
 
+// Host commands for the connection of the next mounted harness.
+let hostClientFakes: Partial<HostClient> = {};
+
 const createHookHarness = (initialProps: HookArgs) => {
   const checksStateContextValue = createChecksStateContextValue();
+  // The connection opens at mount, so it gets the host commands that the test set up to then.
+  let connection: ClientConnection | null = null;
+  const connectHost = (): ClientConnection =>
+    (connection ??= createTestClientConnection({ client: hostClientFakes }));
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
@@ -125,7 +134,7 @@ const createHookHarness = (initialProps: HookArgs) => {
       },
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        { connection: connectHost() },
         createElement(
           HostRuntimeStatusContext.Provider,
           {
@@ -291,9 +300,6 @@ describe("resolveBuildContinuationLaunchAction", () => {
 });
 
 describe("useKanbanSessionStartFlow", () => {
-  const originalWorkspaceGetRepoConfig = host.workspaceGetRepoConfig;
-  const originalWorkspaceApplyAgentStudioStateAction = host.workspaceApplyAgentStudioStateAction;
-  const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
   let repoConfig = createRepoConfigFixture();
   const applyAgentStudioStateAction = mock(
     async (_workspaceId: string, action: WorkspaceAgentStudioStateAction): Promise<RepoConfig> => {
@@ -314,15 +320,15 @@ describe("useKanbanSessionStartFlow", () => {
   beforeEach(() => {
     repoConfig = createRepoConfigFixture();
     applyAgentStudioStateAction.mockClear();
-    host.workspaceGetRepoConfig = async () => repoConfig;
-    host.workspaceApplyAgentStudioStateAction = applyAgentStudioStateAction;
-    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
+    hostClientFakes = {
+      workspaceGetRepoConfig: async () => repoConfig,
+      workspaceApplyAgentStudioStateAction: applyAgentStudioStateAction,
+      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+    };
   });
 
   afterEach(() => {
-    host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-    host.workspaceApplyAgentStudioStateAction = originalWorkspaceApplyAgentStudioStateAction;
-    host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    hostClientFakes = {};
   });
 
   test("opens the shared session start modal for QA review", async () => {
@@ -744,7 +750,6 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("reuse confirm starts directly from the source session when the reused session has no saved model", async () => {
-    const originalBuildContinuationTargetGet = host.taskWorktreeGet;
     const startSessionDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startSessionDeferred.promise);
     const baseArgs = createBaseArgs();
@@ -759,7 +764,7 @@ describe("useKanbanSessionStartFlow", () => {
       workingDirectory: "/repo/worktrees/task-1",
       source: "builder_session" as const,
     }));
-    host.taskWorktreeGet = taskWorktreeGet;
+    hostClientFakes.taskWorktreeGet = taskWorktreeGet;
 
     try {
       await harness.mount();
@@ -804,7 +809,6 @@ describe("useKanbanSessionStartFlow", () => {
       });
       await expect(startPromise).resolves.toBe("session-new");
     } finally {
-      host.taskWorktreeGet = originalBuildContinuationTargetGet;
       await harness.unmount();
     }
   });

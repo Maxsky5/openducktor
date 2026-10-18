@@ -1,5 +1,5 @@
 import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
-import { latestTurnUsageLimit } from "@/lib/agent-session-interrupted-turn";
+import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
 import {
   canInteractWithWorkspaceSession,
@@ -19,21 +19,22 @@ import { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/c
 import {
   getAgentSessionWaitingInputPlaceholder,
   isAgentSessionBlockedOnInput,
-} from "@/lib/agent-session-waiting-input";
-import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
+} from "@openducktor/frontend-core/lib/agent-session-waiting-input";
+import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
-import { useStableAgentSessionIdentity } from "@/lib/use-stable-agent-session-identity";
+import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSession,
   useAgentSessionReadModelState,
 } from "@/state/app-state-provider";
-import { useSelectedSessionContextLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-context-load";
-import { useSelectedSessionHistoryLoad } from "@/state/operations/agent-orchestrator/history/use-selected-session-history-load";
-import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import { workspaceSessionIdentity } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
+import { useSelectedSessionContextLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-context-load";
+import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
+import { useSessionRuntimeData } from "@openducktor/frontend-core/sessions/agent-orchestrator/hooks/use-session-runtime-data";
+import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { createWorkspaceSessionChatDraftPersistence } from "./workspace-session-chat-draft";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   useWorkspaceConflictChatActions,
@@ -73,9 +74,10 @@ export function WorkspaceSessionChat({
   useWorkspaceSessionToolRefresh(session, onToolRefresh);
   const actions = useWorkspaceSessionChatActions(workspace, record, isMounted);
   const { isStarting, isSavingModel } = actions;
+  const chatDrafts = useClientConnection().drafts.chat;
   const draftPersistence = useMemo(
-    () => createWorkspaceSessionChatDraftPersistence(workspace.workspaceId, record.id),
-    [workspace.workspaceId, record.id],
+    () => createWorkspaceSessionChatDraftPersistence(chatDrafts, workspace.workspaceId, record.id),
+    [chatDrafts, workspace.workspaceId, record.id],
   );
   const operations = useAgentOperations();
   const readModel = useAgentSessionReadModelState();

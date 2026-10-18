@@ -2,9 +2,9 @@ import type { TaskCard } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
-import { settingsSnapshotQueryOptions } from "../../queries/workspace";
+import { summarizeTaskLoadError } from "@openducktor/frontend-core/tasks/task-load-errors";
+import { repoTaskDataQueryOptions, taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 
 type UseTaskQueryReadModelArgs = {
   activeRepoPath: string | null;

@@ -5,9 +5,10 @@ import type {
 } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { host } from "@/state/operations/shared/host";
-import { invalidateRepoIssueItemsQueries } from "@/state/queries/issue-items";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { invalidateRepoIssueItemsQueries } from "@openducktor/frontend-core/queries/issue-items";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
 export type IssueReview = {
   issueType: "task" | "feature" | "bug";
@@ -117,6 +118,7 @@ export function useIssueImportSubmission({
   onRefreshed: (item: SourceIssue) => void;
 }) {
   const queryClient = useQueryClient();
+  const host = useHostClient();
   const [outcomes, setOutcomes] = useState<Map<string, ImportOutcome>>(() => new Map());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
@@ -180,7 +182,7 @@ export function useIssueImportSubmission({
     try {
       const item = await queryClient.fetchQuery({
         queryKey: ["issue-item", providerId, repoPath, providerScope, sourceId],
-        queryFn: () => host.issueItemGet({ repoPath, sourceId }),
+        queryFn: ({ client }) => connectionHost(client).issueItemGet({ repoPath, sourceId }),
         staleTime: 0,
       });
       onRefreshed(item);

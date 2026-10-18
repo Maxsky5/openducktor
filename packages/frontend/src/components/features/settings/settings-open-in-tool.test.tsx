@@ -3,30 +3,34 @@ import type { SystemOpenInToolInfo, SystemSettings } from "@openducktor/contract
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { QueryProvider } from "@/lib/query-provider";
-import { host } from "@/state/operations/host";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { HostClient } from "@openducktor/host-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 import { SETTINGS_SECTIONS } from "./settings-modal-constants";
 
 enableReactActEnvironment();
-const originalList = host.systemListOpenInTools;
 afterEach(() => {
   cleanup();
-  host.systemListOpenInTools = originalList;
 });
 
 function Harness({
+  listOpenInTools,
   initial = {},
   disabled = false,
 }: {
+  listOpenInTools: HostClient["systemListOpenInTools"];
   initial?: SystemSettings;
   disabled?: boolean;
 }) {
   const [system, setSystem] = useState(initial);
+  const [connection] = useState(() =>
+    createTestClientConnection({ client: { systemListOpenInTools: listOpenInTools } }),
+  );
   return (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <ThemeProvider>
         <SettingsAppearanceSection
           appearance={{ horizontalScrollbarVisibility: "system", sidebarSessionGrouping: "task" }}
@@ -44,8 +48,8 @@ function Harness({
 describe("Open In settings", () => {
   test("keeps a fixed placeholder during discovery without showing an empty result", async () => {
     const discovery = createDeferred<SystemOpenInToolInfo[]>();
-    host.systemListOpenInTools = () => discovery.promise;
-    render(<Harness />);
+    const listOpenInTools: HostClient["systemListOpenInTools"] = () => discovery.promise;
+    render(<Harness listOpenInTools={listOpenInTools} />);
     expect(screen.getByRole("status", { name: "Loading supported apps" })).toBeDefined();
     expect(screen.queryByText("No supported apps found") === null).toBe(true);
     expect(screen.queryByText("Looking for supported apps…") === null).toBe(true);
@@ -58,8 +62,11 @@ describe("Open In settings", () => {
   });
 
   test("lists available tools and sets a preference without a clear action", async () => {
-    host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
-    render(<Harness />);
+    const listOpenInTools: HostClient["systemListOpenInTools"] = async () => [
+      { toolId: "finder" },
+      { toolId: "zed" },
+    ];
+    render(<Harness listOpenInTools={listOpenInTools} />);
     expect(screen.getByRole("heading", { name: "Appearance" })).toBeDefined();
     expect(SETTINGS_SECTIONS.some(({ label }) => label === "System")).toBe(false);
     const trigger = await screen.findByRole<HTMLButtonElement>("button", {
@@ -81,8 +88,11 @@ describe("Open In settings", () => {
   });
 
   test("can save the displayed default as an explicit preference", async () => {
-    host.systemListOpenInTools = async () => [{ toolId: "finder" }, { toolId: "zed" }];
-    render(<Harness />);
+    const listOpenInTools: HostClient["systemListOpenInTools"] = async () => [
+      { toolId: "finder" },
+      { toolId: "zed" },
+    ];
+    render(<Harness listOpenInTools={listOpenInTools} />);
     const trigger = await screen.findByRole<HTMLButtonElement>("button", {
       name: "Preferred Open In tool",
     });
@@ -93,8 +103,8 @@ describe("Open In settings", () => {
   });
 
   test("disables the selector when no apps are available without changing the preference", async () => {
-    host.systemListOpenInTools = async () => [];
-    render(<Harness />);
+    const listOpenInTools: HostClient["systemListOpenInTools"] = async () => [];
+    render(<Harness listOpenInTools={listOpenInTools} />);
     const trigger = await screen.findByRole<HTMLButtonElement>("button", {
       name: "Preferred Open In tool",
     });
@@ -104,8 +114,10 @@ describe("Open In settings", () => {
   });
 
   test("shows the default when the saved tool is unavailable without changing the preference", async () => {
-    host.systemListOpenInTools = async () => [{ toolId: "finder" }];
-    render(<Harness initial={{ preferredOpenInToolId: "zed" }} />);
+    const listOpenInTools: HostClient["systemListOpenInTools"] = async () => [{ toolId: "finder" }];
+    render(
+      <Harness listOpenInTools={listOpenInTools} initial={{ preferredOpenInToolId: "zed" }} />,
+    );
     await screen.findByText("Zed is unavailable. Open In will use Finder.");
     expect(screen.getByRole("button", { name: "Preferred Open In tool" }).textContent).toContain(
       "Finder",
@@ -115,11 +127,13 @@ describe("Open In settings", () => {
 
   test("shows discovery errors and retries while preserving the preference", async () => {
     let calls = 0;
-    host.systemListOpenInTools = async () => {
+    const listOpenInTools: HostClient["systemListOpenInTools"] = async () => {
       if (++calls === 1) throw new Error("discovery failed");
       return [{ toolId: "zed" }];
     };
-    render(<Harness initial={{ preferredOpenInToolId: "zed" }} />);
+    render(
+      <Harness listOpenInTools={listOpenInTools} initial={{ preferredOpenInToolId: "zed" }} />,
+    );
     await screen.findByText(
       "Failed to load supported apps: discovery failed",
       {},
@@ -141,8 +155,14 @@ describe("Open In settings", () => {
   });
 
   test("disables selection during save", async () => {
-    host.systemListOpenInTools = async () => [{ toolId: "zed" }];
-    render(<Harness initial={{ preferredOpenInToolId: "zed" }} disabled />);
+    const listOpenInTools: HostClient["systemListOpenInTools"] = async () => [{ toolId: "zed" }];
+    render(
+      <Harness
+        listOpenInTools={listOpenInTools}
+        initial={{ preferredOpenInToolId: "zed" }}
+        disabled
+      />,
+    );
     expect(
       (await screen.findByRole<HTMLButtonElement>("button", { name: "Preferred Open In tool" }))
         .disabled,

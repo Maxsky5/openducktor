@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import type { AgentChatMessageQueueAction } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
-import { toTranscriptAttachment } from "./agent-chat-attachments";
+import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   type QueuedMessageSteerContext,
   queuedMessageSteerBlockedReason,

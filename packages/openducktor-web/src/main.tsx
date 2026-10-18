@@ -16,7 +16,7 @@ async function startClient(): Promise<void> {
     hosts: {
       localHost: !standalone && !isRemoteBrowserMode() ? "web" : null,
       defaultEndpoint: !standalone && isRemoteBrowserMode() ? getBrowserBackendUrl() : undefined,
-      createRemoteBridge: (endpoint) => {
+      createRemoteBridge: (endpoint, _local, queryClient) => {
         const version = getAppVersion();
         if (!version) throw new Error("The client app version is missing. Rebuild the web client.");
         return createRemoteShellBridge({
@@ -24,6 +24,7 @@ async function startClient(): Promise<void> {
           version,
           transport: createBrowserRemoteTransport(),
           notifications: createBrowserNotificationBridge({ scope: endpoint }),
+          queryClient,
         });
       },
     },

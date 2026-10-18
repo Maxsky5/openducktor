@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createAgentSessionFixture } from "./agent-studio-test-utils";
 import {
   toAgentStudioTranscriptSession,

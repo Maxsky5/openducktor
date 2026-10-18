@@ -1,9 +1,11 @@
 import type { AgentAttachmentReference } from "@openducktor/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { resolveLocalAttachmentPreview } from "@/lib/local-attachment-files";
 import { useResourceSource } from "@/lib/use-resource-source";
-import { isPreviewableAttachmentKind } from "./agent-chat-attachments";
+import { isPreviewableAttachmentKind } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import type { DeviceFileReference } from "@openducktor/frontend-core/platform/device-file";
+import { toBrowserFile } from "@/lib/local-attachment-files";
 
 export type AgentChatAttachmentPreviewTarget = {
   id: string;
@@ -11,7 +13,7 @@ export type AgentChatAttachmentPreviewTarget = {
   kind: AgentAttachmentReference["kind"];
   mime?: string;
   path?: string;
-  file?: File;
+  file?: DeviceFileReference;
   localPreviewAvailable?: boolean;
 };
 
@@ -28,7 +30,7 @@ export type AgentChatAttachmentPreviewState = {
   markPreviewUnavailable: (failingSrc?: string) => void;
 };
 
-type FileSource = { file: File; src: string };
+type FileSource = { file: DeviceFileReference; src: string };
 type PreviewFailure = { id: string; src: string | null; message: string };
 
 export const useAgentChatAttachmentPreview = ({
@@ -54,7 +56,7 @@ export const useAgentChatAttachmentPreview = ({
       setFileSource(null);
       return;
     }
-    const file = attachment.file;
+    const file = toBrowserFile(attachment.file);
     const src = URL.createObjectURL(file);
     setFileSource({ file, src });
     return () => URL.revokeObjectURL(src);

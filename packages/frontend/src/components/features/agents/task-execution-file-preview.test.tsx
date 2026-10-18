@@ -2,7 +2,7 @@ import { ChatFileLinkProvider } from "./agent-chat/agent-chat-file-link-provider
 import type { ChatFileLinkOwner } from "./agent-chat/agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat/agent-chat-markdown-renderer";
 import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
-import { taskWorktreeQueryOptions } from "@/state/queries/build-runtime";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type {
   WorkspaceTextFileReadResult,
@@ -20,15 +20,11 @@ import {
   useEffect,
   useState,
 } from "react";
-import { QueryProvider } from "@/lib/query-provider";
-import {
-  configureShellBridge,
-  createUnavailableShellBridge,
-  getShellBridge,
-} from "@/lib/shell-bridge";
+import { QueryProvider } from "@/test-utils/query-provider";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
 import {
@@ -90,6 +86,8 @@ const attachEditor = (options: PreviewEditorOptions | undefined, editor: Preview
 let secondFileReadMode: "pending" | "resolve" = "pending";
 let previewTheme: "light" | "dark" = "light";
 let latestQueryClient: QueryClient | null = null;
+// Host commands for the connection of the next rendered preview.
+let hostClient: Partial<HostClient> = {};
 let workerPoolMock: PreviewWorkerPool | undefined;
 
 const runAsyncUiAction = async (action: () => void): Promise<void> => {
@@ -169,8 +167,11 @@ function CaptureQueryClient(): null {
 }
 
 function PreviewTestProviders({ children }: PropsWithChildren): ReactElement {
+  const [connection] = useState<ClientConnection>(() =>
+    createTestClientConnection({ client: hostClient }),
+  );
   return (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <CaptureQueryClient />
       {children}
     </QueryProvider>
@@ -242,16 +243,12 @@ beforeEach(async () => {
     revision: `${input.revision}:saved`,
   }));
 
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        filesystemResolvePath: async (path) => path,
-        gitCanonicalizePath: async (path) => path,
-        filesystemReadTextFile: readTextFileMock,
-        filesystemWriteTextFile: writeTextFileMock,
-      },
-    }),
-  );
+  hostClient = {
+    filesystemResolvePath: async (path) => path,
+    gitCanonicalizePath: async (path) => path,
+    filesystemReadTextFile: readTextFileMock,
+    filesystemWriteTextFile: writeTextFileMock,
+  };
 
   moduleSpies = [
     spyOn(actualThemeProvider, "useTheme").mockImplementation(() => ({
@@ -292,7 +289,7 @@ afterEach(() => {
     moduleSpy.mockRestore();
   }
   moduleSpies = [];
-  configureShellBridge(createUnavailableShellBridge());
+  hostClient = {};
 });
 
 function ChatPreviewHarness(): ReactElement {
@@ -365,16 +362,12 @@ describe("TaskExecutionSelectedFilePreview", () => {
           relativePath: "a.ts",
           access: "local",
         };
-        configureShellBridge(
-          createShellBridgeFixture({
-            client: {
-              gitCanonicalizePath: async (path) => path.replaceAll("/", "\\"),
-              filesystemResolvePath: async () => String.raw`C:\repo\task`,
-              filesystemReadTextFile: readTextFileMock,
-              filesystemWriteTextFile: writeTextFileMock,
-            },
-          }),
-        );
+        hostClient = {
+          gitCanonicalizePath: async (path) => path.replaceAll("/", "\\"),
+          filesystemResolvePath: async () => String.raw`C:\repo\task`,
+          filesystemReadTextFile: readTextFileMock,
+          filesystemWriteTextFile: writeTextFileMock,
+        };
         readTextFileMock.mockResolvedValue(textFileResult(selectedFile, "before"));
         const view = render(
           <PreviewTestProviders>
@@ -544,15 +537,11 @@ describe("TaskExecutionSelectedFilePreview", () => {
             revision: "image-1",
           },
     );
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          filesystemResolvePath: resolvePath,
-          filesystemReadTextFile: readTextFileMock,
-          filesystemWriteTextFile: writeTextFileMock,
-        },
-      }),
-    );
+    hostClient = {
+      filesystemResolvePath: resolvePath,
+      filesystemReadTextFile: readTextFileMock,
+      filesystemWriteTextFile: writeTextFileMock,
+    };
     render(renderPreview({ selectedFile, onClose: () => {} }));
     const image = await screen.findByRole("img", { name: "Diagram" }, { timeout: 4_000 });
     await waitFor(() => expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U="));
@@ -1425,9 +1414,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
   });
 
   test("absolute workspace links keep drafts and block saves after a branch change with the same revision", async () => {
-    moduleSpies.push(
-      spyOn(getShellBridge().client, "filesystemResolvePath").mockResolvedValue("/repo"),
-    );
+    hostClient.filesystemResolvePath = async () => "/repo";
     readTextFileMock.mockImplementation(async (file: TaskExecutionSelectedFile) =>
       textFileResult(file, "const first = true;"),
     );

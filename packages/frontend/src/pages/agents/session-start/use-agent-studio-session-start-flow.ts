@@ -3,8 +3,11 @@ import { useSessionStartContext } from "@/features/session-start/use-session-sta
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { getSessionLaunchAction } from "@/features/session-start/session-start-launch-options";
 import { supportsTaskTargetBranchSelection } from "@/features/session-start/constants";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { effectiveTaskTargetBranch, taskTargetBranchValidationError } from "@/lib/target-branch";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import {
+  effectiveTaskTargetBranch,
+  taskTargetBranchValidationError,
+} from "@openducktor/frontend-core/lib/target-branch";
 import { requireDirectSessionSelection } from "./direct-session-selection";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
@@ -35,9 +38,12 @@ import {
   useSessionStartModalRunner,
   useWorkspaceSessionStartGate,
 } from "@/features/session-start";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { isWorkflowAgentSession } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/workflow-session";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";

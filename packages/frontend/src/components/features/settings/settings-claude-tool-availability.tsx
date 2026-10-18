@@ -10,13 +10,12 @@ import { useId, useState, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { errorMessage } from "@/lib/errors";
-import { hostClient } from "@/lib/host-client";
-import { useHostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useHostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
   claudeToolCatalogQueryOptions,
   skippedClaudeToolCatalogQueryOptions,
-} from "@/state/queries/claude-tool-catalog";
+} from "@openducktor/frontend-core/queries/claude-tool-catalog";
 import { AGENT_ROLE_LABELS } from "@/types/agent-role-labels";
 import { CLAUDE_POLICY_ROLES } from "./settings-claude-policy-fields";
 import { ClaudeToolList } from "./settings-claude-tool-list";
@@ -26,6 +25,7 @@ import {
   RuntimePolicyInfo,
   RuntimePolicyRoleOverrides,
 } from "./settings-runtime-policy-layout";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function ClaudeToolAvailabilitySettings({
   config,
@@ -33,6 +33,7 @@ export function ClaudeToolAvailabilitySettings({
   onChange,
 }: SettingsProps): ReactElement {
   const status = useHostRuntimeStatusContext();
+  const hostClient = useHostClient();
   const runtime = status.statusByKind.claude;
   const runtimeId = status.isCurrent && runtime?.state === "ready" ? runtime.runtimeId : null;
   const hostInstanceId = status.snapshot?.hostInstanceId;

@@ -8,7 +8,7 @@ Electron and the normal web runner select their own local host by default. The s
 
 Select the host icon at the bottom of the workspace rail, left of Settings, to open Host connection. The dialog shows the selected host above the New host address field. Desktop app host and Web runner host name the host supplied by that shell. For a selected local host, the dialog shows whether remote control is on or off. Remote control settings opens that Settings section. When remote control is on, the dialog also shows the sharing address, live client count, Copy address, Show QR code, and Disable remote control. These controls use the same state, change operation, and address view as Remote control settings. A remote host shows its full address once. Paste the address from the other host's Remote control settings, then select Switch host. Use desktop host or Use web runner appears only when that shell has a local host and it is not selected. Host changes sit in the dialog footer, with Cancel on the left. Disconnect returns a remote client to the connection screen. Cancel keeps the selected host. During onboarding, the host icon sits with the header controls.
 
-Selecting the current host does not reload the client. Switching to a different host or disconnecting reloads the window and clears the old host's reads, events, and work state. The client stops local delivery at once and waits for pending admission cleanup before it reloads. Cleanup uses the existing setup and release deadlines. Host work keeps running. Remote drafts stay in page memory and are lost on reload or host change. Copy any unsent draft first. Existing local drafts stay on this device.
+Selecting the current host does not reload the client. Switching to a different host or disconnecting reloads the window and clears the old host's reads, events, and work state. The client stops local delivery at once and waits for pending admission cleanup before it reloads. Cleanup uses the existing setup and release deadlines. Host work keeps running. Remote drafts stay in the memory of their client connection and are lost on reload or host change. Copy any unsent draft first. Existing local drafts stay on this device.
 
 The standalone client starts at the connection page on its first visit. Use `bun run browser:client` to test this mode. It reads no host settings or work until the connection is ready. The connection page has Light, Dark, and System theme choices and saves its theme in this browser.
 
@@ -231,8 +231,12 @@ Remote browser task assets and staged previews use the current client's admissio
 
 Resource query keys include the connection generation. A new admission starts new resource reads. A resource failure stays visible in its view and does not fail the current-work recovery barrier. Electron and the private browser keep their existing resource URLs and IPC or local HTTP delivery.
 
-Import `createRemoteHostClient` from `@openducktor/host-client/remote`.
-Supply the endpoint, client hello, `RemoteTransport`, and one application synchronizer.
+A client app uses `createRemoteHostConnection` from `@openducktor/frontend-core/recovery/remote-host-connection`.
+Supply the endpoint, the client app version, a `RemoteTransport`, and the query client of the same `ClientConnection`.
+It wraps `createRemoteHostClient` from `@openducktor/host-client/remote` and owns the recovery barrier below: task stream owners, live attachments, registered platform owners, the notification replay relay, and the refetch of active reads.
+Pass the result as the host of `createClientConnection`, with `releaseHost` set to disconnect the remote client. Disposing the connection releases the admission and sends no host command.
+A remote host stores drafts in connection memory, so two hosts never read each other's drafts, even with identical repository paths. Set `saveDraftsOnDispose: false` for this storage, so disposal does not wait for draft attachment uploads.
+Electron and the browser use the same module through `createRemoteShellBridge`.
 The portable entry point uses no React, DOM, EventSource, Node API, browser cookie bootstrap, or runtime SDK.
 A native adapter can supply streaming HTTP, such as `expo/fetch`, and its platform terminal socket factory.
 The native app must supply redirect rejection, normal certificate validation, cancellation, and binary terminal frames.
@@ -245,13 +249,14 @@ The synchronizer receives the generation, AbortSignal, current descriptor, previ
 Restore selected task streams and live or terminal attachments before current-state reads.
 Await owned task `ready` promises only after state application has acknowledged the captured replay boundary or its replacement snapshot boundary.
 Later live events do not extend that barrier.
-The browser bridge uses existing task and live-session state owners, the notification replay relay, and active TanStack Query reads.
+The remote host connection uses the task and live-session state owners, the notification replay relay, and the active TanStack Query reads of its own client connection.
+Recovery does not refetch reads that set `meta: { skipHostRecovery: true }`, such as resource reads and the remote access state of this device.
 After a failed first attempt, the first successful admission also recovers mounted state owners, even when no previous host instance ID exists. Fresh bootstrap reads keep their initial path so they do not wait on their own connection barrier.
 Reconnect listeners return the recovery promises that must finish before remote work unlocks.
 The runtime status owner returns its baseline recovery because its Query observer does not fetch on its own.
 Recovery waits for the latest owned baseline if a host event replaces the read, and a failed baseline fails the connection.
 Autopilot returns its held-outcome read and application.
-Selected terminal owners join synchronization before current-state reads.
+Selected terminal owners join synchronization through `subscribeRecovery` before current-state reads.
 They wait for the attachment snapshot and consumption through its output boundary, or an explicit lost-terminal result.
 Later output does not extend that boundary, and terminal restoration fails after a 10-second deadline or a protocol failure.
 

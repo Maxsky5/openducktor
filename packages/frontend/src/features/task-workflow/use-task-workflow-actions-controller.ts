@@ -11,7 +11,7 @@ import {
 } from "@/features/git-conflict-resolution";
 import { buildSessionNavigationHref } from "@/features/session-navigation/session-navigation-target";
 import { useSessionStartWorkflowRunner } from "@/features/session-start";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { gitProviderReadError as toGitProviderReadError } from "@/lib/git-provider-health";
 import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
 import type {

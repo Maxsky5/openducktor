@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
-import { useLayoutEffect, useState } from "react";
+import { type PropsWithChildren, useLayoutEffect, useState } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { taskQueryKeys } from "../../queries/tasks";
-import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
-import { workspaceQueryKeys } from "../../queries/workspace";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
@@ -17,13 +17,18 @@ import {
   flush,
   workspace,
 } from "./workspace-hook-test-fixtures";
-import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
+import { WorkspaceHostProvider } from "./workspace-hook-test-utils";
 
 let workspaceHost = createWorkspaceHostClient();
 
 beforeEach(() => {
   workspaceHost = createWorkspaceHostClient();
 });
+
+// The test connection uses the host client of the current test.
+const WorkspaceHostWrapper = ({ children }: PropsWithChildren) => (
+  <WorkspaceHostProvider host={workspaceHost}>{children}</WorkspaceHostProvider>
+);
 
 type SelectionHarnessArgs = {
   activeWorkspace?: ActiveWorkspace | null;
@@ -46,10 +51,7 @@ const normalizeSelectionArgs = ({
   activeRepo,
   setActiveRepo,
   ...rest
-}: SelectionHarnessArgs): Omit<
-  Parameters<typeof useWorkspaceSelectionOperations>[0],
-  "hostClient"
-> => ({
+}: SelectionHarnessArgs): Parameters<typeof useWorkspaceSelectionOperations>[0] => ({
   ...rest,
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
   setActiveWorkspace:
@@ -67,7 +69,6 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   const Harness = ({ args }: { args: SelectionHarnessArgs }) => {
     latest = useWorkspaceSelectionOperations({
       ...normalizeSelectionArgs(args),
-      hostClient: workspaceHost,
     });
     queryClient = useQueryClient();
     return null;
@@ -76,7 +77,7 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   const sharedHarness = createHookHarness(
     Harness,
     { args: currentArgs },
-    { wrapper: IsolatedQueryWrapper },
+    { wrapper: WorkspaceHostWrapper },
   );
 
   return {
@@ -144,7 +145,6 @@ describe("use-workspace-selection-operations", () => {
       const operations = useWorkspaceSelectionOperations({
         activeWorkspace,
         setActiveWorkspace,
-        hostClient: workspaceHost,
         clearTaskData: () => {},
         clearBranchData: () => {},
       });
@@ -162,11 +162,11 @@ describe("use-workspace-selection-operations", () => {
       return <p>{`${activeWorkspace?.workspaceId}:${routeWorkspace}`}</p>;
     }
     const view = render(
-      <IsolatedQueryWrapper>
+      <WorkspaceHostWrapper>
         <MemoryRouter initialEntries={["/sessions?workspace=repo-a&kind=task&task=task-a"]}>
           <Harness />
         </MemoryRouter>
-      </IsolatedQueryWrapper>,
+      </WorkspaceHostWrapper>,
     );
     try {
       await waitFor(() => expect(hasLoadedWorkspaceList).toBeTrue());

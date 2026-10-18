@@ -5,9 +5,12 @@ import type {
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useMemo } from "react";
-import { getAvailableRuntimeDefinitions, runtimeLabelFor } from "@/lib/agent-runtime";
+import {
+  getAvailableRuntimeDefinitions,
+  runtimeLabelFor,
+} from "@openducktor/frontend-core/lib/agent-runtime";
 import { runtimeExecutableResultForPath } from "@/state/operations/runtime-executables/runtime-executable-validation";
-import type { RuntimeExecutableValidationResult } from "@/state/queries/use-runtime-executable-validation";
+import type { RuntimeExecutableValidationResult } from "@openducktor/frontend-core/queries/use-runtime-executable-validation";
 import { ROLE_DEFAULTS } from "./settings-modal-model";
 
 export type RuntimeAvailabilityValidationState = {

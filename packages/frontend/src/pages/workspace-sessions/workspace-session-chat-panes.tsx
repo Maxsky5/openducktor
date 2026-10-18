@@ -15,9 +15,9 @@ import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/ag
 import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/agent-chat-transcript-model-cache";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
-import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useWorkspaceChatSettings } from "@openducktor/frontend-core/queries/use-workspace-chat-settings";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { WorkspaceConflictChatActions } from "./use-workspace-conflict-chat-actions";
 import { WorkspaceSessionChat } from "./workspace-session-chat";

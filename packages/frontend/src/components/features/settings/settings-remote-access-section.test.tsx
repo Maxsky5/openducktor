@@ -5,7 +5,7 @@ import type {
   RemoteAccessState,
   RemoteAccessConfiguration,
 } from "@openducktor/contracts";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { RemoteAccessProvider } from "@/state/remote-access-provider";
 import { SettingsRemoteAccessSection } from "./settings-remote-access-section";
 
@@ -23,7 +23,7 @@ const bridge = (initial: RemoteAccessState): RemoteAccessBridge => ({
 });
 const show = (operator: RemoteAccessBridge) =>
   render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <RemoteAccessProvider bridge={operator}>
         <SettingsRemoteAccessSection />
       </RemoteAccessProvider>

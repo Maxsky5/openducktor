@@ -1,27 +1,30 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AppearanceSettings } from "@openducktor/contracts";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import type { AppearanceSettings, ThemePreference } from "@openducktor/contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import { hostBridge } from "@/lib/host-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { host } from "@/state/operations/host";
+import type { HostClient } from "@openducktor/host-client";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createSettingsSnapshotFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { SettingsAppearanceSection } from "./settings-appearance-section";
 
 enableReactActEnvironment();
-const originalList = host.systemListOpenInTools;
-beforeEach(() => {
-  host.systemListOpenInTools = async () => [{ toolId: "finder" }];
-});
 
-function TestProvider({ children }: { children: React.ReactNode }) {
-  return (
-    <QueryProvider useIsolatedClient>
+const createSettingsConnection = (client: Partial<HostClient> = {}): ClientConnection =>
+  createTestClientConnection({
+    client: { systemListOpenInTools: async () => [{ toolId: "finder" }], ...client },
+  });
+
+const createTestProvider =
+  (connection: ClientConnection) =>
+  ({ children }: { children: React.ReactNode }) => (
+    <QueryProvider connection={connection}>
       <ThemeProvider>{children}</ThemeProvider>
     </QueryProvider>
   );
-}
 
 const createAppearanceSettings = (
   overrides: Partial<AppearanceSettings> = {},
@@ -31,7 +34,11 @@ const createAppearanceSettings = (
   ...overrides,
 });
 
-const renderAppearanceSection = (appearance: AppearanceSettings, disabled = false): void => {
+const renderAppearanceSection = (
+  appearance: AppearanceSettings,
+  disabled = false,
+  connection = createSettingsConnection(),
+): void => {
   let latestAppearance = appearance;
   const onUpdateAppearance = mock(
     (updater: (current: AppearanceSettings) => AppearanceSettings): void => {
@@ -47,11 +54,14 @@ const renderAppearanceSection = (appearance: AppearanceSettings, disabled = fals
       disabled={disabled}
       onUpdateAppearance={onUpdateAppearance}
     />,
-    { wrapper: TestProvider },
+    { wrapper: createTestProvider(connection) },
   );
 };
 
-const renderAppearanceSectionWithUpdates = (appearance: AppearanceSettings) => {
+const renderAppearanceSectionWithUpdates = (
+  appearance: AppearanceSettings,
+  connection = createSettingsConnection(),
+) => {
   let latestAppearance = appearance;
   const onUpdateAppearance = mock(
     (updater: (current: AppearanceSettings) => AppearanceSettings): void => {
@@ -67,7 +77,7 @@ const renderAppearanceSectionWithUpdates = (appearance: AppearanceSettings) => {
       disabled={false}
       onUpdateAppearance={onUpdateAppearance}
     />,
-    { wrapper: TestProvider },
+    { wrapper: createTestProvider(connection) },
   );
 
   return {
@@ -112,7 +122,6 @@ const changeHorizontalScrollbarVisibility = async (
 
 afterEach(() => {
   cleanup();
-  host.systemListOpenInTools = originalList;
 });
 
 describe("settings appearance section", () => {
@@ -138,50 +147,55 @@ describe("settings appearance section", () => {
   });
 
   test("offers the three theme choices and persists a selection at once", async () => {
-    const setTheme = mock(async () => undefined);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
+    let savedTheme: ThemePreference = "system";
+    const setTheme = mock(async (theme: ThemePreference) => {
+      savedTheme = theme;
+    });
 
-    try {
-      renderAppearanceSection(createAppearanceSettings());
+    renderAppearanceSection(
+      createAppearanceSettings(),
+      false,
+      createSettingsConnection({
+        setTheme,
+        workspaceGetSettingsSnapshot: async () =>
+          createSettingsSnapshotFixture({ theme: savedTheme }),
+      }),
+    );
 
-      const themeTrigger = screen.getByRole("button", { name: "Theme" });
-      expect(
-        screen.getByText(
-          "System default follows the current operating system appearance. Light and Dark keep the chosen appearance on every system.",
-        ),
-      ).toBeDefined();
+    const themeTrigger = screen.getByRole("button", { name: "Theme" });
+    expect(
+      screen.getByText(
+        "System default follows the current operating system appearance. Light and Dark keep the chosen appearance on every system.",
+      ),
+    ).toBeDefined();
 
-      await act(async () => {
-        fireEvent.click(themeTrigger);
-      });
+    await act(async () => {
+      fireEvent.click(themeTrigger);
+    });
 
-      await screen.findByText("Dark");
-      expect(screen.getAllByText("System default").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText("Light").length).toBeGreaterThanOrEqual(1);
+    await screen.findByText("Dark");
+    expect(screen.getAllByText("System default").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Light").length).toBeGreaterThanOrEqual(1);
 
-      const themeOptions = document.querySelectorAll("[data-slot='command-item']");
-      expect([...themeOptions].map((option) => option.textContent)).toEqual([
-        "System default",
-        "Light",
-        "Dark",
-      ]);
-      expect(document.querySelector("[data-slot='command-input']:not(.sr-only)")).toBeNull();
-      expect(screen.queryByPlaceholderText("Search theme...")).toBeNull();
+    const themeOptions = document.querySelectorAll("[data-slot='command-item']");
+    expect([...themeOptions].map((option) => option.textContent)).toEqual([
+      "System default",
+      "Light",
+      "Dark",
+    ]);
+    expect(document.querySelector("[data-slot='command-input']:not(.sr-only)")).toBeNull();
+    expect(screen.queryByPlaceholderText("Search theme...")).toBeNull();
 
-      await act(async () => {
-        const options = screen.getAllByText("Dark");
-        const option = options.at(-1);
-        if (!option) {
-          throw new Error("Expected the Dark theme option to be rendered");
-        }
-        fireEvent.click(option);
-      });
+    await act(async () => {
+      const options = screen.getAllByText("Dark");
+      const option = options.at(-1);
+      if (!option) {
+        throw new Error("Expected the Dark theme option to be rendered");
+      }
+      fireEvent.click(option);
+    });
 
-      expect(setTheme).toHaveBeenCalledWith("dark");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    expect(setTheme).toHaveBeenCalledWith("dark");
   });
 
   test("disables the theme picker while settings interactions are disabled", () => {

@@ -1,4 +1,4 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";

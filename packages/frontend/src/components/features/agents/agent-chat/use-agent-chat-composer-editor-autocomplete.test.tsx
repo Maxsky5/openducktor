@@ -1,7 +1,7 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { createTextSegment } from "./agent-chat-composer-draft";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
 import { useAgentChatComposerEditorAutocomplete } from "./use-agent-chat-composer-editor-autocomplete";
 

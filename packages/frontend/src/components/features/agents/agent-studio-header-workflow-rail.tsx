@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
+import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
   AGENT_WORKFLOW_TONE_ICON_CLASSES,
   AGENT_WORKFLOW_TONE_TEXT_CLASSES,

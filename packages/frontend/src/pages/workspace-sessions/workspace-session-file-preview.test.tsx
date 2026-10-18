@@ -1,5 +1,4 @@
 import { expect, mock, test } from "bun:test";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import type { HostClient } from "@openducktor/host-client";
@@ -7,10 +6,12 @@ import type { TaskExecutionSelectedFile } from "@/components/features/agents/tas
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import { AgentChatMarkdownRenderer } from "@/components/features/agents/agent-chat/agent-chat-markdown-renderer";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
-import { currentBranchQueryOptions, worktreeBranchQueryOptions } from "@/state/queries/git";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  currentBranchQueryOptions,
+  worktreeBranchQueryOptions,
+} from "@openducktor/frontend-core/queries/git";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 import {
   WorkspaceSessionFilePreview,
@@ -20,8 +21,6 @@ import {
 for (const isWorktree of [false, true]) {
   for (const access of ["local", "workspace"] as const) {
     test(`${isWorktree ? "worktree" : "repository"} branch failures only block workspace file previews: ${access}`, async () => {
-      const previousBridge = getShellBridge();
-      const client = createQueryClient();
       const workingDirectory = isWorktree ? "/repo/worktree" : "/repo";
       const read = mock<HostClient["filesystemReadTextFile"]>(async () => ({
         kind: "image" as const,
@@ -34,18 +33,17 @@ for (const isWorktree of [false, true]) {
         mtimeMs: 1,
       }));
       const onSelectionChange = mock<(file: TaskExecutionSelectedFile | null) => void>(() => {});
-      configureShellBridge(
-        createShellBridgeFixture({
-          client: {
-            gitGetCurrentBranch: async () => {
-              throw new Error("Git directory is unavailable");
-            },
-            filesystemResolvePath: async (path) => path,
-            gitCanonicalizePath: async (path) => path.replace("/tmp/", "/private/tmp/"),
-            filesystemReadTextFile: read,
+      const connection = createTestClientConnection({
+        client: {
+          gitGetCurrentBranch: async () => {
+            throw new Error("Git directory is unavailable");
           },
-        }),
-      );
+          filesystemResolvePath: async (path) => path,
+          gitCanonicalizePath: async (path) => path.replace("/tmp/", "/private/tmp/"),
+          filesystemReadTextFile: read,
+        },
+      });
+      const client = connection.queryClient;
       function Preview() {
         const ref = useRef<WorkspaceSessionFilePreviewHandle>(null);
         const branch = useWorkspaceSessionBranch({
@@ -93,11 +91,11 @@ for (const isWorktree of [false, true]) {
         expect(client.getQueryState(key)?.status).toBe("error");
         expect(client.getQueryData(key)).toBeUndefined();
         view = render(
-          <QueryClientProvider client={client}>
+          <ClientConnectionProvider connection={connection}>
             <WorkspacePreviewTransitionGuardProvider>
               <Preview />
             </WorkspacePreviewTransitionGuardProvider>
-          </QueryClientProvider>,
+          </ClientConnectionProvider>,
         );
         await act(async () => fireEvent.click(view!.getByRole("link")));
         if (access === "local") {
@@ -122,8 +120,7 @@ for (const isWorktree of [false, true]) {
         }
       } finally {
         view?.unmount();
-        client.clear();
-        configureShellBridge(previousBridge);
+        await connection.dispose();
       }
     });
   }

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,

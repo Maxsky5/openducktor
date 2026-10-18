@@ -14,8 +14,11 @@ import {
 } from "react";
 import { List } from "react-window";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
-import { gitHistoryQueryOptions, refreshGitWorkingDirectory } from "@/state/queries/git";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import {
+  gitHistoryQueryOptions,
+  refreshGitWorkingDirectory,
+} from "@openducktor/frontend-core/queries/git";
 import {
   historyColumnLeft,
   useHistoryColumnsStore,

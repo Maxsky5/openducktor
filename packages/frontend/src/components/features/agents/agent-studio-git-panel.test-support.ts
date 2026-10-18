@@ -3,7 +3,7 @@ import type { GitFileDiff, FileStatus, GitLocalChanges } from "@openducktor/cont
 import { type RenderResult, render as testingLibraryRender } from "@testing-library/react";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import type { DiffScope, DiffScopeState } from "@/features/agent-studio-git/contracts";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
 import {
   FILE_LIST_VIEW_MODE_STORAGE_KEY,
@@ -238,14 +238,10 @@ export const flush = async (): Promise<void> => {
 };
 
 export const render = (element: ReactElement): RenderResult =>
-  testingLibraryRender(createElement(QueryProvider, { useIsolatedClient: true }, element));
+  testingLibraryRender(createElement(QueryProvider, null, element));
 
 export const renderAgentStudioGitPanelElement = (model: AgentStudioGitPanelModel): ReactElement =>
-  createElement(
-    QueryProvider,
-    { useIsolatedClient: true },
-    createElement(AgentStudioGitPanel, { model }),
-  );
+  createElement(QueryProvider, null, createElement(AgentStudioGitPanel, { model }));
 
 export const ensureRenderer = (renderer: RenderResult | null): RenderResult => {
   if (!renderer) {

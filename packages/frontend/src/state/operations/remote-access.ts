@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { RemoteAccessBridge, RemoteAccessEnableInput } from "@openducktor/contracts";
-import { remoteAccessQueryKey } from "../queries/remote-access";
+import { remoteAccessQueryKey } from "@openducktor/frontend-core/queries/remote-access";
 
 export function useRemoteAccessAction(bridge: RemoteAccessBridge) {
   const queryClient = useQueryClient();

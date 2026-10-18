@@ -1,8 +1,8 @@
 import type { HTMLAttributes, ReactElement } from "react";
 import { useId } from "react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
-import { pendingInputIdentity } from "@/lib/pending-input-identity";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { QuestionFeedback, QuestionSubmitFooter } from "./agent-session-question-submit-footer";
 import { QuestionSummaryTab } from "./agent-session-question-summary-tab";
 import { QuestionTabs } from "./agent-session-question-tabs";

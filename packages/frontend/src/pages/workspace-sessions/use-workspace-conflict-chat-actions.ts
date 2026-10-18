@@ -1,11 +1,11 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { getAgentMessageSendBlockedReason } from "@/lib/agent-message-send-policy";
-import type { RuntimeReadinessSnapshot } from "@/lib/runtime-readiness";
+import type { RuntimeReadinessSnapshot } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import {

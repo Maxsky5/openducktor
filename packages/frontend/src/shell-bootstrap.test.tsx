@@ -1,287 +1,128 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { ThemePreference } from "@openducktor/contracts";
-import {
-  createDisabledAppUpdateBridge,
-  createUnavailableShellBridge,
-  type ShellBridge,
-} from "./lib/shell-bridge";
-import { runOpenDucktorShellBootstrap } from "./shell-bootstrap-workflow";
-import { createHostClientFixture } from "./test-utils/focused-fixture";
-
-if (globalThis.document === undefined) {
-  GlobalRegistrator.register();
-}
+import type { SettingsSnapshot } from "@openducktor/contracts";
+import { act, screen } from "@testing-library/react";
+import * as appModule from "./App";
+import { bootstrapOpenDucktorShell } from "./shell-bootstrap";
+import { resolveRootElement } from "./shell-bootstrap-workflow";
+import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 
 const REPO_ROOT = resolve(import.meta.dir, "../../..");
 
 const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
-const createTestShellBridge = (): ShellBridge =>
-  ({
-    client: createHostClientFixture({}),
-    subscribeWorkspaceSessionUpdates: async () => () => {},
-    subscribeRuntimeChanges: async () => () => {},
-    subscribeRunEvents: async () => () => {},
-    subscribeWorkspaceProviderSetupUpdates: async () => () => {},
-    subscribeAzureDevOpsConnectionUpdates: async () => () => {},
-    subscribeNotificationStream: async () => () => {},
-    subscribeTaskStream: async () => ({
-      subscriptionId: "test-subscription",
-      acknowledge: async () => {},
-      unsubscribe: () => {},
-    }),
-    observeAgentSessionLive: async () => () => {},
-    appUpdates: createDisabledAppUpdateBridge({
-      status: "disabled",
-      currentVersion: "unknown",
-      disabledCode: "updater_unavailable",
-      disabledReason: "Updates are unavailable in this test shell.",
-    }),
-    capabilities: {
-      canOpenExternalUrls: true,
-      canPreviewLocalAttachments: true,
-    },
-    notifications: createUnavailableShellBridge().notifications,
-    openExternalUrl: async () => {},
-    resolveLocalAttachmentPreview: async () => ({ kind: "url", src: "asset://preview" }),
-    resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
-    terminals: {
-      connect: async () => {
-        throw new Error("Terminal transport is not configured for this test.");
-      },
-    },
-  }) satisfies ShellBridge;
-
-type BootstrapHarnessOptions = {
-  loadSettingsSnapshot?: () => Promise<{ theme: ThemePreference }>;
-  configureBridge?: (bridge: ShellBridge) => void;
-};
-
-const createBootstrapHarness = (options: BootstrapHarnessOptions = {}) => {
-  const events: string[] = [];
-  const bridge = createTestShellBridge();
-  let configuredBridge: ShellBridge | null = null;
-  const reportSettingsPreloadError = mock((cause: unknown) => {
-    void cause;
-    events.push("reportSettingsPreloadError");
-  });
-  const renderApp = mock((_rootElement: HTMLElement) => {
-    events.push("renderApp");
-  });
-  const configureBridge = mock((receivedBridge: ShellBridge) => {
-    events.push("configureBridge");
-    configuredBridge = receivedBridge;
-    options.configureBridge?.(receivedBridge);
-  });
-  const loadSettingsSnapshot = mock(async () => {
-    events.push("loadSettingsSnapshot");
-    if (configuredBridge !== bridge) {
-      throw new Error("settings preload ran before the shell bridge was configured");
-    }
-    if (options.loadSettingsSnapshot) {
-      return options.loadSettingsSnapshot();
-    }
-    return { theme: "dark" as const };
-  });
-  const applyTheme = mock((_preference: ThemePreference) => {
-    events.push("applyTheme");
-  });
-  const getRootById = mock((rootId: string) => {
-    events.push(`getRootById:${rootId}`);
-    return document.getElementById(rootId);
-  });
-
-  return {
-    bridge,
-    bootstrap: (bootstrapOptions: Parameters<typeof runOpenDucktorShellBootstrap>[0]) =>
-      runOpenDucktorShellBootstrap(bootstrapOptions, {
-        configureBridge,
-        getRootById,
-        loadSettingsSnapshot,
-        applyTheme,
-        renderApp,
-        reportSettingsPreloadError,
-      }),
-    deps: {
-      applyTheme,
-      configureBridge,
-      getRootById,
-      loadSettingsSnapshot,
-      renderApp,
-      reportSettingsPreloadError,
-    },
-    events,
-  };
+const noRemoteHost = () => {
+  throw new Error("This test uses the local host.");
 };
 
 afterEach(() => {
+  // A pagehide event that does not keep the page in the cache removes the bootstrap listeners.
+  window.dispatchEvent(new Event("pagehide"));
   document.body.innerHTML = "";
   document.documentElement.classList.remove("light", "dark");
 });
 
+const bootLocalHost = async (readSettings: () => Promise<SettingsSnapshot>): Promise<void> => {
+  const rootElement = document.createElement("div");
+  document.body.append(rootElement);
+  await act(async () => {
+    await bootstrapOpenDucktorShell({
+      createShellBridge: () =>
+        createShellBridgeFixture({ client: { workspaceGetSettingsSnapshot: readSettings } }),
+      hosts: { localHost: "web", createRemoteBridge: noRemoteHost },
+      rootElement,
+    });
+  });
+};
+
 describe("bootstrapOpenDucktorShell", () => {
-  test("owns startup ordering from shell readiness through render", async () => {
-    document.body.innerHTML = '<div id="root"></div>';
-    const { bootstrap, bridge, events } = createBootstrapHarness();
-
-    await bootstrap({
-      prepare: async () => {
-        events.push("prepare");
-      },
-      createShellBridge: () => {
-        events.push("createShellBridge");
-        return bridge;
-      },
+  test("applies the theme of the local host before it renders the app", async () => {
+    const themes: boolean[] = [];
+    const appSpy = spyOn(appModule, "App").mockImplementation(() => {
+      themes.push(document.documentElement.classList.contains("dark"));
+      return <p>App</p>;
     });
+    try {
+      await bootLocalHost(async () => createSettingsSnapshotFixture({ theme: "dark" }));
 
-    expect(events).toEqual([
-      "prepare",
-      "getRootById:root",
-      "createShellBridge",
-      "configureBridge",
-      "loadSettingsSnapshot",
-      "applyTheme",
-      "renderApp",
-    ]);
+      expect(await screen.findByText("App")).toBeDefined();
+      expect(themes[0]).toBe(true);
+    } finally {
+      appSpy.mockRestore();
+    }
   });
 
-  test("applies the preloaded theme before rendering", async () => {
-    document.body.innerHTML = '<div id="root"></div>';
-    const { bootstrap, bridge, deps, events } = createBootstrapHarness({
-      loadSettingsSnapshot: async () => ({ theme: "light" }),
-    });
-
-    await bootstrap({
-      createShellBridge: () => bridge,
-    });
-
-    expect(deps.applyTheme).toHaveBeenCalledWith("light");
-    expect(events.slice(-2)).toEqual(["applyTheme", "renderApp"]);
-  });
-
-  test("reports settings preload failures and still renders", async () => {
-    document.body.innerHTML = '<div id="root"></div>';
+  test("reports a settings preload failure and still renders the app", async () => {
     const preloadError = new Error("settings unavailable");
-    const { bootstrap, bridge, deps, events } = createBootstrapHarness({
-      loadSettingsSnapshot: async () => {
+    const appSpy = spyOn(appModule, "App").mockImplementation(() => <p>App</p>);
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await bootLocalHost(async () => {
         throw preloadError;
-      },
-    });
+      });
 
-    await bootstrap({
-      createShellBridge: () => bridge,
-    });
-
-    expect(deps.reportSettingsPreloadError).toHaveBeenCalledWith(preloadError);
-    expect(deps.renderApp).toHaveBeenCalledTimes(1);
-    expect(events.slice(-3)).toEqual([
-      "loadSettingsSnapshot",
-      "reportSettingsPreloadError",
-      "renderApp",
-    ]);
+      expect(await screen.findByText("App")).toBeDefined();
+      expect(consoleError).toHaveBeenCalledWith(
+        "Failed to preload settings snapshot before app bootstrap.",
+        preloadError,
+      );
+    } finally {
+      appSpy.mockRestore();
+      consoleError.mockRestore();
+    }
   });
 
-  test("fails with an actionable error when the default root is missing", async () => {
-    const { bootstrap, bridge, deps } = createBootstrapHarness();
-
-    await expect(
-      bootstrap({
-        createShellBridge: () => bridge,
-      }),
-    ).rejects.toThrow(
-      'OpenDucktor bootstrap root element "#root" was not found. Ensure the shell HTML contains the root element.',
-    );
-
-    expect(deps.configureBridge).not.toHaveBeenCalled();
-    expect(deps.loadSettingsSnapshot).not.toHaveBeenCalled();
-    expect(deps.renderApp).not.toHaveBeenCalled();
-  });
-
-  test("fails with an actionable error when an explicit root is null", async () => {
-    const { bootstrap, bridge, deps } = createBootstrapHarness();
-
-    await expect(
-      bootstrap({
-        rootElement: null,
-        createShellBridge: () => bridge,
-      }),
-    ).rejects.toThrow(
-      "OpenDucktor bootstrap rootElement was explicitly set to null. Omit rootElement to use the shell root lookup, or pass an HTMLElement.",
-    );
-
-    expect(deps.configureBridge).not.toHaveBeenCalled();
-    expect(deps.loadSettingsSnapshot).not.toHaveBeenCalled();
-    expect(deps.renderApp).not.toHaveBeenCalled();
-  });
-
-  test("propagates prepare failures before touching bridge or render dependencies", async () => {
+  test("propagates prepare failures before it reads the root or creates a bridge", async () => {
     const prepareError = new Error("runtime config unavailable");
-    const { bootstrap, bridge, deps, events } = createBootstrapHarness();
+    const createShellBridge = mock(() => createShellBridgeFixture());
 
     await expect(
-      bootstrap({
+      bootstrapOpenDucktorShell({
         prepare: async () => {
-          events.push("prepare");
           throw prepareError;
         },
-        createShellBridge: () => bridge,
+        createShellBridge,
+        hosts: { localHost: "web", createRemoteBridge: noRemoteHost },
+        rootElement: null,
       }),
     ).rejects.toThrow(prepareError);
-
-    expect(events).toEqual(["prepare"]);
-    expect(deps.configureBridge).not.toHaveBeenCalled();
-    expect(deps.renderApp).not.toHaveBeenCalled();
+    expect(createShellBridge).not.toHaveBeenCalled();
   });
+});
 
-  test("propagates shell bridge configuration failures before preload and render", async () => {
-    document.body.innerHTML = '<div id="root"></div>';
-    const configureError = new Error("bridge rejected");
-    const { bootstrap, bridge, deps } = createBootstrapHarness({
-      configureBridge: () => {
-        throw configureError;
+describe("resolveRootElement", () => {
+  const resolveRoot = (overrides: Partial<Parameters<typeof resolveRootElement>[0]> = {}) =>
+    resolveRootElement(
+      {
+        createShellBridge: createShellBridgeFixture,
+        hosts: { localHost: null, createRemoteBridge: noRemoteHost },
+        ...overrides,
       },
-    });
+      (rootId) => document.getElementById(rootId),
+    );
 
-    await expect(
-      bootstrap({
-        createShellBridge: () => bridge,
-      }),
-    ).rejects.toThrow(configureError);
-
-    expect(deps.loadSettingsSnapshot).not.toHaveBeenCalled();
-    expect(deps.renderApp).not.toHaveBeenCalled();
+  test("fails with an actionable error when the default root is missing", () => {
+    expect(() => resolveRoot()).toThrow(
+      'OpenDucktor bootstrap root element "#root" was not found. Ensure the shell HTML contains the root element.',
+    );
   });
 
-  test("passes the resolved root element to the renderer", async () => {
-    document.body.innerHTML = '<div id="app-root"></div>';
-    const rootElement = document.getElementById("app-root");
-    const { bootstrap, bridge, deps } = createBootstrapHarness();
-
-    await bootstrap({
-      rootId: "app-root",
-      createShellBridge: () => bridge,
-    });
-
-    expect(deps.renderApp).toHaveBeenCalledWith(rootElement);
+  test("fails with an actionable error when an explicit root is null", () => {
+    expect(() => resolveRoot({ rootElement: null })).toThrow(
+      "OpenDucktor bootstrap rootElement was explicitly set to null. Omit rootElement to use the shell root lookup, or pass an HTMLElement.",
+    );
   });
 
-  test("treats an explicit undefined root as a lookup fallback", async () => {
-    document.body.innerHTML = '<div id="app-root"></div>';
-    const rootElement = document.getElementById("app-root");
-    const { bootstrap, bridge, deps } = createBootstrapHarness();
+  test("looks up the root id, also when the root element is explicitly undefined", () => {
+    const rootElement = document.createElement("div");
+    rootElement.id = "app-root";
+    document.body.append(rootElement);
 
-    await bootstrap({
-      rootElement: undefined,
-      rootId: "app-root",
-      createShellBridge: () => bridge,
-    });
-
-    expect(deps.getRootById).toHaveBeenCalledWith("app-root");
-    expect(deps.renderApp).toHaveBeenCalledWith(rootElement);
+    expect(resolveRoot({ rootId: "app-root" })).toBe(rootElement);
+    expect(resolveRoot({ rootElement: undefined, rootId: "app-root" })).toBe(rootElement);
   });
 });
 
@@ -289,13 +130,9 @@ describe("shell entrypoints", () => {
   test("the production renderer keeps the crash shell and passes the selected router mode", () => {
     const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
 
-    expect(source).toContain("kanbanLocationForRouter");
     expect(source).toContain("<StartupSplashLifecycle />");
-    expect(source).toContain(
-      "<AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>",
-    );
-    expect(source).toContain("<App routerMode={routerMode} />");
-    expect(source).toContain("routerMode");
+    expect(source).toContain("<AppCrashShell kanbanLocation={kanbanLocationForRouter(mode)}>");
+    expect(source).toContain("<App routerMode={mode} />");
   });
 
   test("the frontend package root does not export bootstrap internals", () => {
@@ -303,7 +140,7 @@ describe("shell entrypoints", () => {
 
     expect(source).toContain("bootstrapOpenDucktorShell");
     expect(source).toContain("OpenDucktorShellBootstrapOptions");
-    expect(source).not.toMatch(/createOpenDucktorShellBootstrap|runOpenDucktorShellBootstrap/u);
+    expect(source).not.toMatch(/resolveRootElement/u);
     expect(source).not.toMatch(/mountOpenDucktorApp|configureShellBridge|getShellBridge|\bApp\b/u);
   });
 });

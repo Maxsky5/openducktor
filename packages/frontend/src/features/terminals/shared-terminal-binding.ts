@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { createLinkController } from "./terminal-link-controller";
 import { createTerminalTheme } from "./terminal-xterm-options";

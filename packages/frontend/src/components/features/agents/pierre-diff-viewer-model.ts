@@ -11,7 +11,7 @@ import type {
   InlineCommentContextLine,
   InlineCommentDraft,
   InlineCommentSide,
-} from "@/state/use-inline-comment-draft-store";
+} from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { selectRenderableDiff } from "./renderable-patch";
 
 const MAX_RENDERABLE_DIFF_CACHE_ENTRIES = 64;

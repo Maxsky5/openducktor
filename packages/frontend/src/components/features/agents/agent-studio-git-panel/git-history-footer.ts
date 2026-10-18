@@ -1,4 +1,4 @@
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 export type HistoryFooter =
   | { kind: "loading" }

@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { HostInvokeError } from "@openducktor/host-client";
 import { act, render, renderHook } from "@testing-library/react";
 import { Activity } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useInterruptedTurnResume } from "./use-interrupted-turn-resume";
 
 const identityA: AgentSessionIdentity = {

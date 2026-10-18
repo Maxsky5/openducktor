@@ -19,9 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { errorMessage } from "@/lib/errors";
-import { workspaceSessionTitle } from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import { workspaceSessionArchivePreviewQueryOptions } from "@/state/queries/workspace-session-archive";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { workspaceSessionArchivePreviewQueryOptions } from "@openducktor/frontend-core/queries/workspace-session-archive";
 import { WorktreeArchivePreview } from "./worktree-archive-preview";
 
 type Props = {

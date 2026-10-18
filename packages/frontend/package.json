@@ -24,6 +24,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
+    "@openducktor/frontend-core": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/path-support": "workspace:*",
     "@pierre/diffs": "1.5.2",
@@ -86,7 +87,6 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.14.6",
-    "@openducktor/adapters-codex-app-server": "workspace:*",
     "@tailwindcss/typography": "^0.5.20",
     "@testing-library/react": "^16.3.3",
     "@types/mdast": "4.0.4",

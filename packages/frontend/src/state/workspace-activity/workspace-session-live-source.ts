@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import { createAgentSessionLiveAttachment } from "@openducktor/host-client";
 import { createContext } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 
 type Listener = (envelope: AgentSessionLiveEnvelope) => void;
 type Observe = (input: AgentSessionLiveAttachInput, listener: Listener) => Promise<() => void>;

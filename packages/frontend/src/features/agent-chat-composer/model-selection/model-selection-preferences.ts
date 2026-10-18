@@ -4,8 +4,8 @@ import {
   pickDefaultVisibleSelectionForCatalog,
   resolvePreferredModelSelection,
 } from "@/features/model-selection/model-selection-state";
-import { findRuntimeDefinition } from "@/lib/agent-runtime";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { resolveLoadedSessionSelection } from "@openducktor/core";
 
 type SendBlockReason = "model" | "profile" | "session";

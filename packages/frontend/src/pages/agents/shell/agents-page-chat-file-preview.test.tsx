@@ -10,7 +10,7 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { useTaskExecutionFilePreviewController } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createSessionPanelsFixture } from "@/test-utils/session-panel-fixtures";
 import { AgentsPageLayout, type AgentsPageLayoutModel } from "./agents-page-layout";
 import * as modals from "./agents-page-modal-content";

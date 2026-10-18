@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { act, fireEvent, render } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 

@@ -1,20 +1,15 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   type AgentChatComposerDraft,
   createEmptyComposerDraft,
   createTextSegment,
   draftHasMeaningfulContent,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatDraftPersistence, AgentChatDraftScope } from "./agent-chat-draft-scope";
-import {
-  clearAgentChatDraft,
-  flushAgentChatDraft,
-  hydrateAgentChatDraft,
-  readAgentChatDraftVersion,
-  setAgentChatDraft,
-} from "./agent-chat-draft-store";
-import { toAgentChatDraftStorageKey } from "./agent-chat-draft-storage";
+import { createAgentChatDraftStore } from "@openducktor/frontend-core/drafts/agent-chat-draft-store";
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import { toAgentChatDraftStorageKey } from "@openducktor/frontend-core/drafts/agent-chat-draft-storage";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
 
 type HookArgs = Parameters<typeof useAgentChatComposerDraftState>[0];
@@ -603,13 +598,19 @@ test.each([false, true])(
       workingDirectory: "/repo/worktree",
     };
     const taskId = "task-recovery";
+    const drafts = createAgentChatDraftStore({
+      storage: createMemoryClientStorage(),
+      stageAttachment: async (file) => {
+        throw new Error(`The test draft store cannot stage '${file.name}'.`);
+      },
+    });
     const persistence: AgentChatDraftPersistence = {
       targetKey: toAgentChatDraftStorageKey(identity),
-      hydrate: () => hydrateAgentChatDraft(identity, taskId),
-      set: (draft) => setAgentChatDraft(identity, taskId, draft),
-      readVersion: () => readAgentChatDraftVersion(identity),
-      clear: (options) => clearAgentChatDraft(identity, options),
-      flush: () => flushAgentChatDraft(identity),
+      hydrate: () => drafts.hydrate(identity, taskId),
+      set: (draft) => drafts.set(identity, taskId, draft),
+      readVersion: () => drafts.readVersion(identity),
+      clear: (options) => drafts.clear(identity, options),
+      flush: () => drafts.flush(identity),
     };
     const scope = { key: "persisted-source", persistence };
     const harness = await mountHarness(scope);
@@ -623,7 +624,7 @@ test.each([false, true])(
       });
       expect(persistence.readVersion()).toBeNull();
       await harness.update({ scope: { key: "another-session", persistence: null } });
-      if (newerWrite) setAgentChatDraft(identity, taskId, buildDraft("external edit"));
+      if (newerWrite) drafts.set(identity, taskId, buildDraft("external edit"));
       await harness.run((state) => state.restoreSubmittedDraft(snapshot));
       await persistence.flush();
       const expected = newerWrite ? buildDraft("external edit") : submitted;
@@ -633,7 +634,7 @@ test.each([false, true])(
       expect(harness.getLatest().draft).toEqual(expected);
     } finally {
       await harness.unmount();
-      clearAgentChatDraft(identity);
+      drafts.dispose();
     }
   },
 );

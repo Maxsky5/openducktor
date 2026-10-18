@@ -1,7 +1,7 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { errorMessage } from "@/lib/errors";
-import { targetBranchFromSelection } from "@/lib/target-branch";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { targetBranchFromSelection } from "@openducktor/frontend-core/lib/target-branch";
 
 type PromptRequest = {
   requestId: string | undefined;

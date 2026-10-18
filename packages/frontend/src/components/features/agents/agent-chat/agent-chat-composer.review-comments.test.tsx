@@ -1,18 +1,14 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
 import { createAgentStudioChatDraftPersistence } from "@/pages/agents/agent-studio-chat-draft";
 import { createWorkspaceSessionChatDraftPersistence } from "@/pages/workspace-sessions/workspace-session-chat-draft";
-import {
-  resetInlineCommentDraftStoreForTests,
-  setInlineCommentDraftScheduleTaskForTests,
-  setInlineCommentDraftStorageForTests,
-  toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatComposer } from "./agent-chat-composer-test-helpers";
 import {
@@ -20,24 +16,24 @@ import {
   createComposerAttachment,
   createTextSegment,
   draftToSerializedText,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   buildModel,
   createMemoryStorage,
   typeIntoComposer,
 } from "./agent-chat-composer-test-helpers";
-import {
-  resetAgentChatDraftStoreForTests,
-  setAgentChatDraftAttachmentStagerForTests,
-  setAgentChatDraftStorageForTests,
-} from "./agent-chat-draft-store";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
+const openConnections = new Set<ClientConnection>();
+
+const render = (element: ReactNode, connection: ClientConnection) =>
+  renderView(element, {
+    wrapper: ({ children }) => <QueryProvider connection={connection}>{children}</QueryProvider>,
+  });
 
 describe("AgentChatComposer review comments", () => {
-  afterEach(() => {
-    resetAgentChatDraftStoreForTests();
-    resetInlineCommentDraftStoreForTests();
+  afterEach(async () => {
+    for (const connection of openConnections) await connection.dispose();
+    openConnections.clear();
   });
 
   test.each([
@@ -51,10 +47,13 @@ describe("AgentChatComposer review comments", () => {
     "settles %s comments and the original composer draft after %s",
     async (kind, outcome) => {
       const storage = createMemoryStorage();
-      setAgentChatDraftStorageForTests(storage);
-      setAgentChatDraftAttachmentStagerForTests(async () => "/tmp/brief.pdf");
-      setInlineCommentDraftStorageForTests(storage);
-      setInlineCommentDraftScheduleTaskForTests(() => () => {});
+      const connection = createTestClientConnection({
+        storage,
+        stageAttachment: async () => "/tmp/brief.pdf",
+        scheduleTask: () => () => {},
+      });
+      openConnections.add(connection);
+      const { chat: chatDrafts, inlineComments } = connection.drafts;
       const owner: InlineCommentOwner =
         kind === "task"
           ? { kind, workspaceId: "workspace-repo", taskId: "task-1" }
@@ -64,6 +63,7 @@ describe("AgentChatComposer review comments", () => {
       const persistence =
         kind === "task"
           ? createAgentStudioChatDraftPersistence({
+              drafts: chatDrafts,
               workspaceId: "workspace-repo",
               taskId: "task-1",
               session: {
@@ -72,7 +72,7 @@ describe("AgentChatComposer review comments", () => {
                 workingDirectory: "/repo",
               },
             })
-          : createWorkspaceSessionChatDraftPersistence("workspace-repo", "chat-1");
+          : createWorkspaceSessionChatDraftPersistence(chatDrafts, "workspace-repo", "chat-1");
       if (!persistence) throw new Error("Expected draft persistence");
       const originalDraft = {
         segments: [createTextSegment("Original text")],
@@ -89,7 +89,7 @@ describe("AgentChatComposer review comments", () => {
         ],
       };
       persistence.set(originalDraft);
-      useInlineCommentDraftStore.getState().addDraft(ownerKey, {
+      inlineComments.getState().addDraft(ownerKey, {
         filePath: "src/a.ts",
         diffScope: "uncommitted",
         startLine: 2,
@@ -105,7 +105,11 @@ describe("AgentChatComposer review comments", () => {
         const selectedPersistence =
           selectedOwner === owner
             ? persistence
-            : createWorkspaceSessionChatDraftPersistence("workspace-repo", "other-chat");
+            : createWorkspaceSessionChatDraftPersistence(
+                chatDrafts,
+                "workspace-repo",
+                "other-chat",
+              );
         if (!selectedPersistence) throw new Error("Expected selected draft persistence");
         const model: AgentChatComposerModel = {
           ...buildModel(),
@@ -126,7 +130,7 @@ describe("AgentChatComposer review comments", () => {
         if (review.pendingSendItems) model.pendingSendItems = review.pendingSendItems;
         return <AgentChatComposer model={model} />;
       }
-      const view = render(<CommentComposer selectedOwner={owner} />);
+      const view = render(<CommentComposer selectedOwner={owner} />, connection);
       fireEvent.click(screen.getByRole("button", { name: "Send message" }));
       await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
       const sent = send.mock.calls[0]?.[0];
@@ -144,9 +148,9 @@ describe("AgentChatComposer review comments", () => {
       typeIntoComposer(view.container, "Other chat text");
       acceptance.resolve(outcome === "accepted");
       await waitFor(() =>
-        expect(
-          useInlineCommentDraftStore.getState().draftsByOwner[ownerKey]?.[0]?.status ?? "cleared",
-        ).toBe(outcome === "accepted" ? "cleared" : "pending"),
+        expect(inlineComments.getState().draftsByOwner[ownerKey]?.[0]?.status ?? "cleared").toBe(
+          outcome === "accepted" ? "cleared" : "pending",
+        ),
       );
       expect(view.container.textContent).toContain("Other chat text");
       view.rerender(<CommentComposer selectedOwner={owner} />);

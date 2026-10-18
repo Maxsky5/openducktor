@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
-import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   COMPOSER_EDITOR_MAX_HEIGHT_PX,
   COMPOSER_EDITOR_MIN_HEIGHT_PX,

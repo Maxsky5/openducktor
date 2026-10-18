@@ -1,8 +1,7 @@
 import { useEffect } from "react";
-import {
-  toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
+import { toInlineCommentDraftOwnerKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
 import type { AgentStudioGitPanelModel } from "./types";
 
 export function useGitCommentDraftValidation(
@@ -12,12 +11,13 @@ export function useGitCommentDraftValidation(
   > & { targetBranch: string | null },
 ): void {
   const ownerKey = toInlineCommentDraftOwnerKey(model.commentOwner ?? null);
+  const inlineComments = useClientConnection().drafts.inlineComments;
   const hydrated = useInlineCommentDraftStore(
     (store) => ownerKey !== null && store.hydratedOwners[ownerKey] === true,
   );
   useEffect(() => {
-    if (ownerKey !== null) useInlineCommentDraftStore.getState().hydrate(ownerKey);
-  }, [ownerKey]);
+    if (ownerKey !== null) inlineComments.getState().hydrate(ownerKey);
+  }, [inlineComments, ownerKey]);
   useEffect(() => {
     if (ownerKey === null || !hydrated) return;
     for (const scope of ["uncommitted", "target"] as const) {
@@ -25,7 +25,7 @@ export function useGitCommentDraftValidation(
         continue;
       const state = model.scopeStatesByScope[scope];
       if (!model.loadedScopesByScope[scope] || state.error !== null) continue;
-      useInlineCommentDraftStore
+      inlineComments
         .getState()
         .dropDraftsForMissingFiles(
           ownerKey,
@@ -34,6 +34,7 @@ export function useGitCommentDraftValidation(
         );
     }
   }, [
+    inlineComments,
     ownerKey,
     hydrated,
     model.loadedScopesByScope,

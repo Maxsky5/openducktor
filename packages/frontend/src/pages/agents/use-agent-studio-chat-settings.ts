@@ -1,8 +1,8 @@
 import type { ChatSettings, ReusablePrompt, SettingsSnapshot } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { errorMessage } from "@/lib/errors";
-import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useWorkspaceChatSettings } from "@openducktor/frontend-core/queries/use-workspace-chat-settings";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 
 const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
 

@@ -10,13 +10,13 @@ import {
   filterRuntimeDefinitionsForStartMode,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
-} from "@/lib/agent-runtime";
-import { runtimeReadinessTargetForRuntime } from "@/lib/runtime-readiness";
+} from "@openducktor/frontend-core/lib/agent-runtime";
+import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib/runtime-readiness";
 import { useRuntimeReadiness } from "@/lib/use-runtime-readiness";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
-} from "@/state/queries/use-runtime-model-catalogs";
+} from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 
 type UseSessionStartModalRuntimeStateArgs = {
   initialCatalog: AgentModelCatalog | null | undefined;

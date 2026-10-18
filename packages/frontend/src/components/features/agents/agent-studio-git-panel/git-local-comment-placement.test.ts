@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GitFileDiff } from "@openducktor/contracts";
-import type { InlineCommentDraft } from "@/state/use-inline-comment-draft-store";
+import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import { placeLocalComments } from "./git-local-comment-placement";
 
 const patch = (oldLine: string, newLine: string): string =>

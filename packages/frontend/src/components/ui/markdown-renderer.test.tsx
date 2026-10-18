@@ -1,4 +1,3 @@
-import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
@@ -6,16 +5,16 @@ import { createElement, type ReactNode, useLayoutEffect, useState } from "react"
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as externalUrl from "@/lib/open-external-url";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { MarkdownMermaid } from "./markdown-mermaid";
 import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedQueryWrapper });
+const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
 
 const renderMarkdownLink = (href: string, label: string) => {
   return render(
@@ -272,7 +271,7 @@ describe("rich task description rendering", () => {
 
   test("keeps highlighted code beside math in premium task documents", async () => {
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <StaticThemeProvider>
           <MarkdownRenderer
             markdown={"Formula $x$\n\n```javascript\nconst value = 1;\n```"}

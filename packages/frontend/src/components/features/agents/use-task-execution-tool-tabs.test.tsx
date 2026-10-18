@@ -4,16 +4,17 @@ import type {
   PullRequestReviewContext,
   WorkspaceFileTree,
 } from "@openducktor/contracts";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren, useEffect, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import { pullRequestReviewQueryKeys } from "@/state/queries/pull-request-review";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
+import { pullRequestReviewQueryKeys } from "@openducktor/frontend-core/queries/pull-request-review";
 import { useTaskExecutionFilePreviewController } from "./file-preview/use-task-execution-file-preview-controller";
 import { TaskExecutionSelectedFilePreview } from "./task-execution-file-preview";
 import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel";
@@ -265,7 +266,7 @@ const renderPanel = (model: TaskRightPanelModel): string =>
   renderToStaticMarkup(
     createElement(
       QueryProvider,
-      { useIsolatedClient: true },
+      null,
       createElement(ThemeProvider, null, createElement(TaskRightPanel, { model })),
     ),
   );
@@ -286,27 +287,29 @@ const renderPanelWithFileTreeData = (
   model: TaskRightPanelModel,
   fileTree: WorkspaceFileTree,
 ): string => {
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection();
+  const queryClient = connection.queryClient;
   queryClient.setQueryData(
     filesystemQueryKeys.tree(fileTree.rootPath, model.fileExplorerModel.targetBranch),
     fileTree,
   );
   return renderToStaticMarkup(
     createElement(
-      QueryClientProvider,
-      { client: queryClient },
+      ClientConnectionProvider,
+      { connection },
       createElement(ThemeProvider, null, createElement(TaskRightPanel, { model })),
     ),
   );
 };
 
 const renderPanelWithCiData = (context: PullRequestReviewContext): string => {
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection();
+  const queryClient = connection.queryClient;
   queryClient.setQueryData(pullRequestReviewQueryKeys.context(ciQueryInput), context);
   return renderToStaticMarkup(
     createElement(
-      QueryClientProvider,
-      { client: queryClient },
+      ClientConnectionProvider,
+      { connection },
       createElement(
         ThemeProvider,
         null,
@@ -571,13 +574,14 @@ describe("useTaskExecutionToolTabs", () => {
         },
       ],
     };
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(filesystemQueryKeys.tree(fileTree.rootPath, "origin/main"), fileTree);
 
     render(
       createElement(
-        QueryClientProvider,
-        { client: queryClient },
+        ClientConnectionProvider,
+        { connection },
         createElement(
           ThemeProvider,
           null,
@@ -622,12 +626,13 @@ describe("useTaskExecutionToolTabs", () => {
         },
       ],
     };
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(filesystemQueryKeys.tree(requestedRoot, "origin/main"), fileTree);
     render(
       createElement(
-        QueryClientProvider,
-        { client: queryClient },
+        ClientConnectionProvider,
+        { connection },
         createElement(
           ThemeProvider,
           null,
@@ -674,7 +679,7 @@ describe("useTaskExecutionToolTabs", () => {
     render(
       createElement(
         QueryProvider,
-        { useIsolatedClient: true },
+        null,
         createElement(
           SeedQueryData,
           { queryKey: filesystemQueryKeys.tree(rootPath, "origin/main"), data: fileTree },
@@ -714,7 +719,8 @@ describe("useTaskExecutionToolTabs", () => {
   test("a late explorer root does not clear the mounted preview; owner departure does", async () => {
     const requestedRoot = "/repo/task-worktree";
     const selectedFile = { rootPath: "/private/repo/task-a", relativePath: "src/index.ts" };
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     const treeKey = filesystemQueryKeys.tree(requestedRoot, "origin/main");
     queryClient.setQueryData(treeKey, { rootPath: selectedFile.rootPath, entries: [] });
     queryClient.setQueryData(
@@ -764,11 +770,11 @@ describe("useTaskExecutionToolTabs", () => {
       );
     }
     const view = render(
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <PreviewWithExplorer />
         </ThemeProvider>
-      </QueryClientProvider>,
+      </ClientConnectionProvider>,
     );
     try {
       await view.findByText("Task A preview");

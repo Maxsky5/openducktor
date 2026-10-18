@@ -1,22 +1,22 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { beforeEach, describe, expect, test } from "bun:test";
+import type { HostClient } from "@openducktor/host-client";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { hostClient } from "@/lib/host-client";
-import { createQueryClient } from "@/lib/query-client";
 import { WorkspacePresenceContext, WorkspaceStateContext } from "@/state/app-state-contexts";
-import { taskQueryKeys } from "@/state/queries/tasks";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import {
   createWorkspacePresenceFixture,
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { SessionPanelOwner } from "./session-panel-layout";
-import {
-  pruneSessionPanelLayouts,
-  sessionPanelLayoutStorageKey,
-  updateSessionPanelLayout,
-} from "./session-panel-layout-store";
+import { sessionPanelLayoutStorageKey } from "./session-panel-layout-store";
 import { useSessionPanelLayoutPruning } from "./use-session-panel-layout-pruning";
 
 const workspace = createWorkspaceRecordFixture({
@@ -27,21 +27,26 @@ const closedWorkspace = createWorkspaceRecordFixture({
   workspaceId: `workspace-${globalThis.crypto.randomUUID()}`,
 });
 
-afterEach(() => {
-  for (const { workspaceId } of [workspace, closedWorkspace]) {
-    pruneSessionPanelLayouts({ kind: "tasks", workspaceId, ids: new Set() });
-    pruneSessionPanelLayouts({ kind: "chats", workspaceId, ids: new Set() });
-  }
+// The host storage of the test. Each rendered connection prunes the records in it.
+let storage: ClientStorage;
+
+beforeEach(() => {
+  storage = createMemoryClientStorage();
 });
 
 const saveLayout = (owner: SessionPanelOwner): void =>
-  updateSessionPanelLayout(owner, (layout) => ({
-    ...layout,
-    panels: { ...layout.panels, right: [{ id: "files", kind: "files" }] },
-  }));
+  storage.setItem(
+    sessionPanelLayoutStorageKey(owner),
+    JSON.stringify({
+      version: 1,
+      panels: { right: ["files"], bottom: [] },
+      closedKinds: [],
+      selectedRight: {},
+    }),
+  );
 
 const isSaved = (owner: SessionPanelOwner): boolean =>
-  localStorage.getItem(sessionPanelLayoutStorageKey(owner)) !== null;
+  storage.getItem(sessionPanelLayoutStorageKey(owner)) !== null;
 
 type PruningInput = {
   /** The IDs of all tasks that the host lists, or null while the list loads. */
@@ -50,8 +55,12 @@ type PruningInput = {
   closedWorkspaces: (typeof workspace)[];
 };
 
-const renderPruning = ({ taskIds, workspaceRecordsAreCurrent, closedWorkspaces }: PruningInput) => {
-  const queryClient = createQueryClient();
+const renderPruning = (
+  { taskIds, workspaceRecordsAreCurrent, closedWorkspaces }: PruningInput,
+  client: Partial<HostClient> = {},
+) => {
+  const connection = createTestClientConnection({ client, storage });
+  const { queryClient } = connection;
   if (taskIds) queryClient.setQueryData(taskQueryKeys.ids(workspace.repoPath), taskIds);
   const workspaceState = createWorkspaceStateFixture({
     activeWorkspace: workspace,
@@ -61,13 +70,13 @@ const renderPruning = ({ taskIds, workspaceRecordsAreCurrent, closedWorkspaces }
   const presence = createWorkspacePresenceFixture({ workspaceRecordsAreCurrent });
   return renderHook(() => useSessionPanelLayoutPruning(), {
     wrapper: ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <WorkspacePresenceContext.Provider value={presence}>
           <WorkspaceStateContext.Provider value={workspaceState}>
             {children}
           </WorkspaceStateContext.Provider>
         </WorkspacePresenceContext.Provider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     ),
   });
 };
@@ -111,13 +120,14 @@ describe("useSessionPanelLayoutPruning", () => {
   });
 
   test("keeps every task layout while the task ID list loads", () => {
-    const loading = spyOn(hostClient, "taskIdsList").mockReturnValue(new Promise(() => {}));
     for (const owner of [kept, removed]) saveLayout(owner);
 
-    const view = renderPruning({ ...current, taskIds: null });
+    const view = renderPruning(
+      { ...current, taskIds: null },
+      { taskIdsList: () => new Promise(() => {}) },
+    );
 
     expect([kept, removed].map(isSaved)).toEqual([true, true]);
-    loading.mockRestore();
     view.unmount();
   });
 

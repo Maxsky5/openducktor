@@ -1,8 +1,8 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { RuntimeWorkingDirectoryRef } from "@openducktor/core";
-import type { RuntimeReadinessState } from "@/lib/runtime-readiness";
-import { toRuntimeWorkingDirectoryRef } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type { RuntimeReadinessState } from "@openducktor/frontend-core/lib/runtime-readiness";
+import { toRuntimeWorkingDirectoryRef } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-runtime-ref";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type ChatComposerPromptInputRuntime =
   | {

@@ -9,8 +9,10 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 ## State and files
 
 - Wire state contexts in `packages/frontend/src/state/app-state-provider.tsx`.
+- Put client behavior that another client also needs in `packages/frontend-core`: host reads and cache sync, session projection, history, notification policy, recovery, and drafts. Read [the frontend core](architecture-overview.md#frontend-core) first. Keep presentation, routing, and browser APIs in the frontend.
+- Reach the host through the client connection: `useHostClient`, `useHostConnection`, or `useClientConnection` in React, and `connectionHost(queryClient)` in a query function. Do not add a module-level host client or query client.
 - Put domain operations in focused hooks under `packages/frontend/src/state/{lifecycle,operations,tasks}`.
-- Put shared types in `packages/frontend/src/types`.
+- Put shared types in `packages/frontend/src/types`, or in `packages/frontend-core/src/types` when the frontend core uses them.
 - Put feature constants in `constants.ts`.
 - Use operation-specific flags such as `isLoadingTasks` and `isLoadingChecks`.
 - Do not use a generic busy flag or a magic string.
@@ -67,7 +69,7 @@ The command palette is in `packages/frontend/src/features/command-palette`. `Wor
 - Add an app action to `useCommandPaletteActions`. Give it other words in `keywords`, so that search finds it.
 - Use `useCommandPalettePageCommand` for a command that exists only on one page, such as the panel toggles of a session page.
 - The shortcut does nothing while a `Dialog` or `Sheet` is open. `hasOpenDialog` in `components/ui/open-dialogs.ts` reports this state.
-- Keep the Recent list device-local. It is UI state in `localStorage`, not task data.
+- Keep the Recent list device-local. It is UI state in the storage of the client connection, not task data. A remote host keeps it in connection memory.
 - Do not show `close_task` in the palette.
 - Show and hide the palette and its workspace list without motion.
 

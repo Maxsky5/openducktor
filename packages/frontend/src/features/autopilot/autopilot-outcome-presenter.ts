@@ -6,9 +6,9 @@ import type {
 } from "@openducktor/contracts";
 import { AUTOPILOT_ACTION_DEFINITIONS } from "@openducktor/core";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type AutopilotOutcomePresenterPorts = {
   claimRecovery: (input: AutopilotRecoveryClaimInput) => Promise<AutopilotRecoveryClaimResult>;

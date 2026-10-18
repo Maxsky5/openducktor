@@ -6,10 +6,11 @@ import {
   type RemoteHostDescriptor,
 } from "@openducktor/contracts";
 import type { RemoteTransport } from "@openducktor/host-client/remote";
-import { appQueryClient } from "@openducktor/frontend/lib/query-client";
-import { createHostRuntimeStatusOwner } from "../../frontend/src/state/host-runtime/host-runtime-status-owner";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHostRuntimeStatusOwner } from "@openducktor/frontend-core/runtime/host-runtime-status-owner";
 import { createHostMcpBridgeStatusFixture } from "../../frontend/src/test-utils/shared-test-fixtures";
-import { createTaskStreamController } from "../../frontend/src/state/tasks/task-stream-controller";
+import { createTaskStreamController } from "@openducktor/frontend-core/tasks/task-stream-controller";
 import { createUnavailableShellBridge } from "@openducktor/frontend/lib/shell-bridge";
 import { createRemoteShellBridge } from "@openducktor/frontend/lib/remote/shell-bridge";
 
@@ -145,12 +146,15 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
       throw new Error("No terminal was selected.");
     },
   };
+  const queryClient = createClientQueryClient();
   const bridge = createRemoteShellBridge({
     endpoint: "https://host.test/remote",
     version: "test-browser",
     transport,
     notifications: createUnavailableShellBridge().notifications,
+    queryClient,
   });
+  const clientConnection = createTestClientConnection({ host: bridge, queryClient });
   const connection = bridge.remoteConnection!;
   const controller = createTaskStreamController({
     transport: bridge,
@@ -194,7 +198,7 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
     if (state.status === "failed") failed.resolve();
   });
   const owner = createHostRuntimeStatusOwner({
-    queryClient: appQueryClient,
+    queryClient,
     ports: {
       subscribeRuntimeChanges: bridge.subscribeRuntimeChanges,
       runtimeStatus: () => bridge.client.runtimeStatus(),
@@ -295,7 +299,6 @@ for (const { readFails, firstFailure, stopDuringReplay } of [
     owner.stop();
     await bridge.dispose?.();
     bridge.notifications.dispose();
-    await appQueryClient.cancelQueries();
-    appQueryClient.clear();
+    await clientConnection.dispose();
   }
 }

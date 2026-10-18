@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { host } from "../shared/host";
 import { runTaskMutationWithChatDraftCleanup } from "./task-chat-draft-cleanup";
 import { useTaskMutationRunner } from "./task-mutation-runner";
 import type { UseTaskOperationsArgs, UseTaskOperationsResult } from "./task-operations-types";
@@ -13,11 +12,14 @@ import {
 } from "./use-task-pull-request-operations";
 import { useTaskReadFlow } from "./use-task-read-flow";
 import { useTaskResetOperations } from "./use-task-reset-operations";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export function useTaskOperations({
   activeWorkspace,
-  agentSessionReadPort = host,
+  agentSessionReadPort: suppliedAgentSessionReadPort,
 }: UseTaskOperationsArgs): UseTaskOperationsResult {
+  const host = useHostClient();
+  const agentSessionReadPort = suppliedAgentSessionReadPort ?? host;
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const pullRequestHostPort = useMemo<TaskPullRequestHostPort>(
@@ -26,7 +28,7 @@ export function useTaskOperations({
       linkMergedPullRequest: host.taskPullRequestLinkMerged,
       unlinkPullRequest: host.taskPullRequestUnlink,
     }),
-    [],
+    [host],
   );
   const pullRequestNotificationPort = useMemo<TaskPullRequestNotificationPort>(
     () => ({

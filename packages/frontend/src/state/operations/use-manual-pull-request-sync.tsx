@@ -1,7 +1,7 @@
 import type { HostClient } from "@openducktor/host-client";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { PullRequestSyncScope, PullRequestSyncTarget } from "@/types/pull-request-sync";
 
 export function useManualPullRequestSync(client: Pick<HostClient, "repoPullRequestSync">) {

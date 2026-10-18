@@ -2,14 +2,15 @@ import { taskStatusSchema } from "@openducktor/contracts";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "@/features/agent-studio-git";
-import { canonicalTargetBranch } from "@/lib/target-branch";
-import { host } from "@/state/operations/shared/host";
+import { canonicalTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { runTaskMutationWithChatDraftCleanup } from "@/state/operations/tasks/task-chat-draft-cleanup";
 import {
   invalidateTaskApprovalContextQuery,
   loadTaskApprovalContextFromQuery,
-} from "@/state/queries/task-approval";
+} from "@openducktor/frontend-core/queries/task-approval";
 import type { TaskApprovalFlowReadyState } from "./task-approval-flow-state";
+import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
+import type { HostClient } from "@openducktor/host-client";
 
 type SubmitDirectMergeApprovalArgs = {
   approval: TaskApprovalFlowReadyState;
@@ -43,7 +44,7 @@ export type SubmitDirectMergeApprovalResult =
 
 const normalizeConflict = (
   conflict: NonNullable<
-    Awaited<ReturnType<typeof host.taskDirectMerge>> extends infer TResult
+    Awaited<ReturnType<HostClient["taskDirectMerge"]>> extends infer TResult
       ? TResult extends { outcome: "conflicts"; conflict: infer TConflict }
         ? TConflict
         : never
@@ -62,6 +63,7 @@ export async function submitDirectMergeApproval({
   refreshTasks,
   workspaceId,
 }: SubmitDirectMergeApprovalArgs): Promise<SubmitDirectMergeApprovalResult> {
+  const host = connectionHost(queryClient);
   const approvalContext = approval.approvalContext;
   const directMergeResult = await runTaskMutationWithChatDraftCleanup({
     agentSessionReadPort: host,
@@ -135,6 +137,7 @@ export async function completeDirectMergeApproval({
   refreshTasks,
   workspaceId,
 }: CompleteDirectMergeApprovalArgs): Promise<{ successDescription: string }> {
+  const host = connectionHost(queryClient);
   const approvalContext = approval.approvalContext;
   const publishTarget = approvalContext.publishTarget;
 
@@ -145,7 +148,7 @@ export async function completeDirectMergeApproval({
     workspaceId,
     taskIds: [approval.taskId],
     mutation: async () => {
-      let publicationConsent: Parameters<typeof host.taskDirectMergeComplete>[2];
+      let publicationConsent: Parameters<HostClient["taskDirectMergeComplete"]>[2];
       if (publishTarget) {
         if (!approvalContext.directMerge || !approvalContext.publicationPreview)
           throw new Error(

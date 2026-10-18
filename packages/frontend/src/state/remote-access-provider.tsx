@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { RemoteAccessBridge, RemoteAccessState } from "@openducktor/contracts";
-import { remoteAccessStateQueryOptions } from "./queries/remote-access";
+import { remoteAccessStateQueryOptions } from "@openducktor/frontend-core/queries/remote-access";
 
 const RemoteAccessContext = createContext<{
   bridge: RemoteAccessBridge | undefined;

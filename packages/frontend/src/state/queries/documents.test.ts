@@ -2,21 +2,21 @@ import { describe, expect, mock, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
+import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import {
   documentQueryKeys,
   fetchFreshTaskDocumentFromQuery,
   taskDocumentQueryOptions,
   type TaskDocumentSection,
-} from "./documents";
+} from "@openducktor/frontend-core/queries/documents";
 
 const document = (markdown: string, updatedAt: string) => ({ markdown, updatedAt });
 
 describe("documents query helpers", () => {
   test("normal views cache each section and a Query refetch reaches the reader", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     let version = 1;
     const read = mock(async (_repoPath: string, _taskId: string, section: string) =>
       document(`${section} V${version}`, `2026-03-28T0${version}:00:00.000Z`),
@@ -45,7 +45,7 @@ describe("documents query helpers", () => {
   });
 
   test("explicit refresh reads the host and updates the cached spec", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec V2", "2026-03-28T10:00:00.000Z"));
     queryClient.setQueryData(
       documentQueryKeys.spec("/repo", "task-1"),
@@ -71,7 +71,7 @@ describe("documents query helpers", () => {
   });
 
   test("explicit refresh keeps newer optimistic content when the host response is older", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec V1", "2026-03-28T09:00:00.000Z"));
     queryClient.setQueryData(
       documentQueryKeys.spec("/repo", "task-1"),
@@ -93,7 +93,7 @@ describe("documents query helpers", () => {
   });
 
   test("a normal Query refetch keeps newer optimistic content and accepts a later host version", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     let incoming = document("# Older spec", "2026-03-28T09:00:00.000Z");
     const read = mock(async () => incoming);
     const queryKey = documentQueryKeys.spec("/repo", "task-1");
@@ -123,8 +123,7 @@ describe("documents query helpers", () => {
       }),
       {
         initialProps: { open: false },
-        wrapper: ({ children }) =>
-          createElement(QueryProvider, { useIsolatedClient: true }, children),
+        wrapper: ({ children }) => createElement(QueryProvider, null, children),
       },
     );
 
@@ -167,7 +166,7 @@ describe("documents query helpers", () => {
   });
 
   test("host failures reach explicit refresh callers", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const failure = new Error("Task store is unavailable");
     const read = mock(async () => {
       throw failure;
@@ -183,7 +182,7 @@ describe("documents query helpers", () => {
   });
 
   test("a read without a repository reports the missing selection", async () => {
-    const queryClient = createQueryClient();
+    const queryClient = createClientQueryClient();
     const read = mock(async () => document("# Spec", "2026-03-28T10:00:00.000Z"));
 
     try {

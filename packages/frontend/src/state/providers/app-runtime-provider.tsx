@@ -6,16 +6,19 @@ import type {
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
-import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
-import { errorMessage } from "@/lib/errors";
+import { getAvailableRuntimeDefinitions } from "@openducktor/frontend-core/lib/agent-runtime";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   ActiveWorkspaceContext,
   type ActiveWorkspaceContextValue,
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
 } from "../app-state-contexts";
-import { runtimeDefinitionsQueryOptions, runtimeQueryKeys } from "../queries/runtime";
-import { settingsSnapshotQueryOptions } from "../queries/workspace";
+import {
+  runtimeDefinitionsQueryOptions,
+  runtimeQueryKeys,
+} from "@openducktor/frontend-core/queries/runtime";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 
 type AppRuntimeProviderProps = PropsWithChildren<{
   loadRepoRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;

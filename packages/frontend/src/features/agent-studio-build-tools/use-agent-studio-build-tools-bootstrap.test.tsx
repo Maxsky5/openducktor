@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { toAgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentStudioBuildToolsBootstrap } from "./use-agent-studio-build-tools-bootstrap";
 
 enableReactActEnvironment();

@@ -1,4 +1,4 @@
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 import type { GitChangeGroup, PullRequest, SystemOpenInToolId } from "@openducktor/contracts";
 import type { ReactNode } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";

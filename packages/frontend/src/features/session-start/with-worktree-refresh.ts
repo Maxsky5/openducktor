@@ -1,7 +1,7 @@
 import type { WorkflowLaunchRequest, WorkflowLaunchResult } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
-import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
-import { invalidateTerminalList } from "@/state/queries/terminals";
+import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
+import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
 
 export const withWorktreeRefresh =
   (

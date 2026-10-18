@@ -1,4 +1,4 @@
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { PullRequest } from "@openducktor/contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";

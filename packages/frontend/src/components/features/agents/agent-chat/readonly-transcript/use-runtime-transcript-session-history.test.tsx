@@ -4,31 +4,31 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionScope,
 } from "@openducktor/core";
-import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
-import { createQueryClient } from "@/lib/query-client";
-import { QueryProvider } from "@/lib/query-provider";
-import { HostRuntimeStatusContext } from "@/state/app-state-contexts";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { createHostRuntimeStatusContextValue } from "@/test-utils/shared-test-fixtures";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
+import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import {
   AgentOperationsContext,
   AgentSessionHistoryLoadContext,
   AgentSessionReadModelStateContext,
-  RuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import { useAgentOperations } from "@/state/app-state-provider";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
   createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
@@ -106,7 +106,7 @@ const createHarness = (
     null,
 ) => {
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <HostRuntimeStatusContext value={readyRuntimeStatus}>
         <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
           <AgentOperationsContext.Provider
@@ -243,7 +243,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
   test("forwards repository scope unchanged to the history request", async () => {
     const readSessionHistory = mock(async () => []);
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
             <AgentOperationsContext.Provider
@@ -301,7 +301,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     ];
     const readSessionHistory = mock(async () => history);
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryProvider useIsolatedClient>
+      <QueryProvider>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
             <AgentOperationsContext.Provider
@@ -351,13 +351,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
   test("loads completed Codex child history through a policy-bound runtime ref", async () => {
     const readSessionHistory = mock(async () => []);
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
     );
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider value={createRuntimeDefinitionsContextValue()}>
             <AgentOperationsContext.Provider
@@ -367,7 +368,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
             </AgentOperationsContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </HostRuntimeStatusContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const harness = createHookHarness(
       useRuntimeTranscriptSessionHistory,
@@ -492,13 +493,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
           resolveCatalog = resolve;
         }),
     );
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
     );
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider
             value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
@@ -510,7 +512,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
             </AgentOperationsContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </HostRuntimeStatusContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const harness = createHookHarness(
       useRuntimeTranscriptSessionHistory,
@@ -583,13 +585,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         },
       });
     });
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
     );
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider
             value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
@@ -601,7 +604,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
             </AgentOperationsContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </HostRuntimeStatusContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const harness = createHookHarness(
       useRuntimeTranscriptSessionHistory,
@@ -643,13 +646,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("catalog offline");
     });
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
     );
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider
             value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
@@ -664,7 +668,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
             </AgentOperationsContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </HostRuntimeStatusContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const props: Parameters<typeof useRuntimeTranscriptSessionHistory>[0] = {
       isOpen: true,
@@ -725,13 +729,14 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       }
       return request;
     });
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection();
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       settingsSnapshotQueryOptions().queryKey,
       createSettingsSnapshotFixture(),
     );
     const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <HostRuntimeStatusContext value={readyRuntimeStatus}>
           <RuntimeDefinitionsContext.Provider
             value={createRuntimeDefinitionsContextValue({ loadRepoRuntimeCatalog })}
@@ -743,7 +748,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
             </AgentOperationsContext.Provider>
           </RuntimeDefinitionsContext.Provider>
         </HostRuntimeStatusContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     const harness = createHookHarness(
       useRuntimeTranscriptSessionHistory,

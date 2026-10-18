@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { render } from "@testing-library/react";
 import { Activity, act, createElement, useContext, useSyncExternalStore } from "react";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
-import { AgentSessionsContext } from "@/state/app-state-contexts";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { AgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
-import { installReactActEnvironment } from "@/test-utils/react-act-environment";
+import { installReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentChatTranscriptSession } from "./agent-chat.types";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";

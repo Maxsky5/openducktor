@@ -11,7 +11,7 @@ import {
   DialogTitle,
   useDialogPresence,
 } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { FolderPickerDialog } from "./folder-picker-dialog";

@@ -12,7 +12,8 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 const { act, render, waitFor } = await import("@testing-library/react");
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { useResourceSource } = await import("./use-resource-source");
-const { synchronizeBrowserState } = await import("./remote/state-recovery");
+const { synchronizeConnectionState } =
+  await import("@openducktor/frontend-core/recovery/state-recovery");
 const { configureShellBridge, createUnavailableShellBridge } = await import("./shell-bridge");
 const allocations: string[] = [];
 const releases: string[] = [];
@@ -123,7 +124,7 @@ try {
   await waitFor(() =>
     assert.equal(view.getByTestId("retry").getAttribute("data-error"), "Resource unavailable."),
   );
-  await synchronizeBrowserState(client, [], false);
+  await synchronizeConnectionState(client, [], false);
   assert.equal(reads, 1);
   assert.equal(view.getByTestId("retry").getAttribute("data-error"), "Resource unavailable.");
   await act(async () => {

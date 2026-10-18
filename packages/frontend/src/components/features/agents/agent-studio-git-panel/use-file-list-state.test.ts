@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { GitFileDiff } from "@openducktor/contracts";
 import { act, renderHook } from "@testing-library/react";
-import { enableReactActEnvironment } from "@/test-utils/react-act-environment";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { useFileListSearch, useFileListState } from "./use-file-list-state";
 
 enableReactActEnvironment();

@@ -1,13 +1,13 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { AgentStudioPendingForcePush } from "@/features/agent-studio-git";
-import { host } from "@/state/operations/shared/host";
 import {
   type GitActionKind,
   type RefreshGitDiffData,
   refreshAfterGitAction,
   toErrorMessage,
 } from "./use-agent-studio-git-action-utils";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type UseAgentStudioGitPushActionsArgs = {
   isCurrentContext: () => boolean;
@@ -36,6 +36,7 @@ export function useAgentStudioGitPushActions({
   ensureGitActionsUnlocked,
   setPushError,
 }: UseAgentStudioGitPushActionsArgs) {
+  const host = useHostClient();
   const [isPushing, setIsPushing] = useState(false);
   const [pendingForcePush, setPendingForcePush] = useState<AgentStudioPendingForcePush | null>(
     null,
@@ -124,6 +125,7 @@ export function useAgentStudioGitPushActions({
       }
     },
     [
+      host,
       isCurrentContext,
       branch,
       clearActionErrors,

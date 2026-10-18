@@ -6,7 +6,7 @@ import {
 import type {
   TaskStreamFrame,
   TaskStreamSubscription,
-} from "@openducktor/frontend/lib/shell-bridge";
+} from "@openducktor/frontend-core/connection/host-connection";
 import { Effect } from "effect";
 import { getBrowserAuthTokenEffect, getBrowserBackendUrlEffect } from "./browser-config";
 import {

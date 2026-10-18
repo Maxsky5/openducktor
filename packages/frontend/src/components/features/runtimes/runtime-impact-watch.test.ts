@@ -39,12 +39,12 @@ const createHarness = (options: Parameters<typeof startHostRuntimeEventsHarness>
 };
 
 const streamWarning = {
-  __openducktorBrowserLive: true,
+  __openducktorConnectionControl: true,
   kind: "stream-warning",
   message: "Event stream lost",
 } as const;
 const reconnected = {
-  __openducktorBrowserLive: true,
+  __openducktorConnectionControl: true,
   kind: "reconnected",
   missedEvents: true,
 } as const;

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   type AgentChatComposerDraft,
   appendTextToDraft,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   AgentChatComposerModel,
@@ -13,9 +13,10 @@ import type {
 import {
   type InlineCommentDraftStore,
   toInlineCommentDraftOwnerKey,
-  useInlineCommentDraftStore,
-} from "@/state/use-inline-comment-draft-store";
-import type { InlineCommentOwner } from "@/types/inline-comment-owner";
+} from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { useInlineCommentDraftStore } from "@openducktor/frontend-core/drafts/use-inline-comment-draft-store";
+import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
 
 export type ReviewCommentStore = Pick<
   InlineCommentDraftStore,
@@ -38,6 +39,7 @@ export function useReviewCommentComposer({
   onSend: AgentChatComposerModel["onSend"];
 } {
   const ownerKey = toInlineCommentDraftOwnerKey(owner);
+  const inlineComments = useClientConnection().drafts.inlineComments;
   const count = useInlineCommentDraftStore((store) =>
     ownerKey === null ? 0 : store.getDraftCount(ownerKey),
   );
@@ -54,15 +56,15 @@ export function useReviewCommentComposer({
     return items;
   }, [count, warning]);
   useEffect(() => {
-    if (ownerKey !== null) useInlineCommentDraftStore.getState().hydrate(ownerKey);
-  }, [ownerKey]);
+    if (ownerKey !== null) inlineComments.getState().hydrate(ownerKey);
+  }, [inlineComments, ownerKey]);
 
   useEffect(() => {
     if (globalThis.window === undefined || globalThis.document === undefined) {
       return;
     }
 
-    const flush = (): void => useInlineCommentDraftStore.getState().flush();
+    const flush = (): void => inlineComments.getState().flush();
     const onVisibilityChange = (): void => {
       if (document.visibilityState === "hidden") {
         flush();
@@ -77,12 +79,12 @@ export function useReviewCommentComposer({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
     };
-  }, []);
+  }, [inlineComments]);
 
   const submitDraft = useCallback(
     (draft: AgentChatComposerDraft, mode: AgentMessageSubmitMode): Promise<AgentChatSendResult> =>
-      sendReviewComments(ownerKey, draft, mode, onSend, useInlineCommentDraftStore.getState),
-    [onSend, ownerKey],
+      sendReviewComments(ownerKey, draft, mode, onSend, inlineComments.getState),
+    [inlineComments, onSend, ownerKey],
   );
 
   return useMemo(

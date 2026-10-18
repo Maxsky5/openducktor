@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createElement, createRef, type MutableRefObject, type PropsWithChildren } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";

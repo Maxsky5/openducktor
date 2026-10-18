@@ -1,5 +1,5 @@
 import { batchImagePreview } from "@/lib/generated-images/image-preview-batches";
-import { runImagePreview } from "@/lib/generated-images/image-preview-queue";
+import { runImagePreview } from "@openducktor/frontend-core/lib/image-preview-queue";
 import { decodeGeneratedImage } from "@/lib/generated-images/image-worker-client";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";

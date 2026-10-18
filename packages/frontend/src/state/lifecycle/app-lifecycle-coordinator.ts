@@ -1,7 +1,10 @@
 import type { RepoStoreHealth, TaskStoreCheck } from "@openducktor/contracts";
 import { isCancelledError } from "@tanstack/react-query";
-import { errorMessage } from "@/lib/errors";
-import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import {
+  getBlockingRepoStoreHealth,
+  summarizeTaskLoadError,
+} from "@openducktor/frontend-core/tasks/task-load-errors";
 
 export const TASK_STORE_PREPARATION_TOAST_DELAY_MS = 1_000;
 

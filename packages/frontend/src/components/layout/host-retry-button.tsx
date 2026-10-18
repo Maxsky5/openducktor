@@ -2,7 +2,7 @@ import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
 
 export const CONNECTION_TOASTER_ID = "host-connection";

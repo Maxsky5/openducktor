@@ -2,12 +2,12 @@ import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { useMemo } from "react";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
 import type { AgentChatComposerModel } from "./agent-chat.types";
-import { validateComposerAttachments } from "./agent-chat-attachments";
+import { validateComposerAttachments } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
   draftHasMeaningfulContent,
   draftHasSlashCommandSegment,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
 
 export function useComposerPolicy({

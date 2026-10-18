@@ -7,9 +7,12 @@ import {
   createFileReferenceSegment,
   createSlashCommandSegment,
   createTextSegment,
-} from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { resolveAgentChatSendDraftParts } from "@/features/agent-chat-composer/message-delivery/agent-chat-send-draft";
+import {
+  createAgentChatSendAttachmentStager,
+  resolveAgentChatSendDraftParts,
+} from "@/features/agent-chat-composer/message-delivery/agent-chat-send-draft";
 
 const modelDescriptor: AgentModelCatalog["models"][number] = {
   id: "openai/gpt-5",
@@ -42,12 +45,18 @@ const textDraft = (text: string): AgentChatComposerDraft => ({
 
 type ResolvePartsInput = Parameters<typeof resolveAgentChatSendDraftParts>[0];
 
+// The send stager keeps the host path of a path-backed attachment. This device has no file to stage.
+const stageWithoutDeviceFiles = createAgentChatSendAttachmentStager(async (file) => {
+  throw new Error(`The test device cannot stage '${file.name}'.`);
+});
+
 const resolveParts = async (
-  input: Omit<ResolvePartsInput, "supportsAttachments"> &
-    Partial<Pick<ResolvePartsInput, "supportsAttachments">>,
+  input: Omit<ResolvePartsInput, "supportsAttachments" | "stageAttachment"> &
+    Partial<Pick<ResolvePartsInput, "supportsAttachments" | "stageAttachment">>,
 ) =>
   resolveAgentChatSendDraftParts({
     supportsAttachments: true,
+    stageAttachment: stageWithoutDeviceFiles,
     ...input,
   });
 

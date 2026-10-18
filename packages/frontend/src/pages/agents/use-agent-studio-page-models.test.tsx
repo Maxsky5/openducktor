@@ -11,25 +11,28 @@ import { AgentChatSettingsProvider } from "@/components/features/agents/agent-ch
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import {
   createAgentSessionsStore,
   type AgentSessionSummary,
   toAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import { ActiveWorkspaceContext } from "@/state/app-state-contexts";
 import {
-  ActiveWorkspaceContext,
   AgentSessionReadModelStateContext,
   AgentSessionsContext,
-} from "@/state/app-state-contexts";
-import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { sessionMessageAt } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import {
   type AgentSessionFixtureOverrides,
   createChatSettingsFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { readyAgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import {
   type AgentStudioChatDraftScope,
   agentStudioChatDraftScopeKey,

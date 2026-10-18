@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { getSessionHistoryFreshnessTracker } from "./queries/agent-session-history-freshness-tracker";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { getSessionHistoryFreshnessTracker } from "@openducktor/frontend-core/queries/agent-session-history-freshness-tracker";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
-import { createAgentSessionCollection } from "./agent-session-collection";
-import { createAgentSessionsStore, toAgentSessionSummary } from "./agent-sessions-store";
+import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
+import {
+  createAgentSessionsStore,
+  toAgentSessionSummary,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   createSessionMessagesState,
   getSessionMessageCount,
-} from "./operations/agent-orchestrator/support/messages";
-import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
 
 const replaceStoreSessions = (
   store: ReturnType<typeof createAgentSessionsStore>,

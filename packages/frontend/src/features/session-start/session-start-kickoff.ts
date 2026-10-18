@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
-import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
+import { loadRepoConfigFromQuery } from "@openducktor/frontend-core/queries/workspace";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import { resolveSessionStartKickoffPromptContext } from "./session-start-prompt-context";
 import { kickoffPromptForTemplate } from "./session-start-prompts";

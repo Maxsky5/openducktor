@@ -1,4 +1,4 @@
-import { SessionNavigationTestProvider } from "./session-navigation-test-provider";
+import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import { describe, expect, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SessionNavigationList } from "./session-navigation-list";

@@ -1,7 +1,7 @@
 import { CheckCircle2, Circle } from "lucide-react";
 import type { HTMLAttributes, ReactElement } from "react";
 import { cn } from "@/lib/utils";
-import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
   isAgentQuestionAnswered,

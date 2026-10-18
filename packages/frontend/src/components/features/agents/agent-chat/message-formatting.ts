@@ -1,10 +1,10 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { agentModelInfoParts } from "@/lib/agent-model-presentation";
-import { isFinalAssistantChatMessage } from "@/state/operations/agent-orchestrator/support/messages";
-import { SYSTEM_PROMPT_PREFIX } from "@/state/operations/agent-orchestrator/support/session-prompt";
+import { isFinalAssistantChatMessage } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { SYSTEM_PROMPT_PREFIX } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-prompt";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { stripToolPrefix } from "./tool-text-utils";
 
 export { SYSTEM_PROMPT_PREFIX };

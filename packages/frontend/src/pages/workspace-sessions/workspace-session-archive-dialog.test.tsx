@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import type { WorkspaceSession, WorkspaceSessionArchivePreview } from "@openducktor/contracts";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { QueryProvider } from "@/lib/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { WorkspaceSessionArchiveDialog } from "./workspace-session-archive-dialog";
 
 const record = (): WorkspaceSession => ({
@@ -30,18 +29,16 @@ test.each([false, true])(
   async (dirty) => {
     const requests: boolean[] = [];
     let finish!: (preview: WorkspaceSessionArchivePreview) => void;
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceSessionArchivePreview: () =>
-            new Promise((resolve) => {
-              finish = resolve;
-            }),
-        },
-      }),
-    );
+    const connection = createTestClientConnection({
+      client: {
+        workspaceSessionArchivePreview: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      },
+    });
     const view = render(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionArchiveDialog
           open
           workspaceId="test"
@@ -75,7 +72,6 @@ test.each([false, true])(
       expect(requests).toEqual([true]);
     } finally {
       view.unmount();
-      configureShellBridge(createUnavailableShellBridge());
     }
   },
 );
@@ -83,19 +79,17 @@ test.each([false, true])(
 test("turning removal off keeps Git resources and Cancel sends no archive request", async () => {
   const requests: boolean[] = [];
   let closed = 0;
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionArchivePreview: async () => ({
-          branchName: "feature/chat",
-          worktreeExists: true,
-          hasUncommittedChanges: true,
-        }),
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionArchivePreview: async () => ({
+        branchName: "feature/chat",
+        worktreeExists: true,
+        hasUncommittedChanges: true,
+      }),
+    },
+  });
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <WorkspaceSessionArchiveDialog
         open
         workspaceId="test"
@@ -126,29 +120,26 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
     expect(requests).toEqual([false]);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("a missing detached worktree can be archived without removal", async () => {
   const requests: boolean[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionArchivePreview: async () => ({
-          branchName: null,
-          worktreeExists: false,
-          hasUncommittedChanges: false,
-        }),
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionArchivePreview: async () => ({
+        branchName: null,
+        worktreeExists: false,
+        hasUncommittedChanges: false,
+      }),
+    },
+  });
   const imported = record();
   imported.externalSessionId = "native-detached";
   if (imported.executionTarget.kind !== "local_worktree") throw new Error("Expected worktree");
   imported.executionTarget.branchName = null;
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <WorkspaceSessionArchiveDialog
         open
         workspaceId="test"
@@ -173,23 +164,20 @@ test("a missing detached worktree can be archived without removal", async () => 
     expect(requests).toEqual([false]);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("a failed check blocks removal but allows keeping the worktree", async () => {
   const requests: boolean[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionArchivePreview: async () => {
-          throw new Error("Cannot delete protected branch main.");
-        },
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionArchivePreview: async () => {
+        throw new Error("Cannot delete protected branch main.");
       },
-    }),
-  );
+    },
+  });
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <WorkspaceSessionArchiveDialog
         open
         workspaceId="test"
@@ -212,24 +200,21 @@ test("a failed check blocks removal but allows keeping the worktree", async () =
     expect(requests).toEqual([false]);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });
 
 test("archive locks the full form and keeps its error and removal choice visible for retry", async () => {
   let closed = 0;
   const requests: boolean[] = [];
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceSessionArchivePreview: async () => ({
-          branchName: "feature/chat",
-          worktreeExists: false,
-          hasUncommittedChanges: false,
-        }),
-      },
-    }),
-  );
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionArchivePreview: async () => ({
+        branchName: "feature/chat",
+        worktreeExists: false,
+        hasUncommittedChanges: false,
+      }),
+    },
+  });
   const props = {
     workspaceId: "test",
     record: record(),
@@ -239,7 +224,7 @@ test("archive locks the full form and keeps its error and removal choice visible
     },
   };
   const view = render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <WorkspaceSessionArchiveDialog open {...props} isArchiving error={null} />
     </QueryProvider>,
   );
@@ -254,7 +239,7 @@ test("archive locks the full form and keeps its error and removal choice visible
     expect(closed).toBe(0);
     expect(requests).toEqual([]);
     view.rerender(
-      <QueryProvider useIsolatedClient>
+      <QueryProvider connection={connection}>
         <WorkspaceSessionArchiveDialog
           open
           {...props}
@@ -269,6 +254,5 @@ test("archive locks the full form and keeps its error and removal choice visible
     expect(requests).toEqual([true]);
   } finally {
     view.unmount();
-    configureShellBridge(createUnavailableShellBridge());
   }
 });

@@ -14,20 +14,23 @@ import {
 import type {
   WorkspaceSessionLiveFacts,
   WorkspaceSessionLiveState,
-} from "@/features/workspace-activity/workspace-activity-state";
+} from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import {
   isAgentSessionActivityActive,
   isAgentSessionActivityWorking,
-} from "@/lib/agent-session-activity-state";
-import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "@openducktor/frontend-core/lib/agent-session-identity";
 import { buildRoleWorkflowState } from "@/lib/agent-workflow-state";
 import { roleWorkflowForTask } from "@/lib/task-agent-workflows";
 import { parseTimestamp } from "@/lib/timestamps";
 import {
   workspaceSessionIdentity,
   workspaceSessionTitle,
-} from "@/state/operations/agent-orchestrator/session-read-model/workspace-session-records";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentWorkflowStepTone } from "@/types/agent-workflow";
 
 /**

@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { AgentRoleOption, AgentStudioHeaderModel } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";

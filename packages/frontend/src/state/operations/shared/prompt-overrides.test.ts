@@ -1,9 +1,9 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
-import { clearAppQueryClient } from "@/lib/query-client";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
+import { loadEffectivePromptOverrides } from "./prompt-overrides";
 
 const createRepoConfig = (): RepoConfig => ({
   workspaceId: "repo",
@@ -63,30 +63,23 @@ const workspaceGetSettingsSnapshotMock = mock(async (): Promise<SettingsSnapshot
   createSettingsSnapshot(),
 );
 
-let loadEffectivePromptOverrides: (typeof import("./prompt-overrides"))["loadEffectivePromptOverrides"];
+let connection: ClientConnection;
 
-beforeAll(async () => {
-  ({ loadEffectivePromptOverrides } = await import("./prompt-overrides"));
-});
-
-beforeEach(async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: {
-        workspaceGetRepoConfig: workspaceGetRepoConfigMock,
-        workspaceList: workspaceListMock,
-        workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
-      },
-    }),
-  );
+beforeEach(() => {
   workspaceGetRepoConfigMock.mockClear();
   workspaceListMock.mockClear();
   workspaceGetSettingsSnapshotMock.mockClear();
-  await clearAppQueryClient();
+  connection = createTestClientConnection({
+    client: {
+      workspaceGetRepoConfig: workspaceGetRepoConfigMock,
+      workspaceList: workspaceListMock,
+      workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
+    },
+  });
 });
 
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
+afterEach(async () => {
+  await connection.dispose();
 });
 
 describe("loadEffectivePromptOverrides", () => {
@@ -97,8 +90,8 @@ describe("loadEffectivePromptOverrides", () => {
     workspaceGetRepoConfigMock.mockImplementationOnce(async () => repoDeferred.promise);
     workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => settingsDeferred.promise);
 
-    const firstLoad = loadEffectivePromptOverrides("repo");
-    const secondLoad = loadEffectivePromptOverrides("repo");
+    const firstLoad = loadEffectivePromptOverrides("repo", connection.queryClient);
+    const secondLoad = loadEffectivePromptOverrides("repo", connection.queryClient);
 
     repoDeferred.resolve(createRepoConfig());
     settingsDeferred.resolve(createSettingsSnapshot());
@@ -115,8 +108,8 @@ describe("loadEffectivePromptOverrides", () => {
 
   test("normalizes workspace ids before deduplicating concurrent loads", async () => {
     const [firstResult, secondResult] = await Promise.all([
-      loadEffectivePromptOverrides("repo"),
-      loadEffectivePromptOverrides(" repo "),
+      loadEffectivePromptOverrides("repo", connection.queryClient),
+      loadEffectivePromptOverrides(" repo ", connection.queryClient),
     ]);
 
     expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);

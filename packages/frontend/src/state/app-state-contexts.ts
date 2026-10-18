@@ -19,38 +19,24 @@ import {
 } from "react";
 import type {
   ActiveWorkspace,
-  AgentOperationsContextValue,
-  AgentSessionHistoryLoadContextValue,
-  AgentSessionReadModelStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
-  HostRuntimeStatusContextValue,
   SpecStateContextValue,
   TasksStateContextValue,
   WorkspaceBranchStateContextValue,
   WorkspacePresenceContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import type { AgentMessageQueuesStore } from "./agent-message-queues-store";
-import type { AgentSessionsStore } from "./agent-sessions-store";
 
 export const WorkspaceStateContext = createContext<WorkspaceStateContextValue | null>(null);
 export const WorkspaceBranchStateContext = createContext<WorkspaceBranchStateContextValue | null>(
   null,
 );
 export const WorkspacePresenceContext = createContext<WorkspacePresenceContextValue | null>(null);
-export const HostRuntimeStatusContext = createContext<HostRuntimeStatusContextValue | null>(null);
 export const ChecksStateContext = createContext<ChecksStateContextValue | null>(null);
 export const TasksStateContext = createContext<TasksStateContextValue | null>(null);
 export const DelegationStateContext = createContext<DelegationStateContextValue | null>(null);
 export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
-export const AgentSessionsContext = createContext<AgentSessionsStore | null>(null);
-export const AgentMessageQueuesContext = createContext<AgentMessageQueuesStore | null>(null);
-export const AgentOperationsContext = createContext<AgentOperationsContextValue | null>(null);
-export const AgentSessionHistoryLoadContext =
-  createContext<AgentSessionHistoryLoadContextValue | null>(null);
-export const AgentSessionReadModelStateContext =
-  createContext<AgentSessionReadModelStateContextValue | null>(null);
 
 export type ActiveWorkspaceContextValue = {
   activeWorkspace: ActiveWorkspace | null;
@@ -128,9 +114,6 @@ export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
 export const useChecksStateContext = (): ChecksStateContextValue =>
   useRequiredContext(ChecksStateContext, "useChecksStateContext");
 
-export const useHostRuntimeStatusContext = (): HostRuntimeStatusContextValue =>
-  useRequiredContext(HostRuntimeStatusContext, "useHostRuntimeStatusContext");
-
 export const useRuntimeDefinitionsContext = (): RuntimeDefinitionsContextValue =>
   useRequiredContext(RuntimeDefinitionsContext, "useRuntimeDefinitionsContext");
 
@@ -170,21 +153,6 @@ export const useTaskControlContext = (): TaskControlContextValue =>
 
 export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue =>
   useRequiredContext(WorkspaceOperationsContext, "useWorkspaceOperationsContext");
-
-export const useAgentSessionsContext = (): AgentSessionsStore =>
-  useRequiredContext(AgentSessionsContext, "useAgentSessions");
-
-export const useAgentMessageQueuesContext = (): AgentMessageQueuesStore =>
-  useRequiredContext(AgentMessageQueuesContext, "useAgentMessageQueue");
-
-export const useAgentOperationsContext = (): AgentOperationsContextValue =>
-  useRequiredContext(AgentOperationsContext, "useAgentOperations");
-
-export const useAgentSessionHistoryLoadContext = (): AgentSessionHistoryLoadContextValue =>
-  useRequiredContext(AgentSessionHistoryLoadContext, "useAgentSessionHistoryLoadContext");
-
-export const useAgentSessionReadModelStateContext = (): AgentSessionReadModelStateContextValue =>
-  useRequiredContext(AgentSessionReadModelStateContext, "useAgentSessionReadModelState");
 
 export const useWorkspaceStateContext = (): WorkspaceStateContextValue =>
   useRequiredContext(WorkspaceStateContext, "useWorkspaceState");

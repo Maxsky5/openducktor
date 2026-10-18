@@ -1,5 +1,5 @@
 import type { AgentRole, TaskCard, WorkspaceAgentStudioState } from "@openducktor/contracts";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 
 export const pruneAgentStudioTaskIds = (
   taskIds: readonly string[],

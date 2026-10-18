@@ -1,14 +1,13 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_CHAT_SETTINGS, type SettingsSnapshot } from "@openducktor/contracts";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import { createQueryClient } from "@/lib/query-client";
-import { workspaceQueryKeys } from "@/state/queries/workspace";
+import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 
 const hostMock = {
   workspaceGetSettingsSnapshot: mock(async (): Promise<SettingsSnapshot> =>
@@ -16,20 +15,7 @@ const hostMock = {
   ),
 };
 
-let useAgentStudioChatSettings: typeof import("./use-agent-studio-chat-settings").useAgentStudioChatSettings;
-
-beforeEach(async () => {
-  configureShellBridge(
-    createShellBridgeFixture({
-      client: { workspaceGetSettingsSnapshot: hostMock.workspaceGetSettingsSnapshot },
-    }),
-  );
-  ({ useAgentStudioChatSettings } = await import("./use-agent-studio-chat-settings"));
-});
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
+const createHostConnection = () => createTestClientConnection({ client: hostMock });
 
 enableReactActEnvironment();
 
@@ -69,12 +55,14 @@ const createSettingsSnapshot = ({
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useChatSettingsHarness, initialProps, {
+    connection: createHostConnection(),
     seedSettingsSnapshot: false,
   });
 
 describe("useAgentStudioChatSettings", () => {
   test("retains saved steering after a failed read and a workspace change", async () => {
-    const client = createQueryClient();
+    const connection = createHostConnection();
+    const client = connection.queryClient;
     const saved = createSettingsSnapshot({ chatOverrides: { steerMessagesByDefault: true } });
     client.setQueryData(workspaceQueryKeys.settingsSnapshot(), saved);
     hostMock.workspaceGetSettingsSnapshot.mockImplementation(async () => {
@@ -83,7 +71,7 @@ describe("useAgentStudioChatSettings", () => {
     const harness = createSharedHookHarness(
       useChatSettingsHarness,
       { workspaceRepoPath: "/repo" },
-      { queryClient: client, seedSettingsSnapshot: false },
+      { connection, seedSettingsSnapshot: false },
     );
     try {
       await harness.mount();

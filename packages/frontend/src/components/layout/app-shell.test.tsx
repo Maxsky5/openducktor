@@ -1,14 +1,11 @@
-import { beforeAll, afterAll } from "bun:test";
-import {
-  installLocalOnlyProviderSetup,
-  localOnlyWorkspaceDetails,
-} from "@/test-utils/workspace-provider-setup-fixture";
-let releaseProviderFixture: (() => void) | undefined;
-beforeAll(() => {
-  releaseProviderFixture = installLocalOnlyProviderSetup();
-});
-afterAll(() => releaseProviderFixture?.());
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import {
+  type ClientStorage,
+  createMemoryClientStorage,
+} from "@openducktor/frontend-core/platform/client-storage";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   type AgentSessionRecord,
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -19,7 +16,8 @@ import {
   type WorkspaceRecord,
   type WorkspaceSession,
 } from "@openducktor/contracts";
-import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { HostClient } from "@openducktor/host-client";
+import type { QueryClient } from "@tanstack/react-query";
 import * as pierre from "@pierre/diffs";
 import * as pierreReact from "@pierre/diffs/react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -35,13 +33,10 @@ import * as repositoryModal from "@/components/features/repository/open-reposito
 import * as diffWorkers from "@/contexts/DiffWorkerProvider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/workspace-preview-transition-guard";
-import { createQueryClient } from "@/lib/query-client";
-import { createAgentSessionsStore } from "@/state/agent-sessions-store";
+import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import {
   ActiveWorkspaceContext,
-  AgentSessionsContext,
   ChecksStateContext,
-  HostRuntimeStatusContext,
   RuntimeDefinitionsContext,
   TaskControlContext,
   TasksStateContext,
@@ -50,21 +45,29 @@ import {
   WorkspaceStateContext,
   useActiveWorkspaceContext,
 } from "@/state/app-state-contexts";
-import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  AgentSessionsContext,
+  HostRuntimeStatusContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   NotificationContext,
   type NotificationContextValue,
 } from "@/state/notifications/notification-context";
-import { filesystemQueryKeys } from "@/state/queries/filesystem";
+import { filesystemQueryKeys } from "@openducktor/frontend-core/queries/filesystem";
 import {
   runtimeDefinitionsQueryOptions,
   runtimeExecutableQueryOptions,
-} from "@/state/queries/runtime";
-import { platformQueryOptions } from "@/state/queries/system";
-import { repoTaskDataQueryOptions } from "@/state/queries/tasks";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { useRecentItemsStore } from "@/features/command-palette/recent-items";
-import { repoConfigQueryOptions, settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+} from "@openducktor/frontend-core/queries/runtime";
+import { platformQueryOptions } from "@openducktor/frontend-core/queries/system";
+import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
+import { agentSessionQueryKeys } from "@openducktor/frontend-core/queries/agent-sessions";
+import { RECENT_ITEMS_STORAGE_KEY } from "@/features/command-palette/constants";
+import type { RecentItem } from "@/features/command-palette/recent-items";
+import {
+  repoConfigQueryOptions,
+  settingsSnapshotQueryOptions,
+} from "@openducktor/frontend-core/queries/workspace";
 import { DiagnosticsAutoOpenProvider } from "@/state/providers/diagnostics-auto-open-provider";
 import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
 import { WorkspaceActivityContext } from "@/state/workspace-activity/workspace-activity-context";
@@ -74,8 +77,6 @@ import {
   type TaskWorkflowActions,
   TaskWorkflowActionsContext,
 } from "@/features/task-workflow/task-workflow-actions-context";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import {
   createChecksStateFixture,
@@ -88,6 +89,10 @@ import {
   createTaskWorkflowActionsFixture,
   createWorkspaceActivityObserverStub,
 } from "@/test-utils/shared-test-fixtures";
+import {
+  localOnlyProviderSetupClient,
+  localOnlyWorkspaceDetails,
+} from "@/test-utils/workspace-provider-setup-fixture";
 import type {
   ActiveWorkspace,
   ChecksStateContextValue,
@@ -296,6 +301,8 @@ type RenderAppShellForTestOptions = {
   ) => Promise<WorkspaceRecord>;
   workspacePresence?: Partial<WorkspacePresenceContextValue>;
   prepareQueryClient?: (queryClient: QueryClient) => void;
+  /** Host storage of the connection, such as a saved Recent list. */
+  storage?: ClientStorage;
   sessionContent?: ReactElement;
   /** Tasks that the task state shows for the active workspace, by repository path. */
   tasksByRepoPath?: Record<string, TaskCard[]>;
@@ -344,11 +351,11 @@ const createTasksState = (tasks: TaskCard[] = []): TasksStateContextValue => ({
 
 function AppShellTestEnvironment({
   options,
-  queryClient,
+  connection,
   settingsSnapshot,
 }: {
   options: RenderAppShellForTestOptions;
-  queryClient: ReturnType<typeof createQueryClient>;
+  connection: ClientConnection;
   settingsSnapshot: ReturnType<typeof createSettingsSnapshotFixture>;
 }): ReactElement {
   const startsWithWorkspaces =
@@ -381,7 +388,7 @@ function AppShellTestEnvironment({
   return (
     <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions={false}>
       <CurrentRoute />
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <ThemeProvider>
           <ActiveWorkspaceContext.Provider
             value={{
@@ -530,15 +537,25 @@ function AppShellTestEnvironment({
             </WorkspacePresenceContext.Provider>
           </ActiveWorkspaceContext.Provider>
         </ThemeProvider>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     </MemoryRouter>
   );
 }
 
+// Host commands of the test host. Each describe block sets them in `beforeEach`.
+let hostFakes: Partial<HostClient> = {};
+const configureHostFakes = (client: Partial<HostClient>): void => {
+  hostFakes = client;
+};
+
 const renderAppShellForTest = (
   options: RenderAppShellForTestOptions = {},
 ): ReturnType<typeof render> => {
-  const queryClient = createQueryClient();
+  const connection = createTestClientConnection({
+    client: { ...localOnlyProviderSetupClient(), ...hostFakes },
+    ...(options.storage && { storage: options.storage }),
+  });
+  const { queryClient } = connection;
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
   queryClient.setQueryData(
@@ -559,7 +576,7 @@ const renderAppShellForTest = (
       error: "Path is empty.",
     });
   }
-  // Keep the seeded listing fresh for the whole test. A stale refetch would call the unconfigured host bridge.
+  // Keep the seeded listing fresh for the whole test. A stale refetch would call the unconfigured test host.
   queryClient.setQueryData(
     filesystemQueryKeys.directory(),
     {
@@ -576,7 +593,7 @@ const renderAppShellForTest = (
   return render(
     <AppShellTestEnvironment
       options={options}
-      queryClient={queryClient}
+      connection={connection}
       settingsSnapshot={settingsSnapshot}
     />,
   );
@@ -600,21 +617,17 @@ afterEach(() => {
 describe("AppShell", () => {
   beforeEach(() => {
     installLocalStorage(new MemoryStorage());
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          tasksList: async () => [],
-          workspaceSessionListActive: async () => [],
-          agentSessionsListForTasks: async () => [],
-          workspaceGetGitProviderContext: async () => null,
-        },
-      }),
-    );
+    configureHostFakes({
+      tasksList: async () => [],
+      workspaceSessionListActive: async () => [],
+      agentSessionsListForTasks: async () => [],
+      workspaceGetGitProviderContext: async () => null,
+    });
   });
 
   afterEach(() => {
     cleanup();
-    configureShellBridge(createUnavailableShellBridge());
+    configureHostFakes({});
     if (originalLocalStorageDescriptor) {
       Object.defineProperty(globalThis, "localStorage", originalLocalStorageDescriptor);
       return;
@@ -1124,24 +1137,20 @@ describe("AppShell session navigation", () => {
 
   beforeEach(() => {
     installLocalStorage(new MemoryStorage());
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          tasksList: async () => [],
-          agentSessionsListForTasks: async () => [],
-          workspaceGetGitProviderContext: async () => null,
-          workspaceSessionListActive: async (workspaceId) =>
-            workspaceId === activeWorkspace.workspaceId
-              ? [chat("mine", activeWorkspace.repoPath)]
-              : [chat("theirs", secondWorkspace.repoPath)],
-        },
-      }),
-    );
+    configureHostFakes({
+      tasksList: async () => [],
+      agentSessionsListForTasks: async () => [],
+      workspaceGetGitProviderContext: async () => null,
+      workspaceSessionListActive: async (workspaceId) =>
+        workspaceId === activeWorkspace.workspaceId
+          ? [chat("mine", activeWorkspace.repoPath)]
+          : [chat("theirs", secondWorkspace.repoPath)],
+    });
   });
 
   afterEach(() => {
     cleanup();
-    configureShellBridge(createUnavailableShellBridge());
+    configureHostFakes({});
   });
 
   test("keeps Kanban, New task, and Settings without page links for sessions or a branch selector", async () => {
@@ -1450,15 +1459,27 @@ describe("AppShell command palette", () => {
     selectedModel: null,
   } satisfies AgentSessionRecord;
 
+  // The palette shortcut and key caps follow the platform of this device.
+  const navigatorPlatforms = { darwin: "MacIntel", linux: "Linux x86_64" } as const;
+  const setDevicePlatform = (platform: keyof typeof navigatorPlatforms): void => {
+    Object.defineProperty(globalThis.navigator, "platform", {
+      configurable: true,
+      get: () => navigatorPlatforms[platform],
+    });
+  };
+  const restoreDevicePlatform = (): void => {
+    Reflect.deleteProperty(globalThis.navigator, "platform");
+  };
+
   const renderPalette = (
     options: RenderAppShellForTestOptions = {},
     platform: "darwin" | "linux" = "darwin",
-  ) =>
-    renderAppShellForTest({
+  ) => {
+    setDevicePlatform(platform);
+    return renderAppShellForTest({
       extraWorkspaces: [fairnest],
       tasksByRepoPath: { "/repo": [ownTask, closedTask], "/fairnest": [fairnestTask] },
       prepareQueryClient: (queryClient) => {
-        queryClient.setQueryData(platformQueryOptions().queryKey, platform);
         queryClient.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
           tasks: [ownTask, closedTask],
         });
@@ -1473,6 +1494,7 @@ describe("AppShell command palette", () => {
       },
       ...options,
     });
+  };
 
   const pressShortcut = (modifier: "metaKey" | "ctrlKey" = "metaKey"): void => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "k", [modifier]: true });
@@ -1517,33 +1539,27 @@ describe("AppShell command palette", () => {
     return option;
   };
 
-  type PaletteHost = NonNullable<Parameters<typeof createShellBridgeFixture>[0]>["client"];
   /** A host with a healthy task store and no Git provider setup, unless a test overrides it. */
-  const configurePaletteHost = (overrides: PaletteHost = {}): void => {
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          tasksList: async () => [],
-          agentSessionsListForTasks: async () => [],
-          taskStoreCheck: async () => createTaskStoreCheckFixture(),
-          workspaceGetGitProviderContext: async () => null,
-          workspaceSessionListActive: async () => [],
-          ...overrides,
-        },
-      }),
-    );
+  const configurePaletteHost = (overrides: Partial<HostClient> = {}): void => {
+    configureHostFakes({
+      tasksList: async () => [],
+      agentSessionsListForTasks: async () => [],
+      taskStoreCheck: async () => createTaskStoreCheckFixture(),
+      workspaceGetGitProviderContext: async () => null,
+      workspaceSessionListActive: async () => [],
+      ...overrides,
+    });
   };
 
   beforeEach(() => {
     installLocalStorage(new MemoryStorage());
-    useRecentItemsStore.setState({ items: [], loadError: null });
     configurePaletteHost();
   });
 
   afterEach(() => {
     cleanup();
-    useRecentItemsStore.setState({ items: [], loadError: null });
-    configureShellBridge(createUnavailableShellBridge());
+    restoreDevicePlatform();
+    configureHostFakes({});
   });
 
   test.each(["sync pull requests", "refresh pull requests", "sync PRs"])(
@@ -1717,7 +1733,6 @@ describe("AppShell command palette", () => {
       tasksByRepoPath: { "/repo": tasks },
       prepareQueryClient: (client) => {
         queryClient = client;
-        client.setQueryData(platformQueryOptions().queryKey, "darwin");
         client.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, { tasks });
         client.setQueryData(repoTaskDataQueryOptions("/fairnest").queryKey, { tasks: [] });
         for (const task of tasks) {
@@ -1830,7 +1845,6 @@ describe("AppShell command palette", () => {
     renderPalette({
       prepareQueryClient: (client) => {
         queryClient = client;
-        client.setQueryData(platformQueryOptions().queryKey, "darwin");
         client.setQueryData(repoTaskDataQueryOptions("/repo").queryKey, {
           tasks: [ownTask, closedTask],
         });
@@ -2140,14 +2154,14 @@ describe("AppShell command palette", () => {
   });
 
   test("shows recent tasks after the actions and drops the ones that no longer exist", async () => {
-    useRecentItemsStore.setState({
-      items: [
-        { kind: "task", workspaceId: fairnest.workspaceId, taskId: fairnestTask.id, openedAt: 3 },
-        { kind: "task", workspaceId: activeWorkspace.workspaceId, taskId: "deleted", openedAt: 2 },
-        { kind: "task", workspaceId: activeWorkspace.workspaceId, taskId: ownTask.id, openedAt: 1 },
-      ],
-    });
-    renderPalette();
+    const recentItems: RecentItem[] = [
+      { kind: "task", workspaceId: fairnest.workspaceId, taskId: fairnestTask.id, openedAt: 3 },
+      { kind: "task", workspaceId: activeWorkspace.workspaceId, taskId: "deleted", openedAt: 2 },
+      { kind: "task", workspaceId: activeWorkspace.workspaceId, taskId: ownTask.id, openedAt: 1 },
+    ];
+    const storage = createMemoryClientStorage();
+    storage.setItem(RECENT_ITEMS_STORAGE_KEY, JSON.stringify(recentItems));
+    renderPalette({ storage });
     const palette = await openPalette();
 
     const recent = await within(palette).findByRole("group", { name: "Recent" });

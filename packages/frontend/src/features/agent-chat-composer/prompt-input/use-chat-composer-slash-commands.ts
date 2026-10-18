@@ -13,7 +13,10 @@ import type {
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
-import { resolveRuntimeCatalogSurface, retryRuntimeCatalog } from "@/state/queries/runtime-catalog";
+import {
+  resolveRuntimeCatalogSurface,
+  retryRuntimeCatalog,
+} from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 

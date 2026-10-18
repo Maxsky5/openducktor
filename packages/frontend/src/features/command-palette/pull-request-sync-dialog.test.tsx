@@ -1,13 +1,11 @@
 import { expect, mock, test } from "bun:test";
 import type { RepositoryGitProviderContext, WorkspaceRecord } from "@openducktor/contracts";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, within } from "@testing-library/react";
-import { createQueryClient } from "@/lib/query-client";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { ManualPullRequestSyncProvider } from "@/state/providers/manual-pull-request-sync-provider";
-import { repositoryGitProviderContextQueryKeys } from "@/state/queries/git-provider-context";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import {
   createDeferred,
   createGitProviderContextFixture,
@@ -34,7 +32,15 @@ test.each([false, true])(
         repoPath: `/repo-${index}`,
       }),
     );
-    const queryClient = createQueryClient();
+    const read = createDeferred<RepositoryGitProviderContext>();
+    const sync = mock(async (_repoPath: string, _workspaceId?: string) => ({ ok: true as const }));
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetGitProviderContext: async () => read.promise,
+        repoPullRequestSync: sync,
+      },
+    });
+    const queryClient = connection.queryClient;
     for (const [index, provider] of providers.entries()) {
       if (index !== 2)
         queryClient.setQueryData(
@@ -42,21 +48,10 @@ test.each([false, true])(
           provider,
         );
     }
-    const read = createDeferred<RepositoryGitProviderContext>();
-    const sync = mock(async (_repoPath: string, _workspaceId?: string) => ({ ok: true as const }));
-    const previousBridge = getShellBridge();
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceGetGitProviderContext: async () => read.promise,
-          repoPullRequestSync: sync,
-        },
-      }),
-    );
     let view: ReturnType<typeof render> | undefined;
     try {
       view = render(
-        <QueryClientProvider client={queryClient}>
+        <ClientConnectionProvider connection={connection}>
           <WorkspaceStateContext
             value={createWorkspaceStateFixture({ workspaces, activeWorkspace: workspaces[0]! })}
           >
@@ -69,7 +64,7 @@ test.each([false, true])(
               />
             </ManualPullRequestSyncProvider>
           </WorkspaceStateContext>
-        </QueryClientProvider>,
+        </ClientConnectionProvider>,
       );
       const chooser = within(view.baseElement).getByRole("dialog", { name: "Sync pull requests" });
       const all = within(chooser).getByRole<HTMLButtonElement>("button", {
@@ -111,7 +106,6 @@ test.each([false, true])(
       read.resolve(null);
       view?.unmount();
       queryClient.clear();
-      configureShellBridge(previousBridge);
     }
   },
 );
@@ -131,7 +125,8 @@ test.each(["closed", "path changed", "identity replaced"] as const)(
       repoPath: "/active",
     });
     const sync = mock(async () => ({ ok: true as const }));
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection({ client: { repoPullRequestSync: sync } });
+    const queryClient = connection.queryClient;
     queryClient.setQueryData(
       repositoryGitProviderContextQueryKeys.repo(captured.repoPath),
       createGitProviderContextFixture(),
@@ -140,10 +135,8 @@ test.each(["closed", "path changed", "identity replaced"] as const)(
       repositoryGitProviderContextQueryKeys.repo(active.repoPath),
       createGitProviderContextFixture(),
     );
-    const previousBridge = getShellBridge();
-    configureShellBridge(createShellBridgeFixture({ client: { repoPullRequestSync: sync } }));
     const content = (workspaces: WorkspaceRecord[], closedWorkspaces: WorkspaceRecord[] = []) => (
-      <QueryClientProvider client={queryClient}>
+      <ClientConnectionProvider connection={connection}>
         <WorkspaceStateContext
           value={createWorkspaceStateFixture({
             workspaces,
@@ -160,7 +153,7 @@ test.each(["closed", "path changed", "identity replaced"] as const)(
             />
           </ManualPullRequestSyncProvider>
         </WorkspaceStateContext>
-      </QueryClientProvider>
+      </ClientConnectionProvider>
     );
     let view: ReturnType<typeof render> | undefined;
     try {
@@ -209,7 +202,6 @@ test.each(["closed", "path changed", "identity replaced"] as const)(
     } finally {
       view?.unmount();
       queryClient.clear();
-      configureShellBridge(previousBridge);
     }
   },
 );
@@ -248,20 +240,17 @@ test.each([
     });
     const read = createDeferred<RepositoryGitProviderContext>();
     const sync = mock(async () => ({ ok: true as const }));
-    const previousBridge = getShellBridge();
-    configureShellBridge(
-      createShellBridgeFixture({
-        client: {
-          workspaceGetGitProviderContext: async () => read.promise,
-          repoPullRequestSync: sync,
-        },
-      }),
-    );
-    const queryClient = createQueryClient();
+    const connection = createTestClientConnection({
+      client: {
+        workspaceGetGitProviderContext: async () => read.promise,
+        repoPullRequestSync: sync,
+      },
+    });
+    const queryClient = connection.queryClient;
     let view: ReturnType<typeof render> | undefined;
     try {
       view = render(
-        <QueryClientProvider client={queryClient}>
+        <ClientConnectionProvider connection={connection}>
           <WorkspaceStateContext
             value={createWorkspaceStateFixture({
               workspaces: [workspace],
@@ -277,7 +266,7 @@ test.each([
               />
             </ManualPullRequestSyncProvider>
           </WorkspaceStateContext>
-        </QueryClientProvider>,
+        </ClientConnectionProvider>,
       );
       const chooser = within(view.baseElement).getByRole("dialog", { name: "Sync pull requests" });
       const named = within(chooser).getByRole<HTMLButtonElement>("button", {
@@ -310,7 +299,6 @@ test.each([
       read.resolve(null);
       view?.unmount();
       queryClient.clear();
-      configureShellBridge(previousBridge);
     }
   },
 );

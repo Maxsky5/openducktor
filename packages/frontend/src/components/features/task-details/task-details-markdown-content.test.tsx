@@ -4,9 +4,9 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { buildCopyPreview } from "@/lib/copy-preview";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
@@ -233,7 +233,7 @@ describe("TaskDetailsMarkdownContent", () => {
         const rendered = render(
           createElement(
             QueryProvider,
-            { useIsolatedClient: true },
+            null,
             createElement(
               StaticThemeProvider,
               null,

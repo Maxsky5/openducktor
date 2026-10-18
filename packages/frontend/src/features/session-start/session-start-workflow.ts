@@ -9,11 +9,11 @@ import type {
   AgentMessageSendOptions,
   AcceptedAgentMessageSendReceipt,
   AgentSessionIdentity,
-} from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
-import type { host } from "@/state/operations/shared/host";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { ResolvedSessionStartDecision, SessionStartFlowRequest } from "./session-start-types";
+import type { HostClient } from "@openducktor/host-client";
 export type { SessionStartBeforeAction, SessionStartPostAction } from "./session-start-types";
 
 export type SendAgentMessage = AgentOperationsContextValue["sendAgentMessage"];
@@ -28,7 +28,7 @@ export type SessionStartWorkflowResult = AgentSessionIdentity & {
   postStartMessageReceipt?: AcceptedAgentMessageSendReceipt;
 };
 
-export type WorkflowLaunchClient = Pick<typeof host, "agentSessionWorkflowLaunch">;
+export type WorkflowLaunchClient = Pick<HostClient, "agentSessionWorkflowLaunch">;
 
 type StartSessionWorkflowArgs = {
   request: SessionStartFlowRequest;

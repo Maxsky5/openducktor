@@ -1,12 +1,11 @@
 import { expect, mock, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { configureShellBridge, getShellBridge } from "@/lib/shell-bridge";
+import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { SessionPageHeader } from "./session-page-header";
 
 for (const remote of [false, true]) {
   test(`session headers only mount Open In for a local host: remote=${remote}`, () => {
-    const previousBridge = getShellBridge();
     configureShellBridge(
       createShellBridgeFixture({
         bridge: remote
@@ -35,7 +34,7 @@ for (const remote of [false, true]) {
       expect(html).toContain("Session actions");
       expect(html).toContain("Toggle terminal");
     } finally {
-      configureShellBridge(previousBridge);
+      configureShellBridge(createUnavailableShellBridge());
     }
   });
 }

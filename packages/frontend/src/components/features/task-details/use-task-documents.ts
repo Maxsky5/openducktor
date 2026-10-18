@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { resolveLatestDocumentPayload } from "@/state/queries/document-utils";
+import { resolveLatestDocumentPayload } from "@openducktor/frontend-core/queries/document-utils";
 import {
   fetchFreshTaskDocumentFromQuery,
   taskDocumentQueryOptions,
-} from "@/state/queries/documents";
-import type { TaskDocumentPayload } from "@/types/task-documents";
+} from "@openducktor/frontend-core/queries/documents";
+import type { TaskDocumentPayload } from "@openducktor/frontend-core/types/task-documents";
 import { ensureTaskDocumentQueryData } from "./task-document-query-data";
 
 export type DocumentSectionKey = "spec" | "plan" | "qa";

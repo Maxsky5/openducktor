@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { CancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
+import type { PropsWithChildren } from "react";
 import { render } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { toast } from "sonner";
-import { gitQueryKeys } from "../../queries/git";
+import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
 import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
-import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
+import { WorkspaceHostProvider } from "./workspace-hook-test-utils";
 
 interface QueryClientCaptureContract {
   current: QueryClient | null;
@@ -18,6 +19,11 @@ let workspaceHost = createWorkspaceHostClient();
 beforeEach(() => {
   workspaceHost = createWorkspaceHostClient();
 });
+
+// The test connection uses the host client of the current test.
+const WorkspaceHostWrapper = ({ children }: PropsWithChildren) => (
+  <WorkspaceHostProvider host={workspaceHost}>{children}</WorkspaceHostProvider>
+);
 
 type ProbeHarnessArgs = {
   activeRepoPath: string | null;
@@ -47,7 +53,6 @@ const ProbeHarness = ({
     isSwitchingWorkspace,
     isLoadingBranches,
     isSwitchingBranch,
-    hostClient: workspaceHost,
     setBranchSyncDegraded,
   });
 
@@ -79,7 +84,7 @@ describe("use-workspace-branch-probe", () => {
           queryClientCapture.current = client;
         }}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -124,7 +129,7 @@ describe("use-workspace-branch-probe", () => {
           queryClientCapture.current = client;
         }}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -170,7 +175,7 @@ describe("use-workspace-branch-probe", () => {
           queryClientCapture.current = client;
         }}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -221,7 +226,7 @@ describe("use-workspace-branch-probe", () => {
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -259,7 +264,7 @@ describe("use-workspace-branch-probe", () => {
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -311,7 +316,7 @@ describe("use-workspace-branch-probe", () => {
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -360,7 +365,7 @@ describe("use-workspace-branch-probe", () => {
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -428,7 +433,7 @@ describe("use-workspace-branch-probe", () => {
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {
@@ -475,7 +480,7 @@ describe("use-workspace-branch-probe", () => {
         isSwitchingBranch={false}
         setBranchSyncDegraded={setBranchSyncDegraded}
       />,
-      { wrapper: IsolatedQueryWrapper },
+      { wrapper: WorkspaceHostWrapper },
     );
 
     try {

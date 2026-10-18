@@ -1,5 +1,5 @@
-import { buildSession } from "../events/session-events-test-harness";
-import { applyLoadedSessionHistory } from "./session-history-chat-messages";
+import { buildSession } from "@openducktor/frontend-core/sessions/agent-orchestrator/events/session-events-test-harness";
+import { applyLoadedSessionHistory } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/session-history-chat-messages";
 import { expect, test } from "bun:test";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import { mergeReadonlyRuntimeHistory } from "@/components/features/agents/agent-chat/readonly-transcript/readonly-transcript-session";
@@ -7,14 +7,14 @@ import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createImageGenerationMessage,
   upsertImageGenerationMessage,
-} from "./image-generation-messages";
-import { createSessionMessagesState } from "./messages";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/image-generation-messages";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   recordImageGenerationSessionEnd,
   recordImageGenerationEnd,
   recordImageGenerationTurnStart,
   recordImageGenerationTurnEnd,
-} from "./image-generation-settlement";
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/image-generation-settlement";
 
 const timestamp = "2026-09-06T10:00:00.000Z";
 const part: AgentImageGenerationPart = {

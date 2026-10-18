@@ -4,10 +4,11 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ReactElement, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
-import { hostBridge } from "@/lib/host-client";
-import { QueryProvider } from "@/lib/query-provider";
+import type { HostClient } from "@openducktor/host-client";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createDeferred, createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { ThemeProvider, useTheme } from "./theme-provider";
 
@@ -74,18 +75,25 @@ const ThemeProviderQueryHarness = ({
 };
 
 type RenderThemeProviderOptions = {
+  setTheme: HostClient["setTheme"];
+  workspaceGetSettingsSnapshot?: HostClient["workspaceGetSettingsSnapshot"];
   withSettingsSnapshot?: boolean;
   enableSettingsSnapshotQuery?: boolean;
 };
 
 const renderThemeProvider = ({
+  setTheme,
+  workspaceGetSettingsSnapshot,
   withSettingsSnapshot = true,
   enableSettingsSnapshotQuery = withSettingsSnapshot,
-}: RenderThemeProviderOptions = {}) => {
+}: RenderThemeProviderOptions) => {
   const queryClientRef: QueryClientRefContract = { current: null };
+  const connection = createTestClientConnection({
+    client: { setTheme, ...(workspaceGetSettingsSnapshot && { workspaceGetSettingsSnapshot }) },
+  });
 
   render(
-    <QueryProvider useIsolatedClient>
+    <QueryProvider connection={connection}>
       <ThemeProviderQueryHarness
         enableSettingsSnapshotQuery={enableSettingsSnapshotQuery}
         onQueryClient={(client) => {
@@ -171,173 +179,140 @@ describe("ThemeProvider", () => {
   test("updates the controlled theme before the settings snapshot is available", async () => {
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      renderThemeProvider({ withSettingsSnapshot: false });
-      expectThemeState("light");
+    renderThemeProvider({ setTheme, withSettingsSnapshot: false });
+    expectThemeState("light");
 
-      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
-      await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
   });
 
   test("keeps an initial snapshot load alive while theme persistence is pending", async () => {
     const initialLoad = createDeferred<SettingsSnapshot>();
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
-      const awaitedLoad = queryClient.fetchQuery(
-        settingsSnapshotQueryOptions({
-          workspaceGetSettingsSnapshot: async () => initialLoad.promise,
-        }),
-      );
+    const queryClient = renderThemeProvider({
+      setTheme,
+      workspaceGetSettingsSnapshot: async () => initialLoad.promise,
+      withSettingsSnapshot: false,
+    });
+    const awaitedLoad = queryClient.fetchQuery(settingsSnapshotQueryOptions());
 
-      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
-      await act(async () => {
-        initialLoad.resolve(createSettingsSnapshotFixture({ theme: "light" }));
-        await flushQueryUpdates();
-      });
+    await act(async () => {
+      initialLoad.resolve(createSettingsSnapshotFixture({ theme: "light" }));
+      await flushQueryUpdates();
+    });
 
-      const loadedSnapshot = await awaitedLoad;
-      expect(loadedSnapshot.theme).toBe("light");
-      expectThemeState("dark");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    const loadedSnapshot = await awaitedLoad;
+    expect(loadedSnapshot.theme).toBe("light");
+    expectThemeState("dark");
   });
 
   test("skips persistence when the selected theme is already authoritative", () => {
     const setTheme = mock(async () => undefined);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      renderThemeProvider();
+    renderThemeProvider({ setTheme });
 
-      fireEvent.click(screen.getByRole("button", { name: "Light" }));
+    fireEvent.click(screen.getByRole("button", { name: "Light" }));
 
-      expect(setTheme).not.toHaveBeenCalled();
-      expectThemeState("light");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    expect(setTheme).not.toHaveBeenCalled();
+    expectThemeState("light");
   });
 
   test("keeps the settings snapshot cache authoritative while persistence is in flight", async () => {
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      const queryClient = renderThemeProvider();
+    const queryClient = renderThemeProvider({ setTheme });
 
-      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
-      expectCachedTheme(queryClient, "light");
-      expectThemeState("dark");
+    expectCachedTheme(queryClient, "light");
+    expectThemeState("dark");
 
-      await act(async () => {
-        persistence.resolve(undefined);
-        await persistence.promise;
-        await flushQueryUpdates();
-      });
+    await act(async () => {
+      persistence.resolve(undefined);
+      await persistence.promise;
+      await flushQueryUpdates();
+    });
 
-      expectCachedTheme(queryClient, "dark");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    expectCachedTheme(queryClient, "dark");
   });
 
   test("discards a stale settings refresh when theme persistence succeeds", async () => {
     const persistence = createDeferred<void>();
     const staleRefresh = createDeferred<SettingsSnapshot>();
     const authoritativeRefresh = createDeferred<SettingsSnapshot>();
+    const loadStaleSnapshot = mock(async () => staleRefresh.promise);
     const loadAuthoritativeSnapshot = mock(async () => authoritativeRefresh.promise);
+    let loadSnapshot = loadStaleSnapshot;
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      const queryClient = renderThemeProvider();
+    const queryClient = renderThemeProvider({
+      setTheme,
+      workspaceGetSettingsSnapshot: () => loadSnapshot(),
+    });
 
-      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
-      const refreshResult = queryClient.fetchQuery({
-        ...settingsSnapshotQueryOptions({
-          workspaceGetSettingsSnapshot: async () => staleRefresh.promise,
-        }),
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    const refreshResult = queryClient.fetchQuery({
+      ...settingsSnapshotQueryOptions(),
+      staleTime: 0,
+    });
+
+    await act(async () => {
+      persistence.resolve(undefined);
+      await persistence.promise;
+      await flushQueryUpdates();
+    });
+
+    expectCachedTheme(queryClient, "dark");
+    expectThemeState("dark");
+
+    await act(async () => {
+      staleRefresh.resolve(createSettingsSnapshotFixture({ theme: "light" }));
+      await refreshResult;
+      loadSnapshot = loadAuthoritativeSnapshot;
+      const authoritativeResult = queryClient.fetchQuery({
+        ...settingsSnapshotQueryOptions(),
         staleTime: 0,
       });
+      await flushQueryUpdates();
+      authoritativeRefresh.resolve(createSettingsSnapshotFixture({ theme: "dark" }));
+      await authoritativeResult;
+      await flushQueryUpdates();
+    });
 
-      await act(async () => {
-        persistence.resolve(undefined);
-        await persistence.promise;
-        await flushQueryUpdates();
-      });
-
-      expectCachedTheme(queryClient, "dark");
-      expectThemeState("dark");
-
-      await act(async () => {
-        staleRefresh.resolve(createSettingsSnapshotFixture({ theme: "light" }));
-        await refreshResult;
-        const authoritativeResult = queryClient.fetchQuery({
-          ...settingsSnapshotQueryOptions({
-            workspaceGetSettingsSnapshot: loadAuthoritativeSnapshot,
-          }),
-          staleTime: 0,
-        });
-        await flushQueryUpdates();
-        authoritativeRefresh.resolve(createSettingsSnapshotFixture({ theme: "dark" }));
-        await authoritativeResult;
-        await flushQueryUpdates();
-      });
-
-      expect(loadAuthoritativeSnapshot).toHaveBeenCalledTimes(1);
-      expectCachedTheme(queryClient, "dark");
-      expectThemeState("dark");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    expect(loadStaleSnapshot).toHaveBeenCalledTimes(1);
+    expect(loadAuthoritativeSnapshot).toHaveBeenCalledTimes(1);
+    expectCachedTheme(queryClient, "dark");
+    expectThemeState("dark");
   });
 
   test("keeps only one theme persistence request in flight during rapid changes", async () => {
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      renderThemeProvider();
+    renderThemeProvider({ setTheme });
 
-      await act(async () => {
-        selectThemesRapidly();
-        await Promise.resolve();
-      });
+    await act(async () => {
+      selectThemesRapidly();
+      await Promise.resolve();
+    });
 
-      expect(setTheme).toHaveBeenCalledTimes(1);
-      await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
 
-      await act(async () => {
-        persistence.resolve(undefined);
-        await persistence.promise;
-        await flushQueryUpdates();
-      });
+    await act(async () => {
+      persistence.resolve(undefined);
+      await persistence.promise;
+      await flushQueryUpdates();
+    });
 
-      expect(setTheme).toHaveBeenCalledTimes(1);
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    expect(setTheme).toHaveBeenCalledTimes(1);
   });
 
   test("keeps the newest theme when a superseded persistence request fails", async () => {
@@ -347,13 +322,11 @@ describe("ThemeProvider", () => {
       persistenceRequests.push(persistence);
       return persistence.promise;
     });
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     try {
-      const queryClient = renderThemeProvider();
+      const queryClient = renderThemeProvider({ setTheme });
 
       await act(async () => {
         selectThemesRapidly();
@@ -384,20 +357,17 @@ describe("ThemeProvider", () => {
     } finally {
       toastError.mockRestore();
       consoleError.mockRestore();
-      hostBridge.client.setTheme = originalSetTheme;
     }
   });
 
   test("rolls back to the persisted theme when the newest request fails", async () => {
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
     const toastError = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
     try {
-      const queryClient = renderThemeProvider();
+      const queryClient = renderThemeProvider({ setTheme });
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Dark" }));
@@ -420,19 +390,16 @@ describe("ThemeProvider", () => {
     } finally {
       toastError.mockRestore();
       consoleError.mockRestore();
-      hostBridge.client.setTheme = originalSetTheme;
     }
   });
 
   test("accepts the loaded persisted theme after a pre-load request fails", async () => {
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
-      const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
+      const queryClient = renderThemeProvider({ setTheme, withSettingsSnapshot: false });
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
       await act(async () => {
@@ -450,19 +417,16 @@ describe("ThemeProvider", () => {
       await waitFor(() => expectThemeState("dark"), { timeout: 1_000 });
     } finally {
       consoleError.mockRestore();
-      hostBridge.client.setTheme = originalSetTheme;
     }
   });
 
   test("keeps an authoritative theme that loads before a pending request fails", async () => {
     const persistence = createDeferred<void>();
     const setTheme = mock(async () => persistence.promise);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
     const consoleError = spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
-      const queryClient = renderThemeProvider({ withSettingsSnapshot: false });
+      const queryClient = renderThemeProvider({ setTheme, withSettingsSnapshot: false });
 
       fireEvent.click(screen.getByRole("button", { name: "Dark" }));
       await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
@@ -485,103 +449,84 @@ describe("ThemeProvider", () => {
       expectThemeState("dark");
     } finally {
       consoleError.mockRestore();
-      hostBridge.client.setTheme = originalSetTheme;
     }
   });
 
   test("reconciles an authoritative settings snapshot after persistence succeeds", async () => {
     const setTheme = mock(async () => undefined);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
 
-    try {
-      const queryClient = renderThemeProvider();
+    const queryClient = renderThemeProvider({ setTheme });
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Dark" }));
-        await flushQueryUpdates();
-      });
-      await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
-        timeout: 1_000,
-      });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+      await flushQueryUpdates();
+    });
+    await waitFor(() => expect(screen.getByLabelText("Current theme").textContent).toBe("dark"), {
+      timeout: 1_000,
+    });
 
-      act(() => {
-        queryClient.setQueryData(
-          settingsSnapshotQueryOptions().queryKey,
-          createSettingsSnapshotFixture({ theme: "light" }),
-        );
-      });
+    act(() => {
+      queryClient.setQueryData(
+        settingsSnapshotQueryOptions().queryKey,
+        createSettingsSnapshotFixture({ theme: "light" }),
+      );
+    });
 
-      await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
   });
 
   test("follows the operating system appearance while the system preference is selected", async () => {
     const setTheme = mock(async () => undefined);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
     const query = installFakeMatchMedia(true);
 
-    try {
-      renderThemeProvider();
+    renderThemeProvider({ setTheme });
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "System" }));
-        await flushQueryUpdates();
-      });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "System" }));
+      await flushQueryUpdates();
+    });
 
-      await waitFor(
-        () => {
-          expect(screen.getByLabelText("Current theme").textContent).toBe("dark");
-          expect(screen.getByLabelText("Current theme preference").textContent).toBe("system");
-          expect(document.documentElement.classList.contains("dark")).toBe(true);
-        },
-        { timeout: 1_000 },
-      );
-      expect(setTheme).toHaveBeenCalledWith("system");
+    await waitFor(
+      () => {
+        expect(screen.getByLabelText("Current theme").textContent).toBe("dark");
+        expect(screen.getByLabelText("Current theme preference").textContent).toBe("system");
+        expect(document.documentElement.classList.contains("dark")).toBe(true);
+      },
+      { timeout: 1_000 },
+    );
+    expect(setTheme).toHaveBeenCalledWith("system");
 
-      act(() => {
-        query.emit(false);
-      });
+    act(() => {
+      query.emit(false);
+    });
 
-      await waitFor(
-        () => {
-          expect(screen.getByLabelText("Current theme").textContent).toBe("light");
-          expect(screen.getByLabelText("Current theme preference").textContent).toBe("system");
-          expect(document.documentElement.classList.contains("light")).toBe(true);
-        },
-        { timeout: 1_000 },
-      );
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    await waitFor(
+      () => {
+        expect(screen.getByLabelText("Current theme").textContent).toBe("light");
+        expect(screen.getByLabelText("Current theme preference").textContent).toBe("system");
+        expect(document.documentElement.classList.contains("light")).toBe(true);
+      },
+      { timeout: 1_000 },
+    );
   });
 
   test("keeps an explicit preference when the operating system appearance changes", async () => {
     const setTheme = mock(async () => undefined);
-    const originalSetTheme = hostBridge.client.setTheme;
-    hostBridge.client.setTheme = setTheme;
     const query = installFakeMatchMedia(false);
 
-    try {
-      renderThemeProvider();
+    renderThemeProvider({ setTheme });
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Light" }));
-        await flushQueryUpdates();
-      });
-      await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
-
-      act(() => {
-        query.emit(true);
-      });
-
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Light" }));
       await flushQueryUpdates();
-      expectThemeState("light");
-    } finally {
-      hostBridge.client.setTheme = originalSetTheme;
-    }
+    });
+    await waitFor(() => expectThemeState("light"), { timeout: 1_000 });
+
+    act(() => {
+      query.emit(true);
+    });
+
+    await flushQueryUpdates();
+    expectThemeState("light");
   });
 });

@@ -1,0 +1,190 @@
+import type { AgentSessionAssociation, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentRuntimeCatalog,
+  AgentSessionTodoItem,
+  PolicyBoundSessionRef,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import type { RuntimeReadinessState } from "../../../lib/runtime-readiness";
+import { useStableAgentSessionIdentity } from "../../../lib/use-stable-agent-session-identity";
+import {
+  sessionTodosQueryOptions,
+  skippedSessionTodosQueryOptions,
+} from "../../../queries/agent-session-todos";
+import { useRuntimeModelCatalogQuery } from "../../../queries/use-runtime-model-catalogs";
+import { settingsSnapshotQueryOptions } from "../../../queries/workspace";
+import {
+  EMPTY_SELECTED_SESSION_RUNTIME_DATA,
+  type SelectedSessionRuntimeData,
+} from "../../../types/selected-session-runtime-data";
+import type { SessionRuntimeDataTarget } from "../support/session-runtime-data-refs";
+import { isMatchingFreshCodexSessionAwaitingKickoff } from "../support/fresh-codex-session";
+import type { AgentSessionState } from "../../../types/agent-orchestrator";
+import { resolveSessionRuntimeDataRefs } from "../support/session-runtime-data-refs";
+import {
+  resolveAgentSessionRuntimePolicyFromSnapshot,
+  resolveSettingsIndependentAgentSessionRuntimePolicy,
+} from "../support/session-runtime-policy";
+import { resolveSessionRuntimeScope } from "../support/session-runtime-scope";
+
+type UseSessionRuntimeDataArgs = {
+  repoPath: string | null;
+  selectedSession: SessionRuntimeDataTarget | null;
+  sessionState?: AgentSessionState | null;
+  runtimeDefinitions: RuntimeDescriptor[];
+  runtimeReadinessState: RuntimeReadinessState;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
+  readSessionTodos: (session: PolicyBoundSessionRef) => Promise<AgentSessionTodoItem[]>;
+};
+
+export const useSessionRuntimeData = ({
+  repoPath,
+  selectedSession,
+  sessionState,
+  runtimeDefinitions,
+  runtimeReadinessState,
+  loadRuntimeCatalog,
+  readSessionTodos,
+}: UseSessionRuntimeDataArgs): SelectedSessionRuntimeData => {
+  const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSession?.identity);
+  const selectedAssociationKind = selectedSession?.sessionAssociation.kind ?? null;
+  const selectedTaskId =
+    selectedSession?.sessionAssociation.kind === "workflow"
+      ? selectedSession.sessionAssociation.taskId
+      : null;
+  const selectedRole =
+    selectedSession?.sessionAssociation.kind === "workflow"
+      ? selectedSession.sessionAssociation.role
+      : null;
+  const selectedModel = selectedSession?.selectedModel ?? null;
+  const stableSelectedSession = useMemo<SessionRuntimeDataTarget | null>(() => {
+    if (!stableSelectedSessionIdentity || !selectedAssociationKind) {
+      return null;
+    }
+    let sessionAssociation: AgentSessionAssociation;
+    if (selectedAssociationKind === "workflow") {
+      if (!selectedTaskId || !selectedRole) {
+        throw new Error("Workflow session runtime data requires a task id and role.");
+      }
+      sessionAssociation = { kind: "workflow", taskId: selectedTaskId, role: selectedRole };
+    } else if (selectedAssociationKind === "repository") {
+      sessionAssociation = { kind: "repository" };
+    } else {
+      sessionAssociation = { kind: "unbound" };
+    }
+    return {
+      identity: stableSelectedSessionIdentity,
+      sessionAssociation,
+      selectedModel,
+    };
+  }, [
+    selectedAssociationKind,
+    stableSelectedSessionIdentity,
+    selectedModel,
+    selectedRole,
+    selectedTaskId,
+  ]);
+  const runtimePolicyTarget = useMemo(() => {
+    if (stableSelectedSession === null) {
+      return null;
+    }
+    return {
+      runtimeKind: stableSelectedSession.identity.runtimeKind,
+      sessionScope: resolveSessionRuntimeScope(stableSelectedSession.sessionAssociation),
+    };
+  }, [stableSelectedSession]);
+  const settingsSnapshotQuery = useQuery({
+    ...settingsSnapshotQueryOptions(),
+    enabled: runtimePolicyTarget?.runtimeKind === "codex",
+  });
+  const runtimePolicyResult = useMemo(() => {
+    if (!runtimePolicyTarget) {
+      return { runtimePolicy: null, error: null };
+    }
+    const settingsIndependentPolicy = resolveSettingsIndependentAgentSessionRuntimePolicy(
+      runtimePolicyTarget.runtimeKind,
+    );
+    if (settingsIndependentPolicy) {
+      return { runtimePolicy: settingsIndependentPolicy, error: null };
+    }
+    const settingsSnapshot = settingsSnapshotQuery.data;
+    if (!settingsSnapshot) {
+      return { runtimePolicy: null, error: null };
+    }
+    try {
+      return {
+        runtimePolicy: resolveAgentSessionRuntimePolicyFromSnapshot({
+          ...runtimePolicyTarget,
+          snapshot: settingsSnapshot,
+        }),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        runtimePolicy: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, [runtimePolicyTarget, settingsSnapshotQuery.data]);
+  const runtimePolicyError =
+    runtimePolicyResult.error ??
+    (settingsSnapshotQuery.error instanceof Error ? settingsSnapshotQuery.error.message : null);
+  const runtimePolicy = runtimePolicyResult.runtimePolicy;
+  const runtimeDataRefs = useMemo(() => {
+    return resolveSessionRuntimeDataRefs({
+      repoPath,
+      selectedSession: stableSelectedSession,
+      runtimePolicy,
+      runtimeDefinitions,
+    });
+  }, [repoPath, runtimeDefinitions, runtimePolicy, stableSelectedSession]);
+  const isRuntimeReady = runtimeReadinessState === "ready";
+  const catalogRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.catalogRef : null;
+  const todosRef = runtimeDataRefs.kind === "available" ? runtimeDataRefs.todosRef : null;
+  const ownsFreshCodexEmptyState = isMatchingFreshCodexSessionAwaitingKickoff(
+    sessionState,
+    stableSelectedSessionIdentity,
+  );
+
+  const modelCatalog = useRuntimeModelCatalogQuery({
+    runtimeRef: catalogRef,
+    loadRuntimeCatalog,
+    enabled: isRuntimeReady,
+  });
+
+  const todosQuery = useQuery({
+    ...(todosRef
+      ? sessionTodosQueryOptions(todosRef, readSessionTodos)
+      : skippedSessionTodosQueryOptions()),
+    enabled: todosRef !== null && isRuntimeReady && !ownsFreshCodexEmptyState,
+  });
+
+  return useMemo(() => {
+    if (runtimeDataRefs.kind === "none") {
+      return EMPTY_SELECTED_SESSION_RUNTIME_DATA;
+    }
+
+    const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
+    const contextError = runtimeDataRefs.kind === "unavailable" ? runtimeDataRefs.error : null;
+
+    return {
+      modelCatalog: modelCatalog.catalog,
+      todos: todosQuery.data ?? [],
+      isLoadingModelCatalog: modelCatalog.isLoading,
+      catalogError: modelCatalog.error,
+      todosError: todosQueryError,
+      runtimePolicyError,
+      contextError,
+    };
+  }, [
+    modelCatalog.catalog,
+    modelCatalog.error,
+    modelCatalog.isLoading,
+    runtimeDataRefs,
+    runtimePolicyError,
+    todosQuery.data,
+    todosQuery.error,
+  ]);
+};

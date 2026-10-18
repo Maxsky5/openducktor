@@ -3,16 +3,10 @@ import type { AgentChatDraftPersistence } from "@/components/features/agents/age
 import {
   type AgentChatDraftSessionIdentity,
   toAgentChatDraftStorageKey,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-storage";
-import {
-  clearAgentChatDraft,
-  flushAgentChatDraft,
-  hydrateAgentChatDraft,
-  readAgentChatDraftVersion,
-  setAgentChatDraft,
-} from "@/components/features/agents/agent-chat/agent-chat-draft-store";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
+} from "@openducktor/frontend-core/drafts/agent-chat-draft-storage";
+import type { AgentChatDraftStore } from "@openducktor/frontend-core/drafts/agent-chat-draft-store";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 export type AgentStudioChatDraftScope = {
   taskId: string;
@@ -47,10 +41,12 @@ const toPersistenceIdentity = (
 };
 
 export const createAgentStudioChatDraftPersistence = ({
+  drafts,
   workspaceId,
   taskId,
   session,
 }: {
+  drafts: AgentChatDraftStore;
   workspaceId: string | null;
   taskId: string;
   session: AgentSessionIdentity | null;
@@ -62,10 +58,10 @@ export const createAgentStudioChatDraftPersistence = ({
 
   return {
     targetKey: toAgentChatDraftStorageKey(identity),
-    hydrate: () => hydrateAgentChatDraft(identity, taskId),
-    set: (draft) => setAgentChatDraft(identity, taskId, draft),
-    readVersion: () => readAgentChatDraftVersion(identity),
-    clear: (options) => clearAgentChatDraft(identity, options),
-    flush: () => flushAgentChatDraft(identity),
+    hydrate: () => drafts.hydrate(identity, taskId),
+    set: (draft) => drafts.set(identity, taskId, draft),
+    readVersion: () => drafts.readVersion(identity),
+    clear: (options) => drafts.clear(identity, options),
+    flush: () => drafts.flush(identity),
   };
 };

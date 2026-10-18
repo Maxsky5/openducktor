@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRuntimeCatalog } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
-import { clearAppQueryClient, appQueryClient } from "@/lib/query-client";
-import { runtimeCatalogQueryKeys } from "@/state/queries/runtime-catalog";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { PropsWithChildren, ReactElement } from "react";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { createRuntimeCatalogFixture } from "@/test-utils/shared-test-fixtures";
 import { useDelegationOperations } from "./use-delegation-operations";
 
@@ -61,15 +61,39 @@ const withoutDefaultModel = (config: RepoConfig): RepoConfig => {
   return rest;
 };
 
+const createDelegationHarness = ({
+  client,
+  refreshTaskData,
+  loadRepoRuntimeCatalog,
+}: { client: Partial<HostClient> } & Pick<
+  Parameters<typeof useDelegationOperations>[0],
+  "refreshTaskData" | "loadRepoRuntimeCatalog"
+>) => {
+  const connection = createTestClientConnection({ client });
+  const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+    <ClientConnectionProvider connection={connection}>{children}</ClientConnectionProvider>
+  );
+  const harness = createHookHarness(
+    () =>
+      useDelegationOperations({
+        activeWorkspace,
+        refreshTaskData,
+        loadRepoRuntimeCatalog,
+      }),
+    undefined,
+    { wrapper },
+  );
+  return {
+    connection,
+    harness,
+    unmount: async () => {
+      await harness.unmount();
+      await connection.dispose();
+    },
+  };
+};
+
 describe("useDelegationOperations", () => {
-  beforeEach(async () => {
-    await clearAppQueryClient();
-  });
-
-  afterEach(async () => {
-    await clearAppQueryClient();
-  });
-
   test("refreshes the delegated task scope after a successful build start", async () => {
     const buildStart = mock(async () => ({
       runtimeKind: "opencode" as const,
@@ -77,19 +101,12 @@ describe("useDelegationOperations", () => {
     }));
     const refreshTaskData = mock(async () => undefined);
     const workspaceGetRepoConfig = mock(async () => createRepoConfig());
-    configureShellBridge(
-      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
-    );
     const loadRepoRuntimeCatalog = mock(async () => runtimeCatalogFixture);
-    const harness = createHookHarness(
-      () =>
-        useDelegationOperations({
-          activeWorkspace,
-          refreshTaskData,
-          loadRepoRuntimeCatalog,
-        }),
-      undefined,
-    );
+    const { harness, unmount } = createDelegationHarness({
+      client: { buildStart, workspaceGetRepoConfig },
+      refreshTaskData,
+      loadRepoRuntimeCatalog,
+    });
 
     try {
       await harness.mount();
@@ -103,8 +120,7 @@ describe("useDelegationOperations", () => {
       expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
       expect(refreshTaskData).toHaveBeenCalledWith("/repo", "task-1");
     } finally {
-      await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
+      await unmount();
     }
   });
 
@@ -115,22 +131,15 @@ describe("useDelegationOperations", () => {
     }));
     const refreshTaskData = mock(async () => undefined);
     const workspaceGetRepoConfig = mock(async () => createRepoConfig());
-    configureShellBridge(
-      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
-    );
     const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("The catalog reader must not run for a fresh cached catalog.");
     });
-    const harness = createHookHarness(
-      () =>
-        useDelegationOperations({
-          activeWorkspace,
-          refreshTaskData,
-          loadRepoRuntimeCatalog,
-        }),
-      undefined,
-    );
-    appQueryClient.setQueryData(
+    const { connection, harness, unmount } = createDelegationHarness({
+      client: { buildStart, workspaceGetRepoConfig },
+      refreshTaskData,
+      loadRepoRuntimeCatalog,
+    });
+    connection.queryClient.setQueryData(
       runtimeCatalogQueryKeys.catalog({
         repoPath: "/repo",
         runtimeKind: "opencode",
@@ -146,8 +155,7 @@ describe("useDelegationOperations", () => {
       expect(loadRepoRuntimeCatalog).not.toHaveBeenCalled();
       expect(buildStart).toHaveBeenCalledWith("/repo", "task-1", "opencode");
     } finally {
-      await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
+      await unmount();
     }
   });
 
@@ -158,19 +166,12 @@ describe("useDelegationOperations", () => {
     }));
     const refreshTaskData = mock(async () => undefined);
     const workspaceGetRepoConfig = mock(async () => withoutDefaultModel(createRepoConfig()));
-    configureShellBridge(
-      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
-    );
     const loadRepoRuntimeCatalog = mock(async () => runtimeCatalogFixture);
-    const harness = createHookHarness(
-      () =>
-        useDelegationOperations({
-          activeWorkspace,
-          refreshTaskData,
-          loadRepoRuntimeCatalog,
-        }),
-      undefined,
-    );
+    const { harness, unmount } = createDelegationHarness({
+      client: { buildStart, workspaceGetRepoConfig },
+      refreshTaskData,
+      loadRepoRuntimeCatalog,
+    });
 
     try {
       await harness.mount();
@@ -182,8 +183,7 @@ describe("useDelegationOperations", () => {
       expect(buildStart).not.toHaveBeenCalled();
       expect(refreshTaskData).not.toHaveBeenCalled();
     } finally {
-      await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
+      await unmount();
     }
   });
 
@@ -202,19 +202,12 @@ describe("useDelegationOperations", () => {
         },
       }),
     );
-    configureShellBridge(
-      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
-    );
     const loadRepoRuntimeCatalog = mock(async () => runtimeCatalogFixture);
-    const harness = createHookHarness(
-      () =>
-        useDelegationOperations({
-          activeWorkspace,
-          refreshTaskData,
-          loadRepoRuntimeCatalog,
-        }),
-      undefined,
-    );
+    const { harness, unmount } = createDelegationHarness({
+      client: { buildStart, workspaceGetRepoConfig },
+      refreshTaskData,
+      loadRepoRuntimeCatalog,
+    });
 
     try {
       await harness.mount();
@@ -225,8 +218,7 @@ describe("useDelegationOperations", () => {
       expect(buildStart).not.toHaveBeenCalled();
       expect(refreshTaskData).not.toHaveBeenCalled();
     } finally {
-      await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
+      await unmount();
     }
   });
 
@@ -237,21 +229,14 @@ describe("useDelegationOperations", () => {
     }));
     const refreshTaskData = mock(async () => undefined);
     const workspaceGetRepoConfig = mock(async () => createRepoConfig());
-    configureShellBridge(
-      createShellBridgeFixture({ client: { buildStart, workspaceGetRepoConfig } }),
-    );
     const loadRepoRuntimeCatalog = mock(async (): Promise<AgentRuntimeCatalog> => {
       throw new Error("Cannot resolve the selected runtime. Start it from the runtime controls.");
     });
-    const harness = createHookHarness(
-      () =>
-        useDelegationOperations({
-          activeWorkspace,
-          refreshTaskData,
-          loadRepoRuntimeCatalog,
-        }),
-      undefined,
-    );
+    const { harness, unmount } = createDelegationHarness({
+      client: { buildStart, workspaceGetRepoConfig },
+      refreshTaskData,
+      loadRepoRuntimeCatalog,
+    });
 
     try {
       await harness.mount();
@@ -262,8 +247,7 @@ describe("useDelegationOperations", () => {
       expect(buildStart).not.toHaveBeenCalled();
       expect(refreshTaskData).not.toHaveBeenCalled();
     } finally {
-      await harness.unmount();
-      configureShellBridge(createUnavailableShellBridge());
+      await unmount();
     }
   });
 });

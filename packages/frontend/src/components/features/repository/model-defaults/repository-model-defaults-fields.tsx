@@ -5,9 +5,12 @@ import type { ModelPickerFavoriteState } from "@/components/features/agents/mode
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { filterRuntimeDefinitionsForRole, findRuntimeDefinition } from "@/lib/agent-runtime";
+import {
+  filterRuntimeDefinitionsForRole,
+  findRuntimeDefinition,
+} from "@openducktor/frontend-core/lib/agent-runtime";
 import { cn } from "@/lib/utils";
-import type { RuntimeModelCatalogQueryResource } from "@/state/queries/use-runtime-model-catalogs";
+import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";

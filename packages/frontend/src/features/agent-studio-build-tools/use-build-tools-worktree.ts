@@ -1,10 +1,7 @@
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import {
-  type TaskWorktreeQueryHost,
-  taskWorktreeQueryOptions,
-} from "@/state/queries/build-runtime";
+import { taskWorktreeQueryOptions } from "@openducktor/frontend-core/queries/build-runtime";
 import {
   type AgentStudioGitPanelContextMode,
   type BuildToolsWorktreeStatus,
@@ -25,7 +22,6 @@ export type BuildToolsWorktreeSnapshotState = {
 const EMPTY_ASYNC_RETRY = async (): Promise<void> => {};
 
 export function useBuildToolsWorktree({
-  host,
   repoPath,
   taskId,
   contextMode,
@@ -35,7 +31,6 @@ export function useBuildToolsWorktree({
   hasSelectedTask,
   taskWorktreeVersion,
 }: {
-  host: TaskWorktreeQueryHost;
   repoPath: string | null;
   taskId: string | null;
   contextMode: AgentStudioGitPanelContextMode;
@@ -58,7 +53,6 @@ export function useBuildToolsWorktree({
     ...taskWorktreeQueryOptions({
       repoPath: repoPath ?? "",
       taskId: taskId ?? "",
-      hostClient: host,
       taskVersion: plan.shouldQuery ? taskWorktreeVersion : null,
     }),
     enabled: plan.queryEnabled,

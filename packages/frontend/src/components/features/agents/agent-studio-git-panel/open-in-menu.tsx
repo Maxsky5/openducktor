@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { errorMessage } from "@/lib/errors";
-import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import {
+  openInToolsQueryOptions,
+  refreshOpenInToolsFromQuery,
+} from "@openducktor/frontend-core/queries/system";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { OpenInToolIcon } from "./open-in-tool-metadata";
 import { getDefaultOpenInTool, getOpenInToolLabel } from "./open-in-tool-metadata-model";
 

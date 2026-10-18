@@ -7,20 +7,14 @@ import { RotateCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { useDialogPresence } from "@/components/ui/dialog";
-import { errorMessage } from "@/lib/errors";
-import { hostClient } from "@/lib/host-client";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { RuntimeImpactDialog } from "./runtime-impact-dialog";
 import { type RuntimeImpactAction, useRuntimeImpactReview } from "./runtime-impact-review";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export type RuntimeRestartPorts = {
   runtimeRestartImpact: (runtimeKind: RuntimeKind) => Promise<RuntimeLifecycleImpact>;
   runtimeRestart: (runtimeKind: RuntimeKind, confirmation: string) => Promise<RuntimeRestartResult>;
-};
-
-const productionPorts: RuntimeRestartPorts = {
-  runtimeRestartImpact: (runtimeKind) => hostClient.runtimeRestartImpact(runtimeKind),
-  runtimeRestart: (runtimeKind, confirmation) =>
-    hostClient.runtimeRestart(runtimeKind, confirmation),
 };
 
 type RuntimeRestartControlProps = {
@@ -42,8 +36,10 @@ export function RuntimeRestartControl({
   runtimeLabel,
   actionLabel,
   isLifecycleBusy,
-  ports = productionPorts,
+  ports: suppliedPorts,
 }: RuntimeRestartControlProps): ReactElement {
+  const hostClient = useHostClient();
+  const ports = suppliedPorts ?? hostClient;
   const { review, open, confirm, cancel } = useRuntimeImpactReview({ kinds: [runtimeKind] });
   const isOpen = review !== null;
   const isDialogMounted = useDialogPresence(isOpen);

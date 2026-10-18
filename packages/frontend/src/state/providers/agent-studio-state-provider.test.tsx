@@ -5,33 +5,38 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, useSyncExternalStore } from "react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { projectWorkspaceSessionLaunch } from "@/pages/workspace-sessions/launch-workspace-session";
 import { useAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/use-agent-chat-transcript-model";
 import { AgentChatTranscriptCacheProvider } from "@/components/features/agents/agent-chat/agent-chat-transcript-cache-provider";
 import { toAgentChatTranscriptSession } from "@/components/features/agents/agent-chat/agent-chat-transcript-session";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
-import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { createLiveSnapshotEnvelope } from "@/test-utils/agent-session-live-fixture";
-import { AgentRuntimeTestAdapter } from "@/test-support/agent-runtime-test-adapter";
-import { createOpenCodeAgentEngineTestAdapter } from "../operations/agent-orchestrator/handlers/opencode-agent-engine.test-support";
-import { useSelectedSessionHistoryLoad } from "../operations/agent-orchestrator/history/use-selected-session-history-load";
-import { projectWorkflowLaunch } from "../operations/agent-orchestrator/session-read-model/workflow-launch-projection";
+import { createLiveSnapshotEnvelope } from "@openducktor/frontend-core/test-support/agent-session-live-fixture";
+import { AgentRuntimeTestAdapter } from "@openducktor/frontend-core/test-support/agent-runtime-test-adapter";
+import { createOpenCodeAgentEngineTestAdapter } from "@openducktor/frontend-core/sessions/agent-orchestrator/handlers/opencode-agent-engine.test-support";
+import { useSelectedSessionHistoryLoad } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/use-selected-session-history-load";
+import { projectWorkflowLaunch } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workflow-launch-projection";
 import {
-  useAgentOperationsContext,
-  useAgentSessionReadModelStateContext,
-  useAgentSessionsContext,
   TaskControlContext,
   TaskSnapshotContext,
   WorkspaceStateContext,
 } from "../app-state-contexts";
+import {
+  useAgentOperationsContext,
+  useAgentSessionReadModelStateContext,
+  useAgentSessionsContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
 import { AgentStudioStateProvider } from "./agent-studio-state-provider";
 import { WorkspaceActivityProvider } from "./workspace-activity-provider";
 
@@ -116,12 +121,10 @@ const createHarness = (history?: Promise<AgentSessionHistoryMessage[]>, strict =
       },
     })),
   };
-  configureShellBridge(
-    createShellBridgeFixture({
-      bridge: {
-        observeAgentSessionLive: observe,
-        subscribeWorkspaceSessionUpdates: async () => () => {},
-      },
+  const connection = createTestClientConnection({
+    queryClient: client,
+    host: createTestHostConnection({
+      observeAgentSessionLive: observe,
       client: {
         tasksList: async () => [],
         workspaceSessionListActive: async (id) => [record(`/${id}`)],
@@ -129,13 +132,13 @@ const createHarness = (history?: Promise<AgentSessionHistoryMessage[]>, strict =
         workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       },
     }),
-  );
+  });
   let workspace = createWorkspaceStateFixture({
     workspaces: [workspaceA, workspaceB],
     activeWorkspace: workspaceA,
   });
   const wrapper = ({ children }: PropsWithChildren) => (
-    <QueryClientProvider client={client}>
+    <ClientConnectionProvider connection={connection}>
       <WorkspaceStateContext.Provider value={workspace}>
         <TaskSnapshotContext.Provider value={{ tasks: [], isLoadingTasks: false }}>
           <TaskControlContext.Provider
@@ -155,7 +158,7 @@ const createHarness = (history?: Promise<AgentSessionHistoryMessage[]>, strict =
           </TaskControlContext.Provider>
         </TaskSnapshotContext.Provider>
       </WorkspaceStateContext.Provider>
-    </QueryClientProvider>
+    </ClientConnectionProvider>
   );
   const observed: Array<{ repo: string; state: string; currentRows: boolean }> = [];
   const harness = createHookHarness(
@@ -203,7 +206,6 @@ const createHarness = (history?: Promise<AgentSessionHistoryMessage[]>, strict =
     dispose: async () => {
       await harness.unmount();
       client.clear();
-      configureShellBridge(createUnavailableShellBridge());
     },
   };
 };

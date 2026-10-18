@@ -21,12 +21,12 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
-} from "@/lib/agent-runtime";
+} from "@openducktor/frontend-core/lib/agent-runtime";
 import {
   canonicalTargetBranch,
   effectiveTaskTargetBranch,
   targetBranchSelectionValue,
-} from "@/lib/target-branch";
+} from "@openducktor/frontend-core/lib/target-branch";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";

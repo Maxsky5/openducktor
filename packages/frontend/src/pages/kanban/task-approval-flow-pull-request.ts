@@ -1,7 +1,8 @@
-import { host } from "@/state/operations/shared/host";
 import type { TaskApprovalFlowReadyState } from "./task-approval-flow-state";
+import type { HostClient } from "@openducktor/host-client";
 
 type SubmitPullRequestApprovalArgs = {
+  host: Pick<HostClient, "taskPullRequestUpsert">;
   approval: TaskApprovalFlowReadyState;
   repoPath: string;
   requestPullRequestGeneration: (taskId: string) => Promise<string | undefined>;
@@ -13,10 +14,11 @@ export type SubmitPullRequestApprovalResult =
   | { outcome: "generation_cancelled" }
   | {
       outcome: "pull_request_created";
-      pullRequest: Awaited<ReturnType<typeof host.taskPullRequestUpsert>>;
+      pullRequest: Awaited<ReturnType<HostClient["taskPullRequestUpsert"]>>;
     };
 
 export async function submitPullRequestApproval({
+  host,
   approval,
   repoPath,
   requestPullRequestGeneration,

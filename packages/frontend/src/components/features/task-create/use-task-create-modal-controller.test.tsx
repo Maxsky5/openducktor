@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { act, render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
-import { QueryProvider } from "@/lib/query-provider";
+import { QueryProvider } from "@/test-utils/query-provider";
 import {
   type TaskWorkflowTaskComposerModel,
   useTaskWorkflowComposer,
@@ -146,7 +146,7 @@ const renderController = (
   };
 
   const providers = (children: ReactNode): ReactElement => (
-    <QueryProvider useIsolatedClient>
+    <QueryProvider>
       <WorkspaceStateContext.Provider value={workspaceState}>
         <TasksStateContext.Provider value={createTasksState(updateTask, createTask)}>
           <SpecStateContext.Provider value={specState}>{children}</SpecStateContext.Provider>
@@ -352,7 +352,7 @@ describe("task workflow editor save ownership", () => {
         ) : null;
       };
       const tree = (workspace: typeof workspaceA, task: typeof taskA): ReactElement => (
-        <QueryProvider useIsolatedClient>
+        <QueryProvider>
           <WorkspaceStateContext.Provider value={{ ...workspaceState, activeWorkspace: workspace }}>
             <TasksStateContext.Provider value={{ ...createTasksState(updateTask), tasks: [task] }}>
               <SpecStateContext.Provider value={specState}>

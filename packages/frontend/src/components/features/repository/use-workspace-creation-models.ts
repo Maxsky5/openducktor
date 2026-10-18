@@ -9,12 +9,12 @@ import { useMemo, useState } from "react";
 import type { ModelPickerFavoriteState } from "@/components/features/agents/model-picker";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { useAgentModelFavorites } from "@/state/mutations/use-agent-model-favorites";
-import { host } from "@/state/operations/shared/host";
 import {
   type RuntimeModelCatalogQueryResource,
   useRuntimeModelCatalogs,
-} from "@/state/queries/use-runtime-model-catalogs";
-import { errorMessage } from "@/lib/errors";
+} from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 export type WorkspaceCreationModelSurface = {
   availableRuntimeDefinitions: RuntimeDescriptor[];
@@ -40,6 +40,7 @@ export function useWorkspaceCreationModels({
   saveAgentModelFavorites: (favorites: AgentModelFavorite[]) => Promise<SettingsSnapshot>;
 }): WorkspaceCreationModelSurface {
   const runtime = useRuntimeAvailabilityContext();
+  const host = useHostClient();
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const runtimeKinds = useMemo(
     () => runtime.availableRuntimeDefinitions.map((definition) => definition.kind),

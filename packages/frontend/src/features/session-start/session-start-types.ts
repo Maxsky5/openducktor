@@ -4,7 +4,10 @@ import type {
   AgentSessionUserMessagePart,
 } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
-import type { AgentMessageSendOptions, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import type {
+  AgentMessageSendOptions,
+  AgentSessionIdentity,
+} from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 
 export type SessionStartExistingSessionOption = {

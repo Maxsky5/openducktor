@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 
 type AsyncConfirmDialogState = {

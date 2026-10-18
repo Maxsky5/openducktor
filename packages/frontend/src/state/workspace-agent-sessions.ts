@@ -1,5 +1,8 @@
-import { createAgentSessionsStore, type AgentSessionsStore } from "./agent-sessions-store";
-import type { AgentOrchestratorState } from "./operations/agent-orchestrator/use-agent-orchestrator-operations";
+import {
+  createAgentSessionsStore,
+  type AgentSessionsStore,
+} from "@openducktor/frontend-core/sessions/agent-sessions-store";
+import type { AgentOrchestratorState } from "@openducktor/frontend-core/sessions/agent-orchestrator/use-agent-orchestrator-operations";
 
 /** Views read one workspace; shared listeners also keep hidden transcripts warm. */
 export const createWorkspaceAgentSessions = (): WorkspaceAgentSessions => {

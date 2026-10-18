@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
-import { CHAT_ATTACHMENT_ACCEPT } from "./agent-chat-attachments";
+import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   AgentChatComposerEditor,
   type AgentChatComposerEditorCatalog,
@@ -17,16 +17,13 @@ import {
   draftHasMeaningfulContent,
   removeAttachmentFromDraft,
   userMessagePartsToComposerDraft,
-} from "./agent-chat-composer-draft";
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { focusEditorEnd } from "./agent-chat-composer-selection";
 import {
   ACTIVE_COMPOSER_CARD_CLASS_NAME,
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
 } from "./agent-chat-composer-surface";
-import {
-  readQueuedMessageEditDraft,
-  writeQueuedMessageEditDraft,
-} from "./agent-chat-queued-message-drafts";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 
 /** The composer catalogs and attachment rule that an edit of a queued message reuses. */
 export type QueuedMessageEditorCatalog = AgentChatComposerEditorCatalog &
@@ -60,14 +57,14 @@ export function QueuedMessageEditor({
   onRemove: () => void;
 }): ReactElement {
   const { editId } = entry;
+  const editDrafts = useClientConnection().drafts.queuedMessageEdits;
   const [draft, setDraft] = useState(
-    () =>
-      readQueuedMessageEditDraft(target, editId) ?? userMessagePartsToComposerDraft(entry.parts),
+    () => editDrafts.read(target, editId) ?? userMessagePartsToComposerDraft(entry.parts),
   );
   // The unsaved edit outlives this editor, so it comes back after navigation.
   const changeDraft = (next: AgentChatComposerDraft): void => {
     setDraft(next);
-    writeQueuedMessageEditDraft(target, editId, next);
+    editDrafts.write(target, editId, next);
   };
   const editorRef = useRef<HTMLDivElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);

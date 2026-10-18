@@ -6,7 +6,7 @@ import {
 import type { HostClient } from "@openducktor/host-client";
 import { useCallback, useMemo } from "react";
 import { readFileAsBase64 } from "@/lib/read-file-as-base64";
-import { host } from "../shared/host";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type TaskDescriptionAssetHostPort = Pick<HostClient, "taskAssetStage" | "taskAssetDiscardStaged">;
 
@@ -39,13 +39,16 @@ export const createTaskDescriptionAssetOperations = (
   },
 });
 
-const taskDescriptionAssetOperations = createTaskDescriptionAssetOperations(host);
-
 export const useTaskDescriptionAssetOperations = (
   workspaceId: string | null,
 ): Pick<TaskDescriptionAssetOperations, "discardStaged"> & {
   stageImage(file: File): Promise<TaskAssetStageResult>;
 } => {
+  const host = useHostClient();
+  const taskDescriptionAssetOperations = useMemo(
+    () => createTaskDescriptionAssetOperations(host),
+    [host],
+  );
   const stageImage = useCallback(
     (file: File) => {
       if (!workspaceId) {
@@ -53,7 +56,7 @@ export const useTaskDescriptionAssetOperations = (
       }
       return taskDescriptionAssetOperations.stageImage(workspaceId, file);
     },
-    [workspaceId],
+    [taskDescriptionAssetOperations, workspaceId],
   );
 
   return useMemo(
@@ -61,6 +64,6 @@ export const useTaskDescriptionAssetOperations = (
       stageImage,
       discardStaged: taskDescriptionAssetOperations.discardStaged,
     }),
-    [stageImage],
+    [stageImage, taskDescriptionAssetOperations],
   );
 };

@@ -15,8 +15,8 @@ import {
   normalizeRepoAgentDefaultForSave,
   normalizeRepoDefaultModelForSave,
 } from "@/lib/repo-agent-defaults";
-import { errorMessage } from "@/lib/errors";
-import { normalizeTargetBranch } from "@/lib/target-branch";
+import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { normalizeTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { dropBlankLines } from "@/state/read-models/settings-read-model";
 import type {
   RepoAgentDefaultInput,
@@ -25,20 +25,21 @@ import type {
   WorkspaceModelDefaultsDraft,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { checksQueryKeys } from "../../queries/checks";
-import { repositoryGitProviderContextQueryKeys } from "../../queries/git-provider-context";
-import { runtimeQueryKeys } from "../../queries/runtime";
-import { getProductionTaskViewSync } from "../../queries/task-view-sync";
-import { customAgentRolesQueryOptions } from "../../queries/workspace-sessions";
+import { checksQueryKeys } from "@openducktor/frontend-core/queries/checks";
+import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
+import { runtimeQueryKeys } from "@openducktor/frontend-core/queries/runtime";
+import { getProductionTaskViewSync } from "@openducktor/frontend-core/queries/task-view-sync";
+import { customAgentRolesQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import {
   loadRepoConfigFromQuery,
   loadSettingsSnapshotFromQuery,
   settingsSnapshotQueryOptions,
   toRepoSettingsInput,
   workspaceQueryKeys,
-} from "../../queries/workspace";
-import { host } from "../shared/host";
+} from "@openducktor/frontend-core/queries/workspace";
 import { diffSettingsSnapshots } from "./settings-snapshot-changes";
+import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { HostClient } from "@openducktor/host-client";
 
 type UseRepoSettingsOperationsArgs = {
   activeWorkspace: WorkspaceRecord | null;
@@ -68,6 +69,7 @@ export function useRepoSettingsOperations({
   applyWorkspaceRecords,
   applyWorkspaceRecord,
 }: UseRepoSettingsOperationsArgs): UseRepoSettingsOperationsResult {
+  const host = useHostClient();
   const queryClient = useQueryClient();
   const settingsSnapshotQueryKey = settingsSnapshotQueryOptions().queryKey;
 
@@ -152,6 +154,7 @@ export function useRepoSettingsOperations({
       applyWorkspaceRecord(workspace);
     },
     [
+      host,
       activeWorkspace,
       applyWorkspaceRecord,
       queryClient,
@@ -184,7 +187,7 @@ export function useRepoSettingsOperations({
       const defaultModel = normalizeRepoDefaultModelForSave(draft.defaultModel);
       if (!defaultModel && Object.keys(agentDefaults).length === 0) return;
 
-      const update: Parameters<typeof host.workspaceSaveRepoSettings>[1] = {};
+      const update: Parameters<HostClient["workspaceSaveRepoSettings"]>[1] = {};
       if (defaultModel) update.defaultModel = defaultModel;
       if (Object.keys(agentDefaults).length > 0) update.agentDefaults = agentDefaults;
       const workspace = await host.workspaceSaveRepoSettings(workspaceId, update);
@@ -193,7 +196,7 @@ export function useRepoSettingsOperations({
       await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.repoConfig(workspaceId) });
       queryClient.removeQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
     },
-    [applyWorkspaceRecord, queryClient, settingsSnapshotQueryKey, syncWorkspaceListRecord],
+    [host, applyWorkspaceRecord, queryClient, settingsSnapshotQueryKey, syncWorkspaceListRecord],
   );
 
   const loadSettingsSnapshot = useCallback(async (): Promise<SettingsSnapshot> => {
@@ -204,7 +207,7 @@ export function useRepoSettingsOperations({
     async (repoPath: string): Promise<GitProviderRepository | null> => {
       return host.workspaceDetectGithubRepository(repoPath);
     },
-    [],
+    [host],
   );
 
   const saveGlobalGitConfig = useCallback(
@@ -213,13 +216,13 @@ export function useRepoSettingsOperations({
       await queryClient.cancelQueries({ queryKey: settingsSnapshotQueryKey, exact: true });
       await queryClient.fetchQuery({ ...settingsSnapshotQueryOptions(), staleTime: 0 });
     },
-    [queryClient, settingsSnapshotQueryKey],
+    [host, queryClient, settingsSnapshotQueryKey],
   );
 
   const previewSettingsSnapshotRuntime = useCallback(
     (snapshot: SettingsSnapshotSaveInput): Promise<SettingsSnapshotRuntimePreview> =>
       host.workspacePreviewSettingsSnapshotRuntime(snapshot),
-    [],
+    [host],
   );
 
   /** Reloads caches that depend on settings after a written save. */
@@ -282,7 +285,7 @@ export function useRepoSettingsOperations({
       );
       return { ...saveResult, refreshError };
     },
-    [applyWorkspaceRecords, queryClient, refreshAfterSettingsSave, settingsSnapshotQueryKey],
+    [host, applyWorkspaceRecords, queryClient, refreshAfterSettingsSave, settingsSnapshotQueryKey],
   );
 
   const saveAgentModelFavorites = useCallback(
@@ -291,7 +294,7 @@ export function useRepoSettingsOperations({
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       return normalizedSnapshot;
     },
-    [queryClient, settingsSnapshotQueryKey],
+    [host, queryClient, settingsSnapshotQueryKey],
   );
 
   return {
