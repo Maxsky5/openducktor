@@ -512,7 +512,7 @@ describe("electron dev script", () => {
           renderer: createFakeRenderer(),
           startElectronProcess: (_rendererDevUrl, _executablePath, remoteDebugging) => {
             remoteDebuggingValues.push(remoteDebugging);
-            void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+            writeFileSync(activePortPath, "45678\n/devtools/browser/example\n");
             return {
               exited: electronExited,
               kill() {},
@@ -604,7 +604,7 @@ describe("electron dev script", () => {
             const launchIndex = remoteDebuggingValues.length;
             remoteDebuggingValues.push(remoteDebugging);
             if (launchIndex === 0) {
-              void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+              writeFileSync(activePortPath, "45678\n/devtools/browser/example\n");
               return {
                 exited: initialExited,
                 kill() {
@@ -685,7 +685,7 @@ describe("electron dev script", () => {
                 },
               };
             }
-            void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+            writeFileSync(activePortPath, "45678\n/devtools/browser/example\n");
             resolveReplacementLaunch();
             return {
               exited: replacementExited,
@@ -770,7 +770,7 @@ describe("electron dev script", () => {
           renderer: createFakeRenderer({ watcher }),
           startElectronProcess: (_rendererDevUrl, _executablePath, remoteDebugging) => {
             remoteDebuggingValues.push(remoteDebugging);
-            void writeFile(activePortPath, "45678\n/devtools/browser/example\n");
+            writeFileSync(activePortPath, "45678\n/devtools/browser/example\n");
             resolveFirstLaunch();
             return {
               exited: processExited,
