@@ -1,28 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  type ReactElement,
-  type Ref,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useState,
-} from "react";
+import { type ReactElement, type Ref, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "sonner";
 import { recordRecentItem } from "@/features/command-palette/recent-items";
 import { useTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { unfilteredRepoTaskDataQueryOptions } from "@/state/queries/tasks";
 import { TaskDetailsSheet } from "./task-details-sheet";
-import type { TaskDetailsConfirm, TaskDetailsSheetProps } from "./task-details-sheet-types";
+import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
 
 export type TaskDetailsSheetControllerHandle = {
-  /** Open the task. `confirm` also opens that confirmation in the sheet. */
-  openTask: (taskId: string, confirm?: TaskDetailsConfirm | null) => void;
+  openTask: (taskId: string) => void;
   close: () => void;
 };
 
 type TaskDetailsSheetControllerProps = Omit<
   TaskDetailsSheetProps,
-  "task" | "open" | "onOpenChange" | "onDelete" | "requestedConfirm" | "onRequestedConfirmHandled"
+  "task" | "open" | "onOpenChange" | "onDelete"
 > & {
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
@@ -37,10 +29,6 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
   const deleteTask = workflowActions?.onDelete;
   const repoPath = sheetProps.activeWorkspace?.repoPath ?? null;
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [requestedConfirm, setRequestedConfirm] = useState<{
-    taskId: string;
-    confirm: TaskDetailsConfirm;
-  } | null>(null);
   const [deletingTask, setDeletingTask] = useState<{
     id: string;
     task: TaskDetailsSheetProps["task"];
@@ -58,15 +46,12 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     if (!taskId || boardTask || taskQuery.isFetching || taskQuery.isPending) return;
     if (taskQuery.isSuccess && taskQuery.data.tasks.some((entry) => entry.id === taskId)) return;
     if (deletingTask?.id === taskId) return;
-    toast.error(
-      taskQuery.isError ? "Could not load notification task" : "Notification task no longer exists",
-      {
-        id: `task-details-unavailable:${repoPath}:${taskId}`,
-        description: taskQuery.isError
-          ? "Reload and open the task again."
-          : "The task was removed from this workspace.",
-      },
-    );
+    toast.error(taskQuery.isError ? "Could not load the task" : "The task no longer exists", {
+      id: `task-details-unavailable:${repoPath}:${taskId}`,
+      description: taskQuery.isError
+        ? "Reload and open the task again."
+        : "The task was removed from this workspace.",
+    });
   }, [
     boardTask,
     deletingTask,
@@ -85,20 +70,17 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
     if (shownTaskId && workspaceId)
       recordRecentItem({ kind: "task", workspaceId, taskId: shownTaskId });
   }, [shownTaskId, workspaceId]);
-  const clearRequestedConfirm = useCallback(() => setRequestedConfirm(null), []);
 
   useImperativeHandle(
     ref,
     () => ({
-      openTask: (nextTaskId, confirm) => {
+      openTask: (nextTaskId) => {
         setDeletingTask(null);
         setTaskId(nextTaskId);
-        setRequestedConfirm(confirm ? { taskId: nextTaskId, confirm } : null);
       },
       close: () => {
         setDeletingTask(null);
         setTaskId(null);
-        setRequestedConfirm(null);
       },
     }),
     [],
@@ -110,9 +92,6 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
       task={task}
       allTasks={sheetTasks}
       open={open}
-      // A closing sheet can still show the previous task, so the request waits for its own task.
-      requestedConfirm={requestedConfirm?.taskId === shownTaskId ? requestedConfirm.confirm : null}
-      onRequestedConfirmHandled={clearRequestedConfirm}
       {...(deleteTask && {
         onDelete: async (deletedTaskId: string, options: { deleteSubtasks: boolean }) => {
           setDeletingTask({ id: deletedTaskId, task });
@@ -130,7 +109,6 @@ function WorkspaceTaskDetailsSheetController(props: TaskDetailsSheetControllerPr
         if (!nextOpen) {
           setDeletingTask(null);
           setTaskId(null);
-          setRequestedConfirm(null);
         }
       }}
     />

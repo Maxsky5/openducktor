@@ -1,17 +1,12 @@
 import { useCallback, useMemo } from "react";
-import type { useTasksState, useWorkspaceState } from "@/state/app-state-provider";
+import { useRequiredTaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
+import type { useTasksState } from "@/state/app-state-provider";
 import {
   type AgentStudioPullRequestModalModel,
   useAgentStudioPullRequestModalModel,
 } from "./use-agent-studio-pull-request-modal-model";
-import {
-  type AgentStudioTaskDetailsLauncherModel,
-  useAgentStudioTaskDetailsLauncher,
-} from "./use-agent-studio-task-details-launcher";
 
 type UseAgentStudioShellTaskActionsArgs = {
-  activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
-  tasks: ReturnType<typeof useTasksState>["tasks"];
   selectedTaskId: string | null;
   linkingMergedPullRequestTaskId: ReturnType<
     typeof useTasksState
@@ -23,14 +18,13 @@ type UseAgentStudioShellTaskActionsArgs = {
 };
 
 export type AgentStudioShellTaskActionsModel = {
-  taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
+  /** Open the details of the selected task. */
+  openTaskDetails: () => void;
   mergedPullRequestModal: AgentStudioPullRequestModalModel | null;
   onDetectPullRequest: (taskId: string) => void;
 };
 
 export function useAgentStudioShellTaskActions({
-  activeWorkspace,
-  tasks,
   selectedTaskId,
   linkingMergedPullRequestTaskId,
   pendingMergedPullRequest,
@@ -53,11 +47,10 @@ export function useAgentStudioShellTaskActions({
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
 
-  const taskDetailsLauncher = useAgentStudioTaskDetailsLauncher({
-    activeWorkspace,
-    tasks,
-    selectedTaskId,
-  });
+  const { onOpenTaskDetails } = useRequiredTaskWorkflowActions();
+  const openTaskDetails = useCallback((): void => {
+    if (selectedTaskId) onOpenTaskDetails(selectedTaskId);
+  }, [onOpenTaskDetails, selectedTaskId]);
 
   const mergedPullRequestModal = useAgentStudioPullRequestModalModel({
     pendingMergedPullRequest,
@@ -68,10 +61,10 @@ export function useAgentStudioShellTaskActions({
 
   return useMemo(
     () => ({
-      taskDetailsLauncher,
+      openTaskDetails,
       mergedPullRequestModal,
       onDetectPullRequest,
     }),
-    [mergedPullRequestModal, onDetectPullRequest, taskDetailsLauncher],
+    [mergedPullRequestModal, onDetectPullRequest, openTaskDetails],
   );
 }

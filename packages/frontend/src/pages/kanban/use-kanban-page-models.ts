@@ -214,10 +214,7 @@ export function useKanbanPageModels({
       onRefreshTasks,
     },
     content,
-    taskDetailsController: {
-      activeWorkspace,
-      allTasks: kanbanTasks,
-    },
+    activeWorkspace,
     mergedPullRequestModal: pendingMergedPullRequest
       ? {
           pullRequest: pendingMergedPullRequest.pullRequest,

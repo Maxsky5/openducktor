@@ -51,12 +51,14 @@ const createWorkflowActions = (onDelete: TaskWorkflowActions["onDelete"]): TaskW
   onOpenSession: () => {},
   onDelegate: () => {},
   onEdit: () => {},
+  onOpenTaskDetails: () => {},
   onHumanApprove: () => {},
   onHumanRequestChanges: () => {},
   onResetImplementation: () => {},
   onResetTask: async () => {},
   onCloseTask: async () => {},
   onDelete,
+  onConfirmTaskAction: () => {},
   onDetectPullRequest: () => {},
   onUnlinkPullRequest: () => {},
   detectingPullRequestTaskId: null,
@@ -144,7 +146,7 @@ describe("TaskDetailsSheetController", () => {
           client.setQueryData(queryKey, { tasks: [] });
         });
         await act(async () => ref.current?.openTask(task.id));
-        expect(toastErrorMock).toHaveBeenCalledWith("Notification task no longer exists", {
+        expect(toastErrorMock).toHaveBeenCalledWith("The task no longer exists", {
           id: "task-details-unavailable:/repo-a:task-1",
           description: "The task was removed from this workspace.",
         });
@@ -199,7 +201,7 @@ describe("TaskDetailsSheetController", () => {
         expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
           expect.objectContaining({ task: null, open: false }),
         );
-        expect(toastErrorMock).toHaveBeenCalledWith("Notification task no longer exists", {
+        expect(toastErrorMock).toHaveBeenCalledWith("The task no longer exists", {
           id: "task-details-unavailable:/repo-a:task-1",
           description: "The task was removed from this workspace.",
         });
@@ -260,7 +262,7 @@ describe("TaskDetailsSheetController", () => {
             expect(toastErrorMock).not.toHaveBeenCalled();
           } else {
             expect(toastErrorMock).toHaveBeenCalledTimes(1);
-            expect(toastErrorMock).toHaveBeenCalledWith("Could not load notification task", {
+            expect(toastErrorMock).toHaveBeenCalledWith("Could not load the task", {
               id: "task-details-unavailable:/repo-a:task-1",
               description: "Reload and open the task again.",
             });
@@ -384,7 +386,7 @@ describe("TaskDetailsSheetController", () => {
     });
   });
 
-  test("passes a requested confirmation to the sheet once and records the task as recent", async () => {
+  test("opens the task and records it as recent", async () => {
     const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
@@ -399,58 +401,17 @@ describe("TaskDetailsSheetController", () => {
 
     try {
       await act(async () => {
-        controllerRef.current?.openTask(task.id, "reset_task");
+        controllerRef.current?.openTask(task.id);
       });
 
-      const props = taskDetailsSheetRenderMock.mock.lastCall?.[0];
-      expect(props).toMatchObject({ task, open: true, requestedConfirm: "reset_task" });
+      expect(taskDetailsSheetRenderMock.mock.lastCall?.[0]).toMatchObject({ task, open: true });
       expect(useRecentItemsStore.getState().items[0]).toMatchObject({
         kind: "task",
         workspaceId: activeWorkspace.workspaceId,
         taskId: task.id,
       });
-
-      await act(async () => {
-        props?.onRequestedConfirmHandled?.();
-      });
-      expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ task, requestedConfirm: null }),
-      );
     } finally {
       useRecentItemsStore.setState({ items: [] });
-      await act(async () => {
-        rendered.unmount();
-      });
-    }
-  });
-
-  test("keeps a requested confirmation until the sheet shows its own task", async () => {
-    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
-    const shown = createTaskCardFixture({ id: "task-1", title: "Task 1" });
-    const requested = createTaskCardFixture({ id: "task-2", title: "Task 2" });
-    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
-    const renderController = (allTasks: (typeof shown)[]) =>
-      createElement(TaskDetailsSheetController, { ref: controllerRef, activeWorkspace, allTasks });
-    const rendered = render(renderController([shown]));
-
-    try {
-      await act(async () => {
-        controllerRef.current?.openTask(shown.id);
-      });
-      await act(async () => {
-        controllerRef.current?.openTask(requested.id, "delete");
-      });
-      expect(taskDetailsSheetRenderMock.mock.lastCall?.[0]).toMatchObject({
-        requestedConfirm: null,
-      });
-
-      rendered.rerender(renderController([shown, requested]));
-
-      expect(taskDetailsSheetRenderMock.mock.lastCall?.[0]).toMatchObject({
-        task: requested,
-        requestedConfirm: "delete",
-      });
-    } finally {
       await act(async () => {
         rendered.unmount();
       });

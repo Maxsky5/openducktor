@@ -61,14 +61,6 @@ function MainChatPreview() {
       humanReviewFeedbackModal: null,
       sessionStartModal: null,
       mergedPullRequestModal: null,
-      taskDetailsLauncher: {
-        taskEditor: null,
-        openTaskDetails: () => {},
-        taskDetailsSheetRef: { current: null },
-        taskDetailsSheetProps: {
-          allTasks: [],
-        },
-      },
     },
     panels: createSessionPanelsFixture(),
   };

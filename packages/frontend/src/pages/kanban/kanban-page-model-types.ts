@@ -117,11 +117,6 @@ export type KanbanPageContentModel = {
   onResetImplementation: (taskId: string) => void;
 };
 
-export type KanbanPageTaskDetailsControllerModel = {
-  activeWorkspace: ActiveWorkspace | null;
-  allTasks: TaskCard[];
-};
-
 export type TaskResetImplementationModalModel = {
   open: boolean;
   taskId: string;
@@ -156,7 +151,7 @@ export type TaskGitConflictDialogModel = {
 export type KanbanPageModels = {
   header: KanbanPageHeaderModel;
   content: KanbanPageContentModel;
-  taskDetailsController: KanbanPageTaskDetailsControllerModel;
+  activeWorkspace: ActiveWorkspace | null;
   mergedPullRequestModal: {
     pullRequest: NonNullable<TaskCard["pullRequest"]>;
     isLinking: boolean;

@@ -1,11 +1,9 @@
 import { useAgentMessageSendPolicy } from "@/lib/use-agent-message-send-policy";
-import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { GitConflictRequestCancelled } from "@/features/git-conflict-resolution/conflict-assistance";
 import { useNavigate } from "react-router";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
-import type { TaskCreateDestination } from "@/components/features/task-create/use-task-create-modal-controller";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import {
   createGitConflictActionsModel,
@@ -34,38 +32,29 @@ import {
   buildActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
 } from "@/pages/kanban/use-kanban-board-model";
+import {
+  type TaskConfirmDialogHostModel,
+  useTaskConfirmDialogHost,
+} from "./task-confirm-dialog-host";
 import type { TaskWorkflowActions } from "./task-workflow-actions-context";
-
-export type TaskWorkflowTaskComposerModel = {
-  open: boolean;
-  task: TaskCard | null;
-  tasks: TaskCard[];
-  destination: TaskCreateDestination | null;
-  initialTitle: string;
-  onOpenChange: (open: boolean) => void;
-};
-
-type TaskComposerState = {
-  open: boolean;
-  taskId: string | null;
-  destination: TaskCreateDestination | null;
-  initialTitle: string;
-};
-
-const CLOSED_TASK_COMPOSER: TaskComposerState = {
-  open: false,
-  taskId: null,
-  destination: null,
-  initialTitle: "",
-};
+import {
+  type TaskWorkflowTaskComposerModel,
+  useTaskWorkflowComposer,
+} from "./use-task-workflow-composer";
+import {
+  type TaskWorkflowTaskDetailsSheetModel,
+  useTaskWorkflowDetailsSheet,
+} from "./use-task-workflow-details-sheet";
 
 export type TaskWorkflowActionsController = {
   actions: TaskWorkflowActions;
   composer: TaskWorkflowTaskComposerModel;
+  taskDetailsSheet: TaskWorkflowTaskDetailsSheetModel;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
   taskApprovalModal: TaskApprovalModalModel | null;
   resetImplementationModal: TaskResetImplementationModalModel | null;
+  taskConfirmDialog: TaskConfirmDialogHostModel | null;
   taskGitConflictDialog: TaskGitConflictDialogModel | null;
   gitConflictActions: ReturnType<typeof createGitConflictActionsModel> | null;
 };
@@ -152,7 +141,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     }
   }, []);
 
-  const resetFlowWorkspaceIdentity = useMemo(
+  const workspaceIdentity = useMemo(
     () =>
       activeWorkspaceId && workspaceRepoPath
         ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
@@ -161,7 +150,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   );
   const { resetImplementationModal, openResetImplementation } = useTaskResetFlow({
     tasks,
-    workspaceIdentity: resetFlowWorkspaceIdentity,
+    workspaceIdentity,
     resetTaskImplementation,
     closeTaskDetails,
   });
@@ -246,54 +235,25 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     onResolveGitConflict: handleResolveTaskGitConflict,
   });
 
-  const [composerState, setComposerState] = useState<TaskComposerState>(CLOSED_TASK_COMPOSER);
-  const composerTask =
-    composerState.taskId === null
-      ? null
-      : (tasks.find((task) => task.id === composerState.taskId) ?? null);
-  const composerOpen =
-    composerState.open && (composerState.taskId === null || composerTask !== null);
-  const destinationWorkspaceId = activeWorkspace?.workspaceId ?? null;
-  const destinationWorkspaceName = activeWorkspace?.workspaceName ?? null;
-  // New task keeps the workspace that was active when it opened.
-  const onCreateTask = useCallback(
-    (options?: { initialTitle?: string }): void => {
-      setComposerState({
-        open: true,
-        taskId: null,
-        destination:
-          destinationWorkspaceId && destinationWorkspaceName
-            ? { workspaceId: destinationWorkspaceId, workspaceName: destinationWorkspaceName }
-            : null,
-        initialTitle: options?.initialTitle ?? "",
-      });
-    },
-    [destinationWorkspaceId, destinationWorkspaceName],
+  const { onCreateTask, onEdit, composer } = useTaskWorkflowComposer({ activeWorkspace, tasks });
+  const { onOpenTaskDetails, taskDetailsSheet } = useTaskWorkflowDetailsSheet({
+    activeWorkspace,
+    tasks,
+  });
+
+  const onDelete = useCallback(
+    (taskId: string, options: { deleteSubtasks: boolean }): Promise<void> =>
+      deleteTask(taskId, options.deleteSubtasks),
+    [deleteTask],
   );
-  const onEdit = useCallback((taskId: string): void => {
-    setComposerState({ open: true, taskId, destination: null, initialTitle: "" });
-  }, []);
-  const onComposerOpenChange = useCallback((open: boolean): void => {
-    setComposerState((current) => (open ? { ...current, open: true } : CLOSED_TASK_COMPOSER));
-  }, []);
-  const composer = useMemo<TaskWorkflowTaskComposerModel>(
-    () => ({
-      open: composerOpen,
-      task: composerTask,
-      tasks,
-      destination: composerState.destination,
-      initialTitle: composerState.initialTitle,
-      onOpenChange: onComposerOpenChange,
-    }),
-    [
-      composerOpen,
-      composerState.destination,
-      composerState.initialTitle,
-      composerTask,
-      onComposerOpenChange,
-      tasks,
-    ],
-  );
+  const { onConfirmTaskAction, model: taskConfirmDialog } = useTaskConfirmDialogHost({
+    workspaceIdentity,
+    tasks,
+    onResetTask: resetTask,
+    onDelete,
+    // A details sheet of the task also closes, as after a confirmation in the sheet.
+    onSucceeded: closeTaskDetails,
+  });
 
   const taskSessionsByTaskId = useMemo(() => buildTaskSessionsByTaskId(sessions), [sessions]);
   const activeTaskSessionContextByTaskId = useMemo(
@@ -328,6 +288,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       onOpenSession,
       onDelegate,
       onEdit,
+      onOpenTaskDetails,
       onHumanApprove: openTaskApproval,
       onHumanRequestChanges,
       onResetImplementation: (taskId, options) => {
@@ -335,7 +296,8 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       },
       onResetTask: resetTask,
       onCloseTask: closeTask,
-      onDelete: (taskId, options) => deleteTask(taskId, options.deleteSubtasks),
+      onDelete,
+      onConfirmTaskAction,
       onDetectPullRequest: (taskId) => {
         void syncPullRequests(taskId);
       },
@@ -354,16 +316,18 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
       kanbanPendingState,
       activeTaskSessionContextByTaskId,
       closeTask,
-      deleteTask,
       detectingPullRequestTaskId,
       gitProvider.context,
       gitProvider.error,
       onBuild,
+      onConfirmTaskAction,
       onCreateTask,
       onDelegate,
+      onDelete,
       onEdit,
       onHumanRequestChanges,
       onOpenSession,
+      onOpenTaskDetails,
       onPlan,
       onQaOpen,
       onQaStart,
@@ -391,10 +355,12 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   return {
     actions,
     composer,
+    taskDetailsSheet,
     humanReviewFeedbackModal,
     sessionStartModal,
     taskApprovalModal,
     resetImplementationModal,
+    taskConfirmDialog,
     taskGitConflictDialog,
     gitConflictActions,
   };

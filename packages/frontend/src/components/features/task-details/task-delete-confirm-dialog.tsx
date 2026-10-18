@@ -13,34 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import {
   formatActiveSessionStopLoadingMessage,
-  formatManagedSessionCleanupLoadingMessage,
-  formatManagedSessionCleanupMessage,
-  formatUnknownManagedSessionCleanupMessage,
+  formatCleanupImpactMessage,
+  confirmButtonState,
 } from "./task-cleanup-impact-model";
+import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
 
-type TaskDeleteConfirmDialogProps = {
-  open: boolean;
-  onOpenChange: (nextOpen: boolean) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-  taskId: string;
-  subtasksCount: number;
-  impact: {
-    hasSubtasks: boolean;
-    isLoading: boolean;
-    isLoadingStopImpact: boolean;
-    hasManagedSessionCleanup: boolean;
-    managedWorktreeCount: number;
-    terminalCount: number;
-    activeSessionCount: number | null;
-    activeSessionCountError: string | null;
-    error: string | null;
-  };
-  deletion: {
-    isPending: boolean;
-    error: string | null;
-  };
-};
+type TaskDeleteConfirmDialogProps = TaskConfirmDialogProps & { subtasksCount: number };
 
 export function TaskDeleteConfirmDialog({
   open,
@@ -50,23 +28,23 @@ export function TaskDeleteConfirmDialog({
   taskId,
   subtasksCount,
   impact,
-  deletion,
+  operation,
+  onCloseAutoFocus,
 }: TaskDeleteConfirmDialogProps): ReactElement {
-  const isImpactLoading = impact.isLoading || impact.isLoadingStopImpact;
-  let confirmLabel = "Delete";
-  if (deletion.isPending) {
-    confirmLabel = "Deleting...";
-  } else if (isImpactLoading) {
-    confirmLabel = "Checking...";
-  }
+  const hasSubtasks = subtasksCount > 0;
+  const cleanupMessage = formatCleanupImpactMessage(impact, "delete");
+  const confirmButton = confirmButtonState(impact, operation, {
+    idle: "Delete",
+    pending: "Deleting...",
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Delete Task</DialogTitle>
           <DialogDescription>
-            {impact.hasSubtasks
+            {hasSubtasks
               ? `Delete ${taskId} and its ${subtasksCount} direct subtask${subtasksCount === 1 ? "" : "s"}? This cannot be undone.`
               : `Delete ${taskId}? This cannot be undone.`}
           </DialogDescription>
@@ -75,7 +53,7 @@ export function TaskDeleteConfirmDialog({
         <DialogBody className="py-4">
           <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
             <p className="font-medium">This action permanently removes the task.</p>
-            {impact.hasSubtasks ? (
+            {hasSubtasks ? (
               <p>
                 Direct subtasks will also be deleted to avoid orphaned children in the workflow.
               </p>
@@ -96,15 +74,9 @@ export function TaskDeleteConfirmDialog({
             {impact.isLoadingStopImpact ? (
               <p>{formatActiveSessionStopLoadingMessage("delete")}</p>
             ) : null}
-            {impact.isLoading ? (
-              <p>{formatManagedSessionCleanupLoadingMessage("delete")}</p>
-            ) : impact.error ? (
-              <p>{formatUnknownManagedSessionCleanupMessage()}</p>
-            ) : impact.hasManagedSessionCleanup ? (
-              <p>{formatManagedSessionCleanupMessage(impact.managedWorktreeCount)}</p>
-            ) : null}
+            {cleanupMessage ? <p>{cleanupMessage}</p> : null}
             {impact.error ? <p className="text-destructive-muted">{impact.error}</p> : null}
-            {deletion.error ? <p className="text-destructive-muted">{deletion.error}</p> : null}
+            {operation.error ? <p className="text-destructive-muted">{operation.error}</p> : null}
           </div>
         </DialogBody>
 
@@ -113,7 +85,7 @@ export function TaskDeleteConfirmDialog({
             type="button"
             variant="outline"
             className="w-[132px] justify-center disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
-            disabled={deletion.isPending}
+            disabled={operation.isPending}
             onClick={onCancel}
           >
             Cancel
@@ -122,18 +94,16 @@ export function TaskDeleteConfirmDialog({
             type="button"
             variant="destructive"
             className="w-[132px] justify-center disabled:bg-rose-400 disabled:text-rose-50 disabled:opacity-100"
-            disabled={
-              deletion.isPending || isImpactLoading || impact.activeSessionCountError !== null
-            }
-            aria-busy={deletion.isPending || isImpactLoading}
+            disabled={confirmButton.disabled}
+            aria-busy={confirmButton.isBusy}
             onClick={onConfirm}
           >
-            {deletion.isPending || isImpactLoading ? (
+            {confirmButton.isBusy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Trash2 className="size-4" />
             )}
-            {confirmLabel}
+            {confirmButton.label}
           </Button>
         </DialogFooter>
       </DialogContent>

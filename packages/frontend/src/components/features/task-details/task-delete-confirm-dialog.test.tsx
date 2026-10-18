@@ -24,7 +24,6 @@ const renderDialog = (
       taskId="task-1"
       subtasksCount={0}
       impact={{
-        hasSubtasks: false,
         isLoading: false,
         isLoadingStopImpact,
         hasManagedSessionCleanup: false,
@@ -34,7 +33,7 @@ const renderDialog = (
         activeSessionCountError,
         error: null,
       }}
-      deletion={{ isPending: false, error: null }}
+      operation={{ isPending: false, error: null }}
     />,
   );
 

@@ -60,6 +60,9 @@ The command palette is in `packages/frontend/src/features/command-palette`. `Wor
 
 - Run each palette action through its existing handler, dialog, or confirmation. Do not add a second version of an action.
 - Run an action of a task, chat, or workspace through `useWorkspaceIntentRunner`. It makes the workspace active before the action runs.
+- Run a task action on the current page. Only an action that opens a session goes to another page.
+- Open the task details through `onOpenTaskDetails` of the task workflow actions. `TaskWorkflowActionsProvider` shows the shared details sheet. The Kanban page, Agent Studio, and the palette use it. The sheet closes when the page changes.
+- Open the Reset Task and Delete confirmations through `onConfirmTaskAction`. `TaskWorkflowActionsProvider` shows them on any page, with the same dialogs as the task details sheet.
 - Open the Rename and Archive dialogs of a chat through `useSessionMenu`. The sidebar and the palette share these dialogs. Chat actions other than Open chat do not make the workspace active.
 - Add an app action to `useCommandPaletteActions`. Give it other words in `keywords`, so that search finds it.
 - Use `useCommandPalettePageCommand` for a command that exists only on one page, such as the panel toggles of a session page.

@@ -7,6 +7,7 @@ import type {
 } from "@/components/features/kanban/kanban-task-activity";
 import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
+import type { TaskConfirmRequestAction } from "@/components/features/task-details/task-confirm-dialog-types";
 
 export type TaskWorkflowActions = {
   kanbanPendingState?: WorkflowPendingState;
@@ -19,12 +20,16 @@ export type TaskWorkflowActions = {
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onDelegate: (taskId: string) => void;
   onEdit: (taskId: string) => void;
+  /** Open the details sheet of a task of the active workspace, on any page. */
+  onOpenTaskDetails: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;
   onHumanRequestChanges: (taskId: string) => void;
   onResetImplementation: (taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void;
   onResetTask: (taskId: string) => Promise<void>;
   onCloseTask: (taskId: string) => Promise<void>;
   onDelete: (taskId: string, options: { deleteSubtasks: boolean }) => Promise<void>;
+  /** Open the confirmation of `action` for a task of the active workspace, on any page. */
+  onConfirmTaskAction: (taskId: string, action: TaskConfirmRequestAction) => void;
   onDetectPullRequest: (taskId: string) => void;
   onUnlinkPullRequest: (taskId: string) => void;
   detectingPullRequestTaskId: string | null;

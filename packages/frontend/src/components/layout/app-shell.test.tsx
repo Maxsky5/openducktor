@@ -1799,8 +1799,10 @@ describe("AppShell command palette", () => {
     expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
   });
 
-  test("makes the workspace of a task active before it opens the task details", async () => {
-    renderPalette();
+  test("makes the workspace of a task active, then opens the task details on the same page", async () => {
+    const onOpenTaskDetails = mock((_taskId: string) => {});
+    renderPalette({ taskWorkflowActions: { onOpenTaskDetails } });
+    const address = screen.getByTestId("current-address").textContent;
     const palette = await openPalette();
 
     search(palette, "checkout");
@@ -1808,9 +1810,10 @@ describe("AppShell command palette", () => {
     expect(within(palette).getByText("Open details")).toBeTruthy();
     fireEvent.keyDown(within(palette).getByRole("combobox"), { key: "Enter" });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("current-address").textContent).toBe("/kanban?task=fair-1"),
-    );
+    await waitFor(() => expect(onOpenTaskDetails).toHaveBeenCalledWith("fair-1"));
+    expect(screen.getByTestId("current-address").textContent).toBe(address);
+    const reopened = await openPalette();
+    expect(actionOption(reopened, "New task").textContent).toContain("in Fairnest");
   });
 
   test("copies the ID of a task in another workspace and keeps the active workspace", async () => {

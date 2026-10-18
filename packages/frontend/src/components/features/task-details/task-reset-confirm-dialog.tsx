@@ -13,32 +13,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   formatActiveSessionStopLoadingMessage,
-  formatManagedSessionCleanupLoadingMessage,
-  formatManagedSessionCleanupMessage,
-  formatUnknownManagedSessionCleanupMessage,
+  formatCleanupImpactMessage,
+  confirmButtonState,
 } from "./task-cleanup-impact-model";
-
-type TaskResetConfirmDialogProps = {
-  open: boolean;
-  onOpenChange: (nextOpen: boolean) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-  taskId: string;
-  impact: {
-    isLoading: boolean;
-    isLoadingStopImpact: boolean;
-    hasManagedSessionCleanup: boolean;
-    managedWorktreeCount: number;
-    terminalCount: number;
-    activeSessionCount: number | null;
-    activeSessionCountError: string | null;
-    error: string | null;
-  };
-  reset: {
-    isPending: boolean;
-    error: string | null;
-  };
-};
+import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
 
 export function TaskResetConfirmDialog({
   open,
@@ -47,19 +25,17 @@ export function TaskResetConfirmDialog({
   onConfirm,
   taskId,
   impact,
-  reset,
-}: TaskResetConfirmDialogProps): ReactElement {
-  const isImpactLoading = impact.isLoading || impact.isLoadingStopImpact;
-  let confirmLabel = "Reset task";
-  if (reset.isPending) {
-    confirmLabel = "Resetting...";
-  } else if (isImpactLoading) {
-    confirmLabel = "Checking...";
-  }
+  operation,
+  onCloseAutoFocus,
+}: TaskConfirmDialogProps): ReactElement {
+  const confirmButton = confirmButtonState(impact, operation, {
+    idle: "Reset task",
+    pending: "Resetting...",
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Reset Task</DialogTitle>
           <DialogDescription>
@@ -89,21 +65,15 @@ export function TaskResetConfirmDialog({
             {impact.isLoadingStopImpact ? (
               <p>{formatActiveSessionStopLoadingMessage("reset")}</p>
             ) : null}
-            {impact.isLoading ? (
-              <p>{formatManagedSessionCleanupLoadingMessage("reset")}</p>
-            ) : impact.error ? (
-              <p>{formatUnknownManagedSessionCleanupMessage()}</p>
-            ) : impact.hasManagedSessionCleanup ? (
-              <p>{formatManagedSessionCleanupMessage(impact.managedWorktreeCount)}</p>
-            ) : (
-              <p>
-                Task-managed worktrees and related local branches will be deleted when present. Any
-                uncommitted changes in those worktrees will be lost.
-              </p>
-            )}
+            <p>
+              {formatCleanupImpactMessage(impact, "reset") ??
+                "Task-managed worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost."}
+            </p>
           </div>
           {impact.error ? <p className="text-destructive-muted mt-2">{impact.error}</p> : null}
-          {reset.error ? <p className="text-destructive-muted mt-2">{reset.error}</p> : null}
+          {operation.error ? (
+            <p className="text-destructive-muted mt-2">{operation.error}</p>
+          ) : null}
         </DialogBody>
 
         <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
@@ -111,7 +81,7 @@ export function TaskResetConfirmDialog({
             type="button"
             variant="outline"
             className="w-[132px] justify-center disabled:border-border disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
-            disabled={reset.isPending}
+            disabled={operation.isPending}
             onClick={onCancel}
           >
             Cancel
@@ -120,16 +90,16 @@ export function TaskResetConfirmDialog({
             type="button"
             variant="destructive"
             className="w-[132px] justify-center disabled:bg-destructive/80 disabled:text-destructive-foreground disabled:opacity-100"
-            disabled={reset.isPending || isImpactLoading || impact.activeSessionCountError !== null}
-            aria-busy={reset.isPending || isImpactLoading}
+            disabled={confirmButton.disabled}
+            aria-busy={confirmButton.isBusy}
             onClick={onConfirm}
           >
-            {reset.isPending || isImpactLoading ? (
+            {confirmButton.isBusy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <RotateCcw className="size-4" />
             )}
-            {confirmLabel}
+            {confirmButton.label}
           </Button>
         </DialogFooter>
       </DialogContent>

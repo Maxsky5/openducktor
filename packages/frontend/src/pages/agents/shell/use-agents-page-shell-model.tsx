@@ -106,8 +106,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { navigationPersistenceError, retryNavigationPersistence, selection } = routeSession;
 
   const taskActions = useAgentStudioShellTaskActions({
-    activeWorkspace,
-    tasks,
     selectedTaskId: selection.view.selectedTask?.id ?? null,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
@@ -127,7 +125,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       workspaceRepoPath,
       isForegroundLoadingTasks,
       routeSession,
-      openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
+      openTaskDetails: taskActions.openTaskDetails,
       runSessionStartWorkflow,
       agentOperations: {
         sendAgentMessage,
@@ -206,13 +204,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       mergedPullRequestModal: taskActions.mergedPullRequestModal,
       humanReviewFeedbackModal: orchestration.humanReviewFeedbackModal,
       sessionStartModal: orchestration.sessionStartModal,
-      taskDetailsLauncher: taskActions.taskDetailsLauncher,
     }),
     [
       orchestration.humanReviewFeedbackModal,
       orchestration.sessionStartModal,
       taskActions.mergedPullRequestModal,
-      taskActions.taskDetailsLauncher,
     ],
   );
 

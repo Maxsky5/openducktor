@@ -124,12 +124,14 @@ const createTaskWorkflowActionsValue = (): TaskWorkflowActions => ({
   onOpenSession: mock(() => {}),
   onDelegate: mock(() => {}),
   onEdit: mock(() => {}),
+  onOpenTaskDetails: mock(() => {}),
   onHumanApprove: mock(() => {}),
   onHumanRequestChanges: mock(() => {}),
   onResetImplementation: mock(() => {}),
   onResetTask: mock(async () => {}),
   onCloseTask: mock(async () => {}),
   onDelete: mock(async () => {}),
+  onConfirmTaskAction: mock(() => {}),
   onDetectPullRequest: mock(() => {}),
   onUnlinkPullRequest: mock(() => {}),
   detectingPullRequestTaskId: null,
@@ -247,10 +249,10 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      await harness.run((viewModel) => viewModel.openDeleteDialog());
+      await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
 
-      expect(harness.getLatest().isLoadingDeleteImpact).toBe(false);
-      expect(harness.getLatest().isLoadingDeleteStopImpact).toBe(true);
+      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoading).toBe(false);
+      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoadingStopImpact).toBe(true);
 
       taskStopImpactHookMock.mockImplementation(
         (_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
@@ -260,8 +262,8 @@ describe("TaskDetailsSheet", () => {
         }),
       );
       await harness.update({ ...harnessOptions });
-      expect(harness.getLatest().isLoadingDeleteStopImpact).toBe(false);
-      expect(harness.getLatest().deleteActiveSessionCount).toBe(0);
+      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoadingStopImpact).toBe(false);
+      expect(harness.getLatest().deleteConfirm.dialog.impact.activeSessionCount).toBe(0);
     } finally {
       await harness.unmount();
     }
@@ -303,10 +305,12 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      await harness.run((viewModel) => viewModel.openDeleteDialog());
+      await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
 
-      expect(harness.getLatest().deleteActiveSessionCountError).toBe("host unavailable");
-      expect(harness.getLatest().isLoadingDeleteImpact).toBe(false);
+      expect(harness.getLatest().deleteConfirm.dialog.impact.activeSessionCountError).toBe(
+        "host unavailable",
+      );
+      expect(harness.getLatest().deleteConfirm.dialog.impact.isLoading).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -348,32 +352,37 @@ describe("TaskDetailsSheet", () => {
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
-    const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-2);
+    // One cleanup read for each confirmation: Delete, Reset Task, and Close Task.
+    const latestImpactCalls = () => taskCleanupImpactHookMock.mock.calls.slice(-3);
 
     try {
       await harness.mount();
       expect(latestImpactCalls()).toEqual([
         [["TASK-1", "TASK-2"], false],
         [["TASK-1"], false],
-      ]);
-
-      await harness.run((viewModel) => viewModel.openDeleteDialog());
-      expect(latestImpactCalls()).toEqual([
-        [["TASK-1", "TASK-2"], true],
         [["TASK-1"], false],
       ]);
 
-      await harness.run((viewModel) => viewModel.closeDeleteDialog());
-      await harness.run((viewModel) => viewModel.openResetDialog());
+      await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
+      expect(latestImpactCalls()).toEqual([
+        [["TASK-1", "TASK-2"], true],
+        [["TASK-1"], false],
+        [["TASK-1"], false],
+      ]);
+
+      await harness.run((viewModel) => viewModel.deleteConfirm.dialog.onCancel());
+      await harness.run((viewModel) => viewModel.resetConfirm.openDialog());
       expect(latestImpactCalls()).toEqual([
         [["TASK-1", "TASK-2"], false],
         [["TASK-1"], true],
+        [["TASK-1"], false],
       ]);
 
-      await harness.run((viewModel) => viewModel.closeResetDialog());
-      await harness.run((viewModel) => viewModel.openCloseDialog());
+      await harness.run((viewModel) => viewModel.resetConfirm.dialog.onCancel());
+      await harness.run((viewModel) => viewModel.closeConfirm.openDialog());
       expect(latestImpactCalls()).toEqual([
         [["TASK-1", "TASK-2"], false],
+        [["TASK-1"], false],
         [["TASK-1"], true],
       ]);
     } finally {
@@ -419,16 +428,45 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      await harness.run((viewModel) => viewModel.openDeleteDialog());
+      await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
       const callsBeforeDelete = taskDocumentsHookMock.mock.calls.length;
 
-      await harness.run((viewModel) => viewModel.confirmDelete());
+      await harness.run((viewModel) => viewModel.deleteConfirm.dialog.onConfirm());
 
       expect(onDelete).toHaveBeenCalledWith("TASK-1", { deleteSubtasks: true });
-      expect(harness.getLatest().isDeletePending).toBe(true);
+      expect(harness.getLatest().deleteConfirm.dialog.operation.isPending).toBe(true);
       expect(taskDocumentsHookMock.mock.calls.slice(callsBeforeDelete).at(-1)?.[1]).toBe(false);
     } finally {
       finishDelete();
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    ["open_builder", [false]],
+    ["human_approve", []],
+  ] as const)("closes the sheet after %s only when it opens a session", async (action, closes) => {
+    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
+    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
+    const onOpenChange = mock((_open: boolean) => {});
+    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
+      task,
+      allTasks: [task],
+      open: true,
+      onOpenChange,
+      onOpenSession: mock(() => {}),
+      onHumanApprove: mock(() => {}),
+      taskDocumentsHook: createTaskDocumentsHookMock(),
+      taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
+      taskStopImpactHook: createTaskStopImpactHookMock(),
+    });
+
+    try {
+      await harness.mount();
+      await harness.run((viewModel) => viewModel.runWorkflowAction(action));
+
+      expect(onOpenChange.mock.calls.map(([open]) => open)).toEqual([...closes]);
+    } finally {
       await harness.unmount();
     }
   });
@@ -476,10 +514,10 @@ describe("TaskDetailsSheet", () => {
       await harness.mount();
       await harness.run((viewModel) => viewModel.runWorkflowAction("close_task"));
 
-      expect(harness.getLatest().isCloseDialogOpen).toBe(true);
+      expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
       expect(onCloseTask).not.toHaveBeenCalled();
 
-      await harness.run((viewModel) => viewModel.confirmClose());
+      await harness.run((viewModel) => viewModel.closeConfirm.dialog.onConfirm());
 
       expect(onCloseTask).toHaveBeenCalledWith("TASK-1");
       expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -526,11 +564,11 @@ describe("TaskDetailsSheet", () => {
 
     try {
       await harness.mount();
-      await harness.run((viewModel) => viewModel.openCloseDialog());
-      await harness.run((viewModel) => viewModel.confirmClose());
+      await harness.run((viewModel) => viewModel.closeConfirm.openDialog());
+      await harness.run((viewModel) => viewModel.closeConfirm.dialog.onConfirm());
 
-      expect(harness.getLatest().isCloseDialogOpen).toBe(true);
-      expect(harness.getLatest().closeError).toBe("close failed");
+      expect(harness.getLatest().closeConfirm.dialog.open).toBe(true);
+      expect(harness.getLatest().closeConfirm.dialog.operation.error).toBe("close failed");
     } finally {
       await harness.unmount();
     }
@@ -665,49 +703,6 @@ describe("TaskDetailsSheet", () => {
 
       expect(screen.getByRole("dialog", { name: "Close Task" })).toBeTruthy();
       expect(onOpenChange).not.toHaveBeenCalledWith(false);
-    } finally {
-      unmount();
-    }
-  });
-
-  test.each([
-    ["reset_task", "Reset Task"],
-    ["delete", "Delete Task"],
-  ] as const)("opens the requested %s confirmation once", async (requestedConfirm, title) => {
-    const { TaskDetailsSheet } = await import("./task-details-sheet");
-    const { TaskWorkflowActionsContext } =
-      await import("@/features/task-workflow/task-workflow-actions-context");
-    const task = createTaskCardFixture({
-      id: "TASK-1",
-      title: "Task 1",
-      availableActions: ["reset_task"],
-    });
-    const onRequestedConfirmHandled = mock(() => {});
-
-    const { unmount } = render(
-      createElement(
-        IsolatedProviders,
-        null,
-        createElement(
-          TaskWorkflowActionsContext.Provider,
-          { value: createTaskWorkflowActionsValue() },
-          createElement(TaskDetailsSheet, {
-            task,
-            allTasks: [task],
-            open: true,
-            onOpenChange: () => {},
-            requestedConfirm,
-            onRequestedConfirmHandled,
-          }),
-        ),
-      ),
-    );
-
-    try {
-      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-
-      expect(screen.getByRole("dialog", { name: title })).toBeTruthy();
-      expect(onRequestedConfirmHandled).toHaveBeenCalledTimes(1);
     } finally {
       unmount();
     }
