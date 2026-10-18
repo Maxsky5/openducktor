@@ -66,7 +66,10 @@ export type TaskSyncService = {
   syncRepoPullRequests(
     repoPath: string,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
-  syncActiveWorkspacePullRequests(): Effect.Effect<void, TaskSyncError>;
+  /**
+   * A workspace failure must not block other workspaces. A failed log write stops the run.
+   */
+  syncOpenWorkspacePullRequests(): Effect.Effect<void, TaskSyncError>;
   startPullRequestSyncLoop(): Effect.Effect<TaskSyncLoopHandle, never>;
 };
 export type TaskSyncError = HostOperationError | TaskServiceError | WorkspaceSettingsError;
@@ -347,78 +350,86 @@ export const createTaskSyncService = ({
           return yield* Effect.fail(syncResult.failure);
         }),
     );
-  const syncActiveWorkspacePullRequests = (): Effect.Effect<void, TaskSyncError> =>
+  const syncOpenWorkspacePullRequests = (
+    onFailure = logSyncFailure,
+  ): Effect.Effect<void, TaskSyncError> =>
     Effect.gen(function* () {
-      const activeWorkspace = (yield* workspaceSettingsService.listWorkspaces()).find(
-        (workspace) => workspace.isActive,
-      );
-      if (!activeWorkspace) {
-        return;
+      const workspaces = yield* Effect.result(workspaceSettingsService.listWorkspaces());
+      if (workspaces._tag === "Failure") {
+        return yield* onFailure(workspaces.failure);
       }
-      yield* syncRepoPullRequests(activeWorkspace.repoPath);
+      for (const workspace of workspaces.success) {
+        yield* syncRepoPullRequests(workspace.repoPath).pipe(
+          Effect.catch((error) => onFailure(error, workspace.repoPath)),
+        );
+      }
     });
-  const writePullRequestSyncIterationFailure = (
+  const runSyncLoop = (state: Ref.Ref<TaskSyncLoopState>) =>
+    Effect.forever(
+      syncOpenWorkspacePullRequests((error, repoPath) =>
+        logLoopFailure(state, error, repoPath),
+      ).pipe(Effect.andThen(Effect.sleep(`${intervalMs} millis`))),
+    );
+  // Finish logs that start before shutdown so stop() can report a write failure.
+  const logLoopFailure = (
     state: Ref.Ref<TaskSyncLoopState>,
     error: TaskSyncError,
+    repoPath?: string,
   ): Effect.Effect<void, HostOperationError> =>
     Effect.uninterruptible(
       Effect.gen(function* () {
         const completion = yield* Deferred.make<void, HostOperationError>();
-        const admitted = yield* Ref.modify(state, (current) => {
+        const canLog = yield* Ref.modify(state, (current) => {
           if (current.stopped) {
             return [false, current];
           }
           return [true, { ...current, activeLog: completion }];
         });
-        if (!admitted) {
+        if (!canLog) {
           return;
         }
 
-        const ownedLogExit = yield* Effect.exit(
-          logger
-            .error(
-              `Pull request sync iteration failed; the scheduler will retry on the next interval: ${error instanceof Error ? error.message : String(error)}`,
-            )
-            .pipe(
-              Effect.mapError(
-                (cause) =>
-                  new HostOperationError({
-                    operation: "task-sync.log-iteration-failure",
-                    message: cause instanceof Error ? cause.message : String(cause),
-                    cause,
-                  }),
-              ),
-              Effect.tapError(onBackgroundFailure),
-            ),
-        );
+        const exit = yield* Effect.exit(logSyncFailure(error, repoPath));
         yield* Ref.update(state, (current) => ({
           ...current,
           activeLog: null,
-          terminalLogCause: Exit.isFailure(ownedLogExit) ? ownedLogExit.cause : null,
+          terminalLogCause: Exit.isFailure(exit) ? exit.cause : null,
         }));
-        yield* Deferred.done(completion, ownedLogExit);
-        if (Exit.isFailure(ownedLogExit)) {
-          return yield* Effect.failCause(ownedLogExit.cause);
+        yield* Deferred.done(completion, exit);
+        if (Exit.isFailure(exit)) {
+          return yield* Effect.failCause(exit.cause);
         }
       }),
     );
-  const runPullRequestSyncLoopIteration = (state: Ref.Ref<TaskSyncLoopState>) =>
-    syncActiveWorkspacePullRequests().pipe(
-      Effect.catch((error) => writePullRequestSyncIterationFailure(state, error)),
-    );
-  const runPullRequestSyncLoop = (state: Ref.Ref<TaskSyncLoopState>) =>
-    Effect.forever(
-      Effect.sleep(`${intervalMs} millis`).pipe(
-        Effect.andThen(runPullRequestSyncLoopIteration(state)),
-      ),
-    );
+  const logSyncFailure = (
+    error: TaskSyncError,
+    repoPath?: string,
+  ): Effect.Effect<void, HostOperationError> => {
+    const message = error instanceof Error ? error.message : String(error);
+    const detail = repoPath ? `${repoPath}: ${message}` : message;
+    return logger
+      .error(
+        `Pull request sync iteration failed; the scheduler will retry on the next interval: ${detail}`,
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new HostOperationError({
+              operation: "task-sync.log-iteration-failure",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        ),
+        Effect.tapError(onBackgroundFailure),
+      );
+  };
   return {
     runMutation,
     runStatusMutation,
     publishExternalTaskCreated,
     publishTasksUpdated,
     syncRepoPullRequests,
-    syncActiveWorkspacePullRequests,
+    syncOpenWorkspacePullRequests,
     startPullRequestSyncLoop() {
       return Effect.gen(function* () {
         const state = yield* Ref.make<TaskSyncLoopState>({
@@ -426,7 +437,7 @@ export const createTaskSyncService = ({
           stopped: false,
           terminalLogCause: null,
         });
-        const fiber = yield* Effect.forkDetach(runPullRequestSyncLoop(state));
+        const fiber = yield* Effect.forkDetach(runSyncLoop(state));
         return {
           stop: () =>
             Effect.gen(function* () {

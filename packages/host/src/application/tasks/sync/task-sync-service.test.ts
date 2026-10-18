@@ -1,9 +1,23 @@
 import { describe, expect, test } from "bun:test";
+import type { WorkspaceRecord } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { HostOperationError } from "../../../effect/host-errors";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import { createTaskSyncServiceForTest, createEventBus } from "./task-sync-service.test-support";
+
+const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
+  workspaceId: repoPath.slice(1),
+  workspaceName: repoPath.slice(1),
+  abbreviation: null,
+  tileColor: null,
+  repoPath,
+  isActive,
+  hasConfig: true,
+  configuredWorktreeBasePath: null,
+  defaultWorktreeBasePath: null,
+  effectiveWorktreeBasePath: null,
+});
 
 describe("task mutation gate and pull request sync", () => {
   test.each(["failure", "interruption"] as const)(
@@ -79,66 +93,42 @@ describe("task mutation gate and pull request sync", () => {
     expect(reports).toEqual([]);
   });
 
-  test("runs linked pull request sync for the active workspace and emits changed task ids", async () => {
-    const { eventBus, events } = createEventBus();
-    const calls: unknown[] = [];
-    const service = createTaskSyncServiceForTest({
-      eventBus,
-      intervalMs: 60000,
-      taskService: {
-        repoPullRequestSyncDetailed(input) {
-          return Effect.tryPromise({
-            try: async () => {
+  test.each([true, false])(
+    "syncs all open workspaces with an active workspace set to %s",
+    async (hasActiveWorkspace) => {
+      const { eventBus, events } = createEventBus();
+      const calls: unknown[] = [];
+      const service = createTaskSyncServiceForTest({
+        eventBus,
+        taskService: {
+          repoPullRequestSyncDetailed(input) {
+            return Effect.sync(() => {
               calls.push(input);
               return { ran: true, changedTaskIds: ["task-1", "task-2"] };
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
+            });
+          },
         },
-      },
-      workspaceSettingsService: {
-        listWorkspaces() {
-          return Effect.tryPromise({
-            try: async () => {
-              return [
-                {
-                  workspaceId: "repo",
-                  workspaceName: "Repo",
-                  abbreviation: null,
-                  tileColor: null,
-                  repoPath: "/repo",
-                  isActive: true,
-                  hasConfig: true,
-                  configuredWorktreeBasePath: null,
-                  defaultWorktreeBasePath: null,
-                  effectiveWorktreeBasePath: null,
-                },
-              ];
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
+        workspaceSettingsService: {
+          listWorkspaces() {
+            return Effect.succeed([
+              workspace("/first"),
+              workspace("/repo", hasActiveWorkspace),
+              workspace("/last"),
+            ]);
+          },
         },
-      },
-    });
-    await Effect.runPromise(service.syncActiveWorkspacePullRequests());
-    expect(calls).toEqual([{ repoPath: "/repo" }]);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      kind: "tasks_updated",
-      repoPath: "/repo",
-      taskIds: ["task-1", "task-2"],
-    });
-  });
+      });
+      await Effect.runPromise(service.syncOpenWorkspacePullRequests());
+      expect(calls).toEqual([{ repoPath: "/first" }, { repoPath: "/repo" }, { repoPath: "/last" }]);
+      expect(events).toMatchObject(
+        ["/first", "/repo", "/last"].map((repoPath) => ({
+          kind: "tasks_updated",
+          repoPath,
+          taskIds: ["task-1", "task-2"],
+        })),
+      );
+    },
+  );
 
   test("publishes partial sync progress once and returns the original failure", async () => {
     const { eventBus, events } = createEventBus();
@@ -159,28 +149,11 @@ describe("task mutation gate and pull request sync", () => {
           );
         },
       },
-      workspaceSettingsService: {
-        listWorkspaces() {
-          return Effect.succeed([
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
-            },
-          ]);
-        },
-      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
     });
 
     await expect(
-      Effect.runPromise(service.syncActiveWorkspacePullRequests().pipe(Effect.flip)),
+      Effect.runPromise(service.syncRepoPullRequests("/repo").pipe(Effect.flip)),
     ).resolves.toBe(mutationFailure);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -246,27 +219,11 @@ describe("task mutation gate and pull request sync", () => {
             }),
           ),
       },
-      workspaceSettingsService: {
-        listWorkspaces: () =>
-          Effect.succeed([
-            {
-              workspaceId: "repo",
-              workspaceName: "Repo",
-              abbreviation: null,
-              tileColor: null,
-              repoPath: "/repo",
-              isActive: true,
-              hasConfig: true,
-              configuredWorktreeBasePath: null,
-              defaultWorktreeBasePath: null,
-              effectiveWorktreeBasePath: null,
-            },
-          ]),
-      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
     });
 
     await expect(
-      Effect.runPromise(service.syncActiveWorkspacePullRequests().pipe(Effect.flip)),
+      Effect.runPromise(service.syncRepoPullRequests("/repo").pipe(Effect.flip)),
     ).resolves.toMatchObject({
       _tag: "HostOperationError",
       message: expect.stringContaining("second task failed"),
@@ -275,164 +232,198 @@ describe("task mutation gate and pull request sync", () => {
     });
   });
 
-  test("logs a partial sync failure once after publishing one batch in the scheduler loop", async () => {
+  test("logs each failed workspace and continues after publishing partial sync progress", async () => {
     const { eventBus, events } = createEventBus();
     const mutationFailure = new HostOperationError({
       operation: "task.repo-pull-request-sync",
       message: "second task failed",
     });
-    const { logCalls } = await Effect.runPromise(
+    const { logs, calls } = await Effect.runPromise(
       Effect.gen(function* () {
-        const logged = yield* Deferred.make<void>();
-        let logCalls = 0;
+        const logs: string[] = [];
+        const calls: string[] = [];
         const service = createTaskSyncServiceForTest({
           eventBus,
-          intervalMs: 1,
           logger: {
-            error: () =>
+            error: (message) =>
               Effect.sync(() => {
-                logCalls += 1;
-              }).pipe(Effect.andThen(Deferred.succeed(logged, undefined))),
+                logs.push(message);
+              }),
           },
           taskService: {
-            repoPullRequestSyncDetailed: () =>
-              Effect.fail(
-                new TaskMutationProgressFailure({
-                  operation: "repo-pull-request-sync",
-                  changes: { taskIds: ["task-1"], removedTaskIds: [] },
-                  failure: mutationFailure,
-                }),
-              ),
+            repoPullRequestSyncDetailed: ({ repoPath }) =>
+              Effect.gen(function* () {
+                calls.push(repoPath);
+                if (repoPath === "/partial") {
+                  return yield* new TaskMutationProgressFailure({
+                    operation: "repo-pull-request-sync",
+                    changes: { taskIds: ["task-1"], removedTaskIds: [] },
+                    failure: mutationFailure,
+                  });
+                }
+                if (repoPath === "/failed") {
+                  return yield* new HostOperationError({
+                    operation: "task.repo-pull-request-sync",
+                    message: "provider unavailable",
+                  });
+                }
+                return { ran: true, changedTaskIds: ["task-2"] };
+              }),
           },
           workspaceSettingsService: {
             listWorkspaces: () =>
               Effect.succeed([
-                {
-                  workspaceId: "repo",
-                  workspaceName: "Repo",
-                  abbreviation: null,
-                  tileColor: null,
-                  repoPath: "/repo",
-                  isActive: true,
-                  hasConfig: true,
-                  configuredWorktreeBasePath: null,
-                  defaultWorktreeBasePath: null,
-                  effectiveWorktreeBasePath: null,
-                },
+                workspace("/partial"),
+                workspace("/failed", true),
+                workspace("/healthy"),
               ]),
           },
         });
         const loop = yield* service.startPullRequestSyncLoop();
-        yield* TestClock.adjust(1);
-        yield* Deferred.await(logged);
+        yield* TestClock.adjust(0);
         yield* loop.stop();
-        return { logCalls };
+        return { logs, calls };
       }).pipe(Effect.provide(TestClock.layer())),
     );
 
-    expect(logCalls).toBe(1);
-    expect(events).toHaveLength(1);
+    expect(calls).toEqual(["/partial", "/failed", "/healthy"]);
+    expect(logs).toHaveLength(2);
+    expect(logs[0]).toContain("/partial");
+    expect(logs[0]).toContain("second task failed");
+    expect(logs[1]).toContain("/failed");
+    expect(logs[1]).toContain("provider unavailable");
+    expect(
+      logs.every((message) => message.includes("the scheduler will retry on the next interval")),
+    ).toBe(true);
+    expect(events).toMatchObject([
+      { repoPath: "/partial", taskIds: ["task-1"] },
+      { repoPath: "/healthy", taskIds: ["task-2"] },
+    ]);
   });
 
-  test("does not run pull request sync during loop startup", async () => {
+  test("syncs at startup, refreshes open workspaces each interval, and stops scheduling", async () => {
     const { eventBus } = createEventBus();
     const calls: unknown[] = [];
+    let openWorkspaces = [workspace("/repo", true), workspace("/other")];
     const service = createTaskSyncServiceForTest({
       eventBus,
-      intervalMs: 60000,
       taskService: {
         repoPullRequestSyncDetailed(input) {
-          return Effect.tryPromise({
-            try: async () => {
-              calls.push(input);
-              return { ran: true, changedTaskIds: [] };
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
+          return Effect.sync(() => {
+            calls.push(input);
+            return { ran: true, changedTaskIds: [] };
           });
         },
       },
       workspaceSettingsService: {
         listWorkspaces() {
-          return Effect.tryPromise({
-            try: async () => {
-              throw new Error("unexpected workspace lookup before first interval");
-            },
-            catch: (cause) =>
-              new HostOperationError({
-                operation: "test.effect",
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause: cause,
-              }),
-          });
+          return Effect.sync(() => openWorkspaces);
         },
       },
     });
-    const loop = await Effect.runPromise(service.startPullRequestSyncLoop());
-    await Effect.runPromise(loop.stop());
-    expect(calls).toEqual([]);
-  });
-
-  test("reports lifecycle logging failures to the live owner before shutdown", async () => {
-    const { eventBus } = createEventBus();
-    const persistenceError = new HostOperationError({
-      operation: "host.lifecycle.log-error",
-      message: "persistent task-sync log failed",
-    });
-    const { reportedFailure, stopResult } = await Effect.runPromise(
+    const snapshots = await Effect.runPromise(
       Effect.gen(function* () {
-        const failureReported = yield* Deferred.make<HostOperationError>();
-        const service = createTaskSyncServiceForTest({
-          eventBus,
-          intervalMs: 0,
-          logger: {
-            error: () => Effect.fail(persistenceError),
-          },
-          onBackgroundFailure: (failure) =>
-            Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
-          taskService: {
-            repoPullRequestSyncDetailed() {
-              return Effect.succeed({ ran: true, changedTaskIds: [] });
-            },
-          },
-          workspaceSettingsService: {
-            listWorkspaces() {
-              return Effect.fail(
-                new HostOperationError({
-                  operation: "test.task-sync.list-workspaces",
-                  message: "workspace read failed",
-                }),
-              );
-            },
-          },
-        });
-
         const loop = yield* service.startPullRequestSyncLoop();
-        const reportedFailure = yield* Deferred.await(failureReported);
-        const stopResult = yield* Effect.result(loop.stop());
-        return { reportedFailure, stopResult };
-      }),
+        try {
+          yield* TestClock.adjust(0);
+          const startup = [...calls];
+          openWorkspaces = [workspace("/other")];
+          yield* TestClock.adjust(5 * 60 * 1000 - 1);
+          const beforeInterval = [...calls];
+          yield* TestClock.adjust(1);
+          const nextInterval = [...calls];
+          yield* loop.stop();
+          yield* TestClock.adjust(5 * 60 * 1000);
+          return { startup, beforeInterval, nextInterval, afterStop: [...calls] };
+        } finally {
+          yield* loop.stop();
+        }
+      }).pipe(Effect.provide(TestClock.layer())),
     );
-
-    expect(reportedFailure).toMatchObject({
-      _tag: "HostOperationError",
-      operation: "task-sync.log-iteration-failure",
-      cause: persistenceError,
-    });
-    expect(stopResult._tag).toBe("Failure");
-    if (stopResult._tag === "Success") {
-      throw new Error("expected task-sync loop logging failure");
-    }
-    expect(stopResult.failure).toMatchObject({
-      _tag: "HostOperationError",
-      operation: "task-sync.log-iteration-failure",
-      cause: persistenceError,
+    expect(snapshots).toEqual({
+      startup: [{ repoPath: "/repo" }, { repoPath: "/other" }],
+      beforeInterval: [{ repoPath: "/repo" }, { repoPath: "/other" }],
+      nextInterval: [{ repoPath: "/repo" }, { repoPath: "/other" }, { repoPath: "/other" }],
+      afterStop: [{ repoPath: "/repo" }, { repoPath: "/other" }, { repoPath: "/other" }],
     });
   });
+
+  test.each(["workspace lookup", "workspace sync"])(
+    "reports lifecycle logging failures during %s to the live owner before shutdown",
+    async (failureStage) => {
+      const { eventBus } = createEventBus();
+      const persistenceError = new HostOperationError({
+        operation: "host.lifecycle.log-error",
+        message: "persistent task-sync log failed",
+      });
+      const calls: string[] = [];
+      const logs: string[] = [];
+      const { reportedFailure, stopResult } = await Effect.runPromise(
+        Effect.gen(function* () {
+          const failureReported = yield* Deferred.make<HostOperationError>();
+          const service = createTaskSyncServiceForTest({
+            eventBus,
+            intervalMs: 0,
+            logger: {
+              error: (message) =>
+                Effect.gen(function* () {
+                  logs.push(message);
+                  return yield* persistenceError;
+                }),
+            },
+            onBackgroundFailure: (failure) =>
+              Deferred.succeed(failureReported, failure).pipe(Effect.asVoid),
+            taskService: {
+              repoPullRequestSyncDetailed({ repoPath }) {
+                return Effect.gen(function* () {
+                  calls.push(repoPath);
+                  return yield* new HostOperationError({
+                    operation: "test.task-sync.provider",
+                    message: "provider unavailable",
+                  });
+                });
+              },
+            },
+            workspaceSettingsService: {
+              listWorkspaces() {
+                if (failureStage === "workspace sync") {
+                  return Effect.succeed([workspace("/repo"), workspace("/other")]);
+                }
+                return Effect.fail(
+                  new HostOperationError({
+                    operation: "test.task-sync.list-workspaces",
+                    message: "workspace read failed",
+                  }),
+                );
+              },
+            },
+          });
+
+          const loop = yield* service.startPullRequestSyncLoop();
+          const reportedFailure = yield* Deferred.await(failureReported);
+          const stopResult = yield* Effect.result(loop.stop());
+          return { reportedFailure, stopResult };
+        }),
+      );
+
+      expect(reportedFailure).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "task-sync.log-iteration-failure",
+        cause: persistenceError,
+      });
+      expect(logs).toHaveLength(1);
+      expect(calls).toEqual(failureStage === "workspace sync" ? ["/repo"] : []);
+      expect(stopResult._tag).toBe("Failure");
+      if (stopResult._tag === "Success") {
+        throw new Error("expected task-sync loop logging failure");
+      }
+      expect(stopResult.failure).toMatchObject({
+        _tag: "HostOperationError",
+        operation: "task-sync.log-iteration-failure",
+        cause: persistenceError,
+      });
+    },
+  );
 
   test("waits for an admitted lifecycle log append before shutdown completes", async () => {
     const { eventBus } = createEventBus();
@@ -564,6 +555,7 @@ describe("task mutation gate and pull request sync", () => {
 
   test("stops without waiting for an in-flight pull request sync iteration", async () => {
     const { eventBus, events } = createEventBus();
+    const calls: string[] = [];
     const eventsBeforeAndAfterRelease = await Effect.runPromise(
       Effect.gen(function* () {
         const syncStarted = yield* Deferred.make<void>();
@@ -573,9 +565,10 @@ describe("task mutation gate and pull request sync", () => {
           eventBus,
           intervalMs: 1,
           taskService: {
-            repoPullRequestSyncDetailed() {
+            repoPullRequestSyncDetailed({ repoPath }) {
               return Effect.uninterruptible(
                 Effect.gen(function* () {
+                  calls.push(repoPath);
                   yield* Deferred.succeed(syncStarted, undefined);
                   yield* Deferred.await(releaseSync);
                   yield* Deferred.succeed(syncFinished, undefined);
@@ -586,20 +579,7 @@ describe("task mutation gate and pull request sync", () => {
           },
           workspaceSettingsService: {
             listWorkspaces() {
-              return Effect.succeed([
-                {
-                  workspaceId: "repo",
-                  workspaceName: "Repo",
-                  abbreviation: null,
-                  tileColor: null,
-                  repoPath: "/repo",
-                  isActive: true,
-                  hasConfig: true,
-                  configuredWorktreeBasePath: null,
-                  defaultWorktreeBasePath: null,
-                  effectiveWorktreeBasePath: null,
-                },
-              ]);
+              return Effect.succeed([workspace("/repo", true), workspace("/other")]);
             },
           },
         });
@@ -617,5 +597,6 @@ describe("task mutation gate and pull request sync", () => {
     );
 
     expect(eventsBeforeAndAfterRelease).toEqual({ beforeRelease: [], afterRelease: [] });
+    expect(calls).toEqual(["/repo"]);
   });
 });
