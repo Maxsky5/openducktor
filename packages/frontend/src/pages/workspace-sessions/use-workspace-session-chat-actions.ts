@@ -45,6 +45,7 @@ export function useWorkspaceSessionChatActions(
   const store = useAgentSessionsContext();
   const operations = useAgentOperations();
   const queryClient = useQueryClient();
+  const recordIdentity = workspaceSessionIdentity(record);
   const title = workspaceSessionTitle(record);
   const isCurrentWorkspace = useCallback(
     () => store.getActivitySnapshot().workspaceRepoPath === workspace.repoPath,
@@ -120,6 +121,7 @@ export function useWorkspaceSessionChatActions(
     );
   }, [host, queryClient, record.id, store, workspace.repoPath, workspace.workspaceId]);
   const preparation = useChatSessionPreparation({
+    identity: recordIdentity,
     targetKey: JSON.stringify([workspace.workspaceId, record.id, visitKey]),
     enabled: preparationEnabled && record.archivedAt === null,
     prepare,
@@ -324,7 +326,6 @@ export function useWorkspaceSessionChatActions(
     [continueInterruptedTurn, isMounted, title, isSendInFlight],
   );
 
-  const recordIdentity = workspaceSessionIdentity(record);
   const session = useAgentSession(recordIdentity);
   const recordSessionKey = recordIdentity === null ? null : agentSessionIdentityKey(recordIdentity);
   const {
