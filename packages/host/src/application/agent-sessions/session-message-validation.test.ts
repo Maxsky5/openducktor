@@ -40,10 +40,15 @@ const attachment = {
   },
 };
 
-const setup = (runtimeKind: RuntimeKind, catalog?: Effect.Effect<AgentRuntimeCatalog>) => {
+const setup = (
+  runtimeKind: RuntimeKind,
+  catalog?: Effect.Effect<AgentRuntimeCatalog>,
+  activities: AgentSessionLiveSnapshot["activity"][] = [],
+) => {
   const recipient = { ...target, runtimeKind };
   let savedModel = { ...selection(), runtimeKind };
   let attached = true;
+  let stored = true;
   let nativeModel = savedModel;
   const order: string[] = [];
   const background: Effect.Effect<void>[] = [];
@@ -113,6 +118,7 @@ const setup = (runtimeKind: RuntimeKind, catalog?: Effect.Effect<AgentRuntimeCat
     runtime: {
       read: () =>
         Effect.sync(() => {
+          activity = activities.shift() ?? activity;
           if (++readCount === 2) waiting.resolve();
           return attached
             ? { type: "live" as const, session: live() }
@@ -134,7 +140,11 @@ const setup = (runtimeKind: RuntimeKind, catalog?: Effect.Effect<AgentRuntimeCat
       loadContext: unexpected,
       loadSessionDiff: unexpected,
       replyApproval: unexpected,
-      replyQuestion: unexpected,
+      replyQuestion: () =>
+        Effect.sync(() => {
+          order.push("answer");
+          activity = "running";
+        }),
       updateSessionModel: (input) =>
         Effect.sync(() => {
           input.workStartGuard?.assertCurrent();
@@ -171,16 +181,20 @@ const setup = (runtimeKind: RuntimeKind, catalog?: Effect.Effect<AgentRuntimeCat
     },
     tasks: {
       agentSessionsList: () =>
-        Effect.succeed([
-          {
-            externalSessionId: "root",
-            runtimeKind,
-            workingDirectory: "/repo/tree",
-            role: "build",
-            selectedModel: savedModel,
-            startedAt: "2026-10-13T12:00:00Z",
-          },
-        ]),
+        Effect.succeed(
+          stored
+            ? [
+                {
+                  externalSessionId: "root",
+                  runtimeKind,
+                  workingDirectory: "/repo/tree",
+                  role: "build",
+                  selectedModel: savedModel,
+                  startedAt: "2026-10-13T12:00:00Z",
+                },
+              ]
+            : [],
+        ),
       agentSessionUpsert: unexpected,
       agentSessionUpdateModel: () => Effect.succeed(true),
       transitionTask: unexpected,
@@ -219,6 +233,9 @@ const setup = (runtimeKind: RuntimeKind, catalog?: Effect.Effect<AgentRuntimeCat
     waiting: waiting.promise,
     detach: () => {
       attached = false;
+    },
+    removeRecord: () => {
+      stored = false;
     },
     setActivity: (value: typeof activity) => {
       activity = value;
@@ -318,6 +335,69 @@ const settingsCatalog: AgentRuntimeCatalog = {
 };
 
 describe("explicit settings ordering", () => {
+  test.each(["waiting_for_question", "waiting_for_permission"] as const)(
+    "keeps settings pending when the runtime read changes to %s",
+    async (activity) => {
+      const h = setup("opencode", Effect.succeed(settingsCatalog), ["running", activity]);
+      let settled = false;
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      )
+        .catch((cause: Error) => cause)
+        .then((result) => {
+          settled = true;
+          return result;
+        });
+      try {
+        await h.waiting;
+        await Effect.runPromise(Effect.yieldNow);
+        expect(settled).toBe(false);
+        expect(h.native.models).toBe(0);
+        h.setActivity("idle");
+        await Effect.runPromise(
+          h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+        );
+        expect(await updating).toBeUndefined();
+        expect(h.order).toEqual(["settings"]);
+      } finally {
+        await Effect.runPromise(h.commands.shutdownOperations());
+      }
+    },
+  );
+
+  test("answers a question while settings wait for the turn to finish", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    const updating = Effect.runPromise(
+      h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+    ).catch((cause: Error) => cause);
+    try {
+      await h.waiting;
+      h.setActivity("waiting_for_question");
+      await Effect.runPromise(
+        h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+      );
+      await Effect.runPromise(
+        h.commands.replyQuestion({
+          ...h.target,
+          requestId: "question-1",
+          answers: [["Proceed"]],
+        }),
+      );
+      expect(h.order).toEqual(["answer"]);
+      expect(h.native.models).toBe(0);
+      h.setActivity("idle");
+      await Effect.runPromise(
+        h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+      );
+      expect(await updating).toBeUndefined();
+      expect(h.order).toEqual(["answer", "settings"]);
+      expect(h.native).toEqual({ sends: 0, models: 1 });
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
   test("applies settings before an idle event drains a queued message", async () => {
     const h = setup("opencode", Effect.succeed(settingsCatalog));
     h.setActivity("running");
@@ -366,16 +446,25 @@ describe("explicit settings ordering", () => {
     "Stop cancels pending settings, catalog pending=%s",
     async (catalogPending) => {
       const gate = Deferred.makeUnsafe<void>();
+      const catalogRead = Promise.withResolvers<void>();
       const h = setup(
         "opencode",
-        (catalogPending ? Deferred.await(gate) : Effect.void).pipe(Effect.as(settingsCatalog)),
+        Effect.sync(() => catalogRead.resolve()).pipe(
+          Effect.andThen(catalogPending ? Deferred.await(gate) : Effect.void),
+          Effect.as(settingsCatalog),
+        ),
       );
-      h.setActivity("running");
+      h.setActivity(catalogPending ? "idle" : "running");
       const updating = Effect.runPromise(
         h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
       ).catch((cause: Error) => cause);
       try {
-        const stopping = Effect.runPromise(h.commands.stopSession(h.target));
+        await (catalogPending ? catalogRead.promise : h.waiting);
+        const stopStarted = Promise.withResolvers<void>();
+        const stopping = Effect.runPromise(
+          h.commands.stopSession(h.target, { onValidated: () => stopStarted.resolve() }),
+        );
+        await stopStarted.promise;
         Deferred.doneUnsafe(gate, Exit.void);
         await stopping;
         expect(await updating).toMatchObject({ message: expect.stringContaining("Stop canceled") });
@@ -386,6 +475,27 @@ describe("explicit settings ordering", () => {
       }
     },
   );
+
+  test("rechecks the saved session after waiting for the turn to finish", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    const updating = Effect.runPromise(
+      h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+    ).catch((cause: Error) => cause);
+    try {
+      await h.waiting;
+      h.removeRecord();
+      h.setActivity("idle");
+      await Effect.runPromise(
+        h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+      );
+      expect(await updating).toBeInstanceOf(Error);
+      expect(h.native.models).toBe(0);
+      expect(h.order).toEqual([]);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
 
   test("a replacement snapshot cancels settings for a removed session", async () => {
     const h = setup("opencode", Effect.succeed(settingsCatalog));

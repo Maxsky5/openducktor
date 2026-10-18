@@ -405,21 +405,28 @@ export const createAgentSessionCommandService = ({
           "model",
           Effect.gen(function* () {
             yield* checkPending(ref);
-            const prepared = yield* policy.prepareModelUpdate(ref);
-            if (input.model)
-              yield* turnPreparation.model(
-                ref,
-                {
-                  ...input.model,
-                  profileId: input.model.profileId ?? prepared.previousModel?.profileId,
-                  runtimeKind: input.runtimeKind,
-                },
-                prepared.previousModel
-                  ? { ...prepared.previousModel, runtimeKind: input.runtimeKind }
-                  : null,
-              );
             yield* waitForIdle(ref);
-            yield* updateModel(prepared);
+            yield* policy.run(
+              ref,
+              "model",
+              Effect.gen(function* () {
+                yield* checkPending(ref);
+                const prepared = yield* policy.prepareModelUpdate(ref);
+                if (input.model)
+                  yield* turnPreparation.model(
+                    ref,
+                    {
+                      ...input.model,
+                      profileId: input.model.profileId ?? prepared.previousModel?.profileId,
+                      runtimeKind: input.runtimeKind,
+                    },
+                    prepared.previousModel
+                      ? { ...prepared.previousModel, runtimeKind: input.runtimeKind }
+                      : null,
+                  );
+                yield* updateModel(prepared);
+              }),
+            );
           }),
           undefined,
           input.workStartGuard?.assertCurrent,

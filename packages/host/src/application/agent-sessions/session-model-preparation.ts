@@ -51,9 +51,7 @@ export const createSessionModelPreparation = ({
               field: "externalSessionId",
               message: "The session is not attached. Reopen it before changing its settings.",
             });
-          return live.session.activity === "running" || live.session.activity === "retrying"
-            ? Deferred.await(waiter)
-            : Effect.void;
+          return live.session.activity === "idle" ? Effect.void : Deferred.await(waiter);
         }),
         Effect.andThen(assertCurrent),
         Effect.ensuring(Effect.sync(() => idleWaiters.delete(key))),
