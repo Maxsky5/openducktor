@@ -1123,7 +1123,7 @@ test.each(["retry", "streaming", "draft", "record-failure"] as const)(
   5000,
 );
 
-test("workspace chat keeps a retained transcript when the workspace switches away and back", async () => {
+test("workspace chat reuses its loaded transcript when the view remounts", async () => {
   const workspace = { workspaceId: "A", workspaceName: "Test", repoPath: "/repo" };
   const entry: WorkspaceSession = {
     id: "session-1",
@@ -1177,14 +1177,12 @@ test("workspace chat keeps a retained transcript when the workspace switches awa
     expect(counters.baselineLoads).toBe(0);
 
     await act(async () => {
-      store.resetWorkspace("/other");
-      store.resetWorkspace("/repo");
       view.rerender(<Harness key="return" />);
     });
 
     await view.findByText("Retained answer", {}, { timeout: 2000 });
     expect(counters.baselineLoads).toBe(0);
-    await waitFor(() => expect(counters.revalidations).toBe(1));
+    expect(counters.revalidations).toBe(0);
   } finally {
     view.unmount();
     configureShellBridge(createUnavailableShellBridge());

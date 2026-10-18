@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useEffect, useMemo } from "react";
 import { createWorkspaceActivityObserver } from "@/features/workspace-activity/workspace-activity-observer";
-import { hostBridge } from "@/lib/host-client";
+import { hostBridge, hostClient } from "@/lib/host-client";
 import { observeWorkspaceSessionRecords } from "@/state/queries/workspace-session-updates";
 import { createAgentSessionListLiveSync } from "@/state/queries/agent-sessions";
 import { createAgentTurnGitSync } from "@/state/queries/agent-turn-git-sync";
@@ -9,16 +9,46 @@ import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { WorkspaceActivityContext } from "../workspace-activity/workspace-activity-context";
 import { createWorkspaceArchivedSessionsPort } from "../workspace-activity/archived-sessions-port";
+import {
+  createWorkspaceSessionLiveSource,
+  WorkspaceSessionLiveSourceContext,
+} from "../workspace-activity/workspace-session-live-source";
 
-/**
- * Owns the live activity projection that feeds the workspace rail tiles.
- *
- * It is mounted inside the workspace state provider so it observes the same
- * workspace list the rail renders, and it does not depend on notifications.
- */
+/** Keeps one live stream per open workspace for activity and session readers. */
 export function WorkspaceActivityProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
   const { workspaces } = useWorkspaceStateContext();
+  const liveSource = useMemo(
+    () =>
+      createWorkspaceSessionLiveSource(
+        async (input, listener) => {
+          const updateLists = createAgentSessionListLiveSync(queryClient);
+          const git = createAgentTurnGitSync(queryClient);
+          const history = getSessionHistoryFreshnessTracker(queryClient).observeWorkspace(
+            input.repoPath,
+          );
+          try {
+            const stop = await hostBridge.observeAgentSessionLive(input, (envelope) => {
+              history.recordEvent(envelope);
+              updateLists(envelope);
+              git.observe(envelope);
+              listener(envelope);
+            });
+            return () => {
+              history.close();
+              git.dispose();
+              stop();
+            };
+          } catch (cause) {
+            history.close();
+            git.dispose();
+            throw cause;
+          }
+        },
+        (input) => hostClient.agentSessionLiveAttach(input),
+      ),
+    [queryClient],
+  );
 
   const archivedSessions = useMemo(
     () => createWorkspaceArchivedSessionsPort(queryClient),
@@ -28,37 +58,13 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
   const observer = useMemo(
     () =>
       createWorkspaceActivityObserver({
-        observe: async (input, listener) => {
-          const syncLists = createAgentSessionListLiveSync(queryClient);
-          const syncGit = createAgentTurnGitSync(queryClient);
-          const historyObservation = getSessionHistoryFreshnessTracker(
-            queryClient,
-          ).observeWorkspace(input.repoPath);
-          try {
-            const stop = await hostBridge.observeAgentSessionLive(input, (envelope) => {
-              historyObservation.recordEvent(envelope);
-              syncLists(envelope);
-              syncGit.observe(envelope);
-              listener(envelope);
-            });
-            return () => {
-              historyObservation.close();
-              syncGit.dispose();
-              stop();
-            };
-          } catch (cause) {
-            historyObservation.close();
-            syncGit.dispose();
-            throw cause;
-          }
-        },
+        observe: liveSource.observeWorkspace,
         archivedSessions,
       }),
-    [archivedSessions, queryClient],
+    [archivedSessions, liveSource],
   );
 
-  // The archived chat lists stay current from the ordered record stream, so no
-  // tile has to poll or re-query on a timer.
+  // Saved chat events keep archived lists current without polling.
   useEffect(
     () =>
       observeWorkspaceSessionRecords(queryClient, (message) => {
@@ -80,7 +86,9 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
 
   return (
     <WorkspaceActivityContext.Provider value={observer}>
-      {children}
+      <WorkspaceSessionLiveSourceContext.Provider value={liveSource}>
+        {children}
+      </WorkspaceSessionLiveSourceContext.Provider>
     </WorkspaceActivityContext.Provider>
   );
 }

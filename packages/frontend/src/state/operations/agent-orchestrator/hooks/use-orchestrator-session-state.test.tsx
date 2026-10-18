@@ -4,10 +4,6 @@ import { QueryClient } from "@tanstack/react-query";
 import { getSessionHistoryFreshnessTracker } from "@/state/queries/agent-session-history-freshness-tracker";
 import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
-import {
-  createAgentSessionTranscriptEventConsumer,
-  type AgentSessionTranscriptEventConsumer,
-} from "../events/session-transcript-events";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
@@ -60,10 +56,7 @@ const createSessionFixture = (): AgentSessionState => ({
   selectedModel: null,
 });
 
-type HookArgs = Omit<
-  Parameters<typeof useOrchestratorSessionState>[0],
-  "historyFreshness" | "flushTranscriptEvents"
-> & { flushTranscriptEvents?: () => void };
+type HookArgs = Omit<Parameters<typeof useOrchestratorSessionState>[0], "historyFreshness">;
 
 const createHookHarness = (initialArgs: HookArgs) => {
   let latest: ReturnType<typeof useOrchestratorSessionState> | null = null;
@@ -74,7 +67,6 @@ const createHookHarness = (initialArgs: HookArgs) => {
     latest = useOrchestratorSessionState({
       ...currentArgs,
       historyFreshness,
-      flushTranscriptEvents: currentArgs.flushTranscriptEvents ?? (() => {}),
     });
     return null;
   };
@@ -121,134 +113,6 @@ const createHookHarness = (initialArgs: HookArgs) => {
 };
 
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
-  test("commits buffered transcript events before retaining the old workspace", async () => {
-    const session = createSessionFixture();
-    let consumer: AgentSessionTranscriptEventConsumer | null = null;
-    const flushTranscriptEvents = () => consumer?.close();
-    const harness = createHookHarness({
-      workspaceRepoPath: "/tmp/repo-a",
-      tasks: [taskFixture],
-      flushTranscriptEvents,
-    });
-    try {
-      await harness.mount();
-      const { sessionStore, sessionTurnState } = harness.getLatest();
-      consumer = createAgentSessionTranscriptEventConsumer(
-        {
-          readSession: sessionStore.getSessionSnapshot,
-          ensureSession: (identity, createSession) =>
-            sessionStore.getSessionSnapshot(identity) ?? createSession(),
-          updateSession: sessionStore.updateSession,
-          updateSessionTodos: () => {},
-          sessionTurnState,
-        },
-        { batchWindowMs: 1_000 },
-      );
-      await harness.run(() => {
-        sessionStore.replaceSession(session);
-        consumer!.handle({
-          type: "assistant_delta",
-          externalSessionId: session.externalSessionId,
-          sessionRef: {
-            repoPath: "/tmp/repo-a",
-            runtimeKind: session.runtimeKind,
-            workingDirectory: session.workingDirectory,
-            externalSessionId: session.externalSessionId,
-          },
-          messageId: "buffered-message",
-          channel: "text",
-          delta: "Buffered text",
-          timestamp: session.startedAt,
-        });
-      });
-      expect(sessionStore.getSessionSnapshot(session)?.messages.items).toHaveLength(0);
-      await harness.update({
-        workspaceRepoPath: "/tmp/repo-b",
-        tasks: [taskFixture],
-        flushTranscriptEvents,
-      });
-      await harness.update({
-        workspaceRepoPath: "/tmp/repo-a",
-        tasks: [taskFixture],
-        flushTranscriptEvents,
-      });
-      expect(sessionStore.getSessionSnapshot(session)?.messages.items).toContainEqual(
-        expect.objectContaining({ content: "Buffered text" }),
-      );
-    } finally {
-      consumer?.close();
-      await harness.unmount();
-    }
-  });
-  test("scopes session reads to the active repository on repo change", async () => {
-    const harness = createHookHarness({
-      workspaceRepoPath: "/tmp/repo-a",
-      tasks: [taskFixture],
-    });
-    const session = createSessionFixture();
-    try {
-      await harness.mount();
-      await harness.run((hook) => {
-        hook.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
-      });
-
-      await harness.update({
-        workspaceRepoPath: "/tmp/repo-b",
-        tasks: [taskFixture],
-      });
-
-      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("restores a retained session when the workspace returns", async () => {
-    const session = {
-      ...createSessionFixture(),
-      historyLoadState: "loaded" as const,
-      messages: createSessionMessagesState("external-1", [
-        {
-          id: "message-1",
-          role: "assistant" as const,
-          content: "Retained transcript",
-          timestamp: "2026-03-01T09:00:00.000Z",
-        },
-      ]),
-    };
-    const harness = createHookHarness({
-      workspaceRepoPath: "/tmp/repo-a",
-      tasks: [taskFixture],
-    });
-    try {
-      await harness.mount();
-      await harness.run((hook) => {
-        hook.sessionStore.setSessionCollection(() => createAgentSessionCollection([session]));
-      });
-
-      await harness.update({
-        workspaceRepoPath: "/tmp/repo-b",
-        tasks: [taskFixture],
-      });
-
-      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toBeNull();
-
-      await harness.update({
-        workspaceRepoPath: "/tmp/repo-a",
-        tasks: [taskFixture],
-      });
-
-      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)?.messages).toBe(
-        session.messages,
-      );
-      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)?.historyLoadState).toBe(
-        "stale",
-      );
-    } finally {
-      await harness.unmount();
-    }
-  });
-
   test("keeps task refs synchronized with latest hook inputs", async () => {
     const nextTask: TaskCard = {
       ...taskFixture,
@@ -305,7 +169,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     }
   });
 
-  test("clears assistant turn timing on workspace change", async () => {
+  test("invalidates controller work and clears turn state on unmount", async () => {
     const harness = createHookHarness({
       workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
@@ -322,10 +186,10 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
         harness.getLatest().sessionTurnState.timing.readTurnUserMessageStartedAtMs("session-1"),
       ).toBe(111);
 
-      await harness.update({
-        workspaceRepoPath: "/tmp/repo-b",
-        tasks: [taskFixture],
-      });
+      const before = harness.getLatest().repoEpochRef.current;
+      await harness.unmount();
+      expect(harness.getLatest().repoEpochRef.current).toBeGreaterThan(before);
+      expect(harness.getLatest().currentWorkspaceRepoPathRef.current).toBeNull();
 
       expect(
         harness.getLatest().sessionTurnState.timing.readTurnUserMessageStartedAtMs("session-1"),

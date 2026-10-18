@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   type AgentMessageQueuesStore,
   createAgentMessageQueuesStore,
@@ -19,10 +19,7 @@ import type {
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
 import type { EnsureSession, UpdateSession } from "./events/session-event-types";
-import {
-  createAgentSessionTranscriptEventConsumer,
-  type AgentSessionTranscriptEventConsumer,
-} from "./events/session-transcript-events";
+import { createAgentSessionTranscriptEventConsumer } from "./events/session-transcript-events";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
 import { createLoadAgentSessionHistory } from "./history/session-history-loader";
@@ -44,15 +41,15 @@ type UseAgentOrchestratorOperationsArgs = {
   isLoadingTasks: boolean;
   refreshTaskData: (repoPath: string, taskIdOrIds?: string | string[]) => Promise<void>;
   agentEngine: AgentEnginePort;
+  sessionStore?: AgentSessionsStore;
+  messageQueues?: AgentMessageQueuesStore;
   /**
-   * Optional dependency seam for tests and specialized callers.
-   * Pass a stable reference, such as a module-level object or a `useMemo` result;
-   * an inline object recreates downstream session loading callbacks on every render.
+   * Keep this object stable. An inline object rebuilds session history callbacks on each render.
    */
   dependencies?: AgentOrchestratorDependencies;
 };
 
-type UseAgentOrchestratorOperationsResult = {
+export type AgentOrchestratorState = {
   sessionStore: AgentSessionsStore;
   messageQueues: AgentMessageQueuesStore;
   operations: AgentOperationsContextValue;
@@ -66,8 +63,10 @@ export function useAgentOrchestratorOperations({
   isLoadingTasks,
   refreshTaskData,
   agentEngine,
+  sessionStore: store,
+  messageQueues: sharedQueues,
   dependencies,
-}: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
+}: UseAgentOrchestratorOperationsArgs): AgentOrchestratorState {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const workspaceId = activeWorkspace?.workspaceId ?? null;
   const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
@@ -77,15 +76,13 @@ export function useAgentOrchestratorOperations({
   );
   const { queryClient, hostPort, liveSessionHostPort } = resolvedDependencies;
   // The host owns every queue for the app lifetime. This store only mirrors them.
-  const [messageQueues] = useState(createAgentMessageQueuesStore);
-  const transcriptEventsRef = useRef<AgentSessionTranscriptEventConsumer | null>(null);
-  const flushTranscriptEvents = useCallback(() => transcriptEventsRef.current?.close(), []);
+  const [messageQueues] = useState(() => sharedQueues ?? createAgentMessageQueuesStore());
   const { sessionStore, taskRef, currentWorkspaceRepoPathRef, repoEpochRef, sessionTurnState } =
     useOrchestratorSessionState({
       workspaceRepoPath,
       tasks,
       historyFreshness: getSessionHistoryFreshnessTracker(queryClient),
-      flushTranscriptEvents,
+      store,
     });
   const invalidateSessionStopQueries = useCallback(
     ({ repoPath }: { repoPath: string; taskId: string }) =>
@@ -136,12 +133,6 @@ export function useAgentOrchestratorOperations({
     [ensureSession, queryClient, sessionStore, sessionTurnState, updateSession],
   );
   const historyReadGeneration = useMemo(() => createSessionHistoryReadGeneration(), []);
-  useLayoutEffect(() => {
-    transcriptEventsRef.current = transcriptEvents;
-    return () => {
-      transcriptEventsRef.current = null;
-    };
-  }, [transcriptEvents]);
   const sessionHistoryLoaders = useMemo(() => {
     const loaderArgs = {
       workspaceRepoPath,
@@ -289,7 +280,7 @@ export function useAgentOrchestratorOperations({
     [sessionHistoryLoaders],
   );
 
-  return useMemo<UseAgentOrchestratorOperationsResult>(
+  return useMemo<AgentOrchestratorState>(
     () => ({
       sessionStore,
       messageQueues,

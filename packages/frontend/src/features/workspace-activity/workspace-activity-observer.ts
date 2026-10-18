@@ -83,7 +83,7 @@ export const createWorkspaceActivityObserver = ({
   observe(
     input: { repoPath: string },
     listener: (envelope: AgentSessionLiveEnvelope) => void,
-  ): Promise<() => void>;
+  ): () => void;
   archivedSessions: WorkspaceActivityArchivedSessionsPort;
 }): WorkspaceActivityObserver => {
   const observations = new Map<string, Observation>();
@@ -167,7 +167,7 @@ export const createWorkspaceActivityObserver = ({
     };
     void archivedSessions.load(workspace.workspaceId).then(settleArchived, settleArchived);
 
-    void observe({ repoPath: workspace.repoPath }, (envelope) => {
+    const receive = (envelope: AgentSessionLiveEnvelope): void => {
       if (observation.cancelled) {
         return;
       }
@@ -177,24 +177,19 @@ export const createWorkspaceActivityObserver = ({
       }
       observation.projection = projection;
       emit();
-    })
-      .then((stop) => {
-        if (observation.cancelled) {
-          stop();
-          return;
-        }
-        observation.stop = stop;
-      })
-      .catch((cause: unknown) => {
-        if (observation.cancelled) {
-          return;
-        }
-        observation.projection = {
-          ...observation.projection,
-          unavailableReason: errorMessage(cause),
-        };
-        emit();
-      });
+    };
+    try {
+      observation.stop = observe({ repoPath: workspace.repoPath }, receive);
+    } catch (cause) {
+      if (observation.cancelled) {
+        return;
+      }
+      observation.projection = {
+        ...observation.projection,
+        unavailableReason: errorMessage(cause),
+      };
+      emit();
+    }
   };
 
   return {

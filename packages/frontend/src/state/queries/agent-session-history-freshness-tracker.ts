@@ -13,10 +13,8 @@ type HistoryEventObserver = {
 
 type HistoryProgressTracker = {
   captureReadVersion: (repoPath: string, identity: AgentSessionIdentity) => void;
-  restoreVersion: (identity: AgentSessionIdentity, version: SessionHistoryVersion) => void;
   getVersion: (identity: AgentSessionIdentity) => SessionHistoryVersion | null;
   recordEvent: (envelope: AgentSessionLiveEnvelope) => void;
-  reset: () => void;
 };
 
 export type SessionHistoryFreshnessTracker = {
@@ -231,9 +229,6 @@ const createSessionHistoryFreshnessTracker = (
         if (version) versions.set(key, version);
         else versions.delete(key);
       },
-      restoreVersion(identity: AgentSessionIdentity, version: SessionHistoryVersion): void {
-        versions.set(agentSessionIdentityKey(identity), version);
-      },
       getVersion(identity: AgentSessionIdentity): SessionHistoryVersion | null {
         return versions.get(agentSessionIdentityKey(identity)) ?? null;
       },
@@ -248,10 +243,6 @@ const createSessionHistoryFreshnessTracker = (
             versions.set(key, { epoch: version.epoch, revision: envelope.sequence });
           }
         }
-      },
-      reset(): void {
-        versions.clear();
-        sessions.clear();
       },
     };
   };

@@ -56,10 +56,10 @@ export const projectWorkspaceSessionLaunch = (
     updateWorkspaceSessionQueries(queryClient, outcome.workspaceId, record);
   }
   const { session } = outcome;
-  if (!session || !record || store.getActivitySnapshot().workspaceRepoPath !== outcome.repoPath)
-    return;
+  const workspaceStore = store.getWorkspaceStore(outcome.repoPath);
+  if (!session || !record || !workspaceStore) return;
   const boundRecord = record;
-  store.setSessionCollection((collection) => {
+  workspaceStore.setSessionCollection((collection) => {
     const current = getAgentSession(collection, session);
     let next = applyWorkspaceSessionRecords(collection, [boundRecord]);
     if (outcome.acceptedMessage?.type === "user_message") {

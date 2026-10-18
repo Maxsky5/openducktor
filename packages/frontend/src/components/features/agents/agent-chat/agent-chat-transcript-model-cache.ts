@@ -9,6 +9,7 @@ export type TranscriptModelCacheEntry = AgentChatTranscriptModel & {
   session: AgentChatTranscriptSession;
   // Queried history has no live baseline and must stay outside store updates.
   baseline: AgentChatTranscriptSession["messages"] | null;
+  lifetime: symbol | null;
   showThinkingMessages: boolean;
 };
 
@@ -29,6 +30,7 @@ export const writeTranscriptModelCacheEntry = ({
   cache,
   touch = true,
   baseline = null,
+  lifetime = null,
 }: {
   session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
@@ -36,12 +38,14 @@ export const writeTranscriptModelCacheEntry = ({
   cache: TranscriptModelCache;
   touch?: boolean;
   baseline?: AgentChatTranscriptSession["messages"] | null;
+  lifetime?: symbol | null;
 }): void => {
   const cacheKey = keyFor(agentSessionIdentityKey(session), showThinkingMessages);
   const entry = {
     ...transcriptModel,
     session,
     baseline,
+    lifetime,
     showThinkingMessages,
   };
   if (touch) {
@@ -56,15 +60,17 @@ export const readTranscriptModelCache = ({
   showThinkingMessages,
   cache,
   touchCurrent = false,
+  lifetime = null,
 }: {
   session: AgentChatTranscriptSession;
   showThinkingMessages: boolean;
   cache: TranscriptModelCache;
   touchCurrent?: boolean;
+  lifetime?: symbol | null;
 }): TranscriptModelCacheLookup => {
   const cacheKey = keyFor(agentSessionIdentityKey(session), showThinkingMessages);
   const cacheEntry = cache.get(cacheKey);
-  if (!cacheEntry) {
+  if (!cacheEntry || cacheEntry.lifetime !== lifetime) {
     return { current: null, latest: null };
   }
 

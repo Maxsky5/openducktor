@@ -94,7 +94,7 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
     ];
   });
   const observer = createWorkspaceActivityObserver({
-    observe: async ({ repoPath }, listener) => {
+    observe: ({ repoPath }, listener) => {
       listeners.set(repoPath, listener);
       return () => listeners.delete(repoPath);
     },

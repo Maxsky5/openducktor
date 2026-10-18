@@ -44,14 +44,8 @@ import {
   buildSessionErrorNoticeMessage,
   buildSessionPolicyNoticeMessage,
 } from "./operations/agent-orchestrator/support/session-notice-messages";
-import {
-  markSessionHistoriesStale,
-  markSessionHistoryStale,
-} from "./operations/agent-orchestrator/history/session-history-freshness";
-import type {
-  SessionHistoryFreshnessTracker,
-  SessionHistoryVersion,
-} from "./queries/agent-session-history-freshness-tracker";
+import { markSessionHistoryStale } from "./operations/agent-orchestrator/history/session-history-freshness";
+import type { SessionHistoryFreshnessTracker } from "./queries/agent-session-history-freshness-tracker";
 
 export {
   type AgentActivitySessionsSnapshot,
@@ -81,7 +75,14 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   collection: AgentSessionCollection;
   result: Result;
 };
+export type AgentSessionSource = {
+  session: AgentSessionState;
+  lifetime: symbol;
+};
+
 export type AgentSessionsStore = {
+  getWorkspaceStore: (repoPath: string) => AgentSessionsStore | null;
+  getSessionSource: (identity: AgentSessionIdentity) => AgentSessionSource | null;
   subscribe: (listener: Listener) => () => void;
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   listSessionSnapshots: () => AgentSessionState[];
@@ -102,22 +103,16 @@ export type AgentSessionsStore = {
   /** The tasks that own workflow sessions in a workspace collection. */
   listSessionTaskIds: (repoPath: string) => string[];
   removeTaskSessions: (repoPath: string, taskIds: string[]) => void;
-  resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
 export const createAgentSessionsStore = (
-  initialWorkspaceRepoPath: string | null = null,
+  workspaceRepoPath: string | null = null,
   historyFreshness?: SessionHistoryFreshnessTracker,
 ): AgentSessionsStore => {
-  let workspaceRepoPath = initialWorkspaceRepoPath;
-  const pendingTaskRemovals = new Map<string, Set<string>>();
-  const retainedCollections = new Map<string, AgentSessionCollection>();
-  const retainedHistoryVersions = new Map<string, Map<string, SessionHistoryVersion>>();
+  // Message revisions can repeat when a workspace creates a new collection.
+  const lifetime = Symbol();
   const historyProgress = historyFreshness?.createHistoryProgressTracker();
   let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
-  if (workspaceRepoPath !== null) {
-    retainedCollections.set(workspaceRepoPath, sessionCollection);
-  }
   let activitySnapshot = createEmptyAgentActivitySnapshot(workspaceRepoPath);
   type VisiblePendingInputSnapshot = {
     collection: AgentSessionCollection;
@@ -342,57 +337,24 @@ export const createAgentSessionsStore = (
     }));
   };
 
-  const retainActiveCollection = (): void => {
-    if (workspaceRepoPath === null) {
-      return;
-    }
-    const versions = new Map<string, SessionHistoryVersion>();
-    for (const session of listAgentSessions(sessionCollection)) {
-      if (session.historyLoadState !== "loaded" || session.historyLoadFailure) continue;
-      const version = historyProgress?.getVersion(session);
-      if (version) versions.set(agentSessionIdentityKey(session), version);
-    }
-    retainedHistoryVersions.set(workspaceRepoPath, versions);
-    retainedCollections.set(workspaceRepoPath, markSessionHistoriesStale(sessionCollection));
-  };
-
-  const activateCollection = (repoPath: string | null): AgentSessionCollection => {
-    if (repoPath === null) {
-      return emptyAgentSessionCollection();
-    }
-    let collection = retainedCollections.get(repoPath) ?? emptyAgentSessionCollection();
-    const removals = pendingTaskRemovals.get(repoPath);
-    if (removals) {
-      collection = withoutTasks(collection, removals);
-      pendingTaskRemovals.delete(repoPath);
-    }
-    return collection;
-  };
-
-  return {
+  const store: AgentSessionsStore = {
+    getWorkspaceStore: (repoPath) => (repoPath === workspaceRepoPath ? store : null),
+    getSessionSource: (identity) => {
+      const session = getAgentSession(sessionCollection, identity);
+      return session ? { session, lifetime } : null;
+    },
     listSessionTaskIds: (repoPath) => {
-      const collection =
-        repoPath === workspaceRepoPath ? sessionCollection : retainedCollections.get(repoPath);
-      const removals = pendingTaskRemovals.get(repoPath);
+      if (repoPath !== workspaceRepoPath) return [];
       const taskIds = new Set<string>();
-      for (const session of collection ? listAgentSessions(collection) : []) {
+      for (const session of listAgentSessions(sessionCollection)) {
         const association = session.sessionAssociation;
-        if (association.kind === "workflow" && !removals?.has(association.taskId)) {
-          taskIds.add(association.taskId);
-        }
+        if (association.kind === "workflow") taskIds.add(association.taskId);
       }
       return [...taskIds];
     },
     removeTaskSessions: (repoPath, taskIds) => {
-      if (taskIds.length === 0) return;
-      if (repoPath === workspaceRepoPath) {
-        setSessionCollection((current) => withoutTasks(current, new Set(taskIds)));
-        return;
-      }
-      // Inactive collections have no writer. Save removals until the next workspace switch.
-      const removals = pendingTaskRemovals.get(repoPath) ?? new Set<string>();
-      for (const taskId of taskIds) removals.add(taskId);
-      pendingTaskRemovals.set(repoPath, removals);
+      if (repoPath !== workspaceRepoPath || taskIds.length === 0) return;
+      setSessionCollection((current) => withoutTasks(current, new Set(taskIds)));
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -422,36 +384,18 @@ export const createAgentSessionsStore = (
       switch (envelope.type) {
         case "snapshot": {
           if (envelope.repoPath !== workspaceRepoPath) return;
-          // Recheck when attachment completes: events may arrive after workspace activation.
-          const versions = retainedHistoryVersions.get(envelope.repoPath);
-          retainedHistoryVersions.delete(envelope.repoPath);
-          if (versions || (envelope.isConnectionSnapshot && historyFreshness)) {
+          if (envelope.isConnectionSnapshot && historyFreshness) {
             setSessionCollection((current) => {
               let collection = current;
               for (const session of listAgentSessions(current)) {
-                const version = versions?.get(agentSessionIdentityKey(session));
                 if (
-                  session.historyLoadState === "stale" &&
-                  !envelope.historyReplayGap &&
-                  version &&
-                  historyFreshness?.isCurrent(envelope.repoPath, session, version)
+                  envelope.historyReplayGap ||
+                  !historyFreshness.isCurrent(
+                    envelope.repoPath,
+                    session,
+                    historyProgress?.getVersion(session) ?? null,
+                  )
                 ) {
-                  historyProgress?.restoreVersion(session, version);
-                  collection = replaceAgentSession(collection, {
-                    ...session,
-                    historyLoadState: "loaded",
-                  });
-                } else if (
-                  envelope.isConnectionSnapshot &&
-                  historyFreshness &&
-                  (envelope.historyReplayGap ||
-                    !historyFreshness.isCurrent(
-                      envelope.repoPath,
-                      session,
-                      historyProgress?.getVersion(session) ?? null,
-                    ))
-                ) {
-                  // The rail can advance while this observer is detached. A snapshot has no transcript.
                   collection = replaceAgentSession(collection, markSessionHistoryStale(session));
                 }
               }
@@ -534,24 +478,8 @@ export const createAgentSessionsStore = (
       );
       return getAgentSession(sessionCollection, nextSession);
     },
-    resetWorkspace: (nextWorkspaceRepoPath) => {
-      retainActiveCollection();
-      noticeUpdates.clear();
-      historyProgress?.reset();
-      if (nextWorkspaceRepoPath !== workspaceRepoPath) clearLiveNotices();
-      workspaceRepoPath = nextWorkspaceRepoPath;
-      sessionCollection = activateCollection(nextWorkspaceRepoPath);
-      activitySnapshot = createAgentActivitySnapshot({
-        collection: sessionCollection,
-        previous:
-          activitySnapshot.workspaceRepoPath === workspaceRepoPath
-            ? activitySnapshot
-            : createEmptyAgentActivitySnapshot(workspaceRepoPath),
-        workspaceRepoPath,
-      });
-      notifyListeners();
-    },
   };
+  return store;
 };
 
 function withoutTasks(
