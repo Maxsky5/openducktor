@@ -2,7 +2,7 @@ import { AlertCircle, Expand } from "lucide-react";
 import { createContext, type ReactNode, useContext, useId, useLayoutEffect, useState } from "react";
 import { Dialog, DialogTrigger } from "./dialog";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
-import { renderMermaidSvg } from "./markdown-mermaid-render";
+import { drawMermaidSvg, peekMermaidSvg, useMermaidSvgCache } from "./markdown-mermaid-svg-cache";
 import {
   getMermaidErrorMessage,
   type MermaidPreview,
@@ -10,6 +10,12 @@ import {
 } from "./markdown-mermaid-state";
 
 const MermaidPreviewContext = createContext<MermaidPreviews | null>(null);
+
+/** The last preview of the diagram, and the source that it shows. */
+type DrawnDiagram = { source: string; preview: MermaidPreview };
+
+const createRenderId = (reactId: string): string =>
+  `odt-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${crypto.randomUUID()}`;
 
 export function MermaidPreviewProvider({
   previews,
@@ -34,28 +40,29 @@ export function MarkdownMermaid({
 }) {
   const reactId = useId();
   const preparedPreview = useContext(MermaidPreviewContext)?.get(source);
-  const [state, setState] = useState<MermaidPreview | null>(preparedPreview ?? null);
+  const svgCache = useMermaidSvgCache();
+  const [drawn, setDrawn] = useState<DrawnDiagram | null>(() => {
+    const svg = peekMermaidSvg(svgCache, source, createRenderId(reactId));
+    return svg === null ? null : { source, preview: { status: "ready", svg } };
+  });
   const [openSvg, setOpenSvg] = useState<string | null>(null);
+  const drawnSource = drawn?.source;
 
   useLayoutEffect(() => {
-    if (preparedPreview) {
+    if (preparedPreview || drawnSource === source) {
       return;
     }
     let active = true;
     const renderDiagram = async (): Promise<void> => {
+      let preview: MermaidPreview;
       try {
-        const renderId = `odt-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}-${crypto.randomUUID()}`;
-        const svg = await renderMermaidSvg(renderId, source);
-        if (active) {
-          setState({ status: "ready", svg });
-        }
+        const svg = await drawMermaidSvg(svgCache, source, createRenderId(reactId));
+        preview = { status: "ready", svg };
       } catch (cause) {
-        if (active) {
-          setState({
-            status: "error",
-            message: getMermaidErrorMessage(cause),
-          });
-        }
+        preview = { status: "error", message: getMermaidErrorMessage(cause) };
+      }
+      if (active) {
+        setDrawn({ source, preview });
       }
     };
     if (renderDelayMs <= 0) {
@@ -70,9 +77,9 @@ export function MarkdownMermaid({
       active = false;
       clearTimeout(renderTimeout);
     };
-  }, [preparedPreview, reactId, renderDelayMs, source]);
+  }, [drawnSource, preparedPreview, reactId, renderDelayMs, source, svgCache]);
 
-  const preview = preparedPreview ?? state;
+  const preview = preparedPreview ?? drawn?.preview ?? null;
 
   const diagram =
     preview?.status === "ready" ? (

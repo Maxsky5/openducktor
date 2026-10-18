@@ -1,3 +1,4 @@
+import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
 import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
@@ -14,7 +15,7 @@ import { MERMAID_RENDER_CONFIG } from "./markdown-mermaid-render";
 import { MarkdownPreviewModal } from "./markdown-preview-modal";
 import { MarkdownRenderer } from "./markdown-renderer";
 
-const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
+const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedMarkdownWrapper });
 
 const renderMarkdownLink = (href: string, label: string) => {
   return render(

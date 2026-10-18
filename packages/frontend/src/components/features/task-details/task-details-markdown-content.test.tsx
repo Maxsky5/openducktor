@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
@@ -17,6 +18,8 @@ const mermaidRenderModule = await import("@/components/ui/markdown-mermaid-rende
 await import("@/components/ui/markdown-renderer-mermaid-candidate");
 
 enableReactActEnvironment();
+
+const render = (element: ReactElement) => renderView(element, { wrapper: MermaidSvgCacheProvider });
 
 const StaticThemeProvider = ({ children }: { children: ReactNode }): ReactElement | null => {
   const queryClient = useQueryClient();

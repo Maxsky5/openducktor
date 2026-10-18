@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/layout/app-shell";
 import { ApplicationOverlays } from "@/components/layout/application-overlays";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache";
 import {
   WorkspacePreviewRouteGuard,
   WorkspacePreviewTransitionGuardProvider,
@@ -62,15 +63,17 @@ function withRouteFallback(element: ReactElement, fallback?: ReactElement): Reac
 function AppProviders(): ReactElement {
   return (
     <ThemeProvider>
-      <AppStateProvider>
-        <WorkspacePreviewTransitionGuardProvider>
-          <ApplicationOverlays>
-            <WorkspacePreviewRouteGuard />
-            <Outlet />
-            <Toaster />
-          </ApplicationOverlays>
-        </WorkspacePreviewTransitionGuardProvider>
-      </AppStateProvider>
+      <MermaidSvgCacheProvider>
+        <AppStateProvider>
+          <WorkspacePreviewTransitionGuardProvider>
+            <ApplicationOverlays>
+              <WorkspacePreviewRouteGuard />
+              <Outlet />
+              <Toaster />
+            </ApplicationOverlays>
+          </WorkspacePreviewTransitionGuardProvider>
+        </AppStateProvider>
+      </MermaidSvgCacheProvider>
     </ThemeProvider>
   );
 }
