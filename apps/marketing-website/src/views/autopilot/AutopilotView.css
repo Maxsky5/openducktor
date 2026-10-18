@@ -33,7 +33,7 @@
       height: calc(688 * var(--u));
     }
   }
-  /* Narrow stages: one lane at a time, and the board head keeps its title and New task. */
+  /* Narrow stages: one lane at a time, and the board head keeps its search field. */
   @container stage (width <= 480px) {
     .auto-stage {
       --design-width: 400;

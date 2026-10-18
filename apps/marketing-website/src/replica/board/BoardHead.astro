@@ -1,8 +1,10 @@
 ---
-// The header of kanban-page-header.tsx: the title, the task card view control, the New task split
-// button with its import menu, and Refresh Tasks. A compact header fits a small board window without a sidebar: it is lower, it
-// leaves room for the window controls, and it keeps only New task.
-import { ChevronDown, Plus, RefreshCcw, Rows2, Rows3 } from "@lucide/astro";
+// The header of kanban-page-header.tsx: the board search field, the Labels, Type, and Priority
+// filter buttons, the task card view control, and Refresh Tasks. The copy has no search text and no
+// selection, so it shows no Clear button. A narrow stage and a compact header keep only the search
+// field. A compact header fits a small board window without a sidebar: it is lower, and it leaves
+// room for the window controls.
+import { Blocks, Flag, RefreshCcw, Rows2, Rows3, Search, Tag } from "@lucide/astro";
 import { flag } from "../flag";
 import Button from "../ui/Button.astro";
 import "./BoardHead.css";
@@ -11,20 +13,30 @@ interface Props {
   compact?: boolean;
 }
 const { compact = false } = Astro.props;
+const FILTERS = [
+  { name: "Labels", Icon: Tag },
+  { name: "Type", Icon: Blocks },
+  { name: "Priority", Icon: Flag },
+];
 ---
 
 <div class="board-head" data-compact={flag(compact)}>
-  <div class="board-title">Kanban Board</div>
+  <div class="board-filters">
+    <span class="board-search"><Search /><span>Search tasks</span></span>
+    {
+      FILTERS.map(({ name, Icon }) => (
+        <Button variant="outline" size="sm" class="board-filter">
+          <Icon class="i14" />
+          {name}
+        </Button>
+      ))
+    }
+  </div>
   <div class="board-actions">
     <span class="view-toggle"
       ><span data-active><Rows2 class="i14" /></span><span><Rows3 class="i14" /></span></span
     >
-    <span class="board-split"
-      ><Button class="board-button board-new"><Plus />New task</Button><Button
-        class="board-button board-new-menu"><ChevronDown /></Button
-      ></span
-    >
-    <Button variant="outline" class="board-button board-refresh"
+    <Button variant="outline" size="sm" class="board-refresh"
       ><RefreshCcw class="i14" />Refresh Tasks</Button
     >
   </div>

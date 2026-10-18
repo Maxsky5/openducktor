@@ -13,6 +13,7 @@ import {
   getControlKey,
   hasLostFocus,
 } from "@/components/features/kanban/use-kanban-card-focus";
+import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { KanbanBoardLoadingShell } from "./kanban-board-loading-shell";
@@ -70,9 +71,10 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
     observer.observe(board, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [repairFocus]);
-  const totalTaskCount = model.columns.reduce((count, column) => count + column.tasks.length, 0);
+  const hasMatchingTasks = model.columns.some((column) => column.tasks.length > 0);
   const isBoardLoading = model.isLoadingTasks || model.isSwitchingWorkspace;
-  const showBlockingLoader = isBoardLoading && totalTaskCount === 0;
+  const showBlockingLoader = isBoardLoading && !model.hasLoadedTasks;
+  const showNoMatch = model.filter.isActive && !hasMatchingTasks && !showBlockingLoader;
 
   return (
     <section
@@ -90,11 +92,22 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
       className="relative min-h-0 min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-busy={isBoardLoading}
     >
+      <KanbanBoardNoMatch
+        visible={showNoMatch}
+        onClear={() => {
+          model.filter.onClear();
+          // Clear filters hides itself, so focus moves to the board.
+          boardRef.current?.focus();
+        }}
+      />
+      {/* The lanes stay mounted under the no-match message, so they keep their scroll position. */}
       <div
+        inert={showNoMatch}
         className={cn(
           "min-h-full w-full max-w-full overflow-x-auto overflow-y-visible transition-opacity duration-150",
           model.showHorizontalScrollbars === false && "hide-scrollbar",
           showBlockingLoader ? "opacity-0" : "opacity-100",
+          showNoMatch && "invisible",
         )}
       >
         <TooltipProvider delayDuration={120}>
@@ -111,6 +124,35 @@ export function KanbanPageContent({ model }: KanbanPageContentProps): ReactEleme
         />
       ) : null}
     </section>
+  );
+}
+
+type KanbanBoardNoMatchProps = {
+  visible: boolean;
+  onClear: () => void;
+};
+
+/**
+ * The message and Clear filters when no loaded task matches. The live region stays mounted, so a
+ * screen reader reads the message when it comes.
+ */
+function KanbanBoardNoMatch({ visible, onClear }: KanbanBoardNoMatchProps): ReactElement {
+  return (
+    <div
+      className={cn(
+        visible &&
+          "absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-3 px-4 py-16 text-center",
+      )}
+    >
+      <p role="status" className="text-sm text-muted-foreground">
+        {visible ? "No tasks match your search or filters" : null}
+      </p>
+      {visible ? (
+        <Button type="button" variant="outline" onClick={onClear}>
+          Clear filters
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

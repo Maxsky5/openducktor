@@ -1,53 +1,82 @@
 @layer replica {
+  /* As in the product, the actions go to a second row when they do not fit next to the filters. */
   .board-head {
     display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: calc(12 * var(--u));
-    height: calc(72 * var(--u));
-    flex: 0 0 auto;
-    padding: 0 calc(24 * var(--u));
+    gap: calc(8 * var(--u)) calc(12 * var(--u));
+    min-height: calc(64 * var(--u));
+    padding: calc(16 * var(--u)) calc(24 * var(--u));
   }
-  .board-title {
-    font-size: calc(18 * var(--u));
-    font-weight: 600;
-    letter-spacing: calc(-0.2 * var(--u));
+  .board-filters {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: calc(8 * var(--u));
+    min-width: 0;
+  }
+  /* The search field: h-8 border-input bg-card shadow-sm text-sm, the search icon, and the
+     placeholder. It grows to 224 pixels and shrinks first when the row is full. */
+  .board-search {
+    display: flex;
+    flex: 1 1 calc(160 * var(--u));
+    max-width: calc(224 * var(--u));
+    align-items: center;
+    gap: calc(6 * var(--u));
+    min-width: 0;
+    height: calc(32 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border: calc(1 * var(--u)) solid var(--input);
+    border-radius: calc(10 * var(--u));
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+    color: var(--muted-foreground);
+    font-size: calc(14 * var(--u));
+    white-space: nowrap;
+  }
+  .board-search > svg {
+    flex: none;
+  }
+  .board-search > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* A filter button without a selection: size sm, a dashed border, and a muted icon. */
+  .board-filter {
+    gap: calc(6 * var(--u));
+    padding: 0 calc(10 * var(--u));
+    border-style: dashed;
+    box-shadow: none;
+  }
+  .board-filter > svg {
+    color: var(--muted-foreground);
   }
   .board-actions {
     display: flex;
+    flex: none;
     align-items: center;
     gap: calc(8 * var(--u));
+    margin-left: auto;
   }
-  .board-button {
-    gap: calc(8 * var(--u));
-    height: calc(40 * var(--u));
-  }
-  /* The New task split button: the import menu joins it with a light rule. */
-  .board-split {
-    display: flex;
-  }
-  .board-new {
-    border-radius: calc(10 * var(--u)) 0 0 calc(10 * var(--u));
-  }
-  .board-new-menu {
-    padding: 0 calc(8 * var(--u));
-    border-left-color: color-mix(in oklch, var(--primary-foreground) 30%, transparent);
-    border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
+  .board-refresh {
+    gap: calc(6 * var(--u));
   }
   /* The task card view control. The first view is active. */
   .view-toggle {
     display: flex;
-    gap: calc(2 * var(--u));
-    padding: calc(3 * var(--u));
+    gap: calc(4 * var(--u));
+    padding: calc(4 * var(--u));
     border-radius: calc(10 * var(--u));
     background: var(--muted);
   }
   .view-toggle span {
     display: grid;
     place-items: center;
-    width: calc(32 * var(--u));
-    height: calc(30 * var(--u));
-    border-radius: calc(7 * var(--u));
+    width: calc(24 * var(--u));
+    height: calc(24 * var(--u));
+    border-radius: calc(6 * var(--u));
     color: var(--muted-foreground);
   }
   .view-toggle span[data-active] {
@@ -55,31 +84,25 @@
     color: var(--foreground);
     box-shadow: var(--shadow-sm);
   }
-  /* A narrow stage keeps the title and New task in a lower header. */
+  /* A narrow stage keeps only the search field, in one lower row. */
   @container stage (width <= 480px) {
     .board-head {
-      height: calc(56 * var(--u));
-      padding: 0 calc(20 * var(--u));
+      flex-wrap: nowrap;
+      min-height: calc(48 * var(--u));
+      padding: calc(8 * var(--u)) calc(20 * var(--u));
     }
-    .view-toggle,
-    .board-refresh {
+    .board-filter,
+    .board-actions {
       display: none;
     }
   }
   .board-head[data-compact] {
-    height: calc(48 * var(--u));
-    padding: 0 calc(16 * var(--u)) 0 calc(80 * var(--u));
+    flex-wrap: nowrap;
+    min-height: calc(48 * var(--u));
+    padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u)) calc(80 * var(--u));
   }
-  .board-head[data-compact] .board-title {
-    font-size: calc(16 * var(--u));
-    line-height: 1.2;
-    letter-spacing: -0.025em;
-  }
-  .board-head[data-compact] .board-button {
-    height: calc(32 * var(--u));
-  }
-  .board-head[data-compact] .view-toggle,
-  .board-head[data-compact] .board-refresh {
+  .board-head[data-compact] .board-filter,
+  .board-head[data-compact] .board-actions {
     display: none;
   }
 }

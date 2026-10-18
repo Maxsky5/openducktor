@@ -541,7 +541,12 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.electron-shell .electron-titlebar-safe-area button {
+.electron-shell .electron-titlebar-safe-area :is(button, input) {
+  -webkit-app-region: no-drag;
+}
+
+/* A popover can open over the header drag area. Without this rule, a click on it drags the window. */
+.electron-shell [data-slot="popover-content"] {
   -webkit-app-region: no-drag;
 }
 

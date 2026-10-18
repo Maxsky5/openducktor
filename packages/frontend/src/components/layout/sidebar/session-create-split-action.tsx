@@ -18,7 +18,7 @@ import {
   runIssueImport,
   toIssueImportState,
 } from "@/pages/kanban/issue-import-provider";
-import { isKanbanTaskCreationDisabled } from "@/pages/kanban/kanban-page-header-model";
+import { isKanbanTaskCreationDisabled } from "@/pages/kanban/task-creation-availability";
 import { useActiveWorkspace, useChecksState } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 

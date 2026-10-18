@@ -4,7 +4,6 @@ import type {
   KanbanEmptyColumnDisplay,
   KanbanTaskCardView,
   TaskCard,
-  RepositoryGitProviderContext,
 } from "@openducktor/contracts";
 import type { AgentRole, KanbanColumn as KanbanColumnData } from "@openducktor/core";
 import type {
@@ -17,6 +16,7 @@ import type { SessionTargetOptions } from "@/components/features/kanban/session-
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import type { SessionStartFlowRequest } from "@/features/session-start";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import type { KanbanBoardFilter } from "./kanban-board-filter";
 
 export type KanbanSessionStartIntent = SessionStartFlowRequest;
 
@@ -83,16 +83,24 @@ export type TaskApprovalModalModel =
   | TaskApprovalMissingBuilderWorktreeModalModel
   | TaskApprovalCompletionModalModel;
 
+export type KanbanBoardFilterModel = {
+  value: KanbanBoardFilter;
+  /** The labels of the loaded tasks and the selected labels, in alphabetical order. */
+  labelOptions: readonly string[];
+  isActive: boolean;
+  isDisabled: boolean;
+  onChange: (patch: Partial<KanbanBoardFilter>) => void;
+  onClear: () => void;
+};
+
 export type KanbanPageHeaderModel = {
   isLoadingTasks: boolean;
   isSwitchingWorkspace: boolean;
   taskCardView: KanbanTaskCardView | null;
   isTaskCardViewPending: boolean;
   onTaskCardViewChange: (taskCardView: KanbanTaskCardView) => void;
-  onCreateTask: () => void;
-  onImportIssues: () => void;
-  importProviderContext: RepositoryGitProviderContext | undefined;
   onRefreshTasks: () => void;
+  filter: KanbanBoardFilterModel;
 };
 
 export type KanbanPageContentModel = {
@@ -103,6 +111,9 @@ export type KanbanPageContentModel = {
   pendingState?: WorkflowPendingState | undefined;
   showHorizontalScrollbars: boolean | null;
   columns: KanbanColumnData[];
+  /** The board loaded at least one task, also when the search and filters hide it. */
+  hasLoadedTasks: boolean;
+  filter: Pick<KanbanBoardFilterModel, "isActive" | "onClear">;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;

@@ -1,7 +1,7 @@
 import { AlignJustify, List, ListTree, type LucideIcon, SplitSquareHorizontal } from "lucide-react";
 import { type ReactElement, useId } from "react";
 import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-viewer";
-import { CompactSearchField } from "@/components/ui/search-field";
+import { ToolbarSearchField } from "@/components/ui/search-field";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { FileListViewMode } from "./file-list-view-preference";
@@ -38,7 +38,7 @@ export function FileListHeader({
       data-testid="agent-studio-git-list-header"
     >
       <div className="min-w-0 flex-1">
-        <CompactSearchField
+        <ToolbarSearchField
           id={searchFieldId}
           label="Search files"
           value={searchText}

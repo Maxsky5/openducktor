@@ -15,7 +15,7 @@ import {
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
-import { CompactSearchField } from "@/components/ui/search-field";
+import { ToolbarSearchField } from "@/components/ui/search-field";
 import { errorMessage } from "@/lib/errors";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { workspaceFileTreeQueryOptions } from "@/state/queries/filesystem";
@@ -377,7 +377,7 @@ export function TaskExecutionFileExplorerPanel({
         ) : (
           <div className="flex h-full min-h-0 flex-col gap-2.5">
             <div className="px-3">
-              <CompactSearchField
+              <ToolbarSearchField
                 id={searchFieldId}
                 label="Search files"
                 value={search.value}

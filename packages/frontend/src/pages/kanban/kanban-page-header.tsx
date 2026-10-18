@@ -1,11 +1,8 @@
-import { ChevronDown, Loader2, Plus, RefreshCcw } from "lucide-react";
+import { Loader2, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskCardViewControl } from "@/components/features/kanban/task-card-view-control";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useChecksState, useWorkspaceState } from "@/state";
-import { issueImportProvider, issueImportSourceLabel } from "./issue-import-provider";
-import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
+import { KanbanBoardFilterBar } from "./kanban-board-filter-bar";
 import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
 
 type KanbanPageHeaderProps = {
@@ -13,65 +10,24 @@ type KanbanPageHeaderProps = {
 };
 
 export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement {
-  const { activeWorkspace } = useWorkspaceState();
-  const { taskStoreCheck } = useChecksState();
-  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck);
-  const importProvider = isCreateTaskDisabled
-    ? null
-    : issueImportProvider(model.importProviderContext);
-
   return (
-    <div className="electron-titlebar-safe-area flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">
-      <h2 className="text-lg font-semibold tracking-tight text-foreground">Kanban Board</h2>
-      <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="electron-titlebar-safe-area flex flex-wrap items-start justify-between gap-3 pr-4">
+      <h2 className="sr-only">Kanban Board</h2>
+      <KanbanBoardFilterBar filter={model.filter} />
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-2" aria-busy={model.isTaskCardViewPending}>
           <TaskCardViewControl
+            size="sm"
             value={model.taskCardView}
             disabled={model.isTaskCardViewPending}
             onValueChange={model.onTaskCardViewChange}
           />
         </div>
-        <div className="flex items-center">
-          <Button
-            type="button"
-            size="default"
-            className={importProvider ? "h-10 rounded-r-none" : "h-10"}
-            disabled={isCreateTaskDisabled}
-            onClick={() => model.onCreateTask()}
-          >
-            <Plus data-icon="inline-start" aria-hidden="true" />
-            New task
-          </Button>
-          {importProvider ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  size="default"
-                  aria-label="More task actions"
-                  className="h-10 rounded-l-none border-l border-primary-foreground/30 px-2"
-                >
-                  <ChevronDown className="size-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-64 p-1.5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-auto w-full justify-start whitespace-normal px-3 py-2 text-left font-normal"
-                  onClick={model.onImportIssues}
-                >
-                  Import from {issueImportSourceLabel(importProvider.config.id)}
-                </Button>
-              </PopoverContent>
-            </Popover>
-          ) : null}
-        </div>
         <Button
           type="button"
-          size="default"
+          size="sm"
           variant="outline"
-          className="h-10"
+          className="gap-1.5"
           disabled={model.isLoadingTasks || model.isSwitchingWorkspace}
           onClick={model.onRefreshTasks}
         >

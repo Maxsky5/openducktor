@@ -14,9 +14,8 @@ import {
 import type { AgentRuntimeCatalog } from "@openducktor/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type RenderResult, fireEvent, render, waitFor } from "@testing-library/react";
-import { act, type ComponentProps, memo, type ReactElement } from "react";
+import { act, type ComponentProps, memo, type ReactElement, type ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
-import { z } from "zod";
 import { hostClient } from "@/lib/host-client";
 import { createQueryClient } from "@/lib/query-client";
 import { createAgentSessionCollection } from "@/state/agent-session-collection";
@@ -72,7 +71,9 @@ import {
   TaskWorkflowActionsContext,
   useRequiredTaskWorkflowActions,
 } from "@/features/task-workflow/task-workflow-actions-context";
-import type { KanbanPageModels } from "./kanban-page-model-types";
+import { EMPTY_KANBAN_BOARD_FILTER } from "./kanban-board-filter";
+import { useKanbanBoardFilterStore } from "./use-kanban-board-filter-model";
+import type { KanbanBoardFilterModel, KanbanPageModels } from "./kanban-page-model-types";
 import { KanbanPageHeader } from "./kanban-page-header";
 import { KanbanColumn } from "@/components/features/kanban/kanban-column";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
@@ -101,10 +102,6 @@ const resetTaskMock = mock(async () => {});
 const sonnerModule = await import("sonner");
 const toastSuccessMock = mock<typeof sonnerModule.toast.success>(() => "toast-success");
 const toastErrorMock = mock<typeof sonnerModule.toast.error>(() => "toast-error");
-const toastActionSchema = z.object({
-  label: z.string(),
-  onClick: z.function(),
-});
 const publishSessionStartedMock = mock(() => {});
 const publishSessionErrorMock = mock(async () => true);
 const reportSessionNotificationFailureMock = mock(() => {});
@@ -200,6 +197,7 @@ type LatestKanbanPageModels = {
   sessionStartModalModel: TaskWorkflowActionsController["sessionStartModal"];
   resetImplementationModalModel: TaskWorkflowActionsController["resetImplementationModal"];
   mergedPullRequestModalProps: KanbanPageModels["mergedPullRequestModal"];
+  models: KanbanPageModels | null;
   location: string;
 };
 
@@ -225,6 +223,7 @@ type KanbanPageHarness = RenderResult & {
   getSessionStartModalModel: () => TaskWorkflowActionsController["sessionStartModal"];
   getResetImplementationModalModel: () => TaskWorkflowActionsController["resetImplementationModal"];
   getMergedPullRequestModalProps: () => KanbanPageModels["mergedPullRequestModal"];
+  getModels: () => KanbanPageModels | null;
   getLocation: () => string;
 };
 
@@ -516,6 +515,7 @@ const publishKanbanPageModels = (
   latest.isLoadingTasks = models.content.isLoadingTasks;
   latest.showHorizontalScrollbars = models.content.showHorizontalScrollbars;
   latest.mergedPullRequestModalProps = models.mergedPullRequestModal;
+  latest.models = models;
 };
 
 const publishTaskWorkflowController = (
@@ -542,7 +542,6 @@ const renderPage = async (
   options: {
     seedSettingsSnapshot?: boolean;
     seedAgentSessionLists?: boolean;
-    seedGitProviderContext?: boolean;
     platform?: AppPlatform | null;
     tasks?: TaskCard[];
   } = {},
@@ -567,6 +566,7 @@ const renderPage = async (
     sessionStartModalModel: null,
     resetImplementationModalModel: null,
     mergedPullRequestModalProps: null,
+    models: null,
     location: "/",
   };
   const { useKanbanPageModels } = await import("./use-kanban-page-models");
@@ -580,9 +580,7 @@ const renderPage = async (
   if (options.seedSettingsSnapshot !== false) {
     queryClient.setQueryData(workspaceQueryKeys.settingsSnapshot(), renderState.settingsSnapshot);
   }
-  if (options.seedGitProviderContext !== false) {
-    queryClient.setQueryData(repositoryGitProviderContextQueryKeys.repo("/repo"), null);
-  }
+  queryClient.setQueryData(repositoryGitProviderContextQueryKeys.repo("/repo"), null);
   if (options.platform !== null) {
     queryClient.setQueryData(systemQueryKeys.platform(), options.platform ?? "darwin");
   }
@@ -609,7 +607,6 @@ const renderPage = async (
       latest,
       useKanbanPageModels({
         onOpenDetails: () => {},
-        onImportIssues: () => {},
         actions: controller.actions,
       }),
     );
@@ -698,6 +695,7 @@ const renderPage = async (
     getSessionStartModalModel: () => latest.sessionStartModalModel,
     getResetImplementationModalModel: () => latest.resetImplementationModalModel,
     getMergedPullRequestModalProps: () => latest.mergedPullRequestModalProps,
+    getModels: () => latest.models,
     getLocation: () => latest.location,
   });
 };
@@ -821,6 +819,23 @@ const confirmSessionStartModal = async (
   });
 };
 
+const inactiveBoardFilterModel: KanbanBoardFilterModel = {
+  value: EMPTY_KANBAN_BOARD_FILTER,
+  labelOptions: [],
+  isActive: false,
+  isDisabled: false,
+  onChange: () => {},
+  onClear: () => {},
+};
+
+const createHeaderQueryWrapper = () => {
+  const queryClient = createQueryClient();
+  queryClient.setQueryData(systemQueryKeys.platform(), "darwin");
+  return ({ children }: { children: ReactNode }): ReactElement => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+};
+
 const KANBAN_PAGE_TEST_TIMEOUT_MS = 5_000;
 const kanbanTest = (name: string, fn: () => Promise<void> | void): void => {
   test(name, fn, KANBAN_PAGE_TEST_TIMEOUT_MS);
@@ -907,6 +922,59 @@ describe("KanbanPage session start modal flow", () => {
   });
 
   kanbanTest(
+    "passes the matching tasks to the board and keeps every loaded task for the session history",
+    async () => {
+      const filtersBefore = useKanbanBoardFilterStore.getState().filters;
+      useKanbanBoardFilterStore.getState().update("other-workspace", { searchText: "notes" });
+      const tasks = [
+        createTaskCardFixture({
+          id: "TASK-1",
+          title: "Fix crash",
+          status: "open",
+          labels: ["bug"],
+        }),
+        createTaskCardFixture({
+          id: "TASK-2",
+          title: "Write notes",
+          status: "in_progress",
+          labels: ["docs"],
+        }),
+      ];
+      const requireModels = (page: KanbanPageHarness): KanbanPageModels => {
+        const models = page.getModels();
+        if (!models) throw new Error("Expected the Kanban page models.");
+        return models;
+      };
+      const boardTaskIds = (models: KanbanPageModels): string[] =>
+        models.content.columns.flatMap((column) => column.tasks.map((task) => task.id));
+      let renderer: KanbanPageHarness | null = null;
+      try {
+        const page = await renderPage({ tasks });
+        renderer = page;
+        expect(boardTaskIds(requireModels(page))).toEqual(["TASK-1", "TASK-2"]);
+
+        await act(async () => {
+          requireModels(page).header.filter.onChange({ searchText: "crash" });
+        });
+
+        const models = requireModels(page);
+        expect(boardTaskIds(models)).toEqual(["TASK-1"]);
+        expect(models.content.filter).toBe(models.header.filter);
+        expect(models.content.hasLoadedTasks).toBe(true);
+        expect([...models.content.historicalSessionsByTaskId.keys()]).toEqual(["TASK-1", "TASK-2"]);
+
+        await act(async () => {
+          requireModels(page).content.filter.onClear();
+        });
+        expect(boardTaskIds(requireModels(page))).toEqual(["TASK-1", "TASK-2"]);
+      } finally {
+        await unmountPageIfRendered(renderer);
+        useKanbanBoardFilterStore.setState({ filters: filtersBefore });
+      }
+    },
+  );
+
+  kanbanTest(
     "delegate action opens modal and foreground confirm navigates to Agent Studio",
     async () => {
       const renderer = await renderPage();
@@ -945,52 +1013,40 @@ describe("KanbanPage session start modal flow", () => {
     },
   );
 
-  kanbanTest("shows the task card view control and the shared New task button", async () => {
-    const onCreateTask = mock(() => {});
+  kanbanTest("shows the compact task card view control and no New task button", async () => {
     const onTaskCardViewChange = mock(() => {});
     const renderer = render(
-      <WorkspaceStateContext
-        value={createWorkspaceStateValue({ settingsSnapshot: currentSettingsSnapshotFixture })}
-      >
-        <ChecksStateContext value={createChecksStateValue()}>
-          <KanbanPageHeader
-            model={{
-              isLoadingTasks: false,
-              isSwitchingWorkspace: false,
-              taskCardView: "normal",
-              isTaskCardViewPending: false,
-              onTaskCardViewChange,
-              onCreateTask,
-              onImportIssues: () => {},
-              importProviderContext: null,
-              onRefreshTasks: () => {},
-            }}
-          />
-        </ChecksStateContext>
-      </WorkspaceStateContext>,
+      <KanbanPageHeader
+        model={{
+          isLoadingTasks: false,
+          isSwitchingWorkspace: false,
+          taskCardView: "normal",
+          isTaskCardViewPending: false,
+          onTaskCardViewChange,
+          onRefreshTasks: () => {},
+          filter: inactiveBoardFilterModel,
+        }}
+      />,
+      { wrapper: createHeaderQueryWrapper() },
     );
     try {
       expect(renderer.getByRole("radiogroup", { name: "Task card view" })).not.toBeNull();
       const normalOption = renderer.getByRole("radio", { name: "Normal" });
       const compactOption = renderer.getByRole("radio", { name: "Compact" });
       expect(renderer.getByRole("radiogroup", { name: "Task card view" }).className).toContain(
-        "h-10",
+        "h-8",
       );
       expect(normalOption.getAttribute("data-state")).toBe("checked");
       expect(normalOption.textContent).toBe("");
       expect(compactOption.textContent).toBe("");
-      expect(normalOption.className).toContain("size-8");
+      expect(normalOption.className).toContain("size-6");
       expect(normalOption.querySelector("svg.lucide-rows-2")).not.toBeNull();
       expect(compactOption.querySelector("svg.lucide-rows-3")).not.toBeNull();
       fireEvent.click(compactOption);
       expect(onTaskCardViewChange).toHaveBeenCalledWith("compact");
-
-      const newTask = renderer.getByRole("button", { name: "New task" });
-      expect(newTask.querySelectorAll("svg")).toHaveLength(1);
-      expect(newTask.querySelector("svg.lucide-plus")).not.toBeNull();
-      expect(renderer.queryByRole("button", { name: "Create Task" })).toBeNull();
-      fireEvent.click(newTask);
-      expect(onCreateTask).toHaveBeenCalledTimes(1);
+      // The sidebar New task button creates and imports tasks.
+      expect(renderer.queryByRole("button", { name: "New task" })).toBeNull();
+      expect(renderer.queryByRole("button", { name: "More task actions" })).toBeNull();
     } finally {
       renderer.unmount();
     }
@@ -999,25 +1055,18 @@ describe("KanbanPage session start modal flow", () => {
   kanbanTest("keeps the task card view control visually stable while saving", async () => {
     const onTaskCardViewChange = mock(() => {});
     const renderer = render(
-      <WorkspaceStateContext
-        value={createWorkspaceStateValue({ settingsSnapshot: currentSettingsSnapshotFixture })}
-      >
-        <ChecksStateContext value={createChecksStateValue()}>
-          <KanbanPageHeader
-            model={{
-              isLoadingTasks: false,
-              isSwitchingWorkspace: false,
-              taskCardView: "compact",
-              isTaskCardViewPending: true,
-              onTaskCardViewChange,
-              onCreateTask: () => {},
-              onImportIssues: () => {},
-              importProviderContext: null,
-              onRefreshTasks: () => {},
-            }}
-          />
-        </ChecksStateContext>
-      </WorkspaceStateContext>,
+      <KanbanPageHeader
+        model={{
+          isLoadingTasks: false,
+          isSwitchingWorkspace: false,
+          taskCardView: "compact",
+          isTaskCardViewPending: true,
+          onTaskCardViewChange,
+          onRefreshTasks: () => {},
+          filter: inactiveBoardFilterModel,
+        }}
+      />,
+      { wrapper: createHeaderQueryWrapper() },
     );
     try {
       const group = renderer.getByRole("radiogroup", { name: "Task card view" });
@@ -1091,41 +1140,6 @@ describe("KanbanPage session start modal flow", () => {
       }
     },
   );
-
-  kanbanTest("Git provider load failure offers a working retry action", async () => {
-    const originalWorkspaceGetGitProviderContext = hostClient.workspaceGetGitProviderContext;
-    const workspaceGetGitProviderContext = mock(originalWorkspaceGetGitProviderContext);
-    let renderer: KanbanPageHarness | null = null;
-
-    try {
-      workspaceGetGitProviderContext
-        .mockImplementationOnce(async () => {
-          throw new Error("provider unavailable");
-        })
-        .mockImplementationOnce(async () => null);
-      hostClient.workspaceGetGitProviderContext = workspaceGetGitProviderContext;
-      renderer = await renderPage({ seedGitProviderContext: false });
-      await waitForMockCall(toastErrorMock);
-
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "Failed to load Git provider context",
-        expect.objectContaining({
-          description: "Could not load the current Git provider: provider unavailable",
-          action: expect.objectContaining({ label: "Retry" }),
-        }),
-      );
-      const action = toastActionSchema.parse(toastErrorMock.mock.calls.at(-1)?.[1]?.action);
-
-      await act(async () => {
-        action.onClick();
-        await Promise.resolve();
-      });
-      await waitForMockCall(workspaceGetGitProviderContext, 2);
-    } finally {
-      hostClient.workspaceGetGitProviderContext = originalWorkspaceGetGitProviderContext;
-      await unmountPageIfRendered(renderer);
-    }
-  });
 
   kanbanTest("uses platform defaults for System horizontal scrollbar visibility", async () => {
     currentSettingsSnapshotFixture = createSettingsSnapshotFixture({

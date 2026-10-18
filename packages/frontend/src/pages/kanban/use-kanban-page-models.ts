@@ -5,19 +5,17 @@ import { toast } from "sonner";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { TASK_SESSION_HISTORY_ERROR_TOAST_ID } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { errorMessage } from "@/lib/errors";
-import { gitProviderReadError } from "@/lib/git-provider-health";
 import { useTasksState, useWorkspaceState } from "@/state";
 import { useAgentSessionLists } from "@/state/queries/use-agent-session-lists";
 import { useKanbanTaskCardView } from "@/state/mutations/use-kanban-task-card-view";
 import { useHorizontalScrollbarVisibility } from "@/state/queries/use-horizontal-scrollbar-visibility";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
-import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
+import { useKanbanBoardFilterModel } from "./use-kanban-board-filter-model";
 import { useKanbanBoardModel } from "./use-kanban-board-model";
 
 type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
-  onImportIssues: () => void;
   actions: TaskWorkflowActions;
 };
 
@@ -48,17 +46,11 @@ export const isKanbanForegroundLoading = (args: {
 
 export function useKanbanPageModels({
   onOpenDetails,
-  onImportIssues,
   actions,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
   const { activeWorkspace, isSwitchingWorkspace } = useWorkspaceState();
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { gitProvider } = useAgentStudioRepoSettings({
-    activeRepoPath: workspaceRepoPath,
-    activeWorkspaceId,
-  });
-  const providerReadError = gitProviderReadError(gitProvider.error);
   const {
     refreshTasks,
     linkMergedPullRequest,
@@ -95,19 +87,6 @@ export function useKanbanPageModels({
       description,
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
-  useEffect(() => {
-    if (!gitProvider.error) {
-      return;
-    }
-
-    toast.error("Failed to load Git provider context", {
-      description: providerReadError,
-      action: {
-        label: "Retry",
-        onClick: gitProvider.retry,
-      },
-    });
-  }, [gitProvider.error, gitProvider.retry, providerReadError]);
   const canResolveHorizontalScrollbarVisibility =
     workspaceRepoPath !== null &&
     !settingsSnapshotQuery.isPending &&
@@ -137,6 +116,7 @@ export function useKanbanPageModels({
   const kanbanTasks =
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
   const kanbanTaskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
+  const { filter, matchingTasks } = useKanbanBoardFilterModel(activeWorkspaceId, kanbanTasks);
   const shouldLoadHistoricalSessions = workspaceRepoPath !== null && kanbanTaskIds.length > 0;
   const historicalSessionLists = useAgentSessionLists({
     repoPath: workspaceRepoPath,
@@ -187,7 +167,9 @@ export function useKanbanPageModels({
     emptyColumnDisplay,
     taskCardView: taskCardViewState.taskCardView ?? DEFAULT_KANBAN_SETTINGS.taskCardView,
     showHorizontalScrollbars: horizontalScrollbarState.showHorizontalScrollbars,
-    tasks: kanbanTasks,
+    tasks: matchingTasks,
+    hasLoadedTasks: kanbanTasks.length > 0,
+    filter,
     historicalSessionsByTaskId,
     pendingState: actions.kanbanPendingState,
     taskSessionsByTaskId: actions.taskSessionsByTaskId,
@@ -208,10 +190,8 @@ export function useKanbanPageModels({
       taskCardView: taskCardViewState.taskCardView,
       isTaskCardViewPending: taskCardViewState.isPending,
       onTaskCardViewChange: taskCardViewState.changeTaskCardView,
-      onCreateTask: actions.onCreateTask,
-      onImportIssues,
-      importProviderContext: gitProvider.context,
       onRefreshTasks,
+      filter,
     },
     content,
     activeWorkspace,

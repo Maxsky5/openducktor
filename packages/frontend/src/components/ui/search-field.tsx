@@ -1,5 +1,11 @@
 import { Search, X } from "lucide-react";
-import { type ComponentProps, type ReactElement, useRef } from "react";
+import {
+  type ComponentProps,
+  type ReactElement,
+  type Ref,
+  useImperativeHandle,
+  useRef,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,30 +44,40 @@ export function SearchField({
   );
 }
 
-type CompactSearchFieldProps = Omit<SearchFieldProps, "disabled">;
+type ToolbarSearchFieldProps = SearchFieldProps & {
+  /** `sm` fits a panel toolbar. `md` fits a page header toolbar. */
+  size?: "sm" | "md";
+  ref?: Ref<HTMLInputElement | null>;
+};
 
 /**
- * A small search field that filters a list, for toolbars and panels. Its label is for screen readers only.
+ * A search field that filters a list in a toolbar, a panel, or a page header. Its label is for
+ * screen readers only.
  * Escape clears the text and stops the event from bubbling.
  * A Radix dialog still closes, because it gets Escape first in the capture phase.
  */
-export function CompactSearchField({
+export function ToolbarSearchField({
   id,
   label,
   value,
   placeholder,
+  disabled = false,
+  size = "sm",
+  ref,
   onValueChange,
-}: CompactSearchFieldProps): ReactElement {
+}: ToolbarSearchFieldProps): ReactElement {
   return (
     <>
       <Label htmlFor={id} className="sr-only">
         {label}
       </Label>
       <SearchInput
+        ref={ref}
         id={id}
         value={value}
         placeholder={placeholder}
-        classes={COMPACT_CLASSES}
+        disabled={disabled}
+        classes={size === "md" ? MEDIUM_CLASSES : SMALL_CLASSES}
         autoComplete="off"
         spellCheck={false}
         onKeyDown={(event) => {
@@ -92,15 +108,25 @@ const DEFAULT_CLASSES: SearchInputClasses = {
   clearIcon: "size-4",
 };
 
-const COMPACT_CLASSES: SearchInputClasses = {
+const SMALL_CLASSES: SearchInputClasses = {
   searchIcon: "left-2 size-3.5",
   input: "h-7 px-7 text-xs",
   clearButton: "top-1/2 right-0.5 size-6 -translate-y-1/2 text-muted-foreground",
   clearIcon: "size-3.5",
 };
 
+const MEDIUM_CLASSES: SearchInputClasses = {
+  searchIcon: "left-2.5 size-4",
+  input: "h-8 pl-8 pr-8",
+  clearButton: "top-1/2 right-1 size-6 -translate-y-1/2 text-muted-foreground",
+  clearIcon: "size-3.5",
+};
+
 type SearchInputProps = Pick<ComponentProps<"input">, "autoComplete" | "spellCheck" | "onKeyDown"> &
-  Omit<SearchFieldProps, "label"> & { classes: SearchInputClasses };
+  Omit<SearchFieldProps, "label"> & {
+    classes: SearchInputClasses;
+    ref?: Ref<HTMLInputElement | null> | undefined;
+  };
 
 /** The input, the search icon, and the clear button that both search fields share. */
 function SearchInput({
@@ -109,10 +135,16 @@ function SearchInput({
   placeholder,
   disabled = false,
   classes,
+  ref,
   onValueChange,
   ...inputProps
 }: SearchInputProps): ReactElement {
   const input = useRef<HTMLInputElement>(null);
+  useImperativeHandle<HTMLInputElement | null, HTMLInputElement | null>(
+    ref,
+    () => input.current,
+    [],
+  );
 
   return (
     <div className="relative">
