@@ -1,9 +1,12 @@
 import { Database } from "bun:sqlite";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { sql } from "drizzle-orm";
+import { Effect, Exit, Scope } from "effect";
 import { z } from "zod";
+import { toHostOperationError } from "../../effect/host-errors";
+import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
@@ -11,6 +14,9 @@ import {
   createSqliteTaskRepositoryContextManager,
   type SqliteTaskRepositoryContextProvider,
 } from "./sqlite-task-repository-context";
+import type { OpenSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
+import { ensureSchema } from "./sqlite-task-store-migrations";
+import { taskStoreSchema } from "./sqlite-task-store-schema";
 
 type BunSqliteStatement = ReturnType<Database["prepare"]>;
 const documentCountRowSchema = z.object({ count: z.number() });
@@ -44,6 +50,40 @@ const createClock = (): (() => Date) => {
   };
 };
 
+const openTestConnection: OpenSqliteTaskStoreConnection = (databasePath) =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise({
+      try: () => mkdir(path.dirname(databasePath), { recursive: true }),
+      catch: (cause) =>
+        toHostOperationError(cause, "test.createSqliteDatabaseDirectory", { databasePath }),
+    });
+    const scope = yield* Scope.make();
+    return yield* Effect.gen(function* () {
+      const connection = yield* openSqliteDrizzleConnection({
+        databasePath,
+        configureWal: false,
+        config: { schema: taskStoreSchema },
+      });
+      // Disposable fixtures need real SQLite transactions, but no power-loss durability.
+      yield* connection.session.execute(
+        (database) => database.run(sql`PRAGMA synchronous = OFF`),
+        "test.disableSqliteDiskSync",
+      );
+      yield* connection.session.execute(
+        (database) => database.run(sql`PRAGMA journal_mode = WAL`),
+        "test.configureSqliteWal",
+      );
+      yield* ensureSchema(connection.database, connection.session, databasePath);
+      return {
+        release: connection.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void))),
+        session: connection.session,
+      };
+    }).pipe(
+      Scope.provide(scope),
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+    );
+  });
+
 export type SqliteTaskStoreTestHarness = {
   readonly cleanup: () => Promise<void>;
   readonly configDir: string;
@@ -67,6 +107,7 @@ export const createSqliteTaskStoreHarness = async ({
     resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
   );
   const contextManager = createSqliteTaskRepositoryContextManager({
+    openConnection: openTestConnection,
     processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
       resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),

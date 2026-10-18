@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
@@ -20,6 +21,7 @@ import {
   readTableNames,
   readTaskColumnNullability,
 } from "./sqlite-task-store-test-support";
+import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
 
 const cleanups = new Set<() => Promise<void>>();
 
@@ -84,6 +86,36 @@ describe("resolveSqliteTaskStoreDatabasePath", () => {
 });
 
 describe("createSqliteTaskRepository SQLite integration", () => {
+  test("disables disk sync only on disposable fixture connections", async () => {
+    const harness = await createRepositoryHarness();
+    const settingsQuery = sql`
+      SELECT synchronous, foreign_keys, journal_mode
+      FROM pragma_synchronous, pragma_foreign_keys, pragma_journal_mode
+    `;
+    const fixtureSettings = await Effect.runPromise(
+      harness.contextProvider(harness.repoPath, "test.fixtureSettings", ({ session }) =>
+        session.execute((database) => database.values(settingsQuery), "test.fixtureSettings"),
+      ),
+    );
+    expect(fixtureSettings).toEqual([[0, 1, "wal"]]);
+
+    const production = await Effect.runPromise(
+      openSqliteTaskStoreConnection(path.join(harness.configDir, "production.sqlite")),
+    );
+    try {
+      const settings = await Effect.runPromise(
+        production.session.execute(
+          (database) => database.values(settingsQuery),
+          "test.productionSettings",
+        ),
+      );
+      expect(settings).toEqual([[expect.any(Number), 1, "wal"]]);
+      expect(settings).not.toEqual([[0, 1, "wal"]]);
+    } finally {
+      await Effect.runPromise(production.release);
+    }
+  });
+
   test("disposes retained connections when the test harness is cleaned up", async () => {
     const { cleanup, repoPath, store } = await createRepositoryHarness();
     await Effect.runPromise(store.listTasks({ repoPath }));

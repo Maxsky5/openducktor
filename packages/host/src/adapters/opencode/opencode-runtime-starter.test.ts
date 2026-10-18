@@ -427,7 +427,7 @@ describe("createOpenCodeRuntimeStarter", () => {
       expect(environment.configContent).not.toContain("authentication");
       // Compare resolved paths: Windows can report the short 8.3 name, macOS the /private path.
       expect(await realpath(cwd)).toBe(await realpath(launchDirectory));
-      await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
+      expect(await Effect.runPromise(handle.stop())).toBeUndefined();
       expect(exits).toEqual([]);
     } finally {
       await removeTestDirectory(root);
@@ -1033,7 +1033,8 @@ describe("createOpenCodeRuntimeStarter", () => {
 
       const handle = await Effect.runPromise(starter.startRuntime(startInput(opencodeBinary)));
 
-      await expect(Effect.runPromise(handle.stop())).rejects.toThrow("process tree stayed alive");
+      const stopFailure = await Effect.runPromise(Effect.flip(handle.stop()));
+      expect(stopFailure.message).toContain("process tree stayed alive");
     } finally {
       if (runtimePid !== null && processIsAlive(runtimePid)) {
         await Effect.runPromise(forceStopProcessTree(runtimePid));
@@ -1082,7 +1083,8 @@ describe("createOpenCodeRuntimeStarter", () => {
       });
 
       const handle = await Effect.runPromise(starter.startRuntime(startInput(opencodeBinary)));
-      await expect(Effect.runPromise(handle.stop())).rejects.toThrow("process tree stayed alive");
+      const stopFailure = await Effect.runPromise(Effect.flip(handle.stop()));
+      expect(stopFailure.message).toContain("process tree stayed alive");
       const pid = runtimePid;
       if (pid === null) throw new Error("The runtime did not start a process.");
       expect(processIsAlive(pid)).toBe(true);
@@ -1175,7 +1177,7 @@ describe("createOpenCodeRuntimeStarter", () => {
 
       expect(handle.runtime.runtimeId).toBe("runtime-path");
       expect(existsSync(startupPath)).toBe(true);
-      await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
+      expect(await Effect.runPromise(handle.stop())).toBeUndefined();
     } finally {
       await removeTestDirectory(root);
     }
