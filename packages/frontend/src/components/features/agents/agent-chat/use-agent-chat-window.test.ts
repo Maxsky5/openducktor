@@ -207,6 +207,7 @@ const mountHarness = async (
     containerClientHeight?: number;
     rowHeightPx?: number;
     getRowHeightPx?: (row: AgentChatTranscriptRow) => number;
+    onResult?: (result: HookResult) => void;
   },
 ): Promise<{
   getLatestResult: () => HookResult;
@@ -313,6 +314,7 @@ const mountHarness = async (
     };
     const result = useAgentChatWindow(hookInput);
     latestResultRef.current = result;
+    options?.onResult?.(result);
     return result;
   }, props);
 
@@ -342,6 +344,21 @@ const mountPinnedTranscript = async () => {
     throw new Error("Expected messages container");
   }
   return { harness, container, extraContentHeightPx };
+};
+
+// The transcript adds the duration row of a finished turn before its last assistant row.
+const withTurnDurationBeforeLastRow = (
+  rows: AgentChatTranscriptRow[],
+): AgentChatTranscriptRow[] => {
+  const lastRow = rows.at(-1);
+  if (!lastRow) {
+    throw new Error("Expected at least one row");
+  }
+  return [
+    ...rows.slice(0, -1),
+    { kind: "turn_duration", key: `${lastRow.key}:duration`, durationMs: 1_000 },
+    lastRow,
+  ];
 };
 
 const dispatchWheelUp = async (container: HTMLDivElement): Promise<void> => {
@@ -1407,6 +1424,58 @@ describe("useAgentChatWindow", () => {
 
     expect(harness.getLatestResult().windowStart).toBe(rows.length - AGENT_CHAT_ROW_WINDOW_SIZE);
     expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("keeps the last row mounted on each render when a row is inserted before it", async () => {
+    const rows = createTurnRows(8);
+    const renderedRowKeys: string[][] = [];
+    const harness = await mountHarness(
+      { rows, displayedSessionKey: "session-1", shouldResetForTranscriptLoad: false },
+      {
+        attachDom: true,
+        onResult: (result) => renderedRowKeys.push(result.visibleRows.map((row) => row.key)),
+      },
+    );
+    const lastRowKey = "session-1:assistant-7";
+    renderedRowKeys.length = 0;
+
+    await harness.update({
+      rows: withTurnDurationBeforeLastRow(rows),
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(renderedRowKeys.length).toBeGreaterThan(0);
+    for (const keys of renderedRowKeys) {
+      expect(keys).toContain(lastRowKey);
+    }
+
+    await harness.unmount();
+  });
+
+  test("keeps the last row of a scrolled row window when a row is inserted before it", async () => {
+    const { harness, container } = await mountPinnedTranscript();
+    const rows = createTurnRows(8);
+    container.scrollTop = 40;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      await dispatchScroll(container);
+    });
+
+    await harness.update({
+      rows: withTurnDurationBeforeLastRow(rows),
+      displayedSessionKey: "session-1",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(
+      harness
+        .getLatestResult()
+        .visibleRows.slice(-2)
+        .map((row) => row.key),
+    ).toEqual(["session-1:assistant-7:duration", "session-1:assistant-7"]);
 
     await harness.unmount();
   });
