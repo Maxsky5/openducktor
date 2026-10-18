@@ -316,6 +316,12 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       });
 
       const queries = createRuntimeQueryAdapter(prepared.queries);
+      const loadRuntimeCatalog: typeof queries.loadRuntimeCatalog = (input) =>
+        Effect.sync(() => {
+          const directories = catalogDirectories.get(input.repoPath) ?? new Set<string>();
+          directories.add(input.workingDirectory);
+          catalogDirectories.set(input.repoPath, directories);
+        }).pipe(Effect.andThen(queries.loadRuntimeCatalog(input)));
       const adapter: AgentSessionRuntimeAdapterPort = {
         sessionImport: createRuntimeSessionImportAdapter({
           ...prepared.sessionImport,
@@ -330,15 +336,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             };
           },
         }),
-        queries: {
-          ...queries,
-          loadRuntimeCatalog: (input) =>
-            Effect.sync(() => {
-              const directories = catalogDirectories.get(input.repoPath) ?? new Set<string>();
-              directories.add(input.workingDirectory);
-              catalogDirectories.set(input.repoPath, directories);
-            }).pipe(Effect.andThen(queries.loadRuntimeCatalog(input))),
-        },
+        queries: { ...queries, loadRuntimeCatalog, loadKnownRuntimeCatalog: loadRuntimeCatalog },
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
