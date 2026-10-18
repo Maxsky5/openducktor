@@ -53,6 +53,9 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
     ? {}
     : {
         processEnv: {
+          // The test preload gives each worker its own config directory. Without it, the host
+          // would use the real development config directory of the user.
+          OPENDUCKTOR_CONFIG_DIR: process.env.OPENDUCKTOR_CONFIG_DIR,
           OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
           PATH: "/usr/bin:/bin",
         },
