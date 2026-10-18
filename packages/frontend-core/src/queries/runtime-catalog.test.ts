@@ -11,7 +11,6 @@ import type {
 import { QueryClient, skipToken } from "@tanstack/react-query";
 import { SKIPPED_QUERY_KEY_SEGMENT } from "./skipped-query";
 import {
-  RUNTIME_CATALOG_GC_TIME_MS,
   RUNTIME_CATALOG_STALE_TIME_MS,
   loadRuntimeCatalogFromQuery,
   repoRuntimeFileSearchQueryOptions,
@@ -60,13 +59,11 @@ const fileSearchFixture: AgentFileSearchResult = {
 describe("runtime catalog queries", () => {
   test("keeps the catalog fresh for thirty minutes", () => {
     expect(RUNTIME_CATALOG_STALE_TIME_MS).toBe(30 * 60_000);
-    expect(RUNTIME_CATALOG_GC_TIME_MS).toBe(60 * 60_000);
     const options = runtimeCatalogQueryOptions(
       workingDirectoryRefFixture,
       async () => runtimeCatalogFixture,
     );
     expect(options.staleTime).toBe(RUNTIME_CATALOG_STALE_TIME_MS);
-    expect(options.gcTime).toBe(RUNTIME_CATALOG_GC_TIME_MS);
   });
 
   test("keys the combined catalog read by repo path, runtime kind, and working directory", () => {

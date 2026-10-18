@@ -13,7 +13,6 @@ import {
   invalidateCurrentBranchQuery,
   invalidateGitWorkingDirectoryQueries,
   invalidateRepoBranchesQuery,
-  loadCurrentBranchFromQuery,
   loadRepoBranchesFromQuery,
   repoBranchesQueryOptions,
 } from "@openducktor/frontend-core/queries/git";
@@ -93,9 +92,21 @@ export function useWorkspaceBranchOperations({
       }
 
       try {
+        // A read from the last visit may still hold the old branch.
+        await Promise.all(
+          [gitQueryKeys.currentBranch(repoPath), gitQueryKeys.branches(repoPath)].map((queryKey) =>
+            queryClient.cancelQueries({ queryKey, exact: true }),
+          ),
+        );
         await Promise.all([
-          loadCurrentBranchFromQuery(queryClient, repoPath),
-          loadRepoBranchesFromQuery(queryClient, repoPath),
+          queryClient.fetchQuery({
+            ...currentBranchQueryOptions(repoPath),
+            staleTime: 0,
+          }),
+          queryClient.fetchQuery({
+            ...repoBranchesQueryOptions(repoPath),
+            staleTime: 0,
+          }),
         ]);
       } catch (error) {
         if (error instanceof CancelledError) {

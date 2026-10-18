@@ -123,5 +123,6 @@ test.each(["merge_commit", "squash", "rebase"] as const)(
       await rm(repo, { recursive: true, force: true });
     }
   },
-  10000,
+  // Each scenario starts about 80 Git processes; Windows CI can exceed 10 seconds.
+  20000,
 );

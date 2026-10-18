@@ -21,9 +21,11 @@ import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-cor
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
 import {
   dropWorkspaceQueries,
+  dropWorkspaceConfigQueries,
   invalidateWorkspaceCaches,
   invalidateWorkspaceSettingsSnapshot,
   loadWorkspaceListFromQuery,
+  pruneWorkspaceConfigQueries,
   workspaceCatalogQueryOptions,
   workspaceListQueryOptions,
   workspaceQueryKeys,
@@ -283,8 +285,9 @@ export function useWorkspaceSelectionOperations({
     }
 
     const records = workspaceListQuery.data;
+    pruneWorkspaceConfigQueries(queryClient, records);
     startTransition(() => applyActiveWorkspaceFromRecords(records));
-  }, [applyActiveWorkspaceFromRecords, workspaceListQuery.data]);
+  }, [applyActiveWorkspaceFromRecords, queryClient, workspaceListQuery.data]);
 
   useEffect(() => {
     if (!workspaceQueryError) {
@@ -467,12 +470,16 @@ export function useWorkspaceSelectionOperations({
       runLifecycleAction(async () => {
         const catalog = await hostClient.workspaceClose(input.workspaceId, input.expectedRepoPath);
         applyLifecycleCatalog(catalog);
+        dropWorkspaceConfigQueries(queryClient, {
+          repoPath: input.expectedRepoPath,
+          workspaceId: input.workspaceId,
+        });
         return {
           title: "Workspace closed",
           description: "Reopen it from Open a Repository when you need it again.",
         };
       }),
-    [applyLifecycleCatalog, hostClient, runLifecycleAction],
+    [applyLifecycleCatalog, hostClient, queryClient, runLifecycleAction],
   );
 
   const removeWorkspace = useCallback(

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { WorkspaceCatalog, WorkspaceRecord } from "@openducktor/contracts";
-import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { isCancelledError, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { type PropsWithChildren, useLayoutEffect, useState } from "react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
@@ -9,6 +9,7 @@ import { createHookHarness } from "@openducktor/frontend-core/test-support/react
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 import { repositoryGitProviderContextQueryKeys } from "@openducktor/frontend-core/queries/git-provider-context";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import {
@@ -901,39 +902,82 @@ describe("use-workspace-selection-operations", () => {
     }
   });
 
-  test("drops repository-path and workspace-id caches after committed removal", async () => {
-    workspaceHost.workspaceRemove = mock(async () => ({
-      catalog: {
-        openWorkspaces: [],
-        closedWorkspaces: [],
-        incompleteRemovals: [],
-      },
-      removedWorktrees: [],
-    }));
-    const harness = createRepoSelectionHarness("/repo");
+  test.each(["close", "remove", "refresh"] as const)(
+    "drops closed workspace caches after %s, including pending reads",
+    async (action) => {
+      const open = [workspace("/repo", true), workspace("/other")];
+      const catalog = { openWorkspaces: open, closedWorkspaces: [], incompleteRemovals: [] };
+      const closed = { ...catalog, openWorkspaces: [workspace("/other", true)] };
+      workspaceHost.workspaceList = mock(async () => open);
+      workspaceHost.workspaceCatalogGet = mock(async () => catalog);
+      workspaceHost.workspaceClose = mock(async () => closed);
+      workspaceHost.workspaceRemove = mock(async () => ({ catalog: closed, removedWorktrees: [] }));
+      const harness = createRepoSelectionHarness("/repo");
+      const release: (() => void)[] = [];
 
-    try {
-      await harness.mount();
-      const queryClient = harness.getQueryClient();
-      queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
-        tasks: [{ id: "task-1" }],
-      });
-      queryClient.setQueryData(["workspace", "repo-config", "repo"], { workspaceId: "repo" });
+      try {
+        await harness.mount();
+        const queryClient = harness.getQueryClient();
+        queryClient.setQueryData(taskQueryKeys.repoData("/repo"), {
+          tasks: [{ id: "task-1" }],
+        });
+        queryClient.setQueryData(workspaceQueryKeys.repoConfig("repo"), { workspaceId: "repo" });
+        const catalogKeys = ["opencode", "claude"].map((runtimeKind) => [
+          ...runtimeCatalogQueryKeys.repoCatalogScope("/repo"),
+          runtimeKind,
+          "/repo/worktree",
+        ]);
+        for (const key of catalogKeys) queryClient.setQueryData(key, { models: [] });
+        const otherConfigKey = workspaceQueryKeys.repoConfig("other");
+        const otherCatalogKey = runtimeCatalogQueryKeys.catalog({
+          repoPath: "/other",
+          runtimeKind: "opencode",
+          workingDirectory: "/other",
+        });
+        queryClient.setQueryData(otherConfigKey, { workspaceId: "other" });
+        queryClient.setQueryData(otherCatalogKey, { models: [] });
+        const reads = [...catalogKeys, workspaceQueryKeys.repoConfig("repo")].map((queryKey) => {
+          const response = createDeferred<unknown>();
+          release.push(() => response.resolve(null));
+          return queryClient
+            .fetchQuery({ queryKey, queryFn: () => response.promise, staleTime: 0 })
+            .catch(isCancelledError);
+        });
 
-      await harness.run((value) =>
-        value.removeWorkspace({
-          workspaceId: "repo",
-          expectedRepoPath: "/repo",
-          removeTaskWorktrees: false,
-        }),
-      );
+        if (action === "refresh") {
+          workspaceHost.workspaceList = mock(async () => closed.openWorkspaces);
+          await queryClient.invalidateQueries({
+            queryKey: workspaceQueryKeys.list(),
+            refetchType: "none",
+          });
+        }
 
-      expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
-      expect(queryClient.getQueryData(["workspace", "repo-config", "repo"])).toBeUndefined();
-    } finally {
-      await harness.unmount();
-    }
-  });
+        await harness.run((value) => {
+          if (action === "refresh") return value.refreshWorkspaces();
+          if (action === "close")
+            return value.closeWorkspace({ workspaceId: "repo", expectedRepoPath: "/repo" });
+          return value.removeWorkspace({
+            workspaceId: "repo",
+            expectedRepoPath: "/repo",
+            removeTaskWorktrees: false,
+          });
+        });
+
+        await harness.waitFor((value) => value.workspaces[0]?.workspaceId === "other");
+        for (const finish of release) finish();
+        expect((await Promise.all(reads)).every((cancelled) => cancelled === true)).toBe(true);
+        if (action === "remove")
+          expect(queryClient.getQueryData(taskQueryKeys.repoData("/repo"))).toBeUndefined();
+        expect(queryClient.getQueryData(workspaceQueryKeys.repoConfig("repo"))).toBeUndefined();
+        for (const key of catalogKeys) expect(queryClient.getQueryData(key)).toBeUndefined();
+        expect(queryClient.getQueryData<unknown>(otherConfigKey)).toEqual({ workspaceId: "other" });
+        expect(queryClient.getQueryData<unknown>(otherCatalogKey)).toEqual({ models: [] });
+      } finally {
+        for (const finish of release) finish();
+        await harness.unmount();
+      }
+    },
+  );
 
   test("keeps the list and catalog caches when the removed workspace id matches a shared key", async () => {
     let listCalls = 0;

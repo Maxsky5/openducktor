@@ -43,7 +43,7 @@ Invalidate these read-mostly values after a write.
 | Runtime catalog | 30 min |
 
 Query modules: `workspace.ts`, `runtime.ts`, and `runtime-catalog.ts` under `packages/frontend-core/src/queries`.
-The runtime catalog keeps inactive results for 60 minutes so a modal can show cached models during a later refresh.
+The runtime catalog and repository config load on the first visit to a workspace. They have no timed cache eviction while that workspace is open. A later visit shows the cached data at once and reads stale data again in the background. Closing or removing a workspace cancels pending reads and removes its runtime catalogs and repository config. Model catalog previews outside an open workspace keep their 60-minute inactive lifetime.
 
 Runtime catalog reads follow these rules:
 
@@ -138,6 +138,8 @@ Use a zero stale time for general worktree status reads. Session Git panels key 
 A branch read that finds a new commit on the same checkout reads the shown local changes, Branch changes, and comparison check again, because their keys do not change. A rebase detaches HEAD and attaches it again, which changes these keys. A read under the new key shows the result that it continues as placeholder data until its own result arrives, when the new or the previous checkout is a detached HEAD. A branch read that finds another checkout removes the inactive reads of an earlier visit to that checkout, because they predate the change. A change to another named branch starts without data.
 
 Query modules: `checks.ts`, `filesystem.ts`, and `git.ts`.
+
+Workspace activation shows the cached branch at once and reads the current branch and branch list again with a zero stale time. The branch-sync probe checks only the active repository on focus or visibility changes. It does not poll or check inactive repositories.
 
 ## Read methods
 
