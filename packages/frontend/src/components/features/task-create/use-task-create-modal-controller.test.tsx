@@ -3,9 +3,9 @@ import { act, render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import {
-  type AgentStudioTaskDetailsLauncherModel,
-  useAgentStudioTaskDetailsLauncher,
-} from "@/pages/agents/shell/use-agent-studio-task-details-launcher";
+  type TaskWorkflowTaskComposerModel,
+  useTaskWorkflowComposer,
+} from "@/features/task-workflow/use-task-workflow-composer";
 import {
   SpecStateContext,
   TasksStateContext,
@@ -316,7 +316,7 @@ describe("useTaskCreateModalController", () => {
   });
 });
 
-describe("Agent Studio task editor save ownership", () => {
+describe("task workflow editor save ownership", () => {
   test.each(["another workspace", "the same task after returning"])(
     "keeps the replacement draft in %s when an old save completes",
     async (replacement) => {
@@ -331,38 +331,32 @@ describe("Agent Studio task editor save ownership", () => {
       const updateTask = mock(async () => {
         await pendingSave;
       });
-      let launcher: AgentStudioTaskDetailsLauncherModel;
+      let workflowComposer: ReturnType<typeof useTaskWorkflowComposer>;
       let controller: Controller;
       let submission: Promise<void> | undefined;
-      const getLauncher = () => launcher;
+      const getComposer = () => workflowComposer;
       const getController = () => controller;
       type ProbeProps = {
         workspace: typeof workspaceA;
         task: typeof taskA;
       };
 
-      const EditorProbe = ({
-        editor,
-      }: {
-        editor: NonNullable<AgentStudioTaskDetailsLauncherModel["taskEditor"]>;
-      }): null => {
-        controller = useTaskCreateModalController({ ...editor, task: editor.task ?? null });
+      const EditorProbe = ({ editor }: { editor: TaskWorkflowTaskComposerModel }): null => {
+        controller = useTaskCreateModalController(editor);
         return null;
       };
-      const LauncherProbe = ({ workspace, task }: ProbeProps): ReactElement | null => {
-        launcher = useAgentStudioTaskDetailsLauncher({
-          activeWorkspace: workspace,
-          tasks: [task],
-          selectedTaskId: task.id,
-        });
-        return launcher.taskEditor ? <EditorProbe editor={launcher.taskEditor} /> : null;
+      const ComposerProbe = ({ workspace, task }: ProbeProps): ReactElement | null => {
+        workflowComposer = useTaskWorkflowComposer({ activeWorkspace: workspace, tasks: [task] });
+        return workflowComposer.composer.open ? (
+          <EditorProbe editor={workflowComposer.composer} />
+        ) : null;
       };
       const tree = (workspace: typeof workspaceA, task: typeof taskA): ReactElement => (
         <QueryProvider useIsolatedClient>
           <WorkspaceStateContext.Provider value={{ ...workspaceState, activeWorkspace: workspace }}>
             <TasksStateContext.Provider value={{ ...createTasksState(updateTask), tasks: [task] }}>
               <SpecStateContext.Provider value={specState}>
-                <LauncherProbe workspace={workspace} task={task} />
+                <ComposerProbe workspace={workspace} task={task} />
               </SpecStateContext.Provider>
             </TasksStateContext.Provider>
           </WorkspaceStateContext.Provider>
@@ -370,7 +364,7 @@ describe("Agent Studio task editor save ownership", () => {
       );
       const view = render(tree(workspaceA, taskA));
       try {
-        act(() => getLauncher().taskDetailsSheetProps.onEdit?.(taskA.id));
+        act(() => getComposer().onEdit(taskA.id));
         act(() => getController().updateState({ title: "Saved A" }));
         act(() => {
           submission = getController().submit();
@@ -383,18 +377,18 @@ describe("Agent Studio task editor save ownership", () => {
         );
 
         view.rerender(tree(workspaceB, taskB));
-        expect(getLauncher().taskEditor).toBeNull();
+        expect(getComposer().composer.open).toBe(false);
         const nextTask = replacement === "another workspace" ? taskB : taskA;
         if (replacement !== "another workspace") {
           view.rerender(tree(workspaceA, taskA));
         }
-        act(() => getLauncher().taskDetailsSheetProps.onEdit?.(nextTask.id));
+        act(() => getComposer().onEdit(nextTask.id));
         act(() => getController().updateState({ title: "Unsaved replacement" }));
         await act(async () => {
           resolveSave();
           await submission;
         });
-        expect(getLauncher().taskEditor?.task?.id).toBe(nextTask.id);
+        expect(getComposer().composer.task?.id).toBe(nextTask.id);
         expect(getController().state.title).toBe("Unsaved replacement");
         expect(getController().isSubmitting).toBe(false);
 
@@ -406,7 +400,7 @@ describe("Agent Studio task editor save ownership", () => {
           expect.objectContaining({ title: "Unsaved replacement" }),
           undefined,
         );
-        expect(getLauncher().taskEditor).toBeNull();
+        expect(getComposer().composer.open).toBe(false);
       } finally {
         await act(async () => {
           resolveSave();

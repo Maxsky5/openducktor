@@ -13,32 +13,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   formatActiveSessionStopLoadingMessage,
-  formatManagedSessionCleanupLoadingMessage,
-  formatManagedSessionCleanupMessage,
-  formatUnknownManagedSessionCleanupMessage,
+  formatCleanupImpactMessage,
+  confirmButtonState,
 } from "./task-cleanup-impact-model";
-
-type TaskCloseConfirmDialogProps = {
-  open: boolean;
-  onOpenChange: (nextOpen: boolean) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-  taskId: string;
-  impact: {
-    isLoading: boolean;
-    isLoadingStopImpact: boolean;
-    hasManagedSessionCleanup: boolean;
-    managedWorktreeCount: number;
-    terminalCount: number;
-    activeSessionCount: number | null;
-    activeSessionCountError: string | null;
-    error: string | null;
-  };
-  closing: {
-    isPending: boolean;
-    error: string | null;
-  };
-};
+import type { TaskConfirmDialogProps } from "./task-confirm-dialog-types";
 
 export function TaskCloseConfirmDialog({
   open,
@@ -47,19 +25,17 @@ export function TaskCloseConfirmDialog({
   onConfirm,
   taskId,
   impact,
-  closing,
-}: TaskCloseConfirmDialogProps): ReactElement {
-  const isImpactLoading = impact.isLoading || impact.isLoadingStopImpact;
-  let confirmLabel = "Close task";
-  if (closing.isPending) {
-    confirmLabel = "Closing...";
-  } else if (isImpactLoading) {
-    confirmLabel = "Checking...";
-  }
+  operation,
+  onCloseAutoFocus,
+}: TaskConfirmDialogProps): ReactElement {
+  const confirmButton = confirmButtonState(impact, operation, {
+    idle: "Close task",
+    pending: "Closing...",
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Close Task</DialogTitle>
           <DialogDescription>Close {taskId} manually and move it to Done?</DialogDescription>
@@ -80,32 +56,35 @@ export function TaskCloseConfirmDialog({
             {impact.isLoadingStopImpact ? (
               <p>{formatActiveSessionStopLoadingMessage("close")}</p>
             ) : null}
-            <p>{worktreeCleanupMessage(impact)}</p>
+            <p>
+              {formatCleanupImpactMessage(impact, "close") ??
+                "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost."}
+            </p>
             <p>The task record, documents, QA reports, and linked history are retained.</p>
           </div>
           {impact.error ? <p className="mt-2 text-destructive-muted">{impact.error}</p> : null}
-          {closing.error ? <p className="mt-2 text-destructive-muted">{closing.error}</p> : null}
+          {operation.error ? (
+            <p className="mt-2 text-destructive-muted">{operation.error}</p>
+          ) : null}
         </DialogBody>
 
         <DialogFooter className="mt-0 flex flex-row justify-between gap-2 border-t border-border pt-5">
-          <Button type="button" variant="outline" disabled={closing.isPending} onClick={onCancel}>
+          <Button type="button" variant="outline" disabled={operation.isPending} onClick={onCancel}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="warning"
-            disabled={
-              closing.isPending || isImpactLoading || impact.activeSessionCountError !== null
-            }
-            aria-busy={closing.isPending || isImpactLoading}
+            disabled={confirmButton.disabled}
+            aria-busy={confirmButton.isBusy}
             onClick={onConfirm}
           >
-            {closing.isPending || isImpactLoading ? (
+            {confirmButton.isBusy ? (
               <Loader2 className="animate-spin" data-icon="inline-start" />
             ) : (
               <CircleCheckBig data-icon="inline-start" />
             )}
-            {confirmLabel}
+            {confirmButton.label}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -117,18 +96,4 @@ function terminalStopMessage(terminalCount: number): string {
   if (terminalCount === 0) return "No running task terminals will be stopped.";
   const noun = terminalCount === 1 ? "terminal" : "terminals";
   return `${terminalCount} task ${noun}, including action terminals, will be stopped before the task closes.`;
-}
-
-function worktreeCleanupMessage(
-  impact: Pick<
-    TaskCloseConfirmDialogProps["impact"],
-    "isLoading" | "error" | "hasManagedSessionCleanup" | "managedWorktreeCount"
-  >,
-): string {
-  if (impact.isLoading) return formatManagedSessionCleanupLoadingMessage("close");
-  if (impact.error) return formatUnknownManagedSessionCleanupMessage();
-  if (impact.hasManagedSessionCleanup) {
-    return formatManagedSessionCleanupMessage(impact.managedWorktreeCount);
-  }
-  return "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost.";
 }

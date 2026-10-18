@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
+import type { TaskConfirmDialogState } from "./task-confirm-dialog-types";
 
 type AsyncConfirmDialogState = {
   isOpen: boolean;
@@ -9,7 +10,7 @@ type AsyncConfirmDialogState = {
 
 type AsyncConfirmDialogAction =
   | { type: "reset" }
-  | { type: "sheetClosed" }
+  | { type: "disabled" }
   | { type: "opened" }
   | { type: "openChanged"; open: boolean }
   | { type: "started" }
@@ -26,7 +27,7 @@ const asyncConfirmDialogReducer = (
       return state.isOpen || state.isPending || state.error !== null
         ? { isOpen: false, isPending: false, error: null }
         : state;
-    case "sheetClosed":
+    case "disabled":
       return state.isOpen || state.error !== null
         ? { isOpen: false, isPending: state.isPending, error: null }
         : state;
@@ -46,20 +47,31 @@ const asyncConfirmDialogReducer = (
 };
 
 type UseTaskAsyncConfirmDialogOptions = {
-  sheetOpen: boolean;
+  /** The dialog can open only while this is true. Turning it off closes the dialog. */
+  enabled: boolean;
+  /** Open the dialog on mount, for a host that mounts it to ask for one confirmation. */
+  initiallyOpen?: boolean;
+  /** A new key resets the dialog and ignores the result of a run that started before. */
   scopeKey: string | null;
-  onOpenChange: (open: boolean) => void;
   run: (() => Promise<void>) | undefined;
+  onSucceeded: () => void;
 };
 
+export type TaskAsyncConfirmDialog = {
+  openDialog: () => void;
+  dialog: Omit<TaskConfirmDialogState, "impact">;
+};
+
+/** A confirmation that runs an async action and keeps the dialog open with its error on failure. */
 export function useTaskAsyncConfirmDialog({
-  sheetOpen,
+  enabled,
+  initiallyOpen = false,
   scopeKey,
-  onOpenChange,
   run,
-}: UseTaskAsyncConfirmDialogOptions) {
+  onSucceeded,
+}: UseTaskAsyncConfirmDialogOptions): TaskAsyncConfirmDialog {
   const [state, dispatch] = useReducer(asyncConfirmDialogReducer, {
-    isOpen: false,
+    isOpen: initiallyOpen,
     isPending: false,
     error: null,
   });
@@ -79,10 +91,10 @@ export function useTaskAsyncConfirmDialog({
   }, [scopeKey]);
 
   useEffect(() => {
-    if (!sheetOpen) {
-      dispatch({ type: "sheetClosed" });
+    if (!enabled) {
+      dispatch({ type: "disabled" });
     }
-  }, [sheetOpen]);
+  }, [enabled]);
 
   const openDialog = useCallback((): void => {
     dispatch({ type: "opened" });
@@ -118,7 +130,7 @@ export function useTaskAsyncConfirmDialog({
           return;
         }
         dispatch({ type: "succeeded" });
-        onOpenChange(false);
+        onSucceeded();
       })
       .catch((cause: unknown) => {
         if (requestToken !== requestTokenRef.current) {
@@ -133,23 +145,16 @@ export function useTaskAsyncConfirmDialog({
         requestInFlightRef.current = false;
         dispatch({ type: "finished" });
       });
-  }, [onOpenChange, run]);
+  }, [onSucceeded, run]);
 
   return {
-    isDialogOpen: sheetOpen && state.isOpen,
-    isPending: state.isPending || requestInFlightRef.current,
-    error: state.error,
     openDialog,
-    closeDialog,
-    handleDialogOpenChange,
-    confirm,
-  } satisfies {
-    isDialogOpen: boolean;
-    isPending: boolean;
-    error: string | null;
-    openDialog: () => void;
-    closeDialog: () => void;
-    handleDialogOpenChange: (nextOpen: boolean) => void;
-    confirm: () => void;
+    dialog: {
+      open: enabled && state.isOpen,
+      onOpenChange: handleDialogOpenChange,
+      onCancel: closeDialog,
+      onConfirm: confirm,
+      operation: { isPending: state.isPending || requestInFlightRef.current, error: state.error },
+    },
   };
 }

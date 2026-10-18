@@ -33,7 +33,11 @@ import type {
   TasksStateContextValue,
   WorkspaceStateContextValue,
 } from "@/types/state-slices";
-import { createObservedCheckFixture } from "@/test-utils/shared-test-fixtures";
+import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
+import {
+  createObservedCheckFixture,
+  createTaskWorkflowActionsFixture,
+} from "@/test-utils/shared-test-fixtures";
 import { agentStudioChatDraftScopeKey } from "../agent-studio-chat-draft";
 import {
   createAgentSessionFixture,
@@ -533,7 +537,9 @@ const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
             <AgentSessionsContext.Provider value={sessionStore}>
               <NotificationContext.Provider value={notificationContextValue}>
                 <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
-                  {children}
+                  <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture()}>
+                    {children}
+                  </TaskWorkflowActionsContext.Provider>
                 </RuntimeDefinitionsContext.Provider>
               </NotificationContext.Provider>
             </AgentSessionsContext.Provider>
@@ -1025,7 +1031,6 @@ describe("useAgentsPageShellModel", () => {
       // Without a selected task there is no panel owner, so the right panel does not show.
       expect(state.panels.right.isVisible).toBe(false);
       expect(state.panels.rightToggle).toBeNull();
-      expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetRef.current).toBeNull();
     } finally {
       await harness.unmount();
     }

@@ -1,11 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
-import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import {
+  SESSION_VIEW_ACTIONS,
+  type TaskWorkflowAction,
+} from "@/components/features/kanban/kanban-task-workflow";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import {
-  collectDeleteImpactTaskIds,
-  collectSingleTaskCleanupImpactTaskIds,
   shouldLoadDocumentSection,
   toDocumentSummaryState,
   toSubtasks,
@@ -13,14 +14,15 @@ import {
 } from "@/components/features/task-details/task-details-sheet-model";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
 import { useTaskCleanupImpact } from "@/components/features/task-details/use-task-cleanup-impact";
-import { useTaskCloseDialog } from "@/components/features/task-details/use-task-close-dialog";
-import { useTaskDeleteDialog } from "@/components/features/task-details/use-task-delete-dialog";
+import {
+  type TaskConfirmDialog,
+  useTaskConfirmDialog,
+} from "@/components/features/task-details/use-task-confirm-dialog";
 import {
   type DocumentSectionKey,
   type TaskDocumentState,
   useTaskDocuments,
 } from "@/components/features/task-details/use-task-documents";
-import { useTaskResetDialog } from "@/components/features/task-details/use-task-reset-dialog";
 import { runTaskWorkflowAction } from "@/features/task-workflow/run-task-workflow-action";
 import type { TaskWorkflowActions } from "@/features/task-workflow/task-workflow-actions-context";
 import { useTaskStopImpact } from "@/state/queries/use-task-stop-impact";
@@ -28,6 +30,9 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 
 type TaskDetailsSheetViewModel = {
   taskId: string | null;
+  deleteConfirm: TaskConfirmDialog;
+  resetConfirm: TaskConfirmDialog;
+  closeConfirm: TaskConfirmDialog;
   subtasks: TaskCard[];
   shouldRenderSubtasks: boolean;
   taskLabels: string[];
@@ -44,51 +49,6 @@ type TaskDetailsSheetViewModel = {
   loadSpecDocumentSection: () => void;
   loadPlanDocumentSection: () => void;
   loadQaDocumentSection: () => void;
-  isDeleteDialogOpen: boolean;
-  isDeletePending: boolean;
-  deleteError: string | null;
-  isLoadingDeleteImpact: boolean;
-  isLoadingDeleteStopImpact: boolean;
-  hasManagedDeleteSessionCleanup: boolean;
-  deleteManagedWorktreeCount: number;
-  deleteImpactError: string | null;
-  deleteTerminalCount: number;
-  deleteActiveSessionCount: number | null;
-  deleteActiveSessionCountError: string | null;
-  isLoadingResetImpact: boolean;
-  isLoadingResetStopImpact: boolean;
-  hasManagedResetSessionCleanup: boolean;
-  resetManagedWorktreeCount: number;
-  resetImpactError: string | null;
-  resetTerminalCount: number;
-  resetActiveSessionCount: number | null;
-  resetActiveSessionCountError: string | null;
-  isResetDialogOpen: boolean;
-  isResetPending: boolean;
-  resetError: string | null;
-  isCloseDialogOpen: boolean;
-  isClosePending: boolean;
-  closeError: string | null;
-  isLoadingCloseImpact: boolean;
-  isLoadingCloseStopImpact: boolean;
-  hasManagedCloseSessionCleanup: boolean;
-  closeManagedWorktreeCount: number;
-  closeImpactError: string | null;
-  closeTerminalCount: number;
-  closeActiveSessionCount: number | null;
-  closeActiveSessionCountError: string | null;
-  openDeleteDialog: () => void;
-  closeDeleteDialog: () => void;
-  handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
-  confirmDelete: () => void;
-  openResetDialog: () => void;
-  closeResetDialog: () => void;
-  handleResetDialogOpenChange: (nextOpen: boolean) => void;
-  confirmReset: () => void;
-  openCloseDialog: () => void;
-  closeCloseDialog: () => void;
-  handleCloseDialogOpenChange: (nextOpen: boolean) => void;
-  confirmClose: () => void;
 };
 
 type UseTaskDetailsSheetViewModelOptions = {
@@ -141,99 +101,40 @@ export function useTaskDetailsSheetViewModel({
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const taskId = task?.id ?? null;
   const taskById = useMemo(() => new Map(allTasks.map((entry) => [entry.id, entry])), [allTasks]);
-  const deleteImpactTaskIds = useMemo(
-    () => collectDeleteImpactTaskIds(task, taskById),
-    [task, taskById],
-  );
-  const singleTaskCleanupImpactTaskIds = useMemo(
-    () => collectSingleTaskCleanupImpactTaskIds(task),
-    [task],
-  );
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const shouldRenderSubtasks = task?.issueType === "epic";
   const taskLabels = useMemo(() => toTaskLabels(task?.labels), [task?.labels]);
 
-  const {
-    isDeleteDialogOpen,
-    isDeletePending,
-    deleteError,
-    openDeleteDialog,
-    closeDeleteDialog,
-    handleDeleteDialogOpenChange,
-    confirmDelete,
-  } = useTaskDeleteDialog({
-    sheetOpen: open,
+  const confirmOptions = {
     task,
-    onOpenChange,
-    onDelete,
+    allTasks,
+    enabled: open,
+    onSucceeded: () => onOpenChange(false),
+    taskCleanupImpactHook,
+    taskStopImpactHook,
+  };
+  const deleteConfirm = useTaskConfirmDialog({
+    ...confirmOptions,
+    action: "delete",
+    run: onDelete && ((id) => onDelete(id, { deleteSubtasks: true })),
   });
+  const resetConfirm = useTaskConfirmDialog({
+    ...confirmOptions,
+    action: "reset_task",
+    run: onResetTask,
+  });
+  const closeConfirm = useTaskConfirmDialog({
+    ...confirmOptions,
+    action: "close",
+    run: onCloseTask,
+  });
+  const { openDialog: openResetDialog } = resetConfirm;
+  const { openDialog: openCloseDialog } = closeConfirm;
   const { specDoc, planDoc, qaDoc, ensureDocumentLoaded } = taskDocumentsHook(
     taskId,
-    open && !isDeletePending,
+    open && !deleteConfirm.dialog.operation.isPending,
     workspaceRepoPath ?? "",
   );
-  const {
-    isResetDialogOpen,
-    isResetPending,
-    resetError,
-    openResetDialog,
-    closeResetDialog,
-    handleResetDialogOpenChange,
-    confirmReset,
-  } = useTaskResetDialog({
-    sheetOpen: open,
-    task,
-    onOpenChange,
-    onResetTask,
-  });
-  const {
-    isCloseDialogOpen,
-    isClosePending,
-    closeError,
-    openCloseDialog,
-    closeCloseDialog,
-    handleCloseDialogOpenChange,
-    confirmClose,
-  } = useTaskCloseDialog({
-    sheetOpen: open,
-    task,
-    onOpenChange,
-    onCloseTask,
-  });
-  const shouldLoadDeleteImpact = open && isDeleteDialogOpen && onDelete !== undefined;
-  const shouldLoadSingleTaskImpact =
-    open &&
-    ((isResetDialogOpen && onResetTask !== undefined) ||
-      (isCloseDialogOpen && onCloseTask !== undefined));
-  const {
-    hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
-    managedWorktreeCount: deleteManagedWorktreeCount,
-    impactError: deleteImpactError,
-    isLoadingImpact: isLoadingDeleteImpact,
-    terminalCount: deleteTerminalCount,
-  } = taskCleanupImpactHook(deleteImpactTaskIds, shouldLoadDeleteImpact);
-  const {
-    hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
-    managedWorktreeCount: singleTaskCleanupWorktreeCount,
-    impactError: singleTaskCleanupImpactError,
-    isLoadingImpact: isLoadingSingleTaskCleanupImpact,
-    terminalCount: singleTaskTerminalCount,
-  } = taskCleanupImpactHook(singleTaskCleanupImpactTaskIds, shouldLoadSingleTaskImpact);
-  const deleteStopImpact = taskStopImpactHook({
-    taskIds: singleTaskCleanupImpactTaskIds,
-    operation: "delete",
-    enabled: shouldLoadDeleteImpact,
-  });
-  const resetStopImpact = taskStopImpactHook({
-    taskIds: singleTaskCleanupImpactTaskIds,
-    operation: "reset_task",
-    enabled: isResetDialogOpen && onResetTask !== undefined,
-  });
-  const closeStopImpact = taskStopImpactHook({
-    taskIds: singleTaskCleanupImpactTaskIds,
-    operation: "close",
-    enabled: isCloseDialogOpen && onCloseTask !== undefined,
-  });
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
       runTaskWorkflowAction(
@@ -256,8 +157,11 @@ export function useTaskDetailsSheetViewModel({
           resolveSessionOptions: resolveSessionOptionsByRole,
         },
       );
+      // The session opens in place of the current view, so the sheet must not stay over it.
+      if (SESSION_VIEW_ACTIONS.has(action)) onOpenChange(false);
     },
     [
+      onOpenChange,
       onBuild,
       onDelegate,
       onOpenSession,
@@ -301,6 +205,9 @@ export function useTaskDetailsSheetViewModel({
 
   return {
     taskId,
+    deleteConfirm,
+    resetConfirm,
+    closeConfirm,
     subtasks,
     shouldRenderSubtasks,
     taskLabels,
@@ -317,50 +224,5 @@ export function useTaskDetailsSheetViewModel({
     loadSpecDocumentSection,
     loadPlanDocumentSection,
     loadQaDocumentSection,
-    isDeleteDialogOpen,
-    isDeletePending,
-    deleteError,
-    isLoadingDeleteImpact,
-    isLoadingDeleteStopImpact: deleteStopImpact.isLoading,
-    hasManagedDeleteSessionCleanup,
-    deleteManagedWorktreeCount,
-    deleteImpactError,
-    deleteTerminalCount,
-    deleteActiveSessionCount: deleteStopImpact.stoppableSessionCount,
-    deleteActiveSessionCountError: deleteStopImpact.error,
-    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
-    isLoadingResetStopImpact: resetStopImpact.isLoading,
-    hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
-    resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
-    resetImpactError: singleTaskCleanupImpactError,
-    resetTerminalCount: singleTaskTerminalCount,
-    resetActiveSessionCount: resetStopImpact.stoppableSessionCount,
-    resetActiveSessionCountError: resetStopImpact.error,
-    isResetDialogOpen,
-    isResetPending,
-    resetError,
-    isCloseDialogOpen,
-    isClosePending,
-    closeError,
-    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact,
-    isLoadingCloseStopImpact: closeStopImpact.isLoading,
-    hasManagedCloseSessionCleanup: hasManagedSingleTaskCleanup,
-    closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
-    closeImpactError: singleTaskCleanupImpactError,
-    closeTerminalCount: singleTaskTerminalCount,
-    closeActiveSessionCount: closeStopImpact.stoppableSessionCount,
-    closeActiveSessionCountError: closeStopImpact.error,
-    openDeleteDialog,
-    closeDeleteDialog,
-    handleDeleteDialogOpenChange,
-    confirmDelete,
-    openResetDialog,
-    closeResetDialog,
-    handleResetDialogOpenChange,
-    confirmReset,
-    openCloseDialog,
-    closeCloseDialog,
-    handleCloseDialogOpenChange,
-    confirmClose,
   };
 }

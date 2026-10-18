@@ -12,6 +12,7 @@ import {
 } from "@/components/features/kanban/session-target-resolution";
 import { TaskCloseConfirmDialog } from "@/components/features/task-details/task-close-confirm-dialog";
 import { TaskDeleteConfirmDialog } from "@/components/features/task-details/task-delete-confirm-dialog";
+import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
 import { TaskDetailsSheetBody } from "@/components/features/task-details/task-details-sheet-body";
 import {
   TaskDetailsSheetFooter,
@@ -20,7 +21,6 @@ import {
 import { TaskDetailsSheetFrame } from "@/components/features/task-details/task-details-sheet-frame";
 import { TaskDetailsSheetHeader } from "@/components/features/task-details/task-details-sheet-header";
 import type { TaskDetailsSheetProps } from "@/components/features/task-details/task-details-sheet-types";
-import { TaskResetConfirmDialog } from "@/components/features/task-details/task-reset-confirm-dialog";
 import { useTaskDetailsSheetViewModel } from "@/components/features/task-details/use-task-details-sheet-view-model";
 import { useDialogOpen } from "@/components/ui/dialog-root";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -85,8 +85,6 @@ export function TaskDetailsSheetContent(
     onOpenChange,
     onEdit = workflowActions?.onEdit,
     onDelete = workflowActions?.onDelete,
-    requestedConfirm = null,
-    onRequestedConfirmHandled,
   } = props;
   const open = useDialogOpen("TaskDetailsSheetContent", "TaskDetailsSheetFrame");
   const taskId = task.id;
@@ -111,13 +109,6 @@ export function TaskDetailsSheetContent(
       taskSessions: contextTaskSessions,
     }),
   );
-  const { openResetDialog, openDeleteDialog } = viewModel;
-  useEffect(() => {
-    if (!requestedConfirm) return;
-    if (requestedConfirm === "reset_task") openResetDialog();
-    else openDeleteDialog();
-    onRequestedConfirmHandled?.();
-  }, [onRequestedConfirmHandled, openDeleteDialog, openResetDialog, requestedConfirm]);
   const hasActiveSession = Boolean(activeSessionContext);
   const activeSessionRole = activeSessionContext?.role;
   const pullRequestHeaderProps = getPullRequestHeaderProps({
@@ -138,7 +129,7 @@ export function TaskDetailsSheetContent(
     onEdit,
     onDelete,
     runWorkflowAction: viewModel.runWorkflowAction,
-    openDeleteDialog: viewModel.openDeleteDialog,
+    openDeleteDialog: viewModel.deleteConfirm.openDialog,
   });
 
   return (
@@ -185,12 +176,19 @@ export function TaskDetailsSheetContent(
       <TaskDetailsSheetFooter {...footerProps} />
 
       {/* Inside the sheet content, so the non-modal sheet treats focus in them as its own. */}
-      <TaskDetailsDialogs
-        viewModel={viewModel}
-        showDelete={onDelete !== undefined}
-        showReset={workflowActions?.onResetTask !== undefined}
-        showClose={workflowActions?.onCloseTask !== undefined}
-      />
+      {onDelete ? (
+        <TaskDeleteConfirmDialog
+          {...viewModel.deleteConfirm.dialog}
+          taskId={task.id}
+          subtasksCount={viewModel.subtasks.length}
+        />
+      ) : null}
+      {workflowActions?.onResetTask ? (
+        <TaskResetConfirmDialog {...viewModel.resetConfirm.dialog} taskId={task.id} />
+      ) : null}
+      {workflowActions?.onCloseTask ? (
+        <TaskCloseConfirmDialog {...viewModel.closeConfirm.dialog} taskId={task.id} />
+      ) : null}
     </>
   );
 }
@@ -336,7 +334,7 @@ function getTaskDetailsFooterProps({
   onEdit: TaskDetailsSheetProps["onEdit"];
   onDelete: TaskWorkflowActions["onDelete"] | undefined;
   runWorkflowAction: TaskDetailsViewModel["runWorkflowAction"];
-  openDeleteDialog: TaskDetailsViewModel["openDeleteDialog"];
+  openDeleteDialog: TaskDetailsViewModel["deleteConfirm"]["openDialog"];
 }): TaskDetailsSheetFooterProps {
   const footerProps: TaskDetailsSheetFooterProps = {
     task,
@@ -358,84 +356,4 @@ function getTaskDetailsFooterProps({
     footerProps.onDeleteSelect = openDeleteDialog;
   }
   return footerProps;
-}
-
-function TaskDetailsDialogs({
-  viewModel,
-  showDelete,
-  showReset,
-  showClose,
-}: {
-  viewModel: TaskDetailsViewModel;
-  showDelete: boolean;
-  showReset: boolean;
-  showClose: boolean;
-}): ReactElement {
-  const taskId = viewModel.taskId;
-  return (
-    <>
-      {showDelete && taskId ? (
-        <TaskDeleteConfirmDialog
-          open={viewModel.isDeleteDialogOpen}
-          onOpenChange={viewModel.handleDeleteDialogOpenChange}
-          onCancel={viewModel.closeDeleteDialog}
-          onConfirm={viewModel.confirmDelete}
-          taskId={taskId}
-          subtasksCount={viewModel.subtasks.length}
-          impact={{
-            hasSubtasks: viewModel.subtasks.length > 0,
-            isLoading: viewModel.isLoadingDeleteImpact,
-            isLoadingStopImpact: viewModel.isLoadingDeleteStopImpact,
-            hasManagedSessionCleanup: viewModel.hasManagedDeleteSessionCleanup,
-            managedWorktreeCount: viewModel.deleteManagedWorktreeCount,
-            terminalCount: viewModel.deleteTerminalCount,
-            activeSessionCount: viewModel.deleteActiveSessionCount,
-            activeSessionCountError: viewModel.deleteActiveSessionCountError,
-            error: viewModel.deleteImpactError,
-          }}
-          deletion={{ isPending: viewModel.isDeletePending, error: viewModel.deleteError }}
-        />
-      ) : null}
-      {showReset && taskId ? (
-        <TaskResetConfirmDialog
-          open={viewModel.isResetDialogOpen}
-          onOpenChange={viewModel.handleResetDialogOpenChange}
-          onCancel={viewModel.closeResetDialog}
-          onConfirm={viewModel.confirmReset}
-          taskId={taskId}
-          impact={{
-            isLoading: viewModel.isLoadingResetImpact,
-            isLoadingStopImpact: viewModel.isLoadingResetStopImpact,
-            hasManagedSessionCleanup: viewModel.hasManagedResetSessionCleanup,
-            managedWorktreeCount: viewModel.resetManagedWorktreeCount,
-            terminalCount: viewModel.resetTerminalCount,
-            activeSessionCount: viewModel.resetActiveSessionCount,
-            activeSessionCountError: viewModel.resetActiveSessionCountError,
-            error: viewModel.resetImpactError,
-          }}
-          reset={{ isPending: viewModel.isResetPending, error: viewModel.resetError }}
-        />
-      ) : null}
-      {showClose && taskId ? (
-        <TaskCloseConfirmDialog
-          open={viewModel.isCloseDialogOpen}
-          onOpenChange={viewModel.handleCloseDialogOpenChange}
-          onCancel={viewModel.closeCloseDialog}
-          onConfirm={viewModel.confirmClose}
-          taskId={taskId}
-          impact={{
-            isLoading: viewModel.isLoadingCloseImpact,
-            isLoadingStopImpact: viewModel.isLoadingCloseStopImpact,
-            hasManagedSessionCleanup: viewModel.hasManagedCloseSessionCleanup,
-            managedWorktreeCount: viewModel.closeManagedWorktreeCount,
-            terminalCount: viewModel.closeTerminalCount,
-            activeSessionCount: viewModel.closeActiveSessionCount,
-            activeSessionCountError: viewModel.closeActiveSessionCountError,
-            error: viewModel.closeImpactError,
-          }}
-          closing={{ isPending: viewModel.isClosePending, error: viewModel.closeError }}
-        />
-      ) : null}
-    </>
-  );
 }

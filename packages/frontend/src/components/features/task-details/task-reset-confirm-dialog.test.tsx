@@ -21,7 +21,7 @@ describe("TaskResetConfirmDialog", () => {
           activeSessionCountError: null,
           error: null,
         }}
-        reset={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null }}
       />,
     );
 
@@ -55,7 +55,7 @@ describe("TaskResetConfirmDialog", () => {
           activeSessionCountError: null,
           error: null,
         }}
-        reset={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null }}
       />,
     );
 
@@ -82,7 +82,7 @@ describe("TaskResetConfirmDialog", () => {
           activeSessionCountError: "host unavailable",
           error: null,
         }}
-        reset={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null }}
       />,
     );
 

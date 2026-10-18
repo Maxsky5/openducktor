@@ -1,29 +1,19 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { PropsWithChildren, ReactElement } from "react";
+import {
+  type TaskWorkflowActions,
+  TaskWorkflowActionsContext,
+} from "@/features/task-workflow/task-workflow-actions-context";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { createTaskCardFixture, enableReactActEnvironment } from "../agent-studio-test-utils";
+import { createTaskWorkflowActionsFixture } from "@/test-utils/shared-test-fixtures";
+import { enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
 
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioShellTaskActions>[0];
 
-const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
-const activeWorkspace: HookArgs["activeWorkspace"] = {
-  workspaceId: "workspace-repo",
-  workspaceName: "Repo",
-  abbreviation: null,
-  tileColor: null,
-  repoPath: "/repo",
-  isActive: true,
-  hasConfig: true,
-  configuredWorktreeBasePath: null,
-  defaultWorktreeBasePath: "/tmp/default-worktrees",
-  effectiveWorktreeBasePath: "/tmp/default-worktrees",
-};
-
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace,
-  tasks: [task],
   selectedTaskId: "task-1",
   linkingMergedPullRequestTaskId: null,
   pendingMergedPullRequest: {
@@ -46,8 +36,14 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useAgentStudioShellTaskActions, initialProps);
+const createHookHarness = (initialProps: HookArgs, workflow: Partial<TaskWorkflowActions> = {}) =>
+  createSharedHookHarness(useAgentStudioShellTaskActions, initialProps, {
+    wrapper: ({ children }: PropsWithChildren): ReactElement => (
+      <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture(workflow)}>
+        {children}
+      </TaskWorkflowActionsContext.Provider>
+    ),
+  });
 
 describe("useAgentStudioShellTaskActions", () => {
   test("wires pull-request actions into the shell and merged PR models", async () => {
@@ -69,11 +65,26 @@ describe("useAgentStudioShellTaskActions", () => {
       state.mergedPullRequestModal?.onConfirm();
       state.mergedPullRequestModal?.onCancel();
 
-      expect(state.taskDetailsLauncher.taskDetailsSheetProps.allTasks).toBe(args.tasks);
-      expect(state.taskDetailsLauncher.taskDetailsSheetProps.onEdit).toBeDefined();
       expect(syncPullRequests).toHaveBeenCalledWith("task-1");
       expect(linkMergedPullRequest).toHaveBeenCalled();
       expect(cancelLinkMergedPullRequest).toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each<[string | null, [string][]]>([
+    ["task-1", [["task-1"]]],
+    [null, []],
+  ])("opens the details of the selected task %s", async (selectedTaskId, calls) => {
+    const onOpenTaskDetails = mock((_taskId: string) => {});
+    const harness = createHookHarness(createArgs({ selectedTaskId }), { onOpenTaskDetails });
+
+    try {
+      await harness.mount();
+      harness.getLatest().openTaskDetails();
+
+      expect(onOpenTaskDetails.mock.calls).toEqual(calls);
     } finally {
       await harness.unmount();
     }

@@ -24,7 +24,7 @@ describe("TaskCloseConfirmDialog", () => {
           activeSessionCountError: null,
           error: null,
         }}
-        closing={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null }}
       />,
     );
 
@@ -65,7 +65,7 @@ describe("TaskCloseConfirmDialog", () => {
           activeSessionCountError: null,
           error: "Could not preview cleanup",
         }}
-        closing={{ isPending: false, error: "Close failed" }}
+        operation={{ isPending: false, error: "Close failed" }}
       />,
     );
 
@@ -105,7 +105,7 @@ describe("TaskCloseConfirmDialog", () => {
           activeSessionCountError: "host unavailable",
           error: null,
         }}
-        closing={{ isPending: false, error: null }}
+        operation={{ isPending: false, error: null }}
       />,
     );
 

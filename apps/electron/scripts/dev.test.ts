@@ -480,6 +480,7 @@ describe("electron dev script", () => {
     ]);
   });
 
+  // The 5 s timeout covers a real fs.watch event, which macOS can deliver late in a full test run.
   test("waits for the CDP port file before logging the endpoint", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "odt-electron-cdp-"));
     const endpointLine = electronDebugEndpointLogLine(45_678);
@@ -527,7 +528,7 @@ describe("electron dev script", () => {
       console.log = originalConsoleLog;
       await rm(directory, { force: true, recursive: true });
     }
-  });
+  }, 5_000);
 
   test("fails when Electron exits before it publishes the CDP port", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "odt-electron-cdp-"));

@@ -35,6 +35,8 @@ const runCommand = (command: Exclude<PaletteTaskCommand, { kind: "copy_id" }>) =
   const onOpenSession = mock(() => {});
   const onResetTask = mock(async () => {});
   const onCloseTask = mock(async () => {});
+  const onConfirmTaskAction = mock((_taskId: string, _action: string) => {});
+  const onOpenTaskDetails = mock((_taskId: string) => {});
   const intent = taskCommandIntent(task, command, taskView);
   intent.run({
     workflow: createTaskWorkflowActionsFixture({
@@ -43,11 +45,23 @@ const runCommand = (command: Exclude<PaletteTaskCommand, { kind: "copy_id" }>) =
       onOpenSession,
       onResetTask,
       onCloseTask,
+      onConfirmTaskAction,
+      onOpenTaskDetails,
     }),
     refreshTasks: async () => {},
     navigate,
   });
-  return { intent, navigate, onEdit, onDelegate, onOpenSession, onResetTask, onCloseTask };
+  return {
+    intent,
+    navigate,
+    onEdit,
+    onDelegate,
+    onOpenSession,
+    onResetTask,
+    onCloseTask,
+    onConfirmTaskAction,
+    onOpenTaskDetails,
+  };
 };
 
 describe("taskCommandIntent", () => {
@@ -58,20 +72,27 @@ describe("taskCommandIntent", () => {
     expect(intent.taskId).toBe("odt-1");
   });
 
-  test("opens a session, the details, and the details confirmations by link", () => {
+  test("opens a session by link", () => {
     const session = runCommand({
       kind: "open_session",
       session: { role: "build", identity: builderIdentity },
     });
     expect(session.navigate.mock.calls[0]?.[0]).toContain("session=build-1");
+  });
 
-    expect(runCommand({ kind: "details" }).navigate).toHaveBeenCalledWith("/kanban?task=odt-1");
-    expect(runCommand({ kind: "reset_task" }).navigate).toHaveBeenCalledWith(
-      "/kanban?task=odt-1&taskConfirm=reset_task",
-    );
-    expect(runCommand({ kind: "delete" }).navigate).toHaveBeenCalledWith(
-      "/kanban?task=odt-1&taskConfirm=delete",
-    );
+  test("opens the details on the current page", () => {
+    const { navigate, onOpenTaskDetails } = runCommand({ kind: "details" });
+    expect(onOpenTaskDetails).toHaveBeenCalledWith("odt-1");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  test("opens the Reset Task and Delete confirmations on the current page", () => {
+    for (const kind of ["reset_task", "delete"] as const) {
+      const { navigate, onConfirmTaskAction, onResetTask } = runCommand({ kind });
+      expect(onConfirmTaskAction).toHaveBeenCalledWith("odt-1", kind);
+      expect(navigate).not.toHaveBeenCalled();
+      expect(onResetTask).not.toHaveBeenCalled();
+    }
   });
 
   test("runs edit and workflow steps through the workflow handlers", () => {
