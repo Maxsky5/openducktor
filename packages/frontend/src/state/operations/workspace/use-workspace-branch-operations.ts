@@ -92,6 +92,12 @@ export function useWorkspaceBranchOperations({
       }
 
       try {
+        // A read from the last visit may still hold the old branch.
+        await Promise.all(
+          [gitQueryKeys.currentBranch(repoPath), gitQueryKeys.branches(repoPath)].map((queryKey) =>
+            queryClient.cancelQueries({ queryKey, exact: true }),
+          ),
+        );
         await Promise.all([
           queryClient.fetchQuery({
             ...currentBranchQueryOptions(repoPath),

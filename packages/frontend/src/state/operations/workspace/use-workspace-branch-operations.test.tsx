@@ -105,25 +105,27 @@ describe("use-workspace-branch-operations", () => {
       await harness.mount();
       await harness.run((value) => value.refreshBranches(false));
       await harness.waitFor((value) => value.activeBranch?.name === "main");
+      read.mockImplementationOnce(() => pending.promise);
+      await harness.run((value) => {
+        void value.refreshBranches(false);
+      });
       await harness.updateArgs({ activeRepo: "/repo-b" });
       await harness.run((value) => value.refreshBranches(false));
       branch = "feature";
-      read.mockImplementationOnce(() => pending.promise);
       await harness.updateArgs({ activeRepo: "/repo-a" });
       expect(harness.getLatest().activeBranch?.name).toBe("main");
+      expect(harness.getLatest().isLoadingBranches).toBe(false);
       let refresh: Promise<void> | undefined;
       await harness.run((value) => {
         refresh = value.refreshBranches(false);
       });
-      expect(read).toHaveBeenCalledTimes(3);
-      expect(harness.getLatest().activeBranch?.name).toBe("main");
-      expect(harness.getLatest().isLoadingBranches).toBe(false);
-      pending.resolve({ name: "feature", detached: false });
+      expect(read).toHaveBeenCalledTimes(4);
+      pending.resolve({ name: "main", detached: false });
       await refresh;
       await harness.waitFor((value) => value.activeBranch?.name === "feature");
       expect(harness.getLatest().branches.map((entry) => entry.name)).toEqual(["feature"]);
     } finally {
-      pending.resolve({ name: "feature", detached: false });
+      pending.resolve({ name: "main", detached: false });
       await harness.unmount();
     }
   });
