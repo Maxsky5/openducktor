@@ -181,24 +181,21 @@ export const createSessionTurnPreparation = (deps: {
         const config = yield* deps.settings.getRepoConfigByRepoPath(target.repoPath);
         const catalog = yield* catalogFor(target);
         const current = saved ? resolveSavedModelAlias(catalog, saved) : null;
-        const resolved = resolveSavedSessionModel({
+        const decision = resolveSavedSessionModel({
           runtimeKind: target.runtimeKind,
-          savedSelection: current,
+          savedSelection: saved,
           defaultSelection:
             target.sessionScope.kind === "workflow"
               ? (config.agentDefaults[target.sessionScope.role] ?? config.defaultModel ?? null)
               : (config.defaultModel ?? null),
           catalog,
         });
-        if (resolved.kind === "blocked")
+        if (decision.kind === "blocked")
           return yield* new HostValidationError({
-            field: resolved.reason,
-            message: resolved.message,
+            field: decision.reason,
+            message: decision.message,
           });
-        if (
-          captured &&
-          (resolved.kind === "repair" || !isSameSelection(current, resolved.selection))
-        )
+        if (captured && !isSameSelection(current, decision.selection))
           return yield* new HostValidationError({
             field: "model",
             message:
@@ -224,11 +221,6 @@ export const createSessionTurnPreparation = (deps: {
                 "This runtime cannot apply this variant to a live session. Select a permitted variant or start a new session.",
             });
         }
-        const convertedSelection =
-          current !== saved && resolved.kind === "keep" ? resolved.selection : null;
-        const decision = convertedSelection
-          ? { kind: "repair" as const, selection: convertedSelection }
-          : resolved;
         yield* validateAttachments(parts, catalog, decision.selection);
         return decision;
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-model"))),

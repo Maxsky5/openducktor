@@ -471,7 +471,7 @@ describe("ModelPicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Remove GPT Five from favorites" }));
     });
 
-    expect(toggleFavorite).toHaveBeenCalledWith(savedAlias);
+    expect(toggleFavorite).toHaveBeenCalledWith(value, [savedAlias]);
   });
 
   test("toggles a favorite without selecting the row or closing the picker", async () => {
@@ -494,7 +494,7 @@ describe("ModelPicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Add GPT Five to favorites" }));
     });
 
-    expect(toggleFavorite).toHaveBeenCalledWith(value);
+    expect(toggleFavorite).toHaveBeenCalledWith(value, []);
     expect(onValueChange).toHaveBeenCalledTimes(0);
     expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
   });

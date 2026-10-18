@@ -15,6 +15,7 @@ type UseAgentModelFavoritesArgs = {
 
 type FavoriteMutationIntent = {
   favorite: AgentModelFavorite;
+  savedFavorites: AgentModelFavorite[];
   shouldBeFavorite: boolean;
 };
 
@@ -26,7 +27,10 @@ export type AgentModelFavoritesState = {
   mutationError: string | null;
   canMutate: boolean;
   isFavorite: (favorite: AgentModelFavorite) => boolean;
-  toggleFavorite: (favorite: AgentModelFavorite) => void;
+  toggleFavorite: (
+    favorite: AgentModelFavorite,
+    savedFavorites?: readonly AgentModelFavorite[],
+  ) => void;
   retryRead: () => void;
   retryMutation: () => void;
 };
@@ -35,8 +39,9 @@ const applyFavoriteMutationIntent = (
   favorites: AgentModelFavorite[],
   intent: FavoriteMutationIntent,
 ): AgentModelFavorite[] => {
+  const targets = [intent.favorite, ...intent.savedFavorites];
   const withoutTarget = favorites.filter(
-    (favorite) => !isSameAgentModelFavorite(favorite, intent.favorite),
+    (favorite) => !targets.some((target) => isSameAgentModelFavorite(favorite, target)),
   );
   return intent.shouldBeFavorite ? [...withoutTarget, intent.favorite] : withoutTarget;
 };
@@ -76,14 +81,15 @@ export function useAgentModelFavorites({
   );
 
   const toggleFavorite = useCallback(
-    (favorite: AgentModelFavorite): void => {
+    (
+      favorite: AgentModelFavorite,
+      savedFavorites: readonly AgentModelFavorite[] = [favorite],
+    ): void => {
       if (favorites === null || readError !== null || isPending) {
         return;
       }
-      mutate({
-        favorite,
-        shouldBeFavorite: !isFavorite(favorite),
-      });
+      const saved = savedFavorites.filter(isFavorite);
+      mutate({ favorite, savedFavorites: saved, shouldBeFavorite: saved.length === 0 });
     },
     [favorites, isFavorite, isPending, mutate, readError],
   );

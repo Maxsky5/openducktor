@@ -46,7 +46,10 @@ export type ModelPickerFavoriteState = {
   isMutationPending: boolean;
   mutationError: string | null;
   canMutate: boolean;
-  toggleFavorite: (favorite: AgentModelFavorite) => void;
+  toggleFavorite: (
+    favorite: AgentModelFavorite,
+    savedFavorites?: readonly AgentModelFavorite[],
+  ) => void;
   retryRead: () => void;
   retryMutation: () => void;
 };
@@ -425,7 +428,7 @@ const ModelFavoriteButton = ({
             onClick={
               favoriteDisabledReason
                 ? undefined
-                : () => favoriteState.toggleFavorite(item.savedFavorite ?? item.value)
+                : () => favoriteState.toggleFavorite(item.value, item.savedFavorites)
             }
           >
             <Star

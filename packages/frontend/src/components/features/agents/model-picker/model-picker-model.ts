@@ -116,7 +116,7 @@ export type ModelPickerItem = {
   value: ModelPickerValue;
   runtime: RuntimeDescriptor;
   model: AgentModelCatalog["models"][number];
-  savedFavorite: AgentModelFavorite | null;
+  savedFavorites: AgentModelFavorite[];
   isFavorite: boolean;
   isEnabledForFavorites: boolean;
   runtimeIndex: number;
@@ -192,13 +192,8 @@ export const buildModelPickerItems = ({
     if (!catalog || (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind)) {
       return [];
     }
-    const savedFavorites = new Map(
-      (favorites ?? [])
-        .filter((favorite) => favorite.runtimeKind === runtime.descriptor.kind)
-        .map((favorite) => [
-          modelPickerValueKey(resolveSavedModelAlias(catalog, favorite)),
-          favorite,
-        ]),
+    const runtimeFavorites = (favorites ?? []).filter(
+      (favorite) => favorite.runtimeKind === runtime.descriptor.kind,
     );
     return catalog.models.map((model, catalogIndex) => {
       const value = {
@@ -206,13 +201,15 @@ export const buildModelPickerItems = ({
         providerId: model.providerId,
         modelId: model.modelId,
       };
-      const savedFavorite = savedFavorites.get(modelPickerValueKey(value)) ?? null;
+      const savedFavorites = runtimeFavorites.filter((favorite) =>
+        isSameModelPickerValue(resolveSavedModelAlias(catalog, favorite), value),
+      );
       return {
         value,
         runtime: runtime.descriptor,
         model,
-        savedFavorite,
-        isFavorite: savedFavorite !== null,
+        savedFavorites,
+        isFavorite: savedFavorites.length > 0,
         isEnabledForFavorites: runtime.isEnabledForFavorites,
         runtimeIndex,
         catalogIndex,

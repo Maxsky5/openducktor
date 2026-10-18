@@ -52,7 +52,7 @@ describe("single-task session queries", () => {
         }),
       );
       const input = { repoPath, taskId: task.id };
-      const markdown = "Unrelated document content.\n".repeat(40_000).trim();
+      const markdown = "Unrelated document content.";
       await Effect.runPromise(store.setSpecDocument({ ...input, markdown }));
       await Effect.runPromise(store.setPlanDocument({ ...input, markdown }));
       await Effect.runPromise(

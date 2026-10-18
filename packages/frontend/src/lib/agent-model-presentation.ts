@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { findCatalogModel } from "./model-catalog-selection";
+import { findCatalogModel, resolveSavedModelAlias } from "./model-catalog-selection";
 
 /** Model metadata shared by final chat messages and session previews. */
 export const agentModelInfoParts = (
@@ -12,7 +12,9 @@ export const agentModelInfoParts = (
   const providerId = model.providerId?.trim();
   const modelId = model.modelId?.trim();
   const catalogModel =
-    catalog && providerId && modelId ? findCatalogModel(catalog, { providerId, modelId }) : null;
+    catalog && providerId && modelId
+      ? findCatalogModel(catalog, resolveSavedModelAlias(catalog, { providerId, modelId }))
+      : null;
   const providerModel = [providerId, catalogModel?.modelName?.trim() ?? modelId]
     .filter(Boolean)
     .join("/");

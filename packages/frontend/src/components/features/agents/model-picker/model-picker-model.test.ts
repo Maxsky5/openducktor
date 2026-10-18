@@ -85,9 +85,12 @@ describe("model-picker-model", () => {
     ]);
   });
 
-  test("shows a favorite saved as an alias on the model that the alias points to", () => {
+  test("shows favorites saved as aliases on the model that the aliases point to", () => {
     const aliasCatalog = catalog("opencode");
-    const savedAlias = { ...favorite, modelId: "claude-sonnet" };
+    const savedAliases = [
+      { ...favorite, modelId: "claude-sonnet" },
+      { ...favorite, modelId: "sonnet-latest" },
+    ];
     const items = buildModelPickerItems({
       runtimes: [
         {
@@ -97,21 +100,23 @@ describe("model-picker-model", () => {
             catalog: {
               ...aliasCatalog,
               models: aliasCatalog.models.map((model) =>
-                model.modelId === "sonnet" ? { ...model, aliases: ["claude-sonnet"] } : model,
+                model.modelId === "sonnet"
+                  ? { ...model, aliases: ["claude-sonnet", "sonnet-latest"] }
+                  : model,
               ),
             },
           },
           isEnabledForFavorites: true,
         },
       ],
-      favorites: [savedAlias],
+      favorites: savedAliases,
       activeView: "favorites",
       searchQuery: "",
       lockedRuntimeKind: null,
     });
 
-    expect(items.map(({ value, savedFavorite }) => ({ value, savedFavorite }))).toEqual([
-      { value: favorite, savedFavorite: savedAlias },
+    expect(items.map(({ value, savedFavorites }) => ({ value, savedFavorites }))).toEqual([
+      { value: favorite, savedFavorites: savedAliases },
     ]);
   });
 
