@@ -5,7 +5,7 @@ import { connectionHost } from "../connection/client-connection";
 
 const pendingReads = new WeakMap<QueryClient, Map<string, Set<Map<string, WorkspaceSession>>>>();
 // Pending commits are removed on cache commit or query cancellation.
-const snapshotCommits = new Map<unknown, () => WorkspaceSession[]>();
+const snapshotCommits = new Map<unknown, () => Array<WorkspaceSession | string>>();
 
 const applyRecord = (
   records: WorkspaceSession[],
@@ -22,20 +22,25 @@ const applyRecord = (
 
 export const workspaceSessionQueryKeys = {
   all: ["workspace-sessions"] as const,
+  ids: (workspaceId: string) => ["workspace-sessions", workspaceId, "ids"] as const,
   list: (workspaceId: string, archived: boolean) =>
     ["workspace-sessions", workspaceId, archived ? "archived" : "active"] as const,
 };
 
-export const workspaceSessionListQueryOptions = (workspaceId: string, archived = false) =>
-  queryOptions<WorkspaceSession[]>({
-    queryKey: workspaceSessionQueryKeys.list(workspaceId, archived),
+const sessionQueryOptions = <T extends WorkspaceSession | string>(
+  queryKey: readonly string[],
+  read: (client: QueryClient) => Promise<T[]>,
+  applyUpdate: (records: T[], session: WorkspaceSession) => T[],
+) =>
+  queryOptions<T[]>({
+    queryKey,
     queryFn: async ({ client, signal }) => {
       let byKey = pendingReads.get(client);
       if (!byKey) {
         byKey = new Map();
         pendingReads.set(client, byKey);
       }
-      const key = JSON.stringify(workspaceSessionQueryKeys.list(workspaceId, archived));
+      const key = JSON.stringify(queryKey);
       let reads = byKey.get(key);
       if (!reads) {
         reads = new Set();
@@ -43,7 +48,7 @@ export const workspaceSessionListQueryOptions = (workspaceId: string, archived =
       }
       const updates = new Map<string, WorkspaceSession>();
       reads.add(updates);
-      let snapshot: WorkspaceSession[] | undefined;
+      let snapshot: T[] | undefined;
       const finish = (): void => {
         if (!reads.delete(updates)) return;
         if (reads.size === 0) byKey.delete(key);
@@ -52,15 +57,13 @@ export const workspaceSessionListQueryOptions = (workspaceId: string, archived =
       };
       signal.addEventListener("abort", finish, { once: true });
       try {
-        const records = await (archived
-          ? connectionHost(client).workspaceSessionListArchived(workspaceId)
-          : connectionHost(client).workspaceSessionListActive(workspaceId));
+        const records = await read(client);
         snapshot = [...records];
         if (signal.aborted) return snapshot;
         // Keep events through the query result's Promise handoff, until the cache commits it.
         snapshotCommits.set(snapshot, () => {
           let merged = records;
-          for (const session of updates.values()) merged = applyRecord(merged, session, archived);
+          for (const session of updates.values()) merged = applyUpdate(merged, session);
           finish();
           return merged;
         });
@@ -79,6 +82,26 @@ export const workspaceSessionListQueryOptions = (workspaceId: string, archived =
     retry: false,
   });
 
+export const workspaceSessionListQueryOptions = (workspaceId: string, archived = false) =>
+  sessionQueryOptions(
+    workspaceSessionQueryKeys.list(workspaceId, archived),
+    (client) =>
+      archived
+        ? connectionHost(client).workspaceSessionListArchived(workspaceId)
+        : connectionHost(client).workspaceSessionListActive(workspaceId),
+    (records, session) => applyRecord(records, session, archived),
+  );
+
+const includeSessionId = (ids: string[], session: WorkspaceSession): string[] =>
+  ids.includes(session.id) ? ids : [...ids, session.id];
+
+export const workspaceSessionIdsQueryOptions = (workspaceId: string) =>
+  sessionQueryOptions(
+    workspaceSessionQueryKeys.ids(workspaceId),
+    (client) => connectionHost(client).workspaceSessionIdsList(workspaceId),
+    includeSessionId,
+  );
+
 /** Apply ordered metadata and retain it for any older snapshot still in flight. */
 export const updateWorkspaceSessionQueries = (
   queryClient: QueryClient,
@@ -87,10 +110,23 @@ export const updateWorkspaceSessionQueries = (
 ): void => {
   if (session.archivedAt !== null)
     workspaceComparisonChoices(queryClient).clear({ workspaceId, sessionId: session.id });
-  for (const archived of [false, true]) {
-    const queryKey = workspaceSessionQueryKeys.list(workspaceId, archived);
+  const idsKey = workspaceSessionQueryKeys.ids(workspaceId);
+  for (const queryKey of [
+    idsKey,
+    workspaceSessionQueryKeys.list(workspaceId, false),
+    workspaceSessionQueryKeys.list(workspaceId, true),
+  ]) {
     const reads = pendingReads.get(queryClient)?.get(JSON.stringify(queryKey));
     for (const updates of reads ?? []) updates.set(session.id, session);
+  }
+  // One record cannot establish completeness after a failed ID read.
+  if (queryClient.getQueryState(idsKey)?.status === "success") {
+    queryClient.setQueryData<string[]>(idsKey, (ids) =>
+      ids ? includeSessionId(ids, session) : undefined,
+    );
+  }
+  for (const archived of [false, true]) {
+    const queryKey = workspaceSessionQueryKeys.list(workspaceId, archived);
     if (queryClient.getQueryData(queryKey) === undefined) {
       continue;
     }

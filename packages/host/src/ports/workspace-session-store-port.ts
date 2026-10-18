@@ -27,6 +27,7 @@ export type WorkspaceSessionStorePort = {
   ): Result<{ session: WorkspaceSession; created: boolean }>;
 
   get(input: WorkspaceSessionStoreRef): Result;
+  listIds(input: WorkspaceSessionStoreScope): Result<string[]>;
   listActive(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   listArchived(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   findByRuntimeSession(

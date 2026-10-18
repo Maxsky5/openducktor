@@ -64,6 +64,7 @@ export const createWorkspaceSessionService = (
   const { store, settings, live, git, operationGate, sessionTitleGate } = dependencies;
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
   return {
+    listIds: (workspaceId: string) => scopeFor(workspaceId).pipe(Effect.flatMap(store.listIds)),
     listActive: (workspaceId: string) =>
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listActive)),
     listArchived: (workspaceId: string) =>

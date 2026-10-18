@@ -385,24 +385,26 @@ describe("FileDiffList tree view and search", () => {
       render(<NavigableFileDiffListHarness files={PACKAGE_FILES} />);
       measurements.resize(600, 800);
       const list = screen.getByRole("list");
+      const file = (path: string): HTMLElement =>
+        within(list).getByLabelText(`Toggle diff for ${path}`);
       // Measure the files that list view shows near the anchor. Then no new row height runs the
       // restore again after the switch, and the restore must finish when those rows render.
       fireEvent.scroll(list, { target: { scrollTop: 86 * TREE_ROW } });
       fireEvent.scroll(list, { target: { scrollTop: 100 * TREE_ROW } });
       // Each package has a directory row and 5 files, so "pkg-15/f-0.ts" is row 91.
       fireEvent.scroll(list, { target: { scrollTop: 91 * TREE_ROW + 20 } });
-      expect(rowTop(fileToggle("pkg-15/f-0.ts"))).toBe(-20);
+      expect(rowTop(file("pkg-15/f-0.ts"))).toBe(-20);
 
       fireEvent.click(screen.getByRole("button", { name: "List view" }));
       fireEvent.scroll(list);
       expect(list.scrollTop).toBe(75 * LIST_ROW + 20);
-      expect(rowTop(fileToggle("pkg-15/f-0.ts"))).toBe(-20);
+      expect(rowTop(file("pkg-15/f-0.ts"))).toBe(-20);
 
       fireEvent.scroll(list, { target: { scrollTop: 400 } });
-      fireEvent.click(fileToggle("pkg-02/f-1.ts"));
+      fireEvent.click(file("pkg-02/f-1.ts"));
 
       expect(list.scrollTop).toBe(400);
-      expect(rowTop(fileToggle("pkg-02/f-1.ts"))).toBe(11 * LIST_ROW - 400);
+      expect(rowTop(file("pkg-02/f-1.ts"))).toBe(11 * LIST_ROW - 400);
     });
 
     test("keeps the top file when resize reports still wait at a view switch", () => {
