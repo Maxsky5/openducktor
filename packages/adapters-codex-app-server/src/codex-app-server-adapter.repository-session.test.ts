@@ -875,7 +875,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
         workingDirectory: "/repo",
         externalSessionId: "thread/start-runtime-live",
       }),
-    ).resolves.toMatchObject({ availability: "runtime", classification: "running" });
+    ).resolves.toMatchObject({ availability: "runtime", classification: "idle" });
     expect(transport.calls.slice(0, 3).map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",

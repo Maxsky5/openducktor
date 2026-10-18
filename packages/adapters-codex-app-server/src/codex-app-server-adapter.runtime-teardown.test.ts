@@ -116,7 +116,8 @@ describe("CodexAppServerAdapter runtime teardown", () => {
   });
 
   test("ignores terminal turn completion from a disposed runtime owner", async () => {
-    const { adapter, transports } = createHarness({}, { deferTurnStart: true });
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents }, { deferTurnStart: true });
 
     await adapter.startSession(codexStartSessionInput());
     const send = failureOf(
@@ -129,6 +130,14 @@ describe("CodexAppServerAdapter runtime teardown", () => {
     await flushCodexAdapterWork();
     adapter.releaseRuntime("runtime-live");
     await adapter.startSession(codexStartSessionInput());
+    emitNotification({
+      method: "thread/status/changed",
+      params: {
+        threadId: "thread/start-runtime-live",
+        status: { type: "active", activeFlags: [] },
+      },
+    });
+    await flushCodexAdapterWork();
 
     const transport = transports.get("runtime-live");
     if (!transport) {

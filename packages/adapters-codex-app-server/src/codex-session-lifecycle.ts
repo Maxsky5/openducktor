@@ -169,15 +169,16 @@ export const sessionStateFromThreadStart = (
   title: string | undefined,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response);
+  const status = codexThreadStatusSnapshot(response.thread.status);
   const summary = toSessionSummary({
     externalSessionId,
     workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
     sessionAssociation: inputAssociation(input),
-    status: "running",
+    status: agentSessionStatusFromActivity(status.classification),
   });
-  return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
+  return buildSessionState(input, summary, runtimeId, model, status);
 };
 
 export const sessionStateFromThreadResume = (
@@ -195,15 +196,16 @@ export const sessionStateFromThreadFork = (
   title: string | undefined,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response);
+  const status = codexThreadStatusSnapshot(response.thread.status);
   const summary = toSessionSummary({
     externalSessionId,
     workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
     sessionAssociation: inputAssociation(input),
-    status: "running",
+    status: agentSessionStatusFromActivity(status.classification),
   });
-  return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
+  return buildSessionState(input, summary, runtimeId, model, status);
 };
 
 export const sessionStateFromExistingThread = (

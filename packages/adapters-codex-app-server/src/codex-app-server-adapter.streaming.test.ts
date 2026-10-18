@@ -83,6 +83,13 @@ describe("CodexAppServerAdapter streaming", () => {
 
     try {
       emitNotification({
+        method: "thread/status/changed",
+        params: {
+          threadId: "thread/start-runtime-live",
+          status: { type: "active", activeFlags: [] },
+        },
+      });
+      emitNotification({
         method: "item/completed",
         params: {
           threadId: "thread/start-runtime-live",
