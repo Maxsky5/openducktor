@@ -418,6 +418,27 @@ describe("AutopilotProvider", () => {
     }
   });
 
+  test("does not show the held outcomes of a workspace that leaves the workspace list during the read", async () => {
+    const provider = renderProvider({});
+    const betaRead = Promise.withResolvers<AutopilotState>();
+    provider.readState.mockImplementation(async ({ workspaceId }) => {
+      provider.calls.push(`read:${workspaceId}`);
+      return workspaceId === "beta" ? betaRead.promise : { outcomes: [], failure: null };
+    });
+    try {
+      await waitFor(() => expect(provider.calls).toEqual(["subscribe", "read:alpha", "read:beta"]));
+      await provider.rerender(alpha, [alpha]);
+      await act(async () => {
+        betaRead.resolve({ outcomes: [skipped("beta-removed", beta)], failure: null });
+        await betaRead.promise;
+      });
+
+      expect(shownToastIds()).toEqual([]);
+    } finally {
+      provider.unmount();
+    }
+  });
+
   test("dismisses the outcomes of a workspace that leaves the workspace list", async () => {
     const provider = renderProvider({});
     try {

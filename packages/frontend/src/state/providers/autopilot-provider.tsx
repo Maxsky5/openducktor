@@ -43,6 +43,12 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     [workspaces],
   );
   const openWorkspaceIdsRef = useRef(openWorkspaceIds);
+  // The workspaces that the host lists, open or closed.
+  const listedWorkspaceIds = useMemo(
+    () => new Set([...workspaces, ...closedWorkspaces].map((workspace) => workspace.workspaceId)),
+    [closedWorkspaces, workspaces],
+  );
+  const listedWorkspaceIdsRef = useRef(listedWorkspaceIds);
   // The workspaces whose held outcomes this subscription read.
   const readWorkspaceIdsRef = useRef(new Set<string>());
   const [subscribed, setSubscribed] = useState(false);
@@ -51,7 +57,14 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     notificationsRef.current = sessionStartNotifications;
     activeWorkspaceIdRef.current = activeWorkspaceId;
     openWorkspaceIdsRef.current = openWorkspaceIds;
-  }, [activeWorkspaceId, openWorkspaceIds, sendAgentMessage, sessionStartNotifications]);
+    listedWorkspaceIdsRef.current = listedWorkspaceIds;
+  }, [
+    activeWorkspaceId,
+    listedWorkspaceIds,
+    openWorkspaceIds,
+    sendAgentMessage,
+    sessionStartNotifications,
+  ]);
 
   const presenter = useMemo(
     () =>
@@ -73,7 +86,8 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
 
   // The host keeps failed and skipped outcomes of each workspace, so a client that attaches,
   // reconnects after missed events, or selects a workspace shows the ones it missed. Each read
-  // shows its outcomes when it completes, also when the selection changed meanwhile.
+  // shows its outcomes when it completes, also when the selection changed meanwhile. The outcomes
+  // of a workspace that left the workspace list during the read do not show.
   const readHeldOutcomes = useCallback(
     async (
       workspaceIds: readonly string[],
@@ -82,7 +96,9 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
       const reads = await Promise.allSettled(
         workspaceIds.map((workspaceId) =>
           queryClient.fetchQuery(autopilotStateQueryOptions(workspaceId)).then((state) => {
-            for (const outcome of state.outcomes) presenter.present(outcome, { workspaceSelected });
+            if (listedWorkspaceIdsRef.current.has(workspaceId))
+              for (const outcome of state.outcomes)
+                presenter.present(outcome, { workspaceSelected });
             presenter.presentFailure(state.failure);
           }),
         ),
@@ -169,10 +185,8 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
   }, [openWorkspaceIds, readHeldOutcomes, subscribed]);
 
   useEffect(() => {
-    presenter.keepWorkspaces(
-      new Set([...workspaces, ...closedWorkspaces].map((workspace) => workspace.workspaceId)),
-    );
-  }, [closedWorkspaces, presenter, workspaces]);
+    presenter.keepWorkspaces(listedWorkspaceIds);
+  }, [listedWorkspaceIds, presenter]);
 
   return <>{children}</>;
 }
