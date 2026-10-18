@@ -69,7 +69,11 @@ const switchHost = async (): Promise<void> => {
 
 const releasedBridge = (event: string) =>
   createShellBridgeFixture({
-    client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+    client: {
+      workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+      // An attachment upload that does not end, such as a stalled network request.
+      workspaceStageLocalAttachment: () => new Promise(() => {}),
+    },
     bridge: {
       dispose: async () => {
         events.push(event);
@@ -140,7 +144,7 @@ test("a host switch saves drafts, unmounts the app, and releases the host before
   }
 });
 
-test("a remote host switch does not wait for drafts that only live in page memory", async () => {
+test("a remote host switch does not wait for drafts or uploads that only live in page memory", async () => {
   const appSpy = spyOn(appModule, "App").mockImplementation(HostSwitchProbe);
   const consoleError = spyOn(console, "error").mockImplementation(() => {});
   const navigate = mock(async () => {
@@ -149,6 +153,17 @@ test("a remote host switch does not wait for drafts that only live in page memor
   try {
     const mounted = await mountShell(navigate, { defaultEndpoint: "https://first.test" });
     mounted.drafts.chat.set(draftIdentity, null, oversizedDraft());
+    mounted.drafts.chat.set({ ...draftIdentity, workspaceSessionId: "session-2" }, null, {
+      ...draftWithText("With a picked file"),
+      attachments: [
+        {
+          id: "attachment-1",
+          name: "photo.png",
+          kind: "image",
+          file: new File(["image"], "photo.png", { type: "image/png" }),
+        },
+      ],
+    });
     await switchHost();
 
     await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));

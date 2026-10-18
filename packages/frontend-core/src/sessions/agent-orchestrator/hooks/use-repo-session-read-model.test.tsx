@@ -479,6 +479,58 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("dismisses the completion alert of a reopened workspace that no longer reports it", async () => {
+    const observation: TaskCompletionObservation = {
+      repoPath: "/repo",
+      taskId: `closed-${crypto.randomUUID()}`,
+      phase: "settled",
+      confirmedDestinations: [],
+      uncertainDestinations: [],
+      failure: {
+        stage: "cleanup",
+        code: "task_completion_failed",
+        message: "Worktree removal failed.",
+        nextAction: "Inspect the worktree.",
+      },
+    };
+    const alertId = `task-completion:/repo:${observation.taskId}`;
+    const activeIds = new Set<string>();
+    const feedback: ClientFeedback = {
+      show: (_kind, message, options) => {
+        activeIds.add(options?.id ?? message);
+      },
+      dismiss: (id) => {
+        activeIds.delete(id);
+      },
+    };
+    const state = createState(
+      (emit, observeIndex) =>
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [snapshot()],
+            taskCompletions: observeIndex === 1 ? [observation] : [],
+          }),
+        ),
+      record,
+      undefined,
+      { feedback },
+    );
+    const reopened = createHookHarness(useRepoSessionReadModel, state.props);
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      // Closing the workspace unmounts its controller, and the alert stays visible.
+      await state.harness.unmount();
+      expect(activeIds.has(alertId)).toBe(true);
+
+      await reopened.mount();
+      await reopened.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(activeIds.has(alertId)).toBe(false);
+    } finally {
+      await reopened.unmount();
+      state.queryClient.clear();
+    }
+  });
   test.each([
     { outcome: "not_issued", responseFirst: true },
     { outcome: "not_issued", responseFirst: false },

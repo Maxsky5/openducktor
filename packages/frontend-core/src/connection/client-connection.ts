@@ -25,6 +25,12 @@ export type ClientConnectionOptions = {
   queryClient: QueryClient;
   /** Device storage for host-scoped drafts. A remote host gets memory storage. */
   storage: ClientStorage;
+  /**
+   * False when `storage` ends with the connection, such as the memory storage of a remote host.
+   * Disposal then drops unsaved drafts, so it does not wait for their attachment uploads. The
+   * default is true.
+   */
+  saveDraftsOnDispose?: boolean;
   feedback: ClientFeedback;
   stageAttachment: AttachmentStager;
   /** Releases the host transport, such as a remote admission. It must not stop host work. */
@@ -59,9 +65,9 @@ export type ClientConnection = {
    */
   saveDrafts(): Promise<void>;
   /**
-   * Saves drafts, cancels reads, clears the cache, and releases the host transport. It rejects
-   * when a step failed, including a draft save. It sends no command that stops or changes host
-   * work, so host work that the host already admitted continues.
+   * Saves drafts unless `saveDraftsOnDispose` is false, cancels reads, clears the cache, and
+   * releases the host transport. It rejects when a step failed, including a draft save. It sends no
+   * command that stops or changes host work, so host work that the host already admitted continues.
    */
   dispose(): Promise<void>;
 };
@@ -73,6 +79,7 @@ export const createClientConnection = ({
   host,
   queryClient,
   storage,
+  saveDraftsOnDispose = true,
   feedback,
   stageAttachment,
   releaseHost,
@@ -130,7 +137,7 @@ export const createClientConnection = ({
           }
         };
         // Page hide runs this. The draft writes start before the first await, so they end before unload.
-        const draftsSaved = attempt(saveDrafts);
+        const draftsSaved = saveDraftsOnDispose ? attempt(saveDrafts) : Promise.resolve();
         drafts.queuedMessageEdits.dispose();
         await attempt(() => queryClient.cancelQueries());
         await draftsSaved;

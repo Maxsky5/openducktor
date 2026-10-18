@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   type RemoteHostDescriptor,
@@ -152,6 +152,39 @@ describe("frontend core without a DOM", () => {
     // A page that unloads after this task keeps both drafts.
     expect(storage.length).toBe(2);
     return disposal;
+  });
+
+  test("drops unsaved drafts without uploads when the storage ends with the connection", async () => {
+    const storage = createMemoryClientStorage();
+    const stageAttachment = mock(() => new Promise<string>(() => {}));
+    const releaseHost = mock(async () => {});
+    const connection = createClientConnection({
+      host: createTestHostConnection(),
+      queryClient: createClientQueryClient(),
+      storage,
+      saveDraftsOnDispose: false,
+      feedback: createFeedbackFake(),
+      stageAttachment,
+      releaseHost,
+      scheduleTask: () => () => {},
+    });
+    connection.drafts.chat.set(chatDraftIdentity, null, {
+      ...draftWithText("Unsaved"),
+      attachments: [
+        {
+          id: "attachment-1",
+          name: "photo.png",
+          kind: "image",
+          file: { name: "photo.png", type: "image/png", size: 5 },
+        },
+      ],
+    });
+
+    await connection.dispose();
+
+    expect(stageAttachment).not.toHaveBeenCalled();
+    expect(storage.length).toBe(0);
+    expect(releaseHost).toHaveBeenCalledTimes(1);
   });
 
   test("reports a failed draft save from disposal and keeps the draft", async () => {

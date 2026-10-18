@@ -235,7 +235,7 @@ A client app uses `createRemoteHostConnection` from `@openducktor/frontend-core/
 Supply the endpoint, the client app version, a `RemoteTransport`, and the query client of the same `ClientConnection`.
 It wraps `createRemoteHostClient` from `@openducktor/host-client/remote` and owns the recovery barrier below: task stream owners, live attachments, registered platform owners, the notification replay relay, and the refetch of active reads.
 Pass the result as the host of `createClientConnection`, with `releaseHost` set to disconnect the remote client. Disposing the connection releases the admission and sends no host command.
-A remote host stores drafts in connection memory, so two hosts never read each other's drafts, even with identical repository paths.
+A remote host stores drafts in connection memory, so two hosts never read each other's drafts, even with identical repository paths. Set `saveDraftsOnDispose: false` for this storage, so disposal does not wait for draft attachment uploads.
 Electron and the browser use the same module through `createRemoteShellBridge`.
 The portable entry point uses no React, DOM, EventSource, Node API, browser cookie bootstrap, or runtime SDK.
 A native adapter can supply streaming HTTP, such as `expo/fetch`, and its platform terminal socket factory.

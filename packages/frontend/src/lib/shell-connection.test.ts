@@ -2,7 +2,6 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
-import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { repoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +11,7 @@ import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
 import { createShellConnection, releaseShellConnection } from "./shell-connection";
 
 describe("createShellConnection", () => {
-  test("uses the selected bridge, query client, and storage", async () => {
+  test("uses the selected bridge and query client, and page memory for a remote host", async () => {
     const workspaceStageLocalAttachment = mock(async () => ({ path: "/host/staged/image.png" }));
     const dispose = mock(async () => {});
     const bridge = createShellBridgeFixture({
@@ -20,17 +19,16 @@ describe("createShellConnection", () => {
       bridge: { dispose },
     });
     const queryClient = createClientQueryClient();
-    const storage = createMemoryClientStorage();
 
-    const connection = createShellConnection(bridge, queryClient, storage);
+    const connection = createShellConnection(bridge, queryClient, "remote");
 
-    expect(connection.storage).toBe(storage);
     const identity = { workspaceId: "workspace-1", workspaceSessionId: "session-1" };
     connection.drafts.chat.set(identity, null, {
       segments: [{ id: "text-1", kind: "text", text: "Saved on this host" }],
     });
     await connection.drafts.chat.flush(identity);
-    expect(storage.length).toBe(1);
+    expect(connection.storage.length).toBe(1);
+    expect(localStorage.length).toBe(0);
     expect(connectionHost(queryClient)).toBe(bridge.client);
     await expect(
       connection.stageAttachment(new File(["image"], "image.png", { type: "image/png" })),
@@ -48,8 +46,9 @@ describe("createShellConnection", () => {
     const connection = createShellConnection(
       createShellBridgeFixture(),
       createClientQueryClient(),
-      createMemoryClientStorage(),
+      "local",
     );
+    expect(connection.storage).toBe(localStorage);
     try {
       await expect(
         connection.stageAttachment({ name: "photo.heic", type: "image/heic", size: 4 }),

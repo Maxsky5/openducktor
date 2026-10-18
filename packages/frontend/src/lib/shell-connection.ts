@@ -2,7 +2,7 @@ import {
   type ClientConnection,
   createClientConnection,
 } from "@openducktor/frontend-core/connection/client-connection";
-import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import type { QueryClient } from "@tanstack/react-query";
 import { createBrowserAttachmentStager } from "./local-attachment-files";
 import type { ShellBridge } from "./shell-bridge";
@@ -11,16 +11,20 @@ import { sonnerFeedback } from "./sonner-feedback";
 /**
  * Creates the client connection of the selected host. The connection owns the host reads and drafts
  * of this page. Its disposal closes the shell transport. It does not stop work on the host.
+ *
+ * A remote host keeps its drafts, layouts, and recent items in page memory, so they cannot replace
+ * the local-host data of this device. The reload clears them, so disposal does not save them.
  */
 export const createShellConnection = (
   bridge: ShellBridge,
   queryClient: QueryClient,
-  storage: ClientStorage,
+  hostKind: "local" | "remote",
 ): ClientConnection =>
   createClientConnection({
     host: bridge,
     queryClient,
-    storage,
+    storage: hostKind === "remote" ? createMemoryClientStorage() : localStorage,
+    saveDraftsOnDispose: hostKind === "local",
     feedback: sonnerFeedback,
     stageAttachment: createBrowserAttachmentStager(bridge.client),
     ...(bridge.dispose && { releaseHost: bridge.dispose }),

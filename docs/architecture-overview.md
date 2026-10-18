@@ -68,7 +68,7 @@ Connection rules:
 - React effects under `ClientConnectionProvider` own the event subscriptions. A platform unmounts that tree before it disposes the connection. The frontend uses `releaseShellConnection` for this order.
 - `saveDrafts()` writes every unsaved draft now. It rejects with an actionable message when a draft could not be saved, and that draft stays in memory.
 - `dispose()` starts `saveDrafts()` before its first `await`, cancels local reads, clears the cache, and releases the host transport. It rejects when a step failed, including a draft save. It sends no command that stops or changes host work, so admitted host work continues. Only the draft save can stage the attachments of an unsaved draft.
-- A local host stores drafts in device storage. A remote host stores drafts in connection memory.
+- A local host stores drafts in device storage. A remote host stores drafts in connection memory. Its connection sets `saveDraftsOnDispose: false`, so disposal drops those drafts and does not wait for their attachment uploads.
 - Platforms supply transient feedback, device storage, the attachment stager, the remote transport, and notification delivery adapters. A device file reference is never a host path. The stager returns the host path.
 - UI facts, such as key labels, the command palette shortcut, scrollbars, and theme, come from the device (`lib/device-platform.ts` in the frontend). Host facts, such as host paths and the host platform, come from host data. Terminal key mapping uses the host platform, because its line-editing input goes to the host shell.
 - The frontend keeps presentation, provider composition, routing, terminals, generated-image decoding, and the browser implementations of the ports.

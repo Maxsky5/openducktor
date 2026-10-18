@@ -133,6 +133,19 @@ const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault
   return `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
 };
 
+// A completion alert stays visible after the controller of its workspace unmounts, so the
+// connection of the query client keeps the shown IDs for the next controller.
+const shownCompletionIdsByClient = new WeakMap<QueryClient, Set<string>>();
+
+const shownCompletionIdsOf = (queryClient: QueryClient): Set<string> => {
+  let ids = shownCompletionIdsByClient.get(queryClient);
+  if (!ids) {
+    ids = new Set();
+    shownCompletionIdsByClient.set(queryClient, ids);
+  }
+  return ids;
+};
+
 const taskIdsScopeKey = (taskIds: string[]): string =>
   JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
 
@@ -197,8 +210,6 @@ export const useRepoSessionReadModel = ({
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
   const retryIdRef = useRef(0);
-  // Completion failures stay visible until the host reports them resolved.
-  const shownCompletionIdsRef = useRef(new Set<string>());
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
   // An unresolved live-stream failure survives task-record recovery so a
   // durable success cannot report a broken stream as healthy.
@@ -779,19 +790,20 @@ export const useRepoSessionReadModel = ({
       }
       // Hydration owns the public state until its own read resolves.
     };
+    const shownCompletionIds = shownCompletionIdsOf(queryClient);
     const projectCompletion = (
       observation: import("@openducktor/contracts").TaskCompletionObservation,
     ) => {
       const id = `task-completion:${observation.repoPath}:${observation.taskId}`;
       if (observation.failure) {
-        shownCompletionIdsRef.current.add(id);
+        shownCompletionIds.add(id);
         feedback.show("error", `Task ${observation.taskId} completion needs attention`, {
           id,
           description: `${observation.failure.message} ${observation.failure.nextAction}`,
           duration: Infinity,
         });
       } else {
-        shownCompletionIdsRef.current.delete(id);
+        shownCompletionIds.delete(id);
         feedback.dismiss(id);
       }
     };
@@ -803,9 +815,9 @@ export const useRepoSessionReadModel = ({
         const completions = envelope.taskCompletions ?? [];
         const prefix = `task-completion:${envelope.repoPath}:`;
         const currentIds = new Set(completions.map(({ taskId }) => `${prefix}${taskId}`));
-        for (const id of shownCompletionIdsRef.current) {
+        for (const id of shownCompletionIds) {
           if (id.startsWith(prefix) && !currentIds.has(id)) {
-            shownCompletionIdsRef.current.delete(id);
+            shownCompletionIds.delete(id);
             feedback.dismiss(id);
           }
         }

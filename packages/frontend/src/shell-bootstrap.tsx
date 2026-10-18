@@ -2,7 +2,6 @@ import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
-import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { loadSettingsSnapshotFromQuery } from "@openducktor/frontend-core/queries/workspace";
 import { App } from "./App";
 import { AppCrashShell } from "./components/errors/app-crash-shell";
@@ -141,11 +140,8 @@ export async function bootstrapOpenDucktorShell(
   }
   if (!bridge) throw new Error("The local host connection is unavailable.");
   if (local && bridge.notifications !== local.notifications) local.notifications.dispose();
-  // A remote host keeps its drafts, layouts, and recent items in page memory. They cannot replace
-  // the local-host data of this device.
-  const storage = target.kind === "remote" ? createMemoryClientStorage() : localStorage;
   configureShellBridge(bridge);
-  const connection = createShellConnection(bridge, queryClient, storage);
+  const connection = createShellConnection(bridge, queryClient, target.kind);
   leavePage = watchPage({
     ...bridge,
     // The release unmounts the app, then clears the client state, then closes the transport.
