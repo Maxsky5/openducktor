@@ -3,9 +3,7 @@ import {
   buildNewWorkspaceSessionHref,
   buildSessionNavigationHref,
   buildSessionsPageHref,
-  legacySessionsSearch,
   parseSessionsPageKind,
-  parseTaskSessionIdentity,
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
 } from "./session-navigation-target";
@@ -17,7 +15,7 @@ const identity = {
 } as const;
 
 describe("session navigation targets", () => {
-  test("names the workspace, task, role, and complete session identity of a task session", () => {
+  test("names the workspace, task, native session ID, and role of a task session", () => {
     const href = buildSessionNavigationHref({
       kind: "task_session",
       workspaceId: "workspace-1",
@@ -27,7 +25,7 @@ describe("session navigation targets", () => {
     });
 
     expect(href).toBe(
-      "/sessions?workspace=workspace-1&kind=task&task=task-1&session=native&agent=qa&runtimeKind=claude&workingDirectory=%2Frepo%2Fworktrees%2Ftask-1",
+      "/sessions?workspace=workspace-1&kind=task&task=task-1&session=native&agent=qa",
     );
   });
 
@@ -38,26 +36,6 @@ describe("session navigation targets", () => {
     expect(
       buildSessionNavigationHref({ kind: "task", workspaceId: "w", taskId: "t", role: "build" }),
     ).toBe("/sessions?workspace=w&kind=task&task=t&agent=build");
-  });
-
-  test("reads a task session identity only when the address names all three fields", () => {
-    const href = buildSessionNavigationHref({
-      kind: "task_session",
-      workspaceId: "w",
-      taskId: "t",
-      role: "build",
-      identity,
-    });
-    const search = new URLSearchParams(href.slice(href.indexOf("?")));
-
-    expect(parseTaskSessionIdentity(search)).toEqual(identity);
-    search.delete("workingDirectory");
-    expect(parseTaskSessionIdentity(search)).toBeNull();
-    expect(
-      parseTaskSessionIdentity(
-        new URLSearchParams("session=native&runtimeKind=unknown&workingDirectory=%2Frepo"),
-      ),
-    ).toBeNull();
   });
 
   test("gives an entry and the content on screen the same key", () => {
@@ -103,11 +81,5 @@ describe("session navigation targets", () => {
     expect(parseSessionsPageKind("workspace")).toBe("workspace");
     expect(parseSessionsPageKind("chats")).toBeNull();
     expect(parseSessionsPageKind(null)).toBeNull();
-  });
-
-  test("keeps old query values and replaces an old kind", () => {
-    expect(legacySessionsSearch("?session=chat-1&kind=task", "workspace")).toBe(
-      "?session=chat-1&kind=workspace",
-    );
   });
 });

@@ -1,6 +1,5 @@
 import { showSessionStartMessageRecovery } from "@/features/session-start/session-start-message-recovery";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
-import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useQueryClient } from "@tanstack/react-query";
 import { createSessionStartKickoffResolver } from "@/features/session-start/session-start-kickoff";
 import type { GitBranch, TaskCard } from "@openducktor/contracts";
@@ -196,7 +195,7 @@ export function useAgentStudioSessionStartFlow({
             scheduleQueryUpdate(
               buildAgentStudioSelectionQueryUpdate({
                 taskId: request.taskId,
-                session: toAgentSessionIdentity(workflow),
+                sessionExternalId: workflow.externalSessionId,
                 role: request.role,
               }),
             );

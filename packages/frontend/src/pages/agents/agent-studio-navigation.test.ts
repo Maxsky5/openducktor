@@ -7,61 +7,46 @@ import {
   restoreNavigationFromWorkspaceState,
 } from "./query-sync/agent-studio-navigation";
 
-const codexIdentity = {
-  externalSessionId: "native",
-  runtimeKind: "codex",
-  workingDirectory: "/repo/worktrees/task-1",
-} as const;
-
 describe("agent-studio-navigation", () => {
-  test("builds a session selection update with the complete identity", () => {
+  test("builds a session selection update with the native ID", () => {
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
-        session: codexIdentity,
+        sessionExternalId: "native",
         role: "spec",
       }),
     ).toEqual({
       task: "task-1",
       session: "native",
-      runtimeKind: "codex",
-      workingDirectory: "/repo/worktrees/task-1",
       agent: "spec",
     });
   });
 
-  test("keeps the complete session identity through a URL write", () => {
+  test("drops removed fields and keeps notification focus through a URL write", () => {
     const address = new URLSearchParams(
-      "workspace=w&kind=task&task=task-1&session=native&agent=build&runtimeKind=codex&workingDirectory=%2Frepo%2Fworktrees%2Ftask-1",
+      "workspace=w&kind=task&task=task-1&session=native&agent=build&runtimeKind=codex&workingDirectory=%2Frepo&attention=question&attentionId=request-1",
     );
     const navigation = parseNavigationStateFromSearchParams(address);
-
-    expect(navigation.sessionIdentity).toEqual(codexIdentity);
+    expect(navigation).toEqual({ taskId: "task-1", sessionExternalId: "native", role: "build" });
     expect(buildSearchParamsFromNavigationState(address, navigation).toString()).toBe(
-      "workspace=w&kind=task&task=task-1&session=native&agent=build&runtimeKind=codex&workingDirectory=%2Frepo%2Fworktrees%2Ftask-1",
+      "workspace=w&kind=task&attention=question&attentionId=request-1&task=task-1&session=native&agent=build",
     );
   });
 
-  test("replaces the session identity with each session update", () => {
+  test("changes the role without changing the selected session", () => {
     const navigation = parseNavigationStateFromSearchParams(
-      new URLSearchParams(
-        "task=task-1&session=native&agent=build&runtimeKind=codex&workingDirectory=%2Frepo%2Fworktrees%2Ftask-1",
-      ),
+      new URLSearchParams("task=task-1&session=native&agent=build"),
     );
-
-    expect(applyQueryUpdateToNavigationState(navigation, { agent: "qa" }).sessionIdentity).toEqual(
-      codexIdentity,
-    );
-    expect(
-      applyQueryUpdateToNavigationState(navigation, { session: "other" }).sessionIdentity,
-    ).toBeNull();
-    expect(
-      applyQueryUpdateToNavigationState(navigation, {
-        session: "native",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-      }).sessionIdentity,
-    ).toEqual({ externalSessionId: "native", runtimeKind: "opencode", workingDirectory: "/repo" });
+    expect(applyQueryUpdateToNavigationState(navigation, { agent: "qa" })).toEqual({
+      taskId: "task-1",
+      sessionExternalId: "native",
+      role: "qa",
+    });
+    expect(applyQueryUpdateToNavigationState(navigation, { session: "other" })).toEqual({
+      taskId: "task-1",
+      sessionExternalId: "other",
+      role: "build",
+    });
   });
 
   test("round trips an external session id without an identity through the URL", () => {
@@ -72,7 +57,6 @@ describe("agent-studio-navigation", () => {
     expect(navigation).toEqual({
       taskId: "task-1",
       sessionExternalId: "session-1",
-      sessionIdentity: null,
       role: "build",
     });
     expect(buildSearchParamsFromNavigationState(new URLSearchParams(), navigation).toString()).toBe(
@@ -83,7 +67,7 @@ describe("agent-studio-navigation", () => {
   test("restores canonical workspace state when navigation is empty", () => {
     expect(
       restoreNavigationFromWorkspaceState(
-        { taskId: "", sessionExternalId: null, sessionIdentity: null, role: null },
+        { taskId: "", sessionExternalId: null, role: null },
         {
           openTaskIds: ["task-1"],
           activeTask: {
@@ -96,7 +80,6 @@ describe("agent-studio-navigation", () => {
     ).toEqual({
       taskId: "task-1",
       sessionExternalId: "session-1",
-      sessionIdentity: null,
       role: "planner",
     });
   });
@@ -107,7 +90,6 @@ describe("agent-studio-navigation", () => {
         {
           taskId: "task-url",
           sessionExternalId: "native",
-          sessionIdentity: codexIdentity,
           role: "qa",
         },
         {
@@ -122,7 +104,6 @@ describe("agent-studio-navigation", () => {
     ).toEqual({
       taskId: "task-url",
       sessionExternalId: "native",
-      sessionIdentity: codexIdentity,
       role: "qa",
     });
   });

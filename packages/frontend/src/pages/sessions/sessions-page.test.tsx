@@ -132,14 +132,18 @@ test.each(["partial", "fresh"] as const)(
   async (address) => {
     function Conversation() {
       const params = new URLSearchParams(useLocation().search);
-      const runtimeKind = params.get("runtimeKind") === "codex" ? "codex" : "opencode";
+      const runtimeKind = params.get("session") === "native-codex" ? "codex" : "opencode";
       const target = useMemo<SessionNavigationTarget>(
         () => ({
           kind: "task_session" as const,
           workspaceId: "alpha",
           taskId: "current",
           role: "planner" as const,
-          identity: { externalSessionId: "shared", runtimeKind, workingDirectory: "/repo" },
+          identity: {
+            externalSessionId: `native-${runtimeKind}`,
+            runtimeKind,
+            workingDirectory: "/repo",
+          },
         }),
         [runtimeKind],
       );
@@ -148,11 +152,11 @@ test.each(["partial", "fresh"] as const)(
     }
     mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
     const href = (runtime: string) =>
-      `/sessions?workspace=alpha&kind=task&task=current&session=shared&agent=planner&runtimeKind=${runtime}&workingDirectory=%2Frepo`;
+      `/sessions?workspace=alpha&kind=task&task=current&session=native-${runtime}&agent=planner`;
     const view = render(
       <MemoryRouter
         initialEntries={[
-          `/sessions?workspace=alpha&kind=task&task=current${address === "partial" ? "&session=shared" : ""}&agent=planner`,
+          `/sessions?workspace=alpha&kind=task&task=current${address === "partial" ? "&session=native-opencode" : ""}&agent=planner`,
         ]}
       >
         <Harness visits={[href("opencode"), href("codex")]} />

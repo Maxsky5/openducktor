@@ -60,7 +60,7 @@ const createRunSessionStartWorkflow = (
 const agentStudioSessionUrl = (
   taskId: string,
   role: string,
-  session: { externalSessionId: string; runtimeKind: string; workingDirectory: string },
+  session: { externalSessionId: string },
 ): string => {
   const search = new URLSearchParams({
     workspace: "workspace-1",
@@ -68,8 +68,6 @@ const agentStudioSessionUrl = (
     task: taskId,
     session: session.externalSessionId,
     agent: role,
-    runtimeKind: session.runtimeKind,
-    workingDirectory: session.workingDirectory,
   });
   return `/sessions?${search.toString()}`;
 };

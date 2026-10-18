@@ -469,10 +469,9 @@ The Sessions page shows one content at a time. The `kind` query value selects ta
 
 Rules:
 
-- Build each session address with `buildSessionNavigationHref`. A task session address names the workspace, task, role, and complete session identity. A task context address names the workspace and task, and it can name a role. A workspace session address names the saved record ID.
-- Task content keeps the complete session identity in the address on each write.
-- An address or saved selection without the complete identity opens a session only when exactly one session of the task has its external ID. More matches show an error.
-- Keep old `/workflows` and `/chats` addresses as redirects that add the matching `kind`.
+- Build each session address with `buildSessionNavigationHref`. A task session address names the workspace, task, native session ID, and role. A task context address names the workspace and task, and it can name a role. A workspace session address names the saved record ID.
+- The workspace, task, and native session ID identify a stored task session. Read its runtime and working directory from the existing session read model. Keep those fields out of the URL.
+- An address or saved selection opens a session only when exactly one session of the task has its external ID. More matches show an error.
 - The address names its workspace. A new address for another workspace selects that workspace. A workspace change from elsewhere replaces the address and drops the old selection, also while the address still waits for its own workspace.
 - A workspace switch that fails or that another workspace action interrupts shows the failure with Retry.
 - Content publishes the visible target after its own selection commits. The session list marks that target as selected. A pending, cancelled, or failed navigation never marks another entry.

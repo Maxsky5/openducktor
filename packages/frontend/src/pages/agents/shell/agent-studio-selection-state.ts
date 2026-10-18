@@ -7,7 +7,6 @@ import {
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate,
-  sessionQueryUpdate,
 } from "../query-sync/agent-studio-navigation";
 
 export type AgentStudioSelectionState = {
@@ -122,10 +121,8 @@ export const buildAgentStudioSelectionQueryUpdateFromState = (
 ): AgentStudioQueryUpdate => {
   const update: AgentStudioQueryUpdate = {
     [AGENT_STUDIO_QUERY_KEYS.task]: selection.taskId || undefined,
-    ...sessionQueryUpdate(
-      agentStudioSelectionSessionExternalId(selection),
-      selection.sessionIdentity,
-    ),
+    [AGENT_STUDIO_QUERY_KEYS.session]:
+      agentStudioSelectionSessionExternalId(selection) ?? undefined,
     [AGENT_STUDIO_QUERY_KEYS.agent]: selection.hasExplicitRoleSelection
       ? selection.role
       : undefined,

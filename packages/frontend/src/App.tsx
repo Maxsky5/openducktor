@@ -19,7 +19,6 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { loadNotFoundPage } from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
-import { LegacySessionsRedirect } from "@/pages/sessions/legacy-sessions-redirect";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
@@ -85,10 +84,6 @@ const routes = createRoutesFromElements(
       <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
       <Route path="/kanban" element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)} />
       <Route path="/sessions" element={<SessionsPage />} />
-      <Route path="/workflows" element={<LegacySessionsRedirect kind="task" />} />
-      <Route path="/agents" element={<LegacySessionsRedirect kind="task" />} />
-      <Route path="/chats" element={<LegacySessionsRedirect kind="workspace" />} />
-      <Route path="/workspace-sessions" element={<LegacySessionsRedirect kind="workspace" />} />
       <Route
         path="/planner"
         element={<Navigate to="/sessions?kind=task&agent=planner" replace />}

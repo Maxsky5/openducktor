@@ -13,7 +13,6 @@ import {
 } from "./agent-studio-navigation";
 import { taskRouteStateSchema, readTaskRouteIntent } from "./task-route-intent";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 type UseAgentStudioQuerySyncArgs = {
   activeWorkspaceId: string | null;
@@ -101,7 +100,6 @@ export function useAgentStudioQuerySync({
   return {
     taskIdParam: shown.taskId,
     sessionExternalIdParam: shown.sessionExternalId,
-    sessionIdentityParam: shown.sessionIdentity,
     hasExplicitRoleParam,
     keepSessionlessParam: shown.keepSessionless ?? false,
     roleFromQuery,
@@ -114,7 +112,6 @@ export function useAgentStudioQuerySync({
   } satisfies {
     taskIdParam: string;
     sessionExternalIdParam: string | null;
-    sessionIdentityParam: AgentSessionIdentity | null;
     hasExplicitRoleParam: boolean;
     keepSessionlessParam: boolean;
     roleFromQuery: AgentRole;

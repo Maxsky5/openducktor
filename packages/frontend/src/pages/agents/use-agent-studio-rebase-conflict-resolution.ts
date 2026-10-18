@@ -148,7 +148,7 @@ export function useAgentStudioRebaseConflictResolution({
             scheduleQueryUpdate(
               buildAgentStudioSelectionQueryUpdate({
                 taskId: view.taskId,
-                session: identity,
+                sessionExternalId: identity.externalSessionId,
                 role: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
               }),
             );

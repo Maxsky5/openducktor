@@ -232,7 +232,7 @@ test("passes the exact session identity through transient navigation state", asy
     },
   });
   expect(navigate).toHaveBeenCalledWith(
-    "/sessions?workspace=workspace&kind=task&task=task-1&session=session-1&agent=build&runtimeKind=codex&workingDirectory=%2Frepo%2Fworktree&attention=permission&attentionId=request-1",
+    "/sessions?workspace=workspace&kind=task&task=task-1&session=session-1&agent=build&attention=permission&attentionId=request-1",
     { state: { notificationTarget: target } },
   );
 });

@@ -82,7 +82,6 @@ describe("useAgentStudioSelectionState", () => {
       return useAgentStudioSelectionState(
         baseProps({
           ...query,
-          routeSessionIdentity: query.sessionIdentityParam,
           scheduleQueryUpdate: query.updateQuery,
         }),
       );
@@ -132,7 +131,6 @@ describe("useAgentStudioSelectionState", () => {
         baseProps({
           activeWorkspaceId: workspaceId,
           ...query,
-          routeSessionIdentity: query.sessionIdentityParam,
         }),
       );
       useLayoutEffect(() => {
@@ -337,8 +335,6 @@ describe("useAgentStudioSelectionState", () => {
       keepSessionless: false,
       task: "task-1",
       session: "session-1",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktrees/session-1",
       agent: "build",
     });
 
