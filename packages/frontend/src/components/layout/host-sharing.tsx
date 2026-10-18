@@ -45,7 +45,13 @@ export function HostSharing({
           </Button>
         ) : null}
         {available ? (
-          <Button type="button" variant="outline" size="sm" onClick={disable}>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="ml-auto"
+            onClick={disable}
+          >
             {pending ? (
               <LoaderCircle data-icon="inline-start" className="animate-spin" />
             ) : (
