@@ -492,8 +492,9 @@ describe("consumeClaudeSession lifecycle", () => {
     ]);
   });
 
-  test("terminalizes a live session when the SDK iterator fails", async () => {
+  test("keeps a reported SDK stream failure within its session", async () => {
     const events: AgentEvent[] = [];
+    const onBackgroundFailure = mock(() => Effect.void);
     const sessionStore = createClaudeAgentSdkSessionStore();
     const session = createClaudeSession({
       activity: "running",
@@ -506,10 +507,12 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
       emit: (_session, event) => events.push(event),
-      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+      onBackgroundFailure,
     });
 
-    await expect(consumption).rejects.toThrow("transport crashed");
+    await expect(consumption).resolves.toBeUndefined();
+    expect(onBackgroundFailure).not.toHaveBeenCalled();
+    expect(session.query.close).toHaveBeenCalledTimes(1);
 
     expect(session.activity).toBe("stopped");
     expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
@@ -622,8 +625,7 @@ describe("consumeClaudeSession lifecycle", () => {
       totalTokens: 42_000,
       maxTokens: 200_000,
     });
-    const outcomes = await Promise.allSettled([consumePromise, stopPromise]);
-    expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(true);
+    await Promise.all([consumePromise, stopPromise]);
 
     expect(
       events
@@ -635,12 +637,7 @@ describe("consumeClaudeSession lifecycle", () => {
         )
         .map((event) => event.type),
     ).toEqual(["session_error", "session_context_updated", "session_finished"]);
-    expect(backgroundFailures).toEqual([
-      expect.objectContaining({
-        operation: "claudeRuntime.consumeSession",
-        message: "transport crashed",
-      }),
-    ]);
+    expect(backgroundFailures).toEqual([]);
   });
 
   test("marks a stream that ended after a replacement took the store key as stopped", async () => {

@@ -8,7 +8,7 @@ import {
   classifySystemSlashCommandInvocation,
   type SendAgentUserMessageInput,
 } from "@openducktor/core";
-import { Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
 import {
@@ -123,7 +123,7 @@ export const applyClaudeSessionModel = async (
   session.model = nextModel;
 };
 
-/** Own the native stream through cleanup and report failures to startup and the background hook. */
+/** Own the native stream through cleanup and report unhandled failures to startup and the background hook. */
 export const consumeClaudeSession = (input: {
   emit: ClaudeAgentSdkEventEmitter;
   now: () => string;
@@ -135,6 +135,7 @@ export const consumeClaudeSession = (input: {
   const { emit, now, onBackgroundFailure, onContinuationAdmission, session, sessionStore } = input;
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
   let continuationAdmitted = onContinuationAdmission === undefined;
+  let streamFailure: Cause.Cause<ClaudeSessionError> | undefined;
   const operation = "claudeRuntime.consumeSession";
   const wrapError = (cause: unknown): ClaudeSessionError =>
     new ClaudeSessionError(operation, [cause]);
@@ -167,9 +168,10 @@ export const consumeClaudeSession = (input: {
     () =>
       Effect.gen(function* () {
         const exit = yield* Effect.exit(stream);
+        if (Exit.isFailure(exit)) streamFailure = exit.cause;
+        let reported = false;
         session.activity = "stopped";
         yield* runAllSteps([
-          exit,
           Effect.try({
             try: () => {
               if (Exit.isFailure(exit) && isLiveSession() && continuationAdmitted) {
@@ -179,6 +181,7 @@ export const consumeClaudeSession = (input: {
                   timestamp: now(),
                   message: toSessionError(exit.cause, operation).message,
                 });
+                reported = true;
               }
             },
             catch: wrapError,
@@ -204,6 +207,8 @@ export const consumeClaudeSession = (input: {
             catch: wrapError,
           }),
         ]);
+        // A reported SDK error must not reach the host's fatal hook.
+        if (Exit.isFailure(exit) && !reported) return yield* exit;
       }),
     () =>
       runAllSteps([
@@ -219,7 +224,11 @@ export const consumeClaudeSession = (input: {
         }),
       ]),
   ).pipe(
-    Effect.catchCause((cause) => Effect.fail(toSessionError(cause, operation))),
+    Effect.catchCause((cause) =>
+      Effect.fail(
+        toSessionError(streamFailure ? Cause.combine(streamFailure, cause) : cause, operation),
+      ),
+    ),
     Effect.tapError(onBackgroundFailure),
     Effect.withSpan(operation),
   );

@@ -50,14 +50,13 @@ describe("Claude tool input lifecycle", () => {
     const session = createClaudeSession({ query: claudeQueryWithMessages([start, delta, stop]) });
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
-    const consumption = consumeClaudeSession({
+    await consumeClaudeSession({
       session,
       sessionStore,
       now: () => timestamp,
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
-    await expect(consumption).rejects.toThrow('tool input for "write-1" (Write, block 0)');
     expect(events.filter((event) => event.type === "session_error")).toEqual([
       expect.objectContaining({
         message: expect.stringContaining('tool input for "write-1" (Write, block 0)'),
@@ -94,14 +93,13 @@ describe("Claude tool input lifecycle", () => {
     });
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
-    const consumption = consumeClaudeSession({
+    await consumeClaudeSession({
       session,
       sessionStore,
       now: () => timestamp,
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
-    await expect(consumption).rejects.toThrow('tool input for "write-1" (Write, block 0)');
     expect(events.filter((event) => event.type === "session_error")).toEqual([
       expect.objectContaining({
         message: expect.stringContaining('tool input for "write-1" (Write, block 0)'),
