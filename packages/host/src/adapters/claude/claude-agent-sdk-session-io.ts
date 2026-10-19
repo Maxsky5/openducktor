@@ -22,22 +22,17 @@ import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
-  assertClaudeSessionModelUpdateSupported,
-  toClaudeFlagSettings,
-} from "./claude-agent-sdk-session-model";
-import { canStartUserTurn } from "./claude-agent-sdk-turn-policy";
-import {
-  applyClaudeUserMessageSignal,
-  rejectPendingAdmissions,
-  waitForUserMessageAdmission,
-} from "./claude-agent-sdk-user-message-admission";
-import {
   ClaudeSessionError,
   runAllSteps,
   toSessionError,
 } from "./claude-agent-sdk-session-lifecycle";
-import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
+import {
+  assertClaudeSessionModelUpdateSupported,
+  toClaudeFlagSettings,
+} from "./claude-agent-sdk-session-model";
 import { toClaudeDisplayParts, toClaudeUserMessageEvent } from "./claude-agent-sdk-session-shape";
+import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
+import { canStartUserTurn } from "./claude-agent-sdk-turn-policy";
 import type {
   ClaudeAcceptedUserMessage,
   ClaudeAgentSdkEvent,
@@ -46,6 +41,11 @@ import type {
   ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
+import {
+  applyClaudeUserMessageSignal,
+  rejectPendingAdmissions,
+  waitForUserMessageAdmission,
+} from "./claude-agent-sdk-user-message-admission";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 export const applyClaudeSessionModel = async (

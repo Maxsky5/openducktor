@@ -1,9 +1,10 @@
-import type { AgentSessionHistoryMessage, ResumeAgentSessionInput } from "@openducktor/core";
 import {
   AgentRuntimeQueryError,
+  type AgentSessionHistoryMessage,
   interruptedTurnResumeError,
   type InterruptedTurnResumeError,
   type InterruptedTurnResumeFailureReason,
+  type ResumeAgentSessionInput,
 } from "@openducktor/core";
 import { Effect, Exit } from "effect";
 import {
@@ -36,9 +37,8 @@ const finishClaudeContinuationDecision = (decision: ClaudeContinuationDecision) 
   decision.kind === "reject" ? failClaudeContinuation(decision.error) : Effect.void;
 
 /**
- * Decides what happens to the attached session after a failed replacement. A session
- * whose stream ended in the meantime has no consumer, so it is dropped instead of
- * restored, and the failure names the missing session.
+ * Restore the attached session only if its stream still runs.
+ * A stopped session must finish cleanup before the continuation reports it missing.
  */
 export const resolveFailedClaudeContinuationSession = <Failure>(input: {
   cause: Failure;

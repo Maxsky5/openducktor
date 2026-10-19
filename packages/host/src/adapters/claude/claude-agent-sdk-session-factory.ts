@@ -15,10 +15,6 @@ import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
 import { toSessionError } from "./claude-agent-sdk-session-lifecycle";
 import {
-  reconcileClaudeSessionTitle,
-  renameClaudeSessionIfNeeded,
-} from "./claude-session-title-update";
-import {
   type ClaudeSessionLaunchInput,
   requireClaudeOpenDucktorMcpForScope,
 } from "./claude-agent-sdk-session-policy";
@@ -36,6 +32,10 @@ import {
   INIT_TIMEOUT_MS,
   withTimeout,
 } from "./claude-agent-sdk-utils";
+import {
+  reconcileClaudeSessionTitle,
+  renameClaudeSessionIfNeeded,
+} from "./claude-session-title-update";
 
 export type CreateClaudeAgentSdkSessionInput = {
   emit: ClaudeAgentSdkEventEmitter;
