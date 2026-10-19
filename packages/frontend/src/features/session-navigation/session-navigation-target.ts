@@ -1,4 +1,4 @@
-import { type AgentRole, runtimeKindSchema } from "@openducktor/contracts";
+import type { AgentRole } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
@@ -10,16 +10,10 @@ export const SESSIONS_QUERY_KEYS = {
   kind: "kind",
 } as const;
 
-/**
- * Keys of task content. A task session address names the complete session identity, because
- * the external session ID alone can match a session of another runtime or working directory.
- */
 export const TASK_SESSION_QUERY_KEYS = {
   task: "task",
   session: "session",
   agent: "agent",
-  runtimeKind: "runtimeKind",
-  workingDirectory: "workingDirectory",
 } as const;
 
 export const WORKSPACE_SESSION_QUERY_KEYS = {
@@ -32,9 +26,9 @@ export type SessionsPageKind = "task" | "workspace";
 /**
  * A conversation or context that the Sessions page can open.
  *
- * A task session carries its complete identity, so matching titles, roles, or external IDs
- * never select another conversation. A task target without a session opens the task context
- * and never starts a session. Its optional role opens the view of that role.
+ * A task session uses its native ID within the workspace and task. A task target without a
+ * session opens the task context and never starts a session. Its optional role opens the view
+ * of that role.
  */
 export type SessionNavigationTarget =
   | {
@@ -91,51 +85,8 @@ export const buildSessionNavigationHref = (target: SessionNavigationTarget): str
   if (target.kind === "task_session") {
     params.set(TASK_SESSION_QUERY_KEYS.session, target.identity.externalSessionId);
     params.set(TASK_SESSION_QUERY_KEYS.agent, target.role);
-    params.set(TASK_SESSION_QUERY_KEYS.runtimeKind, target.identity.runtimeKind);
-    params.set(TASK_SESSION_QUERY_KEYS.workingDirectory, target.identity.workingDirectory);
   } else if (target.role) {
     params.set(TASK_SESSION_QUERY_KEYS.agent, target.role);
   }
   return `${SESSIONS_PATH}?${params.toString()}`;
-};
-
-type TaskSessionAddressValues = {
-  session?: string | null | undefined;
-  runtimeKind?: string | null | undefined;
-  workingDirectory?: string | null | undefined;
-};
-
-const readValue = (value: string | null | undefined): string | null => value?.trim() || null;
-
-/** The complete task session identity of address values, or null when a value is missing. */
-export const toTaskSessionIdentity = (
-  values: TaskSessionAddressValues,
-): AgentSessionIdentity | null => {
-  const externalSessionId = readValue(values.session);
-  const runtimeKind = runtimeKindSchema.safeParse(readValue(values.runtimeKind));
-  const workingDirectory = readValue(values.workingDirectory);
-  if (!externalSessionId || !runtimeKind.success || !workingDirectory) return null;
-  return { externalSessionId, runtimeKind: runtimeKind.data, workingDirectory };
-};
-
-/** The complete task session identity of an address, or null when the address lacks a field. */
-export const parseTaskSessionIdentity = (
-  searchParams: URLSearchParams,
-): AgentSessionIdentity | null =>
-  toTaskSessionIdentity({
-    session: searchParams.get(TASK_SESSION_QUERY_KEYS.session),
-    runtimeKind: searchParams.get(TASK_SESSION_QUERY_KEYS.runtimeKind),
-    workingDirectory: searchParams.get(TASK_SESSION_QUERY_KEYS.workingDirectory),
-  });
-
-/**
- * Map an old page address to the Sessions page.
- *
- * The old task and workspace pages both used `session` with different meanings, so the kind
- * keeps each old link on the content that understands its parameters.
- */
-export const legacySessionsSearch = (search: string, kind: SessionsPageKind): string => {
-  const params = new URLSearchParams(search);
-  params.set(SESSIONS_QUERY_KEYS.kind, kind);
-  return `?${params.toString()}`;
 };

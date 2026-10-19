@@ -93,8 +93,6 @@ describe("useAgentStudioQuerySync", () => {
           await h.run((state) =>
             state.updateQuery({
               session: "native-b",
-              runtimeKind: "codex",
-              workingDirectory: "/repo-b",
               agent: "planner",
             }),
           );
@@ -251,7 +249,7 @@ describe("useAgentStudioQuerySync", () => {
         agentStudioState: null,
         isLoadingAgentStudioState: true,
         searchParams: new URLSearchParams(
-          "workspace=repo-b&task=task-b&session=session-b&agent=build&runtimeKind=claude&workingDirectory=%2Frepo-b",
+          "workspace=repo-b&task=task-b&session=session-b&agent=build",
         ),
         onCommit: (state) => commits.push(state),
         setSearchParams: (next) => writes.push(String(next)),
@@ -259,11 +257,6 @@ describe("useAgentStudioQuerySync", () => {
 
       expect(harness.getLatest().taskIdParam).toBe("task-b");
       expect(harness.getLatest().sessionExternalIdParam).toBe("session-b");
-      expect(harness.getLatest().sessionIdentityParam).toEqual({
-        externalSessionId: "session-b",
-        runtimeKind: "claude",
-        workingDirectory: "/repo-b",
-      });
       expect(harness.getLatest().isWorkspaceRestorePending).toBeFalse();
       expect(commits.length).toBeGreaterThan(0);
       expect(

@@ -44,9 +44,7 @@ describe("useNavigationUrlSync", () => {
       return (
         <button
           onClick={() =>
-            void navigate(
-              "/sessions?workspace=w&task=next&session=native-next&agent=build&runtimeKind=claude&workingDirectory=%2Fnext",
-            )
+            void navigate("/sessions?workspace=w&task=next&session=native-next&agent=build")
           }
         >
           Open next session
@@ -55,9 +53,7 @@ describe("useNavigationUrlSync", () => {
     }
     const view = render(
       <MemoryRouter
-        initialEntries={[
-          "/sessions?workspace=w&task=first&session=native-first&agent=qa&runtimeKind=codex&workingDirectory=%2Ffirst",
-        ]}
+        initialEntries={["/sessions?workspace=w&task=first&session=native-first&agent=qa"]}
       >
         <Session />
       </MemoryRouter>,
@@ -80,7 +76,6 @@ describe("useNavigationUrlSync", () => {
       initialNavigation: {
         taskId: "task-1",
         sessionExternalId: "session-1",
-        sessionIdentity: null,
         role: "planner",
       },
       locationKey: "location-1",
@@ -95,7 +90,6 @@ describe("useNavigationUrlSync", () => {
       initialNavigation: {
         taskId: "task-1",
         sessionExternalId: "session-1",
-        sessionIdentity: null,
         role: "planner",
       },
       locationKey: "location-1",
@@ -107,7 +101,6 @@ describe("useNavigationUrlSync", () => {
     expect(harness.getLatest().navigation).toEqual({
       taskId: "task-1",
       sessionExternalId: "session-1",
-      sessionIdentity: null,
       role: "planner",
     });
     expect(calls).toHaveLength(1);
@@ -117,14 +110,14 @@ describe("useNavigationUrlSync", () => {
     await harness.unmount();
   });
 
-  test("keeps a complete session identity in the address on mount", async () => {
+  test("keeps a native session ID in the address on mount", async () => {
     const calls: SearchParamsCall[] = [];
     const harness = createHookHarness({
       workspaceId: "w",
       locationKey: "location-1",
       navigationType: "PUSH",
       searchParams: new URLSearchParams(
-        "workspace=w&kind=task&task=task-1&session=native&agent=build&runtimeKind=codex&workingDirectory=%2Frepo",
+        "workspace=w&kind=task&task=task-1&session=native&agent=build",
       ),
       setSearchParams: (nextInit, navigateOptions) => {
         calls.push([nextInit, navigateOptions]);
@@ -133,11 +126,7 @@ describe("useNavigationUrlSync", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().navigation.sessionIdentity).toEqual({
-      externalSessionId: "native",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-    });
+    expect(harness.getLatest().navigation.sessionExternalId).toBe("native");
     expect(calls).toHaveLength(0);
     await harness.unmount();
   });

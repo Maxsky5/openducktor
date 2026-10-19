@@ -81,7 +81,6 @@ export function useAgentsPageRouteSessionModel({
   const {
     taskIdParam,
     sessionExternalIdParam,
-    sessionIdentityParam,
     hasExplicitRoleParam,
     keepSessionlessParam,
     roleFromQuery,
@@ -114,23 +113,15 @@ export function useAgentsPageRouteSessionModel({
     [updateQuery],
   );
 
-  const addressSessionIdentity = useStableAgentSessionIdentity(sessionIdentityParam);
   const routeSessionIdentity = useMemo(() => {
     const state = notificationRouteStateSchema.safeParse(locationState);
-    const notificationIdentity = notificationRouteSessionIdentity(
+    return notificationRouteSessionIdentity(
       state.success ? state.data.notificationTarget : null,
       workspaceRepoPath,
       taskIdParam,
       sessionExternalIdParam,
     );
-    return notificationIdentity ?? addressSessionIdentity;
-  }, [
-    addressSessionIdentity,
-    locationState,
-    workspaceRepoPath,
-    taskIdParam,
-    sessionExternalIdParam,
-  ]);
+  }, [locationState, workspaceRepoPath, taskIdParam, sessionExternalIdParam]);
 
   const taskExecutionFilePreview = useTaskExecutionFilePreviewController();
   const {

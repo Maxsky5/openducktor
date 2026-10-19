@@ -165,9 +165,7 @@ const SessionView = memo(function SessionView({
 function sameSelection(left: string, right: string): boolean {
   const a = new URLSearchParams(left);
   const b = new URLSearchParams(right);
-  return ["task", "session", "agent", "runtimeKind", "workingDirectory"].every(
-    (key) => a.get(key) === b.get(key),
-  );
+  return ["task", "session", "agent"].every((key) => a.get(key) === b.get(key));
 }
 
 function hasSelection(view: View): boolean {
@@ -208,9 +206,7 @@ function matchesResolvedSelection(
     const params = new URLSearchParams(address);
     return (
       params.get("task") === target.taskId &&
-      ["session", "agent", "runtimeKind", "workingDirectory"].every(
-        (key) => !params.has(key) || params.get(key) === resolved.get(key),
-      )
+      ["session", "agent"].every((key) => !params.has(key) || params.get(key) === resolved.get(key))
     );
   });
 }

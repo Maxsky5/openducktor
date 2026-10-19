@@ -1,28 +1,21 @@
 import { agentRoleValues, type WorkspaceAgentStudioState } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import {
-  parseTaskSessionIdentity,
-  TASK_SESSION_QUERY_KEYS,
-  toTaskSessionIdentity,
-} from "@/features/session-navigation/session-navigation-target";
-import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { TASK_SESSION_QUERY_KEYS } from "@/features/session-navigation/session-navigation-target";
 
 const AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-panel";
 
 export const AGENT_STUDIO_QUERY_KEYS = TASK_SESSION_QUERY_KEYS;
 
-const LEGACY_AGENT_STUDIO_QUERY_KEYS = ["autostart", "start"] as const;
+const REMOVED_QUERY_KEYS = ["autostart", "start", "runtimeKind", "workingDirectory"] as const;
 
 const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   ...Object.values(AGENT_STUDIO_QUERY_KEYS),
-  ...LEGACY_AGENT_STUDIO_QUERY_KEYS,
+  ...REMOVED_QUERY_KEYS,
 ];
 
 export type AgentStudioQueryKey =
   (typeof AGENT_STUDIO_QUERY_KEYS)[keyof typeof AGENT_STUDIO_QUERY_KEYS];
 
-/** A change of address values. A `session` change replaces the session identity values too. */
 export type AgentStudioQueryUpdate = Partial<Record<AgentStudioQueryKey, string | undefined>> & {
   keepSessionless?: boolean;
 };
@@ -30,8 +23,6 @@ export type AgentStudioQueryUpdate = Partial<Record<AgentStudioQueryKey, string 
 export type AgentStudioNavigationState = {
   taskId: string;
   sessionExternalId: string | null;
-  /** The complete identity of the session, when the address names all its fields. */
-  sessionIdentity: AgentSessionIdentity | null;
   role: AgentRole | null;
   keepSessionless?: boolean;
 };
@@ -58,7 +49,6 @@ export const parseNavigationStateFromSearchParams = (
     taskId: readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.task)) ?? "",
     sessionExternalId:
       readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.session)) ?? null,
-    sessionIdentity: parseTaskSessionIdentity(searchParams),
     role: isRole(roleValue) ? roleValue : null,
   };
 };
@@ -82,21 +72,9 @@ export const buildSearchParamsFromNavigationState = (
   if (navigation.role) {
     next.set(AGENT_STUDIO_QUERY_KEYS.agent, navigation.role);
   }
-  if (navigation.sessionIdentity) {
-    next.set(AGENT_STUDIO_QUERY_KEYS.runtimeKind, navigation.sessionIdentity.runtimeKind);
-    next.set(AGENT_STUDIO_QUERY_KEYS.workingDirectory, navigation.sessionIdentity.workingDirectory);
-  }
 
   return next;
 };
-
-const sameSessionIdentity = (
-  left: AgentSessionIdentity | null,
-  right: AgentSessionIdentity | null,
-): boolean =>
-  left === null || right === null
-    ? left === right
-    : agentSessionIdentityKey(left) === agentSessionIdentityKey(right);
 
 export const applyQueryUpdateToNavigationState = (
   current: AgentStudioNavigationState,
@@ -115,13 +93,8 @@ export const applyQueryUpdateToNavigationState = (
 
   if (AGENT_STUDIO_QUERY_KEYS.session in updates) {
     const sessionExternalId = readOptionalString(updates.session) ?? null;
-    const sessionIdentity = toTaskSessionIdentity(updates);
-    if (
-      sessionExternalId !== next.sessionExternalId ||
-      !sameSessionIdentity(sessionIdentity, next.sessionIdentity)
-    ) {
+    if (sessionExternalId !== next.sessionExternalId) {
       next.sessionExternalId = sessionExternalId;
-      next.sessionIdentity = sessionIdentity;
       hasChanged = true;
     }
   }
@@ -144,25 +117,14 @@ export const applyQueryUpdateToNavigationState = (
   return hasChanged ? next : current;
 };
 
-/** The address values of a session. Without an identity, they name the external ID only. */
-export const sessionQueryUpdate = (
-  sessionExternalId: string | null,
-  sessionIdentity: AgentSessionIdentity | null,
-) =>
-  ({
-    [AGENT_STUDIO_QUERY_KEYS.session]: sessionExternalId ?? undefined,
-    [AGENT_STUDIO_QUERY_KEYS.runtimeKind]: sessionIdentity?.runtimeKind,
-    [AGENT_STUDIO_QUERY_KEYS.workingDirectory]: sessionIdentity?.workingDirectory,
-  }) satisfies AgentStudioQueryUpdate;
-
 export const buildAgentStudioSelectionQueryUpdate = (params: {
   taskId: string;
-  session: AgentSessionIdentity;
+  sessionExternalId: string;
   role: AgentRole;
 }) =>
   ({
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
-    ...sessionQueryUpdate(params.session.externalSessionId, params.session),
+    [AGENT_STUDIO_QUERY_KEYS.session]: params.sessionExternalId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
   }) satisfies AgentStudioQueryUpdate;
 
@@ -173,7 +135,6 @@ export const isSameNavigationState = (
   return (
     left.taskId === right.taskId &&
     left.sessionExternalId === right.sessionExternalId &&
-    sameSessionIdentity(left.sessionIdentity, right.sessionIdentity) &&
     Boolean(left.keepSessionless) === Boolean(right.keepSessionless) &&
     left.role === right.role
   );
@@ -186,7 +147,6 @@ export const clearAgentStudioNavigationState = (
     ...current,
     taskId: "",
     sessionExternalId: null,
-    sessionIdentity: null,
     role: null,
   };
 };

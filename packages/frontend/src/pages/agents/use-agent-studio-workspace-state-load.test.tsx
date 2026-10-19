@@ -85,7 +85,6 @@ const useWorkspaceRestoreWithSelection = (
     isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
     taskIdParam: navigation.taskIdParam,
     sessionExternalIdParam: navigation.sessionExternalIdParam,
-    routeSessionIdentity: navigation.sessionIdentityParam,
     hasExplicitRoleParam: navigation.hasExplicitRoleParam,
     roleFromQuery: navigation.roleFromQuery,
     scheduleQueryUpdate: args.onQueryUpdate,
@@ -303,11 +302,9 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     });
     await harness.update({
       ...repoAArgs,
-      searchParams: new URLSearchParams(
-        "task=task-1&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo-a%2Fworktrees%2Fsession-1",
-      ),
+      searchParams: new URLSearchParams("task=task-1&session=session-1&agent=build"),
     });
-    expect(harness.getLatest().selection.selection.sessionIdentity).not.toBeNull();
+    expect(harness.getLatest().selection.selection.sessionExternalId).toBe("session-1");
 
     await harness.update({
       ...repoAArgs,
@@ -316,7 +313,7 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     });
 
     expect(harness.getLatest().navigation.isWorkspaceRestorePending).toBe(true);
-    expect(harness.getLatest().selection.selection.sessionIdentity).toBeNull();
+    expect(harness.getLatest().selection.selection.sessionExternalId).toBeNull();
 
     await harness.unmount();
   });
