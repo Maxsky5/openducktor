@@ -152,10 +152,11 @@ export function useAgentChatScrollController({
 
   // A wheel over a control outside the transcript, such as the conversation minimap, scrolls it
   // with the same pin rule as a wheel over the transcript. The scroll event pins at the bottom.
+  // Ctrl + wheel and a trackpad pinch zoom the page, so they do not scroll, as over the transcript.
   const scrollByWheel = useCallback(
     (event: WheelEvent) => {
       const container = messagesContainerRef.current;
-      if (!container) {
+      if (!container || event.ctrlKey) {
         return;
       }
       if (isUpwardWheel(event) && pinnedRef.current && canScroll(container)) {

@@ -3077,6 +3077,26 @@ describe("useAgentChatWindow", () => {
       await harness.unmount();
     });
 
+    test("leaves the transcript in place for a zoom gesture over a control outside it", async () => {
+      const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+      const bottom = getMaxScrollTop(container);
+      // Ctrl + wheel and a trackpad pinch zoom the page. The happy-dom WheelEvent is not a
+      // MouseEvent, so it has no modifier keys of its own.
+      const zoom = new WheelEvent("wheel", { deltaY: -100 });
+      Object.defineProperty(zoom, "ctrlKey", { value: true });
+
+      await act(async () => {
+        harness.getLatestResult().navigation.scrollByWheel(zoom);
+        await dispatchScroll(container);
+      });
+      expect(container.scrollTop).toBe(bottom);
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await harness.unmount();
+    });
+
     test("keeps navigation functions across row updates", async () => {
       const harness = await mountHarness({
         rows: createTurnRows(4),
