@@ -43,7 +43,6 @@ import {
 } from "./claude-agent-sdk-file-search";
 import {
   type ClaudeContextUsageDependencies,
-  flushClaudeLiveContextUsageRefresh,
   loadClaudeSessionContextUsage,
 } from "./claude-agent-sdk-context-usage";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
@@ -171,12 +170,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
             continuedClaudeSessionLaunch(scope, input.externalSessionId),
             onContinuationAdmission,
           ).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                if (existing) this.sessionStore.close(existing);
-              }),
-            ),
-            Effect.mapError((cause) =>
+            Effect.catch((cause) =>
               resolveFailedClaudeContinuationSession({
                 cause,
                 existing,
@@ -184,6 +178,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
                 sessionStore: this.sessionStore,
               }),
             ),
+            Effect.tap(() => (existing ? this.sessionStore.settle(existing) : Effect.void)),
           );
         }),
       ),
@@ -203,15 +198,17 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   releaseSession(input: SessionRef) {
-    return fromPromise("claudeRuntime.releaseSession", async () => {
-      const session = this.sessionStore.get(input.externalSessionId);
+    return Effect.gen({ self: this }, function* () {
+      const session = this.sessionStore.getForCleanup(input.externalSessionId);
       if (!session) {
         return;
       }
-      assertClaudeSessionRef(session, input, "release");
-      this.sessionStore.close(session);
-      await flushClaudeLiveContextUsageRefresh(session);
-    });
+      yield* Effect.try({
+        try: () => assertClaudeSessionRef(session, input, "release"),
+        catch: (cause) => toHostOperationError(cause, "claudeRuntime.releaseSession"),
+      });
+      yield* this.sessionStore.settle(session);
+    }).pipe(Effect.withSpan("claudeRuntime.releaseSession"));
   }
 
   loadRuntimeCatalog(input: LoadAgentRuntimeCatalogInput) {

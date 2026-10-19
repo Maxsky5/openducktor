@@ -1,7 +1,9 @@
+import { Effect, Exit } from "effect";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentSessionSummary, type AgentSessionTodoItem } from "@openducktor/core";
-import { interruptedTurnResumeError } from "@openducktor/core";
-import { HostOperationError } from "../../effect/host-errors";
+import { InterruptedTurnResumeError, interruptedTurnResumeError } from "@openducktor/core";
+import { claudeSessionLifecycleFailure } from "./claude-agent-sdk-session-lifecycle";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
   type ClaudeAgentSdkOptionsDependencies,
@@ -47,8 +49,10 @@ export type CreateClaudeAgentSdkSessionInput = {
 
 /** Distinguishes a stream that ended before admission from an admission timeout. */
 class ClaudeContinuationStreamEndedError extends Error {
-  constructor(externalSessionId: string) {
-    super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`);
+  constructor(externalSessionId: string, cause?: unknown) {
+    super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`, {
+      cause,
+    });
   }
 }
 
@@ -166,7 +170,6 @@ export const createClaudeAgentSdkSession = async ({
     if (options.permissionMode) sessionContext.requestedPermissionMode = options.permissionMode;
     input.workStartGuard?.assertCurrent();
     sdkQuery = query({ prompt: queue, options });
-    input.onWorkIssued?.();
   } catch (error) {
     abortController.abort();
     queue.close();
@@ -195,6 +198,7 @@ export const createClaudeAgentSdkSession = async ({
   }
   const consumption = consumeClaudeSession(consumptionInput);
   try {
+    input.onWorkIssued?.();
     await withTimeout(
       sdkQuery.initializationResult(),
       INIT_TIMEOUT_MS,
@@ -218,9 +222,14 @@ export const createClaudeAgentSdkSession = async ({
         // reports its own failure instead of waiting for the admission timeout.
         admission: Promise.race([
           continuationAdmission.promise,
-          consumption.then(() => {
-            throw new ClaudeContinuationStreamEndedError(session.externalSessionId);
-          }),
+          consumption.then(
+            () => {
+              throw new ClaudeContinuationStreamEndedError(session.externalSessionId);
+            },
+            (cause: unknown) => {
+              throw new ClaudeContinuationStreamEndedError(session.externalSessionId, cause);
+            },
+          ),
         ]),
         externalSessionId: session.externalSessionId,
         runtimeId,
@@ -228,50 +237,69 @@ export const createClaudeAgentSdkSession = async ({
       });
       session.activity = "running";
     }
-  } catch (error) {
-    if (sessionStore.get(session.externalSessionId) === session) {
-      sessionStore.close(session);
+    if (sessionStore.get(session.externalSessionId) !== session) {
+      throw new HostOperationError({
+        operation: "claudeRuntime.createSession",
+        message: `Claude session '${session.externalSessionId}' stopped before startup completed.`,
+        details: {
+          externalSessionId: session.externalSessionId,
+          runtimeId,
+        },
+      });
     }
-    await sdkQuery.return();
-    await consumption;
+    session.summary.status = isContinuation ? "running" : "idle";
+    // Restoring an idle session must not move its activity time in the session list.
+    if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
+      return session.summary;
+    }
+    const timestamp = now();
+    if (isContinuation) {
+      emit(session, {
+        type: "transcript_retracted",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        messageIds: [`claude-permission-mode:${session.externalSessionId}`],
+      });
+    }
+    emit(session, {
+      type: "session_started",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      message: sessionInput.startedMessage,
+    });
+    if (!isContinuation) {
+      emit(session, {
+        type: "session_idle",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+      });
+    }
+    return session.summary;
+  } catch (error) {
+    const settled = await Effect.runPromiseExit(sessionStore.settle(session));
+    if (Exit.isFailure(settled)) {
+      const cleanup = claudeSessionLifecycleFailure(settled.cause, "claudeRuntime.settleSession");
+      const causes = new AggregateError([error, cleanup], "Claude startup and settlement failed.");
+      const resumeFailure =
+        error instanceof HostOperationError && error.cause instanceof InterruptedTurnResumeError
+          ? error.cause
+          : undefined;
+      let cause: AggregateError | InterruptedTurnResumeError = causes;
+      if (resumeFailure) {
+        const detail: Parameters<typeof interruptedTurnResumeError>[0] = {
+          reason: resumeFailure.reason,
+          message: resumeFailure.message,
+          cause: causes,
+        };
+        if (resumeFailure.nativeOutcome) detail.nativeOutcome = resumeFailure.nativeOutcome;
+        cause = interruptedTurnResumeError(detail);
+      }
+      throw new HostOperationError({
+        operation: "claudeRuntime.createSession",
+        message: `${errorMessage(error)}\n${cleanup.message}`,
+        cause,
+      });
+    }
     throw error;
   }
-  if (sessionStore.get(session.externalSessionId) !== session) {
-    throw new HostOperationError({
-      operation: "claudeRuntime.createSession",
-      message: `Claude session '${session.externalSessionId}' stopped before startup completed.`,
-      details: {
-        externalSessionId: session.externalSessionId,
-        runtimeId,
-      },
-    });
-  }
-  session.summary.status = isContinuation ? "running" : "idle";
-  // Restoring an idle session must not move its activity time in the session list.
-  if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
-    return session.summary;
-  }
-  const timestamp = now();
-  if (isContinuation) {
-    emit(session, {
-      type: "transcript_retracted",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      messageIds: [`claude-permission-mode:${session.externalSessionId}`],
-    });
-  }
-  emit(session, {
-    type: "session_started",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    message: sessionInput.startedMessage,
-  });
-  if (!isContinuation) {
-    emit(session, {
-      type: "session_idle",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-    });
-  }
-  return session.summary;
 };

@@ -1,5 +1,14 @@
-import { Effect } from "effect";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { Effect, Fiber } from "effect";
+import {
+  claudeSessionLifecycleFailure,
+  settleClaudeSessionSteps,
+} from "./claude-agent-sdk-session-lifecycle";
+import {
+  type HostOperationErrorAggregate,
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
@@ -38,48 +47,139 @@ export const createClaudeAgentSdkSessionStore = ({
 }: CreateClaudeAgentSdkSessionStoreInput = {}): ClaudeSessionStore => {
   const sessions = new Map<string, ClaudeSession>();
   const closeListeners = new Set<(session: ClaudeSession) => void>();
-  const rejectPendingApprovals = (session: ClaudeSession, message: string): void => {
-    for (const pending of session.pendingApprovals.values()) {
-      pending.resolve({
-        behavior: "deny",
-        message,
-        interrupt: true,
-      });
-    }
-  };
+  const consumers = new WeakMap<ClaudeSession, Fiber.Fiber<void, HostOperationErrorAggregate>>();
+  const activeConsumers = new Set<ClaudeSession>();
+  const terminalAdmissions = new WeakMap<ClaudeSession, () => boolean>();
+  const closed = new WeakMap<ClaudeSession, AggregateError | undefined>();
+  const finished = new WeakSet<ClaudeSession>();
   const close = (session: ClaudeSession): void => {
-    clearClaudeStreamToolInputTree(session);
-    rejectPendingApprovals(session, "Claude session was stopped.");
+    if (closed.has(session)) {
+      const failure = closed.get(session);
+      if (failure) throw failure;
+      return;
+    }
+    closed.set(session, undefined);
+    const failures: unknown[] = [];
+    const attempt = (step: () => void): void => {
+      try {
+        step();
+      } catch (cause) {
+        failures.push(cause);
+      }
+    };
     session.activity = "stopped";
     session.activeSdkUserTurnCount = 0;
     session.pendingUserTurnCount = 0;
-    rejectPendingAdmissions(session, new Error("Claude session was stopped."));
+    attempt(() => clearClaudeStreamToolInputTree(session));
+    for (const pending of session.pendingApprovals.values()) {
+      attempt(() =>
+        pending.resolve({
+          behavior: "deny",
+          message: "Claude session was stopped.",
+          interrupt: true,
+        }),
+      );
+    }
+    attempt(() => rejectPendingAdmissions(session, new Error("Claude session was stopped.")));
     session.unreadSteeredUserMessages.clear();
-    session.queue.close();
-    session.abortController.abort();
-    session.query.close();
+    attempt(() => session.queue.close());
+    attempt(() => session.abortController.abort());
+    attempt(() => session.query.close());
     if (sessions.get(session.externalSessionId) === session) {
       sessions.delete(session.externalSessionId);
     }
     session.pendingApprovals.clear();
     session.pendingQuestions.clear();
     for (const listener of closeListeners) {
-      listener(session);
+      attempt(() => listener(session));
+    }
+    if (failures.length > 0) {
+      const failure = new AggregateError(failures, "Failed to close Claude session resources.");
+      closed.set(session, failure);
+      throw failure;
     }
   };
-  const publishSessionFinished = (session: ClaudeSession, message: string): void => {
-    emit?.(session, {
+  const finish: ClaudeSessionStore["finish"] = (
+    session,
+    message,
+    publish = emit,
+    timestamp = now(),
+  ): void => {
+    const current = sessions.get(session.externalSessionId);
+    if ((current && current !== session) || terminalAdmissions.get(session)?.() === false) return;
+    if (finished.has(session)) return;
+    finished.add(session);
+    publish?.(session, {
       type: "session_finished",
       externalSessionId: session.externalSessionId,
-      timestamp: now(),
+      timestamp,
       message,
     });
   };
+  const settle: ClaudeSessionStore["settle"] = (session) =>
+    Effect.suspend(() => {
+      const consumer = consumers.get(session);
+      return settleClaudeSessionSteps([
+        Effect.try({
+          try: () => close(session),
+          catch: (cause) => toHostOperationError(cause, "claudeRuntime.closeSession"),
+        }),
+        consumer
+          ? Fiber.join(consumer)
+          : settleClaudeSessionSteps([
+              Effect.tryPromise({
+                try: () => session.query.return().then(() => {}),
+                catch: (cause) => toHostOperationError(cause, "claudeRuntime.returnQuery"),
+              }),
+              Effect.tryPromise({
+                try: () => flushClaudeLiveContextUsageRefresh(session),
+                catch: (cause) => toHostOperationError(cause, "claudeRuntime.flushContextUsage"),
+              }),
+            ]),
+      ]);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.fail(claudeSessionLifecycleFailure(cause, "claudeRuntime.settleSession")),
+      ),
+      Effect.uninterruptible,
+      Effect.withSpan("claudeRuntime.settleSession"),
+    );
+
+  const stop = (session: ClaudeSession, message: string) =>
+    Effect.suspend(() => {
+      const wasAttached = sessions.get(session.externalSessionId) === session;
+      return settleClaudeSessionSteps([
+        settle(session),
+        Effect.try({
+          try: () => {
+            if (wasAttached) finish(session, message);
+          },
+          catch: (cause) => toHostOperationError(cause, "claudeRuntime.finishSession"),
+        }),
+      ]);
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.fail(claudeSessionLifecycleFailure(cause, "claudeRuntime.stopSession")),
+      ),
+    );
+
+  const getForCleanup = (externalSessionId: string): ClaudeSession | undefined =>
+    sessions.get(externalSessionId) ??
+    [...activeConsumers].findLast((session) => session.externalSessionId === externalSessionId);
 
   return {
     sessions,
     close,
+    finish,
+    settle,
+    ownConsumption: (session, fiber, canFinish) => {
+      consumers.set(session, fiber);
+      terminalAdmissions.set(session, canFinish);
+      activeConsumers.add(session);
+      fiber.addObserver(() => activeConsumers.delete(session));
+    },
     get: (externalSessionId) => sessions.get(externalSessionId),
+    getForCleanup,
     set: (session) => {
       sessions.set(session.externalSessionId, session);
     },
@@ -101,57 +201,49 @@ export const createClaudeAgentSdkSessionStore = ({
       });
     },
     stopSession: (input: RuntimeSessionTarget) =>
-      Effect.tryPromise({
-        try: async () => {
-          const session = sessions.get(input.externalSessionId);
-          if (!session) {
-            throw new HostValidationError({
-              field: "externalSessionId",
-              message: `Unknown Claude session '${input.externalSessionId}'.`,
-              details: { externalSessionId: input.externalSessionId },
+      Effect.gen(function* () {
+        const session = yield* Effect.try({
+          try: () => {
+            const session = getForCleanup(input.externalSessionId);
+            if (!session) {
+              throw new HostValidationError({
+                field: "externalSessionId",
+                message: `Unknown Claude session '${input.externalSessionId}'.`,
+                details: { externalSessionId: input.externalSessionId },
+              });
+            }
+            assertClaudeSessionTarget(session, input, "stop");
+            return session;
+          },
+          catch: (cause) => {
+            if (cause instanceof HostValidationError) {
+              return cause;
+            }
+            if (cause instanceof HostOperationError) {
+              return cause;
+            }
+            return toHostOperationError(cause, "claudeRuntime.stopSession", {
+              externalSessionId: input.externalSessionId,
             });
-          }
-          assertClaudeSessionTarget(session, input, "stop");
-          close(session);
-          await flushClaudeLiveContextUsageRefresh(session);
-          publishSessionFinished(session, "Session stopped");
-        },
-        catch: (cause) => {
-          if (cause instanceof HostValidationError) {
-            return cause;
-          }
-          if (cause instanceof HostOperationError) {
-            return cause;
-          }
-          return new HostOperationError({
-            operation: "claudeRuntime.stopSession",
-            message: errorMessage(cause),
-            cause,
-            details: { externalSessionId: input.externalSessionId },
-          });
-        },
-      }),
+          },
+        });
+        yield* stop(session, "Session stopped");
+      }).pipe(Effect.uninterruptible),
     stopSessionsForRuntime: (runtimeId) =>
-      Effect.tryPromise({
-        try: async () => {
-          const stoppedSessions = [...sessions.values()].filter(
-            (session) => session.runtimeId === runtimeId,
-          );
-          for (const session of stoppedSessions) {
-            close(session);
-          }
-          await Promise.all(stoppedSessions.map(flushClaudeLiveContextUsageRefresh));
-          for (const session of stoppedSessions) {
-            publishSessionFinished(session, "Runtime stopped");
-          }
-        },
-        catch: (cause) =>
-          new HostOperationError({
-            operation: "claudeRuntime.stopSessionsForRuntime",
-            message: errorMessage(cause),
-            cause,
-            details: { runtimeId },
-          }),
-      }),
+      Effect.suspend(() => {
+        const stoppedSessions = [...new Set([...sessions.values(), ...activeConsumers])].filter(
+          (session) => session.runtimeId === runtimeId,
+        );
+        return Effect.forEach(
+          stoppedSessions,
+          (session) => Effect.exit(stop(session, "Runtime stopped")),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.flatMap((exits) => settleClaudeSessionSteps(exits)));
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.fail(claudeSessionLifecycleFailure(cause, "claudeRuntime.stopSessionsForRuntime")),
+        ),
+        Effect.uninterruptible,
+      ),
   };
 };

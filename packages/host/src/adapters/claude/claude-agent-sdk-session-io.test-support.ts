@@ -16,7 +16,9 @@ export const ignoreClaudeBackgroundFailure = (_failure: HostOperationErrorAggreg
 
 export const createClaudeQueryFixture = (query: Partial<Query>): Query => {
   const overrides = { ...query };
-  const stream = isClaudeMessageStream(query) ? query : emptyClaudeMessageStream();
+  const stream = isClaudeMessageStream(query)
+    ? query[Symbol.asyncIterator]()
+    : emptyClaudeMessageStream();
   return Object.assign(stream, defaultQueryControls(), overrides);
 };
 

@@ -693,12 +693,10 @@ describe("createClaudeAgentSdkSession", () => {
       );
 
       await renameStarted.promise;
-      await Promise.resolve();
-      await Promise.resolve();
+      await teardownStarted.promise;
 
       expect(onContinuationAdmission).toHaveBeenCalledTimes(1);
       expect(queryReturn).toHaveBeenCalledTimes(1);
-      await teardownStarted.promise;
       expect(creationSettled).toBe(false);
 
       teardownFinished.resolve();
@@ -1058,82 +1056,94 @@ describe("createClaudeAgentSdkSession", () => {
     });
   });
 
-  test("reports a continuation failure when the stream ends before admission", async () => {
-    const fakeQuery = createClaudeQueryFixture({
-      close: () => {},
-      return: async () => ({ done: true, value: undefined }),
-      async *[Symbol.asyncIterator]() {
-        yield* [];
-      },
-    });
-    const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
-
-    try {
-      const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
-      const events: AgentEvent[] = [];
-      const sessionStore = createClaudeAgentSdkSessionStore();
-      const serviceInput: CreateClaudeAgentSdkServiceInput = {
-        claudeExecutablePath: process.execPath,
-        launchPolicy: {
-          resolve: () => Effect.succeed({}),
+  test.each(["completed", "stream_failed", "cleanup_failed"])(
+    "reports a continuation failure when the stream ends before admission: %s",
+    async (outcome) => {
+      const streamError = new Error("stream failed");
+      const cleanupError = new Error("cleanup failed");
+      const fakeQuery = createClaudeQueryFixture({
+        close: () => {},
+        return: async () => {
+          if (outcome === "cleanup_failed") throw cleanupError;
+          return { done: true, value: undefined };
         },
-        onBackgroundFailure: () => Effect.void,
-        resolveMcpBridgeConnection: () => Effect.die("unused"),
-        runtimeDistribution: createArtifactRuntimeDistribution({
-          mcpLauncher: { kind: "executable", executablePath: process.execPath },
-        }),
-        sessionStore,
-        toolDiscovery: createToolDiscovery(),
-      };
-
-      await expect(
-        createClaudeAgentSdkSession({
-          emit: (_session, event) => events.push(event),
-          input: {
-            repoPath: process.cwd(),
-            runtimeKind: "claude",
-            workingDirectory: process.cwd(),
-            runtimePolicy: { kind: "claude" },
-            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-            systemPrompt: "Build",
-          },
-          initialTodos: [],
-          now: () => "2026-06-25T20:00:00.000Z",
-          randomId: () => "id",
-          resolvedDependencies: {
-            claudeExecutablePath: process.execPath,
-            mcpBridgeConnection: {
-              workspaceId: "workspace-1",
-              hostUrl: "http://127.0.0.1:1",
-              hostToken: "bridge-secret-value",
-            },
-            mcpCommand: [process.execPath],
-          },
-          runtimeId: "runtime-1",
-          serviceInput,
-          sessionInput: {
-            externalSessionId: "session-continuation",
-            options: {},
-            resumeInterruptedTurn: true,
-            startedMessage: "Continued build session",
-          },
-          sessionStore,
-        }),
-      ).rejects.toMatchObject({
-        operation: "claudeRuntime.createSession",
-        message:
-          "Claude session 'session-continuation' ended before it admitted the interrupted-turn continuation.",
-        cause: expect.objectContaining({ reason: "continuation_failed" }),
+        async *[Symbol.asyncIterator]() {
+          if (outcome === "stream_failed") throw streamError;
+          yield* [];
+        },
       });
+      const querySpy = spyOn(realClaudeSdk, "query").mockImplementation(() => fakeQuery);
 
-      expect(sessionStore.get("session-continuation")).toBeUndefined();
-      expect(events.some((event) => event.type === "session_started")).toBe(false);
-      expect(events.some((event) => event.type === "transcript_retracted")).toBe(false);
-      expect(
-        events.some((event) => event.type === "session_finished" || event.type === "session_error"),
-      ).toBe(false);
-    } finally {
-      querySpy.mockRestore();
-    }
-  });
+      try {
+        const { createClaudeAgentSdkSession } = await import("./claude-agent-sdk-session-factory");
+        const events: AgentEvent[] = [];
+        const sessionStore = createClaudeAgentSdkSessionStore();
+        const serviceInput: CreateClaudeAgentSdkServiceInput = {
+          claudeExecutablePath: process.execPath,
+          launchPolicy: {
+            resolve: () => Effect.succeed({}),
+          },
+          onBackgroundFailure: () => Effect.void,
+          resolveMcpBridgeConnection: () => Effect.die("unused"),
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: { kind: "executable", executablePath: process.execPath },
+          }),
+          sessionStore,
+          toolDiscovery: createToolDiscovery(),
+        };
+
+        await expect(
+          createClaudeAgentSdkSession({
+            emit: (_session, event) => events.push(event),
+            input: {
+              repoPath: process.cwd(),
+              runtimeKind: "claude",
+              workingDirectory: process.cwd(),
+              runtimePolicy: { kind: "claude" },
+              sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+              systemPrompt: "Build",
+            },
+            initialTodos: [],
+            now: () => "2026-06-25T20:00:00.000Z",
+            randomId: () => "id",
+            resolvedDependencies: {
+              claudeExecutablePath: process.execPath,
+              mcpBridgeConnection: {
+                workspaceId: "workspace-1",
+                hostUrl: "http://127.0.0.1:1",
+                hostToken: "bridge-secret-value",
+              },
+              mcpCommand: [process.execPath],
+            },
+            runtimeId: "runtime-1",
+            serviceInput,
+            sessionInput: {
+              externalSessionId: "session-continuation",
+              options: {},
+              resumeInterruptedTurn: true,
+              startedMessage: "Continued build session",
+            },
+            sessionStore,
+          }),
+        ).rejects.toMatchObject({
+          operation: "claudeRuntime.createSession",
+          message: expect.stringContaining(
+            "Claude session 'session-continuation' ended before it admitted the interrupted-turn continuation.",
+          ),
+          cause: expect.objectContaining({ reason: "continuation_failed" }),
+        });
+
+        expect(sessionStore.get("session-continuation")).toBeUndefined();
+        expect(events.some((event) => event.type === "session_started")).toBe(false);
+        expect(events.some((event) => event.type === "transcript_retracted")).toBe(false);
+        expect(
+          events.some(
+            (event) => event.type === "session_finished" || event.type === "session_error",
+          ),
+        ).toBe(false);
+      } finally {
+        querySpy.mockRestore();
+      }
+    },
+  );
 });

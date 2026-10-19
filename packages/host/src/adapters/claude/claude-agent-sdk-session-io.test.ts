@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
 import {
   claudeQueryWithMessages,
@@ -29,20 +30,15 @@ describe("sendClaudeUserMessage", () => {
         }),
       ]),
     });
-    const closed = { value: false };
 
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
     await consumeClaudeSession({
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
-      sessionStore: {
-        get: (externalSessionId) =>
-          !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
-        close: () => {
-          closed.value = true;
-        },
-      },
+      sessionStore,
     });
 
     expect(events).toContainEqual(
@@ -56,10 +52,10 @@ describe("sendClaudeUserMessage", () => {
 
   test("emits current context usage from the Claude SDK control API after result messages", async () => {
     const events: AgentEvent[] = [];
-    const closed = { value: false };
+
     const getContextUsage = mock(async () => {
       await Promise.resolve();
-      if (closed.value) {
+      if (session.abortController.signal.aborted) {
         throw new Error("Query was closed before context usage was read.");
       }
       return {
@@ -90,19 +86,14 @@ describe("sendClaudeUserMessage", () => {
       ),
     });
 
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
     await consumeClaudeSession({
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
-      sessionStore: {
-        get: (externalSessionId) =>
-          !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
-        close: () => {
-          closed.value = true;
-          session.query.close();
-        },
-      },
+      sessionStore,
     });
     await waitForTimers();
 
@@ -148,22 +139,16 @@ describe("sendClaudeUserMessage", () => {
         { getContextUsage },
       ),
     });
-    const closed = { value: false };
 
     try {
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      sessionStore.set(session);
       await consumeClaudeSession({
         session,
         now: () => "2026-06-25T20:01:00.000Z",
         emit: (_session, event) => events.push(event),
         onBackgroundFailure: ignoreClaudeBackgroundFailure,
-        sessionStore: {
-          get: (externalSessionId) =>
-            !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
-          close: () => {
-            closed.value = true;
-            session.query.close();
-          },
-        },
+        sessionStore,
       });
       await waitForTimers();
     } finally {
@@ -207,20 +192,15 @@ describe("sendClaudeUserMessage", () => {
     const session = createClaudeSession({
       query: Object.assign(query, { getContextUsage }),
     });
-    const closed = { value: false };
 
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
     const consumePromise = consumeClaudeSession({
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
-      sessionStore: {
-        get: (externalSessionId) =>
-          !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
-        close: () => {
-          closed.value = true;
-        },
-      },
+      sessionStore,
     });
 
     await waitForTimers();
@@ -265,20 +245,15 @@ describe("sendClaudeUserMessage", () => {
         { getContextUsage },
       ),
     });
-    const closed = { value: false };
 
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
     await consumeClaudeSession({
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
-      sessionStore: {
-        get: (externalSessionId) =>
-          !closed.value && externalSessionId === session.externalSessionId ? session : undefined,
-        close: () => {
-          closed.value = true;
-        },
-      },
+      sessionStore,
     });
 
     expect(getContextUsage).not.toHaveBeenCalled();

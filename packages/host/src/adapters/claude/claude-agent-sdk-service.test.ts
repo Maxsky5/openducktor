@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { scheduleClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
+import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
 import { createClaudeAgentSdkService } from "./claude-agent-sdk-service";
 import {
   checkLiveClaudeContinuationEligibility,
@@ -18,6 +19,7 @@ import {
   createClaudeContextUsageResponse,
   createClaudeQueryFixture,
   createClaudeSession,
+  openClaudeQueryWithMessages,
 } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
@@ -735,6 +737,48 @@ describe("createClaudeAgentSdkService", () => {
     await releasePromise;
 
     expect(released).toBe(true);
+  });
+
+  test("release joins consumer teardown after the registry entry is removed", async () => {
+    const returning = Promise.withResolvers<void>();
+    const returned = Promise.withResolvers<void>();
+    const open = openClaudeQueryWithMessages([]);
+    open.query.return = async () => {
+      returning.resolve();
+      await returned.promise;
+      return { done: true, value: undefined };
+    };
+    const session = createSession({ query: open.query });
+    const store = createClaudeAgentSdkSessionStore();
+    const service = createService(session, undefined, store);
+    const consumption = consumeClaudeSession({
+      session,
+      sessionStore: store,
+      emit: () => {},
+      now: () => "2026-06-25T20:00:00.000Z",
+      onBackgroundFailure: () => Effect.void,
+    });
+    open.release();
+    await returning.promise;
+    expect(store.get(session.externalSessionId)).toBeUndefined();
+    let released = false;
+    const releasing = Effect.runPromise(
+      service.releaseSession({
+        repoPath: "/repo/",
+        runtimeKind: "claude",
+        workingDirectory: "/repo/worktree/",
+        externalSessionId: session.externalSessionId,
+      }),
+    ).then(() => {
+      released = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    try {
+      expect(released).toBe(false);
+    } finally {
+      returned.resolve();
+      await Promise.all([consumption, releasing]);
+    }
   });
 
   test("returns the live Claude TODO snapshot", async () => {
@@ -1748,17 +1792,13 @@ describe("continueInterruptedTurn eligibility", () => {
         },
       ],
     });
-    const closeSession = mock((target: ClaudeSession) => sessionStore.close(target));
-    const service = createService(attached, undefined, {
-      ...sessionStore,
-      close: closeSession,
-    });
+    const service = createService(attached, undefined, sessionStore);
 
     await expect(
       resumeFailureReason(service.continueInterruptedTurn(continuationInput, "runtime-claude")),
     ).resolves.toBe("session_not_found");
 
-    expect(closeSession).toHaveBeenCalledWith(attached);
+    expect(attached.query.close).toHaveBeenCalledTimes(1);
     expect(sessionStore.get("session-1")).toBeUndefined();
   });
 

@@ -5,7 +5,7 @@ import {
   type InterruptedTurnResumeError,
   type InterruptedTurnResumeFailureReason,
 } from "@openducktor/core";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -45,25 +45,31 @@ export const resolveFailedClaudeContinuationSession = <Failure>(input: {
   existing: ClaudeSession | undefined;
   externalSessionId: string;
   sessionStore: ClaudeSessionStore;
-}): Failure | HostOperationErrorAggregate => {
-  const { cause, existing, externalSessionId, sessionStore } = input;
-  if (!existing) {
-    return cause;
-  }
-  if (isClaudeSessionStopped(existing)) {
-    sessionStore.close(existing);
-    return toHostOperationError(
-      interruptedTurnResumeError({
-        reason: "session_not_found",
-        message: `Claude session '${externalSessionId}' stopped while the continuation was being created, so the continuation cannot use it.`,
-        cause,
-      }),
-      continuationOperation,
-    );
-  }
-  sessionStore.set(existing);
-  return cause;
-};
+}): Effect.Effect<never, Failure | HostOperationErrorAggregate> =>
+  Effect.gen(function* () {
+    const { cause, existing, externalSessionId, sessionStore } = input;
+    if (!existing) return yield* Effect.fail(cause);
+    if (isClaudeSessionStopped(existing)) {
+      const settled = yield* Effect.exit(sessionStore.settle(existing));
+      return yield* Effect.fail(
+        toHostOperationError(
+          interruptedTurnResumeError({
+            reason: "session_not_found",
+            message: `Claude session '${externalSessionId}' stopped while the continuation was being created, so the continuation cannot use it.`,
+            cause: Exit.isFailure(settled)
+              ? new AggregateError(
+                  [cause, settled.cause],
+                  "Claude continuation and settlement failed.",
+                )
+              : cause,
+          }),
+          continuationOperation,
+        ),
+      );
+    }
+    sessionStore.set(existing);
+    return yield* Effect.fail(cause);
+  });
 
 /**
  * Reads the persisted transcript for a continuation. The read covers the full

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
@@ -7,6 +7,7 @@ import { consumeClaudeSession, sendClaudeUserMessage } from "./claude-agent-sdk-
 import {
   claudeQueryWithMessages,
   createClaudeSession,
+  createClaudeContextUsageResponse,
   emptyClaudeQuery,
   ignoreClaudeBackgroundFailure,
   openClaudeQueryWithMessages,
@@ -20,6 +21,269 @@ import type { ClaudeAgentSdkEventEmitter } from "./claude-agent-sdk-types";
 const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("consumeClaudeSession lifecycle", () => {
+  test.each(["session", "runtime"])("%s stop joins native consumer teardown", async (scope) => {
+    const returning = Promise.withResolvers<void>();
+    const returned = Promise.withResolvers<void>();
+    const events: string[] = [];
+    const emit: ClaudeAgentSdkEventEmitter = (_session, event) => {
+      events.push(event.type);
+    };
+    const sessionStore = createClaudeAgentSdkSessionStore({ emit });
+    const open = openClaudeQueryWithMessages([]);
+    const nativeReturn = open.query.return.bind(open.query);
+    open.query.return = async () => {
+      returning.resolve();
+      await returned.promise;
+      return nativeReturn(undefined);
+    };
+    const session = createClaudeSession({ query: open.query });
+    sessionStore.set(session);
+    const consumption = consumeClaudeSession({
+      session,
+      sessionStore,
+      emit,
+      now: () => "2026-06-25T20:00:00.000Z",
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+    let stopped = false;
+    const stopping = Effect.runPromise(
+      scope === "runtime"
+        ? sessionStore.stopSessionsForRuntime(session.runtimeId)
+        : sessionStore.stopSession({
+            runtimeKind: "claude",
+            workingDirectory: "/repo",
+            externalSessionId: session.externalSessionId,
+          }),
+    ).then(() => {
+      stopped = true;
+    });
+    try {
+      await returning.promise;
+      expect(stopped).toBe(false);
+      expect(events).toEqual([]);
+    } finally {
+      returned.resolve();
+      open.release();
+      await Promise.all([consumption, stopping]);
+    }
+    expect(stopped).toBe(true);
+    expect(events).toEqual(["session_finished"]);
+    expect(session.query.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("runtime shutdown joins a consumer already removed from the registry", async () => {
+    const returning = Promise.withResolvers<void>();
+    const returned = Promise.withResolvers<void>();
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const query = emptyClaudeQuery();
+    query.return = async () => {
+      returning.resolve();
+      await returned.promise;
+      return { done: true, value: undefined };
+    };
+    const session = createClaudeSession({ query });
+    sessionStore.set(session);
+    const consumption = consumeClaudeSession({
+      session,
+      sessionStore,
+      emit: () => {},
+      now: () => "2026-06-25T20:00:00.000Z",
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+    await returning.promise;
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+    let stopped = false;
+    const stopping = Effect.runPromise(sessionStore.stopSessionsForRuntime(session.runtimeId)).then(
+      () => {
+        stopped = true;
+      },
+    );
+    await waitForTimers();
+    try {
+      expect(stopped).toBe(false);
+    } finally {
+      returned.resolve();
+      await Promise.all([consumption, stopping]);
+    }
+  });
+
+  test("runtime shutdown joins replaced consumers without publishing their terminal events", async () => {
+    const oldReturned = Promise.withResolvers<void>();
+    const replacementFinished = Promise.withResolvers<void>();
+    const events: string[] = [];
+    const old = openClaudeQueryWithMessages([]);
+    const current = openClaudeQueryWithMessages([]);
+    old.query.return = async () => {
+      await oldReturned.promise;
+      return { done: true, value: undefined };
+    };
+    const session = createClaudeSession({ query: old.query });
+    const replacement = createClaudeSession({ query: current.query });
+    const emit: ClaudeAgentSdkEventEmitter = (target, event) => {
+      if (event.type === "session_finished") {
+        events.push(target === replacement ? "replacement" : "old");
+        if (target === replacement) replacementFinished.resolve();
+      }
+    };
+    const sessionStore = createClaudeAgentSdkSessionStore({ emit });
+    const consume = (target: typeof session) =>
+      consumeClaudeSession({
+        session: target,
+        sessionStore,
+        emit,
+        now: () => "2026-06-25T20:00:00.000Z",
+        onBackgroundFailure: ignoreClaudeBackgroundFailure,
+      });
+    sessionStore.set(session);
+    const oldConsumption = consume(session);
+    sessionStore.set(replacement);
+    const consumption = consume(replacement);
+    const stopping = Effect.runPromise(sessionStore.stopSessionsForRuntime(session.runtimeId));
+    await replacementFinished.promise;
+    oldReturned.resolve();
+    await Promise.all([oldConsumption, consumption, stopping]);
+    expect(events).toEqual(["replacement"]);
+    expect(old.query.close).toHaveBeenCalledTimes(1);
+    expect(current.query.close).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(["session_finished", "session_error"])(
+    "cleans up and reports a throwing %s subscriber without repeating terminal delivery",
+    async (failingEvent) => {
+      const deliveryError = new Error("subscriber failed");
+      const streamError = new Error("stream failed");
+      const events: string[] = [];
+      const failures: unknown[] = [];
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      const session = createClaudeSession({
+        query:
+          failingEvent === "session_error" ? throwingClaudeQuery(streamError) : emptyClaudeQuery(),
+      });
+      sessionStore.set(session);
+
+      const failure = await consumeClaudeSession({
+        session,
+        sessionStore,
+        now: () => "2026-06-25T20:00:00.000Z",
+        emit: (_session, event) => {
+          events.push(event.type);
+          if (event.type === failingEvent) throw deliveryError;
+        },
+        onBackgroundFailure: (failure) =>
+          Effect.sync(() => {
+            failures.push(failure);
+          }),
+      }).catch((cause: unknown) => cause);
+
+      expect(session.query.close).toHaveBeenCalledTimes(1);
+      expect(session.abortController.signal.aborted).toBe(true);
+      expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+      expect(events.filter((type) => type === "session_finished")).toHaveLength(1);
+      expect(failures).toEqual([failure]);
+      expect(failure).toMatchObject({ operation: "claudeRuntime.consumeSession" });
+      if (failingEvent === "session_error") {
+        expect(failure).toMatchObject({
+          cause: expect.objectContaining({ errors: [streamError, deliveryError] }),
+        });
+      } else {
+        expect(failure).toMatchObject({ cause: deliveryError });
+      }
+    },
+  );
+
+  test("keeps stream and close failures while completing local cleanup", async () => {
+    const streamError = new Error("stream failed");
+    const closeError = new Error("close failed");
+    const returnError = new Error("return failed");
+    const failures: unknown[] = [];
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const closed = mock(() => {});
+    sessionStore.subscribeClose(closed);
+    const session = createClaudeSession({ query: throwingClaudeQuery(streamError) });
+    session.query.close = mock(() => {
+      throw closeError;
+    });
+    session.query.return = mock(async () => {
+      throw returnError;
+    });
+    sessionStore.set(session);
+    const failure = await consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => "2026-06-25T20:00:00.000Z",
+      emit: () => {},
+      onBackgroundFailure: (cause) =>
+        Effect.sync(() => {
+          failures.push(cause);
+        }),
+    }).catch((cause: unknown) => cause);
+
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(failure).toMatchObject({
+      operation: "claudeRuntime.consumeSession",
+      cause: expect.objectContaining({
+        errors: expect.arrayContaining([streamError, closeError, returnError]),
+      }),
+    });
+    expect(failures).toEqual([failure]);
+  });
+
+  test("context and context-error delivery failures cannot prevent finalization", async () => {
+    const reading = Promise.withResolvers<void>();
+    const context = Promise.withResolvers<ReturnType<typeof createClaudeContextUsageResponse>>();
+    const failures: unknown[] = [];
+    const events: string[] = [];
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const session = createClaudeSession({
+      query: claudeQueryWithMessages([
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: MESSAGE_ID,
+          session_id: "session-1",
+          message: {
+            role: "assistant",
+            model: "claude-sonnet-4-6",
+            content: [{ type: "text", text: "Done" }],
+          },
+        }),
+      ]),
+    });
+    session.query.getContextUsage = () => {
+      reading.resolve();
+      return context.promise;
+    };
+    sessionStore.set(session);
+    const consumption = consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => "2026-06-25T20:00:00.000Z",
+      emit: (_session, event) => {
+        events.push(event.type);
+        if (event.type === "session_context_updated" || event.type === "session_context_error")
+          throw new Error("context subscriber failed");
+      },
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          failures.push(failure);
+        }),
+    });
+    await reading.promise;
+    await waitForTimers();
+    context.resolve(createClaudeContextUsageResponse(100, 1000));
+    await expect(consumption).rejects.toThrow("context subscriber failed");
+    expect(session.query.close).toHaveBeenCalledTimes(1);
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+    expect(events.slice(-3)).toEqual([
+      "session_context_updated",
+      "session_context_error",
+      "session_finished",
+    ]);
+    expect(failures).toContainEqual(
+      expect.objectContaining({ operation: "claudeRuntime.consumeSession" }),
+    );
+  });
+
   test("sends the first resumed user message after an unattributed running replay", async () => {
     const events: AgentEvent[] = [];
     const pushed: SDKUserMessage[] = [];
@@ -175,13 +439,15 @@ describe("consumeClaudeSession lifecycle", () => {
     });
     sessionStore.set(session);
 
-    await consumeClaudeSession({
+    const consumption = consumeClaudeSession({
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
       emit: (_session, event) => events.push(event),
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
     });
+
+    await expect(consumption).rejects.toThrow("transport crashed");
 
     expect(session.activity).toBe("stopped");
     expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
@@ -294,7 +560,8 @@ describe("consumeClaudeSession lifecycle", () => {
       totalTokens: 42_000,
       maxTokens: 200_000,
     });
-    await Promise.all([consumePromise, stopPromise]);
+    const outcomes = await Promise.allSettled([consumePromise, stopPromise]);
+    expect(outcomes.every((outcome) => outcome.status === "rejected")).toBe(true);
 
     expect(
       events
@@ -306,7 +573,12 @@ describe("consumeClaudeSession lifecycle", () => {
         )
         .map((event) => event.type),
     ).toEqual(["session_error", "session_context_updated", "session_finished"]);
-    expect(backgroundFailures).toEqual([]);
+    expect(backgroundFailures).toEqual([
+      expect.objectContaining({
+        operation: "claudeRuntime.consumeSession",
+        message: "transport crashed",
+      }),
+    ]);
   });
 
   test("marks a stream that ended after a replacement took the store key as stopped", async () => {
@@ -348,6 +620,8 @@ describe("consumeClaudeSession lifecycle", () => {
 
     expect(session.activity).toBe("stopped");
     expect(sessionStore.get(session.externalSessionId)).toBe(replacement);
+    expect(session.query.close).toHaveBeenCalledTimes(1);
+    expect(replacement.query.close).not.toHaveBeenCalled();
     expect(events.some((event) => event.type === "session_finished")).toBe(false);
   });
 });
