@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
+import { installPanelLayout } from "@/test-utils/panel-layout";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createSessionPanelFixture,
@@ -170,35 +171,41 @@ describe("AgentsPageWorkspace bottom panel visibility", () => {
         rightPanelContent: null,
         panels: panelsFor(isVisible),
       });
-    const view = render(renderWorkspace(false));
-    const panel = view.getByLabelText("Open a tab");
-    const workspacePanel = view.container.querySelector<HTMLElement>(
-      '[id^="agent-studio-workspace-panel-"]',
-    );
-    const hiddenTerminalPanel = view.container.querySelector<HTMLElement>(
-      '[id^="agent-studio-terminal-panel-"]',
-    );
-    expect(workspacePanel?.style.flexGrow).toBe("100");
-    expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
-    expect(view.queryByRole("separator", { name: "Resize bottom panel" })).toBeNull();
+    // The resizable group takes a size change only when its panels have a size, as in a browser.
+    const removePanelLayout = installPanelLayout();
+    try {
+      const view = render(renderWorkspace(false));
+      const panel = view.getByLabelText("Open a tab");
+      const workspacePanel = view.container.querySelector<HTMLElement>(
+        '[id^="agent-studio-workspace-panel-"]',
+      );
+      const hiddenTerminalPanel = view.container.querySelector<HTMLElement>(
+        '[id^="agent-studio-terminal-panel-"]',
+      );
+      expect(workspacePanel?.style.flexGrow).toBe("100");
+      expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
+      expect(view.queryByRole("separator", { name: "Resize bottom panel" })).toBeNull();
 
-    view.rerender(renderWorkspace(true));
-    const separator = view.getByRole("separator", { name: "Resize bottom panel" });
-    expect(workspacePanel?.style.flexGrow).toBe("72");
-    expect(hiddenTerminalPanel?.style.flexGrow).toBe("28");
-    expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
-    expect(separator.tabIndex).toBe(0);
-    expect(separator.querySelector("svg")).not.toBeNull();
-    expect(separator.className).toContain("aria-[orientation=horizontal]:h-3");
-    act(() => separator.focus());
-    expect(document.activeElement).toBe(separator);
+      view.rerender(renderWorkspace(true));
+      const separator = view.getByRole("separator", { name: "Resize bottom panel" });
+      expect(workspacePanel?.style.flexGrow).toBe("72");
+      expect(hiddenTerminalPanel?.style.flexGrow).toBe("28");
+      expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
+      expect(separator.tabIndex).toBe(0);
+      expect(separator.querySelector("svg")).not.toBeNull();
+      expect(separator.className).toContain("aria-[orientation=horizontal]:h-px");
+      act(() => separator.focus());
+      expect(document.activeElement).toBe(separator);
 
-    view.rerender(renderWorkspace(false));
-    expect(workspacePanel?.style.flexGrow).toBe("100");
-    expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
-    expect(view.getByLabelText("Open a tab")).toBe(panel);
-    view.rerender(renderWorkspace(true));
-    expect(view.getByLabelText("Open a tab")).toBe(panel);
+      view.rerender(renderWorkspace(false));
+      expect(workspacePanel?.style.flexGrow).toBe("100");
+      expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");
+      expect(view.getByLabelText("Open a tab")).toBe(panel);
+      view.rerender(renderWorkspace(true));
+      expect(view.getByLabelText("Open a tab")).toBe(panel);
+    } finally {
+      removePanelLayout();
+    }
   });
 
   test("fills the page with the bottom panel at 767px and keeps a path back", () => {

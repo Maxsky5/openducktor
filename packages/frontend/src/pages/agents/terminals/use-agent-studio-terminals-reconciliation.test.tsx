@@ -298,6 +298,47 @@ describe("useAgentStudioTerminals reconciliation", () => {
     }
   }, 5_000);
 
+  test("a return to a kept task view does not move focus into its terminal", async () => {
+    const activations: Array<{ terminalId: string; focus: boolean }> = [];
+    const mountSpy = spyOn(terminalMountModule, "mountTerminalViewport").mockImplementation(
+      (input) => {
+        input.onHydrated();
+        return {
+          activate: (focus) => {
+            activations.push({ terminalId: input.terminalId, focus });
+          },
+          dispose: () => undefined,
+        };
+      },
+    );
+    const mountedTaskIds = ["task-a", "task-b"];
+    const view = renderTaskTerminalPanels(createTerminalTestDependencies(), {
+      mountedTaskIds,
+      children: (result) => <SessionPanel model={result.panels.bottom} />,
+    });
+    const activationsOf = (terminalId: string) =>
+      activations.filter((entry) => entry.terminalId === terminalId);
+    try {
+      await waitFor(() => expect(activationsOf("terminal-task-a")).not.toHaveLength(0));
+      act(() => view.panels().bottomToggle.onToggle());
+      act(() => view.panels().bottomToggle.onToggle());
+      await waitFor(() => expect(activationsOf("terminal-task-a").at(-1)?.focus).toBe(true));
+
+      view.update({ taskId: "task-b", mountedTaskIds });
+      await waitFor(() => expect(activationsOf("terminal-task-b")).not.toHaveLength(0));
+      const before = activationsOf("terminal-task-a").length;
+      view.update({ taskId: "task-a", mountedTaskIds });
+      await waitFor(() => expect(activationsOf("terminal-task-a").length).toBeGreaterThan(before));
+
+      expect(activationsOf("terminal-task-a").slice(before)).toEqual([
+        { terminalId: "terminal-task-a", focus: false },
+      ]);
+    } finally {
+      view.unmount();
+      mountSpy.mockRestore();
+    }
+  });
+
   test("keeps task terminals live, scoped, and bounded across cached task switches", async () => {
     const probes = new Map<
       string,

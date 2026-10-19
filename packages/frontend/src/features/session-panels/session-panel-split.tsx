@@ -194,6 +194,7 @@ export function SessionPanelSplit({
   const isPresent = presence !== "closed";
   const isOpen = presence === "opening" || presence === "open";
   const motion = presence === "opening" || presence === "closing" ? presence : undefined;
+  const showsSeparator = isPresent && !fillsGroup;
   const content = (
     <div
       className="relative h-full min-h-0 overflow-hidden [contain:layout_paint]"
@@ -234,7 +235,14 @@ export function SessionPanelSplit({
           {main}
         </div>
       </ResizablePanel>
-      {isPresent && !fillsGroup ? <ResizableHandle aria-label={separatorLabel} withHandle /> : null}
+      {/* The separator stays mounted, so a close or an open does not register the group again.
+          A group that registers in a hidden kept view ignores sizes until the view shows. */}
+      <ResizableHandle
+        aria-label={separatorLabel}
+        withHandle
+        disabled={!showsSeparator}
+        hidden={!showsSeparator}
+      />
       <ResizablePanel
         id={panelId}
         elementRef={panelRef}

@@ -85,12 +85,14 @@ const isBottomPanelShown = (
 /**
  * Applies the rules that follow a render. The bottom panel hides when it loses its last tab, by a
  * close, a move, or a host list that no longer has its terminals. An empty panel that the user
- * opens stays open. Returns the same state when no rule applies.
+ * opens stays open. A hidden view has no size and runs no transition, so its panels do not slide
+ * and it keeps no focus request. Returns the same state when no rule applies.
  */
 const syncOwnerViewState = (
   state: OwnerViewState,
   bottomTabs: readonly ResolvedPanelTab[],
   isRightOpen: boolean,
+  isActive: boolean,
 ): OwnerViewState => {
   const lostLastTab = state.bottomTabCount > 0 && bottomTabs.length === 0;
   let counted = state;
@@ -104,12 +106,19 @@ const syncOwnerViewState = (
   } else if (state.bottomTabCount !== bottomTabs.length) {
     counted = { ...state, bottomTabCount: bottomTabs.length };
   }
-  const right = nextPresence(counted.presence.right, isRightOpen, counted.motion.right);
-  const bottom = nextPresence(
+  if (!isActive && (counted.focusRequest.right > 0 || counted.focusRequest.bottom > 0)) {
+    counted = { ...counted, focusRequest: { right: 0, bottom: 0 } };
+  }
+  let right = nextPresence(counted.presence.right, isRightOpen, counted.motion.right);
+  let bottom = nextPresence(
     counted.presence.bottom,
     isBottomPanelShown(counted, bottomTabs),
     counted.motion.bottom,
   );
+  if (!isActive) {
+    right = settledPresence(right);
+    bottom = settledPresence(bottom);
+  }
   if (right === counted.presence.right && bottom === counted.presence.bottom) return counted;
   return { ...counted, presence: { right, bottom } };
 };
@@ -121,6 +130,7 @@ const syncOwnerViewState = (
 export function useSessionPanelVisibility(
   ownerKey: string | null,
   bottomTabs: readonly ResolvedPanelTab[],
+  isActive: boolean,
 ): SessionPanelVisibility {
   const rightPanel = useRightPanelOpen();
   const isRightOpen = ownerKey !== null && rightPanel.isOpen;
@@ -129,6 +139,7 @@ export function useSessionPanelVisibility(
     viewState.ownerKey === ownerKey ? viewState : initialOwnerViewState(ownerKey),
     bottomTabs,
     isRightOpen,
+    isActive,
   );
   if (view !== viewState) setViewState(view);
 

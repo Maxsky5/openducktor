@@ -2,6 +2,7 @@ import type { RepoAction } from "@openducktor/contracts";
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -87,6 +88,8 @@ export type SessionPanelModel = {
   onPick: (kind: PanelTabKind) => void;
   /** Hides the panel. Only the bottom panel has it, for the narrow layout. */
   onHide: (() => void) | null;
+  /** The base of the IDs that link each tab to its content. A terminal content is in a portal. */
+  tabIdBase: string;
 };
 
 export type SessionPanelsModel = {
@@ -200,6 +203,7 @@ const usePanelModel = (
     state;
   const { focusRequest, terminals, terminalMounts } = state;
   const { selectTab, closeTab, addTab, pickKind, hideBottom } = actions;
+  const tabIdBase = useId();
   return useMemo(() => {
     const isVisible = presence !== "closed";
     const selectedTab = tabs.find((tab) => tab.id === selectedTabId);
@@ -225,6 +229,7 @@ const usePanelModel = (
       onAddTab: () => addTab(panel),
       onPick: (kind) => pickKind(panel, kind),
       onHide: panel === "bottom" ? hideBottom : null,
+      tabIdBase,
     };
   }, [
     addTab,
@@ -241,6 +246,7 @@ const usePanelModel = (
     presence,
     selectTab,
     selectedTabId,
+    tabIdBase,
     tabs,
     terminalMounts,
     terminals,
@@ -324,7 +330,7 @@ export function useSessionPanels({
   const { layout, layouts } = useOwnerLayout(owner, context);
   const rightTabs = useMemo(() => shownPanelTabs(layout, "right", context), [context, layout]);
   const bottomTabs = useMemo(() => shownPanelTabs(layout, "bottom", context), [context, layout]);
-  const visibility = useSessionPanelVisibility(ownerKey, bottomTabs);
+  const visibility = useSessionPanelVisibility(ownerKey, bottomTabs, isActive);
   const { isRightOpen, isBottomOpen, setBottomOpen, toggleRight, requestFocus } = visibility;
   const rightSelected = selectedPanelTabId(layout, "right", context, rightTabs);
   const bottomSelected = selectedPanelTabId(layout, "bottom", context, bottomTabs);

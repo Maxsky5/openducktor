@@ -3,6 +3,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { AgentsPageRightPanelRuntime } from "../shell/agents-page-right-panel-runtime";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 import type { ToolTabKind } from "@/features/session-panels";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
@@ -531,12 +532,14 @@ for (const outcome of [
   "repository-changed",
   "unmounted",
   "repository-view",
+  "hidden-view",
 ] as const) {
   test(`dialog file save refreshes only its mounted task worktree: ${outcome}`, async () => {
     buildToolsSnapshotState.current.gitPanelContextMode =
       outcome === "repository-view" ? "repository" : "worktree";
     let changeSelection: (next: HookArgs | null) => void = () => {};
     const initialArgs = createHookArgs({ selectedView: createSelectedView({ taskId: "a" }) });
+    const hiddenArgs = createHookArgs({ selectedView: createSelectedView({ taskId: "b" }) });
     function GitPanel({ args }: { args: HookArgs }) {
       const refreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
       return (
@@ -550,7 +553,17 @@ for (const outcome of [
     function SelectedGitPanel() {
       const [args, setArgs] = useState<HookArgs | null>(initialArgs);
       changeSelection = setArgs;
-      return args ? <GitPanel args={args} /> : null;
+      return (
+        <>
+          {args ? <GitPanel args={args} /> : null}
+          {/* A kept view of another task mounts after the shown view. */}
+          {outcome === "hidden-view" ? (
+            <SessionViewContext value={{ id: "hidden", isActive: false }}>
+              <GitPanel args={hiddenArgs} />
+            </SessionViewContext>
+          ) : null}
+        </>
+      );
     }
     const h = createDialogPreviewHarness("src/file.ts", <SelectedGitPanel />);
     const deferred = Promise.withResolvers<ReturnType<typeof dialogTextFile>>();
@@ -578,7 +591,7 @@ for (const outcome of [
         if (outcome === "failed") deferred.reject(new Error("Write failed"));
         else deferred.resolve(dialogTextFile("/repo/a", "Local draft"));
       });
-      if (outcome === "saved") {
+      if (outcome === "saved" || outcome === "hidden-view") {
         expect(refreshWorktreeMock).toHaveBeenCalledTimes(1);
         expect(refreshWorktreeMock).toHaveBeenCalledWith("soft", expect.any(Function));
       } else expect(refreshWorktreeMock).not.toHaveBeenCalled();

@@ -12,6 +12,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { act, type ReactNode, startTransition, useEffect, useState } from "react";
 import { Link, MemoryRouter, useLocation, useNavigate } from "react-router";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { installPanelLayout } from "@/test-utils/panel-layout";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "@/features/session-panels/use-right-panel-open";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
@@ -903,6 +904,8 @@ test.each([true, false])(
       input.filter.sessionId === "Second"
         ? { hostInstanceId: "host", terminals: [] }
         : listTerminals(input);
+    // The resizable group takes a size change only when its panels have a size, as in a browser.
+    const removePanelLayout = installPanelLayout();
     const view = renderSessions(
       client,
       undefined,
@@ -944,6 +947,7 @@ test.each([true, false])(
       );
     } finally {
       view.unmount();
+      removePanelLayout();
       media.mockRestore();
     }
   },
