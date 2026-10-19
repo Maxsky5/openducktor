@@ -4,7 +4,6 @@ import process from "node:process";
 type RunCommandInput = {
   command: readonly [string, ...string[]];
   cwd: string;
-  /** Complete child environment. Omit to inherit the current parent environment. */
   env?: NodeJS.ProcessEnv;
   label: string;
 };
