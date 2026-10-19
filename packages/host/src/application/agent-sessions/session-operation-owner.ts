@@ -170,9 +170,15 @@ export const createSessionOperationOwner = (deps: {
               });
               yield* publish(operation);
               const outcome = yield* Effect.exit(restore(effect));
+              const error = outcome._tag === "Failure" ? Cause.squash(outcome.cause) : undefined;
+              // A nested send shares this observation. Settle its native cause in the same owner.
+              const failure =
+                error instanceof SessionOperationError &&
+                error.observation === operation.observation
+                  ? error.cause
+                  : error;
               operation.observation.pending = false;
               if (outcome._tag === "Failure") {
-                const failure = Cause.squash(outcome.cause);
                 if (failure instanceof AgentSessionMessageAcceptedError)
                   operation.observation.acceptedInput = failure.failure.acceptedMessage;
                 if (failure instanceof AgentSessionCommandAcceptedError)
@@ -240,10 +246,7 @@ export const createSessionOperationOwner = (deps: {
                 yield* deps.retain(operation.observation);
               }
               if (outcome._tag === "Failure")
-                return yield* new SessionOperationError(
-                  { ...operation.observation },
-                  Cause.squash(outcome.cause),
-                );
+                return yield* new SessionOperationError({ ...operation.observation }, failure);
               if (publication._tag === "Failure")
                 return yield* new SessionOperationError(
                   { ...operation.observation },

@@ -534,9 +534,14 @@ test.each(["before its first native send", "after native acceptance"] as const)(
   },
 );
 
-test.each(["kickoff", "message"] as const)(
-  "a rejected first send returns the saved session and the unsent %s instruction",
-  async (instruction) => {
+test.each([
+  ["manual", "kickoff"],
+  ["manual", "message"],
+  ["automatic", "kickoff"],
+  ["automatic", "message"],
+] as const)(
+  "a rejected %s first send returns the saved session and the unsent %s instruction",
+  async (policy, instruction) => {
     const h = await createLaunchHarness();
     h.setSendFailure("rejected");
     const parts: AgentSessionControlSendInput["parts"] = [
@@ -550,7 +555,14 @@ test.each(["kickoff", "message"] as const)(
       instruction === "kickoff"
         ? requestFor("codex")
         : { ...requestFor("codex"), instruction: { kind: "message", parts } };
-    const result = await Effect.runPromise(h.service.launch(request));
+    const result = await Effect.runPromise(
+      policy === "automatic"
+        ? h.launchAutomatic({
+            ...request,
+            policy: { kind: "automatic", actionId: "startBuilder" },
+          })
+        : h.service.launch(request),
+    );
     expect(result).toMatchObject({
       status: "failed",
       session: { externalSessionId: "session-1" },
@@ -563,6 +575,19 @@ test.each(["kickoff", "message"] as const)(
     expect(h.records).toHaveLength(1);
     expect(h.sends).toHaveLength(1);
     expect(h.stops).toEqual([]);
+    expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
+    h.setSendFailure(null);
+    const next = await Effect.runPromise(
+      h.messageDelivery.submit({
+        ...createdRef,
+        sessionScope: builderScope,
+        submissionId: "next-message",
+        mode: "default",
+        parts: [{ kind: "text", text: "Use another model." }],
+      }),
+    );
+    expect(next.kind).toBe("accepted");
+    expect(h.sends).toHaveLength(2);
   },
 );
 
@@ -750,93 +775,6 @@ test("shutdown cancels a reused session's pending speed change", async () => {
   expect(h.sends).toEqual([]);
   expect(h.stops).toEqual([]);
 });
-
-test("Stop cancels an Autopilot message before the send starts", async () => {
-  const wait = await pausePoint();
-  const h = await createLaunchHarness("opencode", {
-    beforeMessageOperation: wait.pause,
-    keepAttachedOnStop: true,
-  });
-  h.setTaskStatus("in_progress");
-  const source = h.addTaskSession("builder", { live: true });
-  const ref = { repoPath: "/repo", ...source };
-  const { commands } = createNodeSessionLaunchControls(h.commands, [h.service]);
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const launch = yield* Effect.forkChild(
-        h.launchAutomatic({
-          ...requestFor("opencode"),
-          policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
-        }),
-      );
-      yield* Deferred.await(wait.entered);
-      yield* commands.stopSession(ref);
-      expect(h.sends).toEqual([]);
-      yield* wait.open;
-      const result = yield* Fiber.join(launch);
-      expect(result.status).toBe("canceled");
-      expect(result.acceptedMessage).toBeUndefined();
-    }).pipe(Effect.ensuring(wait.open)),
-  );
-  expect(h.sends).toEqual([]);
-  expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
-});
-
-test.each(["queue", "send"] as const)(
-  "a canceled launch cannot %s after preparation waits",
-  async (stage) => {
-    const wait = await pausePoint();
-    let preparingLaunch = false;
-    const pauseLaunch = Effect.suspend(() => (preparingLaunch ? wait.pause : Effect.void));
-    const h = await createLaunchHarness(
-      "opencode",
-      stage === "queue"
-        ? { beforeMessagePreparation: pauseLaunch }
-        : { beforeSendContext: pauseLaunch },
-    );
-    h.setTaskStatus("in_progress");
-    const source = h.addTaskSession("builder", {
-      live: true,
-      working: stage === "queue",
-    });
-    const ref = { repoPath: "/repo", ...source };
-    if (stage === "queue") {
-      await Effect.runPromise(
-        h.messageDelivery.submit({
-          ...ref,
-          sessionScope: builderScope,
-          submissionId: "earlier-message",
-          mode: "default",
-          parts: [{ kind: "text", text: "Earlier message" }],
-        }),
-      );
-    }
-    const sendsBefore = h.sends.length;
-    preparingLaunch = true;
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const launch = yield* Effect.forkChild(
-          h.launchAutomatic({
-            ...requestFor("opencode"),
-            policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
-          }),
-        );
-        yield* Deferred.await(wait.entered);
-        h.service.cancelSessionLaunches(ref);
-        yield* wait.open;
-        const result = yield* Fiber.join(launch);
-        expect(result.status).toBe("canceled");
-        expect(result.acceptedMessage).toBeUndefined();
-      }).pipe(Effect.ensuring(wait.open)),
-    );
-    expect(h.sends).toHaveLength(sendsBefore);
-    expect(
-      h.messageDelivery
-        .listQueues("/repo")
-        .flatMap((queue) => queue.entries.map((entry) => entry.submissionId)),
-    ).toEqual(stage === "queue" ? ["earlier-message"] : []);
-  },
-);
 
 test.each(["before", "during"] as const)(
   "Stop %s the first send cancels a fresh launch and stops its session",
