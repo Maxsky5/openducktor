@@ -10,6 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MOTION_EASE_OUT } from "./motion";
 
 export type HorizontalTabDropPosition = "before" | "after";
 type HorizontalTabDragStartEvent = {
@@ -21,12 +22,12 @@ type HorizontalTabDragEndEvent = HorizontalTabDragStartEvent & {
 
 export const horizontalTabDropAnimation = {
   duration: 220,
-  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+  easing: MOTION_EASE_OUT,
 };
 
 export const horizontalTabSortTransition = {
   duration: 180,
-  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+  easing: MOTION_EASE_OUT,
 };
 
 const horizontalTabMeasuring = { droppable: { strategy: MeasuringStrategy.Always } };

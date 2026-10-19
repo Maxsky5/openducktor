@@ -17,6 +17,7 @@ type UseAgentChatScrollControllerResult = {
   pin: () => void;
   unpin: () => void;
   syncScrollPosition: () => void;
+  scrollByWheel: (event: WheelEvent) => void;
 };
 
 type EdgeState = { nearBottom: boolean; nearTop: boolean };
@@ -29,6 +30,24 @@ const isScrollUpKey = (event: KeyboardEvent): boolean =>
 const isEditableTarget = (target: EventTarget | null): boolean =>
   target instanceof HTMLElement &&
   (target.isContentEditable || target.matches("input, textarea, select"));
+
+// A mostly vertical wheel toward the top. A sideways swipe does not count.
+const isUpwardWheel = (event: WheelEvent): boolean =>
+  event.deltaY < 0 && Math.abs(event.deltaY) >= Math.abs(event.deltaX);
+
+// Firefox reports mouse wheel steps in lines, or in pages when the system scrolls a screen per step.
+const WHEEL_LINE_HEIGHT_PX = 16;
+
+const readWheelDeltaYPx = (event: WheelEvent, pageHeightPx: number): number => {
+  switch (event.deltaMode) {
+    case WheelEvent.DOM_DELTA_LINE:
+      return event.deltaY * WHEEL_LINE_HEIGHT_PX;
+    case WheelEvent.DOM_DELTA_PAGE:
+      return event.deltaY * pageHeightPx;
+    default:
+      return event.deltaY;
+  }
+};
 
 const canScroll = (container: HTMLElement): boolean =>
   container.scrollHeight - container.clientHeight > 1;
@@ -139,6 +158,23 @@ export function useAgentChatScrollController({
     setPinned(false);
   }, [setPinned]);
 
+  // A wheel over a control outside the transcript, such as the conversation minimap, scrolls it
+  // with the same pin rule as a wheel over the transcript. The scroll event pins at the bottom.
+  // Ctrl + wheel and a trackpad pinch zoom the page, so they do not scroll, as over the transcript.
+  const scrollByWheel = useCallback(
+    (event: WheelEvent) => {
+      const container = messagesContainerRef.current;
+      if (!container || event.ctrlKey) {
+        return;
+      }
+      if (isUpwardWheel(event) && pinnedRef.current && canScroll(container)) {
+        setPinned(false);
+      }
+      container.scrollTop += readWheelDeltaYPx(event, container.clientHeight);
+    },
+    [messagesContainerRef, pinnedRef, setPinned],
+  );
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     const content = messagesContentRef.current;
@@ -163,7 +199,7 @@ export function useAgentChatScrollController({
     };
 
     const handleWheel = (event: WheelEvent) => {
-      if (event.deltaY < 0 && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
+      if (isUpwardWheel(event)) {
         unpinForUserScroll(event.target);
       }
     };
@@ -300,5 +336,6 @@ export function useAgentChatScrollController({
     pin,
     unpin,
     syncScrollPosition,
+    scrollByWheel,
   };
 }

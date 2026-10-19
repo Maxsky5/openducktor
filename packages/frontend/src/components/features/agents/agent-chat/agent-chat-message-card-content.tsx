@@ -28,6 +28,13 @@ import {
   type UserMessageReferenceKind,
 } from "./agent-chat-user-message-reference-chip";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
+import {
+  isUserAttachmentPart,
+  readRenderableUserMessageText,
+  readUserMessageParts,
+  readVisibleUserMessageText,
+  type UserAttachmentPart,
+} from "./agent-chat-user-message-text";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
@@ -193,30 +200,6 @@ type UserMessageInlineReferenceRange = {
   part: UserMessageDisplayReferencePart;
   start: number;
   end: number;
-};
-
-const readVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
-  let text = "";
-  for (const part of parts) {
-    if (part.kind === "text" && !part.synthetic) {
-      text += part.text;
-    }
-  }
-  return text;
-};
-
-const readRenderableUserMessageText = (
-  parts: AgentUserMessageDisplayPart[],
-  fallbackText: string,
-): string => {
-  if (parts.some((part) => isUserMessageReferencePart(part) && part.sourceText)) {
-    return fallbackText;
-  }
-  const visibleText = readVisibleUserMessageText(parts);
-  if (visibleText.length > 0) {
-    return visibleText;
-  }
-  return fallbackText;
 };
 
 const userMessageTextContainsReferenceMarker = (
@@ -552,31 +535,33 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
   );
 };
 
-type UserAttachmentPart = Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>;
-
-const isUserAttachmentPart = (part: AgentUserMessageDisplayPart): part is UserAttachmentPart =>
-  part.kind === "attachment";
-
-const UserMessageBubble = ({
-  content,
-  attachments,
-  isUnread,
-}: {
-  content: ReactElement | null;
+// What a user message bubble shows: its text with reference chips inline, and its attachments.
+type UserMessageDisplay = {
+  inline: ReactElement | null;
   attachments: UserAttachmentPart[];
-  isUnread: boolean;
+};
+
+const readUserMessageDisplay = (message: AgentChatMessage): UserMessageDisplay => {
+  const userParts = readUserMessageParts(message);
+  const userText = readRenderableUserMessageText(userParts, message.content);
+  return {
+    inline: renderUserMessageInlineContent(userText, userParts),
+    attachments: userParts.filter(isUserAttachmentPart),
+  };
+};
+
+const hasUserMessageDisplay = ({ inline, attachments }: UserMessageDisplay): boolean =>
+  inline !== null || attachments.length > 0;
+
+const UserMessageDisplayContent = ({
+  display: { inline, attachments },
+}: {
+  display: UserMessageDisplay;
 }): ReactElement => (
-  <div
-    className={cn(
-      "max-w-full rounded-xl rounded-br-sm px-3.5 py-2 text-foreground",
-      isUnread
-        ? "border border-dashed border-pending-border bg-pending-surface"
-        : "bg-chat-surface shadow-chat",
-    )}
-  >
-    {content}
+  <>
+    {inline}
     {attachments.length > 0 ? (
-      <div className={cn("flex flex-wrap items-center gap-2", content && "mt-2 mb-1")}>
+      <div className={cn("flex flex-wrap items-center gap-2", inline && "mt-2 mb-1")}>
         {attachments.map((part) => (
           <AgentChatAttachmentChip
             key={part.attachment.id}
@@ -587,6 +572,41 @@ const UserMessageBubble = ({
         ))}
       </div>
     ) : null}
+  </>
+);
+
+/** The text, reference chips, and attachment chips of a user message, as its bubble shows them. */
+export function UserMessageContent({ message }: { message: AgentChatMessage }): ReactElement {
+  return <UserMessageDisplayContent display={readUserMessageDisplay(message)} />;
+}
+
+/** The first rendered line of a user message, or its attachment names when it has no text. */
+export function UserMessageFirstLine({ message }: { message: AgentChatMessage }): ReactElement {
+  const { inline, attachments } = readUserMessageDisplay(message);
+  return (
+    <div className="line-clamp-1">
+      {inline ?? attachments.map((part) => part.attachment.name).join(", ")}
+    </div>
+  );
+}
+
+const UserMessageBubble = ({
+  children,
+  isUnread,
+}: {
+  children: ReactNode;
+  isUnread: boolean;
+}): ReactElement => (
+  <div
+    data-slot="user-message-bubble"
+    className={cn(
+      "max-w-full rounded-xl rounded-br-sm px-3.5 py-2 text-foreground",
+      isUnread
+        ? "border border-dashed border-pending-border bg-pending-surface"
+        : "bg-chat-surface shadow-chat",
+    )}
+  >
+    {children}
   </div>
 );
 
@@ -619,17 +639,15 @@ const UserMessage = ({
   message: AgentChatMessage;
   timeLabel: string;
 }): ReactElement => {
-  const userMeta = message.meta?.kind === "user" ? message.meta : null;
-  const isUnread = userMeta?.state === "queued";
-  const userParts = userMeta?.parts ?? [];
-  const attachments = userParts.filter(isUserAttachmentPart);
-  const userText = readRenderableUserMessageText(userParts, message.content);
-  const content = renderUserMessageInlineContent(userText, userParts);
+  const isUnread = message.meta?.kind === "user" && message.meta.state === "queued";
+  const display = readUserMessageDisplay(message);
 
   return (
     <>
-      {content || attachments.length > 0 ? (
-        <UserMessageBubble content={content} attachments={attachments} isUnread={isUnread} />
+      {hasUserMessageDisplay(display) ? (
+        <UserMessageBubble isUnread={isUnread}>
+          <UserMessageDisplayContent display={display} />
+        </UserMessageBubble>
       ) : null}
       {isUnread || timeLabel ? <UserMessageMeta isUnread={isUnread} timeLabel={timeLabel} /> : null}
     </>

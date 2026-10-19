@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-type MotionFile = "popover.css" | "sheet.css" | "tooltip.css";
+type MotionFile = "motion.css" | "popover.css" | "sheet.css" | "tooltip.css";
 type HappyDomWindow = typeof window & {
   happyDOM: { settings: { device: { prefersReducedMotion: "reduce" | "no-preference" } } };
 };
@@ -17,10 +17,11 @@ type MotionSnapshot = {
 };
 
 // Use a separate document so the real CSS cannot affect parallel component tests.
+// The motion tokens come first, as in the app styles.
 function createStyledDocument(file: MotionFile): Document {
   const styleDocument = document.implementation.createHTMLDocument();
   const styleElement = styleDocument.createElement("style");
-  styleElement.textContent = readMotionStyles(file);
+  styleElement.textContent = `${readMotionStyles("motion.css")}\n${readMotionStyles(file)}`;
   styleDocument.head.append(styleElement);
   return styleDocument;
 }

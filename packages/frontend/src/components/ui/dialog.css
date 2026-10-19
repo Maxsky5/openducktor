@@ -1,11 +1,11 @@
 :root {
   --resize-dur: 300ms;
-  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --resize-ease: var(--motion-ease-out);
   --modal-open-dur: 250ms;
   --modal-close-dur: 150ms;
   --modal-scale: 0.96;
   --modal-scale-close: 0.96;
-  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --modal-ease: var(--motion-ease-out);
 }
 
 /* Radix keeps the overlay and content mounted until their exit animations end. */

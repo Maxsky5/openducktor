@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,6 +10,7 @@ import {
 } from "@/test-utils/animation-frame-test-driver";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AGENT_CHAT_ROW_WINDOW_SIZE } from "./agent-chat-row-windows";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import type { AgentChatTranscriptNotice } from "./agent-chat.types";
@@ -1570,5 +1571,123 @@ describe("AgentChatThread", () => {
     expect(containerNode.scrollTop).toBe(2_000);
 
     rendered.unmount();
+  });
+  describe("conversation minimap", () => {
+    const renderWithMinimapFrame = (
+      messages: ReturnType<typeof buildMessage>[],
+      options: { frameWidth?: number; showConversationMinimap?: boolean; inDialog?: boolean } = {},
+    ) => {
+      // happy-dom has no layout, so every element reports the size of a desktop transcript.
+      const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+        () => new DOMRect(0, 0, options.frameWidth ?? 800, 600),
+      );
+      const thread = createElement(AgentChatThreadComponent, {
+        model: completeThreadModel({
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(buildSession({ messages })),
+        }),
+      });
+      const view = render(
+        createElement(
+          AgentChatSettingsProvider,
+          {
+            value: createChatSettingsFixture({
+              showConversationMinimap: options.showConversationMinimap ?? true,
+            }),
+          },
+          options.inDialog
+            ? createElement(
+                Dialog,
+                { open: true },
+                createElement(
+                  DialogContent,
+                  null,
+                  createElement(DialogTitle, null, "Subagent transcript"),
+                  thread,
+                ),
+              )
+            : thread,
+        ),
+      );
+      return {
+        view,
+        // A dialog renders in a portal outside the render container.
+        scrollRegion: document.querySelector<HTMLElement>(".agent-chat-scroll-region"),
+        cleanup: () => {
+          view.unmount();
+          rectSpy.mockRestore();
+        },
+      };
+    };
+
+    const twoUserMessages = () => [
+      buildMessage("user", "First question", { id: "user-1" }),
+      buildMessage("assistant", "First answer", { id: "assistant-1" }),
+      buildMessage("user", "Second question", { id: "user-2" }),
+    ];
+
+    test("shows one option per user message and moves the transcript beside the rail", () => {
+      const { view, scrollRegion, cleanup } = renderWithMinimapFrame(twoUserMessages());
+      try {
+        const rail = view.getByRole("listbox", { name: "User messages" });
+        expect(
+          within(rail)
+            .getAllByRole("option", { hidden: true })
+            .map((option) => option.textContent),
+        ).toEqual(["Message 1 of 2: First question", "Message 2 of 2: Second question"]);
+        expect(scrollRegion?.style.paddingLeft).toBe("40px");
+      } finally {
+        cleanup();
+      }
+    });
+
+    test("shows the preview card above a dialog that holds the transcript", () => {
+      const { cleanup } = renderWithMinimapFrame(twoUserMessages(), { inDialog: true });
+      try {
+        fireEvent.pointerEnter(screen.getByRole("listbox", { name: "User messages" }), {
+          clientY: 6,
+        });
+
+        const card = document.querySelector('[data-slot="popover-content"]');
+        expect(card?.closest('[data-slot="dialog-content"]')).not.toBeNull();
+      } finally {
+        cleanup();
+      }
+    });
+
+    test("hides the minimap and its gutter when the setting is off", () => {
+      const { view, scrollRegion, cleanup } = renderWithMinimapFrame(twoUserMessages(), {
+        showConversationMinimap: false,
+      });
+      try {
+        expect(view.queryByRole("listbox", { name: "User messages" })).toBeNull();
+        expect(scrollRegion?.style.paddingLeft).toBe("");
+      } finally {
+        cleanup();
+      }
+    });
+
+    test("hides the minimap with fewer than two user messages", () => {
+      const { view, cleanup } = renderWithMinimapFrame([
+        buildMessage("user", "Only question", { id: "user-1" }),
+      ]);
+      try {
+        expect(view.queryByRole("listbox", { name: "User messages" })).toBeNull();
+      } finally {
+        cleanup();
+      }
+    });
+
+    test("hides the minimap beside a narrow transcript", () => {
+      const { view, scrollRegion, cleanup } = renderWithMinimapFrame(twoUserMessages(), {
+        frameWidth: 500,
+      });
+      try {
+        expect(view.queryByRole("listbox", { name: "User messages" })).toBeNull();
+        expect(scrollRegion?.style.paddingLeft).toBe("");
+      } finally {
+        cleanup();
+      }
+    });
   });
 });

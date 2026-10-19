@@ -293,6 +293,20 @@ OpenCode live and history text-part rows keep the runtime's text, part IDs, and 
 
 Final history text parts replace a live whole-message row with the same source ID. Keep each part's text separate when merging those rows. Keep live text when its history snapshot is still incomplete.
 
+### Conversation minimap
+
+Files: `components/features/agents/agent-chat/use-agent-chat-transcript-navigation.ts`, `use-agent-chat-window.ts`, `use-agent-chat-row-window.ts`, `agent-chat-thread.tsx`, `agent-chat-jump-highlight.css`, and `conversation-minimap/`.
+
+`AgentChatThread` mounts the minimap beside the transcript scroll container, so Agent Studio, the Sessions Page, and the subagent transcript dialog share it. The rendered transcript model lists one `userMessageAnchors` entry for each user message row. The list keeps its identity while only assistant output changes.
+
+- `useAgentChatTranscriptNavigation` owns the jump, the jump highlight, and the viewport rows. `useAgentChatWindow` calls it after its own layout effects, so a landing reads the committed row window and scroll position. `jumpToRow` mounts a row window around a target that is not mounted, then puts the target near the top of the viewport before paint. In the latest row window, a target that cannot reach the top, or that lands within the bottom edge distance, goes to the bottom through `pin()`.
+- A jump unpins like an upward user scroll. The scroll controller pin rules then apply without change.
+- `readViewportRows` maps mounted `[data-row-key]` elements to row indexes with the window start. Mounted rows must render in row window order. A new window start notifies the viewport row listeners, because rows that mount above change the indexes of the rows on screen.
+- The minimap owns only UI state: hover, keyboard focus, the preview card, and the tick wave. Its rail stays outside the scroll container, so rail focus and keys never reach the scroll controller.
+- The scroll controller owns wheel input from a control outside the transcript, such as the rail. It applies the same upward-wheel rule as a wheel over the transcript.
+- Inside a dialog, the preview card goes into the dialog content, so it shows above the dialog layer.
+- Settings > Chat has the "Show conversation minimap" switch, saved as `showConversationMinimap`. Valid older Chat settings default it to `true`, and the config remains version `4`. An older app with a strict Chat schema can reject a config written by this version during a downgrade.
+
 ## Session navigation
 
 Files: `state/read-models/session-navigation-read-model.ts`, `components/layout/sidebar/session-navigation-list.tsx`, `components/layout/sidebar/session-navigation-rail.tsx`, and `pages/sessions/sessions-page.tsx`.

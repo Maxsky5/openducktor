@@ -135,6 +135,17 @@ export function SettingsChatSection({
       />
 
       <ChatSettingSwitchRow
+        title="Show conversation minimap"
+        description="Shows your messages beside session transcripts. Changes apply after you save settings."
+        checked={chat.showConversationMinimap}
+        disabled={disabled}
+        ariaLabel="Show conversation minimap beside session transcripts"
+        onCheckedChange={(checked) =>
+          onUpdateChat((current) => ({ ...current, showConversationMinimap: checked }))
+        }
+      />
+
+      <ChatSettingSwitchRow
         title="Expand file diffs by default"
         description="File diffs in session transcripts will start expanded after you save settings."
         checked={chat.expandFileDiffsByDefault}

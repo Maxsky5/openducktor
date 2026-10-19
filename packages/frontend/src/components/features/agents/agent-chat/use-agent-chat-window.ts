@@ -1,8 +1,12 @@
 import type { RefObject } from "react";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
 import { useAgentChatRowWindow } from "./use-agent-chat-row-window";
 import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
+import {
+  type AgentChatTranscriptNavigation,
+  useAgentChatTranscriptNavigation,
+} from "./use-agent-chat-transcript-navigation";
 
 type UseAgentChatWindowInput = {
   rows: AgentChatTranscriptRow[];
@@ -21,6 +25,7 @@ type UseAgentChatWindowResult = {
   isNearTop: boolean;
   scrollToBottom: () => void;
   scrollToTop: () => void;
+  navigation: AgentChatTranscriptNavigation;
 };
 
 export function useAgentChatWindow({
@@ -43,6 +48,9 @@ export function useAgentChatWindow({
     visibleTurnAnchors,
     selectFirstRowWindow,
     selectLatestRowWindow,
+    selectRowWindowAround,
+    expandRowWindowEnd,
+    rereadRowAnchor,
   } = useAgentChatRowWindow({
     rows,
     turnAnchors,
@@ -51,12 +59,13 @@ export function useAgentChatWindow({
     displayedSessionKey,
     messagesContainerRef,
   });
-  const { isNearBottom, isNearTop, pin, unpin, syncScrollPosition } = useAgentChatScrollController({
-    messagesContainerRef,
-    messagesContentRef,
-    pinnedRef,
-    canPin: isLatestWindow,
-  });
+  const { isNearBottom, isNearTop, pin, unpin, syncScrollPosition, scrollByWheel } =
+    useAgentChatScrollController({
+      messagesContainerRef,
+      messagesContentRef,
+      pinnedRef,
+      canPin: isLatestWindow,
+    });
   // The scroll position depends on whether the row window is the latest one, so that also counts.
   const committedRowWindowVersion = `${windowStart}:${visibleRows.length}:${isLatestWindow}`;
 
@@ -104,6 +113,25 @@ export function useAgentChatWindow({
     syncScrollPosition();
   }, [messagesContainerRef, selectFirstRowWindow, syncScrollPosition, unpin, windowStart]);
 
+  // The navigation layout effects run after the effects above, so a landing reads their result.
+  const rowNavigation = useAgentChatTranscriptNavigation({
+    rows,
+    windowStart,
+    windowEnd: windowStart + visibleRows.length,
+    displayedSessionKey,
+    messagesContainerRef,
+    messagesContentRef,
+    selectRowWindowAround,
+    expandRowWindowEnd,
+    rereadRowAnchor,
+    pin,
+    unpin,
+  });
+  const navigation = useMemo(
+    () => ({ ...rowNavigation, scrollByWheel }),
+    [rowNavigation, scrollByWheel],
+  );
+
   return {
     visibleRows,
     visibleTurnAnchors,
@@ -112,5 +140,6 @@ export function useAgentChatWindow({
     isNearTop: isNearTop && windowStart === 0,
     scrollToBottom,
     scrollToTop,
+    navigation,
   };
 }

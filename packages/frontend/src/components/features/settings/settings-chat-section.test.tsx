@@ -95,6 +95,23 @@ describe("settings chat section", () => {
     expectSwitchChecked("Show thinking messages in session transcripts", true);
   });
 
+  test("edits the conversation minimap switch in the draft", () => {
+    const chat = createChatSettings();
+    const { getLatestChat } = renderSettingsChatSectionWithUpdates(chat);
+
+    expect(screen.getByText("Show conversation minimap")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Shows your messages beside session transcripts. Changes apply after you save settings.",
+      ),
+    ).toBeDefined();
+    expectSwitchChecked("Show conversation minimap beside session transcripts", true);
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Show conversation minimap beside session transcripts" }),
+    );
+    expect(getLatestChat()).toEqual({ ...chat, showConversationMinimap: false });
+  });
+
   test("renders file diff switch as checked when diffs expand by default", () => {
     const chatSettings = createChatSettings({ expandFileDiffsByDefault: true });
 
@@ -117,7 +134,7 @@ describe("settings chat section", () => {
     renderSettingsChatSection(chatSettings, true);
 
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(3);
+    expect(switches).toHaveLength(4);
     expect(switches.every((control) => control.hasAttribute("disabled"))).toBe(true);
   });
 

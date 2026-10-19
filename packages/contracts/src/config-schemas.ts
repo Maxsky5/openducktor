@@ -60,6 +60,7 @@ export const DEFAULT_CHAT_SETTINGS = {
   diffHeight: "full",
   lineOverflow: "wrap",
   hunkSeparators: "line-info",
+  showConversationMinimap: true,
 } as const;
 export const DEFAULT_GENERAL_SETTINGS = {
   openAgentStudioTabOnBackgroundSessionStart: true,
@@ -628,6 +629,7 @@ export const chatSettingsSchema = z.object({
   diffHeight: z.enum(CHAT_DIFF_HEIGHT_VALUES).default(DEFAULT_CHAT_SETTINGS.diffHeight),
   lineOverflow: z.enum(CHAT_LINE_OVERFLOW_VALUES).default(DEFAULT_CHAT_SETTINGS.lineOverflow),
   hunkSeparators: z.enum(CHAT_HUNK_SEPARATOR_VALUES).default(DEFAULT_CHAT_SETTINGS.hunkSeparators),
+  showConversationMinimap: z.boolean().default(DEFAULT_CHAT_SETTINGS.showConversationMinimap),
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 export type ChatDiffStyle = z.infer<typeof chatSettingsSchema>["diffStyle"];

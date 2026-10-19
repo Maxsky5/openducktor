@@ -44,6 +44,7 @@ import type { SessionPanelModel } from "./use-session-panels";
 import { SessionTerminalSurface } from "./session-terminal-host";
 import { useSessionViewActive } from "../session-navigation/session-view-context";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { MOTION_EASE_OUT } from "@/components/ui/motion";
 
 /** The content and tab decorations that a page gives for one tool tab kind. */
 export type ToolTabView = {
@@ -307,7 +308,7 @@ const edgeFadeMask = ({ start, end }: ScrollEdges): string | undefined => {
   return `linear-gradient(to right, ${from}, ${to})`;
 };
 
-const DROP_GAP_TRANSITION = "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)";
+const DROP_GAP_TRANSITION = `transform 180ms ${MOTION_EASE_OUT}`;
 
 const dropGapTransform = (gap: number): string | undefined =>
   gap > 0 ? `translateX(${gap}px)` : undefined;

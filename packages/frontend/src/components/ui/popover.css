@@ -3,7 +3,7 @@
   --popover-close-dur: 150ms;
   --popover-scale: 0.97;
   --popover-scale-close: 0.99;
-  --popover-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --popover-ease: var(--motion-ease-out);
 }
 
 [data-slot="popover-content"] {

@@ -19,7 +19,7 @@
   --queue-close: 250ms;
   --queue-fade: 150ms;
   --queue-content-delay: 60ms;
-  --queue-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --queue-ease: var(--motion-ease-out);
   --queue-blur: 2px;
 }
 

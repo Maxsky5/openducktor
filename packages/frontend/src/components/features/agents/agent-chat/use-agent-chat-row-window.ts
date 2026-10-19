@@ -6,7 +6,7 @@ import {
   selectTurnAnchorsForWindow,
 } from "./agent-chat-row-windows";
 import type { AgentChatTranscriptRow, AgentChatTurnAnchor } from "./agent-chat-transcript-model";
-import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
+import { CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX, readMountedRows } from "./agent-chat-window-shared";
 
 type UseAgentChatRowWindowInput = {
   rows: AgentChatTranscriptRow[];
@@ -24,6 +24,9 @@ type UseAgentChatRowWindowResult = {
   visibleTurnAnchors: AgentChatTurnAnchor[];
   selectFirstRowWindow: () => void;
   selectLatestRowWindow: () => void;
+  selectRowWindowAround: (rowIndex: number) => void;
+  expandRowWindowEnd: () => void;
+  rereadRowAnchor: () => void;
 };
 
 type RowRange = {
@@ -74,6 +77,18 @@ const firstRange = (rowCount: number): RowRange => ({
   startRow: 0,
   endRowExclusive: Math.min(rowCount, AGENT_CHAT_ROW_WINDOW_SIZE),
 });
+
+// A full row window with the row near its start, so rows above it can show at once.
+const rangeAround = (rowIndex: number, rowCount: number): RowRange => {
+  const startRow = Math.max(
+    0,
+    Math.min(
+      rowIndex - AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT,
+      rowCount - AGENT_CHAT_ROW_WINDOW_SIZE,
+    ),
+  );
+  return { startRow, endRowExclusive: startRow + AGENT_CHAT_ROW_WINDOW_SIZE };
+};
 
 const clampRange = (range: RowRange, rowCount: number): RowRange => {
   const startRow = clampStart(range.startRow, rowCount);
@@ -136,7 +151,7 @@ const isElementVisibleInContainer = (element: HTMLElement, container: HTMLDivEle
 };
 
 const isMountedRowNearStart = (container: HTMLDivElement): boolean => {
-  const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-row-key]"));
+  const rows = readMountedRows(container);
   if (rows.length === 0) return false;
 
   const preloadRow = rows[Math.min(AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT, rows.length - 1)];
@@ -144,7 +159,7 @@ const isMountedRowNearStart = (container: HTMLDivElement): boolean => {
 };
 
 const isMountedRowNearEnd = (container: HTMLDivElement): boolean => {
-  const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-row-key]"));
+  const rows = readMountedRows(container);
   if (rows.length === 0) return false;
 
   const preloadRow = rows[Math.max(0, rows.length - 1 - AGENT_CHAT_ROW_WINDOW_EDGE_PRELOAD_COUNT)];
@@ -152,7 +167,7 @@ const isMountedRowNearEnd = (container: HTMLDivElement): boolean => {
 };
 
 const readRowAnchor = (container: HTMLDivElement, rowKey: string): RowAnchor | null => {
-  const rows = Array.from(container.querySelectorAll<HTMLElement>("[data-row-key]"));
+  const rows = readMountedRows(container);
   const index = rows.findIndex((row) => row.dataset.rowKey === rowKey);
   const row = rows[index];
   if (!row) return null;
@@ -225,6 +240,18 @@ export function useAgentChatRowWindow({
     setRange(latestRange(rows.length));
   }, [rows.length, setRange, shouldResetForTranscriptLoad]);
 
+  // A jump mounts a full row window with its target near the start. The pending anchor and trims
+  // belong to the previous row window, so the jump drops them.
+  const selectRowWindowAround = useCallback(
+    (rowIndex: number) => {
+      pendingRowAnchorRef.current = null;
+      shouldTrimBottomAfterPrependRef.current = false;
+      shouldTrimTopAfterAppendRef.current = false;
+      setRange(rangeAround(rowIndex, rows.length));
+    },
+    [rows.length, setRange],
+  );
+
   // Rows that mount or unmount above the viewport move every row below them.
   // This hook saves the position of a row that stays mounted, then scrolls by the distance it moved.
   const anchorRow = useCallback(
@@ -271,6 +298,11 @@ export function useAgentChatRowWindow({
     },
     [rows.length, setRange],
   );
+
+  // Adds rows below without a trim, for a jump target that cannot reach the top yet.
+  const expandRowWindowEnd = useCallback(() => {
+    expandAfter({ trimTopAfterAppend: false });
+  }, [expandAfter]);
 
   // The layout can clamp the scroll position to a smaller scroll range, and browser scroll anchoring
   // can move it. The row position includes both, so the correction does not count them twice.
@@ -388,16 +420,21 @@ export function useAgentChatRowWindow({
     }
   }, [didSessionChange, isFollowingLatestWindow, range, rows, sessionRange.range, setRange]);
 
+  // A prepend commits after a scroll, so its anchor follows the scroll until then.
+  const rereadRowAnchor = useCallback(() => {
+    const container = messagesContainerRef.current;
+    const anchor = pendingRowAnchorRef.current;
+    if (container && anchor) {
+      pendingRowAnchorRef.current = readRowAnchor(container, anchor.rowKey);
+    }
+  }, [messagesContainerRef]);
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      // A prepend commits after this event, so its anchor follows the user's scroll until then.
-      const anchor = pendingRowAnchorRef.current;
-      if (anchor) {
-        pendingRowAnchorRef.current = readRowAnchor(container, anchor.rowKey);
-      }
+      rereadRowAnchor();
 
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       const previousScrollTop = lastScrollTopRef.current;
@@ -422,7 +459,7 @@ export function useAgentChatRowWindow({
     lastScrollTopRef.current = container.scrollTop;
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [expandAfter, expandBefore, messagesContainerRef]);
+  }, [expandAfter, expandBefore, rereadRowAnchor, messagesContainerRef]);
 
   const effectiveRange = clampRange(range, rows.length);
   const effectiveStartRow = effectiveRange.startRow;
@@ -447,5 +484,8 @@ export function useAgentChatRowWindow({
     visibleTurnAnchors,
     selectFirstRowWindow,
     selectLatestRowWindow,
+    selectRowWindowAround,
+    expandRowWindowEnd,
+    rereadRowAnchor,
   };
 }

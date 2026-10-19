@@ -55,6 +55,7 @@ const expectedDefaultChatSettings = {
   diffHeight: "full",
   lineOverflow: "wrap",
   hunkSeparators: "line-info",
+  showConversationMinimap: true,
 } as const;
 
 describe("config-schemas", () => {
@@ -905,6 +906,7 @@ describe("config-schemas", () => {
         diffHeight: "scroll",
         lineOverflow: "scroll",
         hunkSeparators: "metadata",
+        showConversationMinimap: false,
       },
       workspaces: {},
       globalPromptOverrides: {},
@@ -936,6 +938,7 @@ describe("config-schemas", () => {
       diffHeight: "scroll",
       lineOverflow: "scroll",
       hunkSeparators: "metadata",
+      showConversationMinimap: false,
     });
     expect(parsedGlobalConfig.chat).toEqual({
       steerMessagesByDefault: true,
@@ -946,6 +949,7 @@ describe("config-schemas", () => {
       diffHeight: "scroll",
       lineOverflow: "scroll",
       hunkSeparators: "simple",
+      showConversationMinimap: true,
     });
   });
 
@@ -973,6 +977,7 @@ describe("config-schemas", () => {
     const invalidCases: Array<[string, Record<string, JSONType>]> = [
       ["steerMessagesByDefault", { steerMessagesByDefault: "true" }],
       ["steerMessagesByDefault", { steerMessagesByDefault: null }],
+      ["showConversationMinimap", { showConversationMinimap: "false" }],
       ["diffStyle", { diffStyle: "side-by-side" }],
       ["diffIndicators", { diffIndicators: "glyphs" }],
       ["diffHeight", { diffHeight: "auto" }],

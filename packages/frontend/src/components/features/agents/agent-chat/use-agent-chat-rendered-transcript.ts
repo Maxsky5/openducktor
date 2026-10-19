@@ -2,8 +2,12 @@ import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
 import type { AgentChatThreadModel, AgentChatTranscriptPresentation } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { isAssistantMessageStreaming } from "./agent-chat-streaming";
-import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import type {
+  AgentChatTranscriptRow,
+  AgentChatUserMessageAnchor,
+} from "./agent-chat-transcript-model";
 import { useAgentChatTranscriptModel } from "./use-agent-chat-transcript-model";
+import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatTranscriptPresentation["notice"]> =
@@ -55,6 +59,8 @@ type UseAgentChatRenderedTranscriptResult = {
   isNearTop: boolean;
   scrollToBottom: () => void;
   scrollToTop: () => void;
+  userMessageAnchors: AgentChatUserMessageAnchor[];
+  navigation: AgentChatTranscriptNavigation;
 };
 
 export function useAgentChatRenderedTranscript({
@@ -73,15 +79,22 @@ export function useAgentChatRenderedTranscript({
   const effectiveShouldResetTranscriptWindow = shouldResetWindow || isTranscriptModelMissing;
   const effectiveTranscriptNotice =
     notice ?? (isTranscriptModelMissing ? TRANSCRIPT_MODEL_PENDING_NOTICE : null);
-  const { visibleRows, visibleTurnAnchors, isNearBottom, isNearTop, scrollToBottom, scrollToTop } =
-    useAgentChatWindow({
-      rows: transcriptModelState.rows,
-      turnAnchors: transcriptModelState.turnAnchors,
-      displayedSessionKey,
-      shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
-      messagesContainerRef,
-      messagesContentRef,
-    });
+  const {
+    visibleRows,
+    visibleTurnAnchors,
+    isNearBottom,
+    isNearTop,
+    scrollToBottom,
+    scrollToTop,
+    navigation,
+  } = useAgentChatWindow({
+    rows: transcriptModelState.rows,
+    turnAnchors: transcriptModelState.turnAnchors,
+    displayedSessionKey,
+    shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
+    messagesContainerRef,
+    messagesContentRef,
+  });
   const latestUserTurnKey = useMemo(() => {
     if (!displayedSessionKey || !transcriptModelState.lastUserMessageKey) {
       return null;
@@ -127,5 +140,7 @@ export function useAgentChatRenderedTranscript({
     isNearTop,
     scrollToBottom,
     scrollToTop,
+    userMessageAnchors: transcriptModelState.userMessageAnchors,
+    navigation,
   };
 }

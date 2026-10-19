@@ -52,6 +52,7 @@ import { WorkspaceTile } from "./workspace-tile";
 import { HostSwitcher } from "./host-connection";
 import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
 import { workspaceActivityBadges } from "./workspace-rail-activity-badges-model";
+import { MOTION_EASE_OUT } from "@/components/ui/motion";
 
 const DRAG_DISTANCE_PX = 6;
 
@@ -178,7 +179,7 @@ function SortableWorkspaceRailButton({
     disabled: isSwitchingWorkspace,
     transition: {
       duration: 180,
-      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      easing: MOTION_EASE_OUT,
     },
   });
 
@@ -362,7 +363,7 @@ export function WorkspaceRail({
               <DragOverlay
                 dropAnimation={{
                   duration: 220,
-                  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                  easing: MOTION_EASE_OUT,
                 }}
                 zIndex={40}
               >
