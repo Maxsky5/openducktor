@@ -41,20 +41,94 @@ describe("build tools", () => {
     }
   });
 
-  it("runs commands and reports the failing build step label", async () => {
-    await runCommand({
-      command: [
-        "bun",
-        "-e",
-        "if (process.env.OPENDUCKTOR_BUILD_TOOLS_TEST !== 'set') process.exit(9)",
-      ],
-      cwd: process.cwd(),
-      env: { OPENDUCKTOR_BUILD_TOOLS_TEST: "set" },
-      label: "Environment command",
-    });
+  it.each([
+    {
+      name: "inherits the current parent environment when env is absent",
+      env: undefined,
+      expected: "parent",
+    },
+    {
+      name: "uses a supplied environment without restoring parent keys",
+      env: { OPENDUCKTOR_BUILD_TOOLS_TEST: "supplied" },
+      expected: "supplied",
+    },
+    { name: "omits parent keys when env is empty", env: {}, expected: null },
+  ])(
+    "$name",
+    async ({ env, expected }) => {
+      const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-command-env-"));
+      const parentEnv = {
+        OPENDUCKTOR_BUILD_TOOLS_TEST: process.env.OPENDUCKTOR_BUILD_TOOLS_TEST,
+        OPENDUCKTOR_BUILD_TOOLS_PARENT: process.env.OPENDUCKTOR_BUILD_TOOLS_PARENT,
+      };
 
+      try {
+        process.env.OPENDUCKTOR_BUILD_TOOLS_TEST = "parent";
+        process.env.OPENDUCKTOR_BUILD_TOOLS_PARENT = "parent-only";
+        const input: Parameters<typeof runCommand>[0] = {
+          command: [
+            process.execPath,
+            "--no-env-file",
+            "-e",
+            `await Bun.write("env.json", JSON.stringify({
+            value: process.env.OPENDUCKTOR_BUILD_TOOLS_TEST ?? null,
+            parent: process.env.OPENDUCKTOR_BUILD_TOOLS_PARENT ?? null,
+          }));`,
+          ],
+          cwd: baseDirectory,
+          label: "Environment command",
+        };
+        if (env !== undefined) input.env = env;
+        await runCommand(input);
+
+        expect(await Bun.file(join(baseDirectory, "env.json")).json()).toEqual({
+          value: expected,
+          parent: env === undefined ? "parent-only" : null,
+        });
+      } finally {
+        for (const [key, value] of Object.entries(parentEnv)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        await rm(baseDirectory, { force: true, recursive: true });
+      }
+      // Each case starts a real subprocess and uses the filesystem.
+    },
+    5_000,
+  );
+
+  it("inherits stdout and stderr", async () => {
+    const subprocess = Bun.spawn(
+      [
+        process.execPath,
+        "--no-env-file",
+        "-e",
+        `import { runCommand } from ${JSON.stringify(new URL("./index.ts", import.meta.url).href)};
+      await runCommand({
+        command: [process.execPath, "--no-env-file", "-e",
+          "process.stdout.write('build stdout'); process.stderr.write('build stderr');"],
+        cwd: process.cwd(),
+        env: {},
+        label: "Output command",
+      });`,
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+
+    const [exitCode, stdout, stderr] = await Promise.all([
+      subprocess.exited,
+      new Response(subprocess.stdout).text(),
+      new Response(subprocess.stderr).text(),
+    ]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe("build stdout");
+    expect(stderr).toBe("build stderr");
+    // Capturing inherited output requires two real subprocesses.
+  }, 5_000);
+
+  it("reports the failing build step label and exit code", async () => {
     const error = await runCommand({
-      command: ["bun", "-e", "process.exit(7)"],
+      command: [process.execPath, "--no-env-file", "-e", "process.exit(7)"],
       cwd: process.cwd(),
       label: "Failing command",
     }).catch((cause: unknown): Error =>
@@ -64,5 +138,6 @@ describe("build tools", () => {
     expect(error).toBeInstanceOf(Error);
     if (!(error instanceof Error)) throw error;
     expect(error.message).toBe("Failing command failed with exit code 7.");
+    // The failure comes from a real subprocess.
   }, 5_000);
 });
