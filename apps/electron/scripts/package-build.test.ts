@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { runCommand } from "@openducktor/build-tools";
 import { resolveHostReleaseArch, resolveHostReleasePlatform } from "./electron-release-targets";
 import {
   buildElectronPackage,
@@ -17,6 +18,25 @@ import {
 
 const caughtError = (cause: unknown): Error =>
   cause instanceof Error ? cause : new Error(String(cause), { cause });
+
+const assertChildEnvironment = (
+  env: NodeJS.ProcessEnv,
+  expected: Record<string, string | null>,
+): Promise<void> =>
+  runCommand({
+    command: [
+      process.execPath,
+      "--no-env-file",
+      "-e",
+      `import assert from "node:assert/strict";
+    const expected = ${JSON.stringify(expected)};
+    const actual = Object.fromEntries(Object.keys(expected).map(key => [key, process.env[key] ?? null]));
+    assert.deepEqual(actual, expected);`,
+    ],
+    cwd: process.cwd(),
+    env,
+    label: "Package environment check",
+  });
 
 describe("build Electron release artifact", () => {
   it("rejects a host mismatch before deleting release or sidecar output", async () => {
@@ -85,13 +105,65 @@ describe("build Electron release artifact", () => {
     ]);
   });
 
-  it("passes the release version into the renderer build environment", () => {
-    expect(resolveElectronBuildEnv(undefined, { PATH: "/bin" })).toEqual({ PATH: "/bin" });
-    expect(resolveElectronBuildEnv("0.4.0-beta.2", { PATH: "/bin" })).toEqual({
-      ODT_APP_VERSION: "0.4.0-beta.2",
-      PATH: "/bin",
-    });
-  });
+  it.each([undefined, "0.4.0-beta.2"])(
+    "passes release version %s into the renderer child",
+    async (releaseVersion) => {
+      const env = {
+        ...process.env,
+        OPENDUCKTOR_PACKAGE_TEST: "ordinary-build-variable",
+        ODT_APP_VERSION: "parent-version",
+      };
+      await assertChildEnvironment(resolveElectronBuildEnv(releaseVersion, env), {
+        ODT_APP_VERSION: releaseVersion ?? "parent-version",
+        OPENDUCKTOR_PACKAGE_TEST: "ordinary-build-variable",
+      });
+      // The renderer environment is checked in a real subprocess.
+    },
+    5_000,
+  );
+
+  it.each([
+    { name: "unsigned", signed: false },
+    { name: "signed", signed: true },
+  ])(
+    "passes the $name builder environment into the child",
+    async ({ signed }) => {
+      const credentials = {
+        CSC_LINK: "synthetic-certificate",
+        CSC_KEY_PASSWORD: "synthetic-key-password",
+        CSC_NAME: "synthetic-certificate-name",
+        APPLE_ID: "synthetic-apple-id",
+        APPLE_APP_SPECIFIC_PASSWORD: "synthetic-apple-password",
+        APPLE_TEAM_ID: "synthetic-team-id",
+      };
+      const parentValues = Object.fromEntries(
+        Object.keys(credentials).map((key) => [key, process.env[key]]),
+      );
+
+      try {
+        Object.assign(process.env, credentials);
+        const env = {
+          ...process.env,
+          CSC_IDENTITY_AUTO_DISCOVERY: "true",
+          OPENDUCKTOR_PACKAGE_TEST: "ordinary-build-variable",
+        };
+        await assertChildEnvironment(resolveElectronBuilderEnv(signed, env), {
+          ...Object.fromEntries(
+            Object.entries(credentials).map(([key, value]) => [key, signed ? value : null]),
+          ),
+          CSC_IDENTITY_AUTO_DISCOVERY: signed ? "true" : "false",
+          OPENDUCKTOR_PACKAGE_TEST: "ordinary-build-variable",
+        });
+      } finally {
+        for (const [key, value] of Object.entries(parentValues)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+      // The builder environment is checked in a real subprocess.
+    },
+    5_000,
+  );
 
   it("derives the updater channel from prerelease versions", () => {
     expect(resolveElectronReleaseVersionMetadata(undefined)).toEqual({
@@ -171,17 +243,6 @@ describe("build Electron release artifact", () => {
       "-c.mac.hardenedRuntime=false",
       "-c.dmg.writeUpdateInfo=false",
     ]);
-
-    const env = resolveElectronBuilderEnv(false, {
-      APPLE_ID: "apple-id",
-      CSC_LINK: "certificate",
-      PATH: "/bin",
-    });
-
-    expect(env.CSC_IDENTITY_AUTO_DISCOVERY).toBe("false");
-    expect(env.APPLE_ID).toBeUndefined();
-    expect(env.CSC_LINK).toBeUndefined();
-    expect(env.PATH).toBe("/bin");
   });
 
   it("keeps release artifact selection platform-specific", () => {

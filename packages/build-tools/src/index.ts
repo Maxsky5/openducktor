@@ -21,15 +21,12 @@ export const markExecutable = async (path: string): Promise<void> => {
 };
 
 export const runCommand = async ({ command, cwd, env, label }: RunCommandInput): Promise<void> => {
-  const spawnOptions = {
+  const subprocess = Bun.spawn([...command], {
     cwd,
+    env: env ?? process.env,
     stderr: "inherit",
     stdout: "inherit",
-  } as const;
-  const subprocess = Bun.spawn(
-    [...command],
-    env ? { ...spawnOptions, env: { ...process.env, ...env } } : spawnOptions,
-  );
+  });
   const exitCode = await subprocess.exited;
 
   if (exitCode !== 0) {
