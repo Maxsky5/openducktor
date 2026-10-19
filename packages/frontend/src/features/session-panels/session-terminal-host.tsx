@@ -181,10 +181,8 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
           entries.set(key, entry);
         }
         const previous = entry.bindings.get(viewId);
-        const focusBase =
-          isActive && previous?.isActive === false
-            ? model.focusRequest
-            : (previous?.focusBase ?? 0);
+        const isReturn = isActive && previous?.isActive === false;
+        const focusBase = isReturn ? model.focusRequest : (previous?.focusBase ?? 0);
         entry.bindings.set(viewId, { model, anchor, isActive, focusBase });
         if (isActive) entry.viewId = viewId;
       }
