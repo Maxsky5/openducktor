@@ -324,7 +324,7 @@ export function useSessionPanels({
   const { layout, layouts } = useOwnerLayout(owner, context);
   const rightTabs = useMemo(() => shownPanelTabs(layout, "right", context), [context, layout]);
   const bottomTabs = useMemo(() => shownPanelTabs(layout, "bottom", context), [context, layout]);
-  const visibility = useSessionPanelVisibility(ownerKey, bottomTabs);
+  const visibility = useSessionPanelVisibility(ownerKey, bottomTabs, isActive);
   const { isRightOpen, isBottomOpen, setBottomOpen, toggleRight, requestFocus } = visibility;
   const rightSelected = selectedPanelTabId(layout, "right", context, rightTabs);
   const bottomSelected = selectedPanelTabId(layout, "bottom", context, bottomTabs);

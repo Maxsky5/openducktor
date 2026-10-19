@@ -15,13 +15,7 @@ import { TerminalLayer } from "@/features/terminals";
 import type { SessionPanelModel } from "./use-session-panels";
 import { SessionViewContext } from "../session-navigation/session-view-context";
 
-type Binding = {
-  model: SessionPanelModel;
-  anchor: HTMLDivElement | null;
-  isActive: boolean;
-  /** Focus requests from before the view last became active. A return to a view does not focus. */
-  focusBase: number;
-};
+type Binding = { model: SessionPanelModel; anchor: HTMLDivElement | null; isActive: boolean };
 type Surface = {
   key: string;
   viewId: string;
@@ -121,7 +115,7 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
         key: entry.key,
         container: entry.container,
         isVisible: isShown && model.isVisible,
-        focusRequest: isShown ? model.focusRequest - binding.focusBase : 0,
+        focusRequest: isShown ? model.focusRequest : 0,
         model: {
           ...model,
           terminalMounts: model.terminalMounts.filter(
@@ -180,10 +174,7 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
           entry = { key, viewId, container, bindings: new Map() };
           entries.set(key, entry);
         }
-        const previous = entry.bindings.get(viewId);
-        const isReturn = isActive && previous?.isActive === false;
-        const focusBase = isReturn ? model.focusRequest : (previous?.focusBase ?? 0);
-        entry.bindings.set(viewId, { model, anchor, isActive, focusBase });
+        entry.bindings.set(viewId, { model, anchor, isActive });
         if (isActive) entry.viewId = viewId;
       }
       dropUnused();

@@ -17,6 +17,7 @@ import {
 import { sessionPanelLayoutStorageKey } from "./session-panel-layout-store";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "./use-right-panel-open";
 import { useSessionPanels } from "./use-session-panels";
+import { SessionViewContext } from "../session-navigation/session-view-context";
 
 const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);
 const NO_TERMINAL_TABS: TerminalTab[] = [];
@@ -69,7 +70,7 @@ type HarnessProps = { overrides: Partial<TerminalSessionsModel> };
 
 /**
  * Renders the controller with a terminal model that adds a creating tab in the same update as the
- * start, as `useTerminals` does.
+ * start, as `useTerminals` does. `setActive` shows or hides the session view of the controller.
  */
 const renderPanels = (
   owner: SessionPanelOwner | null,
@@ -78,6 +79,8 @@ const renderPanels = (
 ) => {
   const scopeKey = owner ? sessionPanelOwnerKey(owner) : null;
   const starts: (RepoAction | undefined)[] = [];
+  let isActive = true;
+  let latestOverrides = initialOverrides;
   const view = renderHook(
     ({ overrides }: HarnessProps) => {
       const [startedTabs, setStartedTabs] = useState<TerminalTab[]>([]);
@@ -106,12 +109,26 @@ const renderPanels = (
         shortcutsEnabled,
       });
     },
-    { initialProps: { overrides: initialOverrides }, wrapper },
+    {
+      initialProps: { overrides: initialOverrides },
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <ClientConnectionProvider connection={connection}>
+          <SessionViewContext value={{ id: "view", isActive }}>{children}</SessionViewContext>
+        </ClientConnectionProvider>
+      ),
+    },
   );
   return {
     ...view,
     starts,
-    setTerminals: (overrides: Partial<TerminalSessionsModel>) => view.rerender({ overrides }),
+    setTerminals: (overrides: Partial<TerminalSessionsModel>) => {
+      latestOverrides = overrides;
+      view.rerender({ overrides });
+    },
+    setActive: (active: boolean) => {
+      isActive = active;
+      view.rerender({ overrides: latestOverrides });
+    },
   };
 };
 
@@ -455,6 +472,46 @@ describe("useSessionPanels", () => {
     } finally {
       shown.unmount();
       kept.unmount();
+    }
+  });
+
+  test("a hidden view ends its panel slides and takes shared changes at once", () => {
+    const kept = renderPanels(newTaskOwner(), {});
+    const shown = renderPanels(newTaskOwner(), {});
+    try {
+      act(() => kept.result.current.rightToggle?.onToggle());
+      expect(kept.result.current.right.presence).toBe("closing");
+      act(() => kept.setActive(false));
+      expect(kept.result.current.right.presence).toBe("closed");
+
+      // A hidden view has no size and no transition, so a slide in it could not end.
+      act(() => shown.result.current.rightToggle?.onToggle());
+      expect(shown.result.current.right.presence).toBe("opening");
+      expect(kept.result.current.right.presence).toBe("open");
+    } finally {
+      shown.unmount();
+      kept.unmount();
+    }
+  });
+
+  test("a view that becomes hidden drops its terminal focus requests", () => {
+    const view = renderPanels(newTaskOwner(), { tabs: [terminalTab("terminal-1")] });
+    const reopenBottom = () => {
+      act(() => view.result.current.bottomToggle.onToggle());
+      act(() => view.result.current.bottomToggle.onToggle());
+    };
+    try {
+      reopenBottom();
+      expect(view.result.current.bottom.focusRequest).toBe(1);
+
+      act(() => view.setActive(false));
+      act(() => view.setActive(true));
+      expect(view.result.current.bottom.focusRequest).toBe(0);
+
+      reopenBottom();
+      expect(view.result.current.bottom.focusRequest).toBe(1);
+    } finally {
+      view.unmount();
     }
   });
 

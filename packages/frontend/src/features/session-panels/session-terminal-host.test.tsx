@@ -70,7 +70,7 @@ test("task views share one viewport through owner eviction and panel closure", (
   }
 });
 
-test("a kept view's terminal surface leaves the panel tab content reachable", () => {
+test("the terminal surface adds no box above the panel tab content", () => {
   const model = createSessionPanelFixture({
     terminals: createTerminalSessionsFixture({ scopeKey: "task" }),
   });

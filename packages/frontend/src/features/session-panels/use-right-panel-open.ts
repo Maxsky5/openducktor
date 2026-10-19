@@ -19,7 +19,7 @@ const storeOf = perConnection(createRightPanelOpenStore);
 
 function createRightPanelOpenStore() {
   let isOpen = readPanelOpen();
-  // Moves a value read from the old key to the current key.
+  // Puts the value under the current key. This moves an old-key value and replaces an invalid value.
   savePanelOpen(isOpen);
   const listeners = new Set<() => void>();
   const set = (next: boolean): void => {
