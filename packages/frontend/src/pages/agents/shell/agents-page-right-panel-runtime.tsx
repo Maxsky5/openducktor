@@ -5,6 +5,7 @@ import { useTaskExecutionToolTabs } from "@/components/features/agents/use-task-
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 import { SessionPanel } from "@/features/session-panels";
 import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/filesystem";
 import {
@@ -44,18 +45,19 @@ export const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRun
 
   const registerFileSaveHandler =
     useOptionalAgentSessionTranscriptDialog()?.registerFileSaveHandler;
+  // The transcript dialog has one save handler, so only the shown view registers.
+  const isActive = useSessionViewActive();
   const repoPath = args.activeWorkspace?.repoPath ?? null;
   const taskId = args.selectedView.taskId;
   const contextMode = toolsModel.gitModel.contextMode;
-  useLayoutEffect(
-    () =>
-      registerFileSaveHandler?.((savedRepoPath, savedTaskId) => {
-        if (savedRepoPath === repoPath && savedTaskId === taskId && contextMode === "worktree")
-          // File queries render refresh failures independently from the completed save.
-          void refreshWorktree("soft").catch(() => {});
-      }),
-    [registerFileSaveHandler, repoPath, taskId, contextMode, refreshWorktree],
-  );
+  useLayoutEffect(() => {
+    if (!isActive) return;
+    return registerFileSaveHandler?.((savedRepoPath, savedTaskId) => {
+      if (savedRepoPath === repoPath && savedTaskId === taskId && contextMode === "worktree")
+        // File queries render refresh failures independently from the completed save.
+        void refreshWorktree("soft").catch(() => {});
+    });
+  }, [isActive, registerFileSaveHandler, repoPath, taskId, contextMode, refreshWorktree]);
 
   useEffect(() => {
     refreshWorktreeRef.current = refreshWorktree;

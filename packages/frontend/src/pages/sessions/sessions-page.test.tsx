@@ -51,6 +51,7 @@ function Harness({
 }): ReactElement {
   const [closed, setClosed] = useState(initiallyClosed);
   const [active, setActive] = useState<ActiveWorkspace | null>(workspace);
+  const [isListed, setIsListed] = useState(true);
   const other = createWorkspaceRecordFixture({ workspaceId: "beta", repoPath: "/beta" });
   const navigate = useNavigate();
   const tasks = [
@@ -59,7 +60,7 @@ function Harness({
   ];
   const workspaceState = createWorkspaceStateFixture({
     activeWorkspace: active ? { ...workspace, ...active } : null,
-    workspaces: [workspace, other],
+    workspaces: isListed ? [workspace, other] : [other],
     selectWorkspace: async (id, onSelected) => {
       setActive(id === workspace.workspaceId ? workspace : other);
       onSelected?.();
@@ -101,6 +102,9 @@ function Harness({
                     </button>
                   ))}
                   <RemoveTask />
+                  <button type="button" onClick={() => setIsListed(false)}>
+                    Unlist active workspace
+                  </button>
                   <Routes>
                     <Route path="/before-session" element={<p>Previous page</p>} />
                     <Route path="/kanban" element={<p>Kanban board</p>} />
@@ -315,6 +319,29 @@ test("task and chat switches keep their inputs and terminal viewports and stop h
     view.unmount();
     mock.module("@/pages/agents/agents-page", () => realAgentsPage);
     mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
+  }
+});
+
+test("drops the task view when its workspace leaves the list before the active workspace changes", () => {
+  function Conversation() {
+    return <input aria-label="Task draft" />;
+  }
+  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+  const view = render(
+    <MemoryRouter
+      initialEntries={["/sessions?workspace=alpha&kind=task&task=current&agent=planner"]}
+    >
+      <Harness />
+    </MemoryRouter>,
+  );
+  try {
+    const draft = view.getByLabelText("Task draft");
+    fireEvent.click(view.getByRole("button", { name: "Unlist active workspace" }));
+    expect(draft.isConnected).toBe(false);
+    expect(view.getByRole("button", { name: "Unlist active workspace" })).toBeTruthy();
+  } finally {
+    view.unmount();
+    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
   }
 });
 

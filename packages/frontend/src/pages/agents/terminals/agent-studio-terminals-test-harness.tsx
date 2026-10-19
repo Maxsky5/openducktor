@@ -137,7 +137,7 @@ export function renderTaskTerminalPanels(
   }
   const element = () => (
     <QueryProvider connection={connection}>
-      <SessionTerminalHost viewIds={props.mountedTaskIds} activeViewId={props.taskId}>
+      <SessionTerminalHost viewIds={props.mountedTaskIds}>
         {props.mountedTaskIds.map((taskId) => (
           <SessionViewContext
             key={taskId}

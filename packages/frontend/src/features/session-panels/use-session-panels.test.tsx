@@ -444,6 +444,20 @@ describe("useSessionPanels", () => {
     expectPanelSlidesOut(view, "right");
   });
 
+  test("kept session views share the right panel open state", () => {
+    const shown = renderPanels(newTaskOwner(), {});
+    const kept = renderPanels(newTaskOwner(), {});
+    try {
+      act(() => shown.result.current.rightToggle?.onToggle());
+      expect(kept.result.current.rightToggle?.isOpen).toBe(false);
+      act(() => kept.result.current.rightToggle?.onToggle());
+      expect(shown.result.current.rightToggle?.isOpen).toBe(true);
+    } finally {
+      shown.unmount();
+      kept.unmount();
+    }
+  });
+
   test.each([true, false])(
     "honors the bottom panel keyboard shortcut when enabled=%s",
     (shortcutsEnabled) => {

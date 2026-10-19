@@ -40,7 +40,7 @@ test("task views share one viewport through owner eviction and panel closure", (
     activeTerminalKey: "terminal",
   });
   const content = (ids: string[], active: string, panelOpen = true) => (
-    <SessionTerminalHost viewIds={ids} activeViewId={active}>
+    <SessionTerminalHost viewIds={ids}>
       {ids.map((id) => (
         <SessionViewContext key={id} value={{ id, isActive: id === active }}>
           <div data-testid={id}>{panelOpen && <SessionTerminalSurface model={model} />}</div>
@@ -65,6 +65,35 @@ test("task views share one viewport through owner eviction and panel closure", (
     expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1);
     view.rerender(content([], "none"));
     expect(viewport?.isConnected).toBe(false);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a kept view's terminal surface leaves the panel tab content reachable", () => {
+  const model = createSessionPanelFixture({
+    terminals: createTerminalSessionsFixture({ scopeKey: "task" }),
+  });
+  const view = render(
+    <SessionTerminalHost viewIds={["view"]}>
+      <SessionViewContext value={{ id: "view", isActive: true }}>
+        <div data-testid="panel-body">
+          <SessionTerminalSurface model={model} />
+        </div>
+      </SessionViewContext>
+    </SessionTerminalHost>,
+  );
+  try {
+    const body = view.getByTestId("panel-body");
+    const layer = view.getByTestId("terminal-layer");
+    expect(body.contains(layer)).toBe(true);
+    // Only the terminal layer can cover the tabs, and it passes input through with no active terminal.
+    expect(layer.getAttribute("data-active")).toBe("false");
+    let element = layer.parentElement;
+    while (element && element !== body) {
+      expect(element.classList.contains("contents")).toBe(true);
+      element = element.parentElement;
+    }
   } finally {
     view.unmount();
   }
@@ -128,7 +157,7 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
     }
     const content = (ids: Array<"planner" | "build">, active: string) => (
       <QueryProvider connection={connection}>
-        <SessionTerminalHost viewIds={ids} activeViewId={active}>
+        <SessionTerminalHost viewIds={ids}>
           {ids.map((id) => (
             <SessionViewContext key={id} value={{ id, isActive: id === active }}>
               <Conversation id={id} />

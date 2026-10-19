@@ -15,7 +15,13 @@ import { TerminalLayer } from "@/features/terminals";
 import type { SessionPanelModel } from "./use-session-panels";
 import { SessionViewContext } from "../session-navigation/session-view-context";
 
-type Binding = { model: SessionPanelModel; anchor: HTMLDivElement | null };
+type Binding = {
+  model: SessionPanelModel;
+  anchor: HTMLDivElement | null;
+  isActive: boolean;
+  /** Focus requests from before the view last became active. A return to a view does not focus. */
+  focusBase: number;
+};
 type Surface = {
   key: string;
   viewId: string;
@@ -28,11 +34,9 @@ const TerminalHostContext = createContext<Host | null>(null);
 /** Views of one task share terminal roots. Moving a root keeps xterm and its transport. */
 export function SessionTerminalHost({
   viewIds,
-  activeViewId,
   children,
 }: {
   viewIds: readonly string[];
-  activeViewId: string | null;
   children: ReactNode;
 }) {
   const parking = useRef<HTMLDivElement>(null);
@@ -43,15 +47,15 @@ export function SessionTerminalHost({
     <TerminalHostContext value={host}>
       {children}
       <div hidden ref={parking} />
-      {surfaces.map(({ key, container, model, viewId, placed }) =>
+      {surfaces.map(({ key, container, model, isVisible, focusRequest }) =>
         createPortal(
           <Tabs value={model.selectedTabId ?? ""} className="contents">
             <TerminalLayer
               terminals={model.terminals}
               mounts={model.terminalMounts}
               activeKey={model.activeTerminalKey}
-              isVisible={placed && activeViewId === viewId && model.isVisible}
-              focusRequest={placed && activeViewId === viewId ? model.focusRequest : 0}
+              isVisible={isVisible}
+              focusRequest={focusRequest}
             />
           </Tabs>,
           container,
@@ -89,7 +93,8 @@ export function SessionTerminalSurface({ model }: { model: SessionPanelModel }) 
         focusRequest={model.focusRequest}
       />
     );
-  return <div ref={bind} className="absolute inset-0" data-terminal-anchor />;
+  // The anchor and its moved root add no box, so only the terminal layer can cover panel content.
+  return <div ref={bind} className="contents" data-terminal-anchor />;
 }
 
 function createHost(parking: RefObject<HTMLDivElement | null>) {
@@ -97,10 +102,10 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
   const listeners = new Set<() => void>();
   let snapshot: Array<{
     key: string;
-    viewId: string;
     container: HTMLDivElement;
     model: SessionPanelModel;
-    placed: boolean;
+    isVisible: boolean;
+    focusRequest: number;
   }> = [];
   const move = (entry: Surface) => {
     const binding = entry.bindings.get(entry.viewId);
@@ -111,11 +116,12 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
     snapshot = [...entries.values()].map((entry) => {
       const binding = entry.bindings.get(entry.viewId)!;
       const { model } = binding;
+      const isShown = binding.anchor !== null && binding.isActive;
       return {
         key: entry.key,
-        viewId: entry.viewId,
         container: entry.container,
-        placed: binding.anchor !== null,
+        isVisible: isShown && model.isVisible,
+        focusRequest: isShown ? model.focusRequest - binding.focusBase : 0,
         model: {
           ...model,
           terminalMounts: model.terminalMounts.filter(
@@ -170,11 +176,16 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
         let entry = entries.get(key);
         if (!entry) {
           const container = document.createElement("div");
-          container.className = "absolute inset-0";
+          container.className = "contents";
           entry = { key, viewId, container, bindings: new Map() };
           entries.set(key, entry);
         }
-        entry.bindings.set(viewId, { model, anchor });
+        const previous = entry.bindings.get(viewId);
+        const focusBase =
+          isActive && previous?.isActive === false
+            ? model.focusRequest
+            : (previous?.focusBase ?? 0);
+        entry.bindings.set(viewId, { model, anchor, isActive, focusBase });
         if (isActive) entry.viewId = viewId;
       }
       dropUnused();

@@ -43,6 +43,10 @@ export function SessionViews({
   const scope = useSessionViewScope();
   const { workspaces } = useWorkspaceState();
   const params = new URLSearchParams(location.search);
+  const isOpen = (candidate: ActiveWorkspace): boolean =>
+    workspaces.some(
+      (open) => open.workspaceId === candidate.workspaceId && open.repoPath === candidate.repoPath,
+    );
   const [state, setState] = useState<{ views: View[]; activeId: string | null }>({
     views: [],
     activeId: null,
@@ -71,15 +75,11 @@ export function SessionViews({
         ? { ...view, search }
         : view;
     })
-    .filter((view) =>
-      workspaces.some(
-        (open) =>
-          open.workspaceId === view.workspace.workspaceId &&
-          open.repoPath === view.workspace.repoPath,
-      ),
-    );
+    .filter((view) => isOpen(view.workspace));
   let activeId: string | null = null;
-  if (isReady && kind !== null) {
+  // The active workspace can resolve to a record that the workspace list no longer has. Its
+  // view would leave the kept views on each render, so no view is active until the two agree.
+  if (isReady && kind !== null && isOpen(workspace)) {
     const candidates = views.filter(
       (view) =>
         view.workspace.workspaceId === workspace.workspaceId &&
@@ -125,7 +125,7 @@ export function SessionViews({
     setState({ views, activeId });
   }
   return (
-    <SessionTerminalHost viewIds={views.map((view) => view.id)} activeViewId={activeId}>
+    <SessionTerminalHost viewIds={views.map((view) => view.id)}>
       {views
         .toSorted((left, right) => left.id.localeCompare(right.id))
         .map((view) => (
