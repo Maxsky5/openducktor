@@ -3077,6 +3077,33 @@ describe("useAgentChatWindow", () => {
       await harness.unmount();
     });
 
+    test("scrolls by pages and lines for wheel steps in those units", async () => {
+      const { harness, container } = await mountPinnedTranscript();
+      const bottom = getMaxScrollTop(container);
+
+      await act(async () => {
+        harness
+          .getLatestResult()
+          .navigation.scrollByWheel(
+            new WheelEvent("wheel", { deltaY: -1, deltaMode: WheelEvent.DOM_DELTA_PAGE }),
+          );
+        await dispatchScroll(container);
+      });
+      expect(container.scrollTop).toBe(bottom - container.clientHeight);
+
+      await act(async () => {
+        harness
+          .getLatestResult()
+          .navigation.scrollByWheel(
+            new WheelEvent("wheel", { deltaY: 3, deltaMode: WheelEvent.DOM_DELTA_LINE }),
+          );
+        await dispatchScroll(container);
+      });
+      expect(container.scrollTop).toBe(bottom - container.clientHeight + 48);
+
+      await harness.unmount();
+    });
+
     test("leaves the transcript in place for a zoom gesture over a control outside it", async () => {
       const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
       const bottom = getMaxScrollTop(container);

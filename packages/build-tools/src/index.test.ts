@@ -19,7 +19,9 @@ describe("build tools", () => {
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
-  });
+    // Real disk I/O in the temp directory. It usually takes under 15 ms, but on the Windows CI
+    // runner the temp directory can stall for more than a second.
+  }, 5_000);
 
   it("marks files executable on POSIX platforms", async () => {
     const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-build-tools-"));

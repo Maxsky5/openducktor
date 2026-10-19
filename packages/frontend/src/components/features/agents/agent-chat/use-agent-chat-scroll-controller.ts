@@ -35,11 +35,19 @@ const isEditableTarget = (target: EventTarget | null): boolean =>
 const isUpwardWheel = (event: WheelEvent): boolean =>
   event.deltaY < 0 && Math.abs(event.deltaY) >= Math.abs(event.deltaX);
 
-// Firefox reports mouse wheel steps in lines.
+// Firefox reports mouse wheel steps in lines, or in pages when the system scrolls a screen per step.
 const WHEEL_LINE_HEIGHT_PX = 16;
 
-const readWheelDeltaYPx = (event: WheelEvent): number =>
-  event.deltaMode === event.DOM_DELTA_LINE ? event.deltaY * WHEEL_LINE_HEIGHT_PX : event.deltaY;
+const readWheelDeltaYPx = (event: WheelEvent, pageHeightPx: number): number => {
+  switch (event.deltaMode) {
+    case WheelEvent.DOM_DELTA_LINE:
+      return event.deltaY * WHEEL_LINE_HEIGHT_PX;
+    case WheelEvent.DOM_DELTA_PAGE:
+      return event.deltaY * pageHeightPx;
+    default:
+      return event.deltaY;
+  }
+};
 
 const canScroll = (container: HTMLElement): boolean =>
   container.scrollHeight - container.clientHeight > 1;
@@ -162,7 +170,7 @@ export function useAgentChatScrollController({
       if (isUpwardWheel(event) && pinnedRef.current && canScroll(container)) {
         setPinned(false);
       }
-      container.scrollTop += readWheelDeltaYPx(event);
+      container.scrollTop += readWheelDeltaYPx(event, container.clientHeight);
     },
     [messagesContainerRef, pinnedRef, setPinned],
   );
