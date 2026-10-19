@@ -2,6 +2,7 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { installPanelLayout } from "@/test-utils/panel-layout";
 import { createSessionPanelFixture } from "@/test-utils/session-panel-fixtures";
 import {
   BottomPanelSplit,
@@ -46,6 +47,28 @@ const withSizeTransition = (run: () => void): void => {
 };
 
 describe("SessionPanelSplit", () => {
+  test("shows its open size after its view hid during a close and the panel opened", () => {
+    const removePanelLayout = installPanelLayout();
+    try {
+      withSizeTransition(() => {
+        const inView = (isHidden: boolean, presence: PanelPresence) => (
+          <div hidden={isHidden}>{renderSplit(presence, () => {})}</div>
+        );
+        const view = render(inView(false, "open"));
+        view.rerender(inView(false, "closing"));
+        // The view hides during the slide, so the panel ends its close while hidden.
+        view.rerender(inView(true, "closed"));
+        // Another view opens the shared right panel.
+        view.rerender(inView(true, "open"));
+        view.rerender(inView(false, "open"));
+
+        expect(panelElement().style.flexGrow).toBe(String(sizes.panel));
+      });
+    } finally {
+      removePanelLayout();
+    }
+  });
+
   test("ends a move at once when no size transition runs, as with reduced motion", () => {
     const onSettled = mock(() => {});
     const view = render(renderSplit("closed", onSettled));
