@@ -38,11 +38,8 @@ export type SessionLaunchContext<Request, Result extends SessionLaunchResult> = 
   /** Stops the session in launch cleanup, so settlement does not stop it again. */
   stopSession: (ref: AgentSessionLiveRef) => Effect.Effect<void, HostError>;
   /**
-   * Sends the first instruction. `instruction` holds the request parts before attachment
-   * resolution. When the runtime did not get the send or rejected it, the failed launch returns
-   * `instruction` as `unsentInstruction`.
-   * An automatic launch can complete with its instruction in the host message queue. A queued
-   * launch result omits `acceptedMessage`.
+   * Keep `instruction` before attachment lookup so a failed launch can return it for a safe
+   * retry. A queued launch completes without `acceptedMessage`.
    */
   send: (
     input: AgentSessionControlSendInput,

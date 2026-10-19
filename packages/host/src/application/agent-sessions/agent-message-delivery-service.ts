@@ -91,7 +91,7 @@ export type AgentMessageDeliveryDependencies = {
 type SteerOutcome = SendOutcome | { readonly kind: "blocked"; readonly error: HostValidationError };
 
 export type AgentMessageDeliveryService = {
-  /** Options guard admission and initial dispatch; queued entries use the normal pause rules. */
+  /** Options guard the first send and enqueue. Queued entries use the normal pause rules. */
   readonly submit: (
     input: AgentMessageSubmitInput,
     options?: AgentSessionSendOptions,
@@ -114,7 +114,7 @@ export const createAgentMessageDeliveryService = (
     publishSnapshot: (queue) => dependencies.publish({ type: "message_queue_updated", queue }),
     now: dependencies.now,
   });
-  const { publish, enqueue, forgetIfUnused, queueFor } = registry;
+  const { publish, forgetIfUnused, queueFor } = registry;
   const conditions = createSessionConditions();
   const reserveSubmission = createSubmissionReservations(dependencies.submissionFingerprint);
 
@@ -235,13 +235,13 @@ export const createAgentMessageDeliveryService = (
     content: SubmittedContent,
     messageId?: string,
   ): AgentMessageSubmitResult => {
-    markAcceptanceUnknown(enqueue(queue, content, "first"), messageId);
+    markAcceptanceUnknown(registry.enqueue(queue, content, "first"), messageId);
     queue.pause ??= { cause: "acceptance_unknown" };
     return { kind: "queued", queue: publish(queue) };
   };
 
-  /** Checks cancellation in the same step that admits an instruction to the queue. */
-  const enqueueCurrent = (
+  /** Stop can run while preparation waits. Check and enqueue without yielding. */
+  const enqueue = (
     queue: MessageQueue,
     content: SubmittedContent,
     position: "first" | "last",
@@ -254,7 +254,7 @@ export const createAgentMessageDeliveryService = (
         forgetIfUnused(queue);
         return Effect.fail(toHostOperationError(cause, "agent-message-delivery.enqueue"));
       }
-      enqueue(queue, content, position);
+      registry.enqueue(queue, content, position);
       return Effect.succeed<AgentMessageSubmitResult>({ kind: "queued", queue: publish(queue) });
     });
 
@@ -263,7 +263,7 @@ export const createAgentMessageDeliveryService = (
     Effect.gen(function* () {
       const queue = queueFor(content);
       if (queue.entries.length > 0 || queue.sendingNewTurn) {
-        return yield* enqueueCurrent(queue, content, "last", options);
+        return yield* enqueue(queue, content, "last", options);
       }
       const completedTurns = queue.completedTurns;
       const outcome = reconcileAcceptedOutcome(yield* sendNewTurn(queue, content, options));
@@ -275,7 +275,7 @@ export const createAgentMessageDeliveryService = (
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "busy": {
           // This message came before any message that queued while it was in flight.
-          const queued = yield* enqueueCurrent(queue, content, "first", options);
+          const queued = yield* enqueue(queue, content, "first", options);
           settle(queue, completedTurns);
           return queued;
         }

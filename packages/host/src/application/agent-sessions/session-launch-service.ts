@@ -61,8 +61,8 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
     SessionLaunchRuntimePort,
     "holdWorkflowLaunch" | "stopSession" | "reportLaunchFailure"
   >;
-  /** A queued instruction has no native acceptance receipt yet. */
-  sendInstruction: (
+  /** A queued instruction has no accepted message yet. */
+  send: (
     request: Request,
     input: AgentSessionControlSendInput,
     options: AgentSessionSendOptions,
@@ -125,7 +125,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         let sent = false;
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
         const reply = yield* Effect.result(
-          deps.sendInstruction(attempt.request, input, {
+          deps.send(attempt.request, input, {
             assertCurrent: () => assertCurrent(attempt),
             onSent: () => {
               sent = true;

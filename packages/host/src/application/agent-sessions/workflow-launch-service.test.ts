@@ -751,11 +751,11 @@ test("shutdown cancels a reused session's pending speed change", async () => {
   expect(h.stops).toEqual([]);
 });
 
-test("Stop cancels an automatic submission waiting before operation ownership", async () => {
+test("Stop cancels an Autopilot message before the send starts", async () => {
   const wait = await pausePoint();
   const h = await createLaunchHarness("opencode", {
     beforeMessageOperation: wait.pause,
-    keepSessionOnStop: true,
+    keepAttachedOnStop: true,
   });
   h.setTaskStatus("in_progress");
   const source = h.addTaskSession("builder", { live: true });
@@ -782,29 +782,29 @@ test("Stop cancels an automatic submission waiting before operation ownership", 
   expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
 });
 
-test.each(["queue admission", "native dispatch"] as const)(
-  "canceling an automatic launch during preparation prevents %s",
+test.each(["queue", "send"] as const)(
+  "a canceled launch cannot %s after preparation waits",
   async (stage) => {
     const wait = await pausePoint();
     let preparingLaunch = false;
     const pauseLaunch = Effect.suspend(() => (preparingLaunch ? wait.pause : Effect.void));
     const h = await createLaunchHarness(
       "opencode",
-      stage === "queue admission"
+      stage === "queue"
         ? { beforeMessagePreparation: pauseLaunch }
         : { beforeSendContext: pauseLaunch },
     );
     h.setTaskStatus("in_progress");
     const source = h.addTaskSession("builder", {
       live: true,
-      working: stage === "queue admission",
+      working: stage === "queue",
     });
     const ref = { repoPath: "/repo", ...source };
-    const target = { ...ref, sessionScope: builderScope };
-    if (stage === "queue admission") {
+    if (stage === "queue") {
       await Effect.runPromise(
         h.messageDelivery.submit({
-          ...target,
+          ...ref,
+          sessionScope: builderScope,
           submissionId: "earlier-message",
           mode: "default",
           parts: [{ kind: "text", text: "Earlier message" }],
@@ -834,7 +834,7 @@ test.each(["queue admission", "native dispatch"] as const)(
       h.messageDelivery
         .listQueues("/repo")
         .flatMap((queue) => queue.entries.map((entry) => entry.submissionId)),
-    ).toEqual(stage === "queue admission" ? ["earlier-message"] : []);
+    ).toEqual(stage === "queue" ? ["earlier-message"] : []);
   },
 );
 

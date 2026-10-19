@@ -65,7 +65,7 @@ export const createLaunchHarness = async (
     beforeMessageOperation?: Effect.Effect<void>;
     beforeMessagePreparation?: Effect.Effect<void>;
     beforeSendContext?: Effect.Effect<void>;
-    keepSessionOnStop?: boolean;
+    keepAttachedOnStop?: boolean;
     forkSourceRead?: Effect.Effect<void>;
     nativeStart?: Effect.Effect<void>;
     nativeFork?: Effect.Effect<void>;
@@ -265,7 +265,7 @@ export const createLaunchHarness = async (
         Effect.sync(() => {
           stops.push(ref.externalSessionId);
           const session = live.get(agentSessionRefKey(ref));
-          if (session && gates.keepSessionOnStop) {
+          if (session && gates.keepAttachedOnStop) {
             session.activity = "idle";
             session.pendingQuestions = [];
           } else live.delete(agentSessionRefKey(ref));
