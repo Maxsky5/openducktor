@@ -97,26 +97,6 @@ const readOwnership = (detail: SessionInfo, identity: OperationIdentity): Owners
   return parsed.data;
 };
 
-const readWorkflowInstructions = async (
-  client: OpenCodeClient,
-  identity: OperationIdentity & { externalSessionId: string },
-): Promise<string> => {
-  const entries = await client.session.instructions.entry.list({
-    sessionID: identity.externalSessionId,
-  });
-  const entry = entries.find((item) => item.key === OPENCODE_WORKFLOW_INSTRUCTION_KEY);
-  const prompt = z.string().safeParse(entry?.value);
-  if (!prompt.success || !prompt.data.trim())
-    throw operationError(
-      identity,
-      "install workflow instructions",
-      "policy_failed",
-      "The conversation has no confirmed OpenDucktor workflow instructions.",
-      "Reopen this workflow through its normal task action, then retry sending.",
-    );
-  return prompt.data;
-};
-
 export const forkNativePermissions = (
   detail: SessionInfo,
   identity: OperationIdentity,
@@ -281,38 +261,48 @@ export const installOpenCodePolicy = async (input: {
   });
 };
 
-/** Root creation, fork, and reattachment install prompts before input admission. */
+/**
+ * Writes the instructions that the host resolved for a root conversation. Reattachment sends no
+ * prompt, so the next new turn writes the current workflow prompt.
+ */
+export const putOpenCodeInstructions = async (input: {
+  client: OpenCodeClient;
+  identity: OperationIdentity;
+  sessionID: string;
+  scope: AgentSessionScope;
+  systemPrompt: string | undefined;
+}): Promise<void> => {
+  const { client, identity, sessionID, scope, systemPrompt } = input;
+  if (systemPrompt === undefined) return;
+  if (scope.kind === "workflow" && !systemPrompt.trim())
+    throw operationError(
+      identity,
+      "install workflow instructions",
+      "policy_failed",
+      "The resolved workflow system prompt is empty.",
+      "Restore the workflow prompt in settings, then retry.",
+    );
+  if (systemPrompt.trim())
+    await client.session.instructions.entry.put({
+      sessionID,
+      key: OPENCODE_WORKFLOW_INSTRUCTION_KEY,
+      value: systemPrompt,
+    });
+};
+
+/** Root creation, fork, and reattachment write instructions before input admission. */
 export const installOpenCodeRootPolicy = async (
   input: Parameters<typeof installOpenCodePolicy>[0] & {
     identity: OperationIdentity;
     systemPrompt?: string | undefined;
   },
 ): Promise<void> => {
-  const { client, detail, identity, scope, systemPrompt } = input;
-  if (scope.kind === "workflow") {
-    if (systemPrompt !== undefined) {
-      if (!systemPrompt.trim())
-        throw operationError(
-          identity,
-          "install workflow instructions",
-          "policy_failed",
-          "The resolved workflow system prompt is empty.",
-          "Restore the workflow prompt in settings, then retry attachment.",
-        );
-      await client.session.instructions.entry.put({
-        sessionID: detail.id,
-        key: OPENCODE_WORKFLOW_INSTRUCTION_KEY,
-        value: systemPrompt,
-      });
-    } else {
-      await readWorkflowInstructions(client, { ...identity, externalSessionId: detail.id });
-    }
-  } else if (systemPrompt?.trim()) {
-    await client.session.instructions.entry.put({
-      sessionID: detail.id,
-      key: OPENCODE_WORKFLOW_INSTRUCTION_KEY,
-      value: systemPrompt,
-    });
-  }
+  await putOpenCodeInstructions({
+    client: input.client,
+    identity: input.identity,
+    sessionID: input.detail.id,
+    scope: input.scope,
+    systemPrompt: input.systemPrompt,
+  });
   await installOpenCodePolicy(input);
 };

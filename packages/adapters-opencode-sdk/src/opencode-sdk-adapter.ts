@@ -55,10 +55,10 @@ import {
   forkNativePermissions,
   installOpenCodePolicy,
   installOpenCodeRootPolicy,
+  putOpenCodeInstructions,
 } from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
-import { OPENCODE_WORKFLOW_INSTRUCTION_KEY } from "./opencode-session-transcript";
 import { iso, modelSelection, projectInboxUser } from "./opencode-message-projection";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
@@ -487,26 +487,14 @@ export class OpencodeSdkAdapter {
           );
         return { type: "command_accepted", commandName: "compact", inputId: item.id };
       }
-      if (
-        !binding.detail.parentID &&
-        input.delivery !== "steer" &&
-        input.systemPrompt !== undefined
-      ) {
-        if (input.sessionScope.kind === "workflow" && !input.systemPrompt.trim())
-          throw operationError(
-            input,
-            "update workflow instructions",
-            "policy_failed",
-            "The workflow prompt is empty.",
-            "Restore the workflow prompt in settings.",
-          );
-        if (input.systemPrompt.trim())
-          await this.client.session.instructions.entry.put({
-            sessionID: binding.detail.id,
-            key: OPENCODE_WORKFLOW_INSTRUCTION_KEY,
-            value: input.systemPrompt,
-          });
-      }
+      if (!binding.detail.parentID && input.delivery !== "steer")
+        await putOpenCodeInstructions({
+          client: this.client,
+          identity: input,
+          sessionID: binding.detail.id,
+          scope: input.sessionScope,
+          systemPrompt: input.systemPrompt,
+        });
       this.assertCurrent(input, generation);
       const encoded = buildOpenCodePromptText(
         input.parts.filter((part) => part.kind !== "slash_command"),

@@ -1852,7 +1852,7 @@ describe("OpenCode V2 live observation", () => {
   });
 
   test.each(["spec", "planner", "build", "qa"] as const)(
-    "restores migrated %s conversations without instructions and requires them before resume",
+    "reattaches migrated %s conversations without instructions and installs them on the next turn",
     async (role) => {
       const fixture = prepareFixture(({ url, method }) => {
         if (url.pathname === "/api/session" && url.searchParams.get("parentID") === "ses_saved")
@@ -1862,6 +1862,15 @@ describe("OpenCode V2 live observation", () => {
         if (url.pathname.endsWith("/instructions/entries")) return response([]);
         if (method === "PUT" && url.pathname.endsWith("/instructions/entries/openducktor.workflow"))
           return noContent();
+        if (url.pathname.endsWith("/prompt"))
+          return response({
+            id: "msg_migrated",
+            sessionID: ref.externalSessionId,
+            type: "user",
+            payload: { text: "Continue the workflow" },
+            delivery: "queue",
+            time: { created: 10 },
+          });
         return undefined;
       });
       const runtime = await fixture.prepare();
@@ -1879,24 +1888,37 @@ describe("OpenCode V2 live observation", () => {
           },
         ]);
         expect(fixture.requests.every(({ method }) => method === "GET")).toBe(true);
-        await expect(runtime.connection.resumeSession(input)).rejects.toThrow(
-          "no confirmed OpenDucktor workflow instructions",
-        );
-        const systemPrompt = `Resolved ${role} workflow instructions for task-1.`;
-        await expect(
-          runtime.connection.resumeSession({ ...input, systemPrompt }),
-        ).resolves.toMatchObject({
+        // The host sends no workflow prompt when it reattaches a conversation.
+        await expect(runtime.connection.resumeSession(input)).resolves.toMatchObject({
           externalSessionId: "ses_saved",
           sessionAssociation: sessionScope,
         });
-        expect(
-          fixture.requests.find(({ url }) =>
-            url.pathname.endsWith("/instructions/entries/openducktor.workflow"),
-          )?.body,
-        ).toEqual({ value: systemPrompt });
-        expect(fixture.requests.some(({ url }) => /\/(prompt|command)$/.test(url.pathname))).toBe(
-          false,
-        );
+        const writes = () =>
+          fixture.requests
+            .filter(
+              ({ url, method }) => method !== "GET" && /\/(entries\/.+|prompt)$/.test(url.pathname),
+            )
+            .map(({ url, body }) => ({ path: url.pathname, body }));
+        expect(writes()).toEqual([]);
+        const systemPrompt = `Resolved ${role} workflow instructions for task-1.`;
+        await expect(
+          runtime.connection.sendUserMessage({
+            ...input,
+            delivery: "new_turn",
+            systemPrompt,
+            parts: [{ kind: "text", text: "Continue the workflow" }],
+          }),
+        ).resolves.toMatchObject({ type: "user_message" });
+        expect(writes()).toEqual([
+          {
+            path: "/api/experimental/session/ses_saved/instructions/entries/openducktor.workflow",
+            body: { value: systemPrompt },
+          },
+          {
+            path: "/api/session/ses_saved/prompt",
+            body: expect.objectContaining({ text: "Continue the workflow" }),
+          },
+        ]);
       } finally {
         await runtime.release();
       }
