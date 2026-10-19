@@ -212,7 +212,7 @@ export function WorkspaceSessionContent({
         sizes={isNarrow ? NARROW_TOOLS_PANEL_SIZES : TOOLS_PANEL_SIZES}
         className="h-full min-h-0 overflow-hidden"
         mainClassName="h-full min-h-0"
-        panelClassName="border-l border-border bg-card"
+        panelClassName="bg-card"
         main={mainContent}
         panel={<SessionPanel model={rightPanel} toolTabs={toolTabs} isActive={isPanelOpen} />}
       />

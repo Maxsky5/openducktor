@@ -193,7 +193,7 @@ describe("AgentsPageWorkspace bottom panel visibility", () => {
       expect(separator.getAttribute("aria-orientation")).toBe("horizontal");
       expect(separator.tabIndex).toBe(0);
       expect(separator.querySelector("svg")).not.toBeNull();
-      expect(separator.className).toContain("aria-[orientation=horizontal]:h-3");
+      expect(separator.className).toContain("aria-[orientation=horizontal]:h-px");
       act(() => separator.focus());
       expect(document.activeElement).toBe(separator);
 

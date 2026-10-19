@@ -15,9 +15,9 @@ describe("ResizableHandle", () => {
       ),
     );
 
-    expect(html).toContain("group-hover:bg-selected-accent");
-    expect(html).toContain("group-hover:border-selected-accent");
-    expect(html).toContain("group-hover:text-selected-accent");
-    expect(html).not.toContain("group-hover:bg-primary");
+    expect(html).toContain("data-[separator=hover]:bg-selected-accent");
+    expect(html).toContain("group-data-[separator=hover]:border-selected-accent");
+    expect(html).toContain("group-data-[separator=hover]:text-selected-accent");
+    expect(html).not.toContain("bg-primary");
   });
 });
