@@ -1,6 +1,7 @@
 import { Effect, Exit, Fiber } from "effect";
 import {
   claudeSessionLifecycleFailure,
+  ClaudeSessionLifecycleError,
   settleClaudeSessionSteps,
 } from "./claude-agent-sdk-session-lifecycle";
 import type { AgentWorkStartGuard } from "@openducktor/core";
@@ -160,8 +161,7 @@ export const consumeClaudeSession = (input: {
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
   let continuationAdmitted = onContinuationAdmission === undefined;
   const operation = "claudeRuntime.consumeSession";
-  const failure = (cause: unknown) =>
-    new HostOperationError({ operation, message: errorMessage(cause), cause });
+  const failure = (cause: unknown) => new ClaudeSessionLifecycleError(operation, [cause]);
   const emitEvent = (event: ClaudeAgentSdkEvent): void => emit(session, event);
   const stream = Effect.tryPromise({
     try: async () => {

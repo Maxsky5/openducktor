@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@openducktor/core";
 import { Effect } from "effect";
+import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession, sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import {
@@ -190,6 +191,67 @@ describe("consumeClaudeSession lifecycle", () => {
       }
     },
   );
+
+  test("preserves structured stream, delivery, and cleanup errors through settlement", async () => {
+    const streamError = new HostOperationError({
+      operation: "claude.native.read",
+      message: "Restore session X failed",
+      cause: new Error("socket reset"),
+      details: { session: "X" },
+    });
+    const deliveryError = new AggregateError(
+      [new Error("subscriber unavailable")],
+      "Session error delivery failed",
+    );
+    const cleanupError = new HostOperationError({
+      operation: "claude.native.close",
+      message: "Teardown session X failed",
+      cause: new Error("process close failed"),
+      details: { session: "X", resource: "query" },
+    });
+    const failures: HostOperationErrorAggregate[] = [];
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const session = createClaudeSession({ query: throwingClaudeQuery(streamError) });
+    session.query.close = mock(() => {
+      throw cleanupError;
+    });
+    sessionStore.set(session);
+    const consumption = consumeClaudeSession({
+      session,
+      sessionStore,
+      now: () => "2026-06-25T20:00:00.000Z",
+      emit: (_session, event) => {
+        if (event.type === "session_error") throw deliveryError;
+      },
+      onBackgroundFailure: (failure) =>
+        Effect.sync(() => {
+          failures.push(failure);
+        }),
+    });
+    const failure = await consumption.catch((cause: unknown) => cause);
+    expect(failures).toHaveLength(1);
+    expect(failure).toBe(failures[0]);
+    expect(failure).toMatchObject({
+      message: "Restore session X failed\nSession error delivery failed\nTeardown session X failed",
+    });
+    const causes = failures[0]?.cause;
+    if (!(causes instanceof AggregateError))
+      throw new Error("Expected combined lifecycle failures.");
+    expect(causes.errors).toHaveLength(3);
+    expect(causes.errors[0]).toBe(streamError);
+    expect(causes.errors[1]).toBe(deliveryError);
+    expect(causes.errors[2]).toBe(cleanupError);
+    const settled = await Effect.runPromise(sessionStore.settle(session)).catch(
+      (cause: unknown) => cause,
+    );
+    expect(settled).toMatchObject({
+      cause: expect.objectContaining({
+        errors: expect.arrayContaining([cleanupError, streamError, deliveryError]),
+      }),
+    });
+    expect(sessionStore.get(session.externalSessionId)).toBeUndefined();
+    expect(session.query.close).toHaveBeenCalledTimes(1);
+  });
 
   test("keeps stream and close failures while completing local cleanup", async () => {
     const streamError = new Error("stream failed");

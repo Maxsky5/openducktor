@@ -1,6 +1,7 @@
 import { Effect, Fiber } from "effect";
 import {
   claudeSessionLifecycleFailure,
+  ClaudeSessionLifecycleError,
   settleClaudeSessionSteps,
 } from "./claude-agent-sdk-session-lifecycle";
 import {
@@ -29,6 +30,14 @@ export type CreateClaudeAgentSdkSessionStoreInput = {
   now?: () => string;
 };
 
+type ClaudeSessionLifecycleState = {
+  consumer?: Fiber.Fiber<void, HostOperationErrorAggregate>;
+  canFinish?: () => boolean;
+  closed: boolean;
+  closeFailure?: ClaudeSessionLifecycleError;
+  terminalAttempted: boolean;
+};
+
 export const hasActiveClaudeWork = (session: ClaudeSession): boolean =>
   session.activity === "running" ||
   session.sdkState === "running" ||
@@ -47,18 +56,23 @@ export const createClaudeAgentSdkSessionStore = ({
 }: CreateClaudeAgentSdkSessionStoreInput = {}): ClaudeSessionStore => {
   const sessions = new Map<string, ClaudeSession>();
   const closeListeners = new Set<(session: ClaudeSession) => void>();
-  const consumers = new WeakMap<ClaudeSession, Fiber.Fiber<void, HostOperationErrorAggregate>>();
+  const lifecycles = new WeakMap<ClaudeSession, ClaudeSessionLifecycleState>();
   const activeConsumers = new Set<ClaudeSession>();
-  const terminalAdmissions = new WeakMap<ClaudeSession, () => boolean>();
-  const closed = new WeakMap<ClaudeSession, AggregateError | undefined>();
-  const finished = new WeakSet<ClaudeSession>();
+  const lifecycleFor = (session: ClaudeSession): ClaudeSessionLifecycleState => {
+    let lifecycle = lifecycles.get(session);
+    if (!lifecycle) {
+      lifecycle = { closed: false, terminalAttempted: false };
+      lifecycles.set(session, lifecycle);
+    }
+    return lifecycle;
+  };
   const close = (session: ClaudeSession): void => {
-    if (closed.has(session)) {
-      const failure = closed.get(session);
-      if (failure) throw failure;
+    const lifecycle = lifecycleFor(session);
+    if (lifecycle.closed) {
+      if (lifecycle.closeFailure) throw lifecycle.closeFailure;
       return;
     }
-    closed.set(session, undefined);
+    lifecycle.closed = true;
     const failures: unknown[] = [];
     const attempt = (step: () => void): void => {
       try {
@@ -94,8 +108,8 @@ export const createClaudeAgentSdkSessionStore = ({
       attempt(() => listener(session));
     }
     if (failures.length > 0) {
-      const failure = new AggregateError(failures, "Failed to close Claude session resources.");
-      closed.set(session, failure);
+      const failure = new ClaudeSessionLifecycleError("claudeRuntime.closeSession", failures);
+      lifecycle.closeFailure = failure;
       throw failure;
     }
   };
@@ -105,10 +119,11 @@ export const createClaudeAgentSdkSessionStore = ({
     publish = emit,
     timestamp = now(),
   ): void => {
+    const lifecycle = lifecycleFor(session);
     const current = sessions.get(session.externalSessionId);
-    if ((current && current !== session) || terminalAdmissions.get(session)?.() === false) return;
-    if (finished.has(session)) return;
-    finished.add(session);
+    if ((current && current !== session) || lifecycle.canFinish?.() === false) return;
+    if (lifecycle.terminalAttempted) return;
+    lifecycle.terminalAttempted = true;
     publish?.(session, {
       type: "session_finished",
       externalSessionId: session.externalSessionId,
@@ -118,22 +133,24 @@ export const createClaudeAgentSdkSessionStore = ({
   };
   const settle: ClaudeSessionStore["settle"] = (session) =>
     Effect.suspend(() => {
-      const consumer = consumers.get(session);
+      const { consumer } = lifecycleFor(session);
       return settleClaudeSessionSteps([
         Effect.try({
           try: () => close(session),
-          catch: (cause) => toHostOperationError(cause, "claudeRuntime.closeSession"),
+          catch: (cause) => new ClaudeSessionLifecycleError("claudeRuntime.closeSession", [cause]),
         }),
         consumer
           ? Fiber.join(consumer)
           : settleClaudeSessionSteps([
               Effect.tryPromise({
                 try: () => session.query.return().then(() => {}),
-                catch: (cause) => toHostOperationError(cause, "claudeRuntime.returnQuery"),
+                catch: (cause) =>
+                  new ClaudeSessionLifecycleError("claudeRuntime.returnQuery", [cause]),
               }),
               Effect.tryPromise({
                 try: () => flushClaudeLiveContextUsageRefresh(session),
-                catch: (cause) => toHostOperationError(cause, "claudeRuntime.flushContextUsage"),
+                catch: (cause) =>
+                  new ClaudeSessionLifecycleError("claudeRuntime.flushContextUsage", [cause]),
               }),
             ]),
       ]);
@@ -154,7 +171,7 @@ export const createClaudeAgentSdkSessionStore = ({
           try: () => {
             if (wasAttached) finish(session, message);
           },
-          catch: (cause) => toHostOperationError(cause, "claudeRuntime.finishSession"),
+          catch: (cause) => new ClaudeSessionLifecycleError("claudeRuntime.finishSession", [cause]),
         }),
       ]);
     }).pipe(
@@ -173,8 +190,9 @@ export const createClaudeAgentSdkSessionStore = ({
     finish,
     settle,
     ownConsumption: (session, fiber, canFinish) => {
-      consumers.set(session, fiber);
-      terminalAdmissions.set(session, canFinish);
+      const lifecycle = lifecycleFor(session);
+      lifecycle.consumer = fiber;
+      lifecycle.canFinish = canFinish;
       activeConsumers.add(session);
       fiber.addObserver(() => activeConsumers.delete(session));
     },

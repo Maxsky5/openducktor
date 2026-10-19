@@ -1,6 +1,20 @@
 import { Cause, Effect, Exit } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 
+/** Marks lifecycle-owned wrappers so aggregation keeps native errors intact. */
+export class ClaudeSessionLifecycleError extends HostOperationError {
+  constructor(
+    operation: string,
+    readonly causes: ReadonlyArray<unknown>,
+  ) {
+    super({
+      operation,
+      message: causes.map(errorMessage).join("\n"),
+      cause: causes.length === 1 ? causes[0] : new AggregateError(causes, "Claude session failed."),
+    });
+  }
+}
+
 /** Run every cleanup step and retain failures in their original order. */
 export const settleClaudeSessionSteps = <E>(steps: ReadonlyArray<Effect.Effect<void, E>>) =>
   Effect.gen(function* () {
@@ -17,10 +31,8 @@ export const settleClaudeSessionSteps = <E>(steps: ReadonlyArray<Effect.Effect<v
 export const claudeSessionLifecycleFailure = (cause: Cause.Cause<unknown>, operation: string) => {
   const errors: unknown[] = [];
   const collect = (cause: unknown): void => {
-    if (cause instanceof HostOperationError && cause.cause !== undefined) {
-      collect(cause.cause);
-    } else if (cause instanceof AggregateError) {
-      cause.errors.forEach(collect);
+    if (cause instanceof ClaudeSessionLifecycleError) {
+      cause.causes.forEach(collect);
     } else if (!errors.includes(cause)) {
       errors.push(cause);
     }
@@ -30,9 +42,5 @@ export const claudeSessionLifecycleFailure = (cause: Cause.Cause<unknown>, opera
     else if (Cause.isDieReason(reason)) collect(reason.defect);
     else collect(new Error("Claude session lifecycle was interrupted."));
   }
-  return new HostOperationError({
-    operation,
-    message: errors.map(errorMessage).join("\n"),
-    cause: errors.length === 1 ? errors[0] : new AggregateError(errors, "Claude session failed."),
-  });
+  return new ClaudeSessionLifecycleError(operation, errors);
 };
