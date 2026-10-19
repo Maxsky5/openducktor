@@ -15,6 +15,7 @@ import {
   failure,
 } from "./test-support/workflow-launch-harness";
 import { createNodeSessionLaunchControls } from "../../composition/node/node-session-launch-controls";
+import { agentSessionRefKey } from "@openducktor/core";
 
 const runtimeKinds: RuntimeKind[] = ["opencode", "codex", "claude"];
 const createdRef: AgentSessionLiveRef = {
@@ -52,6 +53,72 @@ const reuseRequest = (
     decision: { startMode: "reuse", sourceSession },
   },
   instruction: { kind: "message", parts },
+});
+
+test.each(runtimeKinds)("Autopilot queues a message for a working %s session", async (kind) => {
+  const h = await createLaunchHarness(kind);
+  h.setTaskStatus("in_progress");
+  h.setQuestionAfterSend(false);
+  const source = h.addTaskSession("builder", {
+    live: true,
+    working: true,
+    pendingQuestion: { blocking: false },
+  });
+  const parts = [{ kind: "text" as const, text: "Review the QA feedback." }];
+  const result = await Effect.runPromise(
+    h.launchAutomatic({
+      ...requestFor(kind),
+      policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
+      instruction: { kind: "message", parts },
+    }),
+  );
+  expect(result).toMatchObject({ status: "completed", startMode: "reuse" });
+  expect(result.acceptedMessage).toBeUndefined();
+  expect(result.failure).toBeUndefined();
+  expect(result.unsentInstruction).toBeUndefined();
+  expect(h.envelopes).not.toContainEqual(
+    expect.objectContaining({
+      type: "session_operation_updated",
+      observation: expect.objectContaining({ failure: expect.anything() }),
+    }),
+  );
+  expect(h.messageDelivery.listQueues("/repo")[0]?.entries).toEqual([
+    expect.objectContaining({ parts, state: "queued" }),
+  ]);
+  expect(h.starts).toEqual([]);
+  expect(h.resumes).toEqual([]);
+  await h.runBackground();
+  expect(h.sends).toHaveLength(1);
+
+  const ref = { repoPath: "/repo", ...source };
+  const live = h.live.get(agentSessionRefKey(ref))!;
+  live.activity = "idle";
+  live.pendingQuestions = [{ requestId: "late-question", questions: [], blocking: false }];
+  h.setTaskStatus("blocked");
+  h.messageDelivery.observeChanges([
+    {
+      type: "transcript_event",
+      event: {
+        type: "session_idle",
+        sessionRef: ref,
+        externalSessionId: ref.externalSessionId,
+        timestamp,
+        turnOutcome: "completed",
+      },
+    },
+  ]);
+  await h.runBackground();
+  expect(h.sends).toHaveLength(2);
+  expect(h.sends[1]).toMatchObject({
+    ...ref,
+    sessionScope: builderScope,
+    parts,
+    delivery: "new_turn",
+  });
+  expect(h.sends[1]?.systemPrompt).toContain("Task context");
+  expect(h.sends[1]?.systemPrompt).toContain("- currentStatus: blocked");
+  expect(h.sends[1]?.resolvedQuestionRequestIds).toEqual(["late-question"]);
+  expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
 });
 
 test.each(["codex", "claude", "opencode"] as const)(
@@ -281,18 +348,28 @@ test("a reuse launch refuses a source session that waits for blocking input", as
   expect(h.sends).toEqual([]);
 });
 
-test("a reuse launch answers open background questions with its first message", async () => {
-  const h = await createLaunchHarness();
-  h.setTaskStatus("in_progress");
-  const sourceSession = h.addTaskSession("builder", {
-    live: true,
-    pendingQuestion: { blocking: false },
-  });
-  const result = await Effect.runPromise(h.service.launch(reuseRequest(sourceSession)));
-  expect(result.status).toBe("completed");
-  expect(h.sends).toHaveLength(1);
-  expect(h.sends[0]?.resolvedQuestionRequestIds).toEqual(["open-question"]);
-});
+test.each(["manual", "automatic"] as const)(
+  "a %s reuse launch answers open background questions with its first message",
+  async (policy) => {
+    const h = await createLaunchHarness();
+    h.setTaskStatus("in_progress");
+    const sourceSession = h.addTaskSession("builder", {
+      live: true,
+      pendingQuestion: { blocking: false },
+    });
+    const result = await Effect.runPromise(
+      policy === "manual"
+        ? h.service.launch(reuseRequest(sourceSession))
+        : h.launchAutomatic({
+            ...requestFor("codex"),
+            policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
+          }),
+    );
+    expect(result.status).toBe("completed");
+    expect(h.sends).toHaveLength(1);
+    expect(h.sends[0]?.resolvedQuestionRequestIds).toEqual(["open-question"]);
+  },
+);
 
 test("a second manual launch for the same task waits for the first and both complete", async () => {
   const h = await createLaunchHarness();

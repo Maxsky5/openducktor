@@ -93,6 +93,7 @@ const fixture = (accepted?: AcceptedAgentInput) => {
   };
   const service = createSessionLaunchService<Request, SessionLaunchResult>({
     runtime,
+    sendInstruction: (_request, input, options) => runtime.sendUserMessage(input, options),
     initial: () => ({ workspaceId: "workspace", repoPath: "/repo", status: "completed" }),
     key: (request) => request.key,
     run: (attempt) =>

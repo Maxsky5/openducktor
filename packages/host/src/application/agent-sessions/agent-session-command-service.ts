@@ -369,11 +369,17 @@ export const createAgentSessionCommandService = ({
                 message:
                   "The running turn ended before steering. Send a new message with current context.",
               });
-            const request = {
+            const request: AgentSessionControlSendInput = {
               ...content,
               delivery: steering ? ("steer" as const) : ("new_turn" as const),
               systemPrompt: steering ? undefined : (systemPrompt ?? content.systemPrompt),
             };
+            if (ref.sessionScope.kind === "workflow" && !steering && current.type === "live") {
+              const questionIds = current.session.pendingQuestions
+                .filter((question) => question.blocking === false)
+                .map((question) => question.requestId);
+              if (questionIds.length > 0) request.resolvedQuestionRequestIds = questionIds;
+            }
             const guarded = yield* owner.options();
             const accepted = yield* runtime.sendUserMessage(request, {
               assertCurrent: guarded.assertCurrent,

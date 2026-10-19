@@ -71,7 +71,6 @@ export const createWorkflowLaunchService = (
       };
       let session: AgentSessionControlSummary;
       let publish: Effect.Effect<void, TaskServiceError> | null = null;
-      let resolvedQuestionRequestIds: string[] = [];
       if (decision.startMode === "fresh") {
         const startInput: AgentWorkflowSessionStartInput = {
           repoPath,
@@ -99,13 +98,7 @@ export const createWorkflowLaunchService = (
         const { source, live } = decision;
         session = { ...decision.sourceSession, startedAt: source.startedAt, status: "idle" };
         attempt.reusedSession(repoPath, session);
-        // Preparation rejects blocking input. The first instruction answers open background
-        // questions.
-        if (live.type === "live")
-          resolvedQuestionRequestIds = live.session.pendingQuestions
-            .filter((question) => question.blocking === false)
-            .map((question) => question.requestId);
-        else {
+        if (live.type !== "live") {
           const resumeInput: AgentSessionControlResumeInput &
             import("@openducktor/core").AgentWorkStartOptions = {
             repoPath,
@@ -148,8 +141,6 @@ export const createWorkflowLaunchService = (
         parts,
         delivery: "new_turn",
       };
-      if (resolvedQuestionRequestIds.length > 0)
-        input.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
       yield* attempt.send(
         input,
         request.instruction.kind === "message" ? request.instruction.parts : parts,
@@ -157,6 +148,23 @@ export const createWorkflowLaunchService = (
     });
   return createSessionLaunchService<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>({
     runtime: deps.runtime,
+    sendInstruction: (request, input, options) => {
+      if (request.policy.kind !== "automatic") return deps.runtime.sendUserMessage(input, options);
+      return deps.messageDelivery
+        .submit({
+          repoPath: input.repoPath,
+          runtimeKind: input.runtimeKind,
+          workingDirectory: input.workingDirectory,
+          externalSessionId: input.externalSessionId,
+          sessionScope: input.sessionScope,
+          parts: input.parts,
+          submissionId: crypto.randomUUID(),
+          mode: "default",
+        })
+        .pipe(
+          Effect.map((result) => (result.kind === "accepted" ? result.acceptedMessage : undefined)),
+        );
+    },
     initial: (request) => ({
       workspaceId: request.workspaceId,
       repoPath: request.repoPath,

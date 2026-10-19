@@ -326,6 +326,7 @@ export const assembleNodeEffectHostCommandRouter = (
       settings: workspaceSettingsService,
     }),
     workflowLaunch: {
+      messageDelivery,
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
       adapterRegistry: liveSessionAdapterRegistry,
     },
@@ -374,7 +375,6 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeRegistry,
     taskReader: taskStore,
   });
-  const mcpBridge = resolvedMcpHostBridge;
   const workspaceChats = createNodeWorkspaceSessionServices({
     terminalService,
     lifecycle: taskSessionLifecycleCoordinator,
@@ -423,7 +423,7 @@ export const assembleNodeEffectHostCommandRouter = (
     shutdownWorkspaceFiles: () =>
       workspaceFilesService.dispose().pipe(Effect.andThen(git.releaseReadCaptures())),
     lifecycleLogger,
-    mcpHostBridge: mcpBridge,
+    mcpHostBridge: resolvedMcpHostBridge,
     runtimeRegistry,
     initializeRuntimes: hostRuntimeService.initialize,
     startupSweep,
@@ -478,7 +478,7 @@ export const assembleNodeEffectHostCommandRouter = (
       toolDiscovery,
     }),
     ...createRuntimeCommandHandlers(taskSessionStopService, hostRuntimeService, () =>
-      mcpBridge.status(),
+      resolvedMcpHostBridge.status(),
     ),
     ...createSystemDiagnosticsCommandHandlers(systemDiagnosticsService),
     ...createSystemPlatformCommandHandlers(),

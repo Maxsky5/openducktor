@@ -1,6 +1,6 @@
 import { buildAgentSystemPrompt, mergePromptOverrides } from "@openducktor/core";
 import { commandPreparationFixture } from "./command-preparation-fixture";
-import { noMessageQueues } from "../../../test-support/message-queue-observer-test-double";
+import { createAgentMessageDeliveryService } from "../agent-message-delivery-service";
 import { createTaskSessionOperations } from "../task-session-operations";
 import { createWorktreeActionRunner } from "../../actions/worktree-action-runner";
 import { createRuntimeRegistryPort } from "../../tasks/test-support/task-workflow-harness";
@@ -49,6 +49,7 @@ import type { AgentSessionSendOptions } from "../../../ports/agent-session-live-
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
+  AgentSessionBusyError,
 } from "../../../ports/agent-session-send-error";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 
@@ -214,6 +215,11 @@ export const createLaunchHarness = async (
         Effect.gen(function* () {
           sends.push(input);
           sendOptions.push(options);
+          if (live.get(agentSessionRefKey(input))?.activity === "running")
+            return yield* new AgentSessionBusyError({
+              message: "The session is still working.",
+              cause: new Error("Native turn is active"),
+            });
           options?.onSent?.();
           yield* Deferred.succeed(sendEntered, undefined);
           yield* sendGate;
@@ -256,8 +262,23 @@ export const createLaunchHarness = async (
   );
   const runtimeAdmission = createTestRuntimeAdmissionGate();
   runtimeAdmission.open(runtimeKind);
+  const background: Effect.Effect<void>[] = [];
+  const messageDelivery = createAgentMessageDeliveryService({
+    submissionFingerprint: JSON.stringify,
+    canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+    prepare: (content) => commands.prepareUserMessage(content),
+    runOperation: (target, work, submissionId) =>
+      commands.runMessageOperation(target, work, submissionId),
+    commitQueueResume: (commit) => commands.commitQueueResume(commit),
+    prepareQueueResume: (content) => commands.prepareQueueResume(content),
+    send: (input) => commands.sendUserMessage(input),
+    steeringAvailability: () => Effect.succeed({ available: true }),
+    publish: (event) => envelopes.push(event),
+    runInBackground: (effect) => background.push(effect),
+    now: () => timestamp,
+  });
   const runtime = createAgentSessionLiveStateService({
-    messageQueues: noMessageQueues,
+    messageQueues: messageDelivery,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission,
     publish: (event) => envelopes.push(event),
@@ -479,6 +500,7 @@ export const createLaunchHarness = async (
     },
   });
   const service = createWorkflowLaunchService({
+    messageDelivery,
     resolveParts: (parts) => Effect.succeed(parts),
     settings: workspaceSettings,
     startPreparation: preparation,
@@ -566,6 +588,10 @@ export const createLaunchHarness = async (
         policy: { ...request.policy, startCheck: Effect.succeed({ start: true as const }) },
       }),
     commands,
+    messageDelivery,
+    runBackground: async () => {
+      while (background.length > 0) await Effect.runPromise(background.shift()!);
+    },
     sendEntered,
     lifecycle,
     enablePullRequests: (enabled = true) => {
@@ -608,6 +634,7 @@ export const createLaunchHarness = async (
         role?: AgentRole;
         selectedModel?: AgentSessionModelSelection;
         live?: boolean;
+        working?: boolean;
         pendingQuestion?: { blocking: boolean };
       } = {},
     ) => {
@@ -622,6 +649,7 @@ export const createLaunchHarness = async (
       });
       if (options.live) {
         const snapshot = liveSnapshot("/repo", workingDirectory, externalSessionId, "Existing");
+        if (options.working) snapshot.activity = "running";
         if (options.pendingQuestion)
           snapshot.pendingQuestions = [
             { requestId: "open-question", questions: [], ...options.pendingQuestion },

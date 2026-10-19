@@ -1,5 +1,7 @@
 import { SessionOperationError } from "../../ports/session-operation-error";
 import type {
+  AcceptedAgentInput,
+  AgentSessionControlSendInput,
   AgentSessionControlSummary,
   AgentSessionLiveRef,
   AgentSessionUserMessagePart,
@@ -7,7 +9,8 @@ import type {
 } from "@openducktor/contracts";
 import { sessionLaunchFailureMessage } from "@openducktor/core";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
-import { errorMessage, HostValidationError } from "../../effect/host-errors";
+import { errorMessage, type HostError, HostValidationError } from "../../effect/host-errors";
+import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import { createSerialGate } from "../../effect/serial-gate";
 import {
   AgentSessionMessageAcceptedError,
@@ -56,8 +59,14 @@ type Attempt<Request, Result extends SessionLaunchResult> = {
 export const createSessionLaunchService = <Request, Result extends SessionLaunchResult>(deps: {
   runtime: Pick<
     SessionLaunchRuntimePort,
-    "sendUserMessage" | "holdWorkflowLaunch" | "stopSession" | "reportLaunchFailure"
+    "holdWorkflowLaunch" | "stopSession" | "reportLaunchFailure"
   >;
+  /** A queued instruction has no native acceptance receipt yet. */
+  sendInstruction: (
+    request: Request,
+    input: AgentSessionControlSendInput,
+    options: AgentSessionSendOptions,
+  ) => Effect.Effect<AcceptedAgentInput | undefined, HostError>;
   initial: (request: Request) => Result;
   key: (request: Request) => string;
   target?: (request: Request) => AgentSessionLiveRef | undefined;
@@ -116,7 +125,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         let sent = false;
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
         const reply = yield* Effect.result(
-          deps.runtime.sendUserMessage(input, {
+          deps.sendInstruction(attempt.request, input, {
             assertCurrent: () => assertCurrent(attempt),
             onSent: () => {
               sent = true;
@@ -124,7 +133,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           }),
         );
         if (reply._tag === "Success") {
-          attempt.result.acceptedMessage = reply.success;
+          if (reply.success) attempt.result.acceptedMessage = reply.success;
           return;
         }
         const failure =

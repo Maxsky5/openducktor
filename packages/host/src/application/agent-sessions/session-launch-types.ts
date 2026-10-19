@@ -41,6 +41,8 @@ export type SessionLaunchContext<Request, Result extends SessionLaunchResult> = 
    * Sends the first instruction. `instruction` holds the request parts before attachment
    * resolution. When the runtime did not get the send or rejected it, the failed launch returns
    * `instruction` as `unsentInstruction`.
+   * An automatic launch can complete with its instruction in the host message queue. A queued
+   * launch result omits `acceptedMessage`.
    */
   send: (
     input: AgentSessionControlSendInput,
