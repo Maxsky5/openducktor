@@ -62,6 +62,10 @@ export const createLaunchHarness = async (
     holdRelease?: Effect.Effect<void>;
     /** Pauses before the worktree preparation starts. */
     beforePrepare?: Effect.Effect<void>;
+    beforeMessageOperation?: Effect.Effect<void>;
+    beforeMessagePreparation?: Effect.Effect<void>;
+    beforeSendContext?: Effect.Effect<void>;
+    keepSessionOnStop?: boolean;
     forkSourceRead?: Effect.Effect<void>;
     nativeStart?: Effect.Effect<void>;
     nativeFork?: Effect.Effect<void>;
@@ -213,6 +217,11 @@ export const createLaunchHarness = async (
         }),
       sendUserMessage: (input, options) =>
         Effect.gen(function* () {
+          yield* Effect.try({
+            try: () => options?.assertCurrent?.(),
+            catch: (cause) =>
+              cause instanceof HostValidationError ? cause : failure(String(cause)),
+          });
           sends.push(input);
           sendOptions.push(options);
           if (live.get(agentSessionRefKey(input))?.activity === "running")
@@ -255,7 +264,11 @@ export const createLaunchHarness = async (
       stopSession: (ref) =>
         Effect.sync(() => {
           stops.push(ref.externalSessionId);
-          live.delete(agentSessionRefKey(ref));
+          const session = live.get(agentSessionRefKey(ref));
+          if (session && gates.keepSessionOnStop) {
+            session.activity = "idle";
+            session.pendingQuestions = [];
+          } else live.delete(agentSessionRefKey(ref));
         }),
       releaseSession: () => Effect.void,
     },
@@ -266,12 +279,17 @@ export const createLaunchHarness = async (
   const messageDelivery = createAgentMessageDeliveryService({
     submissionFingerprint: JSON.stringify,
     canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
-    prepare: (content) => commands.prepareUserMessage(content),
+    prepare: (content) =>
+      (gates.beforeMessagePreparation ?? Effect.void).pipe(
+        Effect.andThen(commands.prepareUserMessage(content)),
+      ),
     runOperation: (target, work, submissionId) =>
-      commands.runMessageOperation(target, work, submissionId),
+      (gates.beforeMessageOperation ?? Effect.void).pipe(
+        Effect.andThen(commands.runMessageOperation(target, work, submissionId)),
+      ),
     commitQueueResume: (commit) => commands.commitQueueResume(commit),
     prepareQueueResume: (content) => commands.prepareQueueResume(content),
-    send: (input) => commands.sendUserMessage(input),
+    send: (input, options) => commands.sendUserMessage(input, options),
     steeringAvailability: () => Effect.succeed({ available: true }),
     publish: (event) => envelopes.push(event),
     runInBackground: (effect) => background.push(effect),
@@ -441,8 +459,9 @@ export const createLaunchHarness = async (
     turnPreparation: {
       ...commandPreparationFixture,
       context: (target) =>
-        Effect.succeed(
-          buildAgentSystemPrompt({
+        Effect.gen(function* () {
+          yield* gates.beforeSendContext ?? Effect.void;
+          return buildAgentSystemPrompt({
             role: target.sessionScope.kind === "workflow" ? target.sessionScope.role : "build",
             task: {
               taskId: task.id,
@@ -456,8 +475,8 @@ export const createLaunchHarness = async (
               globalOverrides: settings.globalPromptOverrides,
               repoOverrides: config.promptOverrides,
             }),
-          }),
-        ),
+          });
+        }),
     },
     readSessionRootRefs: (repoPath) =>
       tasks.agentSessionsList({ repoPath, taskId: "task" }).pipe(
@@ -488,7 +507,7 @@ export const createLaunchHarness = async (
             new HostOperationError({ operation: "test.persist-model", message: cause.message }),
         ),
       ),
-    pauseForStop: () => Effect.void,
+    pauseForStop: messageDelivery.pauseForStop,
     repositoryPolicy: {
       run: unexpected("repository operation"),
       runSend: unexpected("repository send"),

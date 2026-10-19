@@ -751,6 +751,93 @@ test("shutdown cancels a reused session's pending speed change", async () => {
   expect(h.stops).toEqual([]);
 });
 
+test("Stop cancels an automatic submission waiting before operation ownership", async () => {
+  const wait = await pausePoint();
+  const h = await createLaunchHarness("opencode", {
+    beforeMessageOperation: wait.pause,
+    keepSessionOnStop: true,
+  });
+  h.setTaskStatus("in_progress");
+  const source = h.addTaskSession("builder", { live: true });
+  const ref = { repoPath: "/repo", ...source };
+  const { commands } = createNodeSessionLaunchControls(h.commands, [h.service]);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const launch = yield* Effect.forkChild(
+        h.launchAutomatic({
+          ...requestFor("opencode"),
+          policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
+        }),
+      );
+      yield* Deferred.await(wait.entered);
+      yield* commands.stopSession(ref);
+      expect(h.sends).toEqual([]);
+      yield* wait.open;
+      const result = yield* Fiber.join(launch);
+      expect(result.status).toBe("canceled");
+      expect(result.acceptedMessage).toBeUndefined();
+    }).pipe(Effect.ensuring(wait.open)),
+  );
+  expect(h.sends).toEqual([]);
+  expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
+});
+
+test.each(["queue admission", "native dispatch"] as const)(
+  "canceling an automatic launch during preparation prevents %s",
+  async (stage) => {
+    const wait = await pausePoint();
+    let preparingLaunch = false;
+    const pauseLaunch = Effect.suspend(() => (preparingLaunch ? wait.pause : Effect.void));
+    const h = await createLaunchHarness(
+      "opencode",
+      stage === "queue admission"
+        ? { beforeMessagePreparation: pauseLaunch }
+        : { beforeSendContext: pauseLaunch },
+    );
+    h.setTaskStatus("in_progress");
+    const source = h.addTaskSession("builder", {
+      live: true,
+      working: stage === "queue admission",
+    });
+    const ref = { repoPath: "/repo", ...source };
+    const target = { ...ref, sessionScope: builderScope };
+    if (stage === "queue admission") {
+      await Effect.runPromise(
+        h.messageDelivery.submit({
+          ...target,
+          submissionId: "earlier-message",
+          mode: "default",
+          parts: [{ kind: "text", text: "Earlier message" }],
+        }),
+      );
+    }
+    const sendsBefore = h.sends.length;
+    preparingLaunch = true;
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const launch = yield* Effect.forkChild(
+          h.launchAutomatic({
+            ...requestFor("opencode"),
+            policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
+          }),
+        );
+        yield* Deferred.await(wait.entered);
+        h.service.cancelSessionLaunches(ref);
+        yield* wait.open;
+        const result = yield* Fiber.join(launch);
+        expect(result.status).toBe("canceled");
+        expect(result.acceptedMessage).toBeUndefined();
+      }).pipe(Effect.ensuring(wait.open)),
+    );
+    expect(h.sends).toHaveLength(sendsBefore);
+    expect(
+      h.messageDelivery
+        .listQueues("/repo")
+        .flatMap((queue) => queue.entries.map((entry) => entry.submissionId)),
+    ).toEqual(stage === "queue admission" ? ["earlier-message"] : []);
+  },
+);
+
 test.each(["before", "during"] as const)(
   "Stop %s the first send cancels a fresh launch and stops its session",
   async (point) => {

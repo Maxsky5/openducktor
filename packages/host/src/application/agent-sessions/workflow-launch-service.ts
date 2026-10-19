@@ -151,16 +151,19 @@ export const createWorkflowLaunchService = (
     sendInstruction: (request, input, options) => {
       if (request.policy.kind !== "automatic") return deps.runtime.sendUserMessage(input, options);
       return deps.messageDelivery
-        .submit({
-          repoPath: input.repoPath,
-          runtimeKind: input.runtimeKind,
-          workingDirectory: input.workingDirectory,
-          externalSessionId: input.externalSessionId,
-          sessionScope: input.sessionScope,
-          parts: input.parts,
-          submissionId: crypto.randomUUID(),
-          mode: "default",
-        })
+        .submit(
+          {
+            repoPath: input.repoPath,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.externalSessionId,
+            sessionScope: input.sessionScope,
+            parts: input.parts,
+            submissionId: crypto.randomUUID(),
+            mode: "default",
+          },
+          options,
+        )
         .pipe(
           Effect.map((result) => (result.kind === "accepted" ? result.acceptedMessage : undefined)),
         );

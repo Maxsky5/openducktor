@@ -166,7 +166,7 @@ export const assembleNodeEffectHostCommandRouter = (
       agentSessionCommandService.runMessageOperation(target, work, submissionId),
     commitQueueResume: (commit) => agentSessionCommandService.commitQueueResume(commit),
     prepareQueueResume: (content) => agentSessionCommandService.prepareQueueResume(content),
-    send: (input) => launchControls.commands.sendUserMessage(input),
+    send: (input, options) => launchControls.commands.sendUserMessage(input, options),
     runtimeRegistry: { status: (kind) => runtimeRegistry.status(kind) },
     runtimeDefinitions: runtimeDefinitionsService,
   });
