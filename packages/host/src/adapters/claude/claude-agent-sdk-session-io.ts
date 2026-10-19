@@ -1,19 +1,14 @@
-import { Effect, Exit, Fiber } from "effect";
-import {
-  claudeSessionLifecycleFailure,
-  ClaudeSessionLifecycleError,
-  settleClaudeSessionSteps,
-} from "./claude-agent-sdk-session-lifecycle";
-import type { AgentWorkStartGuard } from "@openducktor/core";
 import { AbortError, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AcceptedAgentUserMessage,
   type AgentModelSelection,
+  type AgentWorkStartGuard,
   AgentSessionMessageRefusedError,
   AgentSessionTurnActiveError,
   classifySystemSlashCommandInvocation,
   type SendAgentUserMessageInput,
 } from "@openducktor/core";
+import { Effect, Exit, Fiber } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
 import {
@@ -36,6 +31,11 @@ import {
   rejectPendingAdmissions,
   waitForUserMessageAdmission,
 } from "./claude-agent-sdk-user-message-admission";
+import {
+  ClaudeSessionError,
+  runAllSteps,
+  toSessionError,
+} from "./claude-agent-sdk-session-lifecycle";
 import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
 import { toClaudeDisplayParts, toClaudeUserMessageEvent } from "./claude-agent-sdk-session-shape";
 import type {
@@ -48,32 +48,6 @@ import type {
 } from "./claude-agent-sdk-types";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
-const assertClaudeSessionAcceptingMessages = (session: ClaudeSession): void => {
-  if (session.activity !== "stopped") {
-    return;
-  }
-  throw new HostValidationError({
-    field: "externalSessionId",
-    message:
-      "Claude Agent SDK session is no longer accepting messages after its SDK stream stopped.",
-    details: {
-      externalSessionId: session.externalSessionId,
-      activity: session.activity,
-    },
-  });
-};
-
-const pushClaudeSdkUserMessage = (session: ClaudeSession, message: SDKUserMessage): void => {
-  session.activeSdkUserTurnCount += 1;
-  session.sdkState = "running";
-  try {
-    session.queue.push(message);
-  } catch (error) {
-    session.activeSdkUserTurnCount -= 1;
-    throw error;
-  }
-};
-
 export const applyClaudeSessionModel = async (
   session: ClaudeSession,
   model: AgentModelSelection | null | undefined,
@@ -81,7 +55,7 @@ export const applyClaudeSessionModel = async (
   workStartGuard?: AgentWorkStartGuard,
   onWorkIssued?: () => void,
 ): Promise<void> => {
-  assertClaudeSessionAcceptingMessages(session);
+  assertAcceptingMessages(session);
   const nextModel = model ?? undefined;
   assertClaudeSessionModelUpdateSupported(session, nextModel);
 
@@ -99,7 +73,7 @@ export const applyClaudeSessionModel = async (
       const changing = session.query.setModel(nextModel?.modelId);
       onWorkIssued?.();
       await changing;
-      assertClaudeSessionAcceptingMessages(session);
+      assertAcceptingMessages(session);
     }
     if (settingsChanged) {
       workStartGuard?.assertCurrent();
@@ -108,7 +82,7 @@ export const applyClaudeSessionModel = async (
       );
       onWorkIssued?.();
       await changing;
-      assertClaudeSessionAcceptingMessages(session);
+      assertAcceptingMessages(session);
     }
   } catch (cause) {
     if (isClaudeSessionStopped(session)) {
@@ -149,19 +123,21 @@ export const applyClaudeSessionModel = async (
   session.model = nextModel;
 };
 
+/** Own the native stream through cleanup and report failures to startup and the background hook. */
 export const consumeClaudeSession = (input: {
   emit: ClaudeAgentSdkEventEmitter;
   now: () => string;
   onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   onContinuationAdmission?: () => void;
   session: ClaudeSession;
-  sessionStore: Pick<ClaudeSessionStore, "close" | "get" | "finish" | "ownConsumption">;
+  sessionStore: Pick<ClaudeSessionStore, "close" | "get" | "finish" | "ownConsumer">;
 }): Promise<void> => {
   const { emit, now, onBackgroundFailure, onContinuationAdmission, session, sessionStore } = input;
   const isLiveSession = (): boolean => sessionStore.get(session.externalSessionId) === session;
   let continuationAdmitted = onContinuationAdmission === undefined;
   const operation = "claudeRuntime.consumeSession";
-  const failure = (cause: unknown) => new ClaudeSessionLifecycleError(operation, [cause]);
+  const wrapError = (cause: unknown): ClaudeSessionError =>
+    new ClaudeSessionError(operation, [cause]);
   const emitEvent = (event: ClaudeAgentSdkEvent): void => emit(session, event);
   const stream = Effect.tryPromise({
     try: async () => {
@@ -178,7 +154,7 @@ export const consumeClaudeSession = (input: {
         }
       }
     },
-    catch: failure,
+    catch: wrapError,
   }).pipe(
     Effect.catch((cause) =>
       session.abortController.signal.aborted && cause.cause instanceof AbortError
@@ -190,34 +166,34 @@ export const consumeClaudeSession = (input: {
     Effect.void,
     () =>
       Effect.gen(function* () {
-        const streamed = yield* Effect.exit(stream);
+        const exit = yield* Effect.exit(stream);
         session.activity = "stopped";
-        yield* settleClaudeSessionSteps([
-          streamed,
+        yield* runAllSteps([
+          exit,
           Effect.try({
             try: () => {
-              if (Exit.isFailure(streamed) && isLiveSession() && continuationAdmitted) {
+              if (Exit.isFailure(exit) && isLiveSession() && continuationAdmitted) {
                 emitEvent({
                   type: "session_error",
                   externalSessionId: session.externalSessionId,
                   timestamp: now(),
-                  message: claudeSessionLifecycleFailure(streamed.cause, operation).message,
+                  message: toSessionError(exit.cause, operation).message,
                 });
               }
             },
-            catch: failure,
+            catch: wrapError,
           }),
           Effect.tryPromise({
             try: () => flushClaudeLiveContextUsageRefresh(session),
-            catch: failure,
+            catch: wrapError,
           }),
           Effect.try({
             try: () => {
-              // An unadmitted replacement cannot terminalize the attached session.
+              // A replacement must admit its continuation before it can finish the attached session.
               if (isLiveSession() && continuationAdmitted) {
                 sessionStore.finish(
                   session,
-                  Exit.isFailure(streamed)
+                  Exit.isFailure(exit)
                     ? "Claude Agent SDK session stream stopped after an error."
                     : "Claude Agent SDK session stream ended.",
                   emit,
@@ -225,33 +201,32 @@ export const consumeClaudeSession = (input: {
                 );
               }
             },
-            catch: failure,
+            catch: wrapError,
           }),
         ]);
       }),
     () =>
-      settleClaudeSessionSteps([
-        Effect.try({ try: () => sessionStore.close(session), catch: failure }),
-        Effect.tryPromise({ try: () => session.query.return().then(() => {}), catch: failure }),
+      runAllSteps([
+        Effect.try({ try: () => sessionStore.close(session), catch: wrapError }),
+        Effect.tryPromise({ try: () => session.query.return().then(() => {}), catch: wrapError }),
         Effect.try({
           try: () =>
             rejectPendingAdmissions(
               session,
               new Error("The Claude Agent SDK stream ended before it acknowledged the message."),
             ),
-          catch: failure,
+          catch: wrapError,
         }),
       ]),
   ).pipe(
-    Effect.catchCause((cause) => Effect.fail(claudeSessionLifecycleFailure(cause, operation))),
+    Effect.catchCause((cause) => Effect.fail(toSessionError(cause, operation))),
     Effect.tapError(onBackgroundFailure),
     Effect.withSpan(operation),
   );
-  // The SDK boundary starts the consumer; the store owns it through shutdown.
   const consumer = Effect.runFork(program);
-  sessionStore.ownConsumption(session, consumer, () => continuationAdmitted);
+  sessionStore.ownConsumer(session, consumer, () => continuationAdmitted);
   const completion = Effect.runPromise(Fiber.join(consumer));
-  // The owned fiber reports failures even when startup no longer awaits this Promise.
+  // Startup may stop awaiting this Promise; the consumer still reports its failure.
   void completion.catch(() => {});
   return completion;
 };
@@ -273,7 +248,7 @@ export const sendClaudeUserMessage = async (input: {
   const { emit, messageInput, now, randomId, session } = input;
   const isManualCompaction =
     classifySystemSlashCommandInvocation(messageInput.parts).kind === "manual_session_compaction";
-  assertClaudeSessionAcceptingMessages(session);
+  assertAcceptingMessages(session);
   const timestamp = now();
   const messageId = randomId();
   if (!isClaudeMessageUuid(messageId)) {
@@ -285,7 +260,7 @@ export const sendClaudeUserMessage = async (input: {
   }
   const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
   const message = textFromContentBlocks(sdkMessage.message.content);
-  assertClaudeSessionAcceptingMessages(session);
+  assertAcceptingMessages(session);
   const displayParts = toClaudeDisplayParts(messageInput.parts);
   sdkMessage.uuid = messageId;
   sdkMessage.session_id = session.externalSessionId;
@@ -301,7 +276,7 @@ export const sendClaudeUserMessage = async (input: {
     if (messageInput.delivery === "new_turn") {
       throw new AgentSessionTurnActiveError(session.externalSessionId);
     }
-    return steerClaudeUserMessage({
+    return steerUserMessage({
       acceptedMessage,
       sdkMessage,
       session,
@@ -331,7 +306,7 @@ export const sendClaudeUserMessage = async (input: {
   try {
     input.assertCurrent?.();
     messageInput.workStartGuard?.assertCurrent();
-    pushClaudeSdkUserMessage(session, sdkMessage);
+    pushSdkMessage(session, sdkMessage);
     if (isManualCompaction) {
       beginClaudeManualCompaction({
         session,
@@ -381,6 +356,32 @@ export const sendClaudeUserMessage = async (input: {
   return toClaudeUserMessageEvent(session, acceptedMessage, "read");
 };
 
+const assertAcceptingMessages = (session: ClaudeSession): void => {
+  if (session.activity !== "stopped") {
+    return;
+  }
+  throw new HostValidationError({
+    field: "externalSessionId",
+    message:
+      "Claude Agent SDK session is no longer accepting messages after its SDK stream stopped.",
+    details: {
+      externalSessionId: session.externalSessionId,
+      activity: session.activity,
+    },
+  });
+};
+
+const pushSdkMessage = (session: ClaudeSession, message: SDKUserMessage): void => {
+  session.activeSdkUserTurnCount += 1;
+  session.sdkState = "running";
+  try {
+    session.queue.push(message);
+  } catch (error) {
+    session.activeSdkUserTurnCount -= 1;
+    throw error;
+  }
+};
+
 /**
  * Sends a message to the running turn with SDK priority `now`. The message does not start
  * a turn, so the turn counters stay unchanged. It stays unread until the CLI echoes it.
@@ -388,7 +389,7 @@ export const sendClaudeUserMessage = async (input: {
  * that arrives while the model streams a reply stops that reply instead; see
  * `isClaudeResultStoppedBySteer`.
  */
-const steerClaudeUserMessage = async (input: {
+const steerUserMessage = async (input: {
   acceptedMessage: ClaudeAcceptedUserMessage;
   sdkMessage: SDKUserMessage;
   session: ClaudeSession;

@@ -166,9 +166,9 @@ export type ClaudeSessionContext = Omit<ClaudeSession, "query">;
 
 export type ClaudeSessionStore = {
   readonly sessions: Map<string, ClaudeSession>;
-  /** Release local resources without joining the consumer that may be finalizing them. */
+  /** Close local resources; the consumer can call this without joining itself. */
   close(session: ClaudeSession): void;
-  ownConsumption(
+  ownConsumer(
     session: ClaudeSession,
     fiber: Fiber.Fiber<void, HostOperationErrorAggregate>,
     canFinish: () => boolean,
@@ -181,7 +181,7 @@ export type ClaudeSessionStore = {
     timestamp?: string,
   ): void;
   get(externalSessionId: string): ClaudeSession | undefined;
-  /** Include consumers still in teardown after their registry entry was removed. */
+  /** Include consumers that still run after close removes their session. */
   getForCleanup(externalSessionId: string): ClaudeSession | undefined;
   probeSessionStatus(
     input: RuntimeSessionTarget,
