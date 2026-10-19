@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, startTransition, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
@@ -65,8 +65,13 @@ const renderWorkspaceMatch = ({
       workspaces: [alpha, beta, gamma],
       closedWorkspaces: [closed],
       activeWorkspace: active,
-      selectWorkspace: async (workspaceId) => {
-        if (await selectWorkspace(workspaceId)) setActive(recordsById.get(workspaceId) ?? alpha);
+      selectWorkspace: async (workspaceId, onSelected) => {
+        if (await selectWorkspace(workspaceId)) {
+          startTransition(() => {
+            setActive(recordsById.get(workspaceId) ?? alpha);
+            onSelected?.();
+          });
+        }
       },
     });
     return (

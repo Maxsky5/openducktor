@@ -4,27 +4,21 @@ import { sessionPanelOwnerKey } from "@/features/session-panels";
 import { useTerminals, type TerminalScope } from "@/features/terminals";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-/** The panel layout owner key, so the panels can place the terminals of each chat. */
-const scopeKey = (workspaceId: string, sessionId: string): string =>
-  sessionPanelOwnerKey({ kind: "chat", workspaceId, sessionId });
-
-export const useWorkspaceSessionTerminals = ({
+export function useWorkspaceSessionTerminals({
   workspace,
   selected,
-  sessions,
 }: {
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
-  sessions: readonly WorkspaceSession[];
-}) => {
-  const mountedScopeKeys = useMemo(
-    () => sessions.map((session) => scopeKey(workspace.workspaceId, session.id)),
-    [sessions, workspace.workspaceId],
-  );
+}): ReturnType<typeof useTerminals> {
   const scope = useMemo((): TerminalScope | null => {
     if (!selected) return null;
     return {
-      key: scopeKey(workspace.workspaceId, selected.id),
+      key: sessionPanelOwnerKey({
+        kind: "chat",
+        workspaceId: workspace.workspaceId,
+        sessionId: selected.id,
+      }),
       context: {
         kind: "workspace_session",
         workspaceId: workspace.workspaceId,
@@ -34,8 +28,8 @@ export const useWorkspaceSessionTerminals = ({
       ...chatWorkingDirectory(selected),
     };
   }, [selected, workspace.repoPath, workspace.workspaceId]);
-  return useTerminals({ scope, isScopeLoading: false, mountedScopeKeys });
-};
+  return useTerminals({ scope, isScopeLoading: false });
+}
 
 function chatWorkingDirectory(
   record: WorkspaceSession,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { CommandPaletteTestContext } from "@/test-utils/command-palette-test-context";
 import { act, fireEvent, render as testingLibraryRender } from "@testing-library/react";
 import { type ChangeEvent, createElement, type ReactElement, useState } from "react";
@@ -8,6 +8,11 @@ import {
   createSessionPanelsFixture,
 } from "@/test-utils/session-panel-fixtures";
 import { AgentsPageWorkspace, AgentsPageWorkspacePanes } from "./agents-page-layout";
+
+const matchMedia = window.matchMedia;
+afterEach(() => {
+  window.matchMedia = matchMedia;
+});
 
 const render = (element: ReactElement) => {
   const result = testingLibraryRender(
@@ -168,10 +173,10 @@ describe("AgentsPageWorkspace bottom panel visibility", () => {
     const view = render(renderWorkspace(false));
     const panel = view.getByLabelText("Open a tab");
     const workspacePanel = view.container.querySelector<HTMLElement>(
-      "#agent-studio-workspace-panel",
+      '[id^="agent-studio-workspace-panel-"]',
     );
     const hiddenTerminalPanel = view.container.querySelector<HTMLElement>(
-      "#agent-studio-terminal-panel",
+      '[id^="agent-studio-terminal-panel-"]',
     );
     expect(workspacePanel?.style.flexGrow).toBe("100");
     expect(hiddenTerminalPanel?.style.flexGrow).toBe("0");

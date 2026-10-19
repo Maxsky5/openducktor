@@ -7,6 +7,7 @@ import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { applyAgentSessionLiveDelta } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/agent-session-live-projection";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useChatSessionPreparation } from "./use-chat-session-preparation";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 
 const identity: AgentSessionIdentity = {
   runtimeKind: "claude",
@@ -31,6 +32,49 @@ const setup = (livePresence: "present" | "unobserved" = "present") => {
     store.updateSession(identity, (session) => ({ ...session, livePresence: "present" }));
   return { wrapper, remove, attach };
 };
+
+test("a hidden view waits to reopen a closed session and reuses a live preparation on return", async () => {
+  const h = setup();
+  let isActive = true;
+  const next = Promise.withResolvers<void>();
+  const prepare = mock(() => (prepare.mock.calls.length === 1 ? Promise.resolve() : next.promise));
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <h.wrapper>
+      <SessionViewContext value={{ id: "view", isActive }}>{children}</SessionViewContext>
+    </h.wrapper>
+  );
+  const view = renderHook(
+    () => useChatSessionPreparation({ identity, targetKey: "A", enabled: true, prepare }),
+    { wrapper },
+  );
+  try {
+    await act(async () => {});
+    expect(view.result.current.ready).toBe(true);
+    isActive = false;
+    view.rerender();
+    act(h.remove);
+    expect(view.result.current.ready).toBe(false);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    isActive = true;
+    view.rerender();
+    expect(view.result.current.ready).toBe(false);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      h.attach();
+      next.resolve();
+    });
+    expect(view.result.current.ready).toBe(true);
+    isActive = false;
+    view.rerender();
+    isActive = true;
+    view.rerender();
+    expect(view.result.current.ready).toBe(true);
+    expect(prepare).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+    next.resolve();
+  }
+});
 
 test("preparation blocks submission until success and keeps a failed attempt visible", async () => {
   const { wrapper } = setup();

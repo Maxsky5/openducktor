@@ -2,6 +2,7 @@ import type { SessionNavigationRecovery } from "@/features/session-navigation/us
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import {
+  Activity,
   type ComponentProps,
   memo,
   type ReactElement,
@@ -39,6 +40,7 @@ import {
   AgentsPageSelectedFileRefreshRuntime,
 } from "./agents-page-right-panel-runtime";
 import { AgentsPageShell } from "./agents-page-shell";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 import type {
   AgentStudioRightPanelBridgeModel,
   AgentStudioSelectedFileRefreshModel,
@@ -51,7 +53,6 @@ const BOTTOM_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
   group: "agent-studio-terminal-layout",
   main: "agent-studio-workspace-panel",
   panel: "agent-studio-terminal-panel",
-  separator: "agent-studio-terminal-separator",
 };
 const RIGHT_PANEL_SPLIT_IDS: SessionPanelSplitIds = {
   group: "agent-studio-right-panel-layout",
@@ -196,7 +197,12 @@ export function AgentsPageWorkspace({
 const MemoizedAgentChatPane = memo(function AgentChatPane({
   chatModel,
 }: AgentChatPaneProps): ReactElement {
-  return <AgentChatSurface model={chatModel} />;
+  const isActive = useSessionViewActive();
+  return (
+    <Activity mode={isActive ? "visible" : "hidden"}>
+      <AgentChatSurface model={chatModel} />
+    </Activity>
+  );
 });
 
 export type AgentsPageLayoutModel = {
@@ -228,6 +234,7 @@ type AgentsPageLayoutProps = {
 };
 
 export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement {
+  const isActive = useSessionViewActive();
   const {
     chatFileLinkOwner,
     activeWorkspace,
@@ -282,33 +289,35 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     ? buildToolsSnapshot.openInTarget.disabledReason
     : "The task working directory is unavailable.";
   const headerContent = useMemo(
-    () => (
-      <AgentStudioHeader
-        model={chatHeaderModel}
-        repoActions={
-          activeWorkspace ? (
-            <SessionRepoActions
-              workspace={activeWorkspace}
-              terminal={{
-                startBlockedReason: panels.startBlockedReason,
-                onRunAction: panels.runAction,
-              }}
+    () =>
+      isActive ? (
+        <AgentStudioHeader
+          model={chatHeaderModel}
+          repoActions={
+            activeWorkspace ? (
+              <SessionRepoActions
+                workspace={activeWorkspace}
+                terminal={{
+                  startBlockedReason: panels.startBlockedReason,
+                  onRunAction: panels.runAction,
+                }}
+              />
+            ) : null
+          }
+          openIn={
+            <SessionOpenInAction
+              contextMode={openInContextMode}
+              targetPath={openInTargetPath}
+              disabledReason={openInDisabledReason}
             />
-          ) : null
-        }
-        openIn={
-          <SessionOpenInAction
-            contextMode={openInContextMode}
-            targetPath={openInTargetPath}
-            disabledReason={openInDisabledReason}
-          />
-        }
-        viewControls={
-          <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
-        }
-      />
-    ),
+          }
+          viewControls={
+            <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
+          }
+        />
+      ) : null,
     [
+      isActive,
       activeWorkspace,
       chatHeaderModel,
       openInContextMode,

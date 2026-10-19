@@ -1,7 +1,6 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
   memo,
   type ReactElement,
   useCallback,
@@ -12,7 +11,6 @@ import {
 } from "react";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
-import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/agent-chat-transcript-model-cache";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -34,62 +32,17 @@ type ChatPane = {
   onSelectFile: (file: TaskExecutionSelectedFile) => false | void;
 };
 
-/** Keeps visited chats ready while hidden chats stop their effects and subscriptions. */
-export function WorkspaceSessionChatPanes({
-  sessionIds,
-  ...current
-}: ChatPane & { sessionIds: readonly string[] }): ReactElement {
-  const [panes, setPanes] = useState<ChatPane[]>([]);
-  const ids = new Set(sessionIds);
-  const currentKey = chatPaneKey(current);
-  const retained = panes
-    .filter(
-      (pane) =>
-        chatPaneKey(pane) !== currentKey &&
-        // Only the current workspace's records can tell us which chats were removed.
-        (pane.workspace.workspaceId !== current.workspace.workspaceId || ids.has(pane.record.id)),
-    )
-    .slice(-(MAX_CACHED_TRANSCRIPTS - 1));
-  const shown = [...retained, current];
-  const last = panes.at(-1);
-  if (
-    shown.length !== panes.length ||
-    !last ||
-    last.workspace !== current.workspace ||
-    last.record !== current.record ||
-    last.workingDirectory !== current.workingDirectory ||
-    last.branchKey !== current.branchKey ||
-    last.onToolRefresh !== current.onToolRefresh ||
-    last.onActionsReady !== current.onActionsReady ||
-    last.onSelectFile !== current.onSelectFile
-  ) {
-    setPanes(shown);
-  }
-  return (
-    <div className="min-h-0 flex-1 overflow-hidden">
-      {shown
-        .toSorted((left, right) => chatPaneKey(left).localeCompare(chatPaneKey(right)))
-        .map((pane) => (
-          <WorkspaceSessionChatPane
-            key={chatPaneKey(pane)}
-            {...pane}
-            mode={chatPaneKey(pane) === currentKey ? "visible" : "hidden"}
-          />
-        ))}
-    </div>
-  );
-}
-
-const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
-  mode,
+/** Keep admitted sends live while the hidden chat surface stops its effects. */
+export const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
+  isVisible,
   ...pane
-}: ChatPane & { mode: "visible" | "hidden" }): ReactElement {
-  const [visit, setVisit] = useState({ mode, key: 0 });
-  if (visit.mode !== mode) {
-    setVisit({ mode, key: visit.key + (mode === "visible" ? 1 : 0) });
+}: ChatPane & { isVisible: boolean }): ReactElement {
+  const [visit, setVisit] = useState({ isVisible, key: 0 });
+  if (visit.isVisible !== isVisible) {
+    setVisit({ isVisible, key: visit.key + (isVisible ? 1 : 0) });
   }
   const mounted = useRef(false);
-  // Activity stops its effects when hidden. Keep pane lifetime outside that boundary.
+  // Admitted sends can finish while the chat surface stops its effects.
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
@@ -98,11 +51,18 @@ const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
   }, []);
   const isMounted = useCallback(() => mounted.current, []);
   return (
-    <Activity mode={mode}>
-      <div className="h-full min-h-0 overflow-hidden">
-        <WorkspaceSessionChatPaneContent {...pane} isMounted={isMounted} visitKey={visit.key} />
-      </div>
-    </Activity>
+    <div
+      className="h-full min-h-0 overflow-hidden"
+      style={{ display: isVisible ? undefined : "none" }}
+      inert={!isVisible}
+    >
+      <WorkspaceSessionChatPaneContent
+        {...pane}
+        isMounted={isMounted}
+        visitKey={visit.key}
+        isVisible={isVisible}
+      />
+    </div>
   );
 });
 
@@ -116,7 +76,8 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
   isMounted,
   visitKey,
   onActionsReady,
-}: ChatPane & { isMounted: () => boolean; visitKey: number }): ReactElement {
+  isVisible,
+}: ChatPane & { isMounted: () => boolean; visitKey: number; isVisible: boolean }): ReactElement {
   const owner = useMemo<ChatFileLinkOwner>(
     () => ({
       kind: "workspace",
@@ -154,13 +115,10 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
           onToolRefresh={onToolRefresh}
           isMounted={isMounted}
           visitKey={visitKey}
+          isVisible={isVisible}
           onActionsReady={onActionsReady}
         />
       </div>
     </ChatFileLinkProvider>
   );
 });
-
-function chatPaneKey(pane: ChatPane): string {
-  return `${pane.workspace.workspaceId}:${pane.record.id}`;
-}

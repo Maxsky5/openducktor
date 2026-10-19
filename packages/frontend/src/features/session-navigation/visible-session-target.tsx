@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { SessionViewContext } from "./session-view-context";
 import { sessionReadStateKey } from "./session-read-state-store";
 import {
   type SessionNavigationTarget,
@@ -20,7 +21,11 @@ import {
  * Content publishes it after its own selection commits, so a pending, cancelled, or failed
  * navigation never marks another entry as selected.
  */
-type VisibleSession = { target: SessionNavigationTarget; readKey: string | null };
+type VisibleSession = {
+  target: SessionNavigationTarget;
+  readKey: string | null;
+  viewId: string | null;
+};
 type VisibleSessionTargetStore = {
   visible: VisibleSession | null;
   setVisible: (update: (current: VisibleSession | null) => VisibleSession | null) => void;
@@ -44,8 +49,11 @@ const useVisibleSessionTargetStore = (): VisibleSessionTargetStore => {
   return store;
 };
 
+export const useVisibleSessionView = (): VisibleSession | null =>
+  useVisibleSessionTargetStore().visible;
+
 export const useVisibleSessionTarget = (): SessionNavigationTarget | null =>
-  useVisibleSessionTargetStore().visible?.target ?? null;
+  useVisibleSessionView()?.target ?? null;
 
 export const useVisibleSessionReadKey = (): string | null =>
   useVisibleSessionTargetStore().visible?.readKey ?? null;
@@ -73,14 +81,18 @@ export const usePublishVisibleSessionTarget = (
   workspaceSessionIdentity: AgentSessionIdentity | null = null,
 ): void => {
   const { setVisible } = useVisibleSessionTargetStore();
+  const viewId = useContext(SessionViewContext)?.id ?? null;
   const readKey = visibleReadKey(target, workspaceSessionIdentity);
   useEffect(() => {
-    const key = target ? sessionNavigationTargetKey(target) : null;
-    setVisible(() => (target ? { target, readKey } : null));
+    if (!target) return;
+    const key = sessionNavigationTargetKey(target);
+    setVisible(() => ({ target, readKey, viewId }));
     return () => {
       setVisible((current) =>
-        current && sessionNavigationTargetKey(current.target) === key ? null : current,
+        current && current.viewId === viewId && sessionNavigationTargetKey(current.target) === key
+          ? null
+          : current,
       );
     };
-  }, [readKey, setVisible, target]);
+  }, [readKey, setVisible, target, viewId]);
 };

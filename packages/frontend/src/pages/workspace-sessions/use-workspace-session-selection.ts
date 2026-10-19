@@ -13,10 +13,12 @@ export function useWorkspaceSessionSelection({
   workspaceId,
   sessions,
   requestedSessionId,
+  isActive,
 }: {
   workspaceId: string;
   sessions: WorkspaceSession[] | undefined;
   requestedSessionId: string | null | undefined;
+  isActive: boolean;
 }): WorkspaceSessionSelection {
   const { storage } = useClientConnection();
   const storageKey = workspaceSessionSelectionStorageKey(workspaceId);
@@ -25,6 +27,7 @@ export function useWorkspaceSessionSelection({
     ...readSelection(storage, storageKey),
   }));
   const savedSelection = useRef({ workspaceId, sessionId: lastSelection.sessionId });
+  const wasActive = useRef(isActive);
   const [failure, setFailure] = useState<{
     workspaceId: string;
     sessionId: string | null;
@@ -87,11 +90,15 @@ export function useWorkspaceSessionSelection({
   }, [currentSelection.error, currentSelection.sessionId, workspaceId]);
 
   useEffect(() => {
+    const activeAgain = isActive && !wasActive.current;
+    wasActive.current = isActive;
     if (
+      !isActive ||
       currentSelection.error !== null ||
       !hasLoadedSessions ||
       missingSessionId !== null ||
-      (workspaceId === savedSelection.current.workspaceId &&
+      (!activeAgain &&
+        workspaceId === savedSelection.current.workspaceId &&
         selectedId === savedSelection.current.sessionId)
     )
       return;
@@ -116,7 +123,15 @@ export function useWorkspaceSessionSelection({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
     };
-  }, [currentSelection.error, hasLoadedSessions, missingSessionId, save, selectedId, workspaceId]);
+  }, [
+    currentSelection.error,
+    hasLoadedSessions,
+    isActive,
+    missingSessionId,
+    save,
+    selectedId,
+    workspaceId,
+  ]);
 
   return { selected, missingSessionId, ...recovery };
 }

@@ -26,13 +26,11 @@ export const useAgentStudioTerminals = (
     repoPath,
     taskId,
     taskVersion,
-    mountedTaskIds,
   }: {
     workspaceId: string | null;
     repoPath: string | null;
     taskId: string | null;
     taskVersion: string | null;
-    mountedTaskIds: readonly string[];
   },
   suppliedDependencies?: AgentStudioTerminalDependencies,
 ): TerminalSessionsModel => {
@@ -57,11 +55,6 @@ export const useAgentStudioTerminals = (
     enabled,
   });
 
-  const mountedScopeKeys = useMemo(() => {
-    if (!workspaceId) return [];
-    return mountedTaskIds.map((mountedTaskId) => terminalScopeKey(workspaceId, mountedTaskId));
-  }, [mountedTaskIds, workspaceId]);
-
   const scope = useMemo((): TerminalScope | null => {
     if (!workspaceId || !repoPath || !taskId) return null;
     return {
@@ -72,7 +65,7 @@ export const useAgentStudioTerminals = (
     };
   }, [repoPath, taskId, workspaceId, worktreeQuery.data?.workingDirectory]);
   const terminalModel = useTerminals(
-    { scope, isScopeLoading: worktreeQuery.isLoading, mountedScopeKeys },
+    { scope, isScopeLoading: worktreeQuery.isLoading },
     dependencies,
   );
 

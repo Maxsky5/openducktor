@@ -7,6 +7,7 @@ import { createAgentMessageSendReceipt } from "@openducktor/frontend-core/test-s
 import { workspaceConflictChatKey } from "./workspace-git-conflict-assistance";
 import { toast } from "sonner";
 import { Tabs } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   useWorkspacePreviewTransitionGuard,
   WorkspacePreviewTransitionGuardProvider,
@@ -101,7 +102,25 @@ function renderClosedSession(
   let currentWorkspace: ActiveWorkspace = workspace;
   let currentRecord = sessionRecord;
   let currentFile = selectedFile;
-  let sessionIds = [sessionRecord.id];
+  let visible = true;
+  function Content(): ReactElement {
+    return (
+      <Tabs value={currentRecord.id}>
+        <WorkspaceSessionContent
+          workspace={currentWorkspace}
+          record={currentRecord}
+          isVisible={visible}
+          rightPanel={createSessionPanelFixture({
+            isVisible: panelOpen,
+            selectedTabId: "files",
+          })}
+          selectedFile={currentFile}
+          onSelectedFileChange={() => {}}
+          {...(onSafeToLeave ? { onSafeToLeave } : {})}
+        />
+      </Tabs>
+    );
+  }
   const content = (
     name: string | null | undefined,
     currentRevision?: string,
@@ -126,20 +145,7 @@ function renderClosedSession(
       >
         <WorkspacePreviewTransitionGuardProvider>
           {switchWorkspace ? <WorkspaceChange apply={switchWorkspace} /> : null}
-          <Tabs value={currentRecord.id}>
-            <WorkspaceSessionContent
-              workspace={currentWorkspace}
-              record={currentRecord}
-              sessionIds={sessionIds}
-              rightPanel={createSessionPanelFixture({
-                isVisible: panelOpen,
-                selectedTabId: "files",
-              })}
-              selectedFile={currentFile}
-              onSelectedFileChange={() => {}}
-              {...(onSafeToLeave ? { onSafeToLeave } : {})}
-            />
-          </Tabs>
+          <Content />
         </WorkspacePreviewTransitionGuardProvider>
       </WorkspaceBranchStateContext.Provider>
     </ClientConnectionProvider>
@@ -150,22 +156,20 @@ function renderClosedSession(
     setSession: (next: WorkspaceSession, file: TaskExecutionSelectedFile | null) => {
       currentRecord = next;
       currentFile = file;
-      if (!sessionIds.includes(next.id)) sessionIds = [...sessionIds, next.id];
-      view.rerender(content(branch, revision));
-    },
-    setSessions: (ids: string[]) => {
-      sessionIds = ids;
       view.rerender(content(branch, revision));
     },
     setWorkspace: (next: ActiveWorkspace, session: WorkspaceSession) => {
       currentWorkspace = next;
       currentRecord = session;
       currentFile = null;
-      sessionIds = [session.id];
       view.rerender(content(branch, revision));
     },
     setPanelOpen: (open: boolean) => {
       panelOpen = open;
+      view.rerender(content(branch, revision));
+    },
+    setVisible: (next: boolean) => {
+      visible = next;
       view.rerender(content(branch, revision));
     },
     setBranch: (
@@ -175,6 +179,41 @@ function renderClosedSession(
     ) => view.rerender(content(name, nextRevision, isSwitchingBranch)),
   };
 }
+
+test("an inactive chat closes its tool confirmation and keeps it closed on return", async () => {
+  function Tools() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setOpen(true)}>Discard changes</button>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent>
+            <DialogTitle>Discard changes</DialogTitle>
+            <DialogDescription>Discard the worktree changes.</DialogDescription>
+            <button onClick={() => setOpen(false)}>Confirm discard</button>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(() => <p>Chat</p>);
+  const tools = mockTools(() => <Tools />);
+  const queryClient = newQueryClient();
+  const view = renderClosedSession(queryClient, "main", undefined, record, null, undefined, true);
+  try {
+    fireEvent.click(view.getByRole("button", { name: "Discard changes" }));
+    const dialog = await view.findByRole("dialog", { name: "Discard changes" });
+    view.setVisible(false);
+    expect(dialog.isConnected).toBe(false);
+    view.setVisible(true);
+    expect(view.queryByRole("dialog")).toBeNull();
+  } finally {
+    view.unmount();
+    queryClient.clear();
+    tools.mockRestore();
+    chat.mockRestore();
+  }
+});
 
 test("conflict assistance follows the selected chat after switching away and back", async () => {
   const send = mock(
@@ -240,7 +279,7 @@ test("conflict assistance follows the selected chat after switching away and bac
   }
 });
 
-test("switching chats keeps the tools and chat drafts and resets the file owner", () => {
+test("changing the chat owner resets its input and file preview", () => {
   const preview = mockFilePreview(({ model }) => (
     <div>Preview: {model.selectedFile?.relativePath}</div>
   ));
@@ -292,8 +331,10 @@ test("switching chats keeps the tools and chat drafts and resets the file owner"
     expect(screen.getByText("Preview: next.ts")).toBeTruthy();
     view.setSession(record, firstFile);
     expect(screen.getByText("Preview: first.ts")).toBeTruthy();
-    expect(view.container.querySelector('[aria-label="Chat input"]')).toBe(chatInput);
-    expect(chatInput.value).toBe("First chat draft");
+    expect(chatInput.isConnected).toBe(false);
+    expect(view.container.querySelector<HTMLInputElement>('[aria-label="Chat input"]')?.value).toBe(
+      "",
+    );
   } finally {
     view.unmount();
     queryClient.clear();
@@ -303,17 +344,20 @@ test("switching chats keeps the tools and chat drafts and resets the file owner"
   }
 });
 
-test("switching workspaces retains chat drafts without sharing them or hidden subscriptions", () => {
+test("changing the workspace owner resets its chat input and active effects", () => {
   const active = new Set<string>();
-  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(({ workspace }) => {
-    useEffect(() => {
-      active.add(workspace.workspaceId);
-      return () => {
-        active.delete(workspace.workspaceId);
-      };
-    }, [workspace.workspaceId]);
-    return <input aria-label={`${workspace.workspaceName} draft`} />;
-  });
+  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
+    ({ workspace, isVisible }) => {
+      useEffect(() => {
+        if (!isVisible) return;
+        active.add(workspace.workspaceId);
+        return () => {
+          active.delete(workspace.workspaceId);
+        };
+      }, [isVisible, workspace.workspaceId]);
+      return <input aria-label={`${workspace.workspaceName} draft`} />;
+    },
+  );
   const queryClient = newQueryClient();
   const otherWorkspace = { workspaceId: "other", workspaceName: "Other", repoPath: "/other" };
   for (const scope of [workspace, otherWorkspace]) {
@@ -337,12 +381,12 @@ test("switching workspaces retains chat drafts without sharing them or hidden su
     fireEvent.change(second, { target: { value: "Second workspace draft" } });
     expect([...active]).toEqual(["other"]);
     view.setWorkspace(workspace, record);
-    expect(screen.getByLabelText("Workspace draft")).toBe(first);
-    expect(first.value).toBe("First workspace draft");
+    expect(screen.getByLabelText("Workspace draft")).not.toBe(first);
+    expect(screen.getByLabelText<HTMLInputElement>("Workspace draft").value).toBe("");
     expect([...active]).toEqual(["workspace"]);
     view.setWorkspace(otherWorkspace, otherRecord);
-    expect(screen.getByLabelText("Other draft")).toBe(second);
-    expect(second.value).toBe("Second workspace draft");
+    expect(screen.getByLabelText("Other draft")).not.toBe(second);
+    expect(screen.getByLabelText<HTMLInputElement>("Other draft").value).toBe("");
   } finally {
     view.unmount();
     expect(active.size).toBe(0);
@@ -395,56 +439,6 @@ test("opening and closing tools preserves question drafts, tabs, and collapse ch
     queryClient.clear();
     chat.mockRestore();
     tools.mockRestore();
-  }
-});
-
-test("retained chats stop hidden subscriptions and drop old or removed chats", () => {
-  const active = new Set<string>();
-  const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(({ record }) => {
-    useEffect(() => {
-      active.add(record.id);
-      return () => {
-        active.delete(record.id);
-      };
-    }, [record.id]);
-    return <input aria-label={`${record.manualTitle} draft`} />;
-  });
-  const queryClient = newQueryClient();
-  queryClient.setQueryData(
-    repoConfigQueryOptions(workspace.workspaceId).queryKey,
-    repoConfigSchema.parse({ ...workspace, agentStudioState: { openTaskIds: [] } }),
-  );
-  const sessions = Array.from({ length: 7 }, (_, index) => ({
-    ...record,
-    id: `chat-${index}`,
-    externalSessionId: `native-${index}`,
-    manualTitle: `Chat ${index}`,
-  }));
-  const view = renderClosedSession(queryClient, "main", undefined, sessions[0], null);
-  try {
-    view.setSessions(sessions.map((session) => session.id));
-    let second: Element | null = null;
-    for (const session of sessions.slice(1)) {
-      view.setSession(session, null);
-      expect([...active]).toEqual([session.id]);
-      if (session.id === "chat-1")
-        second = view.container.querySelector('[aria-label="Chat 1 draft"]');
-    }
-    expect(view.container.querySelectorAll("input")).toHaveLength(6);
-    expect(view.container.querySelector('[aria-label="Chat 0 draft"]')).toBeNull();
-    view.setSession(sessions[1]!, null);
-    expect(view.container.querySelector('[aria-label="Chat 1 draft"]')).toBe(second);
-    view.setSessions(
-      sessions.filter((session) => session.id !== "chat-1").map((session) => session.id),
-    );
-    expect([...active]).toEqual(["chat-1"]);
-    view.setSession(sessions[2]!, null);
-    expect(view.container.querySelector('[aria-label="Chat 1 draft"]')).toBeNull();
-  } finally {
-    view.unmount();
-    expect(active.size).toBe(0);
-    queryClient.clear();
-    chat.mockRestore();
   }
 });
 
@@ -753,7 +747,7 @@ test("the tools panel stays beside the chat", () => {
             <WorkspaceSessionContent
               workspace={workspace}
               record={record}
-              sessionIds={[record.id]}
+              isVisible
               rightPanel={createSessionPanelFixture()}
               selectedFile={null}
               onSelectedFileChange={() => {}}

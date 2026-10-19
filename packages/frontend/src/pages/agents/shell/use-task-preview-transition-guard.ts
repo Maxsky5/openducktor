@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { UseTaskExecutionFilePreviewControllerResult } from "@/components/features/agents/file-preview/use-task-execution-file-preview-controller";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 
 /**
  * Protect unsaved task file edits when a session, workspace, page, or repository branch change
@@ -13,27 +14,30 @@ export function useTaskPreviewTransitionGuard(
   workspaceRepoPath: string | null,
 ): void {
   const { register } = useWorkspacePreviewTransitionGuard();
+  const isActive = useSessionViewActive();
   useEffect(
     () =>
-      register(
-        (apply, cancel, options) => {
-          const selectedFile = preview.model.selectedFile;
-          if (
-            options?.kind === "root_branch_switch" &&
-            selectedFile !== null &&
-            selectedFile.rootPath !== workspaceRepoPath
-          ) {
-            void apply();
-            return;
-          }
-          preview.requestContextTransition(
-            apply,
-            cancel,
-            options?.waitForSuccess ? { waitForSuccess: true } : undefined,
-          );
-        },
-        () => preview.model.onKeepEditing(),
-      ),
-    [preview, register, workspaceRepoPath],
+      isActive
+        ? register(
+            (apply, cancel, options) => {
+              const selectedFile = preview.model.selectedFile;
+              if (
+                options?.kind === "root_branch_switch" &&
+                selectedFile !== null &&
+                selectedFile.rootPath !== workspaceRepoPath
+              ) {
+                void apply();
+                return;
+              }
+              preview.requestContextTransition(
+                apply,
+                cancel,
+                options?.waitForSuccess ? { waitForSuccess: true } : undefined,
+              );
+            },
+            () => preview.model.onKeepEditing(),
+          )
+        : undefined,
+    [isActive, preview, register, workspaceRepoPath],
   );
 }

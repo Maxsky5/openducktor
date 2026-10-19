@@ -6,8 +6,8 @@ import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigatio
 
 type Route = Omit<
   Parameters<typeof useWorkspaceSessionNavigation>[0],
-  "setSearchParams" | "workspaceId"
->;
+  "setSearchParams" | "workspaceId" | "enabled"
+> & { enabled?: boolean };
 
 function createHarness(search = "session=First&keep=value") {
   const writes: Array<{ search: string; options: NavigateOptions | undefined }> = [];
@@ -26,6 +26,7 @@ function createHarness(search = "session=First&keep=value") {
     (route: Route) => {
       const workspaceId = route.searchParams.get("workspace") ?? "workspace-a";
       const navigation = useWorkspaceSessionNavigation({
+        enabled: true,
         ...route,
         workspaceId,
         setSearchParams,
@@ -40,13 +41,13 @@ function createHarness(search = "session=First&keep=value") {
   return { ...hook, writes, events };
 }
 
-test("commits tab selection before writing the URL and does not wait for the router echo", () => {
+test("keeps the displayed owner until the router commits the requested URL", () => {
   const h = createHarness();
   try {
     h.events.length = 0;
     act(() => h.result.current.updateNavigation({ sessionId: "Second" }, false));
-    expect(h.events).toEqual(["selected:Second", "write:Second"]);
-    expect(h.result.current.sessionId).toBe("Second");
+    expect(h.events).toEqual(["write:Second"]);
+    expect(h.result.current.sessionId).toBe("First");
     expect(h.writes).toEqual([
       {
         search: "session=Second&keep=value",
@@ -54,7 +55,7 @@ test("commits tab selection before writing the URL and does not wait for the rou
       },
     ]);
     act(() => h.result.current.updateNavigation({ sessionId: "Third" }, false));
-    expect(h.result.current.sessionId).toBe("Third");
+    expect(h.result.current.sessionId).toBe("First");
     expect(h.writes).toHaveLength(2);
 
     h.rerender({
@@ -62,7 +63,7 @@ test("commits tab selection before writing the URL and does not wait for the rou
       locationKey: "old-echo",
       navigationType: "PUSH",
     });
-    expect(h.result.current.sessionId).toBe("Third");
+    expect(h.result.current.sessionId).toBe("Second");
     h.rerender({
       searchParams: new URLSearchParams(h.writes[1]?.search),
       locationKey: "latest-echo",
@@ -83,7 +84,7 @@ test("coalesces rapid updates and preserves the creation flag and unrelated para
       h.result.current.updateNavigation({ sessionId: "Third" }, false);
       h.result.current.updateNavigation({ creating: true });
     });
-    expect(h.result.current.sessionId).toBe("Third");
+    expect(h.result.current.sessionId).toBe("First");
     expect(h.result.current.creating).toBe(true);
     expect(h.writes).toEqual([
       {
@@ -93,7 +94,7 @@ test("coalesces rapid updates and preserves the creation flag and unrelated para
     ]);
     act(() => h.result.current.updateNavigation({ sessionId: "New chat", creating: false }));
     expect(h.writes[1]?.search).toBe("session=New+chat&keep=value");
-    expect(h.result.current.sessionId).toBe("New chat");
+    expect(h.result.current.sessionId).toBe("First");
     expect(h.result.current.creating).toBe(false);
     act(() => h.result.current.updateNavigation({ sessionId: "New chat", creating: false }));
     expect(h.writes).toHaveLength(2);
@@ -200,6 +201,55 @@ test("a workspace switch commits the requested chat without writing the old work
     expect(h.writes).toHaveLength(1);
     act(() => h.result.current.updateNavigation({ sessionId: "Next" }));
     expect(h.writes[1]?.search).toBe("workspace=workspace-b&session=Next");
+  } finally {
+    h.unmount();
+  }
+});
+
+test("a retained view cannot write its selection while the workspace route is pending", () => {
+  const h = createHarness("workspace=workspace-a&session=First");
+  try {
+    h.rerender({
+      searchParams: new URLSearchParams("workspace=workspace-a&session=First"),
+      locationKey: "initial",
+      navigationType: "POP",
+      enabled: false,
+    });
+    act(() => h.result.current.updateNavigation({ sessionId: "Second" }));
+    expect(h.writes).toHaveLength(0);
+    h.rerender({
+      searchParams: new URLSearchParams("workspace=workspace-b&session=Other"),
+      locationKey: "other",
+      navigationType: "PUSH",
+      enabled: true,
+    });
+    expect(h.result.current.sessionId).toBe("Other");
+    expect(h.writes).toHaveLength(0);
+    act(() => h.result.current.updateNavigation({ sessionId: "Next" }));
+    expect(h.writes[0]?.search).toBe("workspace=workspace-b&session=Next");
+  } finally {
+    h.unmount();
+  }
+});
+
+test("a hidden chat drops its outbound request and ignores callbacks from its last visit", () => {
+  const h = createHarness();
+  const route: Route = {
+    searchParams: new URLSearchParams("session=First&keep=value"),
+    locationKey: "initial",
+    navigationType: "POP",
+  };
+  try {
+    const update = h.result.current.updateNavigation;
+    act(() => update({ sessionId: "Second" }));
+    expect(h.writes).toHaveLength(1);
+    h.rerender({ ...route, enabled: false });
+    act(() => update({ sessionId: "Third" }));
+    h.rerender({ ...route, enabled: true });
+    expect(h.result.current.sessionId).toBe("First");
+    expect(h.writes).toHaveLength(1);
+    act(() => h.result.current.updateNavigation({ creating: true }));
+    expect(h.writes.at(-1)?.search).toBe("session=First&keep=value&create=session");
   } finally {
     h.unmount();
   }

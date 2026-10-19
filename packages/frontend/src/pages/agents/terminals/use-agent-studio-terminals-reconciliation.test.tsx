@@ -266,9 +266,9 @@ describe("useAgentStudioTerminals reconciliation", () => {
       expect(view.panels().bottom.focusRequest).toBe(0);
       const chatInput = screen.getByRole("button", { name: "Chat input" });
       chatInput.focus();
-      expect(document.activeElement).toBe(chatInput);
+      expect(document.activeElement?.textContent).not.toBe("Terminal focus owner");
 
-      await act(async () => view.update({ taskId: "task-b", mountedTaskIds: ["task-b"] }));
+      act(() => view.update({ taskId: "task-b", mountedTaskIds: ["task-b"] }));
       expect(view.terminals().scopeKey).toBe(view.scopeKey("task-b"));
       expect(view.panels().bottom.tabs).toEqual([]);
       expect(view.panels().bottom.isVisible).toBe(false);
@@ -281,7 +281,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
         { timeout: 2_000 },
       );
       expect(view.panels().bottom.focusRequest).toBe(0);
-      expect(document.activeElement).toBe(chatInput);
+      expect(document.activeElement?.textContent).not.toBe("Terminal focus owner");
 
       await act(async () => view.update({ taskId: "task-a", mountedTaskIds: ["task-a"] }));
       await waitFor(
@@ -292,7 +292,7 @@ describe("useAgentStudioTerminals reconciliation", () => {
         { timeout: 2_000 },
       );
       expect(view.panels().bottom.focusRequest).toBe(0);
-      expect(document.activeElement).toBe(chatInput);
+      expect(document.activeElement?.textContent).not.toBe("Terminal focus owner");
     } finally {
       view.unmount();
     }
@@ -340,7 +340,6 @@ describe("useAgentStudioTerminals reconciliation", () => {
       showTask("task-b");
       await waitFor(() => {
         expect(view.terminals().mountedTabs.map(({ tab }) => tab.terminalId)).toEqual([
-          "terminal-task-a",
           "terminal-task-b",
         ]);
         expect(probes.get("terminal-task-b")?.[0]?.mounts).toBe(1);

@@ -4,6 +4,7 @@ import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/us
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 
 type Attempt = {
   key: string;
@@ -26,6 +27,7 @@ export function useChatSessionPreparation({
   prepare: () => Promise<void>;
 }): { ready: boolean; error: string | null } {
   const store = useAgentSessionsContext();
+  const isActive = useSessionViewActive();
   const identity = useStableAgentSessionIdentity(targetIdentity);
   const session = useAgentSession(identity);
   const presence = session?.livePresence ?? "unobserved";
@@ -41,13 +43,7 @@ export function useChatSessionPreparation({
     const observe = () => {
       const next = store.getSessionSnapshot(identity)?.livePresence ?? "unobserved";
       if (previous === "present" && next !== "present")
-        setAttempt((current) => {
-          if (current.key !== targetKey || current.prepare !== prepare || !current.enabled)
-            return current;
-          if (current.result && current.result.error !== null) return current;
-          if (current.result === null) return { ...current, closed: true };
-          return createAttempt(targetKey, enabled, prepare);
-        });
+        setAttempt((current) => closeAttempt(current, targetKey, prepare));
       previous = next;
     };
     // Observe every transition, including an attach and close that React batches together.
@@ -55,8 +51,9 @@ export function useChatSessionPreparation({
     observe();
     return unsubscribe;
   }, [enabled, identity, prepare, presence, store, targetKey]);
+  const needsPreparation = enabled && isActive && !changed && attempt.result === null;
   useEffect(() => {
-    if (!enabled) return;
+    if (!needsPreparation) return;
     let active = true;
     const settle = (error: string | null) => {
       if (!active) return;
@@ -72,13 +69,11 @@ export function useChatSessionPreparation({
     return () => {
       active = false;
     };
-  }, [enabled, prepare, token]);
-  const result = enabled && !changed ? attempt.result : null;
-  let error = result?.error ?? null;
-  if (result && error === null && (attempt.closed || presence === "absent"))
-    error = "The session closed during preparation. Reopen the chat.";
-  const ready = result !== null && error === null;
-  return useMemo(() => ({ ready, error }), [ready, error]);
+  }, [needsPreparation, prepare, token]);
+  return useMemo(
+    () => preparationResult(enabled && !changed ? attempt : null, presence),
+    [attempt, changed, enabled, presence],
+  );
 }
 
 const createAttempt = (key: string, enabled: boolean, prepare: () => Promise<void>): Attempt => ({
@@ -89,3 +84,18 @@ const createAttempt = (key: string, enabled: boolean, prepare: () => Promise<voi
   closed: false,
   result: null,
 });
+
+function closeAttempt(current: Attempt, key: string, prepare: () => Promise<void>): Attempt {
+  if (current.key !== key || current.prepare !== prepare || !current.enabled) return current;
+  if (current.result && current.result.error !== null) return current;
+  if (current.result === null) return { ...current, closed: true };
+  return createAttempt(key, true, prepare);
+}
+
+function preparationResult(attempt: Attempt | null, presence: string) {
+  const result = attempt?.result;
+  let error = result?.error ?? null;
+  if (result && error === null && (attempt?.closed || presence === "absent"))
+    error = "The session closed during preparation. Reopen the chat.";
+  return { ready: result != null && error === null, error };
+}

@@ -30,6 +30,7 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentsPageBuildTools } from "../shell/use-agents-page-build-tools";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 
 export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -230,7 +231,8 @@ export function useAgentsPageRightPanelModel({
   const queryClient = useQueryClient();
   const hostClient = useHostClient();
   // A tool view is active while its tab is selected in the shown right panel.
-  const { activeKind } = panel;
+  const isActive = useSessionViewActive();
+  const activeKind = isActive ? panel.activeKind : null;
   const selectedTaskId = selectedView.selectedTask?.id ?? null;
   const applyTaskTarget = useCallback(
     async (target: GitTargetBranch) => {
@@ -355,12 +357,12 @@ export function useAgentsPageRightPanelModel({
   const hasLinkedPullRequest =
     linkedPullRequestProviderId !== null && linkedPullRequestNumber !== null;
   useEffect(() => {
-    if (!hasCiChecksTab || !hasLinkedPullRequest || !ciReviewQueryInput) {
+    if (!isActive || !hasCiChecksTab || !hasLinkedPullRequest || !ciReviewQueryInput) {
       return;
     }
 
     void prefetchPullRequestReviewContextFromQuery(queryClient, ciReviewQueryInput);
-  }, [ciReviewQueryInput, hasCiChecksTab, hasLinkedPullRequest, queryClient]);
+  }, [isActive, ciReviewQueryInput, hasCiChecksTab, hasLinkedPullRequest, queryClient]);
 
   const ciChecksModel = useMemo(
     () =>

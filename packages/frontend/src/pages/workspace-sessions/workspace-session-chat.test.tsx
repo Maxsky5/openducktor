@@ -51,7 +51,8 @@ import type {
 } from "@/types/state-slices";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { WorkspaceSessionChat } from "./workspace-session-chat";
-import { WorkspaceSessionChatPanes } from "./workspace-session-chat-panes";
+import { WorkspaceSessionChatPane } from "./workspace-session-chat-pane";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 import {
   buildApprovalRequest,
   buildQuestionRequest,
@@ -318,6 +319,7 @@ const createWorkspaceChatHarness = ({
                     <AgentMessageQueuesContext value={messageQueues}>
                       {children ?? (
                         <WorkspaceSessionChat
+                          isVisible
                           workspace={workspace}
                           record={entry}
                           chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -455,6 +457,7 @@ test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME
     const chat = (record: WorkspaceSession, visitKey: number) => (
       <Harness>
         <WorkspaceSessionChat
+          isVisible
           workspace={workspace}
           record={record}
           visitKey={visitKey}
@@ -567,6 +570,7 @@ test.each(["model", "effort", "profile"] as const)(
       updateRecord = setRecord;
       return (
         <WorkspaceSessionChat
+          isVisible
           workspace={workspace}
           record={record}
           chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -821,6 +825,7 @@ test("workspace Recheck disables repeat input and shows pending feedback", async
     return (
       <HostRuntimeStatusContext value={status}>
         <WorkspaceSessionChat
+          isVisible
           workspace={workspace}
           record={entry}
           chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -970,15 +975,22 @@ test("returning to a retained chat expands requests without clearing drafts, whi
   const content = (record: WorkspaceSession, preview = false) => (
     <Harness>
       <div style={{ visibility: preview ? "hidden" : undefined }} inert={preview}>
-        <WorkspaceSessionChatPanes
-          workspace={workspace}
-          record={record}
-          sessionIds={[entry.id, other.id]}
-          workingDirectory="/repo"
-          branchKey="main"
-          onToolRefresh={onToolRefresh}
-          onSelectFile={onSelectFile}
-        />
+        {[entry, other].map((pane) => (
+          <SessionViewContext
+            key={pane.id}
+            value={{ id: pane.id, isActive: pane.id === record.id }}
+          >
+            <WorkspaceSessionChatPane
+              workspace={workspace}
+              record={pane}
+              isVisible={pane.id === record.id}
+              workingDirectory="/repo"
+              branchKey="main"
+              onToolRefresh={onToolRefresh}
+              onSelectFile={onSelectFile}
+            />
+          </SessionViewContext>
+        ))}
       </div>
     </Harness>
   );

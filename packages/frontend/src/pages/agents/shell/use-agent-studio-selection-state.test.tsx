@@ -12,6 +12,7 @@ import {
 } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 
 enableReactActEnvironment();
 
@@ -61,6 +62,56 @@ function SelectionProbe({
 }
 
 describe("useAgentStudioSelectionState", () => {
+  test("a kept task waits for its own address before changing selection", async () => {
+    const writes: URLSearchParams[] = [];
+    const useSelection = ({ search }: { search: string }) => {
+      const query = useAgentStudioQuerySync({
+        activeWorkspaceId: "workspace-1",
+        agentStudioState: null,
+        isLoadingAgentStudioState: true,
+        agentStudioStateError: null,
+        retryAgentStudioStateLoad: () => {},
+        locationKey: search,
+        navigationType: "REPLACE",
+        searchParams: new URLSearchParams(search),
+        setSearchParams: (params) => {
+          if (!(params instanceof URLSearchParams)) throw new Error("Expected search params");
+          writes.push(params);
+        },
+      });
+      return useAgentStudioSelectionState(
+        baseProps({
+          ...query,
+          routeSessionIdentity: query.sessionIdentityParam,
+          scheduleQueryUpdate: query.updateQuery,
+        }),
+      );
+    };
+    const h = createSharedHookHarness(
+      useSelection,
+      { search: "task=task-1&agent=spec" },
+      {
+        wrapper: ({ children }) => (
+          <SessionViewContext value={{ id: "view", isActive: true }}>{children}</SessionViewContext>
+        ),
+      },
+    );
+    try {
+      await h.mount();
+      await h.run((state) =>
+        state.selectAgentStudioSelection(
+          toAgentStudioSessionSelection({ ...session, taskId: "task-2" }),
+        ),
+      );
+      expect(writes.at(-1)?.get("task")).toBe("task-2");
+      expect(h.getLatest().selection.taskId).toBe("task-1");
+      await h.update({ search: writes.at(-1)!.toString() });
+      expect(h.getLatest().selection.taskId).toBe("task-2");
+    } finally {
+      await h.unmount();
+    }
+  });
+
   test("commits a workspace's URL selection before selection state can capture the previous task", async () => {
     const commits: string[] = [];
     const useSelection = ({ workspaceId }: { workspaceId: string }) => {
@@ -116,8 +167,9 @@ describe("useAgentStudioSelectionState", () => {
     expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
     expect(scheduleQueryUpdate).not.toHaveBeenCalled();
     await harness.run(() => applyTransition?.());
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-2"));
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      keepSessionless: false,
       task: "task-2",
       session: undefined,
       agent: undefined,
@@ -183,6 +235,7 @@ describe("useAgentStudioSelectionState", () => {
     expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
     await harness.run(() => cancelTransition?.());
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      keepSessionless: false,
       task: "task-1",
       session: undefined,
       agent: undefined,
@@ -236,6 +289,7 @@ describe("useAgentStudioSelectionState", () => {
     expect(scheduleQueryUpdate).not.toHaveBeenCalled();
     await harness.run(() => cancelTransitions[1]?.());
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      keepSessionless: false,
       task: "task-1",
       session: undefined,
       agent: undefined,
@@ -259,7 +313,7 @@ describe("useAgentStudioSelectionState", () => {
     await harness.unmount();
   });
 
-  test("publishes selected session state immediately and mirrors it to the query", async () => {
+  test("requests a session address before changing the displayed owner", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const harness = createHookHarness(baseProps({ scheduleQueryUpdate }));
 
@@ -268,8 +322,19 @@ describe("useAgentStudioSelectionState", () => {
       state.selectAgentStudioSelection(toAgentStudioSessionSelection(session));
     });
 
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    await harness.update(
+      baseProps({
+        sessionExternalIdParam: session.externalSessionId,
+        routeSessionIdentity: toAgentStudioSessionSelection(session).sessionIdentity,
+        hasExplicitRoleParam: true,
+        roleFromQuery: session.role,
+        scheduleQueryUpdate,
+      }),
+    );
     expect(harness.getLatest().selection).toEqual(toAgentStudioSessionSelection(session));
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+      keepSessionless: false,
       task: "task-1",
       session: "session-1",
       runtimeKind: "opencode",
@@ -289,6 +354,16 @@ describe("useAgentStudioSelectionState", () => {
       state.selectAgentStudioSelection(toAgentStudioSessionSelection(session));
     });
 
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    await harness.update(
+      baseProps({
+        sessionExternalIdParam: session.externalSessionId,
+        routeSessionIdentity: toAgentStudioSessionSelection(session).sessionIdentity,
+        hasExplicitRoleParam: true,
+        roleFromQuery: session.role,
+        scheduleQueryUpdate,
+      }),
+    );
     expect(harness.getLatest().selection).toEqual(toAgentStudioSessionSelection(session));
 
     await harness.update(baseProps({ activeWorkspaceId: "workspace-2", scheduleQueryUpdate }));
@@ -393,7 +468,7 @@ describe("useAgentStudioSelectionState", () => {
     ]);
   });
 
-  test("keeps local task selection while stale route params are catching up", async () => {
+  test("keeps the displayed task until its requested address commits", async () => {
     const harness = createHookHarness(baseProps());
 
     await harness.mount();
@@ -401,11 +476,11 @@ describe("useAgentStudioSelectionState", () => {
       state.selectAgentStudioSelection(toAgentStudioTaskSelection("task-2"));
     });
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-2"));
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
 
     await harness.update(baseProps());
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-2"));
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
 
     await harness.update(baseProps({ taskIdParam: "task-2" }));
 
@@ -446,6 +521,9 @@ describe("useAgentStudioSelectionState", () => {
     const harness = createHookHarness(baseProps());
 
     await harness.mount();
+    await harness.run((state) =>
+      state.selectAgentStudioSelection(toAgentStudioSessionSelection(session)),
+    );
     await harness.run((state) => {
       state.selectAgentStudioSelection(
         toAgentStudioSessionlessRoleSelection({
@@ -455,6 +533,21 @@ describe("useAgentStudioSelectionState", () => {
       );
     });
 
+    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+
+    // The older request can reach the router before the fresh-role request.
+    await harness.update(
+      baseProps({
+        sessionExternalIdParam: session.externalSessionId,
+        routeSessionIdentity: session,
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+    await harness.update(
+      baseProps({ hasExplicitRoleParam: true, roleFromQuery: "build", keepSessionlessParam: true }),
+    );
+
     expect(harness.getLatest().selection).toEqual(
       toAgentStudioSessionlessRoleSelection({
         taskId: "task-1",
@@ -463,13 +556,7 @@ describe("useAgentStudioSelectionState", () => {
     );
 
     await harness.update(baseProps({ hasExplicitRoleParam: true, roleFromQuery: "build" }));
-
-    expect(harness.getLatest().selection).toEqual(
-      toAgentStudioSessionlessRoleSelection({
-        taskId: "task-1",
-        role: "build",
-      }),
-    );
+    expect(harness.getLatest().selection.keepSessionless).toBe(false);
 
     await harness.unmount();
   });

@@ -115,12 +115,10 @@ export type TerminalScopePresentation = {
 };
 
 export type TerminalPresentationState = {
-  activeScopeKey: string | null;
   scopes: Record<string, TerminalScopePresentation>;
 };
 
 export type TerminalPresentationEvent =
-  | { type: "scopeActivated"; scopeKey: string | null }
   | {
       type: "hostSynced";
       scopeKey: string;
@@ -156,12 +154,7 @@ export const emptyTerminalScopePresentation = (): TerminalScopePresentation => (
   closingTabIds: [],
 });
 
-export const createTerminalPresentationState = (
-  scopeKey: string | null,
-): TerminalPresentationState => ({
-  activeScopeKey: scopeKey,
-  scopes: scopeKey ? { [scopeKey]: emptyTerminalScopePresentation() } : {},
-});
+export const createTerminalPresentationState = (): TerminalPresentationState => ({ scopes: {} });
 
 const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): ReadyTerminalTab => {
   const previousSummary = previous?.requestState === "ready" ? previous.summary : null;
@@ -287,11 +280,6 @@ export const terminalPresentationReducer = (
   state: TerminalPresentationState,
   event: TerminalPresentationEvent,
 ): TerminalPresentationState => {
-  if (event.type === "scopeActivated") {
-    if (!event.scopeKey) return { ...state, activeScopeKey: null };
-    const activated = updateScope(state, event.scopeKey, (scope) => scope);
-    return { ...activated, activeScopeKey: event.scopeKey };
-  }
   return updateScope(state, event.scopeKey, (scope) => {
     if (event.type === "hostSynced")
       return reconcileHostTabs(scope, event.hostInstanceId, event.summaries);

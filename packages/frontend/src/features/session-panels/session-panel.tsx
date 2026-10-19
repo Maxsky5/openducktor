@@ -24,7 +24,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { horizontalTabSortTransition } from "@/components/ui/use-horizontal-sortable-tabs";
 import {
-  TerminalLayer,
   TerminalRestartButton,
   TerminalStatusMessages,
   terminalTabLifecycle,
@@ -42,6 +41,8 @@ import { type PanelTabPresentation, panelTabPresentation } from "./session-panel
 import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
 import type { SessionPanelModel } from "./use-session-panels";
+import { SessionTerminalSurface } from "./session-terminal-host";
+import { useSessionViewActive } from "../session-navigation/session-view-context";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 /** The content and tab decorations that a page gives for one tool tab kind. */
@@ -58,6 +59,7 @@ export type ToolTabViews = Partial<Record<ToolTabKind, ToolTabView>>;
 type SessionPanelProps = {
   model: SessionPanelModel;
   toolTabs?: ToolTabViews | undefined;
+  isActive?: boolean;
 };
 
 const OTHER_PANEL = { right: "bottom", bottom: "right" } satisfies Record<PanelId, PanelId>;
@@ -66,12 +68,11 @@ const OTHER_PANEL = { right: "bottom", bottom: "right" } satisfies Record<PanelI
 export const SessionPanel = memo(function SessionPanel({
   model,
   toolTabs,
+  isActive = true,
 }: SessionPanelProps): ReactElement {
+  const active = useSessionViewActive() && isActive;
   const hasTerminalTabs = model.tabs.some((tab) => tab.kind === "terminal");
   const showsTerminalStatus = model.panel === "bottom" || hasTerminalTabs;
-  // A panel that slides out after its last tab closed keeps its empty area blank.
-  const isEmpty = model.tabs.length === 0 && model.presence !== "closing";
-  const isLoadingEmptyBottom = isEmpty && model.panel === "bottom" && model.terminals.isLoading;
   return (
     <TooltipProvider>
       <Tabs
@@ -80,41 +81,49 @@ export const SessionPanel = memo(function SessionPanel({
         data-testid={`session-panel-${model.panel}`}
         className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-card"
       >
-        <SessionPanelTabStrip model={model} toolTabs={toolTabs} />
+        {active && <SessionPanelTabStrip model={model} toolTabs={toolTabs} />}
         {showsTerminalStatus ? <TerminalStatusMessages terminals={model.terminals} /> : null}
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          {model.tabs.map((tab) => (
-            <PanelTabContent
-              key={tab.id}
-              tab={tab}
-              isSelected={tab.id === model.selectedTabId}
-              model={model}
-              toolTabs={toolTabs}
-            />
-          ))}
-          {isEmpty && !isLoadingEmptyBottom ? (
-            <SessionPanelLauncher entries={model.launcher} onPick={model.onPick} />
-          ) : null}
-          {isLoadingEmptyBottom ? (
-            <p
-              role="status"
-              className="flex h-full items-center justify-center text-sm text-muted-foreground"
-            >
-              Loading terminals...
-            </p>
-          ) : null}
-          <TerminalLayer
-            terminals={model.terminals}
-            mounts={model.terminalMounts}
-            activeKey={model.activeTerminalKey}
-            isVisible={model.isVisible}
-            focusRequest={model.focusRequest}
-          />
-        </div>
+        <SessionPanelBody model={model} toolTabs={toolTabs} isActive={active} />
       </Tabs>
     </TooltipProvider>
   );
 });
+
+function SessionPanelBody({
+  model,
+  toolTabs,
+  isActive: active = true,
+}: SessionPanelProps): ReactElement {
+  // A panel that slides out after its last tab closed keeps its empty area blank.
+  const isEmpty = model.tabs.length === 0 && model.presence !== "closing";
+  const isLoadingEmptyBottom = isEmpty && model.panel === "bottom" && model.terminals.isLoading;
+  return (
+    <div className="relative min-h-0 flex-1 overflow-hidden">
+      {active &&
+        model.tabs.map((tab) => (
+          <PanelTabContent
+            key={tab.id}
+            tab={tab}
+            isSelected={tab.id === model.selectedTabId}
+            model={model}
+            toolTabs={toolTabs}
+          />
+        ))}
+      {active && isEmpty && !isLoadingEmptyBottom ? (
+        <SessionPanelLauncher entries={model.launcher} onPick={model.onPick} />
+      ) : null}
+      {active && isLoadingEmptyBottom ? (
+        <p
+          role="status"
+          className="flex h-full items-center justify-center text-sm text-muted-foreground"
+        >
+          Loading terminals...
+        </p>
+      ) : null}
+      <SessionTerminalSurface model={{ ...model, isVisible: active && model.isVisible }} />
+    </div>
+  );
+}
 
 function PanelTabContent({
   tab,

@@ -3,12 +3,15 @@ import type { AgentRole } from "@openducktor/core";
 import { useState } from "react";
 import type { SetURLSearchParams } from "react-router";
 import {
+  type AgentStudioNavigationState,
   type AgentStudioQueryUpdate,
   clearAgentStudioNavigationState,
   hasAgentStudioNavigationSelection,
+  isSameNavigationState,
   parseNavigationStateFromSearchParams,
   restoreNavigationFromWorkspaceState,
 } from "./agent-studio-navigation";
+import { taskRouteStateSchema, readTaskRouteIntent } from "./task-route-intent";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 
@@ -19,9 +22,11 @@ type UseAgentStudioQuerySyncArgs = {
   agentStudioStateError: Error | null;
   retryAgentStudioStateLoad: () => void;
   locationKey: string;
+  locationState?: unknown;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
+  enabled?: boolean;
 };
 
 export function useAgentStudioQuerySync({
@@ -31,9 +36,11 @@ export function useAgentStudioQuerySync({
   agentStudioStateError,
   retryAgentStudioStateLoad,
   locationKey,
+  locationState,
   navigationType,
   searchParams,
   setSearchParams,
+  enabled = true,
 }: UseAgentStudioQuerySyncArgs) {
   const startsWithWorkspaceState =
     activeWorkspaceId !== null &&
@@ -44,23 +51,32 @@ export function useAgentStudioQuerySync({
     activeWorkspaceId,
     startsWithWorkspaceState,
   );
-  const parsedNavigation = parseNavigationStateFromSearchParams(searchParams);
-  // A direct link belongs to its named workspace. A rail switch drops the old selection.
-  const searchNavigation =
-    workspaceChanged && searchParams.get("workspace") !== activeWorkspaceId
-      ? clearAgentStudioNavigationState(parsedNavigation)
-      : parsedNavigation;
-  const initialNavigation =
-    startsWithWorkspaceState && !hasAgentStudioNavigationSelection(searchNavigation)
-      ? restoreNavigationFromWorkspaceState(searchNavigation, agentStudioState)
-      : searchNavigation;
+  const parsedState = taskRouteStateSchema.safeParse(locationState);
+  const routeState = parsedState.success ? parsedState.data : {};
+  const parsedNavigation = readTaskRouteIntent(
+    parseNavigationStateFromSearchParams(searchParams),
+    activeWorkspaceId,
+    routeState,
+  );
+  const initialNavigation = readTaskRouteIntent(
+    navigationForWorkspace(
+      searchParams,
+      activeWorkspaceId,
+      workspaceChanged,
+      startsWithWorkspaceState ? agentStudioState : null,
+    ),
+    activeWorkspaceId,
+    routeState,
+  );
   const { navigation, setNavigation, updateQuery } = useNavigationUrlSync({
     workspaceId: activeWorkspaceId,
     initialNavigation,
     locationKey,
+    locationState,
     navigationType,
     searchParams,
     setSearchParams,
+    enabled,
   });
   const isWorkspaceRestorePending =
     activeWorkspaceId !== null &&
@@ -78,15 +94,18 @@ export function useAgentStudioQuerySync({
     markRestored();
   }
 
-  const hasExplicitRoleParam = navigation.role !== null;
-  const roleFromQuery: AgentRole = navigation.role ?? "spec";
+  const shown = searchParams.has("task") ? parsedNavigation : navigation;
+  const hasExplicitRoleParam = shown.role !== null;
+  const roleFromQuery: AgentRole = shown.role ?? "spec";
 
   return {
-    taskIdParam: navigation.taskId,
-    sessionExternalIdParam: navigation.sessionExternalId,
-    sessionIdentityParam: navigation.sessionIdentity,
+    taskIdParam: shown.taskId,
+    sessionExternalIdParam: shown.sessionExternalId,
+    sessionIdentityParam: shown.sessionIdentity,
     hasExplicitRoleParam,
+    keepSessionlessParam: shown.keepSessionless ?? false,
     roleFromQuery,
+    isNavigationPending: !isSameNavigationState(parsedNavigation, navigation),
     isWorkspaceRestorePending,
     isWorkspaceStateLoaded,
     navigationPersistenceError: agentStudioStateError,
@@ -97,7 +116,9 @@ export function useAgentStudioQuerySync({
     sessionExternalIdParam: string | null;
     sessionIdentityParam: AgentSessionIdentity | null;
     hasExplicitRoleParam: boolean;
+    keepSessionlessParam: boolean;
     roleFromQuery: AgentRole;
+    isNavigationPending: boolean;
     isWorkspaceRestorePending: boolean;
     isWorkspaceStateLoaded: boolean;
     navigationPersistenceError: Error | null;
@@ -115,4 +136,21 @@ function useWorkspaceRestore(workspaceId: string | null, ready: boolean) {
     workspaceId !== null && restore.workspaceId === workspaceId && restore.loaded;
   const markRestored = () => setRestore((current) => ({ ...current, loaded: true }));
   return { workspaceChanged, isWorkspaceStateLoaded, markRestored };
+}
+
+function navigationForWorkspace(
+  searchParams: URLSearchParams,
+  workspaceId: string | null,
+  workspaceChanged: boolean,
+  state: WorkspaceAgentStudioState | null,
+): AgentStudioNavigationState {
+  const parsed = parseNavigationStateFromSearchParams(searchParams);
+  // A direct link belongs to its named workspace. A rail switch drops the old selection.
+  const navigation =
+    workspaceChanged && searchParams.get("workspace") !== workspaceId
+      ? clearAgentStudioNavigationState(parsed)
+      : parsed;
+  return state && !hasAgentStudioNavigationSelection(navigation)
+    ? restoreNavigationFromWorkspaceState(navigation, state)
+    : navigation;
 }

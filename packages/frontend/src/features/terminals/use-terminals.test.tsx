@@ -218,7 +218,6 @@ describe("useTerminals", () => {
               }
             : null,
           isScopeLoading: false,
-          mountedScopeKeys: ["workspace-1:first", "workspace-1:second"],
         },
         dependencies,
       );
@@ -257,7 +256,7 @@ describe("useTerminals", () => {
         </QueryProvider>,
       );
       await waitFor(() => expect(getLatest().tabs[0]?.terminalId).toBe("session-terminal-1"));
-      expect(getLatest().mountedTabs).toHaveLength(2);
+      expect(getLatest().mountedTabs).toHaveLength(1);
       view.rerender(
         <QueryProvider connection={connection}>
           <Harness sessionId={null} />
@@ -471,7 +470,6 @@ describe("useTerminals", () => {
             workingDirectoryError: "The working directory is unavailable.",
           },
           isScopeLoading: false,
-          mountedScopeKeys: [scopeKey],
         },
         dependencies,
       );
@@ -553,7 +551,6 @@ function renderModel(
         {
           scope,
           isScopeLoading,
-          mountedScopeKeys: [scope.key],
         },
         dependencies,
       ),

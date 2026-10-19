@@ -12,7 +12,7 @@ import type {
 } from "@openducktor/contracts";
 import { HostTerminalClientError } from "@openducktor/host-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { platformQueryOptions } from "@openducktor/frontend-core/queries/system";
 import {
@@ -20,16 +20,12 @@ import {
   terminalListByFilterQueryOptions,
 } from "@openducktor/frontend-core/queries/terminals";
 import { terminalActivityOwnerKey } from "./terminal-activity-store";
-import {
-  createTerminalPresentationState,
-  emptyTerminalScopePresentation,
-  type TerminalTab,
-  terminalPresentationReducer,
-} from "./terminal-presentation-state";
+import { type TerminalTab } from "./terminal-presentation-state";
 import type { TerminalTransportController } from "./terminal-transport-controller";
 import { useTerminalTransport } from "./use-terminal-transport";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { HostClient } from "@openducktor/host-client";
+import { useTerminalPresentation } from "./use-terminal-presentation";
 
 export type { TerminalTab } from "./terminal-presentation-state";
 
@@ -104,11 +100,9 @@ export const useTerminals = (
   {
     scope,
     isScopeLoading,
-    mountedScopeKeys,
   }: {
     scope: TerminalScope | null;
     isScopeLoading: boolean;
-    mountedScopeKeys: readonly string[];
   },
   suppliedDependencies?: TerminalDependencies,
 ): TerminalSessionsModel => {
@@ -119,12 +113,7 @@ export const useTerminals = (
   };
   const scopeKey = scope?.key ?? null;
   const queryClient = useQueryClient();
-  const [presentation, dispatch] = useReducer(
-    terminalPresentationReducer,
-    scopeKey,
-    createTerminalPresentationState,
-  );
-  const abandonedCreationTabIds = useRef(new Set<string>());
+  const { visibleState, dispatch, cancelledCreates } = useTerminalPresentation(scopeKey);
   const { controller, transportError } = useTerminalTransport(dependencies.terminalBridge);
   const runningCommandTerminalIds = useRunningCommandTerminalIds(controller, scope);
   const listFilter = useMemo(() => filterForContext(scope?.context ?? null), [scope?.context]);
@@ -134,11 +123,6 @@ export const useTerminals = (
   const terminalQuery = useQuery<TerminalListResponse>(terminalOptions);
   const platformQuery = useQuery(platformQueryOptions());
 
-  // Switch scopes during render so the next commit cannot show the old scope.
-  if (presentation.activeScopeKey !== scopeKey) {
-    dispatch({ type: "scopeActivated", scopeKey });
-  }
-
   useEffect(() => {
     if (!scopeKey || !terminalQuery.data) return;
     dispatch({
@@ -147,26 +131,15 @@ export const useTerminals = (
       hostInstanceId: terminalQuery.data.hostInstanceId,
       summaries: terminalQuery.data.terminals,
     });
-  }, [scopeKey, terminalQuery.data]);
+  }, [dispatch, scopeKey, terminalQuery.data]);
 
-  const visibleState = useMemo(() => {
-    if (!scopeKey || presentation.activeScopeKey !== scopeKey)
-      return emptyTerminalScopePresentation();
-    return presentation.scopes[scopeKey] ?? emptyTerminalScopePresentation();
-  }, [presentation, scopeKey]);
   const closingTabIds = useMemo(
     () => new Set(visibleState.closingTabIds),
     [visibleState.closingTabIds],
   );
   const mountedTabs = useMemo(
-    () =>
-      mountedScopeKeys.flatMap((ownerScopeKey) =>
-        (presentation.scopes[ownerScopeKey]?.tabs ?? []).map((tab) => ({
-          scopeKey: ownerScopeKey,
-          tab,
-        })),
-      ),
-    [mountedScopeKeys, presentation.scopes],
+    () => (scopeKey === null ? [] : visibleState.tabs.map((tab) => ({ scopeKey, tab }))),
+    [scopeKey, visibleState.tabs],
   );
   const isSynced = useMemo(() => {
     const list = terminalQuery.data;
@@ -207,7 +180,7 @@ export const useTerminals = (
           context: scope.context,
           actionId,
         });
-        if (abandonedCreationTabIds.current.delete(tabId)) {
+        if (cancelledCreates.delete(tabId)) {
           dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
           let closed = false;
           try {
@@ -225,7 +198,7 @@ export const useTerminals = (
         dispatch({ type: "creationCompleted", scopeKey, tabId, summary: created.summary });
         await invalidateTerminalList(queryClient, listFilter);
       } catch (cause) {
-        if (abandonedCreationTabIds.current.delete(tabId)) {
+        if (cancelledCreates.delete(tabId)) {
           dispatch({ type: "closeCompleted", scopeKey, tabId });
           return;
         }
@@ -237,7 +210,7 @@ export const useTerminals = (
         dispatch({ type: "creationFailed", scopeKey, tabId, requestState, error: message });
       }
     },
-    [dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
+    [cancelledCreates, dispatch, dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
   );
 
   const { refetch } = terminalQuery;
@@ -255,14 +228,14 @@ export const useTerminals = (
     (ownerScopeKey: string, terminalId: string, title: string): void => {
       dispatch({ type: "titleChanged", scopeKey: ownerScopeKey, terminalId, title });
     },
-    [],
+    [dispatch],
   );
   const closeTerminal = useCallback(
     async (tab: TerminalTab, confirmTerminate: boolean): Promise<TerminalCloseResponse> => {
       if (!scopeKey) throw new Error("Terminal scope is unavailable.");
       if (!tab.terminalId) {
         if (tab.requestState === "creating") {
-          abandonedCreationTabIds.current.add(tab.tabId);
+          cancelledCreates.add(tab.tabId);
           dispatch({ type: "closeStarted", scopeKey, tabId: tab.tabId });
         } else {
           dispatch({ type: "closeCompleted", scopeKey, tabId: tab.tabId });
@@ -294,19 +267,28 @@ export const useTerminals = (
       if (scope) await invalidateTerminalList(queryClient, listFilter);
       return closeResult;
     },
-    [controller, dependencies.hostClient, listFilter, queryClient, scope, scopeKey],
+    [
+      cancelledCreates,
+      dispatch,
+      controller,
+      dependencies.hostClient,
+      listFilter,
+      queryClient,
+      scope,
+      scopeKey,
+    ],
   );
   const changeLifecycle = useCallback(
     (ownerScopeKey: string, terminalId: string, lifecycle: TerminalLifecycle): void => {
       dispatch({ type: "lifecycleChanged", scopeKey: ownerScopeKey, terminalId, lifecycle });
     },
-    [],
+    [dispatch],
   );
   const forgetTerminal = useCallback(
     (ownerScopeKey: string, terminalId: string, message: string): void => {
       dispatch({ type: "terminalForgotten", scopeKey: ownerScopeKey, terminalId, message });
     },
-    [],
+    [dispatch],
   );
   const isLoading = terminalQuery.isFetching || isScopeLoading;
   const openTabs = visibleState.tabs.filter((tab) => !closingTabIds.has(tab.tabId));

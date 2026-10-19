@@ -63,7 +63,10 @@ const useWorkspaceRestore = (args: LoadHookArgs) => {
 };
 
 const useWorkspaceRestoreWithSelection = (
-  args: LoadHookArgs & { onQueryUpdate: (update: AgentStudioQueryUpdate) => void },
+  args: LoadHookArgs & {
+    onQueryUpdate: (update: AgentStudioQueryUpdate) => void;
+    searchParams?: URLSearchParams;
+  },
 ) => {
   const load = useAgentStudioWorkspaceStateLoad(args);
   const navigation = useAgentStudioQuerySync({
@@ -74,7 +77,7 @@ const useWorkspaceRestoreWithSelection = (
     retryAgentStudioStateLoad: load.retry,
     locationKey: "location-1",
     navigationType: "REPLACE",
-    searchParams: emptySearchParams,
+    searchParams: args.searchParams ?? emptySearchParams,
     setSearchParams: () => {},
   });
   const selection = useAgentStudioSelectionState({
@@ -82,6 +85,7 @@ const useWorkspaceRestoreWithSelection = (
     isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
     taskIdParam: navigation.taskIdParam,
     sessionExternalIdParam: navigation.sessionExternalIdParam,
+    routeSessionIdentity: navigation.sessionIdentityParam,
     hasExplicitRoleParam: navigation.hasExplicitRoleParam,
     roleFromQuery: navigation.roleFromQuery,
     scheduleQueryUpdate: args.onQueryUpdate,
@@ -276,7 +280,10 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
       role: "build" as const,
     };
     const connection = createTestClientConnection({ client: { workspaceGetRepoConfig } });
-    const repoAArgs: LoadHookArgs & { onQueryUpdate: (update: AgentStudioQueryUpdate) => void } = {
+    const repoAArgs: LoadHookArgs & {
+      onQueryUpdate: (update: AgentStudioQueryUpdate) => void;
+      searchParams?: URLSearchParams;
+    } = {
       activeWorkspaceId: "repo-a",
       tasks,
       isLoadingTasks: false,
@@ -293,6 +300,12 @@ describe("useAgentStudioWorkspaceStateLoad", () => {
     await harness.waitFor((result) => result.load.agentStudioState !== null);
     await harness.run((result) => {
       result.selection.selectAgentStudioSelection(toAgentStudioSessionSelection(selectedSession));
+    });
+    await harness.update({
+      ...repoAArgs,
+      searchParams: new URLSearchParams(
+        "task=task-1&session=session-1&agent=build&runtimeKind=opencode&workingDirectory=%2Frepo-a%2Fworktrees%2Fsession-1",
+      ),
     });
     expect(harness.getLatest().selection.selection.sessionIdentity).not.toBeNull();
 

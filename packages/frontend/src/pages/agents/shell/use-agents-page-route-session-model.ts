@@ -27,6 +27,7 @@ import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/us
 import type { SelectAgentStudioSelection } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useTaskPreviewTransitionGuard } from "./use-task-preview-transition-guard";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 
 type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspaceId: string | null;
@@ -56,6 +57,7 @@ export function useAgentsPageRouteSessionModel({
   repoSettings,
   isLoadingRepoSettings,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
+  const isActive = useSessionViewActive();
   const { key: locationKey, state: locationState } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
@@ -81,8 +83,10 @@ export function useAgentsPageRouteSessionModel({
     sessionExternalIdParam,
     sessionIdentityParam,
     hasExplicitRoleParam,
+    keepSessionlessParam,
     roleFromQuery,
     isWorkspaceRestorePending,
+    isNavigationPending,
     isWorkspaceStateLoaded,
     navigationPersistenceError,
     updateQuery,
@@ -93,9 +97,11 @@ export function useAgentsPageRouteSessionModel({
     agentStudioStateError: agentStudioStateLoadError,
     retryAgentStudioStateLoad,
     locationKey,
+    locationState,
     navigationType,
     searchParams,
     setSearchParams,
+    enabled: isActive,
   });
 
   const scheduleQueryUpdate = useCallback(
@@ -134,6 +140,8 @@ export function useAgentsPageRouteSessionModel({
   } = useAgentStudioSelectionState({
     activeWorkspaceId,
     routeSessionIdentity,
+    keepSessionlessParam,
+    isNavigationPending,
     isWorkspaceRestorePending,
     taskIdParam,
     sessionExternalIdParam,
@@ -180,6 +188,7 @@ export function useAgentsPageRouteSessionModel({
       loadedState: loadedAgentStudioState,
       state: stateSnapshot,
       enabled:
+        isActive &&
         canSaveAgentStudioState &&
         isWorkspaceStateLoaded &&
         !isWorkspaceRestorePending &&
@@ -195,12 +204,12 @@ export function useAgentsPageRouteSessionModel({
   });
 
   useEffect(() => {
-    if (isRoutePending || !selection.queryUpdate) {
+    if (!isActive || isRoutePending || !selection.queryUpdate) {
       return;
     }
 
     scheduleQueryUpdate(selection.queryUpdate);
-  }, [isRoutePending, scheduleQueryUpdate, selection.queryUpdate]);
+  }, [isActive, isRoutePending, scheduleQueryUpdate, selection.queryUpdate]);
 
   useTaskPreviewTransitionGuard(taskExecutionFilePreview, workspaceRepoPath);
 
@@ -220,7 +229,7 @@ export function useAgentsPageRouteSessionModel({
       : { kind: "task", workspaceId: activeWorkspaceId, taskId: visibleTaskId, role: visibleRole };
   }, [activeWorkspaceId, visibleIdentity, visibleRole, visibleTaskId]);
   usePublishVisibleSessionTarget(
-    navigationRecovery.navigationPersistenceError ? null : visibleTarget,
+    !isActive || navigationRecovery.navigationPersistenceError ? null : visibleTarget,
   );
 
   return {

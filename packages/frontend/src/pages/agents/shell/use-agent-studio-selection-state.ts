@@ -1,4 +1,5 @@
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
@@ -17,6 +18,8 @@ type UseAgentStudioSelectionStateArgs = {
   taskIdParam: string;
   sessionExternalIdParam: string | null;
   routeSessionIdentity?: AgentSessionIdentity | null;
+  keepSessionlessParam?: boolean;
+  isNavigationPending?: boolean;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
@@ -45,11 +48,14 @@ export function useAgentStudioSelectionState({
   taskIdParam,
   sessionExternalIdParam,
   routeSessionIdentity = null,
+  keepSessionlessParam = false,
+  isNavigationPending = false,
   hasExplicitRoleParam,
   roleFromQuery,
   scheduleQueryUpdate,
   requestContextTransition,
 }: UseAgentStudioSelectionStateArgs): AgentStudioSelectionStateModel {
+  const isActive = useSessionViewActive();
   const routeSelection = useMemo(
     () =>
       createAgentStudioRouteSelectionState({
@@ -57,11 +63,13 @@ export function useAgentStudioSelectionState({
         taskIdParam,
         sessionExternalIdParam,
         routeSessionIdentity,
+        keepSessionlessParam,
         hasExplicitRoleParam,
         roleFromQuery,
       }),
     [
       hasExplicitRoleParam,
+      keepSessionlessParam,
       isWorkspaceRestorePending,
       roleFromQuery,
       sessionExternalIdParam,
@@ -91,6 +99,7 @@ export function useAgentStudioSelectionState({
     setSnapshot(currentSnapshot);
   }
   const latestTransitionStateRef = useRef({
+    isActive,
     routeSelection,
     routeSelectionQueryKey,
     snapshot: currentSnapshot,
@@ -101,24 +110,26 @@ export function useAgentStudioSelectionState({
 
   useLayoutEffect(() => {
     latestTransitionStateRef.current = {
+      isActive,
       routeSelection,
       routeSelectionQueryKey,
       snapshot: currentSnapshot,
     };
-  }, [currentSnapshot, routeSelection, routeSelectionQueryKey]);
+  }, [currentSnapshot, isActive, routeSelection, routeSelectionQueryKey]);
 
   useLayoutEffect(() => {
     const workspaceChanged = lastWorkspaceIdRef.current !== activeWorkspaceId;
     lastWorkspaceIdRef.current = activeWorkspaceId;
-    if (!workspaceChanged && currentSnapshot.routeQueryKey === routeSelectionQueryKey) {
-      return;
-    }
+    if (!workspaceChanged && currentSnapshot.routeQueryKey === routeSelectionQueryKey) return;
     if (!workspaceChanged) {
       // A route without an identity is less specific, so the same session keeps its identity.
       const snapshotSelectionQueryKey = routeHasSessionIdentity
         ? agentStudioSelectionRouteKey(currentSnapshot.selection)
         : agentStudioSelectionQueryKey(currentSnapshot.selection);
-      if (snapshotSelectionQueryKey === routeSelectionQueryKey) {
+      if (
+        snapshotSelectionQueryKey === routeSelectionQueryKey &&
+        currentSnapshot.selection.keepSessionless === routeSelection.keepSessionless
+      ) {
         setSnapshot({
           workspaceId: currentSnapshot.workspaceId,
           routeQueryKey: routeSelectionQueryKey,
@@ -154,32 +165,32 @@ export function useAgentStudioSelectionState({
     isWorkspaceRestorePending,
     requestContextTransition,
     routeHasSessionIdentity,
+    routeSelection.keepSessionless,
     routeSelectionQueryKey,
     scheduleQueryUpdate,
   ]);
 
   const selectAgentStudioSelection = useCallback<SelectAgentStudioSelection>(
     (nextSelection) => {
+      if (!latestTransitionStateRef.current.isActive) return;
       const selectedWorkspaceId = activeWorkspaceId;
       requestContextTransition(() => {
         // Drop a deferred selection when the workspace changed before the apply.
-        if (latestTransitionStateRef.current.snapshot.workspaceId !== selectedWorkspaceId) {
+        if (
+          !latestTransitionStateRef.current.isActive ||
+          latestTransitionStateRef.current.snapshot.workspaceId !== selectedWorkspaceId
+        ) {
           return;
         }
-        setSnapshot((current) => ({
-          workspaceId: current.workspaceId,
-          routeQueryKey: routeSelectionQueryKey,
-          selection: nextSelection,
-        }));
         scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });
     },
-    [activeWorkspaceId, requestContextTransition, routeSelectionQueryKey, scheduleQueryUpdate],
+    [activeWorkspaceId, requestContextTransition, scheduleQueryUpdate],
   );
 
   return {
     selection,
-    isRoutePending: currentSnapshot.routeQueryKey !== routeSelectionQueryKey,
+    isRoutePending: isNavigationPending || currentSnapshot.routeQueryKey !== routeSelectionQueryKey,
     selectAgentStudioSelection,
   };
 }
