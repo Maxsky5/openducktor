@@ -10,9 +10,11 @@ import type { AgentSessionLiveStateService } from "./agent-session-live-state-se
 import type { TaskSessionOperations } from "./task-session-operations";
 import type { SessionLaunchRuntimePort } from "../../ports/session-launch-runtime-port";
 import type { WorkflowLaunchPreparationDependencies } from "./workflow-launch-preparation";
+import type { AgentMessageDeliveryService } from "./agent-message-delivery-service";
 
 export type WorkflowLaunchDependencies = WorkflowLaunchPreparationDependencies & {
   sessions: Pick<TaskSessionOperations, "start" | "fork" | "resume">;
+  messageDelivery: Pick<AgentMessageDeliveryService, "submit">;
   /** `sendUserMessage` must apply the normal workflow send policy. */
   runtime: SessionLaunchRuntimePort &
     Pick<AgentSessionLiveStateService, "publishTaskSessionRecords" | "updateSessionModel">;

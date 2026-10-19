@@ -6,6 +6,7 @@ import {
   AgentSessionBusyError,
   AgentSessionCommandAcceptedError,
   AgentSessionMessageAcceptedError,
+  AgentSessionMessageRejectedError,
   messageAcceptedFailure,
 } from "../../ports/agent-session-send-error";
 import { SessionOperationError } from "../../ports/session-operation-error";
@@ -56,6 +57,7 @@ export const sendOutcome = (
         )
           return { kind: "accepted_then_failed", error: cause };
         if (cause instanceof AgentSessionBusyError) return { kind: "busy", error };
+        if (cause instanceof AgentSessionMessageRejectedError) return { kind: "refused", error };
         if (cause instanceof AgentSessionAcceptanceUnknownError)
           return { kind: "unknown", error, messageId: cause.messageId };
         if (error.observation.nativeOutcome === "uncertain") return { kind: "unknown", error };

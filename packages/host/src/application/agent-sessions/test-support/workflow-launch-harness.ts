@@ -1,6 +1,6 @@
 import { buildAgentSystemPrompt, mergePromptOverrides } from "@openducktor/core";
 import { commandPreparationFixture } from "./command-preparation-fixture";
-import { noMessageQueues } from "../../../test-support/message-queue-observer-test-double";
+import { createAgentMessageDeliveryService } from "../agent-message-delivery-service";
 import { createTaskSessionOperations } from "../task-session-operations";
 import { createWorktreeActionRunner } from "../../actions/worktree-action-runner";
 import { createRuntimeRegistryPort } from "../../tasks/test-support/task-workflow-harness";
@@ -49,6 +49,7 @@ import type { AgentSessionSendOptions } from "../../../ports/agent-session-live-
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
+  AgentSessionBusyError,
 } from "../../../ports/agent-session-send-error";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 
@@ -61,6 +62,10 @@ export const createLaunchHarness = async (
     holdRelease?: Effect.Effect<void>;
     /** Pauses before the worktree preparation starts. */
     beforePrepare?: Effect.Effect<void>;
+    beforeMessageOperation?: Effect.Effect<void>;
+    beforeMessagePreparation?: Effect.Effect<void>;
+    beforeSendContext?: Effect.Effect<void>;
+    keepAttachedOnStop?: boolean;
     forkSourceRead?: Effect.Effect<void>;
     nativeStart?: Effect.Effect<void>;
     nativeFork?: Effect.Effect<void>;
@@ -212,8 +217,18 @@ export const createLaunchHarness = async (
         }),
       sendUserMessage: (input, options) =>
         Effect.gen(function* () {
+          yield* Effect.try({
+            try: () => options?.assertCurrent?.(),
+            catch: (cause) =>
+              cause instanceof HostValidationError ? cause : failure(String(cause)),
+          });
           sends.push(input);
           sendOptions.push(options);
+          if (live.get(agentSessionRefKey(input))?.activity === "running")
+            return yield* new AgentSessionBusyError({
+              message: "The session is still working.",
+              cause: new Error("Native turn is active"),
+            });
           options?.onSent?.();
           yield* Deferred.succeed(sendEntered, undefined);
           yield* sendGate;
@@ -249,15 +264,39 @@ export const createLaunchHarness = async (
       stopSession: (ref) =>
         Effect.sync(() => {
           stops.push(ref.externalSessionId);
-          live.delete(agentSessionRefKey(ref));
+          const session = live.get(agentSessionRefKey(ref));
+          if (session && gates.keepAttachedOnStop) {
+            session.activity = "idle";
+            session.pendingQuestions = [];
+          } else live.delete(agentSessionRefKey(ref));
         }),
       releaseSession: () => Effect.void,
     },
   );
   const runtimeAdmission = createTestRuntimeAdmissionGate();
   runtimeAdmission.open(runtimeKind);
+  const background: Effect.Effect<void>[] = [];
+  const messageDelivery = createAgentMessageDeliveryService({
+    submissionFingerprint: JSON.stringify,
+    canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
+    prepare: (content) =>
+      (gates.beforeMessagePreparation ?? Effect.void).pipe(
+        Effect.andThen(commands.prepareUserMessage(content)),
+      ),
+    runOperation: (target, work, submissionId) =>
+      (gates.beforeMessageOperation ?? Effect.void).pipe(
+        Effect.andThen(commands.runMessageOperation(target, work, submissionId)),
+      ),
+    commitQueueResume: (commit) => commands.commitQueueResume(commit),
+    prepareQueueResume: (content) => commands.prepareQueueResume(content),
+    send: (input, options) => commands.sendUserMessage(input, options),
+    steeringAvailability: () => Effect.succeed({ available: true }),
+    publish: (event) => envelopes.push(event),
+    runInBackground: (effect) => background.push(effect),
+    now: () => timestamp,
+  });
   const runtime = createAgentSessionLiveStateService({
-    messageQueues: noMessageQueues,
+    messageQueues: messageDelivery,
     adapterRegistry: createLiveSessionAdapterRegistry(),
     runtimeAdmission,
     publish: (event) => envelopes.push(event),
@@ -420,8 +459,9 @@ export const createLaunchHarness = async (
     turnPreparation: {
       ...commandPreparationFixture,
       context: (target) =>
-        Effect.succeed(
-          buildAgentSystemPrompt({
+        Effect.gen(function* () {
+          yield* gates.beforeSendContext ?? Effect.void;
+          return buildAgentSystemPrompt({
             role: target.sessionScope.kind === "workflow" ? target.sessionScope.role : "build",
             task: {
               taskId: task.id,
@@ -435,8 +475,8 @@ export const createLaunchHarness = async (
               globalOverrides: settings.globalPromptOverrides,
               repoOverrides: config.promptOverrides,
             }),
-          }),
-        ),
+          });
+        }),
     },
     readSessionRootRefs: (repoPath) =>
       tasks.agentSessionsList({ repoPath, taskId: "task" }).pipe(
@@ -467,7 +507,7 @@ export const createLaunchHarness = async (
             new HostOperationError({ operation: "test.persist-model", message: cause.message }),
         ),
       ),
-    pauseForStop: () => Effect.void,
+    pauseForStop: messageDelivery.pauseForStop,
     repositoryPolicy: {
       run: unexpected("repository operation"),
       runSend: unexpected("repository send"),
@@ -479,6 +519,7 @@ export const createLaunchHarness = async (
     },
   });
   const service = createWorkflowLaunchService({
+    messageDelivery,
     resolveParts: (parts) => Effect.succeed(parts),
     settings: workspaceSettings,
     startPreparation: preparation,
@@ -566,6 +607,10 @@ export const createLaunchHarness = async (
         policy: { ...request.policy, startCheck: Effect.succeed({ start: true as const }) },
       }),
     commands,
+    messageDelivery,
+    runBackground: async () => {
+      while (background.length > 0) await Effect.runPromise(background.shift()!);
+    },
     sendEntered,
     lifecycle,
     enablePullRequests: (enabled = true) => {
@@ -608,6 +653,7 @@ export const createLaunchHarness = async (
         role?: AgentRole;
         selectedModel?: AgentSessionModelSelection;
         live?: boolean;
+        working?: boolean;
         pendingQuestion?: { blocking: boolean };
       } = {},
     ) => {
@@ -622,6 +668,7 @@ export const createLaunchHarness = async (
       });
       if (options.live) {
         const snapshot = liveSnapshot("/repo", workingDirectory, externalSessionId, "Existing");
+        if (options.working) snapshot.activity = "running";
         if (options.pendingQuestion)
           snapshot.pendingQuestions = [
             { requestId: "open-question", questions: [], ...options.pendingQuestion },

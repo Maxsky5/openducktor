@@ -13,7 +13,6 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
-  AgentUserMessageDelivery,
   AgentMessageTarget,
   RuntimeKind,
 } from "@openducktor/contracts";
@@ -23,7 +22,12 @@ import {
   agentSessionScopesEqual,
 } from "@openducktor/core";
 import { Effect } from "effect";
-import { type HostError, HostValidationError } from "../../effect/host-errors";
+import {
+  type HostError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
+import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import {
   ACCEPTANCE_UNKNOWN_REASON,
   actionError,
@@ -71,6 +75,7 @@ export type AgentMessageDeliveryDependencies = {
   /** Sends one message to its configured runtime session. */
   readonly send: (
     input: AgentSessionControlSendInput,
+    options?: AgentSessionSendOptions,
   ) => Effect.Effect<AcceptedAgentInput, HostError>;
   /** Tells if the runtime of this kind can steer running work. */
   readonly steeringAvailability: (
@@ -86,8 +91,10 @@ export type AgentMessageDeliveryDependencies = {
 type SteerOutcome = SendOutcome | { readonly kind: "blocked"; readonly error: HostValidationError };
 
 export type AgentMessageDeliveryService = {
+  /** Options guard the first send and enqueue. Queued entries use the normal pause rules. */
   readonly submit: (
     input: AgentMessageSubmitInput,
+    options?: AgentSessionSendOptions,
   ) => Effect.Effect<AgentMessageSubmitResult, HostError>;
   readonly manage: (
     input: AgentMessageQueueManageInput,
@@ -107,23 +114,18 @@ export const createAgentMessageDeliveryService = (
     publishSnapshot: (queue) => dependencies.publish({ type: "message_queue_updated", queue }),
     now: dependencies.now,
   });
-  const { publish, enqueue, forgetIfUnused, queueFor } = registry;
+  const { publish, forgetIfUnused, queueFor } = registry;
   const conditions = createSessionConditions();
   const reserveSubmission = createSubmissionReservations(dependencies.submissionFingerprint);
 
-  const send = (content: AgentSessionSendContent, delivery: AgentUserMessageDelivery) =>
-    dependencies.send({ ...content, delivery });
-
-  /**
-   * Marks a new turn as in flight from this call until the send ends. The mark changes at once,
-   * so no other delivery can start between a check of the mark and the send.
-   */
+  /** Marks the send in flight synchronously, before another submission can start a turn. */
   const sendNewTurn = (
     queue: MessageQueue,
     content: AgentSessionSendContent,
+    options?: AgentSessionSendOptions,
   ): Effect.Effect<SendOutcome> => {
     queue.sendingNewTurn = true;
-    return sendOutcome(send(content, "new_turn")).pipe(
+    return sendOutcome(dependencies.send({ ...content, delivery: "new_turn" }, options)).pipe(
       Effect.ensuring(
         Effect.sync(() => {
           queue.sendingNewTurn = false;
@@ -135,18 +137,18 @@ export const createAgentMessageDeliveryService = (
   const steeringBlock = (content: AgentSessionSendContent) =>
     messageSteeringBlock(content, dependencies.steeringAvailability);
 
-  /**
-   * Steers running work. When steering cannot take the message, an idle session still takes it
-   * as a new turn, and running work makes the steer `blocked`. An issued steer never turns into
-   * a new turn. A failed read of the steering support refuses the message. The callers check for
-   * pending blocking input first.
-   */
-  const steer = (content: AgentSessionSendContent): Effect.Effect<SteerOutcome> =>
+  /** An idle session takes a new turn. A blocked or issued steer never retries as a new turn. */
+  const steer = (
+    content: AgentSessionSendContent,
+    options?: AgentSessionSendOptions,
+  ): Effect.Effect<SteerOutcome> =>
     Effect.gen(function* () {
       const blocked = yield* steeringBlock(content);
       const working = conditions.isWorking(agentSessionRefKey(content));
       if (working && blocked) return { kind: "blocked", error: blocked } as const;
-      return yield* sendOutcome(send(content, working ? "steer" : "new_turn"));
+      return yield* sendOutcome(
+        dependencies.send({ ...content, delivery: working ? "steer" : "new_turn" }, options),
+      );
     }).pipe(Effect.catch((error) => Effect.succeed({ kind: "refused", error } as const)));
 
   /** Finds the queue when the drain runs, so a queue that ended meanwhile gets no delivery. */
@@ -162,11 +164,7 @@ export const createAgentMessageDeliveryService = (
     if (!conditions.isWorking(queue.key)) scheduleDrain(queue.key);
   };
 
-  /**
-   * Ends every send. It forgets an unused queue. A drain skips a completed turn while a send
-   * runs, so a turn that completed during the send delivers now. A stale count is safe: a new
-   * turn then fails with active work and waits.
-   */
+  /** Releases a turn that completed during the send. A stale count only gets a busy refusal. */
   const settle = (queue: MessageQueue, completedTurnsBefore: number): void => {
     forgetIfUnused(queue);
     if (queue.completedTurns !== completedTurnsBefore) scheduleDrain(queue.key);
@@ -180,12 +178,7 @@ export const createAgentMessageDeliveryService = (
     publish(queue);
   };
 
-  /**
-   * Ends a failed delivery of a queued entry. An entry that the agent received leaves the queue,
-   * and the queue pauses because a later host step failed. An entry with an unknown result stays,
-   * so nobody sends it again. Any other entry keeps its place and shows the failure. An earlier
-   * pause keeps its cause.
-   */
+  /** Pauses failed delivery. Accepted entries leave; uncertain or refused entries keep their place. */
   const failEntry = (
     queue: MessageQueue,
     entry: QueueEntry,
@@ -242,21 +235,38 @@ export const createAgentMessageDeliveryService = (
     content: SubmittedContent,
     messageId?: string,
   ): AgentMessageSubmitResult => {
-    markAcceptanceUnknown(enqueue(queue, content, "first"), messageId);
+    markAcceptanceUnknown(registry.enqueue(queue, content, "first"), messageId);
     queue.pause ??= { cause: "acceptance_unknown" };
     return { kind: "queued", queue: publish(queue) };
   };
 
+  /** Stop can run while preparation waits. Check and enqueue without yielding. */
+  const enqueue = (
+    queue: MessageQueue,
+    content: SubmittedContent,
+    position: "first" | "last",
+    options?: AgentSessionSendOptions,
+  ) =>
+    Effect.suspend(() => {
+      try {
+        options?.assertCurrent?.();
+      } catch (cause) {
+        forgetIfUnused(queue);
+        return Effect.fail(toHostOperationError(cause, "agent-message-delivery.enqueue"));
+      }
+      registry.enqueue(queue, content, position);
+      return Effect.succeed<AgentMessageSubmitResult>({ kind: "queued", queue: publish(queue) });
+    });
+
   /** The send keeps the queue, so the queue stays the queue of its session until the send ends. */
-  const submitDefault = (content: SubmittedContent) =>
+  const submitDefault = (content: SubmittedContent, options?: AgentSessionSendOptions) =>
     Effect.gen(function* () {
       const queue = queueFor(content);
       if (queue.entries.length > 0 || queue.sendingNewTurn) {
-        enqueue(queue, content, "last");
-        return { kind: "queued", queue: publish(queue) } satisfies AgentMessageSubmitResult;
+        return yield* enqueue(queue, content, "last", options);
       }
       const completedTurns = queue.completedTurns;
-      const outcome = reconcileAcceptedOutcome(yield* sendNewTurn(queue, content));
+      const outcome = reconcileAcceptedOutcome(yield* sendNewTurn(queue, content, options));
       switch (outcome.kind) {
         case "accepted":
           // A message that the agent received ends a pause that has no messages left.
@@ -265,10 +275,9 @@ export const createAgentMessageDeliveryService = (
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "busy": {
           // This message came before any message that queued while it was in flight.
-          enqueue(queue, content, "first");
-          const queued = publish(queue);
+          const queued = yield* enqueue(queue, content, "first", options);
           settle(queue, completedTurns);
-          return { kind: "queued", queue: queued } as const;
+          return queued;
         }
         case "unknown":
           return queueUnknownMessage(queue, content, outcome.messageId);
@@ -287,13 +296,10 @@ export const createAgentMessageDeliveryService = (
       return yield* Effect.fail(outcome.error);
     });
 
-  /**
-   * A failed steer from the composer pauses the queue, like a failed queued delivery. The queue
-   * can change during the steer, so the result goes to the queue that the session has then.
-   */
-  const submitSteer = (content: SubmittedContent) =>
+  /** A failed steer pauses the session's current queue, which can change during the send. */
+  const submitSteer = (content: SubmittedContent, options?: AgentSessionSendOptions) =>
     Effect.gen(function* () {
-      const sent = yield* steer(content);
+      const sent = yield* steer(content, options);
       const outcome = sent.kind === "blocked" ? sent : reconcileAcceptedOutcome(sent);
       switch (outcome.kind) {
         case "accepted":
@@ -422,7 +428,7 @@ export const createAgentMessageDeliveryService = (
   };
 
   return {
-    submit: (input) =>
+    submit: (input, options) =>
       reserveSubmission(
         input,
         dependencies.runOperation(
@@ -440,7 +446,9 @@ export const createAgentMessageDeliveryService = (
             if (conditions.isBlockedOnInput(agentSessionRefKey(content))) {
               return yield* blockedOnInputError();
             }
-            return yield* input.mode === "default" ? submitDefault(content) : submitSteer(content);
+            return yield* input.mode === "default"
+              ? submitDefault(content, options)
+              : submitSteer(content, options);
           }),
           input.submissionId,
         ),

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { WorkflowLaunchRequest } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
+import { createNodeSessionLaunchControls } from "../../composition/node/node-session-launch-controls";
 import { createLaunchHarness, modelFor, requestFor } from "./test-support/workflow-launch-harness";
 
 const cases = (["fresh", "fork"] as const).flatMap((mode) =>
@@ -8,9 +9,7 @@ const cases = (["fresh", "fork"] as const).flatMap((mode) =>
 );
 
 test.each(cases)("shutdown cancels a %s launch during %s before saving", async (mode, stage) => {
-  const entered = await Effect.runPromise(Deferred.make<void>());
-  const release = await Effect.runPromise(Deferred.make<void>());
-  const pause = Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)));
+  const { entered, release, pause } = await pausePoint();
   const h = await createLaunchHarness(
     "codex",
     stage === "hold"
@@ -72,3 +71,101 @@ test.each(cases)("shutdown cancels a %s launch during %s before saving", async (
   expect(h.removedWorktrees).toEqual(rolledBack ? ["/worktrees/task"] : []);
   expect(h.deletedBranches).toEqual(rolledBack ? ["odt/task-task"] : []);
 });
+
+test("Stop cancels an Autopilot message before the send starts", async () => {
+  const wait = await pausePoint();
+  const h = await createLaunchHarness("opencode", {
+    beforeMessageOperation: wait.pause,
+    keepAttachedOnStop: true,
+  });
+  h.setTaskStatus("in_progress");
+  const source = h.addTaskSession("builder", { live: true });
+  const ref = { repoPath: "/repo", ...source };
+  const { commands } = createNodeSessionLaunchControls(h.commands, [h.service]);
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const launch = yield* Effect.forkChild(
+        h.launchAutomatic({
+          ...requestFor("opencode"),
+          policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
+        }),
+      );
+      yield* Deferred.await(wait.entered);
+      yield* commands.stopSession(ref);
+      expect(h.sends).toEqual([]);
+      yield* wait.open;
+      const result = yield* Fiber.join(launch);
+      expect(result.status).toBe("canceled");
+      expect(result.acceptedMessage).toBeUndefined();
+    }).pipe(Effect.ensuring(wait.open)),
+  );
+  expect(h.sends).toEqual([]);
+  expect(h.messageDelivery.listQueues("/repo")).toEqual([]);
+});
+
+test.each(["queue", "send"] as const)(
+  "a canceled launch cannot %s after preparation waits",
+  async (stage) => {
+    const wait = await pausePoint();
+    let preparingLaunch = false;
+    const pauseLaunch = Effect.suspend(() => (preparingLaunch ? wait.pause : Effect.void));
+    const h = await createLaunchHarness(
+      "opencode",
+      stage === "queue"
+        ? { beforeMessagePreparation: pauseLaunch }
+        : { beforeSendContext: pauseLaunch },
+    );
+    h.setTaskStatus("in_progress");
+    const source = h.addTaskSession("builder", {
+      live: true,
+      working: stage === "queue",
+    });
+    const ref = { repoPath: "/repo", ...source };
+    if (stage === "queue") {
+      await Effect.runPromise(
+        h.messageDelivery.submit({
+          ...ref,
+          sessionScope: { kind: "workflow", taskId: "task", role: "build" },
+          submissionId: "earlier-message",
+          mode: "default",
+          parts: [{ kind: "text", text: "Earlier message" }],
+        }),
+      );
+    }
+    const sendsBefore = h.sends.length;
+    preparingLaunch = true;
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const launch = yield* Effect.forkChild(
+          h.launchAutomatic({
+            ...requestFor("opencode"),
+            policy: { kind: "automatic", actionId: "startReviewQaFeedbacks" },
+          }),
+        );
+        yield* Deferred.await(wait.entered);
+        h.service.cancelSessionLaunches(ref);
+        yield* wait.open;
+        const result = yield* Fiber.join(launch);
+        expect(result.status).toBe("canceled");
+        expect(result.acceptedMessage).toBeUndefined();
+      }).pipe(Effect.ensuring(wait.open)),
+    );
+    expect(h.sends).toHaveLength(sendsBefore);
+    expect(
+      h.messageDelivery
+        .listQueues("/repo")
+        .flatMap((queue) => queue.entries.map((entry) => entry.submissionId)),
+    ).toEqual(stage === "queue" ? ["earlier-message"] : []);
+  },
+);
+
+const pausePoint = async () => {
+  const entered = await Effect.runPromise(Deferred.make<void>());
+  const release = await Effect.runPromise(Deferred.make<void>());
+  return {
+    entered,
+    release,
+    pause: Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    open: Deferred.succeed(release, undefined),
+  };
+};

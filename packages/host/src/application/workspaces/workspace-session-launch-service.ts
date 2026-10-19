@@ -29,7 +29,8 @@ export const createWorkspaceSessionLaunchService = (
 ) => {
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader(deps);
   return createSessionLaunchService<WorkspaceSessionLaunchRequest, WorkspaceSessionLaunchResult>({
-    runtime: { ...deps.live, sendUserMessage: deps.commands.sendUserMessage },
+    runtime: deps.live,
+    send: (_request, input, options) => deps.commands.sendUserMessage(input, options),
     initial: (request) => ({
       workspaceId: request.workspaceId,
       repoPath: request.repoPath,

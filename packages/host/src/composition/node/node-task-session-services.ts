@@ -55,7 +55,10 @@ export const createNodeTaskSessionServices = ({
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   repositoryPolicy: AgentSessionOperationPolicy;
-  workflowLaunch: Pick<Parameters<typeof createWorkflowLaunchService>[0], "resolveParts"> & {
+  workflowLaunch: Pick<
+    Parameters<typeof createWorkflowLaunchService>[0],
+    "resolveParts" | "messageDelivery"
+  > & {
     adapterRegistry: AgentRuntimeQueryDependencies["adapterRegistry"];
   };
   pauseForStop: Parameters<typeof createAgentSessionCommandService>[0]["pauseForStop"];
@@ -170,6 +173,7 @@ export const createNodeTaskSessionServices = ({
     }),
   };
   const workflowLaunchService = createWorkflowLaunchService({
+    messageDelivery: workflowLaunch.messageDelivery,
     resolveParts: workflowLaunch.resolveParts,
     queries: agentRuntimeQueries,
     settings: taskServiceInput.workspaceSettingsService,

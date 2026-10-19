@@ -98,7 +98,7 @@ export const createNodeMessageDelivery = ({
   return {
     ...service,
     runBackground,
-    submit: (input: Parameters<typeof service.submit>[0]) => supervise(service.submit(input)),
+    submit: (...args: Parameters<typeof service.submit>) => supervise(service.submit(...args)),
     manage: (input: Parameters<typeof service.manage>[0]) => supervise(service.manage(input)),
     /** Stops background deliveries before the runtimes that they send to stop. */
     shutdown: () =>
