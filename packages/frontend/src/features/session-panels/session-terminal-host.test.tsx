@@ -10,29 +10,30 @@ import { terminalQueryKeys } from "@openducktor/frontend-core/queries/terminals"
 import { QueryProvider } from "@/test-utils/query-provider";
 import { useTerminals, type TerminalTab } from "@/features/terminals";
 import * as transport from "@/features/terminals/use-terminal-transport";
-import { sessionPanelOwnerKey, useSessionPanels } from ".";
+import { SessionPanel, sessionPanelOwnerKey, useSessionPanels } from ".";
 import { SessionTerminalHost, SessionTerminalSurface } from "./session-terminal-host";
 import { SessionViewContext } from "../session-navigation/session-view-context";
 
-test("task views share one viewport through owner eviction and panel closure", () => {
-  const scopeKey = "task";
-  const tab: TerminalTab = {
-    tabId: "shell",
+const scopeKey = "task";
+const tab: TerminalTab = {
+  tabId: "shell",
+  terminalId: "shell",
+  awaitingLifecycleSync: false,
+  error: null,
+  requestState: "ready",
+  summary: {
     terminalId: "shell",
-    awaitingLifecycleSync: false,
-    error: null,
-    requestState: "ready",
-    summary: {
-      terminalId: "shell",
-      label: "Shell",
-      context: { repoPath: "/repo", taskId: "task" },
-      initialWorkingDir: "/repo",
-      createdAt: "2026-10-18T00:00:00.000Z",
-      lifecycle: "running",
-      exit: null,
-      startedBy: "user",
-    },
-  };
+    label: "Shell",
+    context: { repoPath: "/repo", taskId: "task" },
+    initialWorkingDir: "/repo",
+    createdAt: "2026-10-18T00:00:00.000Z",
+    lifecycle: "running",
+    exit: null,
+    startedBy: "user",
+  },
+};
+
+test("task views share one viewport through owner eviction and panel closure", () => {
   const model = createSessionPanelFixture({
     selectedTabId: tab.tabId,
     terminals: createTerminalSessionsFixture({ scopeKey }),
@@ -65,6 +66,45 @@ test("task views share one viewport through owner eviction and panel closure", (
     expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1);
     view.rerender(content([], "none"));
     expect(viewport?.isConnected).toBe(false);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a terminal tab and its moved content link to each other in each kept view", () => {
+  const panelOf = (tabIdBase: string) =>
+    createSessionPanelFixture({
+      panel: "bottom",
+      tabIdBase,
+      tabs: [{ id: tab.tabId, kind: "terminal", terminal: tab }],
+      selectedTabId: tab.tabId,
+      terminals: createTerminalSessionsFixture({ scopeKey }),
+      terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
+      activeTerminalKey: "terminal",
+    });
+  const panels = { planner: panelOf("planner-panel"), build: panelOf("build-panel") };
+  const content = (active: keyof typeof panels) => (
+    <QueryProvider>
+      <SessionTerminalHost viewIds={["planner", "build"]}>
+        {(["planner", "build"] as const).map((id) => (
+          <SessionViewContext key={id} value={{ id, isActive: id === active }}>
+            <SessionPanel model={panels[id]} />
+          </SessionViewContext>
+        ))}
+      </SessionTerminalHost>
+    </QueryProvider>
+  );
+  const expectLinkedTerminal = () => {
+    const trigger = view.getByRole("tab");
+    const content = document.getElementById(trigger.getAttribute("aria-controls") ?? "");
+    expect(content?.hasAttribute("data-terminal-viewport")).toBe(true);
+    expect(content?.getAttribute("aria-labelledby")).toBe(trigger.id);
+  };
+  const view = render(content("planner"));
+  try {
+    expectLinkedTerminal();
+    view.rerender(content("build"));
+    expectLinkedTerminal();
   } finally {
     view.unmount();
   }

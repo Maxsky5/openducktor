@@ -20,7 +20,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger, tabLinkIds } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { horizontalTabSortTransition } from "@/components/ui/use-horizontal-sortable-tabs";
 import {
@@ -138,9 +138,10 @@ function PanelTabContent({
 }): ReactElement | null {
   if (tab.kind === "terminal") return null;
   const className = "h-full min-h-0 overflow-hidden data-[state=inactive]:hidden";
+  const ids = tabLinkIds(model.tabIdBase, tab.id).content;
   if (tab.kind === "new_tab") {
     return (
-      <TabsContent value={tab.id} className={className}>
+      <TabsContent value={tab.id} {...ids} className={className}>
         <SessionPanelLauncher entries={model.launcher} onPick={model.onPick} />
       </TabsContent>
     );
@@ -148,13 +149,13 @@ function PanelTabContent({
   const content = toolTabs?.[tab.kind]?.content ?? null;
   if (PANEL_TAB_KIND_RULES[tab.kind].keepMounted) {
     return (
-      <TabsContent value={tab.id} forceMount hidden={!isSelected} className={className}>
+      <TabsContent value={tab.id} {...ids} forceMount hidden={!isSelected} className={className}>
         {content}
       </TabsContent>
     );
   }
   return (
-    <TabsContent value={tab.id} className={className}>
+    <TabsContent value={tab.id} {...ids} className={className}>
       {content}
     </TabsContent>
   );
@@ -375,6 +376,7 @@ function SessionPanelTab({
         >
           <SessionPanelTabTrigger
             entryId={tab.id}
+            idBase={model.tabIdBase}
             presentation={presentation}
             view={view}
             tooltipSide={panel === "bottom" ? "top" : "bottom"}
@@ -404,11 +406,14 @@ function SessionPanelTab({
 
 function SessionPanelTabTrigger({
   entryId,
+  idBase,
   presentation,
   view,
   tooltipSide,
 }: {
   entryId: string;
+  /** The ID base of the panel. A terminal content renders under another `Tabs` root. */
+  idBase: string;
   presentation: PanelTabPresentation;
   view: ToolTabView | undefined;
   /** The tooltip opens away from the page edge of the panel. */
@@ -428,6 +433,7 @@ function SessionPanelTabTrigger({
       <TooltipTrigger asChild>
         <TabsTrigger
           value={entryId}
+          {...tabLinkIds(idBase, entryId).trigger}
           aria-label={view?.ariaLabel ?? presentation.ariaLabel}
           className="h-7 min-w-0 flex-1 cursor-pointer justify-start gap-1.5 rounded-md border-0 bg-transparent py-0 pr-7 pl-2 text-xs font-medium text-inherit shadow-none outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none"
         >

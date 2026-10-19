@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { TabsContent } from "@/components/ui/tabs";
+import { TabsContent, tabLinkIds } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type { TerminalExitNotice } from "./terminal-viewport-policy";
 import type { TerminalSessionsModel, TerminalTab } from "./use-terminals";
@@ -31,6 +31,8 @@ type TerminalLayerProps = {
   activeKey: string | null;
   isVisible: boolean;
   focusRequest: number;
+  /** The ID base of the panel tabs, so each viewport links to its tab. */
+  tabIdBase: string;
 };
 
 const viewportClassName =
@@ -46,6 +48,7 @@ export function TerminalLayer({
   activeKey,
   isVisible,
   focusRequest,
+  tabIdBase,
 }: TerminalLayerProps): ReactElement {
   const currentScopeKey = useRef(terminals.scopeKey);
   const retryCreateRef = useRef(terminals.onRetryCreate);
@@ -83,12 +86,14 @@ export function TerminalLayer({
             onTitleChange={terminals.onTitleChange}
           />
         );
+        const value = mount.value ?? mount.key;
         // One element type for every mount, so a scope switch never remounts a viewport.
         return (
           <TabsContent
             key={mount.key}
             forceMount
-            value={mount.value ?? mount.key}
+            value={value}
+            {...tabLinkIds(tabIdBase, value).content}
             data-terminal-viewport
             data-viewport-state={active ? "active" : "inactive"}
             aria-hidden={!active}

@@ -50,6 +50,7 @@ export function SessionTerminalHost({
               activeKey={model.activeTerminalKey}
               isVisible={isVisible}
               focusRequest={focusRequest}
+              tabIdBase={model.tabIdBase}
             />
           </Tabs>,
           container,
@@ -85,6 +86,7 @@ export function SessionTerminalSurface({ model }: { model: SessionPanelModel }) 
         activeKey={model.activeTerminalKey}
         isVisible={model.isVisible}
         focusRequest={model.focusRequest}
+        tabIdBase={model.tabIdBase}
       />
     );
   // The anchor and its moved root add no box, so only the terminal layer can cover panel content.

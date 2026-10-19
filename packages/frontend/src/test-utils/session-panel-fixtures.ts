@@ -55,6 +55,7 @@ export const createSessionPanelFixture = (
     onAddTab: () => {},
     onPick: () => {},
     onHide: null,
+    tabIdBase: `${overrides.panel ?? "right"}-panel`,
     ...overrides,
   };
   const selectedKind = model.tabs.find((tab) => tab.id === model.selectedTabId)?.kind ?? null;
