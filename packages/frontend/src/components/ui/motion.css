@@ -1,0 +1,8 @@
+/*
+ * Motion tokens for every theme. Component styles use them instead of their own copies.
+ * `motion.ts` holds the same curves for JavaScript, and its test keeps them equal.
+ */
+:root {
+  /* A strong ease-out for UI that enters, leaves, or settles. */
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}

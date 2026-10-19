@@ -27,6 +27,7 @@ import {
   type AgentChatTranscriptModel,
   type AgentChatTranscriptRow,
   type AgentChatTurnAnchor,
+  type AgentChatUserMessageAnchor,
   createAgentChatTranscriptModelBuilder,
 } from "./agent-chat-transcript-model";
 import {
@@ -391,6 +392,7 @@ const toModelState = ({
     revision,
     rows: transcriptModel.rows,
     turnAnchors: transcriptModel.turnAnchors,
+    userMessageAnchors: transcriptModel.userMessageAnchors,
     hasAttachmentMessages: transcriptModel.hasAttachmentMessages,
     lastUserMessageKey: transcriptModel.lastUserMessageKey,
     activeStreamingAssistantMessageId: isAgentSessionActivityWorking(session.activityState)
@@ -412,6 +414,7 @@ const EMPTY_STATE: TranscriptModelState = Object.freeze({
   revision: EMPTY_REVISION,
   rows: new Array<AgentChatTranscriptRow>(),
   turnAnchors: new Array<AgentChatTurnAnchor>(),
+  userMessageAnchors: new Array<AgentChatUserMessageAnchor>(),
   hasAttachmentMessages: false,
   lastUserMessageKey: null,
   activeStreamingAssistantMessageId: null,

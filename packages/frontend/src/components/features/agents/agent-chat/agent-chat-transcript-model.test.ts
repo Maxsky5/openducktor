@@ -7,6 +7,14 @@ import {
   updateAgentChatTranscriptModelFromPrefix,
 } from "./agent-chat-transcript-model";
 
+const FORK_NOTICE_META = {
+  kind: "session_notice",
+  tone: "info",
+  reason: "session_forked",
+  title: "Session forked here",
+  parentExternalSessionId: "parent-thread",
+} as const;
+
 describe("agent chat transcript model", () => {
   test("keeps one initial system prompt above the first user message during live updates and hydration", () => {
     const user = buildMessage("user", "Question", { id: "user-1" });
@@ -585,5 +593,65 @@ describe("agent chat transcript model", () => {
 
     expect(idleRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
     expect(resumedRowsState.activeStreamingAssistantMessageId).toBe("assistant-live");
+  });
+
+  test("lists one user message anchor per user row, after the system prompt moves", () => {
+    const session = buildSession({
+      messages: [
+        buildMessage("user", "Parent prompt", { id: "parent-user" }),
+        buildMessage("system", "System prompt:\n\nInitial instructions", { id: "prompt" }),
+        buildMessage("assistant", "Parent answer", { id: "parent-assistant" }),
+        buildMessage("system", "Session forked here", { id: "fork", meta: FORK_NOTICE_META }),
+        buildMessage("user", "Child task", { id: "child-user" }),
+        buildMessage("user", "Queued follow-up", {
+          id: "queued-user",
+          meta: { kind: "user", state: "queued" },
+        }),
+      ],
+      pendingQuestions: [],
+    });
+
+    const model = buildAgentChatTranscriptModel(session, { showThinkingMessages: false });
+
+    expect(model.rows[0]).toMatchObject({ kind: "message", message: { id: "prompt" } });
+    expect(model.userMessageAnchors.map((anchor) => anchor.message.id)).toEqual([
+      "parent-user",
+      "child-user",
+      "queued-user",
+    ]);
+    for (const anchor of model.userMessageAnchors) {
+      expect(model.rows[anchor.rowIndex]?.key).toBe(anchor.rowKey);
+    }
+  });
+
+  test("keeps the user message anchors while only assistant output changes", () => {
+    const user = buildMessage("user", "Question", { id: "user-1" });
+    const session = buildSession({ messages: [user] });
+    const initial = buildAgentChatTranscriptModel(session, { showThinkingMessages: false });
+    const streamed = updateAgentChatTranscriptModelFromPrefix({
+      session: buildSession({
+        ...session,
+        messages: [user, buildMessage("assistant", "Partial", { id: "assistant-1" })],
+      }),
+      showThinkingMessages: false,
+      previousTranscriptModel: initial,
+      startMessageIndex: 1,
+      mode: "append",
+    });
+    const followup = buildMessage("user", "Follow-up", { id: "user-2" });
+    const appended = updateAgentChatTranscriptModelFromPrefix({
+      session: buildSession({
+        ...session,
+        messages: [user, buildMessage("assistant", "Partial", { id: "assistant-1" }), followup],
+      }),
+      showThinkingMessages: false,
+      previousTranscriptModel: streamed!,
+      startMessageIndex: 2,
+      mode: "append",
+    });
+
+    expect(streamed?.userMessageAnchors).toBe(initial.userMessageAnchors);
+    expect(appended?.userMessageAnchors).not.toBe(initial.userMessageAnchors);
+    expect(appended?.userMessageAnchors.map((anchor) => anchor.message)).toEqual([user, followup]);
   });
 });

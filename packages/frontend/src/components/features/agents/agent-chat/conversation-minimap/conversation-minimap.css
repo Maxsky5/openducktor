@@ -1,0 +1,23 @@
+/*
+ * Minimap ticks grow toward the crest. While the pointer or keyboard focus is on the rail, the
+ * rail sets `--tick-growth` on each tick row, from 0 at rest to 1 at full length. A tick at rest
+ * shows a part of its full length, and the active tick shows a longer part.
+ */
+.conversation-minimap-tick {
+  --tick-rest-scale: 0.36;
+  transform-origin: left center;
+  transform: scaleX(
+    calc(var(--tick-rest-scale) + (1 - var(--tick-rest-scale)) * var(--tick-growth, 0))
+  );
+  transition: background-color 150ms var(--motion-ease-out);
+}
+
+.conversation-minimap-tick[data-state="active"] {
+  --tick-rest-scale: 0.57;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-minimap-tick {
+    transition: none;
+  }
+}

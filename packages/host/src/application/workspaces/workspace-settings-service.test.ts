@@ -1400,6 +1400,7 @@ describe("createWorkspaceSettingsService", () => {
       diffHeight: "scroll" as const,
       lineOverflow: "scroll" as const,
       hunkSeparators: "simple" as const,
+      showConversationMinimap: false,
     };
     const explicitAppearanceSettings = {
       horizontalScrollbarVisibility: "show" as const,

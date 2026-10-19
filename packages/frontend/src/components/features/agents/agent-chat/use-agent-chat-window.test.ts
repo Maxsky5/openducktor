@@ -10,6 +10,10 @@ import {
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
 import { buildAgentChatTurnAnchors } from "./agent-chat-transcript-model";
 import { revealElement } from "@/lib/reveal-element";
+import {
+  JUMP_HIGHLIGHT_ATTRIBUTE,
+  JUMP_TOP_MARGIN_PX,
+} from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
 
 interface LatestResultRefContract {
@@ -395,6 +399,29 @@ const growContent = async (extraContentHeightPx: { current: number }): Promise<v
   extraContentHeightPx.current += 200;
   await act(async () => {
     triggerResizeObservers();
+    await flush();
+  });
+};
+
+const readRowElement = (container: HTMLDivElement, rowKey: string): HTMLElement => {
+  const element = Array.from(container.querySelectorAll<HTMLElement>("[data-row-key]")).find(
+    (row) => row.dataset.rowKey === rowKey,
+  );
+  if (!element) {
+    throw new Error(`Expected mounted row ${rowKey}`);
+  }
+  return element;
+};
+
+const readRowTop = (container: HTMLDivElement, rowKey: string): number =>
+  readRowElement(container, rowKey).getBoundingClientRect().top;
+
+const jumpToRow = async (
+  harness: Awaited<ReturnType<typeof mountHarness>>,
+  rowKey: string,
+): Promise<void> => {
+  await act(async () => {
+    harness.getLatestResult().navigation.jumpToRow(rowKey);
     await flush();
   });
 };
@@ -2801,4 +2828,272 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
     // Each step scrolls and renders a window of the 10,000 rows, which takes up to 850 ms on CI.
   }, 5_000);
+  describe("navigation", () => {
+    test("jumps to an unmounted row and puts it below the top of the viewport", async () => {
+      const rows = createTurnRows(100);
+      const harness = await mountHarness(
+        { rows, displayedSessionKey: "session-1", shouldResetForTranscriptLoad: false },
+        { attachDom: true },
+      );
+      const container = harness.messagesContainerRef.current;
+      if (!container) {
+        throw new Error("Expected messages container");
+      }
+      const targetKey = "session-1:user-10";
+      expect(harness.getLatestResult().visibleRows.some((row) => row.key === targetKey)).toBe(
+        false,
+      );
+
+      await jumpToRow(harness, targetKey);
+
+      expect(readRowTop(container, targetKey)).toBe(JUMP_TOP_MARGIN_PX);
+      expect(readRowElement(container, targetKey).hasAttribute(JUMP_HIGHLIGHT_ATTRIBUTE)).toBe(
+        true,
+      );
+      expect(harness.getLatestResult().isNearBottom).toBe(false);
+      expect(harness.getLatestResult().navigation.readViewportRows()?.activeRow).toBe(20);
+
+      await harness.unmount();
+    });
+
+    test("stops auto-follow after a jump that leaves the bottom", async () => {
+      const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+      const targetKey = "session-1:user-1";
+
+      await jumpToRow(harness, targetKey);
+      const landedScrollTop = container.scrollTop;
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(landedScrollTop);
+      expect(readRowTop(container, targetKey)).toBe(JUMP_TOP_MARGIN_PX);
+
+      await harness.unmount();
+    });
+
+    test("extends a short row window until the target reaches the top", async () => {
+      const rows = createTurnRows(150);
+      const harness = await mountHarness(
+        { rows, displayedSessionKey: "session-1", shouldResetForTranscriptLoad: false },
+        { attachDom: true, containerClientHeight: 1400 },
+      );
+      const container = harness.messagesContainerRef.current;
+      if (!container) {
+        throw new Error("Expected messages container");
+      }
+      const targetKey = "session-1:user-50";
+
+      await jumpToRow(harness, targetKey);
+      await animationFrameDriver.flushFrames();
+
+      const { visibleRows, windowStart } = harness.getLatestResult();
+      expect(windowStart + visibleRows.length).toBeLessThan(rows.length);
+      expect(readRowTop(container, targetKey)).toBe(JUMP_TOP_MARGIN_PX);
+
+      await harness.unmount();
+    });
+
+    test("goes to the bottom and keeps auto-follow when the target section ends the transcript", async () => {
+      const rows = createTurnRows(100);
+      const extraContentHeightPx = { current: 0 };
+      const harness = await mountHarness(
+        { rows, displayedSessionKey: "session-1", shouldResetForTranscriptLoad: false },
+        { attachDom: true, extraContentHeightPx },
+      );
+      const container = harness.messagesContainerRef.current;
+      if (!container) {
+        throw new Error("Expected messages container");
+      }
+
+      await act(async () => {
+        harness.getLatestResult().scrollToTop();
+        await flush();
+      });
+      await jumpToRow(harness, "session-1:user-99");
+
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+      // The landed target is active, although the active line shows an earlier row.
+      expect(harness.getLatestResult().navigation.readViewportRows()?.activeRow).toBe(198);
+
+      await growContent(extraContentHeightPx);
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+      expect(harness.getLatestResult().navigation.readViewportRows()?.activeRow).not.toBe(198);
+
+      await harness.unmount();
+    });
+
+    test("pins at once when the target lands at the bottom edge of the transcript", async () => {
+      const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+      container.scrollTop = 0;
+      await act(async () => {
+        await dispatchWheelUp(container);
+        await dispatchScroll(container);
+      });
+
+      // Row 8 starts 320px down, so its landing position is within the bottom edge distance.
+      await jumpToRow(harness, "session-1:user-4");
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await growContent(extraContentHeightPx);
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await harness.unmount();
+    });
+
+    test("notifies viewport row listeners when rows mount above the row window", async () => {
+      const rows = createTurnRows(30);
+      const harness = await mountHarness(
+        { rows, displayedSessionKey: "session-1", shouldResetForTranscriptLoad: false },
+        { attachDom: true },
+      );
+      const windowStart = harness.getLatestResult().windowStart;
+      let notifications = 0;
+      harness.getLatestResult().navigation.subscribeViewportRows(() => {
+        notifications += 1;
+      });
+
+      await harness.update({
+        rows: [...createTurnRows(2, "older"), ...rows],
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      expect(harness.getLatestResult().windowStart).toBe(windowStart + 4);
+      expect(notifications).toBeGreaterThan(0);
+
+      await harness.unmount();
+    });
+
+    test("ignores a row that is not in the transcript", async () => {
+      const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+      const initialScrollTop = container.scrollTop;
+
+      await jumpToRow(harness, "session-1:missing");
+      await growContent(extraContentHeightPx);
+
+      expect(initialScrollTop).toBe(getMaxScrollTop(container) - 200);
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await harness.unmount();
+    });
+
+    test("moves the highlight to the latest jump target", async () => {
+      const { harness, container } = await mountPinnedTranscript();
+
+      await jumpToRow(harness, "session-1:user-1");
+      await jumpToRow(harness, "session-1:user-2");
+
+      expect(
+        readRowElement(container, "session-1:user-1").hasAttribute(JUMP_HIGHLIGHT_ATTRIBUTE),
+      ).toBe(false);
+      expect(
+        readRowElement(container, "session-1:user-2").hasAttribute(JUMP_HIGHLIGHT_ATTRIBUTE),
+      ).toBe(true);
+
+      await harness.unmount();
+    });
+
+    test("reads the rows at the viewport edges and at the active line", async () => {
+      const harness = await mountHarness(
+        {
+          rows: createTurnRows(12),
+          displayedSessionKey: "session-1",
+          shouldResetForTranscriptLoad: false,
+        },
+        { attachDom: true },
+      );
+
+      // 24 rows of 40px in a 300px viewport, at the bottom.
+      expect(harness.getLatestResult().navigation.readViewportRows()).toEqual({
+        activeRow: 16,
+        firstVisibleRow: 16,
+        lastVisibleRow: 23,
+      });
+
+      await harness.unmount();
+    });
+
+    test("notifies viewport row listeners on scroll and on a jump", async () => {
+      const { harness, container } = await mountPinnedTranscript();
+      let notifications = 0;
+      const unsubscribe = harness.getLatestResult().navigation.subscribeViewportRows(() => {
+        notifications += 1;
+      });
+
+      await act(async () => {
+        await dispatchScroll(container);
+      });
+      expect(notifications).toBe(1);
+      await jumpToRow(harness, "session-1:user-1");
+      expect(notifications).toBe(2);
+
+      unsubscribe();
+      await act(async () => {
+        await dispatchScroll(container);
+      });
+      expect(notifications).toBe(2);
+
+      await harness.unmount();
+    });
+
+    test("forwards wheel input with the transcript pin rule", async () => {
+      const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+      const bottom = getMaxScrollTop(container);
+
+      await act(async () => {
+        harness
+          .getLatestResult()
+          .navigation.scrollByWheel(new WheelEvent("wheel", { deltaY: -100 }));
+        await dispatchScroll(container);
+      });
+      expect(container.scrollTop).toBe(bottom - 100);
+      await growContent(extraContentHeightPx);
+      expect(container.scrollTop).toBe(bottom - 100);
+
+      await act(async () => {
+        harness
+          .getLatestResult()
+          .navigation.scrollByWheel(new WheelEvent("wheel", { deltaY: 1_000 }));
+        await dispatchScroll(container);
+      });
+      await growContent(extraContentHeightPx);
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await harness.unmount();
+    });
+
+    test("keeps following after a sideways wheel over a control outside the transcript", async () => {
+      const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+      await act(async () => {
+        harness
+          .getLatestResult()
+          .navigation.scrollByWheel(new WheelEvent("wheel", { deltaX: -200, deltaY: -10 }));
+        await dispatchScroll(container);
+      });
+      await growContent(extraContentHeightPx);
+
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+      await harness.unmount();
+    });
+
+    test("keeps navigation functions across row updates", async () => {
+      const harness = await mountHarness({
+        rows: createTurnRows(4),
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
+      });
+      const { navigation } = harness.getLatestResult();
+
+      await harness.update({
+        rows: createTurnRows(5),
+        displayedSessionKey: "session-1",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      expect(harness.getLatestResult().navigation).toBe(navigation);
+
+      await harness.unmount();
+    });
+  });
 });

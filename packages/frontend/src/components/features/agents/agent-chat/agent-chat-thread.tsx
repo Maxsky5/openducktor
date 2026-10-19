@@ -1,17 +1,21 @@
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { memo, type ReactElement, type RefObject, useMemo } from "react";
+import { memo, type ReactElement, type RefObject, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-input-identity";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import type { AgentChatUserMessageAnchor } from "./agent-chat-transcript-model";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { buildQuestionCardKey } from "./agent-session-question-keys";
+import { MINIMAP_GUTTER_PX } from "./conversation-minimap/constants";
+import { ConversationMinimap } from "./conversation-minimap/conversation-minimap";
+import { useMinimapRailHeight } from "./conversation-minimap/use-minimap-rail-height";
 import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
 import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
@@ -21,6 +25,7 @@ import {
   type AgentChatRenderedTurn,
   useAgentChatRenderedTranscript,
 } from "./use-agent-chat-rendered-transcript";
+import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 
 export function AgentChatThread({
   model,
@@ -87,6 +92,8 @@ export function AgentChatThread({
     isNearTop,
     scrollToBottom,
     scrollToTop,
+    userMessageAnchors,
+    navigation,
   } = useAgentChatRenderedTranscript({
     transcript,
     messagesContainerRef,
@@ -123,6 +130,8 @@ export function AgentChatThread({
           messagesContentRef={messagesContentRef}
           renderedTurns={renderedTurns}
           transcriptNotice={renderedTranscriptNotice}
+          userMessageAnchors={userMessageAnchors}
+          navigation={navigation}
         />
 
         {hasBottomStack ? (
@@ -175,6 +184,8 @@ type AgentChatTranscriptProps = {
   renderedTurns: AgentChatRenderedTurn[];
   transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
+  userMessageAnchors: AgentChatUserMessageAnchor[];
+  navigation: AgentChatTranscriptNavigation;
 };
 
 const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
@@ -282,56 +293,74 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   renderedTurns,
   transcriptNotice,
   runtimePresentation,
+  userMessageAnchors,
+  navigation,
 }: AgentChatTranscriptProps): ReactElement {
-  return (
-    <div
-      ref={messagesContainerRef}
-      className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
-    >
-      <div ref={messagesContentRef}>
-        {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
-        {!transcriptNotice && emptyState ? (
-          <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-            <p>{emptyState.title}</p>
-            {emptyState.actionLabel && emptyState.onAction ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={
-                  !isInteractionEnabled ||
-                  isStarting ||
-                  isSending ||
-                  emptyState.actionDisabled ||
-                  emptyState.isActionPending
-                }
-                onClick={emptyState.onAction}
-              >
-                {emptyState.isActionPending ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="size-3.5" />
-                )}
-                {emptyState.actionLabel}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
+  // The frame holds the scroll container and the minimap rail, which stays outside the container.
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
+  const minimapRailMaxHeight = useMinimapRailHeight(frame, userMessageAnchors.length);
 
-        <div>
-          {renderedTurns.map((turn) => (
-            <AgentChatTurnGroup
-              key={turn.key}
-              turn={turn}
-              modelCatalog={modelCatalog}
-              transcriptTarget={transcriptTarget}
-              runtimePresentation={runtimePresentation}
-              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-            />
-          ))}
+  return (
+    <div ref={setFrame} className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={messagesContainerRef}
+        className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
+        // The gutter keeps the resting ticks clear of the messages.
+        style={minimapRailMaxHeight === null ? undefined : { paddingLeft: MINIMAP_GUTTER_PX }}
+      >
+        <div ref={messagesContentRef}>
+          {transcriptNotice ? <AgentChatTranscriptNotice notice={transcriptNotice} /> : null}
+          {!transcriptNotice && emptyState ? (
+            <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
+              <p>{emptyState.title}</p>
+              {emptyState.actionLabel && emptyState.onAction ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    !isInteractionEnabled ||
+                    isStarting ||
+                    isSending ||
+                    emptyState.actionDisabled ||
+                    emptyState.isActionPending
+                  }
+                  onClick={emptyState.onAction}
+                >
+                  {emptyState.isActionPending ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3.5" />
+                  )}
+                  {emptyState.actionLabel}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div>
+            {renderedTurns.map((turn) => (
+              <AgentChatTurnGroup
+                key={turn.key}
+                turn={turn}
+                modelCatalog={modelCatalog}
+                transcriptTarget={transcriptTarget}
+                runtimePresentation={runtimePresentation}
+                subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
+                subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
+              />
+            ))}
+          </div>
         </div>
       </div>
+      {minimapRailMaxHeight !== null && frame ? (
+        <ConversationMinimap
+          anchors={userMessageAnchors}
+          navigation={navigation}
+          railMaxHeight={minimapRailMaxHeight}
+          frame={frame}
+        />
+      ) : null}
     </div>
   );
 });

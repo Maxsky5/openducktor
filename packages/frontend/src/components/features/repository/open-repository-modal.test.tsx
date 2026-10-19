@@ -303,7 +303,9 @@ describe("OpenRepositoryModal", () => {
       await act(async () => startup.reject(new Error("Sign-in was cancelled")));
       view.unmount();
     }
-  });
+    // The full setup flow, from folder choice to two cancel attempts, takes more than 1 s when
+    // other test runs load the CPU.
+  }, 3000);
   test("opens the folder picker directly when no workspaces are closed", async () => {
     renderModal();
 

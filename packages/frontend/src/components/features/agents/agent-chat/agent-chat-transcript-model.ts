@@ -35,6 +35,13 @@ export type AgentChatTurnAnchor = {
   endRowExclusive: number;
 };
 
+/** A user message row. Its message section runs up to the next user message row. */
+export type AgentChatUserMessageAnchor = {
+  rowKey: string;
+  rowIndex: number;
+  message: AgentChatMessage;
+};
+
 type AgentChatTranscriptMetadata = {
   hasAttachmentMessages: boolean;
   lastUserMessageKey: string | null;
@@ -44,6 +51,7 @@ type AgentChatTranscriptMetadata = {
 export type AgentChatTranscriptModel = AgentChatTranscriptMetadata & {
   rows: AgentChatTranscriptRow[];
   turnAnchors: AgentChatTurnAnchor[];
+  userMessageAnchors: AgentChatUserMessageAnchor[];
 };
 
 type BuildAgentChatTranscriptModelOptions = {
@@ -210,6 +218,7 @@ export function createAgentChatTranscriptModelBuilder(
       return {
         rows: visibleRows,
         turnAnchors: buildAgentChatTurnAnchors(visibleRows),
+        userMessageAnchors: buildAgentChatUserMessageAnchors(visibleRows),
         ...metadata,
       };
     },
@@ -323,6 +332,10 @@ export function updateAgentChatTranscriptModelFromPrefix({
   return {
     rows: visibleRows,
     turnAnchors: buildAgentChatTurnAnchors(visibleRows),
+    userMessageAnchors: buildAgentChatUserMessageAnchors(
+      visibleRows,
+      previousTranscriptModel.userMessageAnchors,
+    ),
     ...metadata,
   };
 }
@@ -350,4 +363,33 @@ export function buildAgentChatTurnAnchors(rows: AgentChatTranscriptRow[]): Agent
     startRow: start,
     endRowExclusive: turnStartIndices[index + 1] ?? rows.length,
   }));
+}
+
+/**
+ * Lists the user message rows. A streaming update usually keeps every user message, so this
+ * returns the previous list when nothing changed, and the readers of the list do not render again.
+ */
+export function buildAgentChatUserMessageAnchors(
+  rows: AgentChatTranscriptRow[],
+  previous: AgentChatUserMessageAnchor[] = [],
+): AgentChatUserMessageAnchor[] {
+  const anchors: AgentChatUserMessageAnchor[] = [];
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (row?.kind === "message" && row.message.role === "user") {
+      anchors.push({ rowKey: row.key, rowIndex, message: row.message });
+    }
+  }
+
+  const isUnchanged =
+    anchors.length === previous.length &&
+    anchors.every((anchor, index) => {
+      const previousAnchor = previous[index];
+      return (
+        previousAnchor?.rowKey === anchor.rowKey &&
+        previousAnchor.rowIndex === anchor.rowIndex &&
+        previousAnchor.message === anchor.message
+      );
+    });
+  return isUnchanged ? previous : anchors;
 }

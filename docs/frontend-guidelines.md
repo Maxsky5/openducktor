@@ -26,7 +26,7 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 
 ## Components and themes
 
-The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `packages/frontend/src/styles.css`. Dialog motion rules are in `packages/frontend/src/components/ui/dialog.css`.
+The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `packages/frontend/src/styles.css`. Motion tokens are in `packages/frontend/src/components/ui/motion.css` and `motion.ts`. Dialog motion rules are in `packages/frontend/src/components/ui/dialog.css`.
 
 - Use a component from `packages/frontend/src/components/ui` when one exists.
 - Use semantic tokens for structural UI.
@@ -36,6 +36,8 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Show focus with the neutral `ring` color only. Do not use the primary color, an opacity modifier, or a glow.
 - Give a focused field or select trigger with an input border the `border-ring` border and no ring. `Input`, `Textarea`, and the default `Combobox` trigger apply it. A `Button` select trigger also needs `focus-visible:ring-0`. A field inside a group that draws the border, such as an input with an attached button, uses `embedded` and puts `focus-within:border-ring` or `has-[input:focus-visible]:border-ring` on the group.
 - Give every other focused control a 2px `ring-ring` ring. `Button`, `Checkbox`, `RadioGroupItem`, `Switch`, `Slider`, and segmented items apply it. A checked fill or a selected border hides a border change.
+- Mark a target that the user navigated to, such as the message of a transcript jump, with one short neutral pulse in `--highlight-pulse`. Nothing stays after the pulse. Do not use a tint, a brand color, an outline, or the focus ring for it.
+- Use `--motion-ease-out` for UI that enters, leaves, or settles. In JavaScript, use `MOTION_EASE_OUT` from `components/ui/motion.ts`, because the Web Animations API cannot read a CSS variable. Give `MOTION_EASE_OUT_POINTS` to the `motion` library. Do not declare a new copy of a curve.
 - Use `warning-surface-hover` and `warning-surface-selected` for interactive warning surfaces. Use the matching `info-surface-hover` and `info-surface-selected` tokens for information surfaces. These tokens keep the base state color across hover and selection in both themes.
 - Do not use hardcoded gray colors or gradient backgrounds for structural UI.
 - Keep `Dialog` mounted while it closes. If a parent mounts the dialog on demand, use `useDialogPresence(open)` in that parent and pass `open` to the dialog.

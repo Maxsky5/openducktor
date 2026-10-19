@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/ui/motion.css";
 @import "./components/ui/dialog.css";
 @import "./components/ui/popover.css";
 @import "./components/ui/sheet.css";
@@ -8,6 +9,8 @@
 @import "./components/layout/sidebar/session-navigation.css";
 @import "./features/session-panels/session-panel-split.css";
 @import "./components/features/agents/agent-chat/agent-chat-message-queue.css";
+@import "./components/features/agents/agent-chat/conversation-minimap/conversation-minimap.css";
+@import "./components/features/agents/agent-chat/agent-chat-jump-highlight.css";
 @source "./";
 @custom-variant dark (&:where(.dark, .dark *));
 @plugin "@tailwindcss/typography";
@@ -49,6 +52,8 @@
   --chat-surface: var(--card);
   --chat-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 4px 16px -4px rgb(15 23 42 / 0.1);
   --chat-shadow-focus: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 8px 20px -8px rgb(15 23 42 / 0.2);
+  /* a neutral pulse around a target that the user navigated to */
+  --highlight-pulse: color-mix(in oklab, var(--foreground) 22%, transparent);
 
   /* secondary */
   --secondary: oklch(0.929 0.013 255.508); /* ~slate-200 */
@@ -207,6 +212,7 @@
   --chat-surface: color-mix(in oklab, var(--foreground) 5%, var(--card));
   --chat-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.25), 0 4px 16px -4px rgb(0 0 0 / 0.35);
   --chat-shadow-focus: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 8px 20px -8px rgb(0 0 0 / 0.6);
+  --highlight-pulse: color-mix(in oklab, var(--foreground) 30%, transparent);
 
   --secondary: oklch(0.279 0.041 260.031); /* ~slate-800 */
   --secondary-foreground: oklch(0.968 0.007 247.896);

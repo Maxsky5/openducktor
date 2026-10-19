@@ -1,0 +1,57 @@
+/*
+ * A jump marks its target user message with one neutral pulse. A soft halo spreads out from the
+ * bubble and dissolves while the bubble swells slightly and settles. Nothing stays after it, so
+ * the mark cannot look like focus or selection.
+ */
+[data-jump-highlight] [data-slot="user-message-bubble"] {
+  position: relative;
+  isolation: isolate;
+  /* User bubbles sit on the right, so the swell grows toward the transcript. */
+  transform-origin: 100% 50%;
+  animation: jump-highlight-swell 480ms var(--motion-ease-out);
+}
+
+[data-jump-highlight] [data-slot="user-message-bubble"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: jump-highlight-pulse 700ms var(--motion-ease-out) both;
+}
+
+@keyframes jump-highlight-swell {
+  30% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes jump-highlight-pulse {
+  from {
+    box-shadow: 0 0 0 0 var(--highlight-pulse);
+  }
+  to {
+    box-shadow: 0 0 6px 16px transparent;
+  }
+}
+
+@keyframes jump-highlight-fade {
+  from {
+    box-shadow: 0 0 6px 4px var(--highlight-pulse);
+  }
+  to {
+    box-shadow: 0 0 6px 4px transparent;
+  }
+}
+
+/* No movement: a still, soft halo fades out in place. */
+@media (prefers-reduced-motion: reduce) {
+  [data-jump-highlight] [data-slot="user-message-bubble"] {
+    animation: none;
+  }
+
+  [data-jump-highlight] [data-slot="user-message-bubble"]::before {
+    animation-name: jump-highlight-fade;
+  }
+}
