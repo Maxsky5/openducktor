@@ -10,7 +10,8 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { TabsContent, tabLinkIds } from "@/components/ui/tabs";
+import { tabLinkIds } from "@/components/ui/tab-link-ids";
+import { TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type { TerminalExitNotice } from "./terminal-viewport-policy";
 import type { TerminalSessionsModel, TerminalTab } from "./use-terminals";

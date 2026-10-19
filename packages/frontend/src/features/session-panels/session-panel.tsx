@@ -20,7 +20,8 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger, tabLinkIds } from "@/components/ui/tabs";
+import { tabLinkIds } from "@/components/ui/tab-link-ids";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { horizontalTabSortTransition } from "@/components/ui/use-horizontal-sortable-tabs";
 import {
