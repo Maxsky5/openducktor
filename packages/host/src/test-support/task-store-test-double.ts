@@ -21,6 +21,7 @@ export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePor
   getTaskMetadata: unexpectedTaskStoreCall("getTaskMetadata"),
   listAgentSessionsForTasks: unexpectedTaskStoreCall("listAgentSessionsForTasks"),
   listPullRequestSyncCandidates: unexpectedTaskStoreCall("listPullRequestSyncCandidates"),
+  listTaskIds: unexpectedTaskStoreCall("listTaskIds"),
   listTasks: unexpectedTaskStoreCall("listTasks"),
   recordQaOutcome: unexpectedTaskStoreCall("recordQaOutcome"),
   setDirectMerge: unexpectedTaskStoreCall("setDirectMerge"),

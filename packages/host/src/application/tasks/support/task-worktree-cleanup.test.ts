@@ -52,6 +52,7 @@ const taskStoreWithTasks = (
     listPullRequestSyncCandidates: () =>
       Effect.die(new Error("unexpected listPullRequestSyncCandidates")),
     listAgentSessionsForTasks: () => Effect.die(new Error("unexpected listAgentSessionsForTasks")),
+    listTaskIds: () => Effect.die(new Error("unexpected listTaskIds")),
     listTasks: () => Effect.succeed(tasks),
     recordQaOutcome: () => Effect.die(new Error("unexpected recordQaOutcome")),
     setDirectMerge: () => Effect.die(new Error("unexpected setDirectMerge")),
