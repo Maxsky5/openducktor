@@ -57,7 +57,7 @@ The change also removes the private `BrowserTabs` and `TaskSelector` modules, th
 
 ## Verification
 
-Run the five full repository checks from [Contributing](../CONTRIBUTING.md#verification-commands). Also run the dependency gate from [Dependency hygiene](dependency-hygiene.md). In this task, the unused-dependency and unused-export checks pass, but the audit still fails for the existing `braces@3.0.3` dependency of marketing-site Stylelint. [The advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) lists no patched version. This change does not alter that dependency tree.
+Run the five full repository checks from [Contributing](../CONTRIBUTING.md#verification-commands). Also run the dependency gate from [Dependency hygiene](dependency-hygiene.md).
 
 Check the image worker bundles under Node, Bun, and Electron:
 

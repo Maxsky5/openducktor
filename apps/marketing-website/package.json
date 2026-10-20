@@ -12,7 +12,6 @@
     "test:browser": "playwright test",
     "format": "prettier --write 'src/**/*.astro'",
     "format:check": "prettier --check 'src/**/*.astro'",
-    "lint:css": "stylelint 'src/**/*.css'",
     "worker:dev": "WRANGLER_SEND_METRICS=false wrangler dev --config wrangler.preview.json --local",
     "worker:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.preview.json"
   },
@@ -29,8 +28,6 @@
     "prettier": "^3.8.0",
     "prettier-plugin-astro": "^0.14.1",
     "sharp": "^0.35.4",
-    "stylelint": "^17.16.0",
-    "stylelint-config-recommended": "^18.0.0",
     "typescript": "^6.0.0",
     "wrangler": "4.149.0",
     "zod": "^4.6.5"

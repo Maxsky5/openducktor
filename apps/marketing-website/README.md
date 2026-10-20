@@ -86,9 +86,9 @@ bun run test
 bun run build
 ```
 
-`bun run lint` also runs Stylelint on the website stylesheets. The website tests also check that each source file has 400 lines or fewer, and that each custom property that a stylesheet reads has a definition.
+The website tests check that each source file has 400 lines or fewer, and that each custom property that a stylesheet reads has a definition.
 
-For focused work, run the website's `test`, `typecheck`, and `lint:css` scripts. Browser review must cover light and dark appearances, 320-pixel width, keyboard navigation, disabled JavaScript, reduced motion, the pause control, successful and failed copy operations, each product view and scene, the visible theme switch, and unknown routes. Validate Cloudflare routing locally with `bun run worker:dev` after a preview build. Live deployment also requires the account, domain, token, and GitHub setup above; local checks cannot prove those are configured.
+For focused work, run the website's `test` and `typecheck` scripts. Browser review must cover light and dark appearances, 320-pixel width, keyboard navigation, disabled JavaScript, reduced motion, the pause control, successful and failed copy operations, each product view and scene, the visible theme switch, and unknown routes. Validate Cloudflare routing locally with `bun run worker:dev` after a preview build. Live deployment also requires the account, domain, token, and GitHub setup above; local checks cannot prove those are configured.
 
 The website build workflow also runs Chromium regressions against the built files. To run them locally, use these commands from `apps/marketing-website`:
 
