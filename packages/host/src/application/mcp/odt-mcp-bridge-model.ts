@@ -15,6 +15,7 @@ import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type { TaskReferenceCandidate } from "../../ports/task-repository-ports";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
@@ -60,11 +61,11 @@ const sanitizeSlug = (value: string): string =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-const formatTaskRef = (task: TaskCard): string => `${task.id} (${task.title})`;
+const formatTaskRef = (task: TaskReferenceCandidate): string => `${task.id} (${task.title})`;
 
 const ambiguousTaskError = (
   requested: string,
-  matches: TaskCard[],
+  matches: readonly TaskReferenceCandidate[],
 ): HostValidationError<{ taskId: string }> =>
   new HostValidationError({
     field: "taskId",
@@ -75,12 +76,17 @@ const ambiguousTaskError = (
     details: { taskId: requested },
   });
 
-const singleTaskMatch = (matches: TaskCard[]): TaskCard | null => {
+const singleTaskMatch = <Task extends TaskReferenceCandidate>(
+  matches: readonly Task[],
+): Task | null => {
   const [match] = matches;
   return matches.length === 1 && match ? match : null;
 };
 
-export const resolveTaskReference = (tasks: TaskCard[], requestedTaskId: string): TaskCard => {
+export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
+  tasks: readonly Task[],
+  requestedTaskId: string,
+): Task => {
   const requestedLiteral = requestedTaskId.trim();
   if (!requestedLiteral) {
     throw new HostValidationError({

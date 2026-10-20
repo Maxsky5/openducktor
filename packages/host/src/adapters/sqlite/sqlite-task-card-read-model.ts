@@ -17,7 +17,7 @@ import {
   validateWithSchema,
 } from "./sqlite-json-codecs";
 import { documentSummariesByTaskId, documentSummary } from "./sqlite-task-document-queries";
-import { requireTaskRow, taskRows } from "./sqlite-task-queries";
+import { getTaskRow, requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
@@ -29,6 +29,15 @@ export const getTaskCard = (
   Effect.gen(function* () {
     const row = yield* requireTaskRow(session, taskId, repoPath);
     return yield* rowToTaskCard(session, row);
+  });
+
+export const findTaskCard = (
+  session: TaskStoreSession,
+  taskId: string,
+): Effect.Effect<TaskCard | null, SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    const row = yield* getTaskRow(session, taskId);
+    return row === null ? null : yield* rowToTaskCard(session, row);
   });
 
 export const listTasksInDatabase = (

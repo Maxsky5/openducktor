@@ -1,6 +1,7 @@
 import { asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
+import type { TaskReferenceCandidate } from "../../ports/task-repository-ports";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
@@ -40,7 +41,19 @@ export const taskRows = (
     return rows;
   });
 
-const getTaskRow = (
+export const taskReferenceCandidates = (
+  session: TaskStoreSession,
+): Effect.Effect<TaskReferenceCandidate[], SqliteTaskStoreReadError> =>
+  session.execute(
+    (database) =>
+      database
+        .select({ id: tasks.id, title: tasks.title })
+        .from(tasks)
+        .orderBy(...taskLaneOrderBy),
+    "sqliteTaskStore.taskReferenceCandidates.selectTasks",
+  );
+
+export const getTaskRow = (
   session: TaskStoreSession,
   taskId: string,
 ): Effect.Effect<TaskRow | null, SqliteTaskStoreReadError> =>

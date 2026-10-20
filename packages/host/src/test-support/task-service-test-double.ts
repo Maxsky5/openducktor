@@ -25,6 +25,8 @@ const createTaskServiceDefaults = () =>
     detectPullRequest: unexpectedTaskServiceCall("detectPullRequest"),
     directMerge: unexpectedTaskServiceCall("directMerge"),
     getApprovalContext: unexpectedTaskServiceCall("getApprovalContext"),
+    findTask: unexpectedTaskServiceCall("findTask"),
+    listTaskReferences: unexpectedTaskServiceCall("listTaskReferences"),
     getTaskMetadata: unexpectedTaskServiceCall("getTaskMetadata"),
     getTaskStopImpact: unexpectedTaskServiceCall("getTaskStopImpact"),
     humanApprove: unexpectedTaskServiceCall("humanApprove"),

@@ -104,8 +104,24 @@ const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
       });
     },
   }) satisfies OdtWorkspaceSettingsService;
-const createTaskService = <Overrides extends Partial<OdtTaskService>>(overrides: Overrides) =>
-  createTaskServiceTestDouble(overrides);
+const createTaskService = <Overrides extends Partial<OdtTaskService>>(overrides: Overrides) => {
+  const service = createTaskServiceTestDouble(overrides);
+  return {
+    ...service,
+    findTask:
+      overrides.findTask ??
+      ((input) =>
+        service
+          .listTasks({ repoPath: input.repoPath })
+          .pipe(Effect.map((tasks) => tasks.find((task) => task.id === input.taskId) ?? null))),
+    listTaskReferences:
+      overrides.listTaskReferences ??
+      ((input) =>
+        service
+          .listTasks(input)
+          .pipe(Effect.map((tasks) => tasks.map(({ id, title }) => ({ id, title }))))),
+  } satisfies OdtTaskService;
+};
 type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
   "taskAssetReadService"
@@ -129,6 +145,7 @@ describe("createOdtMcpBridgeService", () => {
       const taskService = createRealTaskService({
         gitPort: createGitPortTestDouble({ canonicalizePath: (path) => Effect.succeed(path) }),
         taskStore: createTaskStoreTestDouble({
+          findTask: () => Effect.succeed(current),
           listTasks: () => Effect.succeed([current]),
           transitionTask: (input) => {
             transitions.push(input);
@@ -380,6 +397,8 @@ describe("createOdtMcpBridgeService", () => {
     const calls: unknown[] = [];
     let currentTask = taskCard();
     const taskService = createTaskService({
+      findTask: ({ taskId }) => Effect.succeed(taskId === currentTask.id ? currentTask : null),
+      listTaskReferences: () => Effect.succeed([{ id: currentTask.id, title: currentTask.title }]),
       listTasks(input: Parameters<OdtTaskService["listTasks"]>[0]) {
         return Effect.tryPromise({
           try: async () => {
@@ -454,9 +473,7 @@ describe("createOdtMcpBridgeService", () => {
       },
     });
     expect(calls).toEqual([
-      { type: "listTasks", input: { repoPath: "/repo" } },
       { type: "setSpec", input: { repoPath: "/repo", taskId: "task-1", markdown: "## Spec" } },
-      { type: "listTasks", input: { repoPath: "/repo" } },
     ]);
   });
   test("returns a committed-state recovery error to MCP after snapshot publication fails", async () => {
@@ -468,6 +485,7 @@ describe("createOdtMcpBridgeService", () => {
       message: "Snapshot unavailable",
     });
     const base = createTaskServiceWithMutationProgressTestDouble({
+      findTask: () => Effect.succeed(current),
       listTasks: () =>
         Effect.suspend(() => {
           if (mutations > 0) {
@@ -524,6 +542,7 @@ describe("createOdtMcpBridgeService", () => {
   test("uses the task facade to publish one event for MCP document and create mutations", async () => {
     const events: Array<{ kind: "created" | "updated"; taskIds: string[] }> = [];
     const baseTaskService = createTaskServiceWithMutationProgressTestDouble({
+      findTask: () => Effect.succeed(taskCard()),
       createTask: () => Effect.succeed(taskCard({ id: "task-new", title: "New task" })),
       listTasks: () => Effect.succeed([taskCard()]),
       setSpec: () =>

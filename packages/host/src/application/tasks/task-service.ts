@@ -46,7 +46,11 @@ import type { RuntimeRegistryError, RuntimeRegistryPort } from "../../ports/runt
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
-import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type {
+  TaskReferenceCandidate,
+  TaskStoreError,
+  TaskStorePort,
+} from "../../ports/task-repository-ports";
 import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
@@ -135,6 +139,10 @@ export type TaskServiceError =
   | WorkspaceSettingsError;
 
 export type TaskService = {
+  findTask(input: TaskIdInput): Effect.Effect<TaskCard | null, TaskServiceError>;
+  listTaskReferences(
+    input: RepoPathInput,
+  ): Effect.Effect<TaskReferenceCandidate[], TaskServiceError>;
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
   listKanbanTasks(input: RepoPathInput): Effect.Effect<TaskCard[], TaskServiceError>;
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
@@ -441,6 +449,8 @@ const createTaskServiceImplementation = (
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),
     directMerge: (input) => mapTaskMutationProgressErrors(service.directMerge(input)),
     getApprovalContext: (input) => mapTaskServiceErrors(service.getApprovalContext(input)),
+    findTask: (input) => mapTaskServiceErrors(service.findTask(input)),
+    listTaskReferences: (input) => mapTaskServiceErrors(service.listTaskReferences(input)),
     getTaskMetadata: (input) => mapTaskServiceErrors(service.getTaskMetadata(input)),
     humanApprove: (input) => mapTaskServiceErrors(service.humanApprove(input)),
     humanRequestChanges: (input) => mapTaskServiceErrors(service.humanRequestChanges(input)),

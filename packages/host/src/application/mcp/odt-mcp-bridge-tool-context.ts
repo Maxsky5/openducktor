@@ -5,6 +5,7 @@ import {
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { TaskReferenceCandidate } from "../../ports/task-repository-ports";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
@@ -38,6 +39,8 @@ type OdtMcpTaskService = Pick<
   | "buildResumed"
   | "createTask"
   | "getTaskMetadata"
+  | "findTask"
+  | "listTaskReferences"
   | "linkPullRequest"
   | "listTasks"
   | "qaApproved"
@@ -72,7 +75,10 @@ export const createOdtMcpToolContext = ({
       const repoPath = yield* repoPathForWorkspace(workspaceId);
       return yield* taskService.listTasks({ repoPath });
     });
-  const resolveTask = (tasks: TaskCard[], taskId: string) =>
+  const resolveTask = <Task extends TaskReferenceCandidate>(
+    tasks: readonly Task[],
+    taskId: string,
+  ) =>
     Effect.try({
       try: () => resolveTaskReference(tasks, taskId),
       catch: (cause) =>
@@ -86,8 +92,14 @@ export const createOdtMcpToolContext = ({
     });
   const taskForWorkspace = (workspaceId: string, taskId: string) =>
     Effect.gen(function* () {
-      const tasks = yield* tasksForWorkspace(workspaceId);
-      return yield* resolveTask(tasks, taskId);
+      const repoPath = yield* repoPathForWorkspace(workspaceId);
+      const exactTask = yield* taskService.findTask({ repoPath, taskId: taskId.trim() });
+      if (exactTask !== null) return exactTask;
+      const candidates = yield* taskService.listTaskReferences({ repoPath });
+      const reference = yield* resolveTask(candidates, taskId);
+      const task = yield* taskService.findTask({ repoPath, taskId: reference.id });
+      if (task !== null) return task;
+      return yield* resolveTask<TaskCard>([], taskId);
     });
 
   return {

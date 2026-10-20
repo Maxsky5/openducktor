@@ -155,6 +155,8 @@ export const createEventPublishingTaskService = ({
     );
 
   return {
+    findTask: (input) => taskService.findTask(input),
+    listTaskReferences: (input) => taskService.listTaskReferences(input),
     listTasks: (input) => taskService.listTasks(input),
     listKanbanTasks: (input) => taskService.listKanbanTasks(input),
     listTaskIds: (input) => taskService.listTaskIds(input),
