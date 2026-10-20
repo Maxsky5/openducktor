@@ -17,9 +17,9 @@
     "@openducktor/core": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "@tanstack/react-query": "^5.104.1",
-    "react": "^19.3.0",
-    "zod": "^4.6.5",
+    "@tanstack/react-query": "^5.104.4",
+    "react": "^19.3.1",
+    "zod": "^4.6.7",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -29,6 +29,6 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "bun-types": "^1.4.2",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.1"
   }
 }
