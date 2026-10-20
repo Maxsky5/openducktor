@@ -14,6 +14,20 @@ const taskLaneOrderBy = [
   asc(tasks.id),
 ] as const;
 
+export const listTaskIdsInDatabase = (
+  session: TaskStoreSession,
+): Effect.Effect<string[], SqliteTaskStoreReadError> =>
+  session
+    .execute(
+      (database) =>
+        database
+          .select({ id: tasks.id })
+          .from(tasks)
+          .orderBy(...taskLaneOrderBy),
+      "sqliteTaskStore.listTaskIds.selectTasks",
+    )
+    .pipe(Effect.map((rows) => rows.map((row) => row.id)));
+
 export const taskRows = (
   session: TaskStoreSession,
   where?: SQL | undefined,

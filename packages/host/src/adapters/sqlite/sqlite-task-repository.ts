@@ -22,7 +22,12 @@ import {
 } from "./sqlite-task-document-writes";
 import { taskMetadata } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
-import { descendantTaskIds, requireTaskRow, taskReferenceCandidates } from "./sqlite-task-queries";
+import {
+  descendantTaskIds,
+  listTaskIdsInDatabase,
+  requireTaskRow,
+  taskReferenceCandidates,
+} from "./sqlite-task-queries";
 import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
 import {
   applyTaskPatch,
@@ -197,6 +202,11 @@ export const createSqliteTaskRepository = ({
         input.repoPath,
         "sqliteTaskRepository.listAgentSessionsForTasks",
         ({ session }) => listAgentSessionsForTasks(session, input),
+      );
+    },
+    listTaskIds(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.listTaskIds", ({ session }) =>
+        listTaskIdsInDatabase(session),
       );
     },
     listTasks(input) {

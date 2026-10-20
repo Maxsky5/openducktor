@@ -144,10 +144,7 @@ const createAutopilotHarness = async ({
     listTasks: (input) =>
       publicationGate.pipe(Effect.andThen(store(input.repoPath).listTasks(input))),
     listTaskIds: (input) =>
-      taskIdsGate.pipe(
-        Effect.andThen(store(input.repoPath).listTasks(input)),
-        Effect.map((tasks) => tasks.map((task) => task.id)),
-      ),
+      taskIdsGate.pipe(Effect.andThen(store(input.repoPath).listTaskIds(input))),
     setSpec: (input) => move("spec_ready")(input).pipe(Effect.as({ markdown: input.markdown })),
     setPlan: (input) =>
       move("ready_for_dev")(input).pipe(

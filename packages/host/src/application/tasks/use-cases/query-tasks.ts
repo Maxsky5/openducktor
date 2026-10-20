@@ -60,9 +60,7 @@ export const createTaskQueryUseCases = ({
   },
 
   listTaskIds(input) {
-    return taskStore
-      .listTasks({ repoPath: input.repoPath })
-      .pipe(Effect.map((tasks) => tasks.map((task) => task.id)));
+    return taskStore.listTaskIds(input);
   },
 
   getTaskMetadata(input) {

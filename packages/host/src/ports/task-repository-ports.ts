@@ -60,6 +60,8 @@ export type TaskReader = {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<TaskMetadataPayload, TaskStoreError>;
+  /** Read every task ID in listTasks order, including all closed tasks. */
+  listTaskIds(input: { repoPath: string }): Effect.Effect<string[], TaskStoreError>;
   listTasks(input: TaskStoreListTasksInput): Effect.Effect<TaskCard[], TaskStoreError>;
 };
 export type TaskWriter = {

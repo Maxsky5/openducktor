@@ -47,15 +47,12 @@ describe("createTaskService list and session reads", () => {
     ]);
   });
 
-  test("lists the IDs of all tasks, also closed tasks that the Kanban board hides", async () => {
-    const calls: Array<{ repoPath: string; doneVisibleDays?: number }> = [];
+  test("lists all task IDs through the ID read without loading cards", async () => {
+    const calls: Array<{ repoPath: string }> = [];
     const taskStore: TaskStorePort = {
-      listTasks(input) {
+      listTaskIds(input) {
         calls.push(input);
-        return Effect.succeed([
-          task({ id: "task-open" }),
-          task({ id: "task-closed-long-ago", status: "closed" }),
-        ]);
+        return Effect.succeed(["task-open", "task-closed-long-ago"]);
       },
     };
     const service = createTaskService({ taskStore });
@@ -64,8 +61,21 @@ describe("createTaskService list and session reads", () => {
       "task-open",
       "task-closed-long-ago",
     ]);
-    // The ID list reads the store without the Kanban retention filter.
     expect(calls).toEqual([{ repoPath: "/repo" }]);
+  });
+
+  test("preserves typed failures from the task ID read", async () => {
+    const failure = new HostOperationError({
+      operation: "sqliteTaskRepository.listTaskIds",
+      message: "Cannot read task IDs.",
+    });
+    const service = createTaskService({
+      taskStore: { listTaskIds: () => Effect.fail(failure) },
+    });
+
+    expect(await Effect.runPromise(Effect.flip(service.listTaskIds({ repoPath: "/repo" })))).toBe(
+      failure,
+    );
   });
 
   test("preserves typed task asset failures from task mutations", async () => {
