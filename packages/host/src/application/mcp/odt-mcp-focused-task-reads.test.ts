@@ -1,21 +1,26 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { repoConfigSchema } from "@openducktor/contracts";
+import type { JSONType } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
-import { createSqliteTaskStoreHarness } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import {
+  createSqliteTaskStoreHarness,
+  type SqliteTaskStoreTestHarness,
+} from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { taskRowFixture } from "../../adapters/sqlite/sqlite-task-row-test-fixtures";
 import { taskDocuments, tasks } from "../../adapters/sqlite/sqlite-task-store-schema";
 import { createTaskService } from "../tasks/task-service";
 import { resolveTaskReference } from "./odt-mcp-bridge-model";
 import { executeOdtMcpReadTool } from "./odt-mcp-bridge-read-tools";
-import { createOdtMcpToolContext } from "./odt-mcp-bridge-tool-context";
+import { createOdtMcpToolContext, type OdtMcpReadToolName } from "./odt-mcp-bridge-tool-context";
+
+type Read = { operation: string; columns: string[]; count: number };
 
 describe("focused MCP task reads", () => {
-  let harness: Awaited<ReturnType<typeof createSqliteTaskStoreHarness>>;
+  let harness: SqliteTaskStoreTestHarness;
   let context: ReturnType<typeof createOdtMcpToolContext>;
-  let reads: Array<{ columns: string[]; count: number }>;
-  let operations: string[];
+  let reads: Read[];
   let failOperation: string | undefined;
   const databaseFailure = new HostOperationError({
     operation: "test.database",
@@ -26,137 +31,32 @@ describe("focused MCP task reads", () => {
   beforeEach(async () => {
     harness = await createSqliteTaskStoreHarness();
     reads = [];
-    operations = [];
     failOperation = undefined;
-    await Effect.runPromise(
-      harness.contextProvider(harness.repoPath, "test.seed", ({ session }) =>
-        Effect.gen(function* () {
-          const rows = Array.from({ length: 32 }, (_, index) =>
-            taskRowFixture({
-              id: `repo-${index}`,
-              title: index === 0 ? "Focused lookup: final result" : `Other task ${index}`,
-              description: "x".repeat(2048),
-              status: index < 24 ? "closed" : "open",
-            }),
-          );
-          yield* session.execute((db) => db.insert(tasks).values(rows), "test.insertTasks");
-          for (const kind of ["spec", "implementation_plan", "qa_report"] as const) {
-            for (const revision of [1, 2, 3]) {
-              yield* session.execute(
-                (db) =>
-                  db.insert(taskDocuments).values(
-                    rows.map((row) => ({
-                      taskId: row.id,
-                      kind,
-                      revision,
-                      markdown: `${kind} revision ${revision}`,
-                      format: "plain_text" as const,
-                      verdict: kind === "qa_report" ? ("approved" as const) : null,
-                      updatedAt: row.updatedAt,
-                    })),
-                  ),
-                "test.insertDocuments",
-              );
-            }
-          }
-        }),
-      ),
-    );
-    const store = createSqliteTaskRepository({
-      contextProvider: (repoPath, operation, use) =>
-        harness.contextProvider(repoPath, operation, (value) =>
-          use({
-            ...value,
-            session: {
-              ...value.session,
-              execute: (run, name, details) =>
-                Effect.suspend(() => {
-                  operations.push(name);
-                  return name === failOperation
-                    ? Effect.fail(databaseFailure)
-                    : value.session.execute(run, name, details);
-                }).pipe(
-                  Effect.tap((result) =>
-                    Effect.sync(() => {
-                      if (Array.isArray(result))
-                        reads.push({
-                          columns: result.length > 0 ? Object.keys(result[0]) : [],
-                          count: result.length,
-                        });
-                    }),
-                  ),
-                ),
-            },
-          }),
-        ),
-    });
-    context = createOdtMcpToolContext({
-      taskService: createTaskService({ taskStore: store }),
-      workspaceSettingsService: {
-        getRepoConfig: () =>
-          Effect.succeed(
-            repoConfigSchema.parse({
-              workspaceId: "fixture",
-              workspaceName: "Fixture",
-              repoPath: harness.repoPath,
-            }),
-          ),
-        listWorkspaces: () => Effect.succeed([]),
-      },
-      taskAssetReadService: {
-        readBatch: (input) => {
-          expect(input).toEqual({
-            workspaceId: "fixture",
-            taskId: "repo-0",
-            scope: "description",
-            assetIds: [assetId],
-          });
-          return Effect.succeed({
-            kind: "available",
-            assets: [
-              {
-                assetId,
-                asset: {
-                  bytes: Uint8Array.from([1]),
-                  mediaType: "image/png",
-                  headers: {
-                    "Cache-Control": "private, no-store",
-                    "Content-Disposition": 'inline; filename="fixture.png"',
-                    "Content-Type": "image/png",
-                    "X-Content-Type-Options": "nosniff",
-                  },
-                },
-              },
-            ],
-          });
-        },
-      },
-    });
+    await seedTasks(harness);
+    context = createContext();
   });
 
   afterEach(async () => {
     await harness.cleanup();
   });
 
-  test.each(["odt_read_task", "odt_read_task_documents", "odt_read_task_assets"] as const)(
+  test.each([
+    ["odt_read_task", {}],
+    ["odt_read_task_documents", { includeSpec: true, includeQaReport: true }],
+    ["odt_read_task_assets", { assetIds: [assetId] }],
+  ] satisfies Array<[OdtMcpReadToolName, JSONType]>)(
     "%s preserves its public response with bounded full rows for every reference form",
-    async (toolName) => {
-      const input =
-        toolName === "odt_read_task_documents"
-          ? { includeSpec: true, includeQaReport: true }
-          : toolName === "odt_read_task_assets"
-            ? { assetIds: [assetId] }
-            : {};
+    async (toolName, input) => {
       const allTasks = await Effect.runPromise(
         context.taskService.listTasks({ repoPath: harness.repoPath }),
       );
-      const legacyContext = {
+      const listContext = {
         ...context,
         taskForWorkspace: (_workspaceId: string, taskId: string) =>
           Effect.sync(() => resolveTaskReference(allTasks, taskId)),
       };
       const expected = await Effect.runPromise(
-        executeOdtMcpReadTool(legacyContext, toolName, {
+        executeOdtMcpReadTool(listContext, toolName, {
           workspaceId: "fixture",
           taskId: "repo-0",
           ...input,
@@ -302,7 +202,7 @@ describe("focused MCP task reads", () => {
 
   test("fails without another lookup when the selected task is deleted after the candidate read", async () => {
     const taskId = "Focused lookup: final result";
-    const racedContext = createOdtMcpToolContext({
+    const afterDelete = createOdtMcpToolContext({
       ...context,
       taskService: {
         ...context.taskService,
@@ -320,7 +220,7 @@ describe("focused MCP task reads", () => {
     });
 
     const error = await Effect.runPromise(
-      executeOdtMcpReadTool(racedContext, "odt_read_task", { workspaceId: "fixture", taskId }).pipe(
+      executeOdtMcpReadTool(afterDelete, "odt_read_task", { workspaceId: "fixture", taskId }).pipe(
         Effect.flip,
       ),
     );
@@ -336,7 +236,7 @@ describe("focused MCP task reads", () => {
         details: { taskId },
       },
     });
-    expect(operations).toEqual([
+    expect(reads.map((read) => read.operation)).toEqual([
       "sqliteTaskStore.getTaskRow.selectTask",
       "sqliteTaskStore.taskReferenceCandidates.selectTasks",
       "sqliteTaskStore.getTaskRow.selectTask",
@@ -358,8 +258,10 @@ describe("focused MCP task reads", () => {
       context.taskForWorkspace("fixture", taskId).pipe(Effect.flip),
     );
     expect(error).toBe(databaseFailure);
-    expect(operations.at(-1)).toBe(operation);
-    expect(operations).not.toContain("sqliteTaskStore.taskRows.selectTasks");
+    expect(reads.at(-1)?.operation).toBe(operation);
+    expect(reads.map((read) => read.operation)).not.toContain(
+      "sqliteTaskStore.taskRows.selectTasks",
+    );
   });
 
   test("checks the workspace before task lookup", async () => {
@@ -377,6 +279,115 @@ describe("focused MCP task reads", () => {
     expect(
       await Effect.runPromise(denied.taskForWorkspace("fixture", "repo-0").pipe(Effect.flip)),
     ).toBe(error);
-    expect(operations).toEqual([]);
+    expect(reads).toEqual([]);
   });
+
+  function createContext(): ReturnType<typeof createOdtMcpToolContext> {
+    const store = createSqliteTaskRepository({
+      contextProvider: (repoPath, operation, use) =>
+        harness.contextProvider(repoPath, operation, (value) =>
+          use({
+            ...value,
+            session: {
+              ...value.session,
+              execute: (run, name, details) =>
+                Effect.suspend(() => {
+                  const read: Read = { operation: name, columns: [], count: 0 };
+                  reads.push(read);
+                  if (name === failOperation) return Effect.fail(databaseFailure);
+                  return value.session.execute(run, name, details).pipe(
+                    Effect.tap((result) =>
+                      Effect.sync(() => {
+                        if (Array.isArray(result)) {
+                          read.columns = result.length > 0 ? Object.keys(result[0]) : [];
+                          read.count = result.length;
+                        }
+                      }),
+                    ),
+                  );
+                }),
+            },
+          }),
+        ),
+    });
+    return createOdtMcpToolContext({
+      taskService: createTaskService({ taskStore: store }),
+      workspaceSettingsService: {
+        getRepoConfig: () =>
+          Effect.succeed(
+            repoConfigSchema.parse({
+              workspaceId: "fixture",
+              workspaceName: "Fixture",
+              repoPath: harness.repoPath,
+            }),
+          ),
+        listWorkspaces: () => Effect.succeed([]),
+      },
+      taskAssetReadService: {
+        readBatch: (input) => {
+          expect(input).toEqual({
+            workspaceId: "fixture",
+            taskId: "repo-0",
+            scope: "description",
+            assetIds: [assetId],
+          });
+          return Effect.succeed({
+            kind: "available",
+            assets: [
+              {
+                assetId,
+                asset: {
+                  bytes: Uint8Array.from([1]),
+                  mediaType: "image/png",
+                  headers: {
+                    "Cache-Control": "private, no-store",
+                    "Content-Disposition": 'inline; filename="fixture.png"',
+                    "Content-Type": "image/png",
+                    "X-Content-Type-Options": "nosniff",
+                  },
+                },
+              },
+            ],
+          });
+        },
+      },
+    });
+  }
 });
+
+async function seedTasks(harness: SqliteTaskStoreTestHarness): Promise<void> {
+  await Effect.runPromise(
+    harness.contextProvider(harness.repoPath, "test.seed", ({ session }) =>
+      Effect.gen(function* () {
+        const rows = Array.from({ length: 32 }, (_, index) =>
+          taskRowFixture({
+            id: `repo-${index}`,
+            title: index === 0 ? "Focused lookup: final result" : `Other task ${index}`,
+            description: "x".repeat(2048),
+            status: index < 24 ? "closed" : "open",
+          }),
+        );
+        yield* session.execute((db) => db.insert(tasks).values(rows), "test.insertTasks");
+        for (const kind of ["spec", "implementation_plan", "qa_report"] as const) {
+          for (const revision of [1, 2, 3]) {
+            yield* session.execute(
+              (db) =>
+                db.insert(taskDocuments).values(
+                  rows.map((row) => ({
+                    taskId: row.id,
+                    kind,
+                    revision,
+                    markdown: `${kind} revision ${revision}`,
+                    format: "plain_text" as const,
+                    verdict: kind === "qa_report" ? ("approved" as const) : null,
+                    updatedAt: row.updatedAt,
+                  })),
+                ),
+              "test.insertDocuments",
+            );
+          }
+        }
+      }),
+    ),
+  );
+}

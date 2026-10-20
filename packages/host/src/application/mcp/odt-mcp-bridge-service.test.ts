@@ -104,24 +104,6 @@ const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
       });
     },
   }) satisfies OdtWorkspaceSettingsService;
-const createTaskService = <Overrides extends Partial<OdtTaskService>>(overrides: Overrides) => {
-  const service = createTaskServiceTestDouble(overrides);
-  return {
-    ...service,
-    findTask:
-      overrides.findTask ??
-      ((input) =>
-        service
-          .listTasks({ repoPath: input.repoPath })
-          .pipe(Effect.map((tasks) => tasks.find((task) => task.id === input.taskId) ?? null))),
-    listTaskReferences:
-      overrides.listTaskReferences ??
-      ((input) =>
-        service
-          .listTasks(input)
-          .pipe(Effect.map((tasks) => tasks.map(({ id, title }) => ({ id, title }))))),
-  } satisfies OdtTaskService;
-};
 type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
   "taskAssetReadService"
@@ -176,7 +158,7 @@ describe("createOdtMcpBridgeService", () => {
 
   test("reports MCP tool coverage and workspaces", async () => {
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: createTaskService({}),
+      taskService: createTaskServiceTestDouble({}),
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
     await expect(Effect.runPromise(service.ready())).resolves.toEqual({
@@ -229,8 +211,9 @@ describe("createOdtMcpBridgeService", () => {
       },
     };
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: createTaskService({
-        listTasks: () => Effect.succeed([taskCard()]),
+      taskService: createTaskServiceTestDouble({
+        findTask: ({ taskId }) => Effect.succeed(taskId === "task-1" ? taskCard() : null),
+        listTaskReferences: () => Effect.succeed([{ id: "task-1", title: "Add bridge" }]),
       }),
       taskAssetReadService,
       workspaceSettingsService: createWorkspaceSettingsService(),
@@ -274,8 +257,8 @@ describe("createOdtMcpBridgeService", () => {
     const availableAssetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
     const missingAssetId = "96d20c03-a470-47f6-9472-1a1d34cd23df";
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: createTaskService({
-        listTasks: () => Effect.succeed([taskCard()]),
+      taskService: createTaskServiceTestDouble({
+        findTask: () => Effect.succeed(taskCard()),
       }),
       taskAssetReadService: {
         read: () => Effect.succeed(null),
@@ -310,8 +293,8 @@ describe("createOdtMcpBridgeService", () => {
   test("keeps task asset read failures actionable at the bridge boundary", async () => {
     const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: createTaskService({
-        listTasks: () => Effect.succeed([taskCard()]),
+      taskService: createTaskServiceTestDouble({
+        findTask: () => Effect.succeed(taskCard()),
       }),
       taskAssetReadService: {
         read: () => Effect.succeed(null),
@@ -357,8 +340,8 @@ describe("createOdtMcpBridgeService", () => {
   test("returns an actionable validation error for an oversized asset batch", async () => {
     const assetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";
     const service = createOdtMcpBridgeServiceForTest({
-      taskService: createTaskService({
-        listTasks: () => Effect.succeed([taskCard()]),
+      taskService: createTaskServiceTestDouble({
+        findTask: () => Effect.succeed(taskCard()),
       }),
       taskAssetReadService: {
         read: () => Effect.succeed(null),
@@ -396,23 +379,9 @@ describe("createOdtMcpBridgeService", () => {
   test("sets a spec through repo-scoped task service calls", async () => {
     const calls: unknown[] = [];
     let currentTask = taskCard();
-    const taskService = createTaskService({
+    const taskService = createTaskServiceTestDouble({
       findTask: ({ taskId }) => Effect.succeed(taskId === currentTask.id ? currentTask : null),
       listTaskReferences: () => Effect.succeed([{ id: currentTask.id, title: currentTask.title }]),
-      listTasks(input: Parameters<OdtTaskService["listTasks"]>[0]) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ type: "listTasks", input });
-            return [currentTask];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       setSpec(input: Parameters<OdtTaskService["setSpec"]>[0]) {
         return Effect.tryPromise({
           try: async () => {
@@ -611,7 +580,7 @@ describe("createOdtMcpBridgeService", () => {
     ]);
   });
   test("keeps internal plan affected ids out of the MCP response", async () => {
-    const taskService = createTaskService({
+    const taskService = createTaskServiceTestDouble({
       listTasks: () => Effect.succeed([taskCard({ id: "epic-1", issueType: "epic" })]),
       setPlan: () =>
         Effect.succeed({
@@ -648,7 +617,7 @@ describe("createOdtMcpBridgeService", () => {
     expect(result.document).not.toHaveProperty("affectedTaskIds");
   });
   test("creates through the host-owned task service facade", async () => {
-    const taskService = createTaskService({
+    const taskService = createTaskServiceTestDouble({
       createTask(input: CreateTaskUseCaseInput) {
         return Effect.tryPromise({
           try: async () => {
@@ -693,7 +662,7 @@ describe("createOdtMcpBridgeService", () => {
     ).resolves.toMatchObject({ task: { id: "task-new", title: "New task" } });
   });
   test("orders task search results by recent activity before applying the result limit", async () => {
-    const taskService = createTaskService({
+    const taskService = createTaskServiceTestDouble({
       listTasks(input: Parameters<OdtTaskService["listTasks"]>[0]) {
         expect(input).toEqual({ repoPath: "/repo" });
         return Effect.succeed([
@@ -746,20 +715,8 @@ describe("createOdtMcpBridgeService", () => {
   test("links pull requests through the task service provider lookup path", async () => {
     let currentTask = taskCard({ status: "human_review" });
     const linkPullRequestCalls: unknown[] = [];
-    const taskService = createTaskService({
-      listTasks() {
-        return Effect.tryPromise({
-          try: async () => {
-            return [currentTask];
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
+    const taskService = createTaskServiceTestDouble({
+      findTask: () => Effect.succeed(currentTask),
       linkPullRequest(input: Parameters<OdtTaskService["linkPullRequest"]>[0]) {
         return Effect.sync(() => {
           linkPullRequestCalls.push(input);
@@ -814,8 +771,8 @@ describe("createOdtMcpBridgeService", () => {
       aiReviewEnabled: true,
       labels: ["mcp"],
     });
-    const taskService = createTaskService({
-      listTasks: () => Effect.succeed([current]),
+    const taskService = createTaskServiceTestDouble({
+      findTask: () => Effect.succeed(current),
       updateTask(input: Parameters<OdtTaskService["updateTask"]>[0]) {
         updateCalls.push(input);
         return Effect.succeed({
@@ -862,8 +819,8 @@ describe("createOdtMcpBridgeService", () => {
       aiReviewEnabled: true,
       labels: ["backend", "ui"],
     });
-    const taskService = createTaskService({
-      listTasks: () => Effect.succeed([current]),
+    const taskService = createTaskServiceTestDouble({
+      findTask: () => Effect.succeed(current),
       updateTask() {
         updateCalls += 1;
         return Effect.succeed(current);
@@ -893,8 +850,8 @@ describe("createOdtMcpBridgeService", () => {
   test("returns the unchanged task when no editable field is present", async () => {
     let updateCalls = 0;
     const current = taskCard();
-    const taskService = createTaskService({
-      listTasks: () => Effect.succeed([current]),
+    const taskService = createTaskServiceTestDouble({
+      findTask: () => Effect.succeed(current),
       updateTask() {
         updateCalls += 1;
         return Effect.succeed(current);
@@ -921,8 +878,8 @@ describe("createOdtMcpBridgeService", () => {
   test("rejects epic task updates before calling the host update path", async () => {
     let updateCalls = 0;
     const epic = taskCard({ issueType: "epic" });
-    const taskService = createTaskService({
-      listTasks: () => Effect.succeed([epic]),
+    const taskService = createTaskServiceTestDouble({
+      findTask: () => Effect.succeed(epic),
       updateTask() {
         updateCalls += 1;
         return Effect.succeed(epic);

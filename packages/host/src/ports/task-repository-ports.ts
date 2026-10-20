@@ -47,15 +47,14 @@ export type PullRequestSyncCandidate = {
   pullRequest: PullRequest;
   status: TaskStatus;
 };
-export type TaskReferenceCandidate = Pick<TaskCard, "id" | "title">;
+export type TaskReference = Pick<TaskCard, "id" | "title">;
 export type TaskReader = {
   findTask(input: {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<TaskCard | null, TaskStoreError>;
-  listTaskReferences(input: {
-    repoPath: string;
-  }): Effect.Effect<TaskReferenceCandidate[], TaskStoreError>;
+  /** Read IDs and titles in listTasks order without loading cards. */
+  listTaskReferences(input: { repoPath: string }): Effect.Effect<TaskReference[], TaskStoreError>;
   getTask(input: { repoPath: string; taskId: string }): Effect.Effect<TaskCard, TaskStoreError>;
   getTaskMetadata(input: {
     repoPath: string;

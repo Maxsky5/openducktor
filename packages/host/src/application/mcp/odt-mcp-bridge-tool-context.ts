@@ -5,7 +5,7 @@ import {
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import type { TaskReferenceCandidate } from "../../ports/task-repository-ports";
+import type { TaskReference } from "../../ports/task-repository-ports";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
@@ -60,15 +60,6 @@ export type CreateOdtMcpToolContextInput = {
   workspaceSettingsService: OdtMcpWorkspaceSettingsService;
 };
 
-const taskReferenceError = (cause: unknown) =>
-  new HostValidationError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    cause,
-    details: {
-      operation: "odt_mcp_bridge.resolve_task_reference",
-    },
-  });
-
 export const createOdtMcpToolContext = ({
   taskAssetReadService,
   taskService,
@@ -84,10 +75,7 @@ export const createOdtMcpToolContext = ({
       const repoPath = yield* repoPathForWorkspace(workspaceId);
       return yield* taskService.listTasks({ repoPath });
     });
-  const resolveTask = <Task extends TaskReferenceCandidate>(
-    tasks: readonly Task[],
-    taskId: string,
-  ) =>
+  const resolveTask = <Task extends TaskReference>(tasks: readonly Task[], taskId: string) =>
     Effect.try({
       try: () => resolveTaskReference(tasks, taskId),
       catch: taskReferenceError,
@@ -116,3 +104,12 @@ export const createOdtMcpToolContext = ({
 };
 
 export type OdtMcpToolContext = ReturnType<typeof createOdtMcpToolContext>;
+
+const taskReferenceError = (cause: unknown) =>
+  new HostValidationError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+    details: {
+      operation: "odt_mcp_bridge.resolve_task_reference",
+    },
+  });

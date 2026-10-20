@@ -1,7 +1,7 @@
 import { asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
-import type { TaskReferenceCandidate } from "../../ports/task-repository-ports";
+import type { TaskReference } from "../../ports/task-repository-ports";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
@@ -43,7 +43,7 @@ export const taskRows = (
 
 export const taskReferenceCandidates = (
   session: TaskStoreSession,
-): Effect.Effect<TaskReferenceCandidate[], SqliteTaskStoreReadError> =>
+): Effect.Effect<TaskReference[], SqliteTaskStoreReadError> =>
   session.execute(
     (database) =>
       database

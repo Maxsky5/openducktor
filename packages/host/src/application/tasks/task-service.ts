@@ -47,7 +47,7 @@ import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settin
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type {
-  TaskReferenceCandidate,
+  TaskReference,
   TaskStoreError,
   TaskStorePort,
 } from "../../ports/task-repository-ports";
@@ -140,9 +140,7 @@ export type TaskServiceError =
 
 export type TaskService = {
   findTask(input: TaskIdInput): Effect.Effect<TaskCard | null, TaskServiceError>;
-  listTaskReferences(
-    input: RepoPathInput,
-  ): Effect.Effect<TaskReferenceCandidate[], TaskServiceError>;
+  listTaskReferences(input: RepoPathInput): Effect.Effect<TaskReference[], TaskServiceError>;
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
   listKanbanTasks(input: RepoPathInput): Effect.Effect<TaskCard[], TaskServiceError>;
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */

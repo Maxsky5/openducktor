@@ -15,7 +15,7 @@ import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { TaskReferenceCandidate } from "../../ports/task-repository-ports";
+import type { TaskReference } from "../../ports/task-repository-ports";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
 
@@ -52,51 +52,8 @@ export const buildTaskUpdatePatch = (
   return patch;
 };
 
-const labelsEqual = (left: readonly string[], right: readonly string[]): boolean =>
-  left.length === right.length && left.every((value, index) => value === right[index]);
-
-const sanitizeSlug = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const formatTaskRef = (task: TaskReferenceCandidate): string => `${task.id} (${task.title})`;
-
-const ambiguousTaskError = (
-  requested: string,
-  matches: readonly TaskReferenceCandidate[],
-): HostValidationError<{ taskId: string }> =>
-  new HostValidationError({
-    field: "taskId",
-    message: `Task identifier "${requested}" is ambiguous. Use exact task id. Candidates: ${matches
-      .slice(0, MAX_TASK_CANDIDATES)
-      .map(formatTaskRef)
-      .join(", ")}`,
-    details: { taskId: requested },
-  });
-
-export const taskNotFoundError = (
-  requested: string,
-  candidates: readonly TaskReferenceCandidate[] = [],
-): HostValidationError<{ taskId: string }> => {
-  const hint =
-    candidates.length > 0 ? ` Candidate task ids: ${candidates.map(formatTaskRef).join(", ")}` : "";
-  return new HostValidationError({
-    field: "taskId",
-    message: `Task not found: ${requested}.${hint}`,
-    details: { taskId: requested },
-  });
-};
-
-const singleTaskMatch = <Task extends TaskReferenceCandidate>(
-  matches: readonly Task[],
-): Task | null => {
-  const [match] = matches;
-  return matches.length === 1 && match ? match : null;
-};
-
-export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
+/** Match IDs before titles. Reject ties at the first matching step. */
+export const resolveTaskReference = <Task extends TaskReference>(
   tasks: readonly Task[],
   requestedTaskId: string,
 ): Task => {
@@ -114,7 +71,7 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
     return exact;
   }
   const caseInsensitiveId = tasks.filter((task) => normalizeKey(task.id) === requestedLower);
-  const singleCaseInsensitiveId = singleTaskMatch(caseInsensitiveId);
+  const singleCaseInsensitiveId = singleMatch(caseInsensitiveId);
   if (singleCaseInsensitiveId) {
     return singleCaseInsensitiveId;
   }
@@ -129,7 +86,7 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
         normalizedId.split("-").some((segment) => segment === requestedSlug)
       );
     });
-    const singleIdSegment = singleTaskMatch(byIdSegment);
+    const singleIdSegment = singleMatch(byIdSegment);
     if (singleIdSegment) {
       return singleIdSegment;
     }
@@ -138,7 +95,7 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
     }
   }
   const byTitleExact = tasks.filter((task) => normalizeKey(task.title) === requestedLower);
-  const singleTitleExact = singleTaskMatch(byTitleExact);
+  const singleTitleExact = singleMatch(byTitleExact);
   if (singleTitleExact) {
     return singleTitleExact;
   }
@@ -147,7 +104,7 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
   }
   if (requestedSlug) {
     const byTitleSlug = tasks.filter((task) => sanitizeSlug(task.title) === requestedSlug);
-    const singleTitleSlug = singleTaskMatch(byTitleSlug);
+    const singleTitleSlug = singleMatch(byTitleSlug);
     if (singleTitleSlug) {
       return singleTitleSlug;
     }
@@ -165,7 +122,7 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
       );
     })
     .slice(0, MAX_TASK_CANDIDATES + 1);
-  const singleTitleContains = singleTaskMatch(byTitleContains);
+  const singleTitleContains = singleMatch(byTitleContains);
   if (singleTitleContains) {
     return singleTitleContains;
   }
@@ -188,11 +145,18 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
   throw taskNotFoundError(requestedTaskId, candidates);
 };
 
-const taskDocuments = (task: TaskCard): PublicTaskSummaryTask["documents"] => ({
-  hasSpec: Boolean(task.documentSummary.spec.has),
-  hasPlan: Boolean(task.documentSummary.plan.has),
-  hasQaReport: Boolean(task.documentSummary.qaReport.has),
-});
+export const taskNotFoundError = (
+  requested: string,
+  candidates: readonly TaskReference[] = [],
+): HostValidationError<{ taskId: string }> => {
+  const hint =
+    candidates.length > 0 ? ` Candidate task ids: ${candidates.map(formatTaskRef).join(", ")}` : "";
+  return new HostValidationError({
+    field: "taskId",
+    message: `Task not found: ${requested}.${hint}`,
+    details: { taskId: requested },
+  });
+};
 
 export const mapPublicTask = (task: TaskCard): PublicTask => {
   const publicTask: PublicTask = {
@@ -328,3 +292,38 @@ export const parseResponse = <A, O>(
         },
       }),
   });
+
+const labelsEqual = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+const sanitizeSlug = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const formatTaskRef = (task: TaskReference): string => `${task.id} (${task.title})`;
+
+const ambiguousTaskError = (
+  requested: string,
+  matches: readonly TaskReference[],
+): HostValidationError<{ taskId: string }> =>
+  new HostValidationError({
+    field: "taskId",
+    message: `Task identifier "${requested}" is ambiguous. Use exact task id. Candidates: ${matches
+      .slice(0, MAX_TASK_CANDIDATES)
+      .map(formatTaskRef)
+      .join(", ")}`,
+    details: { taskId: requested },
+  });
+
+const singleMatch = <Task extends TaskReference>(matches: readonly Task[]): Task | null => {
+  const [match] = matches;
+  return matches.length === 1 && match ? match : null;
+};
+
+const taskDocuments = (task: TaskCard): PublicTaskSummaryTask["documents"] => ({
+  hasSpec: Boolean(task.documentSummary.spec.has),
+  hasPlan: Boolean(task.documentSummary.plan.has),
+  hasQaReport: Boolean(task.documentSummary.qaReport.has),
+});
