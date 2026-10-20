@@ -15,6 +15,8 @@ export const createTaskStoreTestDouble = <Overrides extends Partial<TaskStorePor
   deleteAgentSession: unexpectedTaskStoreCall("deleteAgentSession"),
   deleteTask: unexpectedTaskStoreCall("deleteTask"),
   diagnoseRepoStore: unexpectedTaskStoreCall("diagnoseRepoStore"),
+  findTask: unexpectedTaskStoreCall("findTask"),
+  listTaskReferences: unexpectedTaskStoreCall("listTaskReferences"),
   getTask: unexpectedTaskStoreCall("getTask"),
   getTaskMetadata: unexpectedTaskStoreCall("getTaskMetadata"),
   listAgentSessionsForTasks: unexpectedTaskStoreCall("listAgentSessionsForTasks"),

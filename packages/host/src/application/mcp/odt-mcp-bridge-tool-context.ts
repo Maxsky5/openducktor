@@ -1,17 +1,18 @@
-import type { TaskCard, WorkspaceScopedOdtToolName } from "@openducktor/contracts";
+import type { WorkspaceScopedOdtToolName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostOperationErrorAggregate,
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
+import type { TaskReference } from "../../ports/task-repository-ports";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { resolveTaskReference } from "./odt-mcp-bridge-model";
+import { resolveTaskReference, taskNotFoundError } from "./odt-mcp-bridge-model";
 
 export type OdtMcpBridgeError =
   | HostOperationErrorAggregate
@@ -38,6 +39,8 @@ type OdtMcpTaskService = Pick<
   | "buildResumed"
   | "createTask"
   | "getTaskMetadata"
+  | "findTask"
+  | "listTaskReferences"
   | "linkPullRequest"
   | "listTasks"
   | "qaApproved"
@@ -72,22 +75,21 @@ export const createOdtMcpToolContext = ({
       const repoPath = yield* repoPathForWorkspace(workspaceId);
       return yield* taskService.listTasks({ repoPath });
     });
-  const resolveTask = (tasks: TaskCard[], taskId: string) =>
+  const resolveTask = <Task extends TaskReference>(tasks: readonly Task[], taskId: string) =>
     Effect.try({
       try: () => resolveTaskReference(tasks, taskId),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-          details: {
-            operation: "odt_mcp_bridge.resolve_task_reference",
-          },
-        }),
+      catch: taskReferenceError,
     });
   const taskForWorkspace = (workspaceId: string, taskId: string) =>
     Effect.gen(function* () {
-      const tasks = yield* tasksForWorkspace(workspaceId);
-      return yield* resolveTask(tasks, taskId);
+      const repoPath = yield* repoPathForWorkspace(workspaceId);
+      const exactTask = yield* taskService.findTask({ repoPath, taskId: taskId.trim() });
+      if (exactTask !== null) return exactTask;
+      const candidates = yield* taskService.listTaskReferences({ repoPath });
+      const reference = yield* resolveTask(candidates, taskId);
+      const task = yield* taskService.findTask({ repoPath, taskId: reference.id });
+      if (task !== null) return task;
+      return yield* taskReferenceError(taskNotFoundError(taskId));
     });
 
   return {
@@ -102,3 +104,12 @@ export const createOdtMcpToolContext = ({
 };
 
 export type OdtMcpToolContext = ReturnType<typeof createOdtMcpToolContext>;
+
+const taskReferenceError = (cause: unknown) =>
+  new HostValidationError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+    details: {
+      operation: "odt_mcp_bridge.resolve_task_reference",
+    },
+  });

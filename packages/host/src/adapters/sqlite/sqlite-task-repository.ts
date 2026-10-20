@@ -10,7 +10,7 @@ import {
   updateAgentSessionModel,
   upsertAgentSession,
 } from "./sqlite-task-agent-sessions";
-import { getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
+import { findTaskCard, getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
 import { insertTaskFromCreateInput } from "./sqlite-task-create";
 import {
   clearQaReportDocuments,
@@ -22,7 +22,7 @@ import {
 } from "./sqlite-task-document-writes";
 import { taskMetadata } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
-import { descendantTaskIds, requireTaskRow } from "./sqlite-task-queries";
+import { descendantTaskIds, requireTaskRow, taskReferenceCandidates } from "./sqlite-task-queries";
 import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
 import {
   applyTaskPatch,
@@ -155,6 +155,18 @@ export const createSqliteTaskRepository = ({
       );
       return Effect.catch(diagnose, (cause) =>
         Effect.succeed(blockingTaskStoreHealth(errorMessage(cause))),
+      );
+    },
+    findTask(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.findTask", ({ session }) =>
+        findTaskCard(session, input.taskId),
+      );
+    },
+    listTaskReferences(input) {
+      return withDatabase(
+        input.repoPath,
+        "sqliteTaskRepository.listTaskReferences",
+        ({ session }) => taskReferenceCandidates(session),
       );
     },
     getTask(input) {
