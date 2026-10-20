@@ -97,7 +97,7 @@ const skippedSourceQueryOptions = (
       staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
     });
   }
-  return skippedRuntimeCatalogQueryOptions();
+  return skippedRuntimeCatalogQueryOptions(runtimeKind);
 };
 
 /**

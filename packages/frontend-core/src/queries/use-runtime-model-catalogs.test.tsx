@@ -1,5 +1,5 @@
 import "../test-support/dom-environment";
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
@@ -11,7 +11,9 @@ import type {
   AgentRuntimeCatalog,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
+import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren, ReactElement } from "react";
+import { createClientQueryClient } from "../connection/client-query-client";
 import { HostRuntimeStatusContext } from "../sessions/session-contexts";
 import { IsolatedQueryWrapper } from "../test-support/isolated-query-wrapper";
 import { createHookHarness } from "../test-support/react-hook-harness";
@@ -54,6 +56,64 @@ afterEach(() => {
 });
 
 describe("useRuntimeModelCatalogs", () => {
+  test("skips each runtime separately without duplicate query warnings when no repository is selected", async () => {
+    const client = createClientQueryClient();
+    const runtimeKinds = ["opencode", "codex", "claude"] as const;
+    const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) =>
+      runtimeCatalogFor(runtimeRef.runtimeKind),
+    );
+    const skippedWrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryClientProvider client={client}>
+        <HostRuntimeStatusContext value={readyRuntimeStatus}>{children}</HostRuntimeStatusContext>
+      </QueryClientProvider>
+    );
+    const harness = createHookHarness(
+      useRuntimeModelCatalogs,
+      {
+        repoPath: null,
+        runtimeKinds,
+        enabledRuntimeKinds: runtimeKinds,
+        loadRuntimeCatalog: loadCatalog,
+      },
+      { wrapper: skippedWrapper },
+    );
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      await harness.mount();
+
+      expect(
+        warn.mock.calls.some(([message]) => String(message).includes("Duplicate Queries found")),
+      ).toBe(false);
+      expect(
+        client
+          .getQueryCache()
+          .getAll()
+          .map((query) => query.queryKey),
+      ).toEqual([
+        ["runtime-catalog", "skipped", "opencode"],
+        ["runtime-catalog", "skipped", "codex"],
+        ["runtime-catalog", "skipped", "claude"],
+      ]);
+      expect(loadCatalog).not.toHaveBeenCalled();
+      expect(harness.getLatest().resources).toEqual(
+        runtimeKinds.map((runtimeKind) =>
+          expect.objectContaining({
+            runtimeKind,
+            catalog: null,
+            error: null,
+            isEnabled: false,
+            isLoading: false,
+          }),
+        ),
+      );
+    } finally {
+      await harness.unmount();
+      warn.mockRestore();
+      client.clear();
+    }
+  });
+
   test("keeps cached catalog data without a loading state during a background refetch", async () => {
     const refetch = createDeferred<AgentRuntimeCatalog>();
     let loadAttempt = 0;

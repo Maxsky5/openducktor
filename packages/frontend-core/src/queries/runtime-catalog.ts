@@ -93,9 +93,11 @@ export const runtimeCatalogQueryOptions = (
   gcTime: Number.POSITIVE_INFINITY,
 });
 
-export const skippedRuntimeCatalogQueryOptions = () =>
+export const skippedRuntimeCatalogQueryOptions = (runtimeKind?: RuntimeKind) =>
   skippedQueryOptions<CachedRuntimeCatalog>({
-    queryKey: runtimeCatalogQueryKeys.skipped,
+    queryKey: runtimeKind
+      ? [...runtimeCatalogQueryKeys.skipped, runtimeKind]
+      : runtimeCatalogQueryKeys.skipped,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
