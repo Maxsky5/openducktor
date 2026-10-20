@@ -300,6 +300,54 @@ describe("focused MCP task reads", () => {
     expect(error.message).toBe("Task not found: missing.");
   });
 
+  test("fails without another lookup when the selected task is deleted after the candidate read", async () => {
+    const taskId = "Focused lookup: final result";
+    const racedContext = createOdtMcpToolContext({
+      ...context,
+      taskService: {
+        ...context.taskService,
+        listTaskReferences: (input) =>
+          context.taskService.listTaskReferences(input).pipe(
+            Effect.tap(() =>
+              harness.store.deleteTask({
+                repoPath: harness.repoPath,
+                taskId: "repo-0",
+                deleteSubtasks: false,
+              }),
+            ),
+          ),
+      },
+    });
+
+    const error = await Effect.runPromise(
+      executeOdtMcpReadTool(racedContext, "odt_read_task", { workspaceId: "fixture", taskId }).pipe(
+        Effect.flip,
+      ),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "HostValidationError",
+      message: `Task not found: ${taskId}.`,
+      details: { operation: "odt_mcp_bridge.resolve_task_reference" },
+      cause: {
+        _tag: "HostValidationError",
+        field: "taskId",
+        message: `Task not found: ${taskId}.`,
+        details: { taskId },
+      },
+    });
+    expect(operations).toEqual([
+      "sqliteTaskStore.getTaskRow.selectTask",
+      "sqliteTaskStore.taskReferenceCandidates.selectTasks",
+      "sqliteTaskStore.getTaskRow.selectTask",
+    ]);
+    expect(
+      await Effect.runPromise(
+        harness.store.findTask({ repoPath: harness.repoPath, taskId: "repo-0" }),
+      ),
+    ).toBeNull();
+  });
+
   test.each([
     ["sqliteTaskStore.getTaskRow.selectTask", "repo-0"],
     ["sqliteTaskStore.documentSummariesByTaskId.selectLatestDocuments", "repo-0"],

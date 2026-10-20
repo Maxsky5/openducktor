@@ -76,6 +76,19 @@ const ambiguousTaskError = (
     details: { taskId: requested },
   });
 
+export const taskNotFoundError = (
+  requested: string,
+  candidates: readonly TaskReferenceCandidate[] = [],
+): HostValidationError<{ taskId: string }> => {
+  const hint =
+    candidates.length > 0 ? ` Candidate task ids: ${candidates.map(formatTaskRef).join(", ")}` : "";
+  return new HostValidationError({
+    field: "taskId",
+    message: `Task not found: ${requested}.${hint}`,
+    details: { taskId: requested },
+  });
+};
+
 const singleTaskMatch = <Task extends TaskReferenceCandidate>(
   matches: readonly Task[],
 ): Task | null => {
@@ -172,20 +185,7 @@ export const resolveTaskReference = <Task extends TaskReferenceCandidate>(
     })
     .slice(0, MAX_TASK_CANDIDATES);
   const candidates = hints.length > 0 ? hints : tasks.slice(0, MAX_TASK_CANDIDATES);
-  if (candidates.length === 0) {
-    throw new HostValidationError({
-      field: "taskId",
-      message: `Task not found: ${requestedTaskId}.`,
-      details: { taskId: requestedTaskId },
-    });
-  }
-  throw new HostValidationError({
-    field: "taskId",
-    message: `Task not found: ${requestedTaskId}. Candidate task ids: ${candidates
-      .map(formatTaskRef)
-      .join(", ")}`,
-    details: { taskId: requestedTaskId },
-  });
+  throw taskNotFoundError(requestedTaskId, candidates);
 };
 
 const taskDocuments = (task: TaskCard): PublicTaskSummaryTask["documents"] => ({

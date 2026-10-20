@@ -1,4 +1,4 @@
-import type { TaskCard, WorkspaceScopedOdtToolName } from "@openducktor/contracts";
+import type { WorkspaceScopedOdtToolName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostOperationErrorAggregate,
@@ -12,7 +12,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
-import { resolveTaskReference } from "./odt-mcp-bridge-model";
+import { resolveTaskReference, taskNotFoundError } from "./odt-mcp-bridge-model";
 
 export type OdtMcpBridgeError =
   | HostOperationErrorAggregate
@@ -60,6 +60,15 @@ export type CreateOdtMcpToolContextInput = {
   workspaceSettingsService: OdtMcpWorkspaceSettingsService;
 };
 
+const taskReferenceError = (cause: unknown) =>
+  new HostValidationError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+    details: {
+      operation: "odt_mcp_bridge.resolve_task_reference",
+    },
+  });
+
 export const createOdtMcpToolContext = ({
   taskAssetReadService,
   taskService,
@@ -81,14 +90,7 @@ export const createOdtMcpToolContext = ({
   ) =>
     Effect.try({
       try: () => resolveTaskReference(tasks, taskId),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-          details: {
-            operation: "odt_mcp_bridge.resolve_task_reference",
-          },
-        }),
+      catch: taskReferenceError,
     });
   const taskForWorkspace = (workspaceId: string, taskId: string) =>
     Effect.gen(function* () {
@@ -99,7 +101,7 @@ export const createOdtMcpToolContext = ({
       const reference = yield* resolveTask(candidates, taskId);
       const task = yield* taskService.findTask({ repoPath, taskId: reference.id });
       if (task !== null) return task;
-      return yield* resolveTask<TaskCard>([], taskId);
+      return yield* taskReferenceError(taskNotFoundError(taskId));
     });
 
   return {
