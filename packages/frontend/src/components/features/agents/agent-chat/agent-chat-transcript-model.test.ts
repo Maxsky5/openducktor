@@ -277,10 +277,10 @@ describe("agent chat transcript model", () => {
         previousTranscriptModel: previous,
         startMessageIndex: prefix.length,
         mode: "append",
-      });
+      })!;
 
       expect(updated).toEqual(buildAgentChatTranscriptModel(nextSession, { showThinkingMessages }));
-      const appendedKeys = updated!.rows
+      const appendedKeys = updated.rows
         .slice(previous.rows.length)
         .filter((row) => row.kind === "message")
         .map((row) => row.key);
@@ -291,9 +291,9 @@ describe("agent chat transcript model", () => {
         expect.stringContaining(":fresh:1"),
       ]);
       for (const [index, row] of previous.rows.entries()) {
-        expect(updated!.rows[index]).toBe(row);
+        expect(updated.rows[index]).toBe(row);
       }
-      expect(updated!.userMessageAnchors).toBe(previous.userMessageAnchors);
+      expect(updated.userMessageAnchors).toBe(previous.userMessageAnchors);
     },
   );
 
