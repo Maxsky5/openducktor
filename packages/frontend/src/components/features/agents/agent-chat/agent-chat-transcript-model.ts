@@ -310,10 +310,16 @@ export function updateAgentChatTranscriptModelFromPrefix({
   const rows = previousTranscriptModel.rows.slice(0, firstTailRowIndex);
   const metadata = buildMetadataFromRows(rows);
 
+  // Only changed IDs need prefix counts to keep duplicate row keys stable.
   const occurrences = new Map<string, number>();
+  forEachSessionMessageFrom(session, startMessageIndex, (message) => {
+    occurrences.set(message.id, 0);
+  });
   for (let index = 0; index < startMessageIndex; index += 1) {
     const message = getSessionMessageAt(session, index);
-    if (message) occurrences.set(message.id, (occurrences.get(message.id) ?? 0) + 1);
+    if (!message) continue;
+    const occurrence = occurrences.get(message.id);
+    if (occurrence !== undefined) occurrences.set(message.id, occurrence + 1);
   }
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
     const occurrence = occurrences.get(message.id) ?? 0;

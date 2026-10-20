@@ -249,6 +249,54 @@ describe("agent chat transcript model", () => {
     ).toBe(false);
   });
 
+  test.each([false, true])(
+    "counts hidden prefix and repeated suffix IDs with thinking visibility %s",
+    (showThinkingMessages) => {
+      const prefix = [
+        buildMessage("user", "Question", { id: "user" }),
+        buildMessage("thinking", "Reasoning", { id: "repeated/id" }),
+        buildMessage("assistant", "Earlier answer", { id: "repeated/id" }),
+        buildMessage("assistant", "Other output", { id: "unrelated" }),
+      ];
+      const session = buildSession({ messages: prefix });
+      const previous = buildAgentChatTranscriptModel(session, { showThinkingMessages });
+      const nextSession = buildSession({
+        ...session,
+        messages: [
+          ...prefix,
+          buildMessage("assistant", "New part", { id: "fresh" }),
+          buildMessage("assistant", "Repeated part", { id: "repeated/id" }),
+          buildMessage("assistant", "Another repeated part", { id: "repeated/id" }),
+          buildMessage("assistant", "Another new part", { id: "fresh" }),
+        ],
+      });
+
+      const updated = updateAgentChatTranscriptModelFromPrefix({
+        session: nextSession,
+        showThinkingMessages,
+        previousTranscriptModel: previous,
+        startMessageIndex: prefix.length,
+        mode: "append",
+      });
+
+      expect(updated).toEqual(buildAgentChatTranscriptModel(nextSession, { showThinkingMessages }));
+      const appendedKeys = updated!.rows
+        .slice(previous.rows.length)
+        .filter((row) => row.kind === "message")
+        .map((row) => row.key);
+      expect(appendedKeys).toEqual([
+        expect.stringContaining(":fresh:0"),
+        expect.stringContaining(":repeated%2Fid:2"),
+        expect.stringContaining(":repeated%2Fid:3"),
+        expect.stringContaining(":fresh:1"),
+      ]);
+      for (const [index, row] of previous.rows.entries()) {
+        expect(updated!.rows[index]).toBe(row);
+      }
+      expect(updated!.userMessageAnchors).toBe(previous.userMessageAnchors);
+    },
+  );
+
   test("buildAgentChatTranscriptModel does not append synthetic thinking rows", () => {
     const session = buildSession({
       messages: [],
