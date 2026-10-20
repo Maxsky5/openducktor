@@ -7,27 +7,20 @@ import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
 
 describe("SQLite task IDs", () => {
   test("initializes an empty store and rejects reads after disposal", async () => {
-    const harness = await createSqliteTaskStoreHarness();
+    const { cleanup, repoPath, store } = await createSqliteTaskStoreHarness();
     try {
-      expect(
-        await Effect.runPromise(harness.store.listTaskIds({ repoPath: harness.repoPath })),
-      ).toEqual([]);
+      expect(await Effect.runPromise(store.listTaskIds({ repoPath }))).toEqual([]);
     } finally {
-      await harness.cleanup();
+      await cleanup();
     }
 
-    expect(
-      await Effect.runPromise(
-        Effect.flip(harness.store.listTaskIds({ repoPath: harness.repoPath })),
-      ),
-    ).toMatchObject({
+    expect(await Effect.runPromise(Effect.flip(store.listTaskIds({ repoPath })))).toMatchObject({
       _tag: "HostOperationError",
     });
   });
 
   test("keeps card ordering, ID ties, subtasks, and old closed tasks", async () => {
-    const harness = await createSqliteTaskStoreHarness();
-    const { repoPath, store, contextProvider } = harness;
+    const { cleanup, repoPath, store, contextProvider } = await createSqliteTaskStoreHarness();
     const older = new Date("2020-01-01T00:00:00.000Z");
     const newer = new Date("2020-01-02T00:00:00.000Z");
     const rows = [
@@ -73,15 +66,15 @@ describe("SQLite task IDs", () => {
         ids.filter((id) => id !== "closed-a"),
       );
     } finally {
-      await harness.cleanup();
+      await cleanup();
     }
   });
 
   test("reads IDs without decoding task card JSON", async () => {
-    const harness = await createSqliteTaskStoreHarness();
+    const { cleanup, repoPath, store, contextProvider } = await createSqliteTaskStoreHarness();
     try {
       await Effect.runPromise(
-        harness.contextProvider(harness.repoPath, "test.seedTask", ({ session }) =>
+        contextProvider(repoPath, "test.seedTask", ({ session }) =>
           session.execute(
             (database) => database.insert(tasks).values(taskRowFixture({ labelsJson: "invalid" })),
             "test.seedTask",
@@ -89,36 +82,28 @@ describe("SQLite task IDs", () => {
         ),
       );
 
-      expect(
-        await Effect.runPromise(harness.store.listTaskIds({ repoPath: harness.repoPath })),
-      ).toEqual(["task-1"]);
-      await expect(
-        Effect.runPromise(harness.store.listTasks({ repoPath: harness.repoPath })),
-      ).rejects.toThrow();
+      expect(await Effect.runPromise(store.listTaskIds({ repoPath }))).toEqual(["task-1"]);
+      await expect(Effect.runPromise(store.listTasks({ repoPath }))).rejects.toThrow();
     } finally {
-      await harness.cleanup();
+      await cleanup();
     }
   });
 
   test("returns a typed error when the ID query fails", async () => {
-    const harness = await createSqliteTaskStoreHarness();
+    const { cleanup, repoPath, store, contextProvider } = await createSqliteTaskStoreHarness();
     try {
       await Effect.runPromise(
-        harness.contextProvider(harness.repoPath, "test.breakTaskTable", ({ session }) =>
+        contextProvider(repoPath, "test.breakTaskTable", ({ session }) =>
           session.execute((database) => database.run(sql`DROP TABLE tasks`), "test.breakTaskTable"),
         ),
       );
 
-      expect(
-        await Effect.runPromise(
-          Effect.flip(harness.store.listTaskIds({ repoPath: harness.repoPath })),
-        ),
-      ).toMatchObject({
+      expect(await Effect.runPromise(Effect.flip(store.listTaskIds({ repoPath })))).toMatchObject({
         _tag: "HostOperationError",
         operation: "sqliteTaskStore.listTaskIds.selectTasks",
       });
     } finally {
-      await harness.cleanup();
+      await cleanup();
     }
   });
 });
