@@ -1,17 +1,19 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type AgentSessionSummary, type AgentSessionTodoItem } from "@openducktor/core";
-import { interruptedTurnResumeError } from "@openducktor/core";
-import { HostOperationError } from "../../effect/host-errors";
+import {
+  type AgentSessionSummary,
+  type AgentSessionTodoItem,
+  InterruptedTurnResumeError,
+  interruptedTurnResumeError,
+} from "@openducktor/core";
+import { Effect, Exit } from "effect";
+import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import {
   buildClaudeAgentSdkOptions,
   type ClaudeAgentSdkOptionsDependencies,
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
-import {
-  reconcileClaudeSessionTitle,
-  renameClaudeSessionIfNeeded,
-} from "./claude-session-title-update";
+import { toSessionError } from "./claude-agent-sdk-session-lifecycle";
 import {
   type ClaudeSessionLaunchInput,
   requireClaudeOpenDucktorMcpForScope,
@@ -30,6 +32,10 @@ import {
   INIT_TIMEOUT_MS,
   withTimeout,
 } from "./claude-agent-sdk-utils";
+import {
+  reconcileClaudeSessionTitle,
+  renameClaudeSessionIfNeeded,
+} from "./claude-session-title-update";
 
 export type CreateClaudeAgentSdkSessionInput = {
   emit: ClaudeAgentSdkEventEmitter;
@@ -43,51 +49,6 @@ export type CreateClaudeAgentSdkSessionInput = {
   serviceInput: CreateClaudeAgentSdkServiceInput;
   sessionInput: ClaudeSessionLaunchInput;
   sessionStore: ClaudeSessionStore;
-};
-
-/** Distinguishes a stream that ended before admission from an admission timeout. */
-class ClaudeContinuationStreamEndedError extends Error {
-  constructor(externalSessionId: string) {
-    super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`);
-  }
-}
-
-/**
- * Blocks until the resumed session admits the interrupted-turn continuation.
- * The CLI fails closed when it never starts the hidden continuation turn.
- */
-export const awaitClaudeContinuationAdmission = async (input: {
-  admission: Promise<void>;
-  externalSessionId: string;
-  runtimeId: string;
-  timeoutMs: number;
-}): Promise<void> => {
-  try {
-    await withTimeout(
-      input.admission,
-      input.timeoutMs,
-      `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation.`,
-    );
-  } catch (error) {
-    const streamEnded = error instanceof ClaudeContinuationStreamEndedError;
-    throw new HostOperationError({
-      operation: "claudeRuntime.createSession",
-      message: streamEnded
-        ? `Claude session '${input.externalSessionId}' ended before it admitted the interrupted-turn continuation.`
-        : `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation within ${input.timeoutMs} ms.`,
-      cause: interruptedTurnResumeError({
-        reason: "continuation_failed",
-        message: streamEnded
-          ? `Claude Code ended session '${input.externalSessionId}' before it started the continuation. Send a new message to continue.`
-          : `Claude Code did not start the continuation for session '${input.externalSessionId}'. Send a new message to continue.`,
-        cause: error,
-      }),
-      details: {
-        externalSessionId: input.externalSessionId,
-        runtimeId: input.runtimeId,
-      },
-    });
-  }
 };
 
 export const createClaudeAgentSdkSession = async ({
@@ -106,7 +67,7 @@ export const createClaudeAgentSdkSession = async ({
   const queue = new AsyncInputQueue<SDKUserMessage>();
   const abortController = new AbortController();
   const startedAt = now();
-  // A reconciliation reports the durable title only after the runtime accepts it.
+  // Report the saved title only after the runtime accepts the change.
   const summaryInput =
     sessionInput.reconcileTitle === true
       ? { externalSessionId: sessionInput.externalSessionId }
@@ -166,7 +127,6 @@ export const createClaudeAgentSdkSession = async ({
     if (options.permissionMode) sessionContext.requestedPermissionMode = options.permissionMode;
     input.workStartGuard?.assertCurrent();
     sdkQuery = query({ prompt: queue, options });
-    input.onWorkIssued?.();
   } catch (error) {
     abortController.abort();
     queue.close();
@@ -175,26 +135,27 @@ export const createClaudeAgentSdkSession = async ({
   const session: ClaudeSession = Object.assign(sessionContext, { query: sdkQuery });
   sessionStore.set(session);
   const isContinuation = sessionInput.resumeInterruptedTurn === true;
-  const continuationAdmission = isContinuation ? Promise.withResolvers<void>() : null;
-  let continuationAdmissionReported = false;
-  const consumptionInput: Parameters<typeof consumeClaudeSession>[0] = {
+  const admission = isContinuation ? Promise.withResolvers<void>() : null;
+  let admissionReported = false;
+  const consumeInput: Parameters<typeof consumeClaudeSession>[0] = {
     session,
     sessionStore,
     now,
     emit,
     onBackgroundFailure: serviceInput.onBackgroundFailure,
   };
-  if (continuationAdmission) {
-    consumptionInput.onContinuationAdmission = () => {
-      if (continuationAdmissionReported) return;
-      continuationAdmissionReported = true;
+  if (admission) {
+    consumeInput.onContinuationAdmission = () => {
+      if (admissionReported) return;
+      admissionReported = true;
       input.onWorkAccepted?.();
-      continuationAdmission.resolve();
+      admission.resolve();
       onContinuationAdmission?.();
     };
   }
-  const consumption = consumeClaudeSession(consumptionInput);
+  const completion = consumeClaudeSession(consumeInput);
   try {
+    input.onWorkIssued?.();
     await withTimeout(
       sdkQuery.initializationResult(),
       INIT_TIMEOUT_MS,
@@ -212,15 +173,19 @@ export const createClaudeAgentSdkSession = async ({
         await renameClaudeSessionIfNeeded({ session, title: sessionInput.title });
       }
     }
-    if (continuationAdmission) {
+    if (admission) {
       await awaitClaudeContinuationAdmission({
-        // Race the admission against the stream itself, so a stream that ends first
-        // reports its own failure instead of waiting for the admission timeout.
+        // A stopped stream cannot admit work, so do not wait for the admission timeout.
         admission: Promise.race([
-          continuationAdmission.promise,
-          consumption.then(() => {
-            throw new ClaudeContinuationStreamEndedError(session.externalSessionId);
-          }),
+          admission.promise,
+          completion.then(
+            () => {
+              throw new ContinuationEndedError(session.externalSessionId);
+            },
+            (cause: unknown) => {
+              throw new ContinuationEndedError(session.externalSessionId, cause);
+            },
+          ),
         ]),
         externalSessionId: session.externalSessionId,
         runtimeId,
@@ -228,50 +193,117 @@ export const createClaudeAgentSdkSession = async ({
       });
       session.activity = "running";
     }
-  } catch (error) {
-    if (sessionStore.get(session.externalSessionId) === session) {
-      sessionStore.close(session);
+    if (sessionStore.get(session.externalSessionId) !== session) {
+      throw new HostOperationError({
+        operation: "claudeRuntime.createSession",
+        message: `Claude session '${session.externalSessionId}' stopped before startup completed.`,
+        details: {
+          externalSessionId: session.externalSessionId,
+          runtimeId,
+        },
+      });
     }
-    await sdkQuery.return();
-    await consumption;
+    session.summary.status = isContinuation ? "running" : "idle";
+    // Restoring an idle session must not move its activity time in the session list.
+    if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
+      return session.summary;
+    }
+    const timestamp = now();
+    if (isContinuation) {
+      emit(session, {
+        type: "transcript_retracted",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+        messageIds: [`claude-permission-mode:${session.externalSessionId}`],
+      });
+    }
+    emit(session, {
+      type: "session_started",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      message: sessionInput.startedMessage,
+    });
+    if (!isContinuation) {
+      emit(session, {
+        type: "session_idle",
+        externalSessionId: session.externalSessionId,
+        timestamp,
+      });
+    }
+    return session.summary;
+  } catch (error) {
+    const settled = await Effect.runPromiseExit(sessionStore.settle(session));
+    if (Exit.isFailure(settled)) {
+      throw toStartupError(error, toSessionError(settled.cause, "claudeRuntime.settleSession"));
+    }
     throw error;
   }
-  if (sessionStore.get(session.externalSessionId) !== session) {
+};
+
+/** A continued session must admit work before startup can report success. */
+export const awaitClaudeContinuationAdmission = async (input: {
+  admission: Promise<void>;
+  externalSessionId: string;
+  runtimeId: string;
+  timeoutMs: number;
+}): Promise<void> => {
+  try {
+    await withTimeout(
+      input.admission,
+      input.timeoutMs,
+      `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation.`,
+    );
+  } catch (error) {
+    const streamEnded = error instanceof ContinuationEndedError;
     throw new HostOperationError({
       operation: "claudeRuntime.createSession",
-      message: `Claude session '${session.externalSessionId}' stopped before startup completed.`,
+      message: streamEnded
+        ? `Claude session '${input.externalSessionId}' ended before it admitted the interrupted-turn continuation.`
+        : `Claude session '${input.externalSessionId}' did not start the interrupted-turn continuation within ${input.timeoutMs} ms.`,
+      cause: interruptedTurnResumeError({
+        reason: "continuation_failed",
+        message: streamEnded
+          ? `Claude Code ended session '${input.externalSessionId}' before it started the continuation. Send a new message to continue.`
+          : `Claude Code did not start the continuation for session '${input.externalSessionId}'. Send a new message to continue.`,
+        cause: error,
+      }),
       details: {
-        externalSessionId: session.externalSessionId,
-        runtimeId,
+        externalSessionId: input.externalSessionId,
+        runtimeId: input.runtimeId,
       },
     });
   }
-  session.summary.status = isContinuation ? "running" : "idle";
-  // Restoring an idle session must not move its activity time in the session list.
-  if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
-    return session.summary;
-  }
-  const timestamp = now();
-  if (isContinuation) {
-    emit(session, {
-      type: "transcript_retracted",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      messageIds: [`claude-permission-mode:${session.externalSessionId}`],
-    });
-  }
-  emit(session, {
-    type: "session_started",
-    externalSessionId: session.externalSessionId,
-    timestamp,
-    message: sessionInput.startedMessage,
-  });
-  if (!isContinuation) {
-    emit(session, {
-      type: "session_idle",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-    });
-  }
-  return session.summary;
 };
+
+const toStartupError = (cause: unknown, cleanup: HostOperationError): HostOperationError => {
+  const errors = new AggregateError([cause, cleanup], "Claude startup and settlement failed.");
+  const resumeError =
+    cause instanceof HostOperationError && cause.cause instanceof InterruptedTurnResumeError
+      ? cause.cause
+      : undefined;
+  let combined: AggregateError | InterruptedTurnResumeError = errors;
+  // Keep the continuation reason at the public error boundary.
+  if (resumeError) {
+    const detail: Parameters<typeof interruptedTurnResumeError>[0] = {
+      reason: resumeError.reason,
+      message: resumeError.message,
+      cause: errors,
+    };
+    if (resumeError.nativeOutcome) detail.nativeOutcome = resumeError.nativeOutcome;
+    combined = interruptedTurnResumeError(detail);
+  }
+  return new HostOperationError({
+    operation: "claudeRuntime.createSession",
+    message: `${errorMessage(cause)}\n${cleanup.message}`,
+    cause: combined,
+  });
+};
+
+/** Keep an early stream end distinct from an admission timeout. */
+class ContinuationEndedError extends Error {
+  constructor(externalSessionId: string, cause?: unknown) {
+    super(`Claude session '${externalSessionId}' ended before it admitted the continuation.`, {
+      cause,
+    });
+  }
+}

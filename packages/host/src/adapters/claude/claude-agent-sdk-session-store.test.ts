@@ -58,6 +58,41 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
 });
 
 describe("createClaudeAgentSdkSessionStore", () => {
+  test("runtime shutdown settles other sessions when one query and a close listener fail", async () => {
+    const queryError = new Error("query close failed");
+    const listenerError = new Error("close listener failed");
+    const store = createClaudeAgentSdkSessionStore();
+    const first = createSession({
+      query: createClaudeQueryFixture({
+        close: () => {
+          throw queryError;
+        },
+      }),
+    });
+    const second = createSession({ externalSessionId: "session-2" });
+    store.set(first);
+    store.set(second);
+    store.subscribeClose((session) => {
+      if (session === first) throw listenerError;
+    });
+    const closed: ClaudeSession[] = [];
+    store.subscribeClose((session) => {
+      closed.push(session);
+    });
+
+    await expect(
+      Effect.runPromise(store.stopSessionsForRuntime(first.runtimeId)),
+    ).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        errors: expect.arrayContaining([queryError, listenerError]),
+      }),
+    });
+    expect(store.get(first.externalSessionId)).toBeUndefined();
+    expect(store.get(second.externalSessionId)).toBeUndefined();
+    expect(second.query.close).toHaveBeenCalledTimes(1);
+    expect(closed).toEqual([first, second]);
+  });
+
   test("stops and probes live Claude sessions without the service object", async () => {
     const events: unknown[] = [];
     const store = createClaudeAgentSdkSessionStore({

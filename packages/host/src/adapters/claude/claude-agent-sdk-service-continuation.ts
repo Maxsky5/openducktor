@@ -1,11 +1,12 @@
-import type { AgentSessionHistoryMessage, ResumeAgentSessionInput } from "@openducktor/core";
 import {
   AgentRuntimeQueryError,
+  type AgentSessionHistoryMessage,
   interruptedTurnResumeError,
   type InterruptedTurnResumeError,
   type InterruptedTurnResumeFailureReason,
+  type ResumeAgentSessionInput,
 } from "@openducktor/core";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import {
   HostOperationError,
   type HostOperationErrorAggregate,
@@ -36,34 +37,39 @@ const finishClaudeContinuationDecision = (decision: ClaudeContinuationDecision) 
   decision.kind === "reject" ? failClaudeContinuation(decision.error) : Effect.void;
 
 /**
- * Decides what happens to the attached session after a failed replacement. A session
- * whose stream ended in the meantime has no consumer, so it is dropped instead of
- * restored, and the failure names the missing session.
+ * Restore the attached session only if its stream still runs.
+ * A stopped session must finish cleanup before the continuation reports it missing.
  */
 export const resolveFailedClaudeContinuationSession = <Failure>(input: {
   cause: Failure;
   existing: ClaudeSession | undefined;
   externalSessionId: string;
   sessionStore: ClaudeSessionStore;
-}): Failure | HostOperationErrorAggregate => {
-  const { cause, existing, externalSessionId, sessionStore } = input;
-  if (!existing) {
-    return cause;
-  }
-  if (isClaudeSessionStopped(existing)) {
-    sessionStore.close(existing);
-    return toHostOperationError(
-      interruptedTurnResumeError({
-        reason: "session_not_found",
-        message: `Claude session '${externalSessionId}' stopped while the continuation was being created, so the continuation cannot use it.`,
-        cause,
-      }),
-      continuationOperation,
-    );
-  }
-  sessionStore.set(existing);
-  return cause;
-};
+}): Effect.Effect<never, Failure | HostOperationErrorAggregate> =>
+  Effect.gen(function* () {
+    const { cause, existing, externalSessionId, sessionStore } = input;
+    if (!existing) return yield* Effect.fail(cause);
+    if (isClaudeSessionStopped(existing)) {
+      const settled = yield* Effect.exit(sessionStore.settle(existing));
+      return yield* Effect.fail(
+        toHostOperationError(
+          interruptedTurnResumeError({
+            reason: "session_not_found",
+            message: `Claude session '${externalSessionId}' stopped while the continuation was being created, so the continuation cannot use it.`,
+            cause: Exit.isFailure(settled)
+              ? new AggregateError(
+                  [cause, settled.cause],
+                  "Claude continuation and settlement failed.",
+                )
+              : cause,
+          }),
+          continuationOperation,
+        ),
+      );
+    }
+    sessionStore.set(existing);
+    return yield* Effect.fail(cause);
+  });
 
 /**
  * Reads the persisted transcript for a continuation. The read covers the full

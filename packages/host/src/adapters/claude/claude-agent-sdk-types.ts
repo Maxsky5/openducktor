@@ -17,7 +17,7 @@ import type {
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
-import type { Effect } from "effect";
+import type { Effect, Fiber } from "effect";
 
 export type {
   ClaudeAgentSdkService,
@@ -166,8 +166,23 @@ export type ClaudeSessionContext = Omit<ClaudeSession, "query">;
 
 export type ClaudeSessionStore = {
   readonly sessions: Map<string, ClaudeSession>;
+  /** Close local resources; the consumer can call this without joining itself. */
   close(session: ClaudeSession): void;
+  ownConsumer(
+    session: ClaudeSession,
+    fiber: Fiber.Fiber<void, HostOperationErrorAggregate>,
+    canFinish: () => boolean,
+  ): void;
+  settle(session: ClaudeSession): Effect.Effect<void, HostOperationErrorAggregate>;
+  finish(
+    session: ClaudeSession,
+    message: string,
+    emit?: ClaudeAgentSdkEventEmitter,
+    timestamp?: string,
+  ): void;
   get(externalSessionId: string): ClaudeSession | undefined;
+  /** Include consumers that still run after close removes their session. */
+  getForCleanup(externalSessionId: string): ClaudeSession | undefined;
   probeSessionStatus(
     input: RuntimeSessionTarget,
   ): Effect.Effect<{ supported: boolean; hasLiveSession: boolean }, never>;
