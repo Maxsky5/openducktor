@@ -181,7 +181,9 @@ export const buildClaudeAgentSdkOptions = async ({
       ],
       PreToolUse: [
         {
-          hooks: [createClaudePreToolUseHook({ session })],
+          hooks: [
+            createClaudePreToolUseHook({ session, now, emit: (event) => emit(session, event) }),
+          ],
         },
       ],
       PostToolUse: [

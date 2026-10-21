@@ -136,7 +136,7 @@ export const createClaudeRunningToolPart = ({
   toolUse,
 }: {
   messageId: string;
-  startedAtMs: number;
+  startedAtMs?: number | undefined;
   toolUse: ClaudeDecodedToolUse;
 }): Extract<AgentStreamPart, { kind: "tool" }> => {
   const part: Extract<AgentStreamPart, { kind: "tool" }> = {
@@ -147,8 +147,9 @@ export const createClaudeRunningToolPart = ({
     tool: toolUse.toolName,
     ...toolPartPresentation(toolUse.toolName),
     status: "running",
-    startedAtMs,
+    inputStreaming: false,
   };
+  if (startedAtMs !== undefined) part.startedAtMs = startedAtMs;
   if (toolUse.metadata) {
     part.metadata = toolUse.metadata;
   }

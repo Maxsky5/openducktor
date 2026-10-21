@@ -42,6 +42,7 @@ type ClaudeToolResultSession = ClaudeBackgroundToolState & {
   toolMessageIdsByCallId: Map<string, string>;
   toolNamesByCallId: Map<string, string>;
   toolEndedAtMsByCallId?: Map<string, number>;
+  runningToolCallIds?: Set<string>;
   toolStartedAtMsByCallId: Map<string, number>;
   todoProjection?: ClaudeTodoProjection;
   todosById: ClaudeTodoState;
@@ -103,6 +104,9 @@ export const handleClaudeUserToolResultMessage = ({
     const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
     const endedAtMs =
       session.toolEndedAtMsByCallId?.get(result.toolUseId) ?? timestampMs(timestamp);
+    session.toolEndedAtMsByCallId ??= new Map();
+    session.toolEndedAtMsByCallId.set(result.toolUseId, endedAtMs);
+    session.runningToolCallIds?.delete(result.toolUseId);
     rememberClaudeTodoToolResult({
       callId: result.toolUseId,
       input,

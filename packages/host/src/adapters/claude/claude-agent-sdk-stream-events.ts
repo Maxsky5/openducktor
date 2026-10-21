@@ -17,6 +17,7 @@ import {
 import { createClaudeAssistantReasoningPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 import type { ClaudeSdkStreamEventMessageProjection } from "./claude-agent-sdk-message-projection";
+import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
 
 export const emitClaudePendingToolPart = ({
   emit,
@@ -33,6 +34,11 @@ export const emitClaudePendingToolPart = ({
   timestamp: string;
   toolUse: ClaudeDecodedToolUse;
 }): void => {
+  if (session.toolEndedAtMsByCallId?.has(toolUse.callId)) return;
+  if (session.runningToolCallIds?.has(toolUse.callId)) {
+    emitClaudeRunningToolPart({ emit, fallbackMessageId, session, timestamp, toolUse });
+    return;
+  }
   if (!session.toolMessageIdsByCallId.has(toolUse.callId)) {
     session.backgroundToolCallIdsSinceSnapshot?.add(toolUse.callId);
   }

@@ -2,7 +2,8 @@ import type { HookCallback, PreToolUseHookSpecificOutput } from "@anthropic-ai/c
 import { findClaudeSubagentSessionByAgentId } from "./claude-agent-sdk-event-session";
 import { parseClaudePreToolUseIngress } from "./claude-agent-sdk-ingress-schemas";
 import { authorizeClaudeToolUse } from "./claude-agent-sdk-permissions";
-import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "./claude-agent-sdk-types";
+import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
 
 const denyToolUse = (message: string) => ({
   hookSpecificOutput: {
@@ -14,8 +15,12 @@ const denyToolUse = (message: string) => ({
 
 export const createClaudePreToolUseHook = ({
   session,
+  emit,
+  now,
 }: {
   session: ClaudeSessionContext;
+  emit: (event: ClaudeAgentSdkEvent) => void;
+  now: () => string;
 }): HookCallback => {
   return async (input, _toolUseId, { signal }) => {
     const preToolUseInput = parseClaudePreToolUseIngress(input);
@@ -37,6 +42,20 @@ export const createClaudePreToolUseHook = ({
     });
     if (authorization.behavior === "deny") {
       return denyToolUse(authorization.message);
+    }
+    if (toolSession) {
+      emitClaudeRunningToolPart({
+        emit,
+        fallbackMessageId: preToolUseInput.tool_use_id,
+        session: toolSession,
+        timestamp: now(),
+        toolUse: {
+          blockType: "tool_use",
+          callId: preToolUseInput.tool_use_id,
+          toolName: preToolUseInput.tool_name,
+          input: authorization.toolInput,
+        },
+      });
     }
     const inputChanged = authorization.toolInput !== toolInput;
     if (authorization.approval === "workflow_role" || authorization.approval === "trusted_odt") {

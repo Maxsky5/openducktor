@@ -154,6 +154,7 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     subagentAgentIdsByToolUseId?: Map<string, string>;
     subagentTaskIdsByToolUseId: Map<string, string>;
     toolEndedAtMsByCallId: Map<string, number>;
+    runningToolCallIds?: Set<string>;
     toolStartedAtMsByCallId: Map<string, number>;
     todosById: Map<string, AgentSessionTodoItem>;
     /** Sent user messages that the CLI has not admitted yet, by message UUID. */

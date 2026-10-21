@@ -650,6 +650,55 @@ describe("handleClaudeSdkMessage tool events", () => {
     }
   });
 
+  test("keeps an executing tool running when its streamed input finishes", () => {
+    const session = createSession();
+    const events: AgentEvent[] = [];
+    const send = (message: ReturnType<typeof claudeSdkMessageFixture>) =>
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp: "2026-06-25T20:00:10.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+      });
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "tool-1", name: "Read", input: {} },
+        },
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "tool_progress",
+        tool_use_id: "tool-1",
+        tool_name: "Read",
+        elapsed_time_seconds: 1,
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+      }),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "assistant_part",
+      part: {
+        callId: "tool-1",
+        status: "running",
+        startedAtMs: Date.parse("2026-06-25T20:00:09.000Z"),
+      },
+    });
+  });
+
   test("emits tool progress with runtime duration metadata", () => {
     const events: AgentEvent[] = [];
     const session = createSession();

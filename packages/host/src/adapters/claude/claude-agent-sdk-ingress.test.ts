@@ -25,7 +25,11 @@ describe("Claude SDK ingress", () => {
   });
 
   test("rejects malformed pre-tool input before authorization", async () => {
-    const hook = createClaudePreToolUseHook({ session: createClaudeSession() });
+    const hook = createClaudePreToolUseHook({
+      session: createClaudeSession(),
+      now: () => "2026-06-25T12:00:00.000Z",
+      emit: () => {},
+    });
     const malformedInput: Parameters<typeof hook>[0] = {
       cwd: "/repo",
       hook_event_name: "PreToolUse",
