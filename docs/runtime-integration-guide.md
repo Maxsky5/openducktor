@@ -63,6 +63,12 @@ A shared process must not give every workspace the same workspace ID. Bind the m
 | Codex | Each `thread/start`, `thread/resume`, and `thread/fork` request sends `mcp_servers.openducktor.*` overrides with the bridge environment of the session workspace. |
 | Claude | Each session resolves the bridge from its own repository. |
 
+### Calling session of browser tools
+
+The managed OpenDucktor MCP server gets `ODT_RUNTIME_KIND`. Browser tools read the runtime session that made each call from the native runtime, never from tool input. [External MCP](external-mcp.md#browser-tools) lists the source of the calling session for each runtime and describes the owner rules.
+
+Give each new, resumed, or forked Claude session its ID before the query starts. A subagent session calls with its own ID, and the host follows its live parent links to the root session. Keep `parentExternalSessionId` in the live snapshot of each child session.
+
 ## Ownership
 
 | Owner | Owns | Does not own |

@@ -48,6 +48,17 @@ The package build checks that the selected platform and architecture match the h
 
 `bun run browser:dev` uses the same launcher in workspace mode with Vite. A published install contains the frontend and host. It does not need published internal workspace packages.
 
+### Chrome for Testing pin
+
+The web runner downloads one pinned Chrome for Testing version. `packages/host/src/adapters/browser/chrome-for-testing/chrome-for-testing-pin.ts` holds the version and the byte size and SHA-256 of each platform archive. A new version makes each host download the browser again.
+
+To update the pin:
+
+1. Pick the Stable version from `https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json`.
+2. Download the full `chrome` archive of each platform in the pin file once. Write its byte size and SHA-256 into the pin file. The JSON has no checksum.
+3. Copy `chrome-linux64/deb.deps` into `CHROME_FOR_TESTING_DEBIAN_PACKAGES`.
+4. Run `bun run --filter @openducktor/host test:browser-conformance`. It installs the new version with the real installer and runs the engine conformance checks.
+
 ## Publish Homebrew
 
 `Publish Homebrew Tap` starts after a GitHub release becomes public. A maintainer can rerun it with the same tag.

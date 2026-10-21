@@ -103,7 +103,7 @@ The network browser config uses `https://machine.ts.net/api` as the work endpoin
 - Caddy can retain it with an exact-and-child path matcher: `@remote path /api /api/*`, then `handle @remote { reverse_proxy 127.0.0.1:14327 }`.
 - nginx can strip it with both `location = /api { proxy_pass http://127.0.0.1:14327/; }` and `location /api/ { proxy_pass http://127.0.0.1:14327/; }`.
 
-The first `--base-path` segment must not match a backend route namespace: `health`, `session`, `shutdown`, `events`, `local-attachment-preview`, `invoke`, `task-events`, `task-assets`, or `terminal`. This restriction also applies to nested paths, such as `/invoke/custom`. Use `/api`, `/api/v1`, or another nonconflicting path so that unprefixed routes remain reachable.
+The first `--base-path` segment must not match a backend route namespace: `health`, `session`, `shutdown`, `events`, `local-attachment-preview`, `invoke`, `task-events`, `task-assets`, `terminal`, or `browser`. This restriction also applies to nested paths, such as `/invoke/custom`. Use `/api`, `/api/v1`, or another nonconflicting path so that unprefixed routes remain reachable.
 
 The example mounts the host at port 443, which differs from the frontend port 1420. The launcher logs an info message about this port mismatch. It is expected behind a proxy.
 
@@ -121,12 +121,30 @@ Without `--base-path`, the browser reaches the host on the backend port, so the 
 - `packages/openducktor-web` implements the bridge with HTTP calls and SSE subscriptions.
 - `packages/openducktor-web/src/typescript-host-backend.ts` owns its host and private browser backend.
 - `packages/remote-host` attaches the shared network work interface to either shell.
+- `packages/openducktor-web/src/browser-tabs` holds the browser tab routes, the preview proxy, and the browser part of the web shell bridge.
 
 Shared frontend code cannot import shell internals. `getShellBridge()` returns `ShellPlatform`, which has no host members, so production frontend code reaches the host only through its client connection. `bun run lint` checks the import boundaries with oxlint: `no-restricted-imports` for shell imports in the shared frontend, and `architecture/allowed-imports` for the frontend core.
 
 The `/events` endpoint authenticates the host session and streams the shared event bus for all repositories. Repository names select browser listeners; they do not restrict access. The transport does not support sessions authorized for only one repository.
 
-The `/events` endpoint keeps one SSE connection and one replay cursor for non-task host events. Run, runtime, and Workspace Session events use the `message` event name. Live-session events use `agent-session-live:` followed by the JSON-encoded repository path. The browser registers a named listener for each observed repository and validates each delivered envelope. Events for unobserved repositories still cross the connection and advance its cursor, but do not trigger JSON parsing or transcript validation in JavaScript. The cursor contains the host epoch, so a cursor from an earlier host process cannot replay. The host keeps a bounded replay buffer for each SSE event name, so a busy repository cannot evict the events of another one. A total byte limit for all buffers evicts the oldest events first. Each connection ends its replay with a `replay-complete` event that names the event names with evicted events and reports a host change. A complete replay keeps the live-session collections and the Workspace Session lists. Listeners of an affected event name read their state again. Restart the host and reload the browser together when this event framing changes.
+The `/events` endpoint keeps one SSE connection and one replay cursor for non-task host events. Run, runtime, and Workspace Session events use the `message` event name. Browser tab events use the `browser` event name, so many tab updates cannot evict other events. Live-session events use `agent-session-live:` followed by the JSON-encoded repository path. The browser registers a named listener for each observed repository and validates each delivered envelope. Events for unobserved repositories still cross the connection and advance its cursor, but do not trigger JSON parsing or transcript validation in JavaScript. The cursor contains the host epoch, so a cursor from an earlier host process cannot replay. The host keeps a bounded replay buffer for each SSE event name, so a busy repository cannot evict the events of another one. A total byte limit for all buffers evicts the oldest events first. Each connection ends its replay with a `replay-complete` event that names the event names with evicted events and reports a host change. A complete replay keeps the live-session collections and the Workspace Session lists. Listeners of an affected event name read their state again. Restart the host and reload the browser together when this event framing changes.
+
+## Browser tabs
+
+The web runner shows each user browser tab in an iframe of the browser of the user. Only an app at `http://localhost`, `http://127.0.0.1`, or `http://[::1]` shows pages. Agent tabs run in a headless Chrome for Testing on the host, and the web runner does not show them. [Browser tabs](browser-tabs.md#web-runner-tabs) describes the frames.
+
+### Install the agent browser on first use
+
+The host downloads the pinned Chrome for Testing, about 120 MB, when an agent first needs a browser page. On a host platform without a pinned build, agents get no browser tools. On Linux, install the system libraries that the agent tool error names. [Browser tabs](browser-tabs.md#chrome-for-testing) describes the install.
+
+### Routes
+
+| Route | Access | Use |
+| --- | --- | --- |
+| `POST /browser/frame-source` | `x-openducktor-app-token`, and an `Origin` of `http://localhost`, `http://127.0.0.1`, or `http://[::1]` | Tells the app how to show a page in the iframe of a tab |
+
+- For a page of the host, the route starts the preview proxy of its dev server and returns its origin.
+- For another site, the host reads the frame rules of the site and returns `direct` or `refused`. A site that does not answer gives `502` with the reason.
 
 ## Access control
 
@@ -157,7 +175,7 @@ The published `@openducktor/web` package contains:
 - `dist/web-shell/**` for the built browser UI.
 - `dist/client/**` for the standalone static browser client.
 
-The package retains native runtime dependencies and bundles the host's JavaScript dependencies.
+The package retains native runtime dependencies and `playwright-core`, and bundles the other JavaScript dependencies of the host.
 See [build and packaging](build-and-packaging.md) for the dependency rules and size measurements.
 
 `.github/workflows/publish-web.yml` builds and checks the package. It runs `scripts/prepare-web-publish-packages.ts` and `npm publish --dry-run`, then publishes through npm Trusted Publisher.

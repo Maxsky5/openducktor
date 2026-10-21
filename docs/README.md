@@ -28,6 +28,7 @@ Use this index to find the document for your task.
 - [External MCP](external-mcp.md) defines package use, host bridge startup, workspace scope, and public task tools.
 - [Interactive terminal architecture](interactive-terminal-architecture.md) defines terminal ownership, transport, replay, and cleanup.
 - [Remote host protocol](remote-host-protocol.md) defines Electron and web enablement, discovery, compatibility, native transport, and recovery.
+- [Browser tabs](browser-tabs.md) defines browser tab ownership, engines, the CDP proxy, agent tools, annotations, and security.
 - [Web runner](web-runner.md) defines the local browser runner and its release package.
 - [Architecture decision records](adr/) record accepted and superseded technical decisions.
 
