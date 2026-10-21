@@ -35,7 +35,7 @@ export function FileListDirectoryRow({
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] whitespace-nowrap tabular-nums">
         {row.additions > 0 ? (
-          <span className="text-green-600 dark:text-green-400">+{row.additions}</span>
+          <span className="text-green-700 dark:text-green-400">+{row.additions}</span>
         ) : null}
         {row.deletions > 0 ? (
           <span className="text-red-600 dark:text-red-400">-{row.deletions}</span>
