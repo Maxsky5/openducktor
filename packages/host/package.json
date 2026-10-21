@@ -8,13 +8,15 @@
     ".": "./src/index.ts",
     "./claude-transcript-worker": "./src/adapters/claude/claude-transcript-worker.ts",
     "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts",
-    "./node-pty": "./src/adapters/node/pty-process-adapter.ts"
+    "./node-pty": "./src/adapters/node/pty-process-adapter.ts",
+    "./chrome-for-testing": "./src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.build.json",
     "db:generate": "drizzle-kit generate --config drizzle.task-store.config.ts",
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --preload ../../scripts/bun-test-preload.ts --pass-with-no-tests --timeout 5000 --parallel=2 --no-isolate",
+    "test:browser-conformance": "ODT_CHROME_FOR_TESTING_CONFIG_ROOT=../../node_modules/.cache/openducktor-chrome-for-testing bun test --timeout 120000 src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.live.test.ts",
     "lint": "oxlint -c ../../.oxlintrc.json src drizzle.task-store.config.ts"
   },
   "dependencies": {
@@ -34,6 +36,7 @@
     "drizzle-orm": "0.45.4",
     "effect": "4.0.2",
     "file-type": "^22.1.1",
+    "playwright-core": "1.64.0",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "stream-chain": "4.2.5",
@@ -44,6 +47,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
+    "bippy": "0.7.3",
     "bun-types": "^1.4.2",
     "drizzle-kit": "0.31.11",
     "node-pty": "1.2.0-beta.15"

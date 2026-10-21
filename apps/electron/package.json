@@ -12,7 +12,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun build --target=node --minify --keep-names --external electron --external node-pty --external @ff-labs/fff-node --external @azure/msal-node-extensions --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts src/main/claude-transcript-worker.ts",
+    "build:main": "bun build --target=node --minify --keep-names --external electron --external node-pty --external playwright-core --external @ff-labs/fff-node --external @azure/msal-node-extensions --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts src/main/claude-transcript-worker.ts",
     "build:preload": "bun build --target=node --minify --keep-names --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",
@@ -30,7 +30,8 @@
   "dependencies": {
     "@azure/msal-node-extensions": "^5.5.2",
     "@ff-labs/fff-node": "0.11.0",
-    "node-pty": "1.2.0-beta.15"
+    "node-pty": "1.2.0-beta.15",
+    "playwright-core": "1.64.0"
   },
   "devDependencies": {
     "@electron/osx-sign": "2.7.1",
@@ -43,8 +44,10 @@
     "@openducktor/host-client": "workspace:*",
     "@openducktor/remote-host": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/mime-types": "^3.0.1",
     "@types/node": "^26.6.4",
     "@types/semver": "^7.7.1",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.1.2",
     "bun-types": "^1.4.2",
     "effect": "4.0.2",
@@ -52,10 +55,12 @@
     "electron-builder": "^26.15.3",
     "electron-builder-squirrel-windows": "26.15.3",
     "electron-updater": "^6.8.9",
+    "mime-types": "^3.0.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "semver": "7.8.5",
     "vite": "^8.3.4",
+    "ws": "8.22.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },
