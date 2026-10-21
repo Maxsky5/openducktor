@@ -127,11 +127,12 @@ const ActionToolSummary = ({
   onOpenScreenshots: () => void;
   chevron: "none" | "open" | "closed";
 }): ReactElement => (
-  <div className="flex min-w-0 items-center gap-2">
+  // The texts share one baseline, so the small label sits on the line of the title.
+  <div className="flex min-w-0 items-baseline gap-2">
     <Icon
       aria-hidden="true"
       className={cn(
-        "size-4 shrink-0",
+        "size-4 shrink-0 self-center",
         isFailed ? "text-destructive-accent" : "text-muted-foreground",
       )}
     />
@@ -149,7 +150,7 @@ const ActionToolSummary = ({
     {screenshots.count > 0 ? (
       <button
         type="button"
-        className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+        className="inline-flex shrink-0 cursor-pointer items-center gap-1 self-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -170,7 +171,7 @@ const ActionToolSummary = ({
       <ChevronDown
         aria-hidden="true"
         className={cn(
-          "size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+          "size-3.5 shrink-0 self-center text-muted-foreground transition-transform motion-reduce:transition-none",
           chevron === "open" && "rotate-180",
         )}
       />
