@@ -87,7 +87,7 @@ describe("launchChromeProcess", () => {
     if (result._tag === "Failure") {
       expect(result.failure.missingLibraries).toEqual([]);
       expect(result.failure.message).toStartWith("Chrome for Testing did not start:");
-      expect(result.failure.message).toContain("ENOENT");
+      expect(result.failure.message).toContain("missing-chrome");
     }
   });
 });

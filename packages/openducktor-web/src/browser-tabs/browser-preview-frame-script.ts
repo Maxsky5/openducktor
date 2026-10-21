@@ -101,6 +101,18 @@ export const browserPreviewFrameScript = (input: {
   };
   const leave = (url) => post({ type: "leave", url: url.href });
 
+  // A form that sends to the dev server sends to the preview, so it keeps its method and fields.
+  addEventListener("submit", (event) => {
+    const form = event.target;
+    if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
+    const submitter =
+      event.submitter && event.submitter.hasAttribute("formaction") ? event.submitter : null;
+    const url = new URL(submitter ? submitter.formAction : form.action);
+    if (url.origin !== TARGET) return;
+    if (submitter) submitter.formAction = toPreview(url);
+    else form.action = toPreview(url);
+  });
+
   if (nav) {
     nav.addEventListener("currententrychange", schedule);
     nav.addEventListener("navigate", (event) => {
