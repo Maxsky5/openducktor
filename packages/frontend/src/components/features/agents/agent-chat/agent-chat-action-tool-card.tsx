@@ -153,16 +153,19 @@ const SECTION_APPEARANCE = {
   },
 } as const;
 
+/** A detail that the user opens, such as a long page snapshot. An error shows at once. */
 const ActionToolDetail = ({ section }: { section: ActionToolSection }): ReactElement => {
   const { frameClassName, textClassName } = SECTION_APPEARANCE[section.tone ?? "default"];
   return (
-    <div className={cn("rounded border", frameClassName)}>
-      <p className={cn("px-2 py-1 text-xs font-medium", textClassName)}>{section.label}</p>
+    <details className={cn("rounded border", frameClassName)} open={section.tone === "error"}>
+      <summary className={cn("cursor-pointer px-2 py-1 text-xs font-medium", textClassName)}>
+        {section.label}
+      </summary>
       <pre
         className={cn("overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px]", textClassName)}
       >
         {section.text}
       </pre>
-    </div>
+    </details>
   );
 };
