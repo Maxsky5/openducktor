@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer, request as httpRequest, type Server } from "node:http";
+import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import { type BrowserPreviewProxies, createBrowserPreviewProxies } from "./browser-preview-proxy";
@@ -245,6 +246,38 @@ describe("browser preview proxy", () => {
     socket.close();
 
     expect(messages).toEqual([`host localhost:${targetPort}`, "echo ping"]);
+  });
+
+  test("cancels a WebSocket handshake that the dev server has not answered when the tab leaves", async () => {
+    const stalled = createServer();
+    const received = Promise.withResolvers<Duplex>();
+    const ended = Promise.withResolvers<void>();
+    // The dev server reads the connection, but it does not answer the handshake yet.
+    stalled.on("upgrade", (_request, socket: Duplex) => {
+      socket.once("end", () => ended.resolve());
+      socket.resume();
+      received.resolve(socket);
+    });
+    const port = await listen(stalled);
+    const previews = createBrowserPreviewProxies({ reportFailure: () => {} });
+    cleanups.push(
+      () => new Promise<void>((resolve) => stalled.close(() => resolve())),
+      async () => {
+        (await received.promise).destroy();
+      },
+      () => previews.close(),
+    );
+    const origin = await previews.originFor({
+      target: `http://localhost:${port}/`,
+      appOrigin: APP_ORIGIN,
+    });
+    const socket = new WebSocket(`${origin.replace("http", "ws")}/hmr`);
+    socket.on("error", () => {});
+    await received.promise;
+
+    socket.terminate();
+
+    await ended.promise;
   });
 
   test("closes while a WebSocket connection stays open", async () => {

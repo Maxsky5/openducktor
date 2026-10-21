@@ -174,6 +174,8 @@ export const createBrowserPreviewProxies = (input: {
     });
     upstream.on("error", () => socket.destroy());
     socket.on("error", () => upstream.destroy());
+    // A tab that leaves during the handshake cancels it, so the dev server keeps no connection.
+    socket.once("close", () => upstream.destroy());
     upstream.end();
   };
 
