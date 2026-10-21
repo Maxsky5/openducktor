@@ -128,8 +128,11 @@ describe("FileDiffList tree view and search", () => {
     render(<NavigableFileDiffListHarness />);
 
     const rows = screen.getAllByRole("listitem").map((row) => row.textContent);
-    expect(rows).toEqual(["src+3-2", "lib+1-1", "a.ts+1-1", "main.ts+2-1", "README.md+3-1"]);
+    expect(rows).toEqual(["src2+3-2", "lib1+1-1", "a.ts+1-1", "main.ts+2-1", "README.md+3-1"]);
     expect(directoryButton("src").getAttribute("aria-expanded")).toBe("true");
+    expect(directoryButton("src").getAttribute("aria-description")).toBe(
+      "2 changed files, 3 lines added, 2 lines removed",
+    );
     expect(directoryButton("src/lib").style.paddingLeft).toBe("1.75rem");
     expect(directoryButton("src/lib").style.minHeight).toBe(`${FILE_LIST_ROW_HEIGHT.tree}px`);
     expect(directoryButton("src/lib").getAttribute("title")).toBe("lib");
@@ -154,17 +157,23 @@ describe("FileDiffList tree view and search", () => {
     fireEvent.click(directoryButton("src/lib"));
     expect(directoryButton("src/lib").getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("button", { name: "Toggle diff for src/lib/a.ts" })).toBeNull();
-    expect(directoryButton("src/lib").textContent).toBe("lib+1-1");
-    expect(directoryButton("src").textContent).toBe("src+3-2");
+    expect(directoryButton("src/lib").textContent).toBe("lib1+1-1");
+    expect(directoryButton("src").textContent).toBe("src2+3-2");
 
     rerender(<NavigableFileDiffListHarness files={["README.md", "src/lib/a.ts", "src/main.ts"]} />);
     expect(directoryButton("src/lib").getAttribute("aria-expanded")).toBe("false");
-    expect(directoryButton("src/lib").textContent).toBe("lib+2-1");
-    expect(directoryButton("src").textContent).toBe("src+5-2");
+    expect(directoryButton("src/lib").textContent).toBe("lib1+2-1");
+    expect(directoryButton("src").textContent).toBe("src2+5-2");
 
     fireEvent.click(directoryButton("src/lib"));
     expect(fileToggle("src/lib/a.ts").getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByTestId("pierre-diff-viewer").textContent).toBe("src/lib/a.ts");
+
+    rerender(<NavigableFileDiffListHarness files={["src/lib/a.ts"]} />);
+    expect(directoryButton("src/lib").textContent).toBe("src/lib1+1-1");
+    expect(directoryButton("src/lib").getAttribute("aria-description")).toBe(
+      "1 changed file, 1 lines added, 1 lines removed",
+    );
   });
 
   test("filters the files in both views, highlights matches, and counts only the matches", () => {
@@ -176,7 +185,7 @@ describe("FileDiffList tree view and search", () => {
     expect(fileCountText()).toBe("1/3");
     expect(lineTotalsText()).toBe("+2-1");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "src+2-1",
+      "src1+2-1",
       "main.ts+2-1",
     ]);
     expect(highlightedTexts(directoryButton("src"))).toEqual(["src"]);
@@ -254,7 +263,7 @@ describe("FileDiffList tree view and search", () => {
     // Only "src/lib/a.ts" matches, so "src" and "lib" join into one row.
     typeSearch("lib");
 
-    expect(directoryButton("src/lib").textContent).toBe("src/lib+1-1");
+    expect(directoryButton("src/lib").textContent).toBe("src/lib1+1-1");
     expect(fileToggle("src/lib/a.ts").style.paddingLeft).toBe("1.75rem");
   });
 
@@ -654,7 +663,7 @@ describe("FileDiffList tree view and search", () => {
     expect(list.scrollTop).toBe(0);
     fireEvent.scroll(list);
 
-    expect(screen.getAllByRole("listitem")[0]?.textContent).toBe("src+1405-19");
+    expect(screen.getAllByRole("listitem")[0]?.textContent).toBe("src19+1405-19");
     expect(fileToggle("src/file-9.ts")).toBeDefined();
   });
 
@@ -671,7 +680,7 @@ describe("FileDiffList tree view and search", () => {
     typeSearch("package-7/src/file-1167");
     expect(fileCountText()).toBe("1/1200");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "packages/package-7/src+1168-1",
+      "packages/package-7/src1+1168-1",
       "file-1167.ts+1168-1",
     ]);
   });

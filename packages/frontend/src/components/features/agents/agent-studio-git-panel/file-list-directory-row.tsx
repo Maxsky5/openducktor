@@ -13,6 +13,7 @@ export function FileListDirectoryRow({
   onToggle: (directory: DirectoryRow) => void;
 }): ReactElement {
   const Chevron = row.isOpen ? ChevronDown : ChevronRight;
+  const fileCountLabel = `${row.fileCount} changed file${row.fileCount === 1 ? "" : "s"}`;
   return (
     <button
       type="button"
@@ -23,7 +24,7 @@ export function FileListDirectoryRow({
       // Directory rows show only in tree view.
       style={fileListRowStyle("tree", row.depth)}
       aria-label={row.path}
-      aria-description={`${row.additions} lines added, ${row.deletions} lines removed`}
+      aria-description={`${fileCountLabel}, ${row.additions} lines added, ${row.deletions} lines removed`}
       aria-expanded={row.isOpen}
       title={row.name.text}
       data-testid="agent-studio-git-directory-toggle-button"
@@ -32,6 +33,13 @@ export function FileListDirectoryRow({
       <Chevron className="size-3 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate">
         <HighlightedText label={row.name} />
+      </span>
+      <span
+        className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-foreground/70"
+        title={fileCountLabel}
+        aria-hidden="true"
+      >
+        {row.fileCount}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] whitespace-nowrap tabular-nums">
         {row.additions > 0 ? (

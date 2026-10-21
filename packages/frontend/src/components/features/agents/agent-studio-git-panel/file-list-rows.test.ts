@@ -48,11 +48,16 @@ describe("buildFileTree", () => {
     expect(
       rows
         .filter((row) => row.kind === "directory")
-        .map(({ path, additions, deletions }) => ({ path, additions, deletions })),
+        .map(({ path, fileCount, additions, deletions }) => ({
+          path,
+          fileCount,
+          additions,
+          deletions,
+        })),
     ).toEqual([
-      { path: "assets", additions: 0, deletions: 0 },
-      { path: "src", additions: 6, deletions: 10 },
-      { path: "src/lib/deep", additions: 2, deletions: 10 },
+      { path: "assets", fileCount: 1, additions: 0, deletions: 0 },
+      { path: "src", fileCount: 3, additions: 6, deletions: 10 },
+      { path: "src/lib/deep", fileCount: 2, additions: 2, deletions: 10 },
     ]);
   });
 
