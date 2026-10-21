@@ -1,4 +1,8 @@
-import type { AgentToolImage, CodexAppServerJsonValue } from "@openducktor/contracts";
+import type {
+  AgentToolImage,
+  AgentToolResultContent,
+  CodexAppServerJsonValue,
+} from "@openducktor/contracts";
 import {
   arrayFromCodexJsonValue,
   extractStringField,
@@ -77,4 +81,29 @@ export const codexToolResultImages = (
     images.push({ mimeType, dataBase64 });
   }
   return images;
+};
+
+/**
+ * The text and images of an MCP tool result, such as a browser screenshot, or undefined when it
+ * has no image. Images become data URLs, so the chat can show them.
+ */
+export const codexToolResultContent = (
+  value: CodexAppServerJsonValue | undefined,
+  text: string | null,
+): AgentToolResultContent[] | undefined => {
+  const images = codexToolResultImages(value);
+  if (images.length === 0) {
+    return undefined;
+  }
+  return [
+    ...(text === null ? [] : [{ kind: "text" as const, text }]),
+    ...images.map((image, index) => ({
+      kind: "file" as const,
+      file: {
+        downloadUri: `data:${image.mimeType};base64,${image.dataBase64}`,
+        mime: image.mimeType,
+        name: `Image ${index + 1}`,
+      },
+    })),
+  ];
 };

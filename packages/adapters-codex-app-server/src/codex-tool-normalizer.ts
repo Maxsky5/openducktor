@@ -16,7 +16,11 @@ import {
   readPathFromCommand,
   searchInputFromCommand,
 } from "./codex-app-server-shared";
-import type { AgentComputerUse, CodexAppServerJsonValue } from "@openducktor/contracts";
+import type {
+  AgentComputerUse,
+  AgentToolResultContent,
+  CodexAppServerJsonValue,
+} from "@openducktor/contracts";
 import type { CodexToolTimingFields } from "./codex-tool-timing";
 
 /**
@@ -90,6 +94,7 @@ export type NormalizedCodexToolInvocation = CodexToolTimingFields & {
   error?: string | null;
   fileDiffs?: FileDiff[];
   computerUse?: AgentComputerUse;
+  resultContent?: AgentToolResultContent[];
   metadata?: CodexToolInvocationMetadata;
 };
 
@@ -370,6 +375,7 @@ export const normalizeCodexToolInvocation = ({
   error,
   fileDiffs,
   computerUse,
+  resultContent,
   title,
   displayLabel,
   preview,
@@ -422,6 +428,9 @@ export const normalizeCodexToolInvocation = ({
   }
   if (computerUse) {
     normalizedTool.computerUse = computerUse;
+  }
+  if (resultContent) {
+    normalizedTool.resultContent = resultContent;
   }
   if (namespace) {
     metadataFields.namespace = namespace;

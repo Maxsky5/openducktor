@@ -112,7 +112,9 @@ export type AgentChatToolCallPresentation =
       kind: "regular" | "workflow";
       displayName: string;
     }
-  | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName };
+  | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName }
+  /** An `odt_browser_*` call. `action` is the browser action, such as `click`. */
+  | { kind: "browser"; displayName: string; action: string };
 
 export type AgentChatRuntimePresentation = {
   runtimeKind: RuntimeKind | null;

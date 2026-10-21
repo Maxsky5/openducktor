@@ -53,8 +53,9 @@ describe("resolveAgentChatRuntimePresentation", () => {
     });
 
     expect(presentation.presentToolCall(toolName, toolName)).toEqual({
-      kind: "regular",
+      kind: "browser",
       displayName: "Browser click",
+      action: "click",
     });
   });
 
@@ -65,9 +66,11 @@ describe("resolveAgentChatRuntimePresentation", () => {
     });
 
     for (const toolName of ODT_BROWSER_TOOL_NAMES) {
+      const action = toolName.slice("odt_browser_".length);
       expect(presentation.presentToolCall(`openducktor_${toolName}`)).toEqual({
-        kind: "regular",
-        displayName: `Browser ${toolName.slice("odt_browser_".length)}`,
+        kind: "browser",
+        displayName: `Browser ${action}`,
+        action,
       });
     }
   });

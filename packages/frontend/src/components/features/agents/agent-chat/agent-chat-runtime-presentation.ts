@@ -13,12 +13,6 @@ import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runt
 import type { AgentChatTaskToolName, AgentChatRuntimePresentation } from "./agent-chat.types";
 import { readBrowserToolAction } from "./browser-tool-summary";
 
-/** Browser tools act on web pages, so they show as browser actions, not workflow steps. */
-const browserToolDisplayName = (odtTool: OdtToolName | null): string | null => {
-  const action = odtTool === null ? null : readBrowserToolAction(odtTool);
-  return action === null ? null : `Browser ${action}`;
-};
-
 const resolveTaskTool = (odtTool: OdtToolName | null): AgentChatTaskToolName | null => {
   switch (odtTool) {
     case "odt_create_task":
@@ -56,9 +50,10 @@ export const resolveAgentChatRuntimePresentation = ({
       if (taskTool) {
         return { kind: "task", displayName: taskTool, taskTool };
       }
-      const browserDisplayName = browserToolDisplayName(odtTool);
-      if (browserDisplayName) {
-        return { kind: "regular", displayName: browserDisplayName };
+      // Browser tools act on web pages, so they show as browser actions, not workflow steps.
+      const browserAction = odtTool === null ? null : readBrowserToolAction(odtTool);
+      if (browserAction !== null) {
+        return { kind: "browser", displayName: `Browser ${browserAction}`, action: browserAction };
       }
       return {
         kind: isOdtWorkflowMutationToolName(toolName, workflowToolAliasesByCanonical)

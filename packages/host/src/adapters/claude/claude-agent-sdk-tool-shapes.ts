@@ -1,4 +1,5 @@
 import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentToolResultContent } from "@openducktor/contracts";
 import type { AgentStreamPart } from "@openducktor/core";
 import { z } from "zod";
 import {
@@ -209,6 +210,16 @@ const stringifyToolResultContent = (value: ClaudeProtocolValue): string => {
   return JSON.stringify(value, null, 2);
 };
 
+/** An image block of a tool result, such as a browser screenshot. */
+const claudeToolResultImageSchema = z.object({
+  type: z.literal("image"),
+  source: z.object({
+    type: z.literal("base64"),
+    media_type: z.string().min(1),
+    data: z.string().min(1),
+  }),
+});
+
 const toolResultBlockText = (block: ClaudeProtocolValue): string => {
   const text = toolContentStringSchema.safeParse(block);
   if (text.success) {
@@ -217,6 +228,10 @@ const toolResultBlockText = (block: ClaudeProtocolValue): string => {
   const record = claudeProtocolObjectSchema.safeParse(block);
   if (!record.success) {
     return stringifyToolResultContent(block);
+  }
+  // An image goes to the result content, not into the text.
+  if (claudeToolResultImageSchema.safeParse(record.data).success) {
+    return "";
   }
   return (
     readStringProp(record.data, "text") ??
@@ -246,6 +261,38 @@ const claudeToolResultContentText = (value: ClaudeProtocolObject): string => {
     return stringifyToolResultContent(parsedContent.data);
   }
   return "";
+};
+
+/**
+ * The text and images of a tool result, such as a browser screenshot, or undefined when it has no
+ * image. Images become data URLs, so the chat can show them.
+ */
+export const claudeToolResultContent = (
+  raw: ClaudeProtocolObject,
+  text: string,
+): AgentToolResultContent[] | undefined => {
+  const content = claudeProtocolValueSchema.safeParse(raw.content);
+  if (!content.success || !Array.isArray(content.data)) {
+    return undefined;
+  }
+  const images = content.data.flatMap((block) => {
+    const image = claudeToolResultImageSchema.safeParse(block);
+    return image.success ? [image.data.source] : [];
+  });
+  if (images.length === 0) {
+    return undefined;
+  }
+  return [
+    ...(text.length > 0 ? [{ kind: "text" as const, text }] : []),
+    ...images.map((image, index) => ({
+      kind: "file" as const,
+      file: {
+        downloadUri: `data:${image.media_type};base64,${image.data}`,
+        mime: image.media_type,
+        name: `Image ${index + 1}`,
+      },
+    })),
+  ];
 };
 
 export const decodeClaudeToolResultValue = (

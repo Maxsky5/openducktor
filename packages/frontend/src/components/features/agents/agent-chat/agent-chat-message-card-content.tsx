@@ -14,6 +14,7 @@ import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-or
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import { BrowserToolMessage } from "./agent-chat-browser-tool";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import {
@@ -731,6 +732,16 @@ const ToolMessageBody = ({
   }
   if (!toolCallPresentation) {
     throw new Error(`Tool Call presentation is missing for ${meta.tool}.`);
+  }
+  if (toolCallPresentation.kind === "browser") {
+    return (
+      <BrowserToolMessage
+        meta={meta}
+        action={toolCallPresentation.action}
+        messageTimestamp={message.timestamp}
+        timeLabel={timeLabel}
+      />
+    );
   }
   if (toolCallPresentation.kind === "workflow") {
     return (

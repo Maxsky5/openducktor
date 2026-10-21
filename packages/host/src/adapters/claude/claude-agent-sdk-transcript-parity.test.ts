@@ -1075,6 +1075,18 @@ describe("Claude live and hydrated transcript parity", () => {
         input: { command: "pwd" },
         result: "/repo",
       },
+      {
+        id: "tool-screenshot",
+        name: "mcp__openducktor__odt_browser_screenshot",
+        input: { tabId: "tab-1" },
+        result: [
+          { type: "text", text: "Screenshot of the visible page." },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" },
+          },
+        ],
+      },
     ] as const;
     const assistantMessage = claudeSdkMessageFixture({
       type: "assistant",
@@ -1135,7 +1147,17 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(assistantParts(liveEvents)).toEqual(hydratedToolParts);
     expect(
       assistantParts(liveEvents).flatMap((part) => (part.kind === "tool" ? [part.callId] : [])),
-    ).toEqual(["tool-read", "tool-bash"]);
+    ).toEqual(["tool-read", "tool-bash", "tool-screenshot"]);
+    expect(hydratedToolParts.at(-1)).toMatchObject({
+      output: "Screenshot of the visible page.",
+      resultContent: [
+        { kind: "text", text: "Screenshot of the visible page." },
+        {
+          kind: "file",
+          file: { downloadUri: "data:image/png;base64,iVBORw0KGgo=", mime: "image/png" },
+        },
+      ],
+    });
   });
 
   test("releases completed tool input and timing metadata", () => {

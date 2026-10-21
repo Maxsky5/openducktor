@@ -1,7 +1,6 @@
 import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
 import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { readBrowserToolAction, summarizeBrowserToolInput } from "./browser-tool-summary";
 import { extractAllFileEditData } from "./file-edit-tool";
 import { extractPathFromInput, readInputString } from "./tool-input-utils";
 import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
@@ -225,11 +224,6 @@ export const buildToolSummary = (
 
   if (meta.status === "error" && hasNonEmptyText(meta.error)) {
     return compactText(meta.error, 220);
-  }
-
-  const browserAction = readBrowserToolAction(meta.tool);
-  if (browserAction !== null) {
-    return summarizeBrowserToolInput(browserAction, meta.input);
   }
 
   if (lowerTool === "execute") {

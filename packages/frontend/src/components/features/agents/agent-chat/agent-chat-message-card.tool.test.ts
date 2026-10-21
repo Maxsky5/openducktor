@@ -9,6 +9,8 @@ import {
 } from "./agent-chat-message-card-test-harness";
 import { formatTime } from "./message-formatting";
 
+const TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
+
 describe("AgentChatMessageCard tool presentation", () => {
   test("hides approximate hydrated tool timestamps", () => {
     const timestamp = "2026-07-10T20:33:01.000Z";
@@ -35,32 +37,66 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain(formatTime(timestamp));
   });
 
-  test("renders a browser tool call as a browser action row", () => {
+  test("renders a browser tool call as a browser action card with its typed text", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
           id: "browser-tool",
           role: "tool",
-          content: "Tool openducktor_odt_browser_click completed",
+          content: "Tool openducktor_odt_browser_type completed",
           timestamp: "2026-07-10T20:33:19.261Z",
           meta: {
             kind: "tool",
             partId: "browser-tool-part",
             callId: "browser-tool-call",
-            tool: "openducktor_odt_browser_click",
+            tool: "openducktor_odt_browser_type",
             toolType: "workflow",
             status: "completed",
-            input: { tabId: "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b", ref: "e12" },
-            output: "Clicked e12.",
+            input: { tabId: TAB_ID, ref: "e29", text: "lego fusée", submit: true },
+            output: "Typed into e29 and pressed Enter.",
           },
         },
       }),
     );
 
-    expect(html).toContain("Browser click");
-    expect(html).toContain(">e12<");
-    expect(html).not.toContain("browser_click");
+    expect(html).toContain(">Browser<");
+    expect(html).toContain("Type &quot;lego fusée&quot; and press Enter");
+    expect(html).not.toContain("browser_type");
     expect(html).toContain("lucide-globe");
+    expect(html).not.toContain("Screenshot");
+  });
+
+  test("offers the screenshot of a browser screenshot call", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "browser-screenshot",
+          role: "tool",
+          content: "Tool openducktor_odt_browser_screenshot completed",
+          timestamp: "2026-07-10T20:33:19.261Z",
+          meta: {
+            kind: "tool",
+            partId: "browser-screenshot-part",
+            callId: "browser-screenshot-call",
+            tool: "openducktor_odt_browser_screenshot",
+            toolType: "workflow",
+            status: "completed",
+            input: { tabId: TAB_ID },
+            output: "Screenshot of the visible page.",
+            resultContent: [
+              { kind: "text", text: "Screenshot of the visible page." },
+              {
+                kind: "file",
+                file: { downloadUri: "data:image/png;base64,iVBORw0KGgo=", mime: "image/png" },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Screenshot page");
+    expect(html).toContain("Screenshot</button>");
   });
 
   test("keeps exact tool timestamps visible", () => {
