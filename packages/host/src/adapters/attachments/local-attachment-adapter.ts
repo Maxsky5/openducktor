@@ -1,4 +1,4 @@
-import { mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -75,5 +75,18 @@ export const createLocalAttachmentAdapter = (): LocalAttachmentPort => ({
       Effect.as(true),
       Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
     );
+  },
+  fileInfo(inputPath) {
+    return Effect.tryPromise({
+      try: () => stat(inputPath),
+      catch: (cause) => toHostPathStatError(cause, "localAttachment.fileInfo", inputPath),
+    }).pipe(Effect.map((metadata) => ({ isFile: metadata.isFile(), byteSize: metadata.size })));
+  },
+  readFile(inputPath) {
+    return Effect.tryPromise({
+      try: async () => new Uint8Array(await readFile(inputPath)),
+      catch: (cause) =>
+        toHostOperationError(cause, "localAttachment.readFile", { path: inputPath }),
+    });
   },
 });

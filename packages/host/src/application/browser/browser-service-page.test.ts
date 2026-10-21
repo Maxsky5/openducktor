@@ -282,6 +282,58 @@ describe("browser service with a live page", () => {
     });
   });
 
+  test("saves each agent screenshot and names its file in the result, so a reply can show it", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const page = createBrowserPageSessionTestDouble("http://localhost:3000/");
+    const unused = () => Effect.die(new Error("The test does not use this page call."));
+    const harness = createBrowserServiceHarness({
+      engine: { openSession: () => Effect.succeed(page.session) },
+      automation: {
+        connect: () =>
+          Effect.succeed({
+            snapshot: unused,
+            elementPoint: unused,
+            click: unused,
+            hover: unused,
+            fill: unused,
+            press: unused,
+            selectOptions: unused,
+            scrollIntoView: unused,
+            scrollBy: unused,
+            screenshot: () => Effect.succeed(png),
+            waitFor: unused,
+            close: () => Effect.void,
+          }),
+      },
+      savedTabs: [
+        {
+          tabId: tabId(1),
+          owner: taskOwner,
+          url: "http://localhost:3000/",
+          title: "App",
+          createdBy: "agent",
+          shared: false,
+        },
+      ],
+    });
+
+    const call = run(
+      harness.service.runAgentTool(taskOwner, "odt_browser_screenshot", { tabId: tabId(1) }),
+    );
+    await waitUntil(() => harness.engine.created.length === 1);
+    harness.engine.emit({ type: "tab_attached", tabId: tabId(1) });
+    const result = await call;
+
+    expect(harness.screenshots.saved).toEqual([{ workspaceId: "workspace-1", png }]);
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: `Screenshot of the visible page in tab ${tabId(1)}. Saved to file:///config/browser/screenshots/workspace-1/shot-1.png.`,
+      },
+      { type: "image", mimeType: "image/png", dataBase64: Buffer.from(png).toString("base64") },
+    ]);
+  });
+
   test("Reload goes to the engine and never sends Page.reload, which reloads an Electron window", async () => {
     const { harness, page } = await startLiveTab();
 

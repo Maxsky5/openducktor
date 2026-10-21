@@ -3,6 +3,7 @@ import {
   LOCAL_ATTACHMENT_UNAVAILABLE_MESSAGE,
   LOCAL_ATTACHMENT_UNAVAILABLE_REASON,
   type LocalAttachmentUnavailableDetails,
+  type LocalImageReadInput,
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
 import { decodeStrictBase64 } from "../../domain/strict-base64";
@@ -15,6 +16,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { LocalAttachmentPort } from "../../ports/local-attachment-port";
+import { readLocalImage } from "./local-image-reader";
 import {
   addIndexedStagedAttachment,
   isStagedAttachmentIndexFresh,
@@ -41,6 +43,7 @@ export type LocalAttachmentService = {
   resolve(
     input: LocalAttachmentResolveInput,
   ): Effect.Effect<ResolvedLocalAttachment, LocalAttachmentServiceError>;
+  readImage(input: LocalImageReadInput): ReturnType<typeof readLocalImage>;
 };
 export type LocalAttachmentStageInput = {
   base64Data: string;
@@ -385,5 +388,6 @@ export const createLocalAttachmentService = (
         return { path: match.entry.path };
       });
     },
+    readImage: (input) => readLocalImage(localAttachmentPort, input),
   };
 };

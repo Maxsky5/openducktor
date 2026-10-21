@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentToolData } from "@openducktor/contracts";
-import { browserToolScreenshots, browserToolTitle } from "./browser-tool-summary";
+import { browserToolScreenshotPaths, browserToolTitle } from "./browser-tool-summary";
 
 const TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 
@@ -40,14 +40,16 @@ describe("browser tool titles", () => {
     expect(browserToolTitle(action, input)).toBe(title);
   });
 
-  test("shows only the images of a result as screenshots", () => {
-    const png = "data:image/png;base64,iVBORw0KGgo=";
-    expect(
-      browserToolScreenshots([
-        { kind: "text", text: "Screenshot of the visible page." },
-        { kind: "file", file: { downloadUri: png, mime: "image/png" } },
-        { kind: "file", file: { uri: "file:///tmp/report.pdf", mime: "application/pdf" } },
-      ]),
-    ).toEqual([png]);
+  test("reads the saved screenshot files from the result text in every runtime", () => {
+    const text = "Screenshot of the visible page in tab t1. Saved to file:///tmp/a%20b/shot.png.";
+    // Codex can put the whole MCP result into one JSON text.
+    const codexText = JSON.stringify({ content: [{ type: "text", text }] });
+
+    expect(browserToolScreenshotPaths(text)).toEqual(["/tmp/a b/shot.png"]);
+    expect(browserToolScreenshotPaths(codexText)).toEqual(["/tmp/a b/shot.png"]);
+    expect(browserToolScreenshotPaths("Saved to file:///C:/Users/ada/shot.png.")).toEqual([
+      "C:/Users/ada/shot.png",
+    ]);
+    expect(browserToolScreenshotPaths("Clicked e12 in tab t1.")).toEqual([]);
   });
 });

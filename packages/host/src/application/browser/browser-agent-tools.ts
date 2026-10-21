@@ -16,6 +16,7 @@ import type {
   BrowserAutomationPage,
 } from "../../ports/browser-automation-port";
 import type { BrowserEnginePort } from "../../ports/browser-engine-port";
+import type { BrowserScreenshotStorePort } from "../../ports/browser-screenshot-store-port";
 import { readyBrowserEngineForAgent } from "./browser-agent-engine";
 import type { BrowserAgentPages } from "./browser-agent-pages";
 import {
@@ -44,6 +45,7 @@ export type BrowserAgentToolsInput = {
   prompts: BrowserPromptBook;
   tabs: BrowserTabService;
   pages: BrowserAgentPages;
+  screenshots: Pick<BrowserScreenshotStorePort, "save">;
   newTabId(): string;
   /** Shows the clients where an agent clicks, hovers, or types. */
   mark(tabId: string, action: MarkedAction, point: { x: number; y: number }): void;
@@ -56,6 +58,7 @@ export const createBrowserAgentTools = ({
   prompts,
   tabs,
   pages,
+  screenshots,
   newTabId,
   mark,
 }: BrowserAgentToolsInput) => {
@@ -333,11 +336,27 @@ export const createBrowserAgentTools = ({
     odt_browser_screenshot: (owner, params, operation) =>
       pageAction(owner, params.tabId, operation, (page) =>
         page.screenshot(params.ref ?? null, ACTION_TIMEOUT_MS).pipe(
-          Effect.map((png): OdtBrowserToolResult => ({
+          Effect.flatMap((png) =>
+            screenshots.save(owner.workspaceId, png).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new BrowserServiceError({
+                    code: "browser_action_failed",
+                    operation,
+                    message: `Could not save the screenshot: ${cause.message}`,
+                    tabId: params.tabId,
+                    cause,
+                  }),
+              ),
+              Effect.map((fileUrl) => ({ png, fileUrl })),
+            ),
+          ),
+          Effect.map(({ png, fileUrl }): OdtBrowserToolResult => ({
             content: [
               {
                 type: "text",
-                text: `Screenshot of ${params.ref === undefined ? "the visible page" : `element ${params.ref}`} in tab ${params.tabId}.`,
+                // The file URL lets a reply show the screenshot with Markdown.
+                text: `Screenshot of ${params.ref === undefined ? "the visible page" : `element ${params.ref}`} in tab ${params.tabId}. Saved to ${fileUrl}.`,
               },
               {
                 type: "image",

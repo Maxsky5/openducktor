@@ -46,6 +46,10 @@ const createRecordingLocalAttachmentService = () => {
           }),
       });
     },
+    readImage(input) {
+      calls.push({ method: "readImage", input });
+      return Effect.succeed({ mediaType: "image/png" as const, bytesBase64: "iVBORw0KGgo=" });
+    },
   };
   const service: LocalAttachmentService = promiseService;
   return { calls, service };
@@ -65,12 +69,20 @@ describe("createLocalAttachmentCommandHandlers", () => {
     await expect(
       router.invoke("workspace_resolve_local_attachment_path", { path: "brief.pdf" }),
     ).resolves.toEqual({ path: "/tmp/openducktor-local-attachments/staged.txt" });
+    await expect(router.invoke("local_image_read", { path: "/tmp/shot.png" })).resolves.toEqual({
+      mediaType: "image/png",
+      bytesBase64: "iVBORw0KGgo=",
+    });
+    await expect(router.invoke("local_image_read", { path: " " })).rejects.toThrow(
+      "The image request needs the absolute path of an image file.",
+    );
     expect(calls).toEqual([
       {
         method: "stage",
         input: { name: "brief.pdf", base64Data: "YnJpZWY=" },
       },
       { method: "resolve", input: { path: "brief.pdf" } },
+      { method: "readImage", input: { path: "/tmp/shot.png" } },
     ]);
   });
 });

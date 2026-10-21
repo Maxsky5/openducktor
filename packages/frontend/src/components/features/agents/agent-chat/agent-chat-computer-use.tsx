@@ -24,9 +24,12 @@ export const ComputerUseToolMessage = ({
       icon={MousePointerClick}
       label="Computer Use"
       title={action?.action ?? "Computer action"}
-      screenshots={(action?.images ?? []).map(
-        (image) => `data:${image.mimeType};base64,${image.dataBase64}`,
-      )}
+      screenshots={{
+        count: action?.images?.length ?? 0,
+        sources: (action?.images ?? []).map(
+          (image) => `data:${image.mimeType};base64,${image.dataBase64}`,
+        ),
+      }}
       sections={[
         { label: "JavaScript", text: action?.code ?? "" },
         { label: "Error", text: hasNonEmptyText(meta.error) ? meta.error : "", tone: "error" },

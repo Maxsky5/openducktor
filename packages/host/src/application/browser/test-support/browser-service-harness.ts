@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import { HostOperationError, HostResourceError } from "../../../effect/host-errors";
 import type { BrowserAutomationPort } from "../../../ports/browser-automation-port";
 import type { BrowserEnginePort } from "../../../ports/browser-engine-port";
+import type { BrowserScreenshotStorePort } from "../../../ports/browser-screenshot-store-port";
 import type {
   BrowserSitePermissionFile,
   BrowserSitePermissionPort,
@@ -55,6 +56,8 @@ export const createBrowserServiceHarness = (
     beforeSitePermissionRead?: Effect.Effect<void>;
     /** The saved tabs of the last run. */
     savedTabs?: BrowserSavedTab[];
+    /** The automation client of agent calls. */
+    automation?: BrowserAutomationPort;
     /** The saved tab file cannot be read. */
     savedTabsUnreadable?: boolean;
   } = {},
@@ -97,12 +100,24 @@ export const createBrowserServiceHarness = (
         return Effect.void;
       }),
   };
+  const savedScreenshots: Array<{ workspaceId: string; png: Uint8Array }> = [];
+  const removedScreenshotWorkspaces: string[] = [];
+  const screenshots = { saved: savedScreenshots, removed: removedScreenshotWorkspaces };
+  const screenshotStore: BrowserScreenshotStorePort = {
+    save: (workspaceId, png) =>
+      Effect.sync(() => {
+        screenshots.saved.push({ workspaceId, png });
+        return `file:///config/browser/screenshots/${workspaceId}/shot-${screenshots.saved.length}.png`;
+      }),
+    removeWorkspace: (workspaceId) => Effect.sync(() => void screenshots.removed.push(workspaceId)),
+  };
   let nextId = 0;
   const service = createBrowserService({
     engine: engineDouble.engine,
-    automation: unusedAutomation,
+    automation: input.automation ?? unusedAutomation,
     sitePermissions,
     savedTabs,
+    screenshots: screenshotStore,
     owners: {
       settings: { getRepoConfig: () => Effect.succeed(repoConfig) },
       git: { canonicalizePath: (path) => Effect.succeed(path) },
@@ -146,7 +161,7 @@ export const createBrowserServiceHarness = (
     reportFailure: () => {},
     newId: () => `00000000-0000-4000-8000-${String(++nextId).padStart(12, "0")}`,
   });
-  return { service, engine: engineDouble, events, sitePermissionFiles, tabFile };
+  return { service, engine: engineDouble, events, sitePermissionFiles, tabFile, screenshots };
 };
 
 export const tabId = (index: number): string =>

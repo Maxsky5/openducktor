@@ -91,6 +91,7 @@ export const HOST_COMMAND_NAMES = [
   "issue_item_get",
   "issue_items_import",
   "issue_items_list",
+  "local_image_read",
   "notification_publish_action",
   "open_external_url",
   "path_check",

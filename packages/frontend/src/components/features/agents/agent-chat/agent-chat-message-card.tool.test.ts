@@ -82,14 +82,7 @@ describe("AgentChatMessageCard tool presentation", () => {
             toolType: "workflow",
             status: "completed",
             input: { tabId: TAB_ID },
-            output: "Screenshot of the visible page.",
-            resultContent: [
-              { kind: "text", text: "Screenshot of the visible page." },
-              {
-                kind: "file",
-                file: { downloadUri: "data:image/png;base64,iVBORw0KGgo=", mime: "image/png" },
-              },
-            ],
+            output: "Screenshot of the visible page. Saved to file:///tmp/shot.png.",
           },
         },
       }),

@@ -4,6 +4,8 @@ import { act, type ReactElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { CHAT_MARKDOWN_LINK_POLICY } from "./agent-chat-markdown-link-policy";
 import { ChatFileLinkContext } from "./agent-chat-file-link-context";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
@@ -129,15 +131,32 @@ describe("chat Markdown links", () => {
       view.unmount();
     }
   });
-  test("does not relax image URLs or non-chat Markdown", () => {
-    const view = render(
+  test("loads a file image through the host, and keeps scripts and non-chat file links out", async () => {
+    const localImageRead = mock(async () => ({
+      mediaType: "image/png" as const,
+      bytesBase64: "AAAA",
+    }));
+    const view = renderView(
       <>
         <AgentChatMarkdownRenderer markdown="![image](file:///repo/a.png)\n\n<script>bad()</script>" />
         <MarkdownRenderer markdown="[file](file:///repo/a.ts)" />
       </>,
+      {
+        wrapper: ({ children }) => (
+          <QueryProvider connection={createTestClientConnection({ client: { localImageRead } })}>
+            <MermaidSvgCacheProvider>{children}</MermaidSvgCacheProvider>
+          </QueryProvider>
+        ),
+      },
     );
     try {
-      expect(view.container.querySelector("img")?.getAttribute("src") || "").toBe("");
+      // The page never loads a `file:` URL itself. The host reads the image.
+      await waitFor(() =>
+        expect(view.container.querySelector("img")?.getAttribute("src")).toBe(
+          "data:image/png;base64,AAAA",
+        ),
+      );
+      expect(localImageRead).toHaveBeenCalledWith({ path: "/repo/a.png" });
       expect(view.container.querySelector("script")).toBeNull();
       expect(view.container.querySelector("a")?.getAttribute("href")).toBe("");
     } finally {

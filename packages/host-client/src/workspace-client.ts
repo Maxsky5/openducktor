@@ -1,4 +1,8 @@
 import {
+  type LocalImageReadInput,
+  type LocalImageReadResult,
+  localImageReadInputSchema,
+  localImageReadResultSchema,
   type WorkspaceProviderSetupRef,
   type WorkspaceProviderSetupSelection,
   type WorkspaceProviderSetupCommit,
@@ -609,6 +613,15 @@ export class HostWorkspaceClient {
     path: string;
   }): Promise<ResolvedLocalAttachment> {
     return workspaceResolveLocalAttachmentPath(this.invokeFn, input);
+  }
+
+  /** Reads an image file of the host, such as an agent screenshot that a reply shows. */
+  async localImageRead(input: LocalImageReadInput): Promise<LocalImageReadResult> {
+    return this.invokeFn(
+      "local_image_read",
+      localImageReadInputSchema.parse(input),
+      localImageReadResultSchema,
+    );
   }
 
   async setTheme(theme: string): Promise<void> {

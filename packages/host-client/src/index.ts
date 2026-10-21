@@ -197,6 +197,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceClient.workspaceStageLocalAttachment.bind(workspaceClient),
     workspaceResolveLocalAttachmentPath:
       workspaceClient.workspaceResolveLocalAttachmentPath.bind(workspaceClient),
+    localImageRead: workspaceClient.localImageRead.bind(workspaceClient),
     setTheme: workspaceClient.setTheme.bind(workspaceClient),
     filesystemListDirectory: filesystemClient.filesystemListDirectory.bind(filesystemClient),
     filesystemResolvePath: filesystemClient.filesystemResolvePath.bind(filesystemClient),

@@ -178,6 +178,10 @@ Keep these values outside TanStack Query:
 - Event-driven orchestration state.
 - Commands such as `runtimeRestart`, `buildStart`, `gitPushBranch`, and `taskTransition`.
 
+## Local images
+
+`state/queries/local-images.ts` keys each host image by its path. A read keeps its data with `staleTime: Infinity` and `gcTime: 0`, so the data goes away when no view shows the image. A browser card reads its screenshot only after the user opens it.
+
 ## Generated images
 
 `state/queries/agent-generated-images.ts` keys image reads by repository, runtime, working directory, session, turn, item, and output revision. It caches a Blob with `staleTime: Infinity` and `gcTime: 0`. It disables refetch on mount because each output revision has its own query.

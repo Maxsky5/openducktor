@@ -53,6 +53,7 @@ Each shell gives its engine to `createNodeHostDefaultPorts` through the `browser
 | Site permissions | Workspace browser data on the host | The saved permission choices of each site. |
 | Browser profile | Electron partition `persist:openducktor-browser-<workspaceId>`, or `<config-root>/browser/workspaces/<workspaceId>/profile` | Cookies, storage, and cache of the workspace. |
 | Pending annotations | Memory of the client | They go away when the app reloads. |
+| Agent screenshots | `<config-root>/browser/screenshots/<workspaceId>/` on the host | Each PNG that `odt_browser_screenshot` takes. The workspace keeps its newest 200. Removing the workspace deletes them. |
 
 Client storage belongs to the host connection. A remote host keeps its client storage in memory only.
 
@@ -200,6 +201,13 @@ Every CDP client except the host session of a tab goes through the proxy. Each c
 - `odt_browser_wait` waits up to its `timeoutMs`, 10 seconds by default.
 - The runtimes run the OpenDucktor tools without an approval. Codex gets `default_tools_approval_mode = "approve"` for the `openducktor` server, and `enabled_tools` limits it to the tools of the session. OpenCode gets `allow` rules for the allowed tools. Claude approves them in its pre-tool-use hook.
 - The console tool reads a bounded history of console messages and page errors, recorded from the moment the tab opens.
+- `odt_browser_screenshot` saves its PNG and names the file in its result as `Saved to file:///….png.` The chat card of the call reads the file from that text, because Codex in code mode passes the result to clients only as cut text. An agent can show the file in a reply with Markdown image syntax.
+
+## Chat cards
+
+- Each `odt_browser_*` call shows in the chat as a Browser card with a title that names the action, such as `Type "hello" and press Enter`. Its Input and Output stay closed until the user opens them. An error shows at once.
+- A screenshot call has a Screenshot button. The card reads the saved file from the host only when the user opens it.
+- A Markdown image in a chat or a document can name a host file with an absolute path or a `file:` URL. The client reads it with `local_image_read`, which reads any PNG, JPEG, GIF, or WebP file of the host up to 20 MB.
 
 ## Prompts
 

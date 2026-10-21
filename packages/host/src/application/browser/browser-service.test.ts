@@ -775,7 +775,7 @@ describe("browser service popups and engine events", () => {
     ).toEqual(["scheme_refused", "page_notification"]);
   });
 
-  test("removing a workspace closes its tabs and deletes its saved permissions", async () => {
+  test("removing a workspace closes its tabs and deletes its permissions and screenshots", async () => {
     const harness = createBrowserServiceHarness();
     await run(harness.service.openTab({ owner: taskOwner, tabId: tabId(1), address: null }));
     harness.sitePermissionFiles.set("workspace-1", { version: 1, sites: {} });
@@ -784,6 +784,7 @@ describe("browser service popups and engine events", () => {
 
     expect(harness.engine.closed).toEqual([tabId(1)]);
     expect(harness.sitePermissionFiles.has("workspace-1")).toBe(false);
+    expect(harness.screenshots.removed).toEqual(["workspace-1"]);
   });
 
   test("removing a workspace closes an opener with its popup window on the first try", async () => {

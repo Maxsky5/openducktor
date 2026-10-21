@@ -9,11 +9,16 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import { useResourceSource } from "@/lib/use-resource-source";
+import { localImagePathOf } from "@/lib/local-image-path";
+import { MarkdownLocalImage } from "./markdown-local-image";
 import { MarkdownMermaid } from "./markdown-mermaid";
 
-/** The default URL rule, which also keeps task asset images. */
+/** The default URL rule, which also keeps task asset images and images of host files. */
 export const RICH_MARKDOWN_URL_TRANSFORM: UrlTransform = (url, _key, node) => {
-  if (node.tagName === "img" && url.startsWith(TASK_ASSET_URI_PREFIX)) {
+  if (
+    node.tagName === "img" &&
+    (url.startsWith(TASK_ASSET_URI_PREFIX) || localImagePathOf(url) !== null)
+  ) {
     return url;
   }
   return defaultUrlTransform(url);
@@ -139,6 +144,10 @@ const createRichMarkdownComponents = (
           />
         );
       }
+    }
+    const localPath = src ? localImagePathOf(src) : null;
+    if (localPath !== null) {
+      return <MarkdownLocalImage path={localPath} alt={alt} title={title} className={className} />;
     }
     const callerImage = components.img
       ? createElement(components.img, { ...props, alt, className, src, title })

@@ -10,6 +10,16 @@ import { isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
 /** A detail of an action tool call. A section with no text does not show. */
 export type ActionToolSection = { label: string; text: string; tone?: "error" };
 
+/** The screenshots of an action. A card that reads them from the host loads them on request. */
+export type ActionToolScreenshots = {
+  count: number;
+  /** Image sources, such as data URLs, or null until `load` reads them. */
+  sources: readonly string[] | null;
+  load?: () => void;
+  /** Why the screenshots could not load. */
+  error?: string | null;
+};
+
 type ActionToolCardProps = {
   meta: ToolMeta;
   messageTimestamp: string;
@@ -18,8 +28,7 @@ type ActionToolCardProps = {
   /** The kind of action, such as `Browser`. */
   label: string;
   title: string;
-  /** Image sources, such as data URLs, that the Screenshot button shows. */
-  screenshots: readonly string[];
+  screenshots: ActionToolScreenshots;
   sections: readonly ActionToolSection[];
 };
 
@@ -31,7 +40,7 @@ export const ActionToolCard = ({
   meta,
   messageTimestamp,
   timeLabel,
-  icon: Icon,
+  icon,
   label,
   title,
   screenshots,
@@ -41,64 +50,23 @@ export const ActionToolCard = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
   const shownSections = sections.filter((section) => section.text.length > 0);
-  const media = screenshots.map((src, index): MediaPreviewItem => ({
-    id: `screenshot-${index + 1}`,
-    kind: "image",
-    src,
-    alt: `${label} screenshot ${index + 1}`,
-    unavailableLabel: `Screenshot ${index + 1} is unavailable.`,
-  }));
 
   const summary = (
-    <div className="flex min-w-0 items-center gap-2">
-      <Icon
-        aria-hidden="true"
-        className={cn(
-          "size-4 shrink-0",
-          isFailed ? "text-destructive-accent" : "text-muted-foreground",
-        )}
-      />
-      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <p
-        className={cn(
-          "min-w-0 truncate text-sm font-medium",
-          isFailed ? "text-destructive-surface-foreground" : "text-foreground",
-        )}
-      >
-        {title}
-      </p>
-      {media.length > 0 ? (
-        <button
-          type="button"
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setPreviewOpen(true);
-          }}
-        >
-          <ImageIcon aria-hidden="true" className="size-3" />
-          {media.length > 1 ? `Screenshots (${media.length})` : "Screenshot"}
-        </button>
-      ) : null}
-      <ToolMessageTiming
-        showSpinner={isToolMessageActive(meta)}
-        durationMs={getToolDuration(meta, messageTimestamp)}
-        timeLabel={timeLabel}
-        className="text-muted-foreground"
-      />
-      {shownSections.length > 0 ? (
-        <ChevronDown
-          aria-hidden="true"
-          className={cn(
-            "size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
-            detailsOpen && "rotate-180",
-          )}
-        />
-      ) : null}
-    </div>
+    <ActionToolSummary
+      meta={meta}
+      messageTimestamp={messageTimestamp}
+      timeLabel={timeLabel}
+      icon={icon}
+      label={label}
+      title={title}
+      isFailed={isFailed}
+      screenshots={screenshots}
+      onOpenScreenshots={() => {
+        if (screenshots.sources === null) screenshots.load?.();
+        setPreviewOpen(true);
+      }}
+      chevron={shownSections.length > 0 ? (detailsOpen ? "open" : "closed") : "none"}
+    />
   );
 
   return (
@@ -129,16 +97,122 @@ export const ActionToolCard = ({
       ) : (
         summary
       )}
-      {media.length > 0 ? (
-        <MediaPreviewDialog
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          title={media.length > 1 ? `${label} screenshots` : `${label} screenshot`}
-          description="Preview of the screenshots from this tool call."
-          media={media}
-        />
-      ) : null}
+      <ActionToolScreenshotPreview
+        label={label}
+        screenshots={screenshots}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+      />
     </div>
+  );
+};
+
+/** The row of a card: the action, its Screenshot button, its timing, and the details cue. */
+const ActionToolSummary = ({
+  meta,
+  messageTimestamp,
+  timeLabel,
+  icon: Icon,
+  label,
+  title,
+  isFailed,
+  screenshots,
+  onOpenScreenshots,
+  chevron,
+}: Pick<
+  ActionToolCardProps,
+  "meta" | "messageTimestamp" | "timeLabel" | "icon" | "label" | "title" | "screenshots"
+> & {
+  isFailed: boolean;
+  onOpenScreenshots: () => void;
+  chevron: "none" | "open" | "closed";
+}): ReactElement => (
+  <div className="flex min-w-0 items-center gap-2">
+    <Icon
+      aria-hidden="true"
+      className={cn(
+        "size-4 shrink-0",
+        isFailed ? "text-destructive-accent" : "text-muted-foreground",
+      )}
+    />
+    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {label}
+    </span>
+    <p
+      className={cn(
+        "min-w-0 truncate text-sm font-medium",
+        isFailed ? "text-destructive-surface-foreground" : "text-foreground",
+      )}
+    >
+      {title}
+    </p>
+    {screenshots.count > 0 ? (
+      <button
+        type="button"
+        className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onOpenScreenshots();
+        }}
+      >
+        <ImageIcon aria-hidden="true" className="size-3" />
+        {screenshots.count > 1 ? `Screenshots (${screenshots.count})` : "Screenshot"}
+      </button>
+    ) : null}
+    <ToolMessageTiming
+      showSpinner={isToolMessageActive(meta)}
+      durationMs={getToolDuration(meta, messageTimestamp)}
+      timeLabel={timeLabel}
+      className="text-muted-foreground"
+    />
+    {chevron === "none" ? null : (
+      <ChevronDown
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none",
+          chevron === "open" && "rotate-180",
+        )}
+      />
+    )}
+  </div>
+);
+
+/** The load error and the preview dialog of the screenshots of a card. */
+const ActionToolScreenshotPreview = ({
+  label,
+  screenshots,
+  open,
+  onOpenChange,
+}: {
+  label: string;
+  screenshots: ActionToolScreenshots;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}): ReactElement | null => {
+  if (screenshots.error) {
+    return (
+      <p role="alert" className="mt-1 text-xs text-destructive">
+        Screenshot could not be loaded: {screenshots.error}
+      </p>
+    );
+  }
+  const media = (screenshots.sources ?? []).map((src, index): MediaPreviewItem => ({
+    id: `screenshot-${index + 1}`,
+    kind: "image",
+    src,
+    alt: `${label} screenshot ${index + 1}`,
+    unavailableLabel: `Screenshot ${index + 1} is unavailable.`,
+  }));
+  if (media.length === 0) return null;
+  return (
+    <MediaPreviewDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={media.length > 1 ? `${label} screenshots` : `${label} screenshot`}
+      description="Preview of the screenshots from this tool call."
+      media={media}
+    />
   );
 };
 

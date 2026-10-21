@@ -2,6 +2,7 @@ import type { BrowserFailureCode, BrowserHostEvent } from "@openducktor/contract
 import { Effect, Exit, FiberSet, Scope } from "effect";
 import type { BrowserAutomationPort } from "../../ports/browser-automation-port";
 import type { BrowserEngineError, BrowserEnginePort } from "../../ports/browser-engine-port";
+import type { BrowserScreenshotStorePort } from "../../ports/browser-screenshot-store-port";
 import type { BrowserSitePermissionPort } from "../../ports/browser-site-permission-port";
 import type { BrowserTabStorePort } from "../../ports/browser-tab-store-port";
 import { createBrowserAgentPages } from "./browser-agent-pages";
@@ -28,6 +29,7 @@ export type CreateBrowserServiceInput = {
   automation: BrowserAutomationPort;
   sitePermissions: BrowserSitePermissionPort;
   savedTabs: BrowserTabStorePort;
+  screenshots: BrowserScreenshotStorePort;
   owners: BrowserOwnerAccessDependencies;
   /** Stages a cropped annotation image as a local attachment and returns its path. */
   stageImage(base64Png: string, name: string): Effect.Effect<{ path: string }, BrowserServiceError>;
@@ -115,6 +117,7 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
     prompts,
     tabs,
     pages,
+    screenshots: input.screenshots,
     newTabId: newId,
     mark: (tabId, action, point) =>
       hub.broadcast({ type: "agent_marker", tabId, action, x: point.x, y: point.y }),
@@ -268,6 +271,17 @@ export const createBrowserService = (input: CreateBrowserServiceInput): BrowserS
           .deleteWorkspaceProfile(workspaceId)
           .pipe(Effect.mapError(engineFailure("browser.workspace.remove")));
         yield* sitePermissions.removeWorkspace(workspaceId);
+        yield* input.screenshots.removeWorkspace(workspaceId).pipe(
+          Effect.mapError(
+            (cause) =>
+              new BrowserServiceError({
+                code: "browser_action_failed",
+                operation: "browser.workspace.remove",
+                message: `Could not delete the agent screenshots of the workspace: ${cause.message}`,
+                cause,
+              }),
+          ),
+        );
         engineEvents.clearWorkspace(workspaceId);
       }),
     dispose: () =>

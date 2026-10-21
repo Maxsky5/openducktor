@@ -1,8 +1,10 @@
+import { type LocalImageReadInput, localImageReadInputSchema } from "@openducktor/contracts";
 import type {
   LocalAttachmentResolveInput,
   LocalAttachmentService,
   LocalAttachmentStageInput,
 } from "../../application/attachments/local-attachment-service";
+import { HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import {
   commandInputRecordSchema,
@@ -36,10 +38,22 @@ const parseResolveInput = (args: HostCommandArgs): LocalAttachmentResolveInput =
   };
 };
 
+const parseLocalImageInput = (args: HostCommandArgs): LocalImageReadInput => {
+  const parsed = localImageReadInputSchema.safeParse(args);
+  if (!parsed.success)
+    throw new HostValidationError({
+      field: "local_image_read",
+      message: "The image request needs the absolute path of an image file.",
+      cause: parsed.error,
+    });
+  return parsed.data;
+};
+
 export const createLocalAttachmentCommandHandlers = (
   localAttachmentService: LocalAttachmentService,
 ) =>
   ({
+    local_image_read: (args) => localAttachmentService.readImage(parseLocalImageInput(args)),
     workspace_resolve_local_attachment_path: (args) =>
       localAttachmentService.resolve(parseResolveInput(args)),
     workspace_stage_local_attachment: (args) => localAttachmentService.stage(parseStageInput(args)),

@@ -1,10 +1,6 @@
-import {
-  type AgentToolData,
-  type AgentToolResultContent,
-  isOdtBrowserToolName,
-  type OdtToolName,
-} from "@openducktor/contracts";
+import { type AgentToolData, isOdtBrowserToolName, type OdtToolName } from "@openducktor/contracts";
 import { z } from "zod";
+import { localImagePathOf } from "@/lib/local-image-path";
 import { readInputString } from "./tool-input-utils";
 import { compactText } from "./tool-text-utils";
 
@@ -117,10 +113,15 @@ export const browserToolTitle = (action: string, input: AgentToolData | undefine
   }
 };
 
-/** The images of a browser tool result, such as a screenshot, as data URLs. */
-export const browserToolScreenshots = (content: AgentToolResultContent[] | undefined): string[] =>
-  (content ?? []).flatMap((item) => {
-    if (item.kind !== "file") return [];
-    const source = item.file.downloadUri ?? item.file.uri;
-    return source?.startsWith("data:image/") ? [source] : [];
+/** The host saves each agent screenshot and names it in the result as `Saved to file:///….png.` */
+const SAVED_SCREENSHOT = /Saved to (file:\/\/\S+?\.png)\./g;
+
+/**
+ * The saved screenshot files of a browser tool result. Codex can put the whole result into one
+ * text, so the files come from the text in every runtime.
+ */
+export const browserToolScreenshotPaths = (output: string | undefined): string[] =>
+  Array.from((output ?? "").matchAll(SAVED_SCREENSHOT)).flatMap((match) => {
+    const path = localImagePathOf(match[1] ?? "");
+    return path === null ? [] : [path];
   });

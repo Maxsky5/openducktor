@@ -1,3 +1,4 @@
+import { createBrowserScreenshotFileStore } from "../../adapters/browser/files/browser-screenshot-file-store";
 import { Cause, Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import {
@@ -53,6 +54,7 @@ const createNodeBrowserService = (input: NodeBrowserServiceInput): BrowserServic
     engine: input.engine,
     automation: input.automation,
     sitePermissions: createBrowserSitePermissionFileStore({ configRoot: input.configRoot }),
+    screenshots: createBrowserScreenshotFileStore({ configRoot: input.configRoot }),
     savedTabs: createBrowserTabFileStore({
       configRoot: input.configRoot,
       engineKind: input.engine.kind,

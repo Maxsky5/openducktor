@@ -73,6 +73,7 @@ export * from "./git-provider-descriptors";
 export * from "./git-provider-repository";
 export * from "./git-schemas";
 export * from "./issue-import-schemas";
+export * from "./local-image-schemas";
 export * from "./host-event-schemas";
 export * from "./host-runtime-schemas";
 export * from "./host-command-contracts";
