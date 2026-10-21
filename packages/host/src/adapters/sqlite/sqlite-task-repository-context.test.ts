@@ -7,7 +7,7 @@ import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { createSqliteTaskRepositoryContextManager } from "./sqlite-task-repository-context";
-import { openSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
+import { openSqliteTaskStoreTestConnection } from "./sqlite-task-store-test-support";
 
 const tempDirectories = new Set<string>();
 
@@ -15,6 +15,7 @@ const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-"));
   tempDirectories.add(configDir);
   const manager = createSqliteTaskRepositoryContextManager({
+    openConnection: openSqliteTaskStoreTestConnection,
     processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
       Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
@@ -36,7 +37,7 @@ const createCloseFailureHarness = async (
       Effect.succeed(path.join(configDir, workspaceId, "database.sqlite")),
     resolveWorkspaceIdForRepoPath: (repoPath) => Effect.succeed(path.basename(repoPath)),
     openConnection: (databasePath) =>
-      openSqliteTaskStoreConnection(databasePath).pipe(
+      openSqliteTaskStoreTestConnection(databasePath).pipe(
         Effect.map((connection) => ({
           ...connection,
           release: connection.release.pipe(
