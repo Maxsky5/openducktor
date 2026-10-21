@@ -14,10 +14,10 @@
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {
-    "@opencode/client": "2.0.26",
+    "@opencode/client": "2.0.32",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   }
 }
