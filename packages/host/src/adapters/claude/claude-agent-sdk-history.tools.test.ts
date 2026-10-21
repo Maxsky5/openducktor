@@ -3,7 +3,7 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history tool projection", () => {
-  test("keeps a pending tool's known arguments without inventing execution or a result", () => {
+  test("keeps a tool call's known arguments without inventing execution timing or a result", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -30,7 +30,7 @@ describe("claude-agent-sdk-history tool projection", () => {
     expect(tool).toMatchObject({
       kind: "tool",
       callId: "pending-bash",
-      status: "pending",
+      status: "running",
       inputStreaming: false,
       input: { command: "git status", description: "Inspect changes" },
       preview: "git status",

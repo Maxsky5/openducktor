@@ -630,7 +630,7 @@ describe("handleClaudeSdkMessage result events", () => {
         part: expect.objectContaining({
           kind: "tool",
           callId: "tool-1",
-          status: "pending",
+          status: "running",
         }),
       }),
       expect.objectContaining({

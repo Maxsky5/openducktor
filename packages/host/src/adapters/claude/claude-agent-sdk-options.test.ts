@@ -229,7 +229,7 @@ const preToolUseHook = async (
 };
 
 test.each(["root", "nested subagent"] as const)(
-  "%s tool leaves preparation at PreToolUse and times only execution",
+  "%s tool leaves preparation at SDK input completion and times only execution",
   async (owner) => {
     const session = createSession();
     let target: ClaudeEventSession = session;
@@ -286,7 +286,7 @@ test.each(["root", "nested subagent"] as const)(
         event: { type: "content_block_stop", index: 0 },
       }),
     );
-    expect(lastTool()).toMatchObject({ part: { status: "pending", inputStreaming: false } });
+    expect(lastTool()).toMatchObject({ part: { status: "running", inputStreaming: false } });
     const hookInput: Omit<realClaudeSdk.PreToolUseHookInput, "hook_event_name"> = {
       session_id: session.externalSessionId,
       transcript_path: "/tmp/session-1.jsonl",
@@ -297,11 +297,9 @@ test.each(["root", "nested subagent"] as const)(
     };
     if (owner === "nested subagent") hookInput.agent_id = "inner-agent";
     timestamp = "2026-06-25T20:00:20.000Z";
-    const pre = options.hooks?.PreToolUse?.[0]?.hooks[0];
     const post = options.hooks?.PostToolUse?.[0]?.hooks[0];
-    if (!pre || !post) throw new Error("Expected native tool hooks.");
+    if (!post) throw new Error("Expected native completion hook.");
     const signal = new AbortController().signal;
-    await pre({ ...hookInput, hook_event_name: "PreToolUse" }, "call-1", { signal });
     expect(lastTool()).toMatchObject({
       externalSessionId: target.externalSessionId,
       part: { callId: "call-1", status: "running", inputStreaming: false },
@@ -842,6 +840,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options.forkSession).toBe(true);
     expect(options).not.toHaveProperty("sessionStore");
     expect(options).not.toHaveProperty("sessionStoreFlush");
+    expect(options.hooks).not.toHaveProperty("UserPromptSubmit");
     expect(options.hooks?.PostToolUse).toHaveLength(1);
     expect(options.hooks?.PostToolUseFailure).toHaveLength(1);
   });

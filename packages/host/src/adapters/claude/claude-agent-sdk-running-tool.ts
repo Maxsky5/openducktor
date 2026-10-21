@@ -60,8 +60,6 @@ export const emitClaudeRunningToolPart = ({
     session.backgroundToolCallIdsSinceSnapshot?.add(toolUse.callId);
   }
   const messageId = session.toolMessageIdsByCallId.get(toolUse.callId) ?? fallbackMessageId;
-  session.runningToolCallIds ??= new Set();
-  session.runningToolCallIds.add(toolUse.callId);
   session.toolMessageIdsByCallId.set(toolUse.callId, messageId);
   session.toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
   if (executionStartedAtMs !== undefined)

@@ -290,7 +290,7 @@ describe("Claude background ordinary tool parts", () => {
         patch: { status: "completed" },
       }),
     );
-    expect(parts("foreground").at(-1)?.status).toBe("pending");
+    expect(parts("foreground").at(-1)?.status).toBe("running");
     send(toolResult("foreground", "/repo"));
     send(
       claudeSdkMessageFixture({
@@ -476,7 +476,7 @@ describe("Claude background ordinary tool parts", () => {
         summary: "Still running",
       }),
     );
-    expect(parts("foreground-progress").at(-1)?.status).toBe("pending");
+    expect(parts("foreground-progress").at(-1)?.status).toBe("running");
     expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
     send(taskStart("foreground-progress-task", "foreground-progress", "Print directory", false));
     send(toolResult("foreground-progress", "/repo"));
@@ -578,7 +578,7 @@ describe("Claude background ordinary tool parts", () => {
         summary: "Still waiting",
       }),
     );
-    expect(parts("bash-absent").at(-1)?.status).toBe("pending");
+    expect(parts("bash-absent").at(-1)?.status).toBe("running");
     expect(hasActiveClaudeBackgroundWork(session)).toBe(false);
     send(toolResult("bash-absent", "Started", "absent-task"));
     expect(parts("bash-absent").at(-1)).toMatchObject({

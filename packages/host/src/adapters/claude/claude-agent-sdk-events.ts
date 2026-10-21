@@ -27,11 +27,11 @@ import {
   emitClaudePermissionDeniedToolPart,
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
-import { handleClaudeToolProgressMessage } from "./claude-agent-sdk-running-tool";
 import {
-  emitClaudePendingToolPart,
-  handleClaudeStreamEvent,
-} from "./claude-agent-sdk-stream-events";
+  emitClaudeRunningToolPart,
+  handleClaudeToolProgressMessage,
+} from "./claude-agent-sdk-running-tool";
+import { handleClaudeStreamEvent } from "./claude-agent-sdk-stream-events";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { handleClaudeSubagentSystemMessage } from "./claude-agent-sdk-subagents";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
@@ -427,7 +427,7 @@ const handleAssistantMessage = ({
           continue;
         }
 
-        emitClaudePendingToolPart({
+        emitClaudeRunningToolPart({
           emit,
           fallbackMessageId: assistantMessageId,
           session,

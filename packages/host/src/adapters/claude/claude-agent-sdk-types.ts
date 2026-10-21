@@ -126,8 +126,6 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     activity: ClaudeSessionActivity;
     externalSessionId: string;
     input: ClaudeSessionInput;
-    /** Host context for the next prompt and its running turn. Never persisted by OpenDucktor. */
-    turnSystemPrompt?: string | undefined;
     lastAssistantTextMessageId?: string;
     lastAssistantText?: string;
     lastAssistantTextFinal?: boolean;
@@ -154,7 +152,6 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     subagentAgentIdsByToolUseId?: Map<string, string>;
     subagentTaskIdsByToolUseId: Map<string, string>;
     toolEndedAtMsByCallId: Map<string, number>;
-    runningToolCallIds?: Set<string>;
     toolStartedAtMsByCallId: Map<string, number>;
     todosById: Map<string, AgentSessionTodoItem>;
     /** Sent user messages that the CLI has not admitted yet, by message UUID. */

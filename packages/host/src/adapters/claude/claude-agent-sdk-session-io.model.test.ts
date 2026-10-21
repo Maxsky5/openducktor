@@ -35,6 +35,9 @@ describe("Claude session I/O model changes", () => {
 
     expect(session.input).toBe(originalInput);
     expect(session.input.systemPrompt).toBe("Build");
+    expect(await queue[Symbol.asyncIterator]().next()).toMatchObject({
+      value: { message: { role: "user", content: [{ type: "text", text: "hello" }] } },
+    });
   });
 
   test.each([false, true])(

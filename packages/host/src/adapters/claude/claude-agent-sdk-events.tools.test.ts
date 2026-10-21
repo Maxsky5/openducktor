@@ -67,7 +67,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           callId: "tool-1",
-          status: "pending",
+          status: "running",
           tool: "mcp__openducktor__odt_set_plan",
           toolType: "workflow",
         }),
@@ -228,7 +228,7 @@ describe("handleClaudeSdkMessage tool events", () => {
     expect(events[0]).toEqual(
       expect.objectContaining({
         type: "assistant_part",
-        part: expect.objectContaining({ callId: "tool-meta-1", status: "pending" }),
+        part: expect.objectContaining({ callId: "tool-meta-1", status: "running" }),
       }),
     );
   });
@@ -382,7 +382,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             blockType: "mcp_tool_use",
             serverName: "openducktor",
           },
-          status: "pending",
+          status: "running",
           tool: "mcp__openducktor__odt_read_task",
           toolType: "workflow",
         }),
@@ -474,7 +474,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         part: expect.objectContaining({
           callId: "tool-1",
           messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
-          status: "pending",
+          status: "running",
           tool: "code_execution",
           toolType: "generic",
         }),

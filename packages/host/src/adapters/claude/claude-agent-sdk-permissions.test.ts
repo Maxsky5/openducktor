@@ -26,8 +26,6 @@ describe("createClaudeCanUseTool", () => {
       const session = createClaudeRepositoryPermissionTestSession();
       const hook = createClaudePreToolUseHook({
         session,
-        now: () => "2026-06-25T12:00:00.000Z",
-        emit: () => {},
       });
       const input = {
         hook_event_name: "PreToolUse" as const,

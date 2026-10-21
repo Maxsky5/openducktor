@@ -19,26 +19,20 @@ import type { ClaudeAgentSdkEvent } from "./claude-agent-sdk-types";
 import type { ClaudeSdkStreamEventMessageProjection } from "./claude-agent-sdk-message-projection";
 import { emitClaudeRunningToolPart } from "./claude-agent-sdk-running-tool";
 
-export const emitClaudePendingToolPart = ({
+const emitClaudePendingToolPart = ({
   emit,
-  inputStreaming = false,
   fallbackMessageId,
   session,
   timestamp,
   toolUse,
 }: {
   emit: (event: ClaudeAgentSdkEvent) => void;
-  inputStreaming?: boolean;
   fallbackMessageId: string;
   session: ClaudeEventSession;
   timestamp: string;
   toolUse: ClaudeDecodedToolUse;
 }): void => {
   if (session.toolEndedAtMsByCallId?.has(toolUse.callId)) return;
-  if (session.runningToolCallIds?.has(toolUse.callId)) {
-    emitClaudeRunningToolPart({ emit, fallbackMessageId, session, timestamp, toolUse });
-    return;
-  }
   if (!session.toolMessageIdsByCallId.has(toolUse.callId)) {
     session.backgroundToolCallIdsSinceSnapshot?.add(toolUse.callId);
   }
@@ -52,7 +46,7 @@ export const emitClaudePendingToolPart = ({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
     timestamp,
-    part: createClaudePendingToolPart({ inputStreaming, messageId, toolUse }),
+    part: createClaudePendingToolPart({ inputStreaming: true, messageId, toolUse }),
   });
 };
 
@@ -84,7 +78,7 @@ export const handleClaudeStreamEvent = ({
     const index = event.index;
     const toolUse = completeClaudeStreamToolInput(session, index);
     if (toolUse) {
-      emitClaudePendingToolPart({
+      emitClaudeRunningToolPart({
         emit,
         fallbackMessageId: toolUse.callId,
         session,
@@ -127,7 +121,6 @@ export const handleClaudeStreamEvent = ({
     rememberClaudeStreamToolStart(session, index, toolUse);
     emitClaudePendingToolPart({
       emit,
-      inputStreaming: true,
       fallbackMessageId: toolUse.callId,
       session,
       timestamp,

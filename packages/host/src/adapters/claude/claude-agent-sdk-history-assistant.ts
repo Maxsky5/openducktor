@@ -5,7 +5,7 @@ import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-sch
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { finishReasonForClaudeStopReason } from "./claude-agent-sdk-result-lifecycle";
 import {
-  createClaudePendingToolPart,
+  createClaudeRunningToolPart,
   decodeClaudeToolUseBlock,
   isClaudeToolUseBlockType,
 } from "./claude-agent-sdk-tool-shapes";
@@ -170,7 +170,7 @@ export const projectClaudeHistoryAssistantMessage = ({
         index,
       });
       if (toolUse) {
-        parts.push(createClaudePendingToolPart({ messageId, toolUse }));
+        parts.push(createClaudeRunningToolPart({ messageId, toolUse }));
         toolMessageIdsByCallId.set(toolUse.callId, messageId);
         toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
         if (toolUse.input) {

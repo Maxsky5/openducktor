@@ -48,7 +48,6 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     todoProjection?: ClaudeTodoProjection;
     todosById: ClaudeTodoState;
     toolEndedAtMsByCallId?: Map<string, number>;
-    runningToolCallIds?: Set<string>;
     toolStartedAtMsByCallId: Map<string, number>;
     subagentMessageIdsByTaskId: Map<string, string>;
     subagentAgentIdsByToolUseId?: Map<string, string>;

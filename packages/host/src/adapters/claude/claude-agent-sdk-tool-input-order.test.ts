@@ -52,11 +52,21 @@ describe("Claude tool input completion order", () => {
       expect(events).toEqual([
         expect.objectContaining({
           type: "assistant_part",
-          part: expect.objectContaining({ callId: "enter-1", input: {}, inputStreaming: true }),
+          part: expect.objectContaining({
+            callId: "enter-1",
+            status: "pending",
+            input: {},
+            inputStreaming: true,
+          }),
         }),
         expect.objectContaining({
           type: "assistant_part",
-          part: expect.objectContaining({ callId: "enter-1", input: {}, inputStreaming: false }),
+          part: expect.objectContaining({
+            callId: "enter-1",
+            status: "running",
+            input: {},
+            inputStreaming: false,
+          }),
         }),
       ]);
     },
@@ -140,10 +150,11 @@ describe("Claude tool input completion order", () => {
               callId: "write-1",
               partId: "write-1",
               messageId: "write-1",
-              status: "pending",
             },
           });
         }
+        expect(events[0]).toMatchObject({ part: { status: "pending" } });
+        expect(events[1]).toMatchObject({ part: { status: "running" } });
         expect(session.toolInputsByCallId.get("write-1")).toEqual(input);
       } finally {
         parse.mockRestore();
@@ -207,20 +218,20 @@ describe("Claude tool input completion order", () => {
         send(message);
       }
       expect(session.toolInputsByCallId.get("write-1")).toEqual(input);
-      const pendingTools = events.flatMap((event) =>
+      const toolParts = events.flatMap((event) =>
         event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
       );
-      expect(pendingTools.length).toBeGreaterThanOrEqual(2);
-      for (const part of pendingTools) {
+      expect(toolParts.length).toBeGreaterThanOrEqual(2);
+      for (const part of toolParts) {
         expect(part).toMatchObject({
           callId: "write-1",
           messageId: "write-1",
           partId: "write-1",
-          status: "pending",
         });
       }
-      expect(pendingTools[0]).toMatchObject({ inputStreaming: true, input: {} });
-      expect(pendingTools.at(-1)).toMatchObject({
+      expect(toolParts[0]).toMatchObject({ status: "pending", inputStreaming: true, input: {} });
+      expect(toolParts.at(-1)).toMatchObject({
+        status: "running",
         inputStreaming: false,
         input,
         preview: "/repo/relative.txt",
