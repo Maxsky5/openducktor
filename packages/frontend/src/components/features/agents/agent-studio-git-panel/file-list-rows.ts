@@ -31,9 +31,8 @@ export type DirectoryRow = {
   name: RowLabel;
   depth: number;
   isOpen: boolean;
-  /** Number of matching descendant files, including closed directories. */
+  /** Totals include matching files in nested and closed directories. */
   fileCount: number;
-  /** Line totals of all matching descendant files, including closed directories. */
   additions: number;
   deletions: number;
 };

@@ -21,7 +21,6 @@ export function FileListDirectoryRow({
         FILE_LIST_ROW_CLASS_NAME,
         "text-foreground outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
       )}
-      // Directory rows show only in tree view.
       style={fileListRowStyle("tree", row.depth)}
       aria-label={row.path}
       aria-description={`${fileCountLabel}, ${row.additions} lines added, ${row.deletions} lines removed`}
