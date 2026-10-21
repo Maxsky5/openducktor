@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
 import { Effect, Exit, Scope } from "effect";
 import type { BrowserEngineEvent } from "@openducktor/host";
 import {
@@ -531,7 +532,7 @@ describe("Electron browser engine page events", () => {
     await Effect.runPromise(
       harness.engine.windows?.revealDownload(TAB_ID, update.download.downloadId) ?? Effect.void,
     );
-    expect(harness.revealed).toEqual(["/downloads/report.pdf"]);
+    expect(harness.revealed).toEqual([path.join("/downloads", "report.pdf")]);
   });
 
   test("clears the browser data of a removed workspace", async () => {

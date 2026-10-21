@@ -20,6 +20,7 @@ afterEach(async () => {
 
 /** A dev server that answers each test path, and a preview of it. */
 const startPreview = async () => {
+  let finishStream = () => {};
   const target = createServer((request, response) => {
     switch (request.url) {
       case "/":
@@ -30,8 +31,21 @@ const startPreview = async () => {
         });
         response.end("<!doctype html><html><head><title>App</title></head><body>Hi</body></html>");
         return;
+      case "/stream":
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.write("<!doctype html><html><head><title>App</title></head><body>Loading");
+        finishStream = () => response.end(" done</body></html>");
+        return;
       case "/next":
         response.writeHead(302, { location: `http://localhost:${targetPort}/done?x=1` });
+        response.end();
+        return;
+      case "/account/settings":
+        response.writeHead(302, { location: "login" });
+        response.end();
+        return;
+      case "/account/profile":
+        response.writeHead(302, { location: "?tab=2" });
         response.end();
         return;
       case "/away":
@@ -65,7 +79,7 @@ const startPreview = async () => {
     target: `http://localhost:${targetPort}/some/page`,
     appOrigin: APP_ORIGIN,
   });
-  return { origin, previews, targetPort };
+  return { origin, previews, targetPort, finishStream: () => finishStream() };
 };
 
 describe("browser preview proxy", () => {
@@ -83,9 +97,31 @@ describe("browser preview proxy", () => {
     expect(response.headers.get("content-security-policy")).toBe(
       `default-src 'self'; frame-ancestors ${APP_ORIGIN}`,
     );
-    expect(Number(response.headers.get("content-length"))).toBe(Buffer.byteLength(html));
+    expect(html).toEndWith("<body>Hi</body></html>");
     const script = await (await fetch(`${origin}/__openducktor/frame.js`)).text();
     expect(script).toContain(JSON.stringify([APP_ORIGIN]));
+  });
+
+  test("streams a page as the dev server sends it, such as a loading state", async () => {
+    const { origin, finishStream } = await startPreview();
+    const response = await fetch(`${origin}/stream`);
+    if (!response.body) throw new Error("Expected a page body.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let html = "";
+    while (!html.includes("Loading")) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("The page ended before its first content.");
+      html += decoder.decode(value, { stream: true });
+    }
+    finishStream();
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      html += decoder.decode(chunk.value, { stream: true });
+    }
+
+    expect(html).toBe(
+      '<!doctype html><html><head><script src="/__openducktor/frame.js"></script><title>App</title></head><body>Loading done</body></html>',
+    );
   });
 
   test("keeps redirects of the dev server in the preview, and stops redirects to other sites", async () => {
@@ -96,6 +132,10 @@ describe("browser preview proxy", () => {
     const leave = await fetch(`${origin}${outside.headers.get("location")}`);
 
     expect(inside.headers.get("location")).toBe("/done?x=1");
+    const relative = await fetch(`${origin}/account/settings`, { redirect: "manual" });
+    const queryOnly = await fetch(`${origin}/account/profile`, { redirect: "manual" });
+    expect(relative.headers.get("location")).toBe("/account/login");
+    expect(queryOnly.headers.get("location")).toBe("/account/profile?tab=2");
     expect(outside.headers.get("location")).toBe(
       `/__openducktor/leave?url=${encodeURIComponent("https://accounts.example.com/login?next=%2F")}`,
     );
@@ -156,6 +196,19 @@ describe("browser preview proxy", () => {
     socket.close();
 
     expect(messages).toEqual([`host localhost:${targetPort}`, "echo ping"]);
+  });
+
+  test("closes while a WebSocket connection stays open", async () => {
+    const { origin, previews } = await startPreview();
+    const socket = new WebSocket(`${origin.replace("http", "ws")}/ws`);
+    await new Promise<void>((resolve, reject) => {
+      socket.once("message", () => resolve());
+      socket.on("error", reject);
+    });
+    const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+
+    await previews.close();
+    await closed;
   });
 
   test("shows the error of a dev server that does not answer in the tab", async () => {

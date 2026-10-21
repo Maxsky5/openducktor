@@ -658,9 +658,12 @@ type BrowserFeatureCalls = { started: string[]; closed: string[] };
 const renderBrowserPanels = (
   owner: SessionPanelOwner,
   initialBrowser: Partial<SessionPanelBrowserModel>,
+  { isActive: initialActive = true }: { isActive?: boolean } = {},
 ) => {
   const scopeKey = sessionPanelOwnerKey(owner);
   const calls: BrowserFeatureCalls = { started: [], closed: [] };
+  let isActive = initialActive;
+  let latestBrowser = initialBrowser;
   const view = renderHook(
     ({ browser }: BrowserHarnessProps) => {
       const terminals = useMemo(() => createTerminalSessionsFixture({ scopeKey }), []);
@@ -685,12 +688,26 @@ const renderBrowserPanels = (
         browser: model,
       });
     },
-    { initialProps: { browser: initialBrowser }, wrapper },
+    {
+      initialProps: { browser: initialBrowser },
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <ClientConnectionProvider connection={connection}>
+          <SessionViewContext value={{ id: "view", isActive }}>{children}</SessionViewContext>
+        </ClientConnectionProvider>
+      ),
+    },
   );
   return {
     ...view,
     calls,
-    setBrowser: (browser: Partial<SessionPanelBrowserModel>) => view.rerender({ browser }),
+    setBrowser: (browser: Partial<SessionPanelBrowserModel>) => {
+      latestBrowser = browser;
+      view.rerender({ browser });
+    },
+    setActive: (active: boolean) => {
+      isActive = active;
+      view.rerender({ browser: latestBrowser });
+    },
   };
 };
 
@@ -848,6 +865,18 @@ describe("useSessionPanels browser tabs", () => {
     });
     view.unmount();
     expect(inAppLinkTarget()).toBeNull();
+  });
+
+  test("lets only the shown page open links in its browser tabs", () => {
+    const view = renderBrowserPanels(newTaskOwner(), {}, { isActive: false });
+    expect(inAppLinkTarget()).toBeNull();
+
+    view.setActive(true);
+    expect(inAppLinkTarget()).not.toBeNull();
+
+    view.setActive(false);
+    expect(inAppLinkTarget()).toBeNull();
+    view.unmount();
   });
 
   test("gives links the reason why the page cannot open a browser tab", () => {

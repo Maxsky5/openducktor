@@ -1,4 +1,8 @@
-import type { BrowserNavigation, BrowserTabSummary } from "@openducktor/contracts";
+import {
+  BROWSER_BLANK_URL,
+  type BrowserNavigation,
+  type BrowserTabSummary,
+} from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
 import {
   type BrowserAnnotation,
@@ -12,7 +16,7 @@ import type { BrowserChannel } from "./browser-channel";
 import { BrowserPageArea, useDevToolsSize } from "./browser-devtools-dock";
 import { useBrowserDevToolsStore } from "./browser-devtools-store";
 import type { BrowserFrameControls } from "./browser-frame-display";
-import { BrowserNewTab, showsBrowserNewTab } from "./browser-new-tab";
+import { BrowserNewTab } from "./browser-new-tab";
 import { PageOverlays } from "./browser-page-overlays";
 import {
   frameReplacement,
@@ -189,6 +193,10 @@ function FrameTabContent({
     </div>
   );
 }
+
+/** True for a tab with no address, which shows the new tab page in place of a blank page. */
+const showsBrowserNewTab = (tab: BrowserTabSummary): boolean =>
+  tab.url === BROWSER_BLANK_URL && !tab.loading && tab.error === null;
 
 /**
  * The new tab page of a tab with no address, or null. A chosen page loads in the tab and takes the

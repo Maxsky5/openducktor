@@ -74,7 +74,7 @@ A browser tab belongs to one task or one Workspace Session, like a terminal. All
 - `page` tells where the page of a tab runs: `host` in the engine, or `frame` in an iframe of the web runner app. A frame page cannot be shared, because agents cannot reach it.
 - After a restart, each saved tab with a host page comes back with `started: false`. It counts toward the tab limit, but it has no page. A client that shows the panels of the owner starts it with `browser_tab_start`. An agent call starts it before it uses it.
 - Close ends the page at once. The page cannot delay it with `beforeunload`. Closing a tab also closes its Electron popup windows and its DevTools.
-- When a page closes itself, for example with `window.close()`, the engine sends `tab_ended`, and the host closes the tab.
+- When a page closes itself, for example with `window.close()`, or Chrome for Testing stops by itself, the engine sends `tab_ended`, and the host closes the tab.
 - After the user stops sharing a tab, its queued agent actions fail with `browser_not_shared`. The running action finishes first.
 
 The host closes tabs when their owner goes away:

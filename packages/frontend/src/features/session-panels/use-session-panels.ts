@@ -436,6 +436,7 @@ export function useSessionPanels({
   });
   const { addressFocus, actions: browserActions } = useSessionPanelBrowserTabs({
     ownerKey,
+    isActive,
     layout,
     browser: ownerBrowser,
     latest,

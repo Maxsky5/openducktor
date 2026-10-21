@@ -1,8 +1,4 @@
-import {
-  BROWSER_BLANK_URL,
-  type BrowserTabSummary,
-  isBrowserNavigableUrl,
-} from "@openducktor/contracts";
+import { type BrowserTabSummary, isBrowserNavigableUrl } from "@openducktor/contracts";
 import { type ReactElement, useMemo, useSyncExternalStore } from "react";
 import { useBrowserRecentPages } from "./browser-recent-pages";
 import { useBrowserTabs } from "./browser-runtime";
@@ -10,10 +6,6 @@ import { type BrowserNewTabPage, BrowserNewTabView } from "./components/browser-
 
 /** The pages that other tabs of the workspace show, at most this many. */
 const OPEN_PAGES_LIMIT = 8;
-
-/** True for a tab with no address, which shows the new tab page in place of a blank page. */
-export const showsBrowserNewTab = (tab: BrowserTabSummary): boolean =>
-  tab.url === BROWSER_BLANK_URL && !tab.loading && tab.error === null;
 
 /** The new tab page of a tab, with the recent pages and open tabs of its workspace. */
 export function BrowserNewTab({

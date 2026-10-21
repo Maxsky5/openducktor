@@ -47,7 +47,7 @@ type ChromeWorkspaceBrowserInput = {
   readonly workspaceId: string;
   readonly chrome: ChromeProcess;
   readonly emit: (event: BrowserEngineEvent) => void;
-  /** Called once when Chrome ends without `stop`, after the `tab_detached` events. */
+  /** Called once when Chrome ends without `stop`, after the `tab_ended` events. */
   readonly onUnexpectedExit: () => void;
 };
 
@@ -207,17 +207,20 @@ export const startChromeWorkspaceBrowser = (
       if (target) handleChromePageTargetEvent(pageContext, target, event);
     });
 
-    /** Ends tab handling. Each live tab ends without a close from the host. */
-    const detachAll = (): void => {
+    /**
+     * Ends tab handling. A stop detaches each tab, so its saved state comes back after a restart. A
+     * Chrome exit ends each tab, because its page is gone and nothing can attach it again.
+     */
+    const releaseTabs = (type: "tab_detached" | "tab_ended"): void => {
       stopping = true;
       unsubscribe();
-      for (const tabId of tabs.keys()) emit({ type: "tab_detached", tabId });
+      for (const tabId of tabs.keys()) emit({ type, tabId });
       tabs.clear();
     };
 
     const removeExitListener = chrome.onExit(() => {
       if (stopping) return;
-      detachAll();
+      releaseTabs("tab_ended");
       // Closing the scope only interrupts the background work of this browser. Nothing waits for it.
       Effect.runFork(Scope.close(scope, Exit.void));
       input.onUnexpectedExit();
@@ -227,7 +230,7 @@ export const startChromeWorkspaceBrowser = (
       Effect.gen(function* () {
         if (stopping) return;
         removeExitListener();
-        detachAll();
+        releaseTabs("tab_detached");
         yield* Scope.close(scope, Exit.void);
         yield* chrome.stop();
       });

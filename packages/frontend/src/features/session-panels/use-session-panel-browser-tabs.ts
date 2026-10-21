@@ -104,6 +104,7 @@ type SessionPanelBrowserTabs = {
  */
 export function useSessionPanelBrowserTabs({
   ownerKey,
+  isActive,
   layout,
   browser,
   latest,
@@ -111,6 +112,8 @@ export function useSessionPanelBrowserTabs({
   showRight,
 }: {
   ownerKey: string | null;
+  /** True while the page shows. Only the shown page opens links in its browser tabs. */
+  isActive: boolean;
   layout: SessionPanelLayout;
   /** The browser model of the owner, or null when the page has none for the owner. */
   browser: SessionPanelBrowserModel | null;
@@ -230,13 +233,13 @@ export function useSessionPanelBrowserTabs({
     [latest, showRight, update],
   );
 
-  // Links of the page, such as chat and terminal links, can open in its browser tabs.
+  // Links of the shown page, such as chat and terminal links, can open in its browser tabs.
   const hasTabs = browser !== null;
   const blockedReason = browser?.startBlockedReason ?? null;
   useEffect(() => {
-    if (!hasTabs) return;
+    if (!hasTabs || !isActive) return;
     return registerInAppLinkTarget({ blockedReason, open: openBrowserPage });
-  }, [blockedReason, hasTabs, openBrowserPage]);
+  }, [blockedReason, hasTabs, isActive, openBrowserPage]);
 
   const actions = useMemo<HostTabActions<"browser">>(
     () => ({ pick: pickBrowser, close: (panel, tab) => void closeBrowserTab(panel, tab) }),

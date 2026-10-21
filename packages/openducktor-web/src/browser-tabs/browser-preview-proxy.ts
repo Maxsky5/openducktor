@@ -8,7 +8,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { request as httpsRequest } from "node:https";
-import type { Duplex } from "node:stream";
+import { type Duplex, Transform } from "node:stream";
 import { isBrowserFrameUrl } from "@openducktor/contracts";
 import { isPreviewAppHostname } from "./browser-preview-hosts";
 import { z } from "zod";
@@ -52,6 +52,8 @@ type Preview = {
   port: number;
   target: URL;
   appOrigins: Set<string>;
+  /** Client sockets of WebSocket upgrades. `closeAllConnections` does not close them. */
+  upgrades: Set<Duplex>;
 };
 
 /**
@@ -73,6 +75,7 @@ export const createBrowserPreviewProxies = (input: {
         port: 0,
         target,
         appOrigins: new Set([appOrigin]),
+        upgrades: new Set(),
       };
       preview.server.on("request", (request, response) =>
         handleRequest(preview, request, response),
@@ -140,6 +143,8 @@ export const createBrowserPreviewProxies = (input: {
       socket.destroy();
       return;
     }
+    preview.upgrades.add(socket);
+    socket.once("close", () => preview.upgrades.delete(socket));
     const upstream = sendUpstream(preview, request, (upstreamResponse) => {
       // The dev server refused the upgrade, so the client gets its answer.
       socket.end(
@@ -196,7 +201,7 @@ export const createBrowserPreviewProxies = (input: {
     upstream: IncomingMessage,
     response: ServerResponse,
   ) => {
-    const headers = downstreamHeaders(upstream.headers, preview);
+    const headers = downstreamHeaders(upstream.headers, preview, request.url);
     const status = upstream.statusCode ?? 502;
     const injects =
       request.method !== "HEAD" &&
@@ -209,17 +214,11 @@ export const createBrowserPreviewProxies = (input: {
       upstream.pipe(response);
       return;
     }
-    const chunks: Buffer[] = [];
-    upstream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    // The frame script changes the length of the page.
+    delete headers["content-length"];
+    response.writeHead(status, upstream.statusMessage, headers);
     upstream.on("error", (cause) => response.destroy(cause));
-    upstream.on("end", () => {
-      const body = withFrameScript(Buffer.concat(chunks));
-      response.writeHead(status, upstream.statusMessage, {
-        ...headers,
-        "content-length": String(body.length),
-      });
-      response.end(body);
-    });
+    upstream.pipe(withFrameScript()).pipe(response);
   };
 
   const upstreamHeaders = (
@@ -243,7 +242,11 @@ export const createBrowserPreviewProxies = (input: {
     return headers;
   };
 
-  const downstreamHeaders = (incoming: IncomingHttpHeaders, preview: Preview) => {
+  const downstreamHeaders = (
+    incoming: IncomingHttpHeaders,
+    preview: Preview,
+    requestPath: string | undefined,
+  ) => {
     const headers: OutgoingHttpHeaders = { ...incoming };
     for (const name of HOP_BY_HOP_HEADERS) delete headers[name];
     delete headers["x-frame-options"];
@@ -252,7 +255,7 @@ export const createBrowserPreviewProxies = (input: {
       Array.from(preview.appOrigins),
     );
     if (incoming.location !== undefined) {
-      headers.location = previewLocation(incoming.location, preview);
+      headers.location = previewLocation(incoming.location, preview, requestPath);
     }
     return headers;
   };
@@ -267,9 +270,16 @@ export const createBrowserPreviewProxies = (input: {
     return `${preview.target.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
   };
 
-  /** A redirect stays in the preview for the dev server, and goes to the leave page otherwise. */
-  const previewLocation = (location: string, preview: Preview): string => {
-    const url = new URL(location, preview.target);
+  /**
+   * A redirect stays in the preview for the dev server, and goes to the leave page otherwise. A
+   * relative location resolves against the page that the dev server answered.
+   */
+  const previewLocation = (
+    location: string,
+    preview: Preview,
+    requestPath: string | undefined,
+  ): string => {
+    const url = new URL(location, new URL(requestPath ?? "/", preview.target));
     if (url.origin === preview.target.origin) {
       return `${url.pathname}${url.search}${url.hash}`;
     }
@@ -307,6 +317,7 @@ export const createBrowserPreviewProxies = (input: {
           result.status === "fulfilled"
             ? [
                 new Promise<void>((resolve) => {
+                  for (const socket of result.value.upgrades) socket.destroy();
                   result.value.server.closeAllConnections();
                   result.value.server.close(() => resolve());
                 }),
@@ -353,12 +364,44 @@ const withFrameAncestors = (
     .join(", ");
 };
 
-/** Adds the frame script as the first child of `<head>`, so it runs before page scripts. */
-const withFrameScript = (html: Buffer): Buffer => {
-  const text = html.toString("latin1");
-  const head = /<head(\s[^>]*)?>/i.exec(text) ?? /<html(\s[^>]*)?>/i.exec(text);
-  const at = head ? head.index + head[0].length : 0;
-  return Buffer.concat([html.subarray(0, at), SCRIPT_TAG, html.subarray(at)]);
+/** The index after the first `tag` in `html`, or null when `html` has no such tag. */
+const tagEnd = (html: Buffer, tag: RegExp): number | null => {
+  const match = tag.exec(html.toString("latin1"));
+  return match ? match.index + match[0].length : null;
+};
+
+/**
+ * Adds the frame script as the first child of `<head>`, so it runs before page scripts. The page
+ * waits only until its `<head>` tag arrives, so a streamed page shows its first content at once.
+ * A page without `<head>` gets the script after `<html>`, or first.
+ */
+const withFrameScript = (): Transform => {
+  let start: Buffer | null = Buffer.alloc(0);
+  const inject = (html: Buffer, at: number) =>
+    Buffer.concat([html.subarray(0, at), SCRIPT_TAG, html.subarray(at)]);
+  return new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      if (start === null) {
+        done(null, chunk);
+        return;
+      }
+      start = Buffer.concat([start, chunk]);
+      const at = tagEnd(start, /<head(\s[^>]*)?>/i);
+      if (at === null) {
+        done();
+        return;
+      }
+      const page = inject(start, at);
+      start = null;
+      done(null, page);
+    },
+    flush(done) {
+      done(
+        null,
+        start === null ? undefined : inject(start, tagEnd(start, /<html(\s[^>]*)?>/i) ?? 0),
+      );
+    },
+  });
 };
 
 const headerLines = (rawHeaders: readonly string[]): string => {

@@ -170,12 +170,12 @@ describe("startChromeWorkspaceBrowser", () => {
     expect(browser.knowsTab(TAB_ID)).toBe(false);
   });
 
-  test("a Chrome exit detaches every tab", async () => {
+  test("an unexpected Chrome exit ends every tab, so the host removes the tabs that lost their page", async () => {
     const started = await startWithTab();
 
     started.fake.exit();
 
-    expect(started.events).toEqual([{ type: "tab_detached", tabId: TAB_ID }]);
+    expect(started.events).toEqual([{ type: "tab_ended", tabId: TAB_ID }]);
     expect(started.unexpectedExits()).toBe(1);
   });
 
