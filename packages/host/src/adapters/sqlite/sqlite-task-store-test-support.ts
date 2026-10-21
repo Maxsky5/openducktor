@@ -50,7 +50,7 @@ const createClock = (): (() => Date) => {
   };
 };
 
-const openTestConnection: OpenSqliteTaskStoreConnection = (databasePath) =>
+export const openSqliteTaskStoreTestConnection: OpenSqliteTaskStoreConnection = (databasePath) =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
       try: () => mkdir(path.dirname(databasePath), { recursive: true }),
@@ -107,7 +107,7 @@ export const createSqliteTaskStoreHarness = async ({
     resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
   );
   const contextManager = createSqliteTaskRepositoryContextManager({
-    openConnection: openTestConnection,
+    openConnection: openSqliteTaskStoreTestConnection,
     processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
       resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
