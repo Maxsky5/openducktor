@@ -81,9 +81,11 @@ const FileEditCardHeader = ({
         {dirName ? <span className="text-muted-foreground">{dirName}/</span> : null}
         <span className="font-semibold">{fileName}</span>
       </span>
-      <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-mono", config.color)}>
-        {config.badge}
-      </Badge>
+      {data.kind !== "write-input" ? (
+        <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-mono", config.color)}>
+          {config.badge}
+        </Badge>
+      ) : null}
       {data.additions > 0 || data.deletions > 0 ? (
         <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
           {data.additions > 0 ? <span className="text-green-400">+{data.additions}</span> : null}
@@ -145,12 +147,17 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
           hunkSeparators={chatSettings.hunkSeparators}
         />
       ) : null}
-      {isExpanded && data.kind === "content" ? (
-        <PierreFileViewer
-          filePath={data.filePath}
-          content={data.content}
-          heightMode={chatSettings.diffHeight}
-        />
+      {isExpanded && (data.kind === "content" || data.kind === "write-input") ? (
+        <>
+          {data.kind === "write-input" ? (
+            <p className="px-3 py-1 text-[11px] text-muted-foreground">Write input</p>
+          ) : null}
+          <PierreFileViewer
+            filePath={data.filePath}
+            content={data.content}
+            heightMode={chatSettings.diffHeight}
+          />
+        </>
       ) : null}
     </div>
   );

@@ -1041,10 +1041,9 @@ describe("agent-chat-message-card-model", () => {
           ),
         ).toEqual([
           {
-            kind: "content",
+            kind: "write-input",
             filePath: "src/app.ts",
             content,
-            changeType: "modified",
             additions: 0,
             deletions: 0,
           },

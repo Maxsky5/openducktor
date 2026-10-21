@@ -31,6 +31,10 @@ type FileEditDataBase = {
 
 export type FileEditData =
   | (FileEditDataBase & {
+      kind: "write-input";
+      content: string;
+    })
+  | (FileEditDataBase & {
       kind: "replacement";
       oldContent: string;
       newContent: string;
@@ -131,10 +135,13 @@ export const extractFileEditData = (
   if (meta.tool.toLowerCase() === "write" && meta.status !== "error") {
     const write = claudeWriteContentSchema.safeParse(meta.input);
     if (write.success) {
-      return buildFileContentEditData(
-        { file: filePath, content: write.data.content, type: "modified" },
-        workingDirectory,
-      );
+      return {
+        kind: "write-input",
+        filePath: relativizeDisplayPath(filePath, workingDirectory),
+        content: write.data.content,
+        additions: 0,
+        deletions: 0,
+      };
     }
   }
 

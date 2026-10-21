@@ -200,6 +200,28 @@ afterAll(() => {
 });
 
 describe("AgentChatFileEditCard", () => {
+  test.each(["pending", "completed"] as const)(
+    "labels a %s Write input without an applied-change badge",
+    (status) => {
+      const data = extractAllFileEditData({
+        kind: "tool",
+        partId: "write-input",
+        callId: "write-input",
+        tool: "Write",
+        toolType: "file_edit",
+        status,
+        input: { file_path: "src/example.ts", content: "export const value = 1;\n" },
+      })[0]!;
+      renderFileEditCard(data, false);
+      expect(screen.queryByText(/^[MAD]$/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+      expect(screen.getByText("Write input")).toBeDefined();
+      expect(screen.getByTestId("pierre-file-viewer").textContent).toBe(
+        "export const value = 1;\n",
+      );
+    },
+  );
+
   test("expands an SDK Edit fragment through Pierre's two-content viewer", () => {
     const data = extractAllFileEditData({
       kind: "tool",
