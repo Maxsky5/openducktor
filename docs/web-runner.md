@@ -44,6 +44,12 @@ On the host computer, enable Remote control and copy its host address. Open the 
 - The site serves one client for all hosts. Run the latest stable release on each host. The client refuses data from an older host and tells you to update it.
 - Reload open tabs after a release. A tab of the earlier client can fail when it loads a file that the release removed.
 
+### Local network access
+
+Chrome 142 and later ask for permission before a public site connects to an address on your local network. Private network addresses and Tailscale addresses (`100.64.0.0/10`) are local, so a host behind Tailscale Serve or a LAN HTTPS proxy causes this prompt. Allow access when Chrome asks.
+
+If you block access at this prompt, the client shows "This browser blocked access to your local network." and stops reconnecting. To allow access again, open the browser's site settings for the client, allow local network access, and select Retry.
+
 ### Deploy your own copy
 
 Build the client:

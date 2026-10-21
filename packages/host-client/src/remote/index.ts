@@ -712,7 +712,8 @@ class RemoteRefusalError extends RemoteConnectionError {}
 const SETUP_TIMEOUT_MS = 10_000;
 const canRetry = (error: RemoteConnectionError): boolean =>
   ["unavailable", "transport_failure", "connection_expired"].includes(error.failure.code) &&
-  error.failure.transportCause !== "tls";
+  error.failure.transportCause !== "tls" &&
+  error.failure.transportCause !== "local_network";
 const connectionError = (
   cause: unknown,
   code: RemoteFailure["code"] = "transport_failure",

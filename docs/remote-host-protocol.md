@@ -270,7 +270,8 @@ Changing browser tabs keeps the live host connection and work state. One page ow
 A cached page reloads if the selected host changed or its previous client was released. Local clients release their owners on cache entry and rebuild on history restore. Leaving the page closes the client and its notification owners.
 Transport loss cancels old-generation handles and permits active reconnect with exponential backoff capped at 15 seconds, or manual `retry()`.
 `setActive(false)` and `disconnect()` cancel attempts.
-Permanent endpoint, protocol, capability, TLS, and synchronization failures require correction and explicit retry.
+Permanent endpoint, protocol, capability, TLS, local network, and synchronization failures require correction and explicit retry.
+The browser transport reports `transportCause: "local_network"` when the browser blocks Local Network Access before the host first answers.
 Same-host reconnect resumes retained cursors; a replay gap requires the affected current state.
 A new host instance replaces stale live state and old handles.
 

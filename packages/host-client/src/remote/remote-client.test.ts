@@ -11,6 +11,7 @@ import {
 import {
   createRemoteHostClient,
   readSse,
+  RemoteConnectionError,
   remoteError,
   type RemoteTransport,
   type RemoteHttpResponse,
@@ -925,6 +926,50 @@ test("a stalled initial task stream ends the synchronization generation", async 
     for (let index = 0; index < 8; index += 1) await Promise.resolve();
     scheduled.at(-1)!();
     await expect(connection).rejects.toMatchObject({ failure: { code: "transport_failure" } });
+  } finally {
+    timers.mockRestore();
+    await remote.disconnect();
+  }
+});
+
+test("blocked local network access fails without automatic reconnects until the user retries", async () => {
+  const f = fixture();
+  const request = f.transport.request;
+  let blocked = true;
+  let discoveries = 0;
+  f.transport.request = async (method, url, headers, signal, body) => {
+    if (url === "https://host.example/remote") {
+      discoveries += 1;
+      if (blocked)
+        throw new RemoteConnectionError({
+          code: "transport_failure",
+          transportCause: "local_network",
+          message: "This browser blocked access to your local network.",
+          nextAction: "Allow local network access for this site, then select Retry.",
+        });
+    }
+    return request(method, url, headers, signal, body);
+  };
+  const timers = spyOn(globalThis, "setTimeout");
+  const remote = createRemoteHostClient(
+    "https://host.example/remote",
+    hello,
+    f.transport,
+    async () => {},
+  );
+  try {
+    const failure = await remote.connect().catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({ failure: { transportCause: "local_network" } });
+    expect(remote.readState()).toMatchObject({
+      status: "failed",
+      failure: { transportCause: "local_network" },
+    });
+    // The first automatic reconnect waits 500 ms. The connection never schedules it.
+    expect(timers.mock.calls.some(([, delay]) => delay === 500)).toBe(false);
+    blocked = false;
+    await remote.retry();
+    expect(remote.readState().status).toBe("connected");
+    expect(discoveries).toBe(2);
   } finally {
     timers.mockRestore();
     await remote.disconnect();

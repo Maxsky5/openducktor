@@ -46,7 +46,7 @@ export const remoteFailureSchema = z.object({
   ]),
   message: z.string(),
   nextAction: z.string(),
-  transportCause: z.enum(["network", "proxy", "tls", "timeout"]).optional(),
+  transportCause: z.enum(["network", "proxy", "tls", "timeout", "local_network"]).optional(),
   host: remoteHostDescriptorSchema.optional(),
   client: remoteClientHelloSchema.optional(),
   missingCapabilities: z.array(z.object({ name: z.string(), reason: z.string() })).optional(),
