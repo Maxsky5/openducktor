@@ -380,6 +380,8 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
 
+Codex V2 `subAgentActivity` items can refer to a sibling or ancestor. The native [message handler](https://github.com/openai/codex/blob/main/codex-rs/core/src/tools/handlers/multi_agents_v2/message_tool.rs) emits `interacted` for the message recipient. Only `started` activity can create a child route. Other activity updates an existing child route only when the source thread is its parent. Keep conflicting creation and native parent metadata as errors.
+
 ### Queue and steering
 
 The host owns the message queue. A runtime is eligible when its adapter can refuse a new turn while native work runs. Steering is optional.
