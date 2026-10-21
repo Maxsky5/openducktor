@@ -22,6 +22,7 @@ import {
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createSourceRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import { createBrowserEngineTestDouble } from "../../test-support/browser-engine-test-double";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
@@ -241,6 +242,7 @@ const createRouter = async (
       taskEventPublicationReporter: { report: () => Effect.void },
       taskStore: createTaskStoreTestDouble({}),
       terminalPty: { start: () => Effect.die("Terminal PTY is not expected in this test.") },
+      browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
       toolDiscovery: stubTools({ bun: process.execPath, codex: binary }),
     }),
   );

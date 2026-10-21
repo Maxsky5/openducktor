@@ -25,6 +25,16 @@ import {
   ELECTRON_APP_UPDATE_GET_STATE_CHANNEL,
   ELECTRON_APP_UPDATE_INSTALL_CHANNEL,
   ELECTRON_APP_UPDATE_STATE_CHANGED_CHANNEL,
+  ELECTRON_BROWSER_BIND_GUEST_CHANNEL,
+  ELECTRON_BROWSER_CONNECT_CHANNEL,
+  ELECTRON_BROWSER_DISCONNECT_CHANNEL,
+  ELECTRON_BROWSER_EVENT_CHANNEL,
+  ELECTRON_BROWSER_PICK_FILES_CHANNEL,
+  ELECTRON_BROWSER_SEND_CHANNEL,
+  type ElectronBrowserEventEnvelope,
+  electronBrowserEventEnvelopeSchema,
+  electronBrowserPickFilesResultSchema,
+  type OpenDucktorElectronBrowserApi,
   ELECTRON_EDITOR_CLIPBOARD_READ_CHANNEL,
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_CHANNEL,
   electronLocalAttachmentPreviewResultSchema,
@@ -118,6 +128,42 @@ const terminals: OpenDucktorElectronTerminalApi = {
     };
     ipcRenderer.on(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);
     return () => ipcRenderer.off(ELECTRON_TERMINAL_EVENT_CHANNEL, handleEvent);
+  },
+};
+
+const browser: OpenDucktorElectronBrowserApi = {
+  async connect(clientId) {
+    await ipcRenderer.invoke(ELECTRON_BROWSER_CONNECT_CHANNEL, clientId);
+  },
+  async send(clientId, frame) {
+    await ipcRenderer.invoke(ELECTRON_BROWSER_SEND_CHANNEL, { clientId, frame });
+  },
+  async disconnect(clientId) {
+    await ipcRenderer.invoke(ELECTRON_BROWSER_DISCONNECT_CHANNEL, clientId);
+  },
+  subscribe(clientId, listener) {
+    const handleEvent = (
+      _event: Electron.IpcRendererEvent,
+      value: ElectronBrowserEventEnvelope,
+    ) => {
+      const parsedEnvelope = electronBrowserEventEnvelopeSchema.safeParse(value);
+      if (parsedEnvelope.success && parsedEnvelope.data.clientId === clientId) {
+        listener(parsedEnvelope.data.frame);
+      }
+    };
+    ipcRenderer.on(ELECTRON_BROWSER_EVENT_CHANNEL, handleEvent);
+    return () => ipcRenderer.off(ELECTRON_BROWSER_EVENT_CHANNEL, handleEvent);
+  },
+  async bindGuest(tabId, webContentsId) {
+    await ipcRenderer.invoke(ELECTRON_BROWSER_BIND_GUEST_CHANNEL, { tabId, webContentsId });
+  },
+  async pickFiles(input) {
+    return electronBrowserPickFilesResultSchema.parse(
+      await ipcRenderer.invoke(ELECTRON_BROWSER_PICK_FILES_CHANNEL, {
+        multiple: input.multiple,
+        accept: input.accept,
+      }),
+    );
   },
 };
 
@@ -216,6 +262,7 @@ const electronApi: OpenDucktorElectronApi = {
     return result.src;
   },
   terminals,
+  browser,
   taskStream,
   notificationStream: createElectronNotificationStreamApi(ipcRenderer),
   editorClipboard: {

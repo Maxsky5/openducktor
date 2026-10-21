@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getListedToolInputSchema } from "./listed-tool-schema";
+import { getListedToolInputSchema, getListedToolOutputSchema } from "./listed-tool-schema";
 
 type ListedToolSchema = ReturnType<typeof getListedToolInputSchema>;
 
@@ -36,5 +36,26 @@ describe("listed MCP tool input schema", () => {
     expect(properties).toHaveProperty("assetIds");
     expect(properties).not.toHaveProperty("workspaceId");
     expect(requiredOf(schema)).toEqual(expect.arrayContaining(["taskId", "assetIds"]));
+  });
+
+  test("drops schema parts that guide no call, and keeps the bounds that do", () => {
+    const type = getListedToolInputSchema("odt_browser_type", { hideWorkspaceId: true });
+    const pullRequest = getListedToolInputSchema("odt_set_pull_request", { hideWorkspaceId: true });
+    const assets = getListedToolInputSchema("odt_read_task_assets", { hideWorkspaceId: true });
+
+    expect(type).not.toHaveProperty("$schema");
+    expect(propertiesOf(type).text).toEqual({ type: "string" });
+    expect(propertiesOf(type).ref).toEqual({
+      type: "string",
+      minLength: 1,
+      description: "Ref from the latest odt_browser_snapshot, such as e12.",
+    });
+    expect(propertiesOf(pullRequest).number).toEqual({ type: "integer", exclusiveMinimum: 0 });
+    expect(propertiesOf(assets).assetIds).toEqual({
+      minItems: 1,
+      type: "array",
+      items: { type: "string", format: "uuid" },
+    });
+    expect(getListedToolOutputSchema("odt_read_task")).not.toHaveProperty("$schema");
   });
 });

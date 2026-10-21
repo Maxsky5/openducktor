@@ -1,3 +1,4 @@
+import type { BrowserService } from "../../application/browser/browser-service-types";
 import type { WorkspaceSettingsError } from "../../application/workspaces/workspace-settings-service";
 import type { NotificationService } from "../../application/notifications/notification-service";
 import type { AutopilotService } from "../../application/autopilot/autopilot-service";
@@ -18,6 +19,7 @@ import type { TaskStoreError } from "../../ports/task-repository-ports";
 import {
   createStopMcpHostBridgeStep,
   createStopRuntimesStep,
+  createStopBrowserStep,
   createStopTerminalsStep,
   type HostLifecycleLogger,
   type HostShutdownStep,
@@ -55,6 +57,7 @@ export const createNodeHostRouterLifecycle = ({
   taskAssetStagingService,
   taskSyncService,
   terminalService,
+  browserService,
 }: {
   shutdownWorkspaceFiles: () => Effect.Effect<void>;
   initializeAdmission: () => Effect.Effect<void, WorkspaceSettingsError>;
@@ -80,6 +83,7 @@ export const createNodeHostRouterLifecycle = ({
   taskAssetStagingService: Pick<TaskAssetStagingService, "shutdownCleanup">;
   taskSyncService: Pick<TaskSyncService, "startPullRequestSyncLoop"> | null;
   terminalService: TerminalService;
+  browserService: BrowserService;
 }): NodeHostRouterLifecycle => {
   let pullRequestSyncLoop: TaskSyncLoopHandle | null = null;
   let taskAssetStagingSwept = false;
@@ -158,6 +162,7 @@ export const createNodeHostRouterLifecycle = ({
               { label: "Workspace provider setup", run: () => workspaceProviderSetup.shutdown() },
               { label: "image workers", run: () => imageWorkers.shutdown },
               createStopTerminalsStep(terminalService),
+              createStopBrowserStep(browserService),
               createStopRuntimesStep(runtimeRegistry, lifecycleLogger),
               createStopMcpHostBridgeStep(mcpHostBridge ?? undefined, lifecycleLogger),
               {

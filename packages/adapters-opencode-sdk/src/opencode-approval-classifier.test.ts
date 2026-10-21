@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import {
+  ODT_BROWSER_READ_TOOL_NAMES,
+  ODT_BROWSER_TOOL_NAMES,
+  toOpencodeExposedOdtToolIds,
+} from "@openducktor/contracts";
 import { classifyOpenCodeApprovalMutation } from "./opencode-approval-classifier";
 
 const classifyShell = (
@@ -204,5 +209,18 @@ describe("OpenCode approval classifier", () => {
         patterns: [],
       }),
     ).toBe("mutating");
+  });
+
+  test("classifies page reads as read-only and page actions as unknown, so read-only roles keep both", () => {
+    const reads = new Set<string>(ODT_BROWSER_READ_TOOL_NAMES);
+    for (const toolName of ODT_BROWSER_TOOL_NAMES) {
+      const expected = reads.has(toolName) ? "read_only" : "unknown";
+      for (const name of toOpencodeExposedOdtToolIds(toolName)) {
+        expect(classifyOpenCodeApprovalMutation({ permission: name, patterns: [] })).toBe(expected);
+        expect(
+          classifyOpenCodeApprovalMutation({ permission: "tool", toolName: name, patterns: [] }),
+        ).toBe(expected);
+      }
+    }
   });
 });

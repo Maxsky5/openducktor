@@ -1,9 +1,12 @@
 import {
+  isOdtBrowserToolName,
   ODT_MCP_TOOL_NAMES,
+  ODT_READ_ONLY_TOOL_NAMES,
   ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
   odtToolNameSchema,
   type OdtToolName,
 } from "@openducktor/contracts";
+import type { AgentApprovalMutation } from "../types/agent-orchestrator";
 import { ODT_WORKFLOW_READ_TOOL_NAMES } from "./odt-workflow-tools";
 
 export type OdtToolAliasResolver = (canonicalToolName: OdtToolName) => readonly string[];
@@ -13,7 +16,7 @@ export const ODT_READ_TOOL_NAMES = [
   ...ODT_WORKFLOW_READ_TOOL_NAMES,
 ] as const satisfies readonly OdtToolName[];
 
-const ODT_READ_TOOL_NAME_SET = new Set<OdtToolName>(ODT_READ_TOOL_NAMES);
+const ODT_READ_ONLY_TOOL_NAME_SET = new Set<OdtToolName>(ODT_READ_ONLY_TOOL_NAMES);
 
 export const normalizeOdtToolName = (
   toolName: string,
@@ -35,10 +38,22 @@ export const normalizeOdtToolName = (
   return null;
 };
 
-export const isOdtMutationToolName = (
+/**
+ * Classifies an approval request for an ODT tool. Task and page reads are read-only. Task and
+ * workflow writes are mutating. Browser actions never change the workspace or the task store, but
+ * they can change the app behind the page, so their class is unknown. Returns null for a tool
+ * that is not an ODT tool.
+ */
+export const classifyOdtToolMutation = (
   toolName: string,
   aliasesForTool?: OdtToolAliasResolver,
-): boolean => {
+): AgentApprovalMutation | null => {
   const normalized = normalizeOdtToolName(toolName, aliasesForTool);
-  return normalized !== null && !ODT_READ_TOOL_NAME_SET.has(normalized);
+  if (normalized === null) {
+    return null;
+  }
+  if (ODT_READ_ONLY_TOOL_NAME_SET.has(normalized)) {
+    return "read_only";
+  }
+  return isOdtBrowserToolName(normalized) ? "unknown" : "mutating";
 };

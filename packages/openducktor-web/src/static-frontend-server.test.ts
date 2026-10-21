@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,11 +12,18 @@ const execFileAsync = promisify(execFile);
 test("serves packaged assets with compression and cache validation under Node", async () => {
   const directory = await mkdtemp(join(tmpdir(), "odt-static-node-"));
   try {
+    // Like the published CLI, the bundle loads playwright-core from the package dependencies.
+    await symlink(
+      fileURLToPath(new URL("../node_modules", import.meta.url)),
+      join(directory, "node_modules"),
+      "junction",
+    );
     const result = await Bun.build({
       entrypoints: [
         fileURLToPath(new URL("./static-frontend-server.node-fixture.ts", import.meta.url)),
       ],
       target: "node",
+      external: ["playwright-core"],
       outdir: directory,
       naming: "static-check.mjs",
     });

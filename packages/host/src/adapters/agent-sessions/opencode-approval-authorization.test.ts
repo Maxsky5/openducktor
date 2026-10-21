@@ -51,6 +51,12 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
           allowed: role === "build" || permittedWrite[role] === permission,
         })),
         {
+          permission: "functions.openducktor_odt_browser_click",
+          mutation: "unknown" as const,
+          allowed: true,
+        },
+        { permission: "odt_browser_snapshot", mutation: "unknown" as const, allowed: true },
+        {
           permission: role === "build" ? "odt_qa_approved" : "odt_build_completed",
           mutation: "mutating" as const,
           allowed: false,

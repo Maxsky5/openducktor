@@ -172,6 +172,7 @@ const createTaskServiceInput = (input: TaskServiceTestInput): CreateTaskServiceI
       ({
         acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
+    browserTabs: rest.browserTabs ?? { closeOwnerTabs: () => Effect.void },
     worktreeActions: rest.worktreeActions ?? createBuildWorktreeActions([]),
     toolDiscovery: resolvedToolDiscovery,
     taskStore: createTaskStorePort(taskStore),

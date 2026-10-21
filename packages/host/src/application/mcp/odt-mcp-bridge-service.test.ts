@@ -106,7 +106,7 @@ const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
   }) satisfies OdtWorkspaceSettingsService;
 type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
-  "taskAssetReadService"
+  "taskAssetReadService" | "browserAgentTools" | "browserCallers"
 > & {
   taskAssetReadService?: TaskAssetReadService;
 };
@@ -115,6 +115,12 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
     taskAssetReadService: input.taskAssetReadService ?? {
       read: () => Effect.succeed(null),
       readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
+    },
+    browserAgentTools: {
+      runAgentTool: () => Effect.die(new Error("Task tools never run browser tools.")),
+    },
+    browserCallers: {
+      resolve: () => Effect.die(new Error("Task tools never resolve a browser caller.")),
     },
     ...input,
   });

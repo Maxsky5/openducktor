@@ -36,6 +36,7 @@ import {
 } from "./electron-host";
 import { HostOperationError } from "../../../../packages/host/src/effect/host-errors";
 import { createFakeOpenCodeV2 } from "../../../../packages/host/src/test-support/opencode-v2-standalone";
+import { createBrowserEngineTestDouble } from "../../../../packages/host/src/test-support/browser-engine-test-double";
 
 type ElectronHostCommandRouterInput = Parameters<
   typeof createProductionElectronHostCommandRouter
@@ -66,6 +67,7 @@ const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRoute
     onBackgroundFailure: () => Effect.void,
     ...defaultEnvironment,
     runtimeDistribution: testRuntimeDistribution,
+    browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
     ...input,
   });
 };
@@ -1286,6 +1288,7 @@ describe("createElectronHostCommandRouter", () => {
         createElectronEffectHostCommandRouter({
           isPackaged: false,
           onBackgroundFailure: () => Effect.void,
+          browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
           processEnv: {
             OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
             PATH: "/usr/bin:/bin",

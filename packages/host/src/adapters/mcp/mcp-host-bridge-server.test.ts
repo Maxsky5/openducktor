@@ -12,6 +12,7 @@ import {
   type RepoConfig,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { BrowserServiceError } from "../../application/browser/browser-service-error";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import { TaskPolicyError } from "../../domain/task";
@@ -33,6 +34,11 @@ const repoConfig: RepoConfig = {
   agentDefaults: {},
   agentStudioState: { openTaskIds: [] },
 };
+const unexpectedBrowserTool: OdtMcpBridgeService["invokeBrowserTool"] = () =>
+  Effect.die(new Error("unexpected browser tool invocation"));
+const unexpectedTaskTool: OdtMcpBridgeService["invoke"] = () =>
+  Effect.die(new Error("unexpected scoped tool invocation"));
+const BROWSER_TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 const createWorkspaceSettingsService = (): WorkspaceSettingsService =>
   createWorkspaceSettingsServiceTestDouble({
     getRepoConfigByRepoPath(repoPath: string) {
@@ -109,6 +115,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
             return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
@@ -169,6 +176,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
             return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
@@ -250,6 +258,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.fail(
             new HostOperationError({
@@ -302,6 +311,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: (status) => published.push(status),
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
@@ -343,6 +353,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
@@ -386,6 +397,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
@@ -444,6 +456,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
             return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
@@ -516,6 +529,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
+        invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
@@ -551,6 +565,152 @@ describe("createMcpHostBridgeServer", () => {
           details: { reason: "needs a product decision", taskId: "task-1" },
         },
       });
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("routes browser tools with their caller to the browser branch", async () => {
+    const calls: unknown[] = [];
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
+      bridgeService: {
+        ready: () => Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        getWorkspaces: () => Effect.succeed({ workspaces: [] }),
+        invoke: unexpectedTaskTool,
+        invokeBrowserTool(toolName, input) {
+          return Effect.sync(() => {
+            calls.push({ toolName, input });
+            return { content: [{ type: "text" as const, text: "Clicked e12" }] };
+          });
+        },
+      } satisfies OdtMcpBridgeService,
+    });
+    const body = {
+      tabId: BROWSER_TAB_ID,
+      ref: "e12",
+      workspaceId: "repo",
+      caller: { runtime: "opencode", runtimeSessionId: "ses_1" },
+    };
+    try {
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_browser_click`, {
+        method: "POST",
+        headers: { "x-openducktor-app-token": "token-1" },
+        body,
+      });
+
+      expect(response).toEqual({
+        status: 200,
+        body: { content: [{ type: "text", text: "Clicked e12" }] },
+      });
+      expect(calls).toEqual([{ toolName: "odt_browser_click", input: body }]);
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("returns browser failures with their message and failure code", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
+      bridgeService: {
+        ready: () => Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        getWorkspaces: () => Effect.succeed({ workspaces: [] }),
+        invoke: unexpectedTaskTool,
+        invokeBrowserTool: () =>
+          Effect.fail(
+            new BrowserServiceError({
+              code: "browser_not_shared",
+              operation: "browser.runAgentTool",
+              message: "The user stopped sharing this tab. Ask the user to share it again.",
+              tabId: BROWSER_TAB_ID,
+            }),
+          ),
+      } satisfies OdtMcpBridgeService,
+    });
+    try {
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_browser_snapshot`, {
+        method: "POST",
+        headers: { "x-openducktor-app-token": "token-1" },
+        body: {
+          tabId: BROWSER_TAB_ID,
+          workspaceId: "repo",
+          caller: { runtime: "codex", runtimeSessionId: "thread-1" },
+        },
+      });
+
+      expect(response).toEqual({
+        status: 400,
+        body: {
+          ok: false,
+          error: {
+            code: "ODT_TOOL_EXECUTION_ERROR",
+            message: "The user stopped sharing this tab. Ask the user to share it again.",
+            details: {
+              browserFailure: {
+                code: "browser_not_shared",
+                message: "The user stopped sharing this tab. Ask the user to share it again.",
+                tabId: BROWSER_TAB_ID,
+              },
+            },
+          },
+        },
+      });
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("stops the host work of a call when its client stops waiting", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const started = Promise.withResolvers<void>();
+    const interrupted = Promise.withResolvers<void>();
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      onStatusChanged: () => {},
+      bridgeService: {
+        ready: () => Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        getWorkspaces: () => Effect.succeed({ workspaces: [] }),
+        invoke: unexpectedTaskTool,
+        invokeBrowserTool: () =>
+          Effect.sync(() => started.resolve()).pipe(
+            Effect.andThen(Effect.never),
+            Effect.onInterrupt(() => Effect.sync(() => interrupted.resolve())),
+          ),
+      } satisfies OdtMcpBridgeService,
+    });
+    try {
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const body = JSON.stringify({
+        tabId: BROWSER_TAB_ID,
+        workspaceId: "repo",
+        caller: { runtime: "codex", runtimeSessionId: "thread-1" },
+      });
+      const client = request(`${connection.hostUrl}/invoke/odt_browser_snapshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-openducktor-app-token": "token-1" },
+      });
+      client.on("error", () => {});
+      client.end(body);
+      await started.promise;
+
+      client.destroy();
+
+      await interrupted.promise;
     } finally {
       await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });

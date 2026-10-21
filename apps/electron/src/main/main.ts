@@ -102,6 +102,7 @@ import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protoco
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu } from "./main-menu";
+import { createElectronBrowserRuntime } from "./browser/electron-browser-runtime";
 import { registerElectronTerminalIpc } from "./terminals/electron-terminal-ipc";
 import { createNodePtyPort } from "@openducktor/host/node-pty";
 
@@ -185,6 +186,13 @@ const hostEventBus = new BufferedHostEventBus({
     ),
 });
 let remoteAccess: RemoteAccessController | null = null;
+const browserRuntime = createElectronBrowserRuntime({
+  reportFailure: (operation, cause) =>
+    reportElectronNonFatalFailure(`OpenDucktor browser operation '${operation}' failed.`, cause),
+});
+/** OpenDucktor windows only. Browser popup windows show untrusted pages and get no app data. */
+const getMainWindows = (): ElectronBrowserWindow[] =>
+  BrowserWindow.getAllWindows().filter((window) => browserRuntime.isMainWindow(window));
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
 let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
@@ -286,6 +294,7 @@ const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistrib
     },
     runtimeDistribution,
     terminalPty: createNodePtyPort(),
+    browserEngine: () => Effect.succeed(browserRuntime.engine),
   });
 
 const resolveRuntimeDistributionEffect = (): Effect.Effect<
@@ -371,6 +380,7 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
       },
     );
     yield* enableRemoteAccessFromEnvironment(remoteAccess, process.env);
+    yield* browserRuntime.start(ipcMain, hostCommandRouter.browserService);
     return { hostCommandRouter };
   });
 
@@ -497,6 +507,8 @@ const createMainWindowEffect = (
             preload: getPreloadPath(),
             sandbox: true,
             session: rendererSession,
+            // Browser tabs use `<webview>`. The browser runtime hardens each webview attach.
+            webviewTag: true,
           },
         }),
       catch: (cause) =>
@@ -506,6 +518,7 @@ const createMainWindowEffect = (
           cause,
         }),
     });
+    browserRuntime.attachMainWindow(window);
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => {
       event.preventDefault();
@@ -556,14 +569,11 @@ const createMainWindow = (rendererSession: ElectronSession): Promise<ElectronBro
 const registerHostEventForwarding = (): void => {
   for (const channel of HOST_EVENT_CHANNELS) {
     hostEventBus.subscribe(channel, (envelope) => {
-      forwardElectronHostEvent(
-        BrowserWindow.getAllWindows(),
-        envelope,
-        ({ channel: failedChannel, cause }) =>
-          reportElectronNonFatalFailure(
-            `OpenDucktor renderer event delivery failed for channel '${failedChannel}'.`,
-            cause,
-          ),
+      forwardElectronHostEvent(getMainWindows(), envelope, ({ channel: failedChannel, cause }) =>
+        reportElectronNonFatalFailure(
+          `OpenDucktor renderer event delivery failed for channel '${failedChannel}'.`,
+          cause,
+        ),
       );
     });
   }
@@ -582,7 +592,7 @@ const registerAppUpdateStateForwarding = (appUpdateService: ElectronAppUpdateSer
       );
       return;
     }
-    for (const window of BrowserWindow.getAllWindows()) {
+    for (const window of getMainWindows()) {
       if (window.isDestroyed() || window.webContents.isDestroyed()) {
         continue;
       }
@@ -835,7 +845,7 @@ const disposeHostEffect = (hostCommandRouter: EffectHostCommandRouter, reason: s
 
 const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLifecycleError> => {
   if (!activeHostCommandRouter) {
-    return Effect.void;
+    return browserRuntime.stop();
   }
   const host = activeHostCommandRouter;
   return Effect.gen(function* () {
@@ -848,7 +858,10 @@ const disposeActiveHostEffect = (reason: string): Effect.Effect<void, ElectronLi
         cause: remoteResult.failure,
       });
     if (hostResult._tag === "Failure") return yield* hostResult.failure;
-  });
+  }).pipe(
+    // The host closes the browser tabs first. The DevTools endpoint then stops.
+    Effect.ensuring(browserRuntime.stop()),
+  );
 };
 
 const disposeActiveAppUpdateService = async (): Promise<void> => {
@@ -981,7 +994,7 @@ const configureElectronReadyRuntimeEffect = ({
             process.platform,
             readMacosNotificationAuthorizationStatus,
           ),
-        getWindows: () => BrowserWindow.getAllWindows(),
+        getWindows: getMainWindows,
         ipcMain,
         openExternal: (url) => shell.openExternal(url),
         platform: process.platform,
@@ -1036,7 +1049,7 @@ const startupEffect = composeElectronMainStartupEffect({
       if (shutdownController.isHostShutdownStarted()) {
         return;
       }
-      if (BrowserWindow.getAllWindows().length === 0) {
+      if (getMainWindows().length === 0) {
         runElectronMainTask(() => createMainWindow(rendererSession).then(() => {}));
       }
     });

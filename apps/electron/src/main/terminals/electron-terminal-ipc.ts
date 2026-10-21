@@ -17,7 +17,7 @@ import {
   ElectronValidationError,
   jsonIssues,
 } from "../../effect/electron-errors";
-import { runElectronMainTask } from "../electron-main-task-owner";
+import { createRendererClientCleanup } from "../electron-renderer-client-cleanup";
 import {
   ELECTRON_TERMINAL_DISCONNECT_CHANNEL,
   ELECTRON_TERMINAL_EVENT_CHANNEL,
@@ -37,11 +37,6 @@ const electronTerminalSendRequestSchema = z.strictObject({
 });
 type ElectronTerminalSendRequest = z.infer<typeof electronTerminalSendRequestSchema>;
 
-type ElectronTerminalNavigationDetails = {
-  isMainFrame: boolean;
-  isSameDocument: boolean;
-};
-
 export type ElectronTerminalSender = {
   readonly id: number;
   isDestroyed(): boolean;
@@ -51,14 +46,6 @@ export type ElectronTerminalSender = {
 type ElectronTerminalSenderState = {
   sender: ElectronTerminalSender | null;
   clients: Map<string, TerminalClientSession>;
-};
-
-type ElectronTerminalLifecycleSender = ElectronTerminalSender & {
-  on(
-    event: "did-start-navigation",
-    listener: (details: ElectronTerminalNavigationDetails) => void,
-  ): void;
-  once(event: "destroyed", listener: () => void): void;
 };
 
 export type ElectronTerminalIpcHandler = Parameters<IpcMain["handle"]>[1];
@@ -101,11 +88,6 @@ const readClientId = (
         }),
       );
 };
-
-export const shouldDetachTerminalSenderForNavigation = (details: {
-  isMainFrame: boolean;
-  isSameDocument: boolean;
-}): boolean => details.isMainFrame && !details.isSameDocument;
 
 export const createElectronTerminalIpcController = (terminalService: TerminalService) => {
   const sendersById = new Map<number, ElectronTerminalSenderState>();
@@ -216,25 +198,12 @@ export const registerElectronTerminalIpc = ({
   terminalService,
 }: RegisterElectronTerminalIpcInput): void => {
   const terminalIpc = createElectronTerminalIpcController(terminalService);
-  const boundTerminalSenders = new WeakSet<ElectronTerminalLifecycleSender>();
-  const bindTerminalSenderCleanup = (sender: ElectronTerminalLifecycleSender): void => {
-    if (boundTerminalSenders.has(sender)) return;
-    boundTerminalSenders.add(sender);
-    const senderId = sender.id;
-    const detach = () => {
-      runElectronMainTask(
-        () => runElectronEffect(terminalIpc.detachSender(senderId)),
-        (cause) => reportLifecycleFailure(senderId, cause),
-      );
-    };
-    sender.once("destroyed", () => {
-      terminalIpc.releaseSender(senderId);
-      detach();
-    });
-    sender.on("did-start-navigation", (details) => {
-      if (shouldDetachTerminalSenderForNavigation(details)) detach();
-    });
-  };
+  const bindTerminalSenderCleanup = createRendererClientCleanup({
+    detachSender: terminalIpc.detachSender,
+    // The sender map must not keep a destroyed renderer when its cleanup fails.
+    onDestroyed: terminalIpc.releaseSender,
+    reportFailure: reportLifecycleFailure,
+  });
 
   ipcMain.handle(ELECTRON_TERMINAL_SEND_CHANNEL, async (event, request) => {
     bindTerminalSenderCleanup(event.sender);

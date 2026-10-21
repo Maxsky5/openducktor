@@ -1,3 +1,4 @@
+import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { type HostError, HostResourceError, HostValidationError } from "../../effect/host-errors";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -23,14 +24,15 @@ export type OpenDucktorMcpServerConfigResolver = (
 export const createOpenDucktorMcpServerConfigResolver = ({
   resolveBridge,
   runtimeDistribution,
-  runtimeName,
+  runtimeKind,
   toolDiscovery,
 }: {
   resolveBridge: () => McpHostBridgeServer | undefined;
   runtimeDistribution: HostRuntimeDistribution;
-  runtimeName: string;
+  runtimeKind: RuntimeKind;
   toolDiscovery: ToolDiscoveryPort;
 }): OpenDucktorMcpServerConfigResolver => {
+  const runtimeName = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label;
   return (repoPath) =>
     Effect.gen(function* () {
       const bridge = resolveBridge();
@@ -53,7 +55,7 @@ export const createOpenDucktorMcpServerConfigResolver = ({
         });
       }
       const environment = yield* Effect.try({
-        try: () => buildOpenDucktorMcpBridgeEnvironment(connection, runtimeName),
+        try: () => buildOpenDucktorMcpBridgeEnvironment(connection, runtimeKind),
         catch: (cause) =>
           cause instanceof HostValidationError
             ? cause

@@ -1,5 +1,6 @@
 import { claudePolicyFieldsSchema } from "./claude-policy-schemas";
 import { z } from "zod";
+import { workspaceIdSchema } from "./workspace-id-schemas";
 import { openCodePermissionRulesSchema } from "./opencode-permission-schemas";
 import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
@@ -29,8 +30,6 @@ import { customAgentRoleSchema } from "./workspace-session-schemas";
 import { workspaceRemovalRecordSchema } from "./workspace-lifecycle-schemas";
 
 export const DEFAULT_BRANCH_PREFIX = "odt";
-export const WORKSPACE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 export const CHAT_DIFF_STYLE_VALUES = ["split", "unified"] as const;
 export const CHAT_DIFF_INDICATOR_VALUES = ["bars", "classic", "none"] as const;
 export const CHAT_DIFF_HEIGHT_VALUES = ["full", "scroll"] as const;
@@ -526,15 +525,6 @@ const persistedGitProviderSchema = gitProviderConfigSchema.safeExtend({
 const persistedRepoGitConfigSchema = repoGitConfigSchema.safeExtend({
   provider: persistedGitProviderSchema.optional(),
 });
-
-export const workspaceIdSchema = z
-  .string()
-  .trim()
-  .min(1, "Workspace ID cannot be blank.")
-  .regex(
-    WORKSPACE_ID_PATTERN,
-    "Workspace ID must contain only lowercase letters, digits, and single dashes.",
-  );
 
 export const workspaceNameSchema = trimmedRequiredString("Workspace name");
 

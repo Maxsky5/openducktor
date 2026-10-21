@@ -3,16 +3,18 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import {
   type GetWorkspacesResult,
   type HostMcpBridgeStatus,
+  isOdtBrowserToolName,
+  type OdtBrowserToolResult,
   type OdtHostBridgeReady,
   type OdtToolErrorPayload,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
-  type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Exit } from "effect";
 import { z } from "zod";
 import type {
-  OdtMcpBridgeError,
   OdtMcpBridgeService,
+  OdtMcpBrowserBridgeError,
+  OdtMcpTaskToolName,
   WorkspaceScopedOdtToolResult,
 } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -79,6 +81,7 @@ type BridgeHttpResponse = {
 type BridgeHttpPayload =
   | { readonly ok: true }
   | GetWorkspacesResult
+  | OdtBrowserToolResult
   | OdtHostBridgeReady
   | OdtToolErrorPayload
   | WorkspaceScopedOdtToolResult;
@@ -86,7 +89,8 @@ type BridgeHttpPayload =
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const tcpAddressSchema = z.object({ port: z.number() }).passthrough();
 
-const isWorkspaceScopedToolName = (command: string): command is WorkspaceScopedOdtToolName =>
+const isTaskToolName = (command: string): command is OdtMcpTaskToolName =>
+  !isOdtBrowserToolName(command) &&
   ODT_WORKSPACE_SCOPED_TOOL_NAMES.some((toolName) => toolName === command);
 
 const bridgeHttpResponse = (
@@ -97,7 +101,7 @@ const bridgeHttpResponse = (
   statusCode,
 });
 
-const bridgeErrorResponse = (cause: OdtMcpBridgeError): BridgeHttpResponse =>
+const bridgeErrorResponse = (cause: OdtMcpBrowserBridgeError): BridgeHttpResponse =>
   bridgeHttpResponse(400, bridgeErrorPayload(cause, errorMessage(cause)));
 
 const sendJson = (response: ServerResponse, { body, statusCode }: BridgeHttpResponse): void => {
@@ -244,7 +248,11 @@ const createBridgeRequestHandler =
         return bridgeHttpResponse(200, yield* bridgeService.getWorkspaces(body));
       }
 
-      if (!isWorkspaceScopedToolName(command)) {
+      // Browser tools resolve their task or Workspace Session from the calling session.
+      if (isOdtBrowserToolName(command)) {
+        return bridgeHttpResponse(200, yield* bridgeService.invokeBrowserTool(command, body));
+      }
+      if (!isTaskToolName(command)) {
         return bridgeHttpResponse(
           404,
           bridgeMessagePayload(`Unknown MCP host bridge command: ${command}`),
@@ -253,7 +261,12 @@ const createBridgeRequestHandler =
 
       return bridgeHttpResponse(200, yield* bridgeService.invoke(command, body));
     });
-    Effect.runPromise(Effect.result(handle))
+    // A client that stops waiting, for example at its time limit, also stops the host work.
+    const abandoned = new AbortController();
+    response.once("close", () => {
+      if (!response.writableFinished) abandoned.abort();
+    });
+    Effect.runPromise(Effect.result(handle), { signal: abandoned.signal })
       .then((result) => {
         sendJson(
           response,
@@ -261,6 +274,7 @@ const createBridgeRequestHandler =
         );
       })
       .catch((error) => {
+        if (abandoned.signal.aborted) return;
         sendJson(
           response,
           bridgeErrorResponse(toMcpHostBridgeError(error, "mcpHostBridge.serializeResponse")),

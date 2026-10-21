@@ -13,6 +13,7 @@ import { errorMessage, HostOperationError, HostValidationError } from "../../eff
 import { sanitizeChildProcessEnvironment } from "../../infrastructure/process/process-environment";
 import {
   buildOpenDucktorMcpBridgeEnvironment,
+  OPENDUCKTOR_MCP_RUNTIME_SESSION_ID_ENV,
   type OpenDucktorMcpBridgeConnection,
 } from "../mcp/openducktor-mcp-environment";
 import { createClaudeCanUseTool } from "./claude-agent-sdk-permissions";
@@ -311,7 +312,7 @@ const buildClaudeMcpServers = async ({
   }
   const baseBridgeEnvironment = buildOpenDucktorMcpBridgeEnvironment(
     resolvedDependencies.mcpBridgeConnection,
-    "Claude",
+    "claude",
   );
   const bridgeEnvironment = workflowRole
     ? {
@@ -333,6 +334,8 @@ const buildClaudeMcpServers = async ({
       args,
       env: {
         ...publicBridgeEnvironment,
+        // New, resumed, and forked sessions all know their ID before the query starts.
+        [OPENDUCKTOR_MCP_RUNTIME_SESSION_ID_ENV]: session.externalSessionId,
         [CLAUDE_OPENDUCKTOR_MCP_TOKEN_FILE_ENV]: hostTokenFile,
       },
       alwaysLoad: true,

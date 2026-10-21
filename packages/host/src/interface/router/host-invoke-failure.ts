@@ -14,6 +14,10 @@ import {
   TerminalServiceError,
   terminalServiceErrorToFailure,
 } from "../../application/terminals/terminal-service";
+import {
+  BrowserServiceError,
+  browserServiceErrorToFailure,
+} from "../../application/browser/browser-service-error";
 import { TaskAssetError, taskAssetErrorToFailure } from "../../effect/task-asset-error";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import {
@@ -66,6 +70,9 @@ export const hostInvokeFailureFromError = (cause: unknown): HostInvokeFailure | 
       kind: "workspace_text_file_write",
       workspaceTextFileWriteFailure: cause.failure,
     };
+  }
+  if (cause instanceof BrowserServiceError) {
+    return { kind: "browser", browserFailure: browserServiceErrorToFailure(cause) };
   }
   if (cause instanceof TerminalServiceError) {
     return {

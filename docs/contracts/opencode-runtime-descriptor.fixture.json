@@ -35,7 +35,55 @@
       "functions.openducktor_odt_set_pull_request"
     ],
     "odt_qa_approved": ["openducktor_odt_qa_approved", "functions.openducktor_odt_qa_approved"],
-    "odt_qa_rejected": ["openducktor_odt_qa_rejected", "functions.openducktor_odt_qa_rejected"]
+    "odt_qa_rejected": ["openducktor_odt_qa_rejected", "functions.openducktor_odt_qa_rejected"],
+    "odt_browser_list": ["openducktor_odt_browser_list", "functions.openducktor_odt_browser_list"],
+    "odt_browser_open": ["openducktor_odt_browser_open", "functions.openducktor_odt_browser_open"],
+    "odt_browser_navigate": [
+      "openducktor_odt_browser_navigate",
+      "functions.openducktor_odt_browser_navigate"
+    ],
+    "odt_browser_close": [
+      "openducktor_odt_browser_close",
+      "functions.openducktor_odt_browser_close"
+    ],
+    "odt_browser_snapshot": [
+      "openducktor_odt_browser_snapshot",
+      "functions.openducktor_odt_browser_snapshot"
+    ],
+    "odt_browser_click": [
+      "openducktor_odt_browser_click",
+      "functions.openducktor_odt_browser_click"
+    ],
+    "odt_browser_hover": [
+      "openducktor_odt_browser_hover",
+      "functions.openducktor_odt_browser_hover"
+    ],
+    "odt_browser_type": ["openducktor_odt_browser_type", "functions.openducktor_odt_browser_type"],
+    "odt_browser_press": [
+      "openducktor_odt_browser_press",
+      "functions.openducktor_odt_browser_press"
+    ],
+    "odt_browser_select": [
+      "openducktor_odt_browser_select",
+      "functions.openducktor_odt_browser_select"
+    ],
+    "odt_browser_scroll": [
+      "openducktor_odt_browser_scroll",
+      "functions.openducktor_odt_browser_scroll"
+    ],
+    "odt_browser_screenshot": [
+      "openducktor_odt_browser_screenshot",
+      "functions.openducktor_odt_browser_screenshot"
+    ],
+    "odt_browser_console": [
+      "openducktor_odt_browser_console",
+      "functions.openducktor_odt_browser_console"
+    ],
+    "odt_browser_wait": ["openducktor_odt_browser_wait", "functions.openducktor_odt_browser_wait"],
+    "odt_browser_dialog": [
+      "openducktor_odt_browser_dialog",
+      "functions.openducktor_odt_browser_dialog"
+    ]
   },
   "capabilities": {
     "provisioningMode": "host_managed",

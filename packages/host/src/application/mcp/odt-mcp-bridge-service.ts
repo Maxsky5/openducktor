@@ -7,6 +7,8 @@ import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
+  type OdtBrowserToolName,
+  type OdtBrowserToolResult,
   type OdtHostBridgeReady,
   type QaApprovedResult,
   type QaRejectedResult,
@@ -17,10 +19,13 @@ import {
   type SetSpecResult,
   type TaskDocumentsRead,
   type TaskSummary,
-  type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType } from "zod";
+import {
+  executeOdtMcpBrowserTool,
+  type OdtMcpBrowserBridgeError,
+} from "./odt-mcp-bridge-browser-tools";
 import { parseResponse, parseToolInput } from "./odt-mcp-bridge-model";
 import { executeOdtMcpMutationTool } from "./odt-mcp-bridge-mutation-tools";
 import { executeOdtMcpReadTool } from "./odt-mcp-bridge-read-tools";
@@ -30,9 +35,11 @@ import {
   ODT_MCP_READ_TOOL_NAMES,
   type OdtMcpBridgeError,
   type OdtMcpReadToolName,
+  type OdtMcpTaskToolName,
 } from "./odt-mcp-bridge-tool-context";
 
-export type { OdtMcpBridgeError } from "./odt-mcp-bridge-tool-context";
+export type { OdtMcpBrowserBridgeError } from "./odt-mcp-bridge-browser-tools";
+export type { OdtMcpBridgeError, OdtMcpTaskToolName } from "./odt-mcp-bridge-tool-context";
 
 export type WorkspaceScopedOdtToolResult =
   | BuildBlockedResult
@@ -53,9 +60,14 @@ export type OdtMcpBridgeService = {
   ready(input?: JSONType): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
   getWorkspaces(input?: JSONType): Effect.Effect<GetWorkspacesResult, OdtMcpBridgeError>;
   invoke(
-    toolName: WorkspaceScopedOdtToolName,
+    toolName: OdtMcpTaskToolName,
     input: JSONType,
   ): Effect.Effect<WorkspaceScopedOdtToolResult, OdtMcpBridgeError>;
+  /** `input` is the tool input plus `workspaceId` and the calling runtime session. */
+  invokeBrowserTool(
+    toolName: OdtBrowserToolName,
+    input: JSONType,
+  ): Effect.Effect<OdtBrowserToolResult, OdtMcpBrowserBridgeError>;
 };
 export const createOdtMcpBridgeService = (
   input: CreateOdtMcpToolContextInput,
@@ -85,13 +97,15 @@ export const createOdtMcpBridgeService = (
         return yield* executeOdtMcpMutationTool(context, toolName, input);
       });
     },
+    invokeBrowserTool(toolName, input) {
+      return executeOdtMcpBrowserTool(context, toolName, input);
+    },
   };
 };
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-const READ_TOOL_NAMES: ReadonlySet<WorkspaceScopedOdtToolName> = new Set(ODT_MCP_READ_TOOL_NAMES);
+const READ_TOOL_NAMES: ReadonlySet<OdtMcpTaskToolName> = new Set(ODT_MCP_READ_TOOL_NAMES);
 
-const isOdtMcpReadToolName = (
-  toolName: WorkspaceScopedOdtToolName,
-): toolName is OdtMcpReadToolName => READ_TOOL_NAMES.has(toolName);
+const isOdtMcpReadToolName = (toolName: OdtMcpTaskToolName): toolName is OdtMcpReadToolName =>
+  READ_TOOL_NAMES.has(toolName);

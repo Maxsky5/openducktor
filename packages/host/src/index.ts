@@ -27,6 +27,32 @@ export {
 } from "./adapters/runtimes/runtime-distribution";
 export { findInvalidSettingsFileError } from "./adapters/settings/settings-config-adapter";
 export {
+  attachCdpTargetSession,
+  type CdpConnection,
+} from "./adapters/browser/cdp/cdp-target-session";
+export {
+  answerOnce,
+  createBrowserEndSignal,
+  createBrowserPermissionRequest,
+} from "./adapters/browser/browser-engine-lifecycle";
+export { BrowserServiceError } from "./application/browser/browser-service-error";
+export type {
+  BrowserClientSession,
+  BrowserClientSessionInput,
+  BrowserDevToolsConnection,
+  BrowserDevToolsPeer,
+  BrowserService,
+} from "./application/browser/browser-service-types";
+export {
+  BrowserEngineError,
+  type BrowserEngineEvent,
+  type BrowserEnginePort,
+  type BrowserEngineTabSpec,
+  type CdpEvent,
+  type CdpPayload,
+  CdpProtocolError,
+} from "./ports/browser-engine-port";
+export {
   type AgentSessionLiveStateService,
   createAgentSessionLiveStateService,
 } from "./application/agent-sessions/agent-session-live-state-service";

@@ -27,6 +27,8 @@ import {
   type NodeFetchServer,
 } from "@openducktor/remote-host/node-fetch-server";
 import { allowedHostnamesFor, parseHostEffect } from "@openducktor/remote-host/http-origin";
+import { createBrowserServiceFake } from "./browser-tabs/browser-service-test-fake";
+import type { BrowserPreviewProxies } from "./browser-tabs/browser-preview-proxy";
 import { validateLauncherNetworkOptionsEffect } from "./launcher";
 import {
   buildBackendUrl,
@@ -152,6 +154,11 @@ const missingTaskAssetReadService: TaskAssetReadService = {
   readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
 };
 
+const unexpectedBrowserPreviews: BrowserPreviewProxies = {
+  originFor: () => Promise.reject(new Error("Unexpected browser preview.")),
+  close: () => Promise.resolve(),
+};
+
 const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
   Effect.die(new Error(`Unexpected terminal service operation: ${operation}`));
 
@@ -196,6 +203,7 @@ const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
     resize: () => unexpectedTerminalOperation("resize"),
     write: () => unexpectedTerminalOperation("write"),
   },
+  browserService: createBrowserServiceFake(),
 });
 
 const performWebSocketUpgrade = (
@@ -264,6 +272,7 @@ const handleTestRequest = (
     allowedOrigins: new Set(),
     appSessionCookieName: options.appSessionCookieName ?? APP_SESSION_COOKIE_NAME,
     appToken: options.appToken ?? APP_TOKEN,
+    browserPreviews: unexpectedBrowserPreviews,
     controlToken: options.controlToken ?? CONTROL_TOKEN,
     eventBus: options.eventBus ?? new BufferedHostEventBus({ report: () => {} }),
     hostCommandRouter,
@@ -462,6 +471,7 @@ describe("TypeScript web host backend", () => {
           allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
           appSessionCookieName: APP_SESSION_COOKIE_NAME,
           appToken: APP_TOKEN,
+          browserPreviews: unexpectedBrowserPreviews,
           controlToken: CONTROL_TOKEN,
           eventBus: new BufferedHostEventBus({ report: () => {} }),
           hostCommandRouter: createTestNodeHostCommandRouter(),
@@ -731,6 +741,7 @@ describe("TypeScript web host backend", () => {
           allowedOrigins: new Set(),
           appSessionCookieName: APP_SESSION_COOKIE_NAME,
           appToken: APP_TOKEN,
+          browserPreviews: unexpectedBrowserPreviews,
           controlToken: CONTROL_TOKEN,
           eventBus,
           hostCommandRouter: createTestNodeHostCommandRouter(),
@@ -847,6 +858,7 @@ describe("TypeScript web host backend", () => {
           allowedOrigins,
           appSessionCookieName: APP_SESSION_COOKIE_NAME,
           appToken: APP_TOKEN,
+          browserPreviews: unexpectedBrowserPreviews,
           controlToken: CONTROL_TOKEN,
           eventBus: new BufferedHostEventBus({ report: () => {} }),
           hostCommandRouter: createTestHostCommandRouter(),
@@ -1807,6 +1819,7 @@ describe("TypeScript web host backend", () => {
             allowedOrigins: new Set(),
             appSessionCookieName: APP_SESSION_COOKIE_NAME,
             appToken: APP_TOKEN,
+            browserPreviews: unexpectedBrowserPreviews,
             controlToken: CONTROL_TOKEN,
             eventBus,
             hostCommandRouter: createTestHostCommandRouter(),
@@ -1897,6 +1910,7 @@ describe("TypeScript web host backend", () => {
       allowedOrigins: allowedFrontendOrigins(TERMINAL_UPGRADE_FRONTEND_ORIGIN),
       appSessionCookieName: APP_SESSION_COOKIE_NAME,
       appToken: APP_TOKEN,
+      browserPreviews: unexpectedBrowserPreviews,
       controlToken: CONTROL_TOKEN,
       eventBus: new BufferedHostEventBus({ report: () => {} }),
       hostCommandRouter: createTestNodeHostCommandRouter(),

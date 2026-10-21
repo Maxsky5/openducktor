@@ -84,11 +84,11 @@ export const createNodeHostRuntimeComposition = ({
     userEnvironment,
     readEnv,
   } = defaultPorts;
-  const mcpServerConfigFor = (runtimeName: string) =>
+  const mcpServerConfigFor = (runtimeKind: RuntimeKind) =>
     createOpenDucktorMcpServerConfigResolver({
       resolveBridge,
       runtimeDistribution,
-      runtimeName,
+      runtimeKind,
       toolDiscovery,
     });
   // Shared runtimes start in the user home directory. Each operation names its own directory.
@@ -115,7 +115,7 @@ export const createNodeHostRuntimeComposition = ({
       liveSessionLifecycle: liveState,
       codexAppServer,
       onBackgroundFailure,
-      resolveMcpServerConfig: mcpServerConfigFor("Codex"),
+      resolveMcpServerConfig: mcpServerConfigFor("codex"),
       resolveRuntimePolicy: (scope) =>
         loadGlobalConfig(settingsConfig).pipe(
           Effect.map(({ agentRuntimes: { codex } }) =>
@@ -130,7 +130,7 @@ export const createNodeHostRuntimeComposition = ({
     launchDirectory,
     liveSessionLifecycle: liveState,
     readEnv,
-    resolveMcpServerConfig: mcpServerConfigFor("OpenCode"),
+    resolveMcpServerConfig: mcpServerConfigFor("opencode"),
     settingsConfig,
     taskSessionLifecycleCoordinator,
     toolDiscovery,

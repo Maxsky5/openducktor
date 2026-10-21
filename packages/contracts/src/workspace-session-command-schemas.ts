@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { agentSessionControlSummarySchema } from "./agent-session-control-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
-import { workspaceIdSchema } from "./config-schemas";
+import { workspaceIdSchema } from "./workspace-id-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,

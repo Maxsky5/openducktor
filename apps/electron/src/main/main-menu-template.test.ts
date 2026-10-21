@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createApplicationMenuTemplate, createViewMenu } from "./main-menu-template";
+import {
+  createApplicationMenuTemplate,
+  createViewMenu,
+  type MainMenuInput,
+} from "./main-menu-template";
 import type { MenuItemConstructorOptions } from "electron";
 
 type MenuSubmenu = MenuItemConstructorOptions["submenu"] | undefined;
@@ -29,15 +33,31 @@ describe("main menu template", () => {
     expect(roles).not.toContain("toggleDevTools");
   });
 
-  test("puts reload roles in the main application menu", () => {
+  test("reloads the focused window page from the main menu, never a focused webview", () => {
+    const onReloadWindow = mock<MainMenuInput["onReloadWindow"]>(() => {});
     const template = createApplicationMenuTemplate({
       isDevelopment: true,
       appName: "OpenDucktor",
+      onReloadWindow,
     });
-    const mainMenu = template.find((item) => item.label === "OpenDucktor");
-    const roles = rolesFromSubmenu(mainMenu?.submenu);
+    const items = submenuItems(template.find((item) => item.label === "OpenDucktor")?.submenu);
+    const window = { id: 1 };
 
-    expect(roles).toEqual(expect.arrayContaining(["reload", "forceReload"]));
+    expect(rolesFromSubmenu(items)).not.toContain("reload");
+    expect(rolesFromSubmenu(items)).not.toContain("forceReload");
+    for (const [label, accelerator] of [
+      ["Reload", "CmdOrCtrl+R"],
+      ["Force Reload", "Shift+CmdOrCtrl+R"],
+    ]) {
+      const item = items.find((candidate) => candidate.label === label);
+      expect(item?.accelerator).toBe(accelerator);
+      // SAFETY: the click handler passes the window through to `onReloadWindow` only.
+      item?.click?.(item as never, window as never, {} as never);
+    }
+    expect(onReloadWindow.mock.calls).toEqual([
+      [window, false],
+      [window, true],
+    ]);
     expect(template.some((item) => item.label === "View")).toBe(true);
   });
 
@@ -47,6 +67,7 @@ describe("main menu template", () => {
       isDevelopment: false,
       appName: "OpenDucktor",
       onCheckForUpdates,
+      onReloadWindow: () => {},
     });
     const updateItem = template
       .flatMap((item) => submenuItems(item.submenu))

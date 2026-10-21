@@ -10,7 +10,12 @@ import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
+import {
+  type BrowserOwnerCleanupPort,
+  closeOwnerBrowserTabs,
+} from "../../browser/browser-owner-cleanup";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
@@ -322,6 +327,49 @@ export const runTaskRuntimeCleanup = ({
         ? `terminated task terminals: ${terminalResult.closedTerminalIds.join(", ")}`
         : "checked task terminals",
     );
+  });
+
+/** Reads the agent sessions of each task, in task order. */
+export const readTaskSessionRecords = (
+  taskStore: Pick<TaskStorePort, "getTaskMetadata">,
+  repoPath: string,
+  taskIds: readonly string[],
+) =>
+  Effect.forEach(taskIds, (taskId) =>
+    taskStore.getTaskMetadata({ repoPath, taskId }).pipe(
+      Effect.map((metadata): TaskSessionRecords => ({
+        taskId,
+        sessions: metadata.agentSessions,
+      })),
+    ),
+  );
+
+/** Closes the browser tabs of the deleted tasks before the task store deletes them. */
+export const runTaskBrowserTabCleanup = ({
+  browserTabs,
+  progress,
+  taskIds,
+  workspaceId,
+}: {
+  browserTabs: BrowserOwnerCleanupPort | undefined;
+  progress: TaskCleanupProgressState;
+  taskIds: readonly string[];
+  workspaceId: string;
+}) =>
+  Effect.gen(function* () {
+    if (!browserTabs) {
+      return yield* new HostDependencyError({
+        dependency: "BrowserService",
+        operation: "task_delete",
+        message: "The browser service is required for task_delete.",
+      });
+    }
+    yield* closeOwnerBrowserTabs(
+      browserTabs,
+      taskIds.map((taskId) => ({ kind: "task", workspaceId, taskId })),
+      "task_delete.browser_tabs",
+    );
+    progress.completedSteps.push("closed task browser tabs");
   });
 
 export const runTaskLocalCleanup = ({

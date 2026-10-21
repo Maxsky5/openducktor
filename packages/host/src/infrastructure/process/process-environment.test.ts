@@ -711,6 +711,8 @@ describe("sanitizeChildProcessEnvironment", () => {
       PATH: "/already/resolved:/usr/bin",
       ODT_HOST_TOKEN: "host-secret",
       ODT_HOST_TOKEN_FILE: "/tmp/host-token",
+      ODT_RUNTIME_KIND: "claude",
+      ODT_RUNTIME_SESSION_ID: "claude-session-1",
       OPENDUCKTOR_APP_TOKEN: "app-secret",
       USER_SETTING: "preserved",
     };

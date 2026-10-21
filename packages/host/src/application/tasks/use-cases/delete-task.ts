@@ -14,9 +14,10 @@ import {
   collectRelatedTaskBranches,
   collectTaskDeleteTargets,
   managedWorktreeBaseForRepoConfig,
+  readTaskSessionRecords,
+  runTaskBrowserTabCleanup,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
-  type TaskSessionRecords,
   taskHasSessionsForRoles,
   workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
@@ -29,6 +30,7 @@ export const createTaskDeleteUseCase = ({
   taskActivityGuard,
   settingsConfig,
   terminalService,
+  browserTabs,
   worktreeFiles,
   workspaceSettingsService,
   taskSessionLifecycleCoordinator,
@@ -84,17 +86,7 @@ export const createTaskDeleteUseCase = ({
           "delete tasks",
         );
       }
-      const targetTaskSessions: TaskSessionRecords[] = [];
-      for (const targetTask of targetTasks) {
-        const metadata = yield* taskStore.getTaskMetadata({
-          repoPath,
-          taskId: targetTask.id,
-        });
-        targetTaskSessions.push({
-          taskId: targetTask.id,
-          sessions: metadata.agentSessions,
-        });
-      }
+      const targetTaskSessions = yield* readTaskSessionRecords(taskStore, repoPath, targetTaskIds);
       const hasWorkflowSessions = targetTaskSessions.some((entry) =>
         taskHasSessionsForRoles(entry.sessions, workflowCleanupSessionRoles),
       );
@@ -155,6 +147,12 @@ export const createTaskDeleteUseCase = ({
           worktreeCleanupOperation: "task_delete",
           worktreeFiles,
           worktreePaths,
+        });
+        yield* runTaskBrowserTabCleanup({
+          browserTabs,
+          progress: cleanupProgress,
+          taskIds: targetTaskIds,
+          workspaceId: repoConfig.workspaceId,
         });
         const deletion = yield* Effect.result(
           taskStore.deleteTask({

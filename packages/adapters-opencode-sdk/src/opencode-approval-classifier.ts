@@ -1,7 +1,7 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   type AgentApprovalMutation,
-  isOdtWorkflowMutationToolName,
+  classifyOdtToolMutation,
   normalizeOdtWorkflowToolName,
 } from "@openducktor/core";
 
@@ -462,11 +462,11 @@ const classifyWorkflowTool = (name: string | undefined): AgentApprovalMutation |
   if (!toolName) {
     return null;
   }
-  const aliases = OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
-  if (isOdtWorkflowMutationToolName(toolName, aliases)) {
-    return "mutating";
-  }
-  return normalizeOdtWorkflowToolName(toolName, aliases) ? "read_only" : null;
+  const workflowTool = normalizeOdtWorkflowToolName(
+    toolName,
+    OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+  );
+  return workflowTool ? classifyOdtToolMutation(workflowTool) : null;
 };
 
 const classifyAll = (patterns: readonly string[]): AgentApprovalMutation => {

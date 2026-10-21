@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { gitTargetBranchSchema, pullRequestSchema, workspaceRecordSchema } from "./git-schemas";
+import { odtToolWorkspaceIdSchema } from "./odt-tool-workspace-id-schema";
+import {
+  ODT_BROWSER_TOOL_NAMES,
+  ODT_BROWSER_TOOL_SCHEMAS,
+  type OdtBrowserToolName,
+  odtBrowserToolResultSchema,
+} from "./odt-browser-tool-schemas";
 import {
   ODT_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
@@ -61,25 +68,25 @@ export const odtToolErrorPayloadSchema = z
   .strict();
 export type OdtToolErrorPayload = z.infer<typeof odtToolErrorPayloadSchema>;
 
+/**
+ * MCP clients such as Codex show these schemas to the model, so a description says only what the
+ * field name and type do not.
+ */
+const TASK_PRIORITY_DESCRIPTION = "0 critical, 1 high, 2 normal, 3 low, 4 very low.";
+
 export const publicTaskSchema = z
   .object({
-    id: z.string().trim().min(1).describe("Canonical task identifier."),
-    title: z.string().describe("Task title."),
-    description: z.string().describe("Task description. Empty string when omitted."),
-    status: taskStatusSchema.describe("Current task status."),
-    priority: taskPrioritySchema.describe(
-      "Task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
-    ),
-    issueType: issueTypeSchema.describe("Task issue type."),
-    aiReviewEnabled: z
-      .boolean()
-      .describe("Whether OpenDucktor QA review is required before human review."),
-    labels: z.array(z.string()).describe("Task labels."),
-    targetBranch: gitTargetBranchSchema
-      .optional()
-      .describe("Persisted task target branch override."),
-    createdAt: z.string().describe("Task creation timestamp."),
-    updatedAt: z.string().describe("Task last update timestamp."),
+    id: z.string().trim().min(1),
+    title: z.string(),
+    description: z.string().describe("Empty when not set."),
+    status: taskStatusSchema,
+    priority: taskPrioritySchema.describe(TASK_PRIORITY_DESCRIPTION),
+    issueType: issueTypeSchema,
+    aiReviewEnabled: z.boolean().describe("True when QA review runs before human review."),
+    labels: z.array(z.string()),
+    targetBranch: gitTargetBranchSchema.optional().describe("Target branch override."),
+    createdAt: z.string(),
+    updatedAt: z.string(),
   })
   .strict();
 export type PublicTask = z.infer<typeof publicTaskSchema>;
@@ -141,16 +148,9 @@ export const taskDocumentsReadSchema = z
   .strict();
 export type TaskDocumentsRead = z.infer<typeof taskDocumentsReadSchema>;
 
-const workspaceScopedToolWorkspaceIdSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .optional()
-  .describe("Optional workspaceId. Overrides startup workspace; workflow agents omit.");
-
 export const ReadTaskInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
   })
   .strict();
@@ -158,7 +158,7 @@ export type ReadTaskInput = z.infer<typeof ReadTaskInputSchema>;
 
 export const ReadTaskAssetsInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     assetIds: z
       .array(taskAssetIdSchema)
@@ -171,7 +171,7 @@ export type ReadTaskAssetsInput = z.infer<typeof ReadTaskAssetsInputSchema>;
 
 export const ReadTaskDocumentsInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     includeSpec: z.boolean().optional(),
     includePlan: z.boolean().optional(),
@@ -213,7 +213,7 @@ const labelStringSchema = z.string().trim().min(1);
 
 export const SetSpecInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
   })
@@ -222,7 +222,7 @@ export type SetSpecInput = z.infer<typeof SetSpecInputSchema>;
 
 export const SetPlanInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     markdown: z.string().trim().min(1),
   })
@@ -231,7 +231,7 @@ export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
 
 export const BuildBlockedInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     reason: z.string().trim().min(1),
   })
@@ -240,7 +240,7 @@ export type BuildBlockedInput = z.infer<typeof BuildBlockedInputSchema>;
 
 export const BuildResumedInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
   })
   .strict();
@@ -248,7 +248,7 @@ export type BuildResumedInput = z.infer<typeof BuildResumedInputSchema>;
 
 export const BuildCompletedInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     summary: z.string().optional(),
   })
@@ -257,7 +257,7 @@ export type BuildCompletedInput = z.infer<typeof BuildCompletedInputSchema>;
 
 export const SetPullRequestInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     number: z.number().int().positive(),
   })
@@ -266,7 +266,7 @@ export type SetPullRequestInput = z.infer<typeof SetPullRequestInputSchema>;
 
 export const QaApprovedInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     reportMarkdown: z.string().trim().min(1),
   })
@@ -275,7 +275,7 @@ export type QaApprovedInput = z.infer<typeof QaApprovedInputSchema>;
 
 export const QaRejectedInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
     reportMarkdown: z.string().trim().min(1),
   })
@@ -284,82 +284,40 @@ export type QaRejectedInput = z.infer<typeof QaRejectedInputSchema>;
 
 export const CreateTaskInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
-    title: z.string().trim().min(1).describe("Task title."),
-    issueType: publicIssueTypeSchema(publicEpicRejectionReason).describe(
-      `Issue type. Allowed values: task, feature, bug. ${publicEpicRejectionReason}`,
-    ),
-    priority: taskPrioritySchema.describe(
-      "Task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
-    ),
-    description: z.string().trim().min(1).optional().describe("Optional task description."),
-    labels: z.array(labelStringSchema).optional().describe("Optional task labels."),
-    aiReviewEnabled: z
-      .boolean()
-      .optional()
-      .describe("Optional override for whether OpenDucktor QA review is required."),
+    workspaceId: odtToolWorkspaceIdSchema,
+    title: z.string().trim().min(1),
+    issueType: publicIssueTypeSchema(publicEpicRejectionReason),
+    priority: taskPrioritySchema.describe(TASK_PRIORITY_DESCRIPTION),
+    description: z.string().trim().min(1).optional(),
+    labels: z.array(labelStringSchema).optional(),
+    aiReviewEnabled: z.boolean().optional().describe("Overrides whether QA review is required."),
   })
   .strict();
 export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
 
 export const SearchTasksInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
-    priority: taskPrioritySchema.optional().describe("Exact-match priority filter."),
-    issueType: issueTypeSchema
-      .optional()
-      .describe("Exact-match issue type filter. Active epics may appear in search results."),
-    status: activeTaskStatusSchema.optional().describe("Exact-match active status filter."),
-    title: z.string().trim().min(1).optional().describe("Case-insensitive title substring filter."),
-    tags: z
-      .array(labelStringSchema)
-      .min(1)
-      .optional()
-      .describe("Task labels filter. Matching tasks must contain all tags."),
-    limit: z
-      .number()
-      .int()
-      .positive()
-      .max(100)
-      .default(50)
-      .describe("Maximum number of results to return. Default 50, max 100."),
+    workspaceId: odtToolWorkspaceIdSchema,
+    priority: taskPrioritySchema.optional(),
+    issueType: issueTypeSchema.optional(),
+    status: activeTaskStatusSchema.optional(),
+    title: z.string().trim().min(1).optional().describe("Case-insensitive substring."),
+    tags: z.array(labelStringSchema).min(1).optional(),
+    limit: z.number().int().positive().max(100).default(50),
   })
   .strict();
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
 export const UpdateTaskInputSchema = z
   .object({
-    workspaceId: workspaceScopedToolWorkspaceIdSchema,
+    workspaceId: odtToolWorkspaceIdSchema,
     taskId: z.string().trim().min(1),
-    title: z
-      .string()
-      .trim()
-      .min(1)
-      .optional()
-      .describe("New task title. Omit to keep the current title."),
-    description: z
-      .string()
-      .trim()
-      .optional()
-      .describe("New task description. An empty string clears the description."),
-    priority: taskPrioritySchema
-      .optional()
-      .describe(
-        "New task priority. Valid values: 0 (P0 Critical), 1 (P1 High), 2 (P2 Normal), 3 (P3 Low), 4 (P4 Very low).",
-      ),
-    labels: z
-      .array(labelStringSchema)
-      .optional()
-      .describe("New task labels. An empty array clears all labels."),
-    issueType: publicIssueTypeSchema(publicEpicUpdateRejectionReason)
-      .optional()
-      .describe(
-        `New issue type. Allowed values: task, feature, bug. ${publicEpicUpdateRejectionReason}`,
-      ),
-    aiReviewEnabled: z
-      .boolean()
-      .optional()
-      .describe("Set false to turn OpenDucktor QA review off for this task."),
+    title: z.string().trim().min(1).optional(),
+    description: z.string().trim().optional(),
+    priority: taskPrioritySchema.optional().describe(TASK_PRIORITY_DESCRIPTION),
+    labels: z.array(labelStringSchema).optional(),
+    issueType: publicIssueTypeSchema(publicEpicUpdateRejectionReason).optional(),
+    aiReviewEnabled: z.boolean().optional().describe("False turns QA review off."),
   })
   .strict();
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInputSchema>;
@@ -386,6 +344,7 @@ export const ODT_TOOL_SCHEMAS = {
   odt_set_pull_request: SetPullRequestInputSchema,
   odt_qa_approved: QaApprovedInputSchema,
   odt_qa_rejected: QaRejectedInputSchema,
+  ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const satisfies Record<OdtToolName, z.ZodTypeAny>;
 
 export const ODT_WORKFLOW_TOOL_SCHEMAS = {
@@ -403,6 +362,7 @@ export const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
   odt_qa_approved: ODT_TOOL_SCHEMAS.odt_qa_approved,
   odt_qa_rejected: ODT_TOOL_SCHEMAS.odt_qa_rejected,
+  ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
 
 export type OdtWorkflowToolName = keyof typeof ODT_WORKFLOW_TOOL_SCHEMAS;
@@ -439,6 +399,7 @@ export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
   odt_qa_approved: ODT_TOOL_SCHEMAS.odt_qa_approved,
   odt_qa_rejected: ODT_TOOL_SCHEMAS.odt_qa_rejected,
+  ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
 
 export const odtPersistedDocumentSchema = z
@@ -592,6 +553,11 @@ export const odtHostBridgeReadySchema = z
   .strict();
 export type OdtHostBridgeReady = z.infer<typeof odtHostBridgeReadySchema>;
 
+// SAFETY: the entries map every browser tool name to the one browser result schema.
+const ODT_BROWSER_TOOL_RESPONSE_SCHEMAS = Object.fromEntries(
+  ODT_BROWSER_TOOL_NAMES.map((toolName) => [toolName, odtBrowserToolResultSchema]),
+) as Record<OdtBrowserToolName, typeof odtBrowserToolResultSchema>;
+
 export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_get_workspaces: getWorkspacesResultSchema,
   odt_create_task: createTaskResultSchema,
@@ -608,4 +574,5 @@ export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_set_pull_request: setPullRequestResultSchema,
   odt_qa_approved: qaApprovedResultSchema,
   odt_qa_rejected: qaRejectedResultSchema,
+  ...ODT_BROWSER_TOOL_RESPONSE_SCHEMAS,
 } as const;

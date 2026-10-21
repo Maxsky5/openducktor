@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  ODT_BROWSER_TOOL_NAMES,
   ODT_MCP_TOOL_NAMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   agentRoleValues,
@@ -67,6 +68,22 @@ describe("workflow-tool-permissions", () => {
       });
 
       expect(rules.filter((rule) => rule.action === "ask")).toEqual([]);
+    }
+  });
+
+  test("allows every browser tool, with its aliases, for every role and repository scope", () => {
+    const scopes = [
+      ...agentRoleValues.map((role) =>
+        buildRoleScopedPermissionRules({ role, runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR }),
+      ),
+      buildRepositoryScopedPermissionRules(OPENCODE_RUNTIME_DESCRIPTOR),
+    ];
+    for (const rules of scopes) {
+      for (const toolName of ODT_BROWSER_TOOL_NAMES) {
+        for (const permission of toOpencodeExposedOdtToolIds(toolName)) {
+          expect(findFinalExactAction(rules, permission)).toBe("allow");
+        }
+      }
     }
   });
 
@@ -276,5 +293,8 @@ test.each([
     expect(effectiveAction(rules, "subagent")).toBe("allow");
     expect(effectiveAction(rules, "shell")).toBe("allow");
     expect(effectiveAction(rules, "edit")).toBe(role === "build" ? "allow" : "deny");
+    for (const prefix of ["", "openducktor_", "functions.openducktor_"]) {
+      expect(effectiveAction(rules, `${prefix}odt_browser_click`)).toBe("allow");
+    }
   },
 );

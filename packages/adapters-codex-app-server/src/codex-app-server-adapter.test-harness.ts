@@ -589,7 +589,7 @@ export const expectedThreadConfig = (repoPath: string, enabledTools: readonly st
   },
   "mcp_servers.openducktor.enabled": true,
   "mcp_servers.openducktor.required": true,
-  "mcp_servers.openducktor.default_tools_approval_mode": "prompt",
+  "mcp_servers.openducktor.default_tools_approval_mode": "approve",
   "mcp_servers.openducktor.enabled_tools": [...enabledTools],
 });
 

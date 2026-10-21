@@ -12,6 +12,13 @@ export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
 export * from "./attachment-limits";
 export * from "./autopilot-schemas";
+export * from "./browser-address";
+export * from "./browser-url-rules";
+export * from "./workspace-id-schemas";
+export * from "./browser-channel-protocol";
+export * from "./browser-frame-protocol";
+export * from "./browser-shortcuts";
+export * from "./browser-tab-schemas";
 export * from "./local-attachment-error-schemas";
 export {
   azureDevOpsDeploymentSchema,
@@ -73,6 +80,7 @@ export * from "./host-invoke-failure-schemas";
 export * from "./mcp-bridge-discovery";
 export * from "./metadata-schemas";
 export * from "./notification-schemas";
+export * from "./odt-browser-tool-schemas";
 export * from "./odt-mcp-schemas";
 export * from "./odt-tool-names";
 export * from "./prompt-schemas";

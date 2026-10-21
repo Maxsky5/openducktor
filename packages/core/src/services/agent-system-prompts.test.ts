@@ -1,3 +1,4 @@
+import { ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import {
   buildAgentKickoffPrompt,
@@ -76,6 +77,9 @@ describe("buildAgentSystemPrompt", () => {
       "odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
       "document-only revisions",
     ]);
+    // The MCP definitions describe browser tool input, so the prompt names the tools only.
+    expect(prompt).toContain(`- Browser tools: ${ODT_BROWSER_TOOL_NAMES.join(", ")}`);
+    expect(prompt).not.toContain("odt_browser_click({");
     expect(prompt).not.toContain("Existing documents:");
     expect(prompt).not.toContain("- spec: # Purpose");
     expect(prompt).not.toContain("- implementationPlan: ## Plan");

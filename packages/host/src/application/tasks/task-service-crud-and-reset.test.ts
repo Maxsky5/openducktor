@@ -173,6 +173,7 @@ describe("createTaskService task mutations and reset", () => {
         completionState,
         taskSessionLifecycleCoordinator: createTaskSessionLifecycleCoordinator(),
         terminalService: { acquireTaskCleanup: () => Effect.succeed({ closedTerminalIds: [] }) },
+        browserTabs: { closeOwnerTabs: () => Effect.void },
       });
       const result = await Effect.runPromise(
         Effect.result(
@@ -817,7 +818,7 @@ describe("createTaskService task mutations and reset", () => {
     ).rejects.toThrow("Task epic-1 has 1 subtasks. Confirm subtask deletion to continue.");
     expect(calls).toEqual([{ type: "list", input: { repoPath: "/repo" } }]);
   });
-  test("deletes subtasks with inactive session guard and cleans related worktrees and branches", async () => {
+  test("deletes subtasks with inactive session guard and cleans related worktrees, branches, and browser tabs", async () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord({
       workingDirectory: "/worktrees/repo/task-1",
@@ -950,6 +951,10 @@ describe("createTaskService task mutations and reset", () => {
           settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
           taskActivityGuard,
           taskStore,
+          browserTabs: {
+            closeOwnerTabs: (owner) =>
+              Effect.sync(() => void calls.push({ type: "closeTabs", owner })),
+          },
           worktreeFiles: createCleanupWorktreeFiles(calls),
           workspaceSettingsService: createBuildWorkspaceSettingsService({
             workspaceId: "repo",
@@ -983,6 +988,8 @@ describe("createTaskService task mutations and reset", () => {
       },
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      { type: "closeTabs", owner: { kind: "task", workspaceId: "repo", taskId: "epic-1" } },
+      { type: "closeTabs", owner: { kind: "task", workspaceId: "repo", taskId: "task-1" } },
       {
         type: "delete",
         input: { repoPath: "/repo", taskId: "epic-1", deleteSubtasks: true },

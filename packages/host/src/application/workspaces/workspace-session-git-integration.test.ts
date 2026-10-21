@@ -164,6 +164,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const dependencies: WorkspaceSessionServiceDependencies = {
+      browserTabs: { closeOwnerTabs: () => Effect.void },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },

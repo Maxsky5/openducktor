@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
+import { describe, expect, spyOn, test } from "bun:test";
+import { ODT_BROWSER_BRIDGE_TIMEOUT_MS, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
 import { z } from "zod";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { mcpToolPayloadSchema, type McpToolPayload, OdtToolError } from "./tool-results";
@@ -390,6 +390,63 @@ describe("OdtHostBridgeClient", () => {
         },
       },
     ]);
+  });
+
+  test("callBrowserTool sends the caller and waits longer than other tools", async () => {
+    const tabId = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
+    const requests: Array<{ url: string; body: McpToolPayload }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      requests.push({
+        url: String(input),
+        body: mcpToolPayloadSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
+      });
+      return jsonResponse({ content: [{ type: "text", text: "Clicked e12" }] });
+    };
+    const timeout = spyOn(AbortSignal, "timeout");
+    try {
+      const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+      await expect(
+        client.callBrowserTool(
+          "odt_browser_click",
+          "repo",
+          { tabId, ref: "e12" },
+          { runtime: "codex", runtimeSessionId: "thread-1" },
+        ),
+      ).resolves.toEqual({ content: [{ type: "text", text: "Clicked e12" }] });
+      await client.call("odt_read_task", "repo", { taskId: "task-1" }).catch(() => undefined);
+
+      expect(timeout.mock.calls).toEqual([[ODT_BROWSER_BRIDGE_TIMEOUT_MS], [10_000]]);
+    } finally {
+      timeout.mockRestore();
+    }
+    expect(requests[0]).toEqual({
+      url: "http://127.0.0.1:14327/invoke/odt_browser_click",
+      body: {
+        tabId,
+        ref: "e12",
+        workspaceId: "repo",
+        caller: { runtime: "codex", runtimeSessionId: "thread-1" },
+      },
+    });
+  });
+
+  test("callBrowserTool rejects a host result that is not browser content", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse({ content: [{ type: "image", mimeType: "image/gif", dataBase64: "AQID" }] });
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    const result = client.callBrowserTool(
+      "odt_browser_screenshot",
+      "repo",
+      { tabId: "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b" },
+      { runtime: "claude", runtimeSessionId: "claude-1" },
+    );
+
+    await expect(result).rejects.toMatchObject({
+      code: "ODT_HOST_RESPONSE_INVALID",
+      details: { command: "odt_browser_screenshot" },
+    });
   });
 
   test("call validates the private task asset bridge payload before MCP formatting", async () => {
