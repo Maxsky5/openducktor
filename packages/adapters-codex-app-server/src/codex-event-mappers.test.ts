@@ -1113,6 +1113,60 @@ describe("Codex subagent event mapper", () => {
     });
   });
 
+  test.each(["live", "thread_read"] as const)(
+    "keeps sibling communication out of child routes in %s",
+    (source) => {
+      const subagents = new CodexSubagentLinkState();
+      const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));
+      const rootContext = { source: "live" as const, runtimeId: "runtime-1", threadId: "root" };
+      for (const childThreadId of ["sender", "receiver"]) {
+        pipeline.runLive(
+          {
+            kind: "item_completed",
+            item: {
+              type: "subAgentActivity",
+              id: `spawn-${childThreadId}`,
+              agentThreadId: childThreadId,
+              agentPath: `/root/${childThreadId}`,
+              kind: "started",
+            },
+          },
+          rootContext,
+        );
+      }
+      const item = {
+        type: "subAgentActivity",
+        id: "send-message",
+        agentThreadId: "receiver",
+        agentPath: "/root/receiver",
+        kind: "interacted",
+      };
+      const ctx = { source, runtimeId: "runtime-1", threadId: "sender" };
+      const result =
+        source === "live"
+          ? pipeline.runLiveResult({ kind: "item_completed", item }, ctx)
+          : pipeline.runThreadItemResult({ index: 0, item }, ctx);
+
+      expect(result).toEqual({ handled: true, events: [] });
+      expect(subagents.routesForParent("sender", "runtime-1")).toEqual([]);
+      expect(subagents.routeForChild("receiver", "runtime-1")).toMatchObject({
+        parentExternalSessionId: "root",
+        childExternalSessionId: "receiver",
+      });
+      expect(subagents.statusForChild("receiver", "runtime-1")).toBe("running");
+      const completion = pipeline.runLive(
+        {
+          kind: "item_completed",
+          item: { ...item, id: "receiver-completed", kind: "completed", completedAtMs: 2_000 },
+        },
+        rootContext,
+      );
+      expect(projectedSubagents(projectCodexCanonicalEvents(completion))).toEqual([
+        expect.objectContaining({ externalSessionId: "receiver", status: "completed" }),
+      ]);
+    },
+  );
+
   test("keeps explicit collab parent conflicts fail-fast", () => {
     const subagents = new CodexSubagentLinkState();
     const pipeline = createCodexEventMapperPipeline(createCodexEventMappers(subagents));

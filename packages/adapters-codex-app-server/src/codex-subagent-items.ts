@@ -231,7 +231,7 @@ const subagentActivityParts = (
     });
   }
   const route = linkState.routeForChild(item.agentThreadId, ctx.runtimeId);
-  if (!route && item.kind !== "started") {
+  if (item.kind !== "started" && route?.parentExternalSessionId !== sourceThreadId) {
     return [];
   }
   const runtimeId = route?.runtimeId ?? ctx.runtimeId;
