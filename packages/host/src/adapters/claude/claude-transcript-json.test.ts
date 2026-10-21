@@ -42,7 +42,7 @@ const readRecord = (record: ClaudeProtocolValue, chunkSize = 17): ClaudeProtocol
 describe("Claude transcript JSON reader", () => {
   test("requests one source replay for an oversized record and completes its second pass", () => {
     const chunks = [
-      '{"type":"user","uuid":"user-1","snapshots":"',
+      '{"type":"user","uuid":"user-1","isVisibleInTranscriptOnly":true,"snapshots":"',
       "A".repeat(3 * 1024 * 1024),
       '","message":{"content":"Keep this text."}}',
     ];
@@ -54,7 +54,12 @@ describe("Claude transcript JSON reader", () => {
     for (const chunk of chunks) first.reader.write(chunk);
     expect(first.reader.finish()).toEqual({
       kind: "complete",
-      record: { type: "user", uuid: "user-1", message: { content: "Keep this text." } },
+      record: {
+        type: "user",
+        uuid: "user-1",
+        isVisibleInTranscriptOnly: true,
+        message: { content: "Keep this text." },
+      },
     });
   });
 
@@ -86,6 +91,7 @@ describe("Claude transcript JSON reader", () => {
       sessionId: "session-1",
       cwd: "/repo",
       timestamp: "2026-10-21T10:00:00.000Z",
+      isVisibleInTranscriptOnly: true,
       message: {
         role: "user",
         content: [
@@ -112,6 +118,7 @@ describe("Claude transcript JSON reader", () => {
       sessionId: "session-1",
       cwd: "/repo",
       timestamp: "2026-10-21T10:00:00.000Z",
+      isVisibleInTranscriptOnly: true,
       message: {
         role: "user",
         content: [

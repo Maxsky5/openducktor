@@ -4,6 +4,10 @@ import * as sessionFactory from "./claude-agent-sdk-session-factory";
 import * as nativeSessions from "./claude-session-metadata";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AgentRuntimeQueryError, InterruptedTurnResumeError } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -104,7 +108,7 @@ describe("createClaudeAgentSdkService", () => {
       } finally {
         launch.mockRestore();
         loadTodos.mockRestore();
-        service.dispose();
+        await Effect.runPromise(service.dispose());
       }
     });
   }
@@ -163,7 +167,7 @@ describe("createClaudeAgentSdkService", () => {
       model.mockRestore();
       loadTodos.mockRestore();
       create.mockRestore();
-      service.dispose();
+      await Effect.runPromise(service.dispose());
     }
   });
 
@@ -305,7 +309,7 @@ describe("createClaudeAgentSdkService", () => {
     } finally {
       const session = store.get("session-1");
       if (session) store.close(session);
-      service.dispose();
+      await Effect.runPromise(service.dispose());
       attach.mockRestore();
       loadTodos.mockRestore();
     }
@@ -357,7 +361,7 @@ describe("createClaudeAgentSdkService", () => {
       expect(renameSessionSpy.mock.calls[0]?.[1]).toBe("Fairnest");
       expect(session.summary.title).toBe("Fairnest");
     } finally {
-      service.dispose();
+      await Effect.runPromise(service.dispose());
       renameSessionSpy.mockRestore();
     }
   });
@@ -407,7 +411,7 @@ describe("createClaudeAgentSdkService", () => {
       expect(session.summary.title).toBeUndefined();
       expect(session.summary.sessionAssociation).toEqual({ kind: "repository" });
     } finally {
-      service.dispose();
+      await Effect.runPromise(service.dispose());
       renameSessionSpy.mockRestore();
     }
   });
@@ -869,7 +873,7 @@ describe("createClaudeAgentSdkService", () => {
     await Effect.runPromise(sessionStore.stopSessionsForRuntime("runtime-1"));
     expect(calls).toEqual(["release:/repo/worktree/"]);
 
-    service.dispose();
+    await Effect.runPromise(service.dispose());
     expect(calls).toEqual(["release:/repo/worktree/", "dispose"]);
 
     sessionStore.set(createSession());
@@ -1213,7 +1217,7 @@ describe("createClaudeAgentSdkService", () => {
       } finally {
         const session = store.get("session-1");
         if (session) store.close(session);
-        service.dispose();
+        await Effect.runPromise(service.dispose());
         attach.mockRestore();
         loadTodos.mockRestore();
         inspect.mockRestore();
@@ -1264,7 +1268,7 @@ describe("createClaudeAgentSdkService", () => {
         expect(store.get("session-1")).toBeUndefined();
         expect(attach).toHaveBeenCalledTimes(stage === "inspect" ? 0 : 1);
       } finally {
-        service.dispose();
+        await Effect.runPromise(service.dispose());
         attach.mockRestore();
         loadTodos.mockRestore();
         inspect.mockRestore();
@@ -1547,6 +1551,7 @@ describe("createClaudeAgentSdkService", () => {
 });
 
 describe("continueInterruptedTurn eligibility", () => {
+  const unexpectedTranscriptReader = { read: () => Effect.die("Unexpected transcript read") };
   const continuationInput = {
     repoPath: "/repo/",
     runtimeKind: "claude" as const,
@@ -1770,7 +1775,7 @@ describe("continueInterruptedTurn eligibility", () => {
         ),
       ).toMatchObject({ state: "read", message: "Continue with this message." });
     } finally {
-      service.dispose();
+      await Effect.runPromise(service.dispose());
       store.close(attached);
       start.mockRestore();
       loadTodos.mockRestore();
@@ -1802,33 +1807,83 @@ describe("continueInterruptedTurn eligibility", () => {
     expect(sessionStore.get("session-1")).toBeUndefined();
   });
 
-  test("reads the persisted transcript for a reattached live session before continuing", async () => {
-    const service = createService(
-      createSession({
-        input: {
-          repoPath: "/missing-worktree",
-          runtimeKind: "claude",
-          workingDirectory: "/missing-worktree",
-          externalSessionId: "session-1",
-          runtimePolicy: { kind: "claude" },
-          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
-        },
-      }),
-    );
-
-    await expect(
-      resumeFailureReason(
-        service.continueInterruptedTurn(
-          {
-            ...continuationInput,
-            repoPath: "/missing-worktree",
-            workingDirectory: "/missing-worktree",
-          },
-          "runtime-claude",
-        ),
-      ),
-    ).resolves.toBe("session_not_found");
-  });
+  test.each(["persisted", "reattached"] as const)(
+    "uses the configured transcript reader for a %s continuation",
+    async (source) => {
+      const root = await mkdtemp(join(tmpdir(), "claude-continuation-reader-"));
+      let service: ReturnType<typeof createService> | undefined;
+      try {
+        const cwd = await realpath(root);
+        const config = join(cwd, "config");
+        const project = join(config, "projects", "continuation-fixture");
+        await mkdir(project, { recursive: true });
+        const sessionId = randomUUID();
+        const request = {
+          ...continuationInput,
+          repoPath: cwd,
+          workingDirectory: cwd,
+          externalSessionId: sessionId,
+        };
+        const base = { sessionId, cwd, timestamp: "2026-06-25T20:00:01.000Z" };
+        await writeFile(
+          join(project, `${sessionId}.jsonl`),
+          [
+            {
+              ...base,
+              type: "user",
+              uuid: "user",
+              parentUuid: null,
+              message: { role: "user", content: "Inspect the repository" },
+            },
+            {
+              ...base,
+              type: "assistant",
+              uuid: "reply",
+              parentUuid: "user",
+              message: {
+                id: "reply",
+                role: "assistant",
+                content: [{ type: "text", text: "Inspection complete" }],
+                stop_reason: "end_turn",
+              },
+            },
+          ]
+            .map((entry) => JSON.stringify(entry))
+            .join("\n") + "\n",
+        );
+        const session =
+          source === "reattached"
+            ? createSession({
+                externalSessionId: sessionId,
+                input: request,
+                summary: {
+                  externalSessionId: sessionId,
+                  runtimeKind: "claude",
+                  workingDirectory: cwd,
+                  sessionAssociation: request.sessionScope,
+                  startedAt: base.timestamp,
+                  status: "idle",
+                },
+                acceptedUserMessages: [],
+              })
+            : null;
+        service = createService(session, undefined, undefined, {
+          processEnv: { CLAUDE_CONFIG_DIR: config },
+        });
+        const history = await Effect.runPromise(service.loadSessionHistory(request));
+        expect(history.map((message) => [message.role, message.text])).toEqual([
+          ["user", "Inspect the repository"],
+          ["assistant", "Inspection complete"],
+        ]);
+        expect(
+          await resumeFailureReason(service.continueInterruptedTurn(request, "runtime-claude")),
+        ).toBe("completed_turn");
+      } finally {
+        if (service) await Effect.runPromise(service.dispose());
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("accepts a live session whose latest in-process turn is unfinished", async () => {
     const session = createSession({
@@ -1848,6 +1903,7 @@ describe("continueInterruptedTurn eligibility", () => {
           session,
           continuationInput,
           () => "2026-06-25T20:00:02.000Z",
+          unexpectedTranscriptReader,
         ),
       ),
     ).resolves.toBeUndefined();
@@ -1873,6 +1929,7 @@ describe("continueInterruptedTurn eligibility", () => {
           session,
           continuationInput,
           () => "2026-06-25T20:00:02.000Z",
+          unexpectedTranscriptReader,
         ),
       ),
     ).resolves.toBe("completed_turn");

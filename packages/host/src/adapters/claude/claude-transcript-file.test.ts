@@ -107,7 +107,7 @@ test("a later worker parse failure reports its physical source line", async () =
   expect(failure.failure.cause).toBeInstanceOf(Error);
 });
 
-test("interrupting a large scan waits for all workers before closing its source file", async () => {
+test("disposing a large scan owner waits for all workers before closing its source file", async () => {
   const path = await transcript(`${JSON.stringify({ type: "user", uuid: "first" })}\n`);
   const child = Bun.spawn(
     [
@@ -119,6 +119,7 @@ test("interrupting a large scan waits for all workers before closing its source 
       import {Worker} from "node:worker_threads";
       import {Deferred,Effect,Fiber} from "effect";
       const {scanClaudeTranscriptBatches}=await import(process.env.ODT_SCAN_MODULE);
+      const {createClaudeTranscriptReadOwner}=await import(process.env.ODT_OWNER_MODULE);
       const path=process.env.ODT_SCAN_PATH;
       const probe=await open(path,"r");
       const prototype=Object.getPrototypeOf(probe);
@@ -126,16 +127,23 @@ test("interrupting a large scan waits for all workers before closing its source 
       const entered=Deferred.makeUnsafe();
       let terminated=0;
       const closeCounts=[];
+      let closed=false;
       const terminate=Worker.prototype.terminate;
       Worker.prototype.terminate=function(){return terminate.call(this).then(code=>{terminated++;return code;});};
       const close=prototype.close;
-      prototype.close=function(){closeCounts.push(terminated);return close.call(this);};
-      const fiber=Effect.runFork(scanClaudeTranscriptBatches(path,()=>Deferred.succeed(entered,undefined).pipe(Effect.andThen(Effect.never))));
+      prototype.close=function(){closeCounts.push(terminated);return close.call(this).then(()=>{closed=true;});};
+      const owner=createClaudeTranscriptReadOwner({
+        read:()=>scanClaudeTranscriptBatches(path,()=>Deferred.succeed(entered,undefined).pipe(Effect.andThen(Effect.never))).pipe(
+          Effect.as({messages:[],source:{root:path,selected:path,sessionId:"session"}})
+        )
+      });
+      const fiber=Effect.runFork(owner.read({repoPath:"/repo",workingDirectory:"/repo",externalSessionId:"session",runtimeKind:"claude",runtimePolicy:{kind:"claude"}}));
       try{
         await Effect.runPromise(Deferred.await(entered));
-        await Effect.runPromise(Fiber.interrupt(fiber));
+        await Effect.runPromise(owner.dispose());
         assert.equal(terminated,4);
         assert.deepEqual(closeCounts,[4]);
+        assert.equal(closed,true);
       }finally{
         await Effect.runPromise(Fiber.interrupt(fiber));
         prototype.close=close;
@@ -149,6 +157,7 @@ test("interrupting a large scan waits for all workers before closing its source 
         ...process.env,
         ODT_SCAN_PATH: path,
         ODT_SCAN_MODULE: new URL("./claude-transcript-file.ts", import.meta.url).href,
+        ODT_OWNER_MODULE: new URL("./claude-transcript-read-owner.ts", import.meta.url).href,
       },
       stdout: "pipe",
       stderr: "pipe",

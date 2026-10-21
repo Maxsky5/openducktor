@@ -85,6 +85,98 @@ const tools = (history: AgentSessionHistoryMessage[]) =>
   history.flatMap((message) => message.parts).filter((part) => part.kind === "tool");
 
 describe("Claude transcript reader through saved history", () => {
+  test.each(storageModes)(
+    "keeps an undelivered queue hidden before SDK input that resembles command output with %s storage",
+    async (storage) => {
+      await withTranscript(async ({ user, write, input, options }) => {
+        await write([
+          user("request", null, "Original request"),
+          {
+            type: "attachment",
+            uuid: "pending-queue",
+            parentUuid: "request",
+            sessionId,
+            timestamp,
+            attachment: { type: "queued_command", prompt: "Undelivered prompt" },
+          },
+          {
+            ...user(
+              "caveat",
+              "pending-queue",
+              "<local-command-caveat>Native caveat</local-command-caveat>",
+            ),
+            isMeta: true,
+          },
+          user("command", "caveat", "<command-name>/status</command-name>"),
+          user("output", "command", "<local-command-stdout>Native output</local-command-stdout>"),
+          {
+            ...user(
+              "human",
+              "output",
+              "<local-command-stdout>Explain this tag</local-command-stdout>",
+            ),
+            promptSource: "sdk",
+          },
+        ]);
+
+        const messages = await Effect.runPromise(
+          loadClaudeSessionMessages(input, { ...options, storage }),
+        );
+        expect(messages.map((message) => message.uuid)).toEqual([
+          "request",
+          "caveat",
+          "command",
+          "output",
+          "human",
+        ]);
+      });
+    },
+  );
+
+  test("hides transcript-only input without splitting the current assistant response", async () => {
+    await withTranscript(async ({ user, assistant, write, input, options }) => {
+      await write([
+        user("user", null, "Inspect the repository"),
+        {
+          ...assistant("reply-start", "user", []),
+          message: {
+            id: "reply",
+            role: "assistant",
+            content: [text("Inspecting the repository")],
+            stop_reason: null,
+          },
+        },
+        {
+          ...user("internal", "reply-start", "Internal continuation context"),
+          isVisibleInTranscriptOnly: true,
+          timestamp: "2026-10-21T10:00:02.000Z",
+        },
+        {
+          ...assistant("reply-end", "internal", []),
+          timestamp: "2026-10-21T10:00:03.000Z",
+          message: {
+            id: "reply",
+            role: "assistant",
+            content: [text("Inspection complete")],
+            stop_reason: "end_turn",
+          },
+        },
+      ]);
+
+      const history = await Effect.runPromise(
+        loadClaudeHistory(input, () => timestamp, undefined, options),
+      );
+      expect(history.map((message) => [message.messageId, message.role, message.text])).toEqual([
+        ["user", "user", "Inspect the repository"],
+        ["reply", "assistant", "Inspection complete"],
+      ]);
+      expect(history[0]?.timestamp).toBe(timestamp);
+      expect(history[1]?.parts).toContainEqual(
+        expect.objectContaining({ kind: "step", phase: "finish", reason: "stop" }),
+      );
+    });
+  });
+
   test("restores pre-compaction turns and both parallel tool results in memory and on disk", async () => {
     await withTranscript(async ({ user, assistant, write, input, options }) => {
       await write([
@@ -220,7 +312,7 @@ describe("Claude transcript reader through saved history", () => {
           Effect.runPromise(loadClaudeHistory(input, () => timestamp, undefined, { reader })),
           Effect.runPromise(loadClaudeTodos(input, { reader })),
         ]);
-        reader.dispose();
+        await Effect.runPromise(reader.dispose());
         expect(sourceReads).toBe(1);
         expect(todos).toEqual([
           { id: "1", content: "Verify the file", status: "pending", priority: "medium" },
@@ -402,7 +494,7 @@ describe("Claude transcript reader through saved history", () => {
         const after = await Effect.runPromise(
           loadClaudeHistory(input, () => timestamp, undefined, { reader }),
         );
-        reader.dispose();
+        await Effect.runPromise(reader.dispose());
         expect(after.map((message) => [message.messageId, message.text])).toEqual([
           ["user", "Read the live transcript"],
           ["answer", "Completed append"],

@@ -114,7 +114,7 @@ test.each(
 )(
   "restores saved workflow reads with %s storage through %s after worktree removal",
   async (storage, projection) => {
-    await withSavedTranscript(storage, async ({ input, options }) => {
+    await withSavedTranscript(storage, async ({ root, input, options }) => {
       await rm(dirname(input.workingDirectory), { recursive: true });
       const reader = createClaudeTranscriptReader(options);
       try {
@@ -142,7 +142,7 @@ test.each(
         for (const request of [
           { ...input, sessionScope: undefined },
           { ...input, sessionScope: { kind: "repository" } as const },
-          { ...input, workingDirectory: relative(process.cwd(), input.workingDirectory) },
+          { ...input, workingDirectory: relative(root, input.workingDirectory) },
         ]) {
           const read =
             projection === "history"
@@ -150,10 +150,13 @@ test.each(
                   Effect.asVoid,
                 )
               : loadClaudeTodos(request, { reader }).pipe(Effect.asVoid);
-          const failure = await Effect.runPromise(Effect.flip(read));
-          expect(failure).toMatchObject({
-            operation: "claude.transcript.resolve directory for",
-            cause: { code: "ENOENT" },
+          const result = await Effect.runPromise(Effect.result(read));
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: {
+              operation: "claude.transcript.resolve directory for",
+              cause: { code: "ENOENT" },
+            },
           });
         }
       } finally {
@@ -207,21 +210,40 @@ test.each(storageModes)(
   },
 );
 
-test.each(storageModes)(
-  "propagates non-missing workflow directory errors with %s storage",
-  async (storage) => {
+test.each(
+  storageModes.flatMap((storage) => [
+    { storage, directory: "invalid path", code: "ERR_INVALID_ARG_VALUE" },
+    // Windows realpath reports a file parent as ENOENT, which permits a saved workflow read.
+    { storage, directory: "file parent", code: process.platform === "win32" ? null : "ENOTDIR" },
+  ]),
+)(
+  "applies native workflow directory errors for $directory with $storage storage",
+  async ({ storage, directory, code }) => {
     await withSavedTranscript(storage, async ({ input, options }) => {
-      await rm(dirname(input.workingDirectory), { recursive: true });
-      await writeFile(dirname(input.workingDirectory), "The worktree parent is a file.");
+      if (directory === "file parent") {
+        await rm(dirname(input.workingDirectory), { recursive: true });
+        await writeFile(dirname(input.workingDirectory), "The worktree parent is a file.");
+      }
+      const request =
+        directory === "invalid path"
+          ? { ...input, workingDirectory: `${input.workingDirectory}\0invalid` }
+          : input;
       for (const read of [
-        loadClaudeHistory(input, () => timestamp, undefined, options).pipe(Effect.asVoid),
-        loadClaudeTodos(input, options).pipe(Effect.asVoid),
+        loadClaudeHistory(request, () => timestamp, undefined, options).pipe(Effect.asVoid),
+        loadClaudeTodos(request, options).pipe(Effect.asVoid),
       ]) {
-        const failure = await Effect.runPromise(Effect.flip(read));
-        expect(failure).toMatchObject({
-          operation: "claude.transcript.resolve directory for",
-          cause: { code: "ENOTDIR" },
-        });
+        const result = await Effect.runPromise(Effect.result(read));
+        expect(result).toMatchObject(
+          code === null
+            ? { _tag: "Success" }
+            : {
+                _tag: "Failure",
+                failure: {
+                  operation: "claude.transcript.resolve directory for",
+                  cause: { code },
+                },
+              },
+        );
       }
     });
   },

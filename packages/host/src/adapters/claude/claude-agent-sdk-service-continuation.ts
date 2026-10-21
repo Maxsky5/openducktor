@@ -26,6 +26,7 @@ import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession, ClaudeSessionStore } from "./claude-agent-sdk-types";
 import { toClaudeServiceError } from "./claude-agent-sdk-utils";
+import type { ClaudeTranscriptReader } from "./claude-transcript-reader";
 
 const continuationOperation = "claudeRuntime.continueInterruptedTurn";
 
@@ -74,9 +75,10 @@ export const resolveFailedClaudeContinuationSession = <Failure>(input: {
 const readClaudeContinuationTranscript = (
   input: ResumeAgentSessionInput,
   now: () => string,
+  reader: ClaudeTranscriptReader,
   liveContext?: ClaudeLiveHistoryContext,
 ) =>
-  loadClaudeHistory(input, now, liveContext).pipe(
+  loadClaudeHistory(input, now, liveContext, { reader }).pipe(
     Effect.mapError((cause) =>
       interruptedTurnResumeError({
         ...classifyPersistedClaudeContinuationFailure(cause, input.externalSessionId),
@@ -95,6 +97,7 @@ export const checkLiveClaudeContinuationEligibility = (
   session: ClaudeSession,
   input: ResumeAgentSessionInput,
   now: () => string,
+  reader: ClaudeTranscriptReader,
 ) =>
   Effect.gen(function* () {
     yield* Effect.try({
@@ -110,7 +113,7 @@ export const checkLiveClaudeContinuationEligibility = (
       },
     });
     return yield* decideClaudeContinuation(session, input.externalSessionId, () =>
-      readClaudeContinuationTranscript(input, now, claudeLiveHistoryContext(session)),
+      readClaudeContinuationTranscript(input, now, reader, claudeLiveHistoryContext(session)),
     );
   }).pipe(
     Effect.mapError((cause) => toClaudeServiceError(continuationOperation, cause)),
@@ -160,8 +163,9 @@ export const classifyPersistedClaudeContinuationFailure = (
 export const checkPersistedClaudeContinuationEligibility = (
   input: ResumeAgentSessionInput,
   now: () => string,
+  reader: ClaudeTranscriptReader,
 ) =>
-  readClaudeContinuationTranscript(input, now).pipe(
+  readClaudeContinuationTranscript(input, now, reader).pipe(
     Effect.map((history) => decideClaudePersistedContinuation(history, input.externalSessionId)),
     Effect.mapError((cause) => toClaudeServiceError(continuationOperation, cause)),
     Effect.flatMap(finishClaudeContinuationDecision),

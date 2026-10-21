@@ -196,7 +196,7 @@ const createHarness = async (
   let releaseSessionImpl: ClaudeAgentSdkService["releaseSession"] = () => Effect.void;
   let stopSessionsForRuntimeImpl: ClaudeAgentSdkService["stopSessionsForRuntime"] = () =>
     Effect.void;
-  let disposeImpl: ClaudeAgentSdkService["dispose"] = () => {};
+  let disposeImpl: ClaudeAgentSdkService["dispose"] = () => Effect.void;
   let inspectSessionForImportImpl: ClaudeAgentSdkService["inspectSessionForImport"] = () =>
     Effect.die(new Error("Unexpected import"));
   let failNextMutationAfterApply = false;
@@ -1709,9 +1709,7 @@ describe("Claude host live-session adapter", () => {
     await Effect.runPromise(harness.adapter.startSession(startInput));
     let cleanupAttempts = 0;
     let disposeCalls = 0;
-    harness.setDispose(() => {
-      disposeCalls += 1;
-    });
+    harness.setDispose(() => Effect.sync(() => void (disposeCalls += 1)));
     harness.setStopSessionsForRuntime(() => {
       cleanupAttempts += 1;
       return cleanupAttempts === 1
@@ -2123,9 +2121,7 @@ describe("Claude host live-session adapter", () => {
           stoppedRuntimeIds.push(runtimeId);
         }),
       );
-      harness.setDispose(() => {
-        disposeCalls += 1;
-      });
+      harness.setDispose(() => Effect.sync(() => void (disposeCalls += 1)));
 
       await expect(Effect.runPromise(harness.adapter.releaseRuntime())).resolves.toEqual([
         sessionRef,

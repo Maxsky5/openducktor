@@ -57,8 +57,8 @@ describe("Claude transcript read ownership", () => {
         for (const caller of callers) expect(yield* Fiber.join(caller)).toBe(result);
         yield* owner.read(input);
         expect(reads).toBe(6);
-        owner.dispose();
-        otherOwner.dispose();
+        yield* owner.dispose();
+        yield* otherOwner.dispose();
       }),
     );
   });
@@ -86,7 +86,7 @@ describe("Claude transcript read ownership", () => {
         yield* Deferred.succeed(finish, undefined);
         expect(yield* Fiber.join(second)).toBe(result);
         expect(closed).toBe(true);
-        owner.dispose();
+        yield* owner.dispose();
       }),
     );
   });
@@ -115,7 +115,7 @@ describe("Claude transcript read ownership", () => {
         expect(closed).toBe(1);
         expect(yield* owner.read(input)).toBe(result);
         expect(reads).toBe(2);
-        owner.dispose();
+        yield* owner.dispose();
       }),
     );
   });
@@ -144,7 +144,7 @@ describe("Claude transcript read ownership", () => {
         expect(yield* Fiber.join(second)).toMatchObject({ _tag: "Failure", failure });
         yield* Effect.result(failingOwner.read(input));
         expect(reads).toBe(2);
-        failingOwner.dispose();
+        yield* failingOwner.dispose();
 
         const owner = createClaudeTranscriptReadOwner({
           read: () => Effect.never.pipe(Effect.ensuring(Effect.sync(() => void (closed += 1)))),
@@ -154,7 +154,7 @@ describe("Claude transcript read ownership", () => {
           owner.read({ ...input, externalSessionId: "other" }),
           { startImmediately: true },
         );
-        owner.dispose();
+        yield* owner.dispose();
         expect(Exit.isFailure(yield* Fiber.await(waiting))).toBe(true);
         expect(Exit.isFailure(yield* Fiber.await(other))).toBe(true);
         expect(closed).toBe(2);
@@ -165,6 +165,46 @@ describe("Claude transcript read ownership", () => {
             message: expect.stringContaining("closed"),
           },
         });
+      }),
+    );
+  });
+
+  test("disposal waits for cleanup already started by the last consumer", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const closing = yield* Deferred.make<void>();
+        const finishClosing = yield* Deferred.make<void>();
+        let closed = false;
+        let disposed = false;
+        const owner = createClaudeTranscriptReadOwner({
+          read: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Effect.never),
+              Effect.ensuring(
+                Deferred.succeed(closing, undefined).pipe(
+                  Effect.andThen(Deferred.await(finishClosing)),
+                  Effect.andThen(Effect.sync(() => void (closed = true))),
+                ),
+              ),
+            ),
+        });
+        const caller = yield* Effect.forkChild(owner.read(input));
+        yield* Deferred.await(started);
+        const cancellation = yield* Effect.forkChild(Fiber.interrupt(caller));
+        yield* Deferred.await(closing);
+        const disposal = yield* Effect.forkChild(
+          owner.dispose().pipe(Effect.andThen(Effect.sync(() => void (disposed = true)))),
+          { startImmediately: true },
+        );
+        try {
+          expect(disposed).toBe(false);
+        } finally {
+          yield* Deferred.succeed(finishClosing, undefined);
+        }
+        yield* Fiber.join(disposal);
+        expect(closed).toBe(true);
+        yield* Fiber.join(cancellation);
       }),
     );
   });

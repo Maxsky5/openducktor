@@ -130,11 +130,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  dispose(): void {
-    this.historyReader.dispose();
-    this.transcriptReader.dispose();
-    this.untrackFileSearchSessions();
-    this.fileSearch.dispose();
+  dispose(): Effect.Effect<void> {
+    return this.historyReader.dispose().pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          this.transcriptReader.dispose();
+          this.untrackFileSearchSessions();
+          this.fileSearch.dispose();
+        }),
+      ),
+    );
   }
 
   startSession(input: StartAgentSessionInput, runtimeId: string) {
@@ -173,9 +178,14 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         Effect.gen({ self: this }, function* () {
           const existing = this.sessionStore.get(input.externalSessionId);
           if (existing) {
-            yield* checkLiveClaudeContinuationEligibility(existing, input, this.now);
+            yield* checkLiveClaudeContinuationEligibility(
+              existing,
+              input,
+              this.now,
+              this.historyReader,
+            );
           } else {
-            yield* checkPersistedClaudeContinuationEligibility(input, this.now);
+            yield* checkPersistedClaudeContinuationEligibility(input, this.now, this.historyReader);
           }
           // The replacement starts a new CLI process for the same session id. Keep the
           // attached session until the replacement is created, so a failed continuation

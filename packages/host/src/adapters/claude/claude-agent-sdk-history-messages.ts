@@ -30,6 +30,7 @@ type ClaudeHistoryEntry = {
   subtype?: unknown;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
+  isVisibleInTranscriptOnly?: boolean;
   isMeta?: boolean;
   is_meta?: boolean;
   interruptedByShutdown?: boolean;
