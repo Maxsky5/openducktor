@@ -123,6 +123,10 @@ export const createBrowserPreviewProxies = (input: {
     const upstream = sendUpstream(preview, request, (upstreamResponse) =>
       relayResponse(preview, request, upstreamResponse, response),
     );
+    // A tab that leaves the page closes the response, so the dev server stops its answer too.
+    response.once("close", () => {
+      if (!response.writableFinished) upstream.destroy();
+    });
     upstream.on("error", (cause) => {
       if (response.headersSent) {
         response.destroy(cause);
@@ -219,7 +223,8 @@ export const createBrowserPreviewProxies = (input: {
     // The frame script changes the length of the page.
     delete headers["content-length"];
     response.writeHead(status, upstream.statusMessage, headers);
-    upstream.pipe(withFrameScript()).pipe(response);
+    const nonce = scriptNonce(upstream.headers["content-security-policy"]);
+    upstream.pipe(withFrameScript(nonce)).pipe(response);
   };
 
   const upstreamHeaders = (
@@ -365,6 +370,15 @@ const withFrameAncestors = (
     .join(", ");
 };
 
+/**
+ * The script nonce of the page policy, or null. The frame script gets it, so a policy that runs
+ * only scripts with a nonce runs the frame script too.
+ */
+const scriptNonce = (policy: string | string[] | undefined): string | null =>
+  /(?:^|[;,])\s*(?:script-src-elem|script-src|default-src)\s[^;,]*'nonce-([\w+/=-]+)'/i.exec(
+    [policy ?? []].flat().join(", "),
+  )?.[1] ?? null;
+
 /** The index after the first `tag` in `html`, or null when `html` has no such tag. */
 const tagEnd = (html: Buffer, tag: RegExp): number | null => {
   const match = tag.exec(html.toString("latin1"));
@@ -376,10 +390,14 @@ const tagEnd = (html: Buffer, tag: RegExp): number | null => {
  * waits only until its `<head>` tag arrives, so a streamed page shows its first content at once.
  * A page without `<head>` gets the script after `<html>`, or first.
  */
-const withFrameScript = (): Transform => {
+const withFrameScript = (nonce: string | null): Transform => {
   let start: Buffer | null = Buffer.alloc(0);
+  const script =
+    nonce === null
+      ? SCRIPT_TAG
+      : Buffer.from(`<script nonce="${nonce}" src="${BROWSER_PREVIEW_SCRIPT_PATH}"></script>`);
   const inject = (html: Buffer, at: number) =>
-    Buffer.concat([html.subarray(0, at), SCRIPT_TAG, html.subarray(at)]);
+    Buffer.concat([html.subarray(0, at), script, html.subarray(at)]);
   return new Transform({
     transform(chunk: Buffer, _encoding, done) {
       if (start === null) {

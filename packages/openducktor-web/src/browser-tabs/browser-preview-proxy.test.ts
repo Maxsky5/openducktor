@@ -21,6 +21,7 @@ afterEach(async () => {
 /** A dev server that answers each test path, and a preview of it. */
 const startPreview = async () => {
   let finishStream = () => {};
+  const eventsClosed = Promise.withResolvers<void>();
   const target = createServer((request, response) => {
     switch (request.url) {
       case "/":
@@ -51,6 +52,18 @@ const startPreview = async () => {
       case "/away":
         response.writeHead(302, { location: "https://accounts.example.com/login?next=%2F" });
         response.end();
+        return;
+      case "/events":
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write("data: hi\n\n");
+        response.once("close", () => eventsClosed.resolve());
+        return;
+      case "/nonce":
+        response.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          "content-security-policy": "style-src 'nonce-style'; script-src 'self' 'nonce-abc123'",
+        });
+        response.end("<!doctype html><html><head><title>App</title></head><body>Hi</body></html>");
         return;
       case "/cut":
         response.writeHead(200, { "content-type": "application/json", "content-length": "100" });
@@ -84,7 +97,13 @@ const startPreview = async () => {
     target: `http://localhost:${targetPort}/some/page`,
     appOrigin: APP_ORIGIN,
   });
-  return { origin, previews, targetPort, finishStream: () => finishStream() };
+  return {
+    origin,
+    previews,
+    targetPort,
+    finishStream: () => finishStream(),
+    eventsClosed: eventsClosed.promise,
+  };
 };
 
 describe("browser preview proxy", () => {
@@ -214,6 +233,28 @@ describe("browser preview proxy", () => {
 
     await previews.close();
     await closed;
+  });
+
+  test("gives the frame script the nonce that the page allows for scripts", async () => {
+    const { origin } = await startPreview();
+
+    const html = await (await fetch(`${origin}/nonce`)).text();
+
+    expect(html).toContain(
+      '<head><script nonce="abc123" src="/__openducktor/frame.js"></script><title>App</title>',
+    );
+  });
+
+  test("closes the dev server stream when the tab leaves the page", async () => {
+    const { origin, eventsClosed } = await startPreview();
+    const leave = new AbortController();
+    const response = await fetch(`${origin}/events`, { signal: leave.signal });
+    if (!response.body) throw new Error("Expected an event stream.");
+    await response.body.getReader().read();
+
+    leave.abort();
+
+    await eventsClosed;
   });
 
   test("ends a response at once when the dev server drops it", async () => {
