@@ -9,6 +9,8 @@ import { extractAllFileEditData } from "./file-edit-tool";
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
 let AgentChatSettingsProvider: typeof import("./agent-chat-settings-context").AgentChatSettingsProvider;
 const pierreDiffViewerModule = await import("@/components/features/agents/pierre-diff-viewer");
+const pierreFilePairModule =
+  await import("@/components/features/agents/pierre-file-pair-diff-viewer");
 type RestorableSpy = { mockRestore(): void };
 let pierreViewerSpies: RestorableSpy[] = [];
 
@@ -63,6 +65,18 @@ const fileViewerMock = mock(
       data-height-mode={heightMode ?? ""}
     >
       {content}
+    </div>
+  ),
+);
+
+const filePairViewerMock = mock(
+  ({
+    oldContent,
+    newContent,
+  }: ComponentProps<typeof pierreFilePairModule.PierreFilePairDiffViewer>) => (
+    <div data-testid="pierre-file-pair-viewer">
+      <span>{oldContent}</span>
+      <span>{newContent}</span>
     </div>
   ),
 );
@@ -130,6 +144,12 @@ beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
   pierreViewerSpies = [
+    spyOn(pierreFilePairModule, "PierreFilePairDiffViewer").mockImplementation(
+      Object.assign(filePairViewerMock, {
+        $$typeof: pierreFilePairModule.PierreFilePairDiffViewer.$$typeof,
+        type: filePairViewerMock,
+      }),
+    ),
     spyOn(pierreDiffViewerModule, "PierreDiffPreloader").mockImplementation(
       Object.assign(preloaderMock, {
         $$typeof: pierreDiffViewerModule.PierreDiffPreloader.$$typeof,
@@ -168,6 +188,7 @@ afterEach(() => {
   preloadedViewerMock.mockClear();
   viewerMock.mockClear();
   fileViewerMock.mockClear();
+  filePairViewerMock.mockClear();
 });
 
 afterAll(() => {
@@ -179,6 +200,48 @@ afterAll(() => {
 });
 
 describe("AgentChatFileEditCard", () => {
+  test.each(["pending", "completed"] as const)(
+    "labels a %s Write input without an applied-change badge",
+    (status) => {
+      const data = extractAllFileEditData({
+        kind: "tool",
+        partId: "write-input",
+        callId: "write-input",
+        tool: "Write",
+        toolType: "file_edit",
+        status,
+        input: { file_path: "src/example.ts", content: "export const value = 1;\n" },
+      })[0]!;
+      renderFileEditCard(data, false);
+      expect(screen.queryByText(/^[MAD]$/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+      expect(screen.getByText("Write input")).toBeDefined();
+      expect(screen.getByTestId("pierre-file-viewer").textContent).toBe(
+        "export const value = 1;\n",
+      );
+    },
+  );
+
+  test("expands an SDK Edit fragment through Pierre's two-content viewer", () => {
+    const data = extractAllFileEditData({
+      kind: "tool",
+      partId: "edit-fragment",
+      callId: "edit-fragment",
+      tool: "Edit",
+      toolType: "file_edit",
+      status: "completed",
+      input: { file_path: "src/example.ts", old_string: "before", new_string: "after" },
+    })[0]!;
+    renderFileEditCard(data, false);
+    expect(screen.queryByTestId("pierre-file-pair-viewer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+    expect(screen.getByText("Edit fragment")).toBeDefined();
+    expect(screen.getByTestId("pierre-file-pair-viewer").textContent).toBe("beforeafter");
+    expect(preloadedViewerMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+    expect(screen.queryByTestId("pierre-file-pair-viewer")).toBeNull();
+  });
+
   test("does not mount the hidden diff preloader while collapsed", () => {
     renderFileEditCard(buildFileEditData(), false);
 

@@ -5,6 +5,7 @@ import {
   PierreFileViewer,
   PierrePreloadedDiffViewer,
 } from "@/components/features/agents/pierre-diff-viewer";
+import { PierreFilePairDiffViewer } from "@/components/features/agents/pierre-file-pair-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
@@ -72,6 +73,7 @@ const FileEditCardHeader = ({
         isExpanded && "border-b border-border",
       )}
       onClick={onToggle}
+      aria-expanded={hasContent ? isExpanded : undefined}
     >
       {hasContent ? <ExpandIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
       <Icon className={cn("size-3.5 shrink-0", config.color)} />
@@ -79,9 +81,11 @@ const FileEditCardHeader = ({
         {dirName ? <span className="text-muted-foreground">{dirName}/</span> : null}
         <span className="font-semibold">{fileName}</span>
       </span>
-      <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-mono", config.color)}>
-        {config.badge}
-      </Badge>
+      {data.kind !== "write-input" ? (
+        <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px] font-mono", config.color)}>
+          {config.badge}
+        </Badge>
+      ) : null}
       {data.additions > 0 || data.deletions > 0 ? (
         <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
           {data.additions > 0 ? <span className="text-green-400">+{data.additions}</span> : null}
@@ -116,6 +120,22 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
     >
       <FileEditCardHeader data={data} isExpanded={isExpanded} onToggle={handleToggle} />
 
+      {isExpanded && data.kind === "replacement" ? (
+        <>
+          <p className="px-3 py-1 text-[11px] text-muted-foreground">Edit fragment</p>
+          <PierreFilePairDiffViewer
+            filePath={data.filePath}
+            oldContent={data.oldContent}
+            newContent={data.newContent}
+            diffStyle={chatSettings.diffStyle}
+            diffIndicators={chatSettings.diffIndicators}
+            heightMode={chatSettings.diffHeight}
+            lineOverflow={chatSettings.lineOverflow}
+            hunkSeparators={chatSettings.hunkSeparators}
+          />
+        </>
+      ) : null}
+
       {isExpanded && data.kind === "diff" ? (
         <PierrePreloadedDiffViewer
           patch={data.diff}
@@ -127,12 +147,17 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
           hunkSeparators={chatSettings.hunkSeparators}
         />
       ) : null}
-      {isExpanded && data.kind === "content" ? (
-        <PierreFileViewer
-          filePath={data.filePath}
-          content={data.content}
-          heightMode={chatSettings.diffHeight}
-        />
+      {isExpanded && (data.kind === "content" || data.kind === "write-input") ? (
+        <>
+          {data.kind === "write-input" ? (
+            <p className="px-3 py-1 text-[11px] text-muted-foreground">Write input</p>
+          ) : null}
+          <PierreFileViewer
+            filePath={data.filePath}
+            content={data.content}
+            heightMode={chatSettings.diffHeight}
+          />
+        </>
       ) : null}
     </div>
   );

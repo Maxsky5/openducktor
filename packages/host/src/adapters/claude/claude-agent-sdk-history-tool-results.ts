@@ -15,7 +15,7 @@ import { isNestedHistoryEntry, readHistorySessionId } from "./claude-agent-sdk-h
 import {
   type ClaudeHistoryMessage,
   isClaudeHistoryBackgroundTasksChangedMessage,
-} from "./claude-agent-sdk-history-import";
+} from "./claude-agent-sdk-history-messages";
 import {
   type ClaudeLiveUserMessage,
   readHistoryToolResults,

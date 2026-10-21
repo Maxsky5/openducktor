@@ -341,6 +341,7 @@ describe("AgentChatMessageCard tool presentation", () => {
       expect(summary?.textContent).toContain(expected);
       expect(summary?.textContent).not.toContain("Old document");
       expect(summary?.textContent).not.toContain("Returned document body");
+      expect(html.includes("animate-spin")).toBe(status === "running");
       expect(html).toContain("Output");
       expect(html).toContain("Returned document body");
     },
@@ -555,9 +556,11 @@ describe("AgentChatMessageCard tool presentation", () => {
       }),
     );
 
-    expect(html).toContain('<p class="shrink-0 font-medium text-current">read</p>');
-    expect(html).not.toContain('<p class="shrink-0 font-medium text-current">/repo/src/app.ts</p>');
-    expect(html).toContain('<p class="truncate text-muted-foreground">/repo/src/app.ts</p>');
+    const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
+    expect(Array.from(summary?.querySelectorAll("p") ?? [], (el) => el.textContent)).toEqual([
+      "read",
+      "/repo/src/app.ts",
+    ]);
   });
   test("renders file tool summaries relative to the session working directory", () => {
     const html = renderToStaticMarkup(
@@ -732,7 +735,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain("RUNNING");
   });
 
-  test("renders queued workflow tools with completed arguments and purple styling", () => {
+  test("renders pending workflow tools as preparing with completed arguments", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -758,12 +761,13 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain("animate-spin");
     expect(html).toContain("border-pending-border");
     expect(html).not.toContain("border-info-border");
-    expect(html).toContain("QUEUED");
+    expect(html).toContain("PREPARING");
+    expect(html).not.toContain("QUEUED");
     expect(html).not.toContain("RUNNING");
   });
 
   test.each([true, false])(
-    "shows a queued label only when input completion is explicit: %s",
+    "marks tools as preparing when input completion is explicit: %s",
     (inputComplete) => {
       const meta: ToolMeta = {
         kind: "tool",
@@ -790,13 +794,19 @@ describe("AgentChatMessageCard tool presentation", () => {
       );
       const text = new DOMParser().parseFromString(html, "text/html").body.textContent;
       if (inputComplete) {
-        expect(text).toContain("Queued");
+        const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
+        expect(summary?.querySelector("p")?.textContent).toBe("Preparing execute");
+        expect(summary?.firstElementChild?.classList.contains("opacity-50")).toBe(true);
         expect(text).toContain("console.log(42)");
+        expect(html).not.toContain("border-dashed");
+        expect(html).not.toContain("pending-");
       } else {
-        expect(text).not.toContain("Queued");
+        expect(text).not.toContain("Preparing");
+        expect(html).not.toContain("border-dashed");
       }
+      expect(text).not.toContain("Queued");
       expect(text).not.toContain("Preparing arguments");
-      expect(html).toContain("animate-spin");
+      expect(html.includes("animate-spin")).toBe(!inputComplete);
     },
   );
 

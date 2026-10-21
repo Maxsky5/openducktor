@@ -139,6 +139,23 @@
       }
     },
     {
+      "files": ["packages/host/src/adapters/claude/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@anthropic-ai/claude-agent-sdk",
+                "importNames": ["importSessionToStore"],
+                "message": "Read Claude history through getSessionMessages or getSubagentMessages. Raw transcript imports are forbidden."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": [
         "packages/host/src/**/*.test.ts",
         "packages/host/src/**/*.spec.ts",

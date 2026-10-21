@@ -306,7 +306,7 @@ Use native fields to classify tool-result wrappers, synthetic messages, queue op
 
 Use stable native IDs when present. Deduplicate by ID and lifecycle, not message text. Keep tool proposal, queue, execution, progress, and completion separate. Measure duration from native execution start. If history omits that point, omit duration.
 
-Keep the original tool ID and reason for success, failure, and denial. Read file edits from structured results or supported hooks. Do not infer a diff from tool input or private transcripts.
+Keep the original tool ID and reason for success, failure, and denial. Read applied file edits from structured results or supported hooks. Keep previews from tool input separate from confirmed file changes. Do not reconstruct applied changes from private transcripts.
 
 Keep prompt parts typed until the adapter encodes them. History must rebuild the same command, skill, file, attachment, and subagent parts as the live stream.
 

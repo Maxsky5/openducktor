@@ -24,7 +24,10 @@ import { toast } from "sonner";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PIERRE_HIGHLIGHT_LINE_LIMIT } from "@/lib/diff/pierre-config";
+import {
+  PIERRE_DIFF_THEME as DIFF_THEME,
+  PIERRE_HIGHLIGHT_LINE_LIMIT,
+} from "@/lib/diff/pierre-config";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import {
@@ -102,7 +105,6 @@ type PierreHighlightTarget =
   | { kind: "file"; file: FileContents; taskKey: string }
   | { kind: "diff"; fileDiff: FileDiffMetadata; taskKey: string };
 
-const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const EMPTY_LINE_ANNOTATIONS: DiffLineAnnotation<unknown>[] = [];
 type DiffCssProperties = CSSProperties & Record<`--diffs-${string}`, string | number>;
 const DIFF_WRAPPER_STYLE: DiffCssProperties = {

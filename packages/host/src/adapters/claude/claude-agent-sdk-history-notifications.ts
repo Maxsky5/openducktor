@@ -1,5 +1,5 @@
 import { readHistorySessionId } from "./claude-agent-sdk-history-entry";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import type { ClaudeTaskNotification } from "./claude-agent-sdk-runtime-messages";
 import type { ClaudeHistoryTaskNotificationMessage } from "./claude-agent-sdk-subagents";
 

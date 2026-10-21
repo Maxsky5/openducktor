@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ClaudePolicyFields, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentEvent, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -19,6 +19,12 @@ import {
   CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV,
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import {
+  type ClaudeEventSession,
+  claudeSubagentEventSession,
+} from "./claude-agent-sdk-event-session";
+import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 import type {
   ClaudeSessionContext,
   ClaudeToolInput,
@@ -147,6 +153,8 @@ const buildOptions = (
   session: ClaudeSessionContext,
   events?: {
     resolvedBridgeRepoPaths?: string[];
+    emitted?: AgentEvent[];
+    now?: () => string;
   },
   claudePolicy?: ClaudePolicyFields | null,
   sessionOptions: Partial<realClaudeSdk.Options> = {},
@@ -165,9 +173,9 @@ const buildOptions = (
       mcpCommand: [process.execPath],
     },
     serviceInput: createServiceInput(events),
-    now: () => "2026-06-25T20:00:00.000Z",
+    now: events?.now ?? (() => "2026-06-25T20:00:00.000Z"),
     randomId: () => "id",
-    emit: () => {},
+    emit: (_session, event) => events?.emitted?.push(event),
     sessionOptions,
   };
   if (claudePolicy !== undefined) request.claudePolicy = claudePolicy;
@@ -219,6 +227,131 @@ const preToolUseHook = async (
     { signal: new AbortController().signal },
   );
 };
+
+test.each(["root", "nested subagent"] as const)(
+  "%s tool leaves preparation at SDK input completion and times only execution",
+  async (owner) => {
+    const session = createSession();
+    let target: ClaudeEventSession = session;
+    if (owner === "nested subagent") {
+      session.subagentAgentIdsByToolUseId = new Map([["outer-tool", "outer-agent"]]);
+      const outer = claudeSubagentEventSession(session, "outer-tool");
+      if (!outer) throw new Error("Expected outer subagent.");
+      outer.subagentAgentIdsByToolUseId = new Map([["inner-tool", "inner-agent"]]);
+      const inner = claudeSubagentEventSession(outer, "inner-tool");
+      if (!inner) throw new Error("Expected nested subagent.");
+      target = inner;
+    }
+    const events: AgentEvent[] = [];
+    let timestamp = "2026-06-25T20:00:00.000Z";
+    const options = await buildOptions(session, { emitted: events, now: () => timestamp });
+    const send = (message: ReturnType<typeof claudeSdkMessageFixture>) =>
+      handleClaudeSdkMessage({
+        session: target,
+        message,
+        timestamp,
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+      });
+    const lastTool = () =>
+      events.findLast((event) => event.type === "assistant_part" && event.part.kind === "tool");
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "call-1", name: "Bash", input: {} },
+        },
+      }),
+    );
+    timestamp = "2026-06-25T20:00:10.000Z";
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json: '{"command":"sleep 1"}' },
+        },
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+      }),
+    );
+    expect(lastTool()).toMatchObject({ part: { status: "running", inputStreaming: false } });
+    const hookInput: Omit<realClaudeSdk.PreToolUseHookInput, "hook_event_name"> = {
+      session_id: session.externalSessionId,
+      transcript_path: "/tmp/session-1.jsonl",
+      cwd: process.cwd(),
+      tool_name: "Bash",
+      tool_use_id: "call-1",
+      tool_input: { command: "sleep 1", timeout: 1000 },
+    };
+    if (owner === "nested subagent") hookInput.agent_id = "inner-agent";
+    timestamp = "2026-06-25T20:00:20.000Z";
+    const post = options.hooks?.PostToolUse?.[0]?.hooks[0];
+    if (!post) throw new Error("Expected native completion hook.");
+    const signal = new AbortController().signal;
+    expect(lastTool()).toMatchObject({
+      externalSessionId: target.externalSessionId,
+      part: { callId: "call-1", status: "running", inputStreaming: false },
+    });
+    const running = lastTool();
+    if (running?.type !== "assistant_part") throw new Error("Expected running tool.");
+    expect(running.part).not.toHaveProperty("startedAtMs");
+    send(
+      claudeSdkMessageFixture({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "call-1", name: "Bash", input: hookInput.tool_input }],
+        },
+      }),
+    );
+    expect(lastTool()).toMatchObject({ part: { status: "running", input: hookInput.tool_input } });
+    timestamp = "2026-06-25T20:00:30.000Z";
+    await post(
+      { ...hookInput, hook_event_name: "PostToolUse", duration_ms: 1200, tool_response: "Done" },
+      "call-1",
+      { signal },
+    );
+    timestamp = "2026-06-25T20:00:32.000Z";
+    send(
+      claudeSdkMessageFixture({
+        type: "tool_progress",
+        tool_use_id: "call-1",
+        tool_name: "Bash",
+        elapsed_time_seconds: 1,
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "call-1", content: "Done" }],
+        },
+      }),
+    );
+    expect(lastTool()).toMatchObject({
+      externalSessionId: target.externalSessionId,
+      part: {
+        status: "completed",
+        startedAtMs: Date.parse("2026-06-25T20:00:28.800Z"),
+        endedAtMs: Date.parse("2026-06-25T20:00:30.000Z"),
+      },
+    });
+    session.abortController.abort();
+  },
+);
 
 test.each(["repository", "workflow"] as const)(
   "model-only attachment preserves native settings for %s sessions",
@@ -707,6 +840,7 @@ describe("buildClaudeAgentSdkOptions", () => {
     expect(options.forkSession).toBe(true);
     expect(options).not.toHaveProperty("sessionStore");
     expect(options).not.toHaveProperty("sessionStoreFlush");
+    expect(options.hooks).not.toHaveProperty("UserPromptSubmit");
     expect(options.hooks?.PostToolUse).toHaveLength(1);
     expect(options.hooks?.PostToolUseFailure).toHaveLength(1);
   });

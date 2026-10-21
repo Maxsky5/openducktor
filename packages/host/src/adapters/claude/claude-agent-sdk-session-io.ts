@@ -300,8 +300,6 @@ export const sendClaudeUserMessage = async (input: {
       ),
     );
   const previousActivity = session.activity;
-  const previousTurnSystemPrompt = session.turnSystemPrompt;
-  if (messageInput.systemPrompt !== undefined) session.turnSystemPrompt = messageInput.systemPrompt;
   const previousSdkState = session.sdkState;
   const previousPendingUserTurnCount = session.pendingUserTurnCount;
   if (isManualCompaction) {
@@ -331,7 +329,6 @@ export const sendClaudeUserMessage = async (input: {
       throw cause;
     }
     session.pendingUserTurnCount = previousPendingUserTurnCount;
-    session.turnSystemPrompt = previousTurnSystemPrompt;
     session.activity = previousActivity;
     if (previousSdkState === undefined) {
       delete session.sdkState;

@@ -1,17 +1,6 @@
-import type {
-  ModelUsage,
-  NonNullableUsage,
-  SDKMessage,
-  SessionMessage,
-  SessionStoreEntry,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { ModelUsage, NonNullableUsage, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { createHash, type UUID } from "node:crypto";
 import { z } from "zod";
-import {
-  filterClaudeHistoryMessages,
-  type ClaudeHistoryConversationMessage,
-  type ClaudeHistoryMessage,
-} from "./claude-agent-sdk-history-import";
 
 const defaultClaudeSdkMessageUuid = "00000000-0000-4000-8000-000000000001" satisfies UUID;
 const claudeSdkMessageUuidSchema = z.custom<UUID>((value) => z.uuid().safeParse(value).success);
@@ -465,33 +454,8 @@ export function claudeSdkMessageFixture(
   }
 }
 
-export const claudeHistoryMessagesFixture = (
-  messages: readonly ClaudeHistoryMessage[],
-): ClaudeHistoryMessage[] => [...messages];
-
-type ClaudeSessionMessageFixture = SessionStoreEntry & {
-  readonly type: SessionMessage["type"];
-  readonly uuid: string;
-  readonly session_id?: string;
-  readonly message: SessionMessage["message"];
-  readonly parent_tool_use_id?: string | null;
-  readonly parent_agent_id?: string | null;
-};
-
-/** Builds the complete public SessionMessage envelope and preserves extra mirrored metadata. */
-export const claudeSessionMessageFixture = <Fixture extends ClaudeSessionMessageFixture>(
-  message: Fixture,
-): SessionMessage & Fixture => ({
-  ...message,
-  session_id: message.session_id ?? "session-1",
-  parent_tool_use_id: message.parent_tool_use_id ?? null,
-  parent_agent_id: message.parent_agent_id ?? null,
-});
-
-export const claudeSessionMessageFixtures = (
-  messages: readonly ClaudeSessionMessageFixture[],
-): ClaudeHistoryConversationMessage[] => messages.map(claudeSessionMessageFixture);
-
-export const claudeHistoryMessageFixtures = (
-  messages: readonly SessionStoreEntry[],
-): ClaudeHistoryMessage[] => filterClaudeHistoryMessages(messages);
+export {
+  claudeHistoryMessagesFixture,
+  claudeSessionMessageFixture,
+  claudeSessionMessageFixtures,
+} from "./claude-agent-sdk-history-test-messages";

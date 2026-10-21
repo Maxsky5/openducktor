@@ -20,7 +20,7 @@ const WORKFLOW_TOOL_APPEARANCE = {
     foregroundClassName: "text-info-surface-foreground",
   },
   queued: {
-    label: "QUEUED",
+    label: "PREPARING",
     statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
     foregroundClassName: "text-pending-surface-foreground",
   },

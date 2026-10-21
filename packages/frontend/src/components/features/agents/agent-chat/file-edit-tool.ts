@@ -1,4 +1,5 @@
 import type { FileContent, FileDiff } from "@openducktor/contracts";
+import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput } from "./tool-input-utils";
 import { relativizeDisplayPath } from "./tool-path-utils";
@@ -29,6 +30,15 @@ type FileEditDataBase = {
 };
 
 export type FileEditData =
+  | (FileEditDataBase & {
+      kind: "write-input";
+      content: string;
+    })
+  | (FileEditDataBase & {
+      kind: "replacement";
+      oldContent: string;
+      newContent: string;
+    })
   | (FileEditDataBase & {
       kind: "diff";
       diff: string;
@@ -122,5 +132,36 @@ export const extractFileEditData = (
     return null;
   }
 
+  if (meta.tool.toLowerCase() === "write" && meta.status !== "error") {
+    const write = claudeWriteContentSchema.safeParse(meta.input);
+    if (write.success) {
+      return {
+        kind: "write-input",
+        filePath: relativizeDisplayPath(filePath, workingDirectory),
+        content: write.data.content,
+        additions: 0,
+        deletions: 0,
+      };
+    }
+  }
+
+  if (meta.tool.toLowerCase() === "edit" && meta.status !== "error") {
+    const replacement = claudeEditReplacementSchema.safeParse(meta.input);
+    if (replacement.success) {
+      return {
+        kind: "replacement",
+        filePath: relativizeDisplayPath(filePath, workingDirectory),
+        oldContent: replacement.data.old_string,
+        newContent: replacement.data.new_string,
+        changeType: "modified",
+        additions: 0,
+        deletions: 0,
+      };
+    }
+  }
+
   return buildPathOnlyFileEditData(filePath, workingDirectory);
 };
+
+const claudeEditReplacementSchema = z.object({ old_string: z.string(), new_string: z.string() });
+const claudeWriteContentSchema = z.object({ content: z.string() });

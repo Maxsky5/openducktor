@@ -12,7 +12,7 @@ import {
 import type {
   ClaudeHistoryConversationMessage,
   ClaudeHistoryMessage,
-} from "./claude-agent-sdk-history-import";
+} from "./claude-agent-sdk-history-messages";
 import {
   type ClaudeDecodedToolResult,
   decodeClaudeToolResultValue,

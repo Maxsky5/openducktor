@@ -1,5 +1,5 @@
 import type { SDKMessage, SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { z } from "zod";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
@@ -50,7 +50,7 @@ export const readClaudeQueuedPrompt = (entry: ClaudeHistoryMessage): string | nu
 };
 
 export const isClaudeMetaHistoryMessage = (entry: ClaudeHistoryMessage): boolean => {
-  return entry.isMeta === true || entry.interruptedByShutdown === true;
+  return entry.isMeta === true || entry.is_meta === true || entry.interruptedByShutdown === true;
 };
 
 const claudeMetaStreamFlagSchema = z.looseObject({ isSynthetic: z.boolean().optional() });

@@ -8,6 +8,71 @@ const timestamp = "2026-09-08T00:00:00.000Z";
 
 describe("Claude tool input completion order", () => {
   test.each(["envelope-first", "stop-first"] as const)(
+    "%s marks empty tool input ready exactly once",
+    (order) => {
+      const session = createEventTestSession();
+      const events: AgentEvent[] = [];
+      const send = (message: ReturnType<typeof claudeSdkMessageFixture>) =>
+        handleClaudeSdkMessage({
+          session,
+          message,
+          timestamp,
+          modelSelection: (model) => ({
+            providerId: "claude",
+            modelId: model,
+            runtimeKind: "claude",
+          }),
+          emit: (event) => events.push(event),
+        });
+      send(
+        claudeSdkMessageFixture({
+          type: "stream_event",
+          event: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "tool_use", id: "enter-1", name: "EnterPlanMode", input: {} },
+          },
+        }),
+      );
+      const envelope = claudeSdkMessageFixture({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "enter-1", name: "EnterPlanMode", input: {} }],
+        },
+      });
+      const stop = claudeSdkMessageFixture({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+      });
+      for (const message of order === "envelope-first" ? [envelope, stop] : [stop, envelope]) {
+        send(message);
+      }
+      send(stop);
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: "assistant_part",
+          part: expect.objectContaining({
+            callId: "enter-1",
+            status: "pending",
+            input: {},
+            inputStreaming: true,
+          }),
+        }),
+        expect.objectContaining({
+          type: "assistant_part",
+          part: expect.objectContaining({
+            callId: "enter-1",
+            status: "running",
+            input: {},
+            inputStreaming: false,
+          }),
+        }),
+      ]);
+    },
+  );
+
+  test.each(["envelope-first", "stop-first"] as const)(
     "%s parses large fragmented input once and emits one completed update",
     (order) => {
       const session = createEventTestSession();
@@ -85,10 +150,11 @@ describe("Claude tool input completion order", () => {
               callId: "write-1",
               partId: "write-1",
               messageId: "write-1",
-              status: "pending",
             },
           });
         }
+        expect(events[0]).toMatchObject({ part: { status: "pending" } });
+        expect(events[1]).toMatchObject({ part: { status: "running" } });
         expect(session.toolInputsByCallId.get("write-1")).toEqual(input);
       } finally {
         parse.mockRestore();
@@ -152,19 +218,24 @@ describe("Claude tool input completion order", () => {
         send(message);
       }
       expect(session.toolInputsByCallId.get("write-1")).toEqual(input);
-      const pendingTools = events.flatMap((event) =>
+      const toolParts = events.flatMap((event) =>
         event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
       );
-      expect(pendingTools.length).toBeGreaterThanOrEqual(2);
-      for (const part of pendingTools) {
+      expect(toolParts.length).toBeGreaterThanOrEqual(2);
+      for (const part of toolParts) {
         expect(part).toMatchObject({
           callId: "write-1",
           messageId: "write-1",
           partId: "write-1",
-          status: "pending",
         });
-        expect(part).not.toHaveProperty("input");
       }
+      expect(toolParts[0]).toMatchObject({ status: "pending", inputStreaming: true, input: {} });
+      expect(toolParts.at(-1)).toMatchObject({
+        status: "running",
+        inputStreaming: false,
+        input,
+        preview: "/repo/relative.txt",
+      });
     },
   );
 });

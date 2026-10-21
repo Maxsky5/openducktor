@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
-  claudeHistoryMessageFixtures,
+  claudeHistoryMessagesFixture,
   claudeSessionMessageFixture as toSessionMessage,
 } from "./claude-agent-sdk-test-messages";
 
@@ -247,7 +247,7 @@ describe("claude-agent-sdk-history", () => {
 
   test("does not render Claude's interrupted tool-use control record as a user message", () => {
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "user",
           uuid: "interrupted-tool-use-1",

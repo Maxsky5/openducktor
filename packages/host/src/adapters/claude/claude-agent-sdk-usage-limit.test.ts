@@ -9,7 +9,7 @@ import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 import {
-  claudeHistoryMessageFixtures,
+  claudeHistoryMessagesFixture,
   claudeSdkMessageFixture,
   claudeSdkMessageUuidFixture,
 } from "./claude-agent-sdk-test-messages";
@@ -205,7 +205,7 @@ describe("Claude usage-limit recovery", () => {
         errors: ["The turn failed. Try again."],
       });
       const history = toClaudeHistoryMessages(
-        claudeHistoryMessageFixtures([user, kept, ...snapshots, ...errors, result]),
+        claudeHistoryMessagesFixture([user, kept, ...snapshots, ...errors, result]),
         () => timestamp,
       );
 
@@ -287,7 +287,7 @@ describe("Claude usage-limit recovery", () => {
       expect(events).toContainEqual(expect.objectContaining({ type: "turn_error", message: text }));
 
       const history = toClaudeHistoryMessages(
-        claudeHistoryMessageFixtures([user, assistant, result]),
+        claudeHistoryMessagesFixture([user, assistant, result]),
         () => timestamp,
       );
       expect(decideClaudePersistedContinuation(history, "session-1")).toEqual({ kind: "allow" });

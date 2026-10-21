@@ -1026,6 +1026,54 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("file edit helpers", () => {
+    test.each(["export const value = 1;\n", ""])(
+      "retains the full Claude Write input for the file viewer: %j",
+      (content) => {
+        expect(
+          extractAllFileEditData(
+            createToolMeta({
+              tool: "Write",
+              toolType: "file_edit",
+              status: "completed",
+              input: { file_path: "/repo/src/app.ts", content },
+            }),
+            "/repo",
+          ),
+        ).toEqual([
+          {
+            kind: "write-input",
+            filePath: "src/app.ts",
+            content,
+            additions: 0,
+            deletions: 0,
+          },
+        ]);
+      },
+    );
+
+    test("retains Claude Edit replacement texts for Pierre without creating a patch", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "Edit",
+          toolType: "file_edit",
+          status: "completed",
+          input: { file_path: "/repo/src/app.ts", old_string: "old", new_string: "new" },
+        }),
+        "/repo",
+      );
+      expect(data).toEqual([
+        {
+          kind: "replacement",
+          filePath: "src/app.ts",
+          oldContent: "old",
+          newContent: "new",
+          additions: 0,
+          deletions: 0,
+          changeType: "modified",
+        },
+      ]);
+    });
+
     test("detects file edit tools case-insensitively", () => {
       expect(isFileEditTool("edit")).toBe(true);
       expect(isFileEditTool("Apply_Patch")).toBe(true);

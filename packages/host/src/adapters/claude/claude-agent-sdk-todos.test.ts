@@ -4,7 +4,7 @@ import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import {
-  claudeHistoryMessageFixtures,
+  claudeHistoryMessagesFixture,
   claudeSdkMessageFixture,
 } from "./claude-agent-sdk-test-messages";
 import { applyClaudeTaskToolResult, toClaudeTodos } from "./claude-agent-sdk-todos";
@@ -187,9 +187,9 @@ describe("Claude task tools", () => {
         ];
       }),
     ).toEqual([
-      { displayLabel: "todo", status: "pending", tool: "TaskCreate" },
+      { displayLabel: "todo", status: "running", tool: "TaskCreate" },
       { displayLabel: "todo", status: "completed", tool: "TaskCreate" },
-      { displayLabel: "todo", status: "pending", tool: "TaskUpdate" },
+      { displayLabel: "todo", status: "running", tool: "TaskUpdate" },
       { displayLabel: "todo", status: "completed", tool: "TaskUpdate" },
     ]);
 
@@ -340,7 +340,7 @@ describe("Claude task tools", () => {
     });
     expect(
       toClaudeTodos(
-        claudeHistoryMessageFixtures([toolUse, toolResult, updateUse, updateResult, replacement]),
+        claudeHistoryMessagesFixture([toolUse, toolResult, updateUse, updateResult, replacement]),
       ),
     ).toEqual([
       {
@@ -395,7 +395,7 @@ describe("Claude task tools", () => {
       },
     });
 
-    const historyMessages = claudeHistoryMessageFixtures([
+    const historyMessages = claudeHistoryMessagesFixture([
       toolUse,
       toolResult,
       updateUse,
@@ -464,7 +464,7 @@ describe("Claude task tools", () => {
       },
     });
 
-    expect(toClaudeTodos(claudeHistoryMessageFixtures([listUse, listResult]))).toEqual([
+    expect(toClaudeTodos(claudeHistoryMessagesFixture([listUse, listResult]))).toEqual([
       { id: "2", content: "Run tests", status: "in_progress", priority: "medium" },
       { id: "3", content: "Commit", status: "pending", priority: "medium" },
     ]);

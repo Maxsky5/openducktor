@@ -10,7 +10,7 @@ import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 import {
-  claudeHistoryMessageFixtures,
+  claudeHistoryMessagesFixture,
   claudeSdkMessageFixture,
 } from "./claude-agent-sdk-test-messages";
 
@@ -180,7 +180,7 @@ describe("Claude manual compaction", () => {
 
   test("hydrates a manual compact boundary as the same shared notice", () => {
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "system",
           subtype: "local_command",
@@ -229,7 +229,7 @@ describe("Claude manual compaction", () => {
 
   test("hydrates a live manual compact boundary with the accepted message id", () => {
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "system",
           subtype: "local_command",
@@ -276,7 +276,7 @@ describe("Claude manual compaction", () => {
 
   test("hides Claude's compact summary and hook output after hydration", () => {
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "queue-operation",
           operation: "enqueue",
@@ -372,7 +372,7 @@ describe("Claude manual compaction", () => {
 
   test("hydrates a manual compact no-op without a user or assistant duplicate", () => {
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "system",
           subtype: "local_command",
@@ -413,7 +413,7 @@ describe("Claude manual compaction", () => {
 
   test("keeps failed manual compaction visible after hydration", () => {
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "system",
           subtype: "local_command",
@@ -474,7 +474,7 @@ describe("Claude manual compaction", () => {
       message: boundary,
     });
     const history = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([boundary]),
+      claudeHistoryMessagesFixture([boundary]),
       () => "2026-07-23T11:00:00.000Z",
     );
 

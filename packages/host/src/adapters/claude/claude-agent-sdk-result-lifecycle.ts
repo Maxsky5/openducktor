@@ -1,6 +1,6 @@
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import type { ClaudeHistoryResultMessage } from "./claude-agent-sdk-history-import";
+import type { ClaudeHistoryResultMessage } from "./claude-agent-sdk-history-messages";
 
 export type ClaudeResultLike = SDKResultMessage | ClaudeHistoryResultMessage;
 

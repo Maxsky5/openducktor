@@ -67,7 +67,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         type: "assistant_part",
         part: expect.objectContaining({
           callId: "tool-1",
-          status: "pending",
+          status: "running",
           tool: "mcp__openducktor__odt_set_plan",
           toolType: "workflow",
         }),
@@ -228,7 +228,7 @@ describe("handleClaudeSdkMessage tool events", () => {
     expect(events[0]).toEqual(
       expect.objectContaining({
         type: "assistant_part",
-        part: expect.objectContaining({ callId: "tool-meta-1", status: "pending" }),
+        part: expect.objectContaining({ callId: "tool-meta-1", status: "running" }),
       }),
     );
   });
@@ -382,7 +382,7 @@ describe("handleClaudeSdkMessage tool events", () => {
             blockType: "mcp_tool_use",
             serverName: "openducktor",
           },
-          status: "pending",
+          status: "running",
           tool: "mcp__openducktor__odt_read_task",
           toolType: "workflow",
         }),
@@ -474,7 +474,7 @@ describe("handleClaudeSdkMessage tool events", () => {
         part: expect.objectContaining({
           callId: "tool-1",
           messageId: "8396b93d-f45e-40a5-895d-43b82c68f129",
-          status: "pending",
+          status: "running",
           tool: "code_execution",
           toolType: "generic",
         }),
@@ -648,6 +648,55 @@ describe("handleClaudeSdkMessage tool events", () => {
     if (completedPart?.type === "assistant_part") {
       expect(completedPart.part).not.toHaveProperty("startedAtMs");
     }
+  });
+
+  test("keeps an executing tool running when its streamed input finishes", () => {
+    const session = createSession();
+    const events: AgentEvent[] = [];
+    const send = (message: ReturnType<typeof claudeSdkMessageFixture>) =>
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp: "2026-06-25T20:00:10.000Z",
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+      });
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "tool-1", name: "Read", input: {} },
+        },
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "tool_progress",
+        tool_use_id: "tool-1",
+        tool_name: "Read",
+        elapsed_time_seconds: 1,
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+      }),
+    );
+    expect(events.at(-1)).toMatchObject({
+      type: "assistant_part",
+      part: {
+        callId: "tool-1",
+        status: "running",
+        startedAtMs: Date.parse("2026-06-25T20:00:09.000Z"),
+      },
+    });
   });
 
   test("emits tool progress with runtime duration metadata", () => {

@@ -11,7 +11,7 @@ type ToolStreamEntry = {
   blockIndex: number;
   partialInputJson: string;
   toolUse: ClaudeDecodedToolUse;
-  lastEmittedInputFingerprint?: string;
+  completedInputFingerprint?: string;
   envelopeInput?: ClaudeToolInput;
 };
 
@@ -34,9 +34,6 @@ export const rememberClaudeStreamToolStart = (
     partialInputJson: "",
     toolUse,
   };
-  if (toolUse.input) {
-    entry.lastEmittedInputFingerprint = toolInputFingerprint(toolUse.input);
-  }
   const state = toolStreamStateFor(session);
   const previous = state.toolsByBlockIndex.get(blockIndex);
   if (previous) {
@@ -93,12 +90,7 @@ export const completeClaudeStreamToolInput = (
     return null;
   }
 
-  const nextFingerprint = toolInputFingerprint(input);
-  if (entry.lastEmittedInputFingerprint === nextFingerprint) {
-    return null;
-  }
-
-  entry.lastEmittedInputFingerprint = nextFingerprint;
+  entry.completedInputFingerprint = toolInputFingerprint(input);
   entry.toolUse = {
     ...entry.toolUse,
     input,
@@ -122,7 +114,7 @@ export const consumeClaudeStreamEmittedToolInput = (
     return true;
   }
   state.toolsByCallId.delete(callId);
-  return entry.lastEmittedInputFingerprint === toolInputFingerprint(input);
+  return entry.completedInputFingerprint === toolInputFingerprint(input);
 };
 
 export const discardClaudeStreamToolInputBlocks = (session: ClaudeToolInputStreamSession): void => {

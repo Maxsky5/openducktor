@@ -39,7 +39,7 @@ export const handleClaudeToolProgressMessage = ({
   });
 };
 
-const emitClaudeRunningToolPart = ({
+export const emitClaudeRunningToolPart = ({
   emit,
   fallbackMessageId,
   session,
@@ -50,14 +50,20 @@ const emitClaudeRunningToolPart = ({
   emit: (event: ClaudeAgentSdkEvent) => void;
   fallbackMessageId: string;
   session: ClaudeEventSession;
-  startedAtMs: number;
+  startedAtMs?: number;
   timestamp: string;
   toolUse: ClaudeDecodedToolUse;
 }): void => {
+  if (session.toolEndedAtMsByCallId?.has(toolUse.callId)) return;
+  const executionStartedAtMs = startedAtMs ?? session.toolStartedAtMsByCallId.get(toolUse.callId);
+  if (!session.toolMessageIdsByCallId.has(toolUse.callId)) {
+    session.backgroundToolCallIdsSinceSnapshot?.add(toolUse.callId);
+  }
   const messageId = session.toolMessageIdsByCallId.get(toolUse.callId) ?? fallbackMessageId;
   session.toolMessageIdsByCallId.set(toolUse.callId, messageId);
   session.toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
-  session.toolStartedAtMsByCallId.set(toolUse.callId, startedAtMs);
+  if (executionStartedAtMs !== undefined)
+    session.toolStartedAtMsByCallId.set(toolUse.callId, executionStartedAtMs);
   if (toolUse.input) {
     session.toolInputsByCallId.set(toolUse.callId, toolUse.input);
   }
@@ -76,7 +82,7 @@ const emitClaudeRunningToolPart = ({
     timestamp,
     part: createClaudeRunningToolPart({
       messageId,
-      startedAtMs,
+      startedAtMs: executionStartedAtMs,
       toolUse: effectiveToolUse,
     }),
   });

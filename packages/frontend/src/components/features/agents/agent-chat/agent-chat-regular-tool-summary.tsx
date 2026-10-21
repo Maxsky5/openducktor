@@ -20,10 +20,33 @@ type RegularToolSummaryProps = {
   hasExpandableDetails: boolean;
 };
 
-const QueuedToolLabel = ({ meta }: { meta: ToolMeta }): ReactElement | null =>
-  getToolLifecyclePhase(meta) === "queued" && meta.inputStreaming === false ? (
-    <span className="shrink-0 text-pending-muted">Queued</span>
-  ) : null;
+const DEFAULT_TOOL_APPEARANCE = {
+  text: "text-foreground",
+  icon: "text-muted-foreground",
+  emptySummary: "",
+};
+
+const PREPARING_TOOL_APPEARANCE = {
+  ...DEFAULT_TOOL_APPEARANCE,
+  text: "text-muted-foreground",
+};
+
+const TOOL_APPEARANCE = {
+  preparing: PREPARING_TOOL_APPEARANCE,
+  executing: DEFAULT_TOOL_APPEARANCE,
+  completed: DEFAULT_TOOL_APPEARANCE,
+  failed: {
+    text: "text-destructive-muted",
+    icon: "text-destructive-accent",
+    emptySummary: "Tool failed",
+  },
+  cancelled: {
+    text: "text-cancelled-muted",
+    icon: "text-cancelled-accent",
+    emptySummary: "Tool cancelled",
+  },
+  queued: PREPARING_TOOL_APPEARANCE,
+} satisfies Record<ReturnType<typeof getToolLifecyclePhase>, typeof DEFAULT_TOOL_APPEARANCE>;
 
 export const RegularToolSummary = ({
   meta,
@@ -35,44 +58,28 @@ export const RegularToolSummary = ({
   hasExpandableDetails,
 }: RegularToolSummaryProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const isActive = isToolMessageActive(meta);
+  const isPreparing = meta.status === "pending" && meta.inputStreaming !== undefined;
+  const isActive =
+    isToolMessageActive(meta) && (meta.status !== "pending" || meta.inputStreaming !== false);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
-  const summaryText =
-    summary.length > 0
-      ? summary
-      : lifecyclePhase === "failed"
-        ? "Tool failed"
-        : lifecyclePhase === "cancelled"
-          ? "Tool cancelled"
-          : "";
+  const appearance = TOOL_APPEARANCE[lifecyclePhase];
+  const summaryText = summary || appearance.emptySummary;
   const durationMs = getToolDuration(meta, messageTimestamp);
   return (
     <div
       className={cn(
         "flex min-h-6 items-center gap-2 text-xs",
+        isPreparing && "opacity-50",
         hasExpandableDetails ? "cursor-pointer" : "",
-        lifecyclePhase === "failed"
-          ? "text-destructive-muted"
-          : lifecyclePhase === "cancelled"
-            ? "text-cancelled-muted"
-            : "text-foreground",
+        appearance.text,
       )}
     >
-      <span
-        className={cn(
-          lifecyclePhase === "failed"
-            ? "text-destructive-accent"
-            : lifecyclePhase === "cancelled"
-              ? "text-cancelled-accent"
-              : "text-muted-foreground",
-        )}
-      >
-        {toolIcon(meta)}
-      </span>
-      <p className="shrink-0 font-medium text-current">{displayName}</p>
-      <QueuedToolLabel meta={meta} />
+      <span className={appearance.icon}>{toolIcon(meta)}</span>
+      <p className="shrink-0 font-medium text-current">
+        {isPreparing ? `Preparing ${displayName}` : displayName}
+      </p>
       {summaryText.length > 0 ? (
-        <p className="truncate text-muted-foreground">{summaryText}</p>
+        <p className="min-w-0 flex-1 truncate text-muted-foreground">{summaryText}</p>
       ) : null}
       <ToolMessageTiming
         showSpinner={isActive}

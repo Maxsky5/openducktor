@@ -103,6 +103,8 @@ export const handleClaudeUserToolResultMessage = ({
     const startedAtMs = session.toolStartedAtMsByCallId.get(result.toolUseId);
     const endedAtMs =
       session.toolEndedAtMsByCallId?.get(result.toolUseId) ?? timestampMs(timestamp);
+    session.toolEndedAtMsByCallId ??= new Map();
+    session.toolEndedAtMsByCallId.set(result.toolUseId, endedAtMs);
     rememberClaudeTodoToolResult({
       callId: result.toolUseId,
       input,

@@ -1,5 +1,5 @@
 import type { AgentModelSelection } from "@openducktor/core";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { readStringProp } from "./claude-agent-sdk-utils";

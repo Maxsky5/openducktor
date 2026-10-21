@@ -149,7 +149,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         part: expect.objectContaining({
           kind: "tool",
           callId: "tool-1",
-          status: "pending",
+          status: "running",
         }),
       }),
       expect.objectContaining({
@@ -1156,7 +1156,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           partId: "tool-1",
           callId: "tool-1",
           tool: "Bash",
-          status: "pending",
+          status: "running",
         }),
       }),
     ]);

@@ -573,7 +573,7 @@ describe("handleClaudeSdkMessage subagent events", () => {
         part: expect.objectContaining({
           kind: "tool",
           callId: "inner-tool-1",
-          status: "pending",
+          status: "running",
         }),
       }),
       expect.objectContaining({
