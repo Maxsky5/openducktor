@@ -127,18 +127,18 @@ describe("Claude streamed tool input", () => {
     },
   );
 
-  test("does not parse empty deltas or repeat unchanged initial input", () => {
+  test("does not parse empty deltas and parses an explicit empty object once", () => {
     const session = { externalSessionId: "session-1" };
     start(session, 0, "empty");
     appendClaudeStreamToolInputJson(session, 0, "");
     const parse = spyOn(JSON, "parse");
     try {
-      expect(completeClaudeStreamToolInput(session, 0)).toBeNull();
+      expect(completeClaudeStreamToolInput(session, 0)?.input).toEqual({});
       expect(parse).not.toHaveBeenCalled();
       expect(consumeClaudeStreamEmittedToolInput(session, "empty", {})).toBe(true);
       start(session, 0, "object");
       appendClaudeStreamToolInputJson(session, 0, "{}");
-      expect(completeClaudeStreamToolInput(session, 0)).toBeNull();
+      expect(completeClaudeStreamToolInput(session, 0)?.input).toEqual({});
       expect(parse).toHaveBeenCalledTimes(1);
     } finally {
       parse.mockRestore();

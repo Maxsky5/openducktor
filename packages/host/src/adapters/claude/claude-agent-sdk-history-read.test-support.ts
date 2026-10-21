@@ -44,9 +44,40 @@ const assistant = (
   parent_tool_use_id: parentToolUseId,
   message: { id: uuid, role: "assistant", content, stop_reason: stopReason },
 });
-const root = [user];
+const root = [
+  user,
+  assistant(
+    "task-call",
+    user.uuid,
+    [
+      {
+        type: "tool_use",
+        id: "create-task",
+        name: "TaskCreate",
+        input: { subject: "Inspect stored task" },
+      },
+    ],
+    "tool_use",
+  ),
+  {
+    ...user,
+    uuid: "task-result",
+    parentUuid: "task-call",
+    toolUseResult: { task: { id: "1", subject: "Inspect stored task" } },
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "create-task",
+          content: "Task #1 created successfully: Inspect stored task",
+        },
+      ],
+    },
+  },
+];
 const entries: unknown[] = [...root];
-let parent = user.uuid;
+let parent = "task-result";
 for (let index = 0; index < 701; index++) {
   const uuid = `assistant-${index}`;
   entries.push(
@@ -77,9 +108,17 @@ entries.push(
 const child = [
   { ...user, uuid: "child-user", isSidechain: true, parent_tool_use_id: "child-tool" },
   {
+    ...user,
+    uuid: "child-instructions",
+    parentUuid: "child-user",
+    isSidechain: true,
+    isMeta: true,
+    message: { role: "user", content: "Internal child instructions" },
+  },
+  {
     ...assistant(
       "child-call",
-      "child-user",
+      "child-instructions",
       [
         {
           type: "tool_use",
@@ -137,6 +176,10 @@ const writeTranscript = (path: string, rows: unknown[]) =>
   fsPromises.writeFile(path, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 await writeTranscript(join(project, `${sessionId}.jsonl`), entries);
 await writeTranscript(join(project, sessionId, "subagents", "agent-child.jsonl"), child);
+await fsPromises.writeFile(
+  join(project, sessionId, "subagents", "agent-child.meta.json"),
+  JSON.stringify({ toolUseId: "child-tool", agentType: "Explore" }),
+);
 await writeTranscript(
   join(project, sessionId, "subagents", "team", "agent-grandchild.jsonl"),
   grandchild,
@@ -144,6 +187,14 @@ await writeTranscript(
 
 let reads = new Map<string, number>();
 let diskBytes = 0;
+let serializedBytes = 0;
+const originalStringify = JSON.stringify;
+// SAFETY: The wrapper forwards all arguments and preserves both JSON.stringify overloads.
+JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+  const result = originalStringify(...args);
+  if (result !== undefined) serializedBytes += Buffer.byteLength(result);
+  return result;
+}) as typeof JSON.stringify;
 const record = (path: string): void => {
   if (path.endsWith(".jsonl")) reads.set(path, (reads.get(path) ?? 0) + 1);
 };
@@ -193,6 +244,7 @@ const measure = async (
 ) => {
   reads = new Map();
   diskBytes = 0;
+  serializedBytes = 0;
   const started = performance.now();
   const result = await run();
   return {
@@ -204,6 +256,7 @@ const measure = async (
       ]),
     ),
     diskBytes,
+    serializedBytes,
     responseBytes: Buffer.byteLength(JSON.stringify(result)),
     elapsedMs: performance.now() - started,
     result,
@@ -219,4 +272,19 @@ const childResult = await measure("child transcript", () =>
   ),
 );
 const todoResult = await measure("root todos", () => loadClaudeTodos(input));
-await Bun.write(Bun.stdout, `${JSON.stringify([rootResult, childResult, todoResult])}\n`);
+const nestedResult = await measure("nested child transcript", () =>
+  loadClaudeHistory(
+    {
+      ...input,
+      externalSessionId: claudeSubagentExternalSessionId(
+        claudeSubagentExternalSessionId(sessionId, "child"),
+        "grandchild",
+      ),
+    },
+    () => timestamp,
+  ),
+);
+await Bun.write(
+  Bun.stdout,
+  `${JSON.stringify([rootResult, childResult, todoResult, nestedResult])}\n`,
+);

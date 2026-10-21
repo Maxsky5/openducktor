@@ -3,8 +3,8 @@ import { z } from "zod";
 import { isNestedHistoryEntry } from "./claude-agent-sdk-history-entry";
 import {
   type ClaudeHistoryMessage,
-  loadClaudeRawHistoryMessages,
-} from "./claude-agent-sdk-history-import";
+  loadClaudeSessionMessages,
+} from "./claude-agent-sdk-history-messages";
 import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import {
   readHistoryToolResults,
@@ -324,7 +324,7 @@ export const toClaudeTodos = (
 export const loadClaudeTodos = async (
   input: LoadAgentSessionTodosInput,
 ): Promise<AgentSessionTodoItem[]> => {
-  const messages = await loadClaudeRawHistoryMessages(input);
+  const messages = await loadClaudeSessionMessages(input);
   return toClaudeTodos(messages, {
     includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
   });

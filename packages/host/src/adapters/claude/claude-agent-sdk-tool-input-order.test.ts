@@ -8,6 +8,61 @@ const timestamp = "2026-09-08T00:00:00.000Z";
 
 describe("Claude tool input completion order", () => {
   test.each(["envelope-first", "stop-first"] as const)(
+    "%s marks empty tool input ready exactly once",
+    (order) => {
+      const session = createEventTestSession();
+      const events: AgentEvent[] = [];
+      const send = (message: ReturnType<typeof claudeSdkMessageFixture>) =>
+        handleClaudeSdkMessage({
+          session,
+          message,
+          timestamp,
+          modelSelection: (model) => ({
+            providerId: "claude",
+            modelId: model,
+            runtimeKind: "claude",
+          }),
+          emit: (event) => events.push(event),
+        });
+      send(
+        claudeSdkMessageFixture({
+          type: "stream_event",
+          event: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "tool_use", id: "enter-1", name: "EnterPlanMode", input: {} },
+          },
+        }),
+      );
+      const envelope = claudeSdkMessageFixture({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "enter-1", name: "EnterPlanMode", input: {} }],
+        },
+      });
+      const stop = claudeSdkMessageFixture({
+        type: "stream_event",
+        event: { type: "content_block_stop", index: 0 },
+      });
+      for (const message of order === "envelope-first" ? [envelope, stop] : [stop, envelope]) {
+        send(message);
+      }
+      send(stop);
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: "assistant_part",
+          part: expect.objectContaining({ callId: "enter-1", input: {}, inputStreaming: true }),
+        }),
+        expect.objectContaining({
+          type: "assistant_part",
+          part: expect.objectContaining({ callId: "enter-1", input: {}, inputStreaming: false }),
+        }),
+      ]);
+    },
+  );
+
+  test.each(["envelope-first", "stop-first"] as const)(
     "%s parses large fragmented input once and emits one completed update",
     (order) => {
       const session = createEventTestSession();
@@ -163,8 +218,13 @@ describe("Claude tool input completion order", () => {
           partId: "write-1",
           status: "pending",
         });
-        expect(part).not.toHaveProperty("input");
       }
+      expect(pendingTools[0]).toMatchObject({ inputStreaming: true, input: {} });
+      expect(pendingTools.at(-1)).toMatchObject({
+        inputStreaming: false,
+        input,
+        preview: "/repo/relative.txt",
+      });
     },
   );
 });

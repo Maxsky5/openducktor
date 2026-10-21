@@ -84,7 +84,9 @@ export const RegularToolMessage = ({
             if (event.target === event.currentTarget) setDetailsOpen(event.currentTarget.open);
           }}
         >
-          <summary className="list-none [&::-webkit-details-marker]:hidden">{summaryRow}</summary>
+          <summary className="list-none rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            {summaryRow}
+          </summary>
           <div className="ml-5 mt-1 space-y-2">
             {hasInput && meta.input ? (
               <ToolInputDetails

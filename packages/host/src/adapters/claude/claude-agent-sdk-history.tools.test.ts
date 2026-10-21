@@ -3,6 +3,43 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history tool projection", () => {
+  test("keeps a pending tool's known arguments without inventing execution or a result", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-pending",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "pending-bash",
+                name: "Bash",
+                input: { command: "git status", description: "Inspect changes" },
+              },
+            ],
+          },
+        }),
+      ],
+      () => "2026-10-20T00:00:00.000Z",
+    );
+    const tool = history[0]?.parts[0];
+    expect(tool).toMatchObject({
+      kind: "tool",
+      callId: "pending-bash",
+      status: "pending",
+      inputStreaming: false,
+      input: { command: "git status", description: "Inspect changes" },
+      preview: "git status",
+    });
+    expect(tool).not.toHaveProperty("startedAtMs");
+    expect(tool).not.toHaveProperty("endedAtMs");
+    expect(tool).not.toHaveProperty("output");
+  });
+
   test("hydrates MCP tool blocks with input and result timestamps", () => {
     const history = toClaudeHistoryMessages(
       [

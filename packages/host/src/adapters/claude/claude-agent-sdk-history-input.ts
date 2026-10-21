@@ -1,6 +1,6 @@
 import type { SessionStoreEntry } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { parseClaudeHistoryConversationEntry } from "./claude-agent-sdk-ingress-schemas";
 import {
   type ClaudeLiveUserMessage,
@@ -45,6 +45,7 @@ const notHandled: ClaudeHistoryInputProjection = { handled: false };
 const handledWithoutMessage: ClaudeHistoryInputProjection = { handled: true };
 
 export const createClaudeHistoryInputProjector = (options: {
+  includeNestedEntries?: boolean;
   liveUserMessages: readonly ClaudeLiveUserMessage[];
 }) => {
   const resolveLiveUserMessage = createLiveUserMessageResolver(options.liveUserMessages);
@@ -143,7 +144,7 @@ export const createClaudeHistoryInputProjector = (options: {
       return notHandled;
     }
     if (
-      entry.parent_tool_use_id ||
+      (entry.parent_tool_use_id && !options.includeNestedEntries) ||
       isClaudeMetaHistoryMessage(entry) ||
       !isClaudeHumanUserMessage(entryValue)
     ) {

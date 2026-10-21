@@ -1,4 +1,4 @@
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-import";
+import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { parseClaudeHistoryConversationEntry } from "./claude-agent-sdk-ingress-schemas";
 import { z } from "zod";
 

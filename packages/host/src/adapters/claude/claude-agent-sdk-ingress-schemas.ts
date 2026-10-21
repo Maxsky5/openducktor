@@ -119,11 +119,6 @@ const claudeHistoryAssistantEntrySchema = z.object({
   message: claudeAssistantMessagePayloadSchema,
 });
 
-const claudeMetaQueuedCommandAttachmentSchema = z.object({
-  prompt: z.string().min(1),
-  timestamp: z.string().optional(),
-});
-
 const claudeTaskUsageSchema = z.object({
   total_tokens: z.number(),
   tool_uses: z.number(),
@@ -203,12 +198,6 @@ const claudeHistorySubagentSystemMessageSchema = z.discriminatedUnion("subtype",
   claudeTaskNotificationMessageSchema,
 ]);
 
-const claudeHistoryStoreEntrySchema = z.object({
-  timestamp: z.string().optional(),
-  type: z.string().min(1),
-  uuid: z.string().optional(),
-});
-
 const claudePreToolUseIngressSchema = claudeToolHookSchema.extend({
   hook_event_name: z.literal("PreToolUse"),
 });
@@ -278,9 +267,6 @@ export type ClaudeUserToolResultIngress = {
   uuid?: string;
 };
 
-export const parseClaudeHistoryStoreEntry = (value: SessionStoreEntry) =>
-  parseClaudeIngress(claudeHistoryStoreEntrySchema.safeParse(value), "claudeSessionHistoryEntry");
-
 export const parseClaudeHistorySubagentSystemMessageIngress = (
   value: SessionStoreEntry,
 ): ClaudeHistorySubagentSystemMessageIngress =>
@@ -300,14 +286,6 @@ export const parseClaudeHistoryAssistantEntry = (
   parseClaudeIngress(
     claudeHistoryAssistantEntrySchema.safeParse(value),
     "claudeHistoryAssistantMessage",
-  );
-
-export const parseClaudeMetaQueuedCommandAttachment = (
-  value: SessionStoreEntry[string],
-): z.output<typeof claudeMetaQueuedCommandAttachmentSchema> =>
-  parseClaudeIngress(
-    claudeMetaQueuedCommandAttachmentSchema.safeParse(value),
-    "claudeMetaQueuedCommandAttachment",
   );
 
 export const parseClaudePreToolUseIngress = (value: HookInput) =>

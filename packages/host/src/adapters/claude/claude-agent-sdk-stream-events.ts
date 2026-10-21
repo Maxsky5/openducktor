@@ -20,12 +20,14 @@ import type { ClaudeSdkStreamEventMessageProjection } from "./claude-agent-sdk-m
 
 export const emitClaudePendingToolPart = ({
   emit,
+  inputStreaming = false,
   fallbackMessageId,
   session,
   timestamp,
   toolUse,
 }: {
   emit: (event: ClaudeAgentSdkEvent) => void;
+  inputStreaming?: boolean;
   fallbackMessageId: string;
   session: ClaudeEventSession;
   timestamp: string;
@@ -44,7 +46,7 @@ export const emitClaudePendingToolPart = ({
     type: "assistant_part",
     externalSessionId: session.externalSessionId,
     timestamp,
-    part: createClaudePendingToolPart({ messageId, toolUse }),
+    part: createClaudePendingToolPart({ inputStreaming, messageId, toolUse }),
   });
 };
 
@@ -119,6 +121,7 @@ export const handleClaudeStreamEvent = ({
     rememberClaudeStreamToolStart(session, index, toolUse);
     emitClaudePendingToolPart({
       emit,
+      inputStreaming: true,
       fallbackMessageId: toolUse.callId,
       session,
       timestamp,

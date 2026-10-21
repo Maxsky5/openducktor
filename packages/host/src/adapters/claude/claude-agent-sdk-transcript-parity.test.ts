@@ -10,7 +10,7 @@ import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
 import {
-  claudeHistoryMessageFixtures,
+  claudeHistoryMessagesFixture,
   claudeSdkMessageFixture,
   claudeSdkMessageUuidFixture,
   claudeSessionMessageFixture,
@@ -184,7 +184,7 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(liveEvents.some((event) => event.type === "assistant_message")).toBe(false);
 
     const hydratedMessages = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([reasoningMessage, draftMessage, toolMessage]),
+      claudeHistoryMessagesFixture([reasoningMessage, draftMessage, toolMessage]),
       () => resultTimestamp,
     ).filter((message) => message.role === "assistant");
     expect(hydratedMessages).toHaveLength(1);
@@ -683,7 +683,7 @@ describe("Claude live and hydrated transcript parity", () => {
     });
 
     const hydratedAssistantMessages = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([firstSnapshot, finalSnapshot]),
+      claudeHistoryMessagesFixture([firstSnapshot, finalSnapshot]),
       () => resultTimestamp,
     ).filter((message) => message.role === "assistant");
     expect(hydratedAssistantMessages).toHaveLength(1);
@@ -862,7 +862,7 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(retainedLiveAssistantMessageIds(liveEvents)).toEqual([responseId]);
 
     const hydratedAssistantMessages = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([reasoningMessage, finalMessage]),
+      claudeHistoryMessagesFixture([reasoningMessage, finalMessage]),
       () => resultTimestamp,
     ).filter((message) => message.role === "assistant");
     expect(hydratedAssistantMessages).toHaveLength(1);
@@ -1384,7 +1384,7 @@ describe("Claude live and hydrated transcript parity", () => {
 
     expect(liveEvents.slice(eventCountBeforeLateNotification)).toEqual([]);
     const hydrated = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         toolUseMessage,
         taskStarted,
         replacementMessage,
@@ -1480,7 +1480,7 @@ describe("Claude live and hydrated transcript parity", () => {
 
     expect(liveEvents.slice(eventCountBeforeLateResult)).toEqual([]);
     const hydrated = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([toolUseMessage, replacementMessage, lateToolResult]),
+      claudeHistoryMessagesFixture([toolUseMessage, replacementMessage, lateToolResult]),
       () => resultTimestamp,
     );
     expect(hydrated.map((message) => message.messageId)).toEqual([
@@ -1545,7 +1545,7 @@ describe("Claude live and hydrated transcript parity", () => {
         event.type === "assistant_message" && event.message === "Final answer",
     );
     const hydratedFinal = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([assistantMessage, resultMessage]),
+      claudeHistoryMessagesFixture([assistantMessage, resultMessage]),
       () => resultTimestamp,
     ).find((message) => message.role === "assistant");
 

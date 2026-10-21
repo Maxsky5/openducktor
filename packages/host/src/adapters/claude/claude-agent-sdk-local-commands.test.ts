@@ -5,7 +5,7 @@ import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import {
-  claudeHistoryMessageFixtures,
+  claudeHistoryMessagesFixture,
   claudeSdkMessageFixture,
 } from "./claude-agent-sdk-test-messages";
 
@@ -18,7 +18,7 @@ describe("Claude local slash commands", () => {
     const outputTimestamp = "2026-06-25T20:00:00.250Z";
     const nextTurnTimestamp = "2026-06-26T15:39:43.000Z";
     const hydrated = toClaudeHistoryMessages(
-      claudeHistoryMessageFixtures([
+      claudeHistoryMessagesFixture([
         {
           type: "user",
           uuid: "older-context-command",
@@ -33,12 +33,6 @@ describe("Claude local slash commands", () => {
           timestamp,
           sessionId: "session-1",
           content: "/context",
-        },
-        {
-          type: "queue-operation",
-          operation: "dequeue",
-          timestamp,
-          sessionId: "session-1",
         },
         {
           type: "assistant",

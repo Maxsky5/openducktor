@@ -8,8 +8,8 @@ import {
 } from "./claude-agent-sdk-event-session";
 import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
-import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
 import {
+  claudeHistoryMessagesFixture,
   claudeSdkMessageFixture,
   claudeSdkMessageUuidFixture,
   claudeSessionMessageFixture,
@@ -987,7 +987,7 @@ describe("Claude background ordinary tool parts", () => {
       output: "Check files\nAll checks passed",
     });
 
-    const lostTerminal = filterClaudeHistoryMessages([
+    const lostTerminal = claudeHistoryMessagesFixture([
       ...entries,
       {
         type: "system",
@@ -1009,7 +1009,7 @@ describe("Claude background ordinary tool parts", () => {
   });
 
   test("history correlates a task notification without a start edge or result task ID", () => {
-    const entries = filterClaudeHistoryMessages([
+    const entries = claudeHistoryMessagesFixture([
       claudeSessionMessageFixture({
         type: "assistant",
         uuid: "history-mcp-call",
@@ -1069,7 +1069,7 @@ describe("Claude background ordinary tool parts", () => {
   });
 
   test("history keeps file links from a saved MCP task notification", () => {
-    const entries = filterClaudeHistoryMessages([
+    const entries = claudeHistoryMessagesFixture([
       claudeSessionMessageFixture({
         type: "assistant",
         uuid: "history-files-call",
@@ -1125,7 +1125,7 @@ describe("Claude background ordinary tool parts", () => {
   });
 
   test("history leaves a foreground call completed when progress precedes its start", () => {
-    const entries = filterClaudeHistoryMessages([
+    const entries = claudeHistoryMessagesFixture([
       claudeSessionMessageFixture({
         type: "assistant",
         uuid: "history-foreground-call",
@@ -1187,7 +1187,7 @@ describe("Claude background ordinary tool parts", () => {
   });
 
   test("history reconciles a saved launch with current process activity", () => {
-    const entries = filterClaudeHistoryMessages([
+    const entries = claudeHistoryMessagesFixture([
       claudeSessionMessageFixture({
         type: "assistant",
         uuid: "history-restart-call",
@@ -1291,8 +1291,8 @@ describe("Claude background ordinary tool parts", () => {
       },
       message: { role: "user", content: [] },
     });
-    const partFor = (entries: Parameters<typeof filterClaudeHistoryMessages>[0]) =>
-      toClaudeHistoryMessages(filterClaudeHistoryMessages(entries), () => timestamp)
+    const partFor = (entries: Parameters<typeof claudeHistoryMessagesFixture>[0]) =>
+      toClaudeHistoryMessages(claudeHistoryMessagesFixture(entries), () => timestamp)
         .flatMap((message) => message.parts)
         .find(
           (candidate): candidate is ToolPart =>

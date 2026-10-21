@@ -5,6 +5,7 @@ import {
   PierreFileViewer,
   PierrePreloadedDiffViewer,
 } from "@/components/features/agents/pierre-diff-viewer";
+import { PierreFilePairDiffViewer } from "@/components/features/agents/pierre-file-pair-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
@@ -72,6 +73,7 @@ const FileEditCardHeader = ({
         isExpanded && "border-b border-border",
       )}
       onClick={onToggle}
+      aria-expanded={hasContent ? isExpanded : undefined}
     >
       {hasContent ? <ExpandIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
       <Icon className={cn("size-3.5 shrink-0", config.color)} />
@@ -115,6 +117,22 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       data-testid="agent-chat-file-edit-card"
     >
       <FileEditCardHeader data={data} isExpanded={isExpanded} onToggle={handleToggle} />
+
+      {isExpanded && data.kind === "replacement" ? (
+        <>
+          <p className="px-3 py-1 text-[11px] text-muted-foreground">Edit fragment</p>
+          <PierreFilePairDiffViewer
+            filePath={data.filePath}
+            oldContent={data.oldContent}
+            newContent={data.newContent}
+            diffStyle={chatSettings.diffStyle}
+            diffIndicators={chatSettings.diffIndicators}
+            heightMode={chatSettings.diffHeight}
+            lineOverflow={chatSettings.lineOverflow}
+            hunkSeparators={chatSettings.hunkSeparators}
+          />
+        </>
+      ) : null}
 
       {isExpanded && data.kind === "diff" ? (
         <PierrePreloadedDiffViewer

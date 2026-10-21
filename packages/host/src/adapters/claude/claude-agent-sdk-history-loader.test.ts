@@ -6,9 +6,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   claudeLiveHistoryContext,
   finalizeClaudeHistory,
-  isClaudeSubagentTranscriptComplete,
   loadClaudeHistory,
-  reconciledClaudeSubagentStatus,
 } from "./claude-agent-sdk-history-loader";
 import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
@@ -267,6 +265,7 @@ describe("claudeLiveHistoryContext", () => {
       activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "fresh",
+      subagentAgentIdsByToolUseId: expect.any(Map),
       userMessages: [acceptedUserMessage],
     });
     expect(context.hasActiveWork()).toBe(true);
@@ -291,6 +290,7 @@ describe("claudeLiveHistoryContext", () => {
       activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
       source: "persisted",
+      subagentAgentIdsByToolUseId: expect.any(Map),
       userMessages: [acceptedUserMessage],
     });
     expect(context.hasActiveWork()).toBe(false);
@@ -317,6 +317,7 @@ describe("claudeLiveHistoryContext", () => {
     expect(sibling).not.toBeNull();
     if (!child || !sibling) return;
     child.backgroundToolActiveTaskIds = new Set(["child-task"]);
+    child.subagentAgentIdsByToolUseId = new Map([["nested-call", "nested-agent"]]);
     sibling.backgroundToolActiveTaskIds = new Set(["sibling-task"]);
     expect([...claudeLiveHistoryContext(session).activeBackgroundTaskIds()]).toEqual([
       "root-task",
@@ -326,126 +327,9 @@ describe("claudeLiveHistoryContext", () => {
     const context = claudeLiveHistoryContext(session, child.externalSessionId);
     expect(context.source).toBe("persisted");
     expect(context.userMessages).toEqual([]);
+    expect(context.subagentAgentIdsByToolUseId).toBe(child.subagentAgentIdsByToolUseId);
     expect([...context.activeBackgroundTaskIds()]).toEqual(["child-task"]);
     child.backgroundToolActiveTaskIds.clear();
     expect(context.activeBackgroundTaskIds().size).toBe(0);
-  });
-});
-
-describe("isClaudeSubagentTranscriptComplete", () => {
-  test("accepts only a final assistant message at the end of the SDK transcript", () => {
-    expect(
-      isClaudeSubagentTranscriptComplete([
-        {
-          type: "assistant",
-          uuid: "assistant-final",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: "Review complete." }],
-            stop_reason: "end_turn",
-          },
-        },
-      ]),
-    ).toBe(true);
-    expect(
-      isClaudeSubagentTranscriptComplete([
-        {
-          type: "assistant",
-          uuid: "assistant-tool",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: "Still working." }],
-            stop_reason: "tool_use",
-          },
-        },
-      ]),
-    ).toBe(false);
-    expect(
-      isClaudeSubagentTranscriptComplete([
-        {
-          type: "assistant",
-          uuid: "assistant-final",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: "First pass complete." }],
-            stop_reason: "end_turn",
-          },
-        },
-        {
-          type: "user",
-          uuid: "user-resume",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          message: {
-            role: "user",
-            content: "Review one more file.",
-          },
-        },
-      ]),
-    ).toBe(false);
-  });
-});
-
-describe("reconciledClaudeSubagentStatus", () => {
-  const assistantMessage = (uuid: string, text: string, stopReason: string | null) =>
-    ({
-      type: "assistant",
-      uuid,
-      session_id: "session-1",
-      parent_tool_use_id: null,
-      parent_agent_id: null,
-      message: {
-        role: "assistant",
-        content: [{ type: "text", text }],
-        stop_reason: stopReason,
-      },
-    }) as const;
-
-  test("settles a nested child from its terminal parent without a root notification", () => {
-    expect(
-      reconciledClaudeSubagentStatus(
-        [assistantMessage("parent-final", "Parent complete.", "end_turn")],
-        [assistantMessage("child-final", "Child report.", null)],
-      ),
-    ).toBe("completed");
-  });
-
-  test("keeps a nested child running while its parent is not terminal", () => {
-    expect(
-      reconciledClaudeSubagentStatus(
-        [assistantMessage("parent-working", "Parent working.", null)],
-        [assistantMessage("child-working", "Child report.", null)],
-      ),
-    ).toBeNull();
-  });
-
-  test("keeps an incomplete background child running after its parent turn ends", () => {
-    expect(
-      reconciledClaudeSubagentStatus(
-        [assistantMessage("parent-final", "Parent complete.", "end_turn")],
-        [assistantMessage("child-working", "Child report.", null)],
-        "background",
-      ),
-    ).toBeNull();
-  });
-
-  test("completes a background child from its own terminal transcript", () => {
-    expect(
-      reconciledClaudeSubagentStatus(
-        [assistantMessage("parent-final", "Parent complete.", "end_turn")],
-        [assistantMessage("child-final", "Child complete.", "end_turn")],
-        "background",
-      ),
-    ).toBe("completed");
   });
 });

@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test";
-import { filterClaudeHistoryMessages } from "./claude-agent-sdk-history-import";
+import { parseClaudeHistoryMessages } from "./claude-agent-sdk-history-messages";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import { createClaudePreToolUseHook } from "./claude-agent-sdk-pre-tool-use-hook";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
+import { claudeSessionMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("Claude SDK ingress", () => {
   test("rejects malformed history entries before history projection", () => {
-    const malformedHistory = [{ type: "assistant", message: new Date() }];
+    const malformedHistory = [
+      claudeSessionMessageFixture({ type: "assistant", uuid: "malformed", message: new Date() }),
+    ];
     let error: unknown;
     try {
-      filterClaudeHistoryMessages(malformedHistory);
+      parseClaudeHistoryMessages(malformedHistory);
     } catch (cause) {
       error = cause;
     }
@@ -20,20 +23,6 @@ describe("Claude SDK ingress", () => {
       field: "claudeHistoryAssistantMessage",
     });
   });
-
-  test.each([{ prompt: 123 }, { prompt: "Peer prompt", timestamp: 123 }])(
-    "rejects malformed consumed meta queue fields before history projection: %j",
-    (fields) => {
-      expect(() =>
-        filterClaudeHistoryMessages([
-          {
-            type: "attachment",
-            attachment: { type: "queued_command", isMeta: true, ...fields },
-          },
-        ]),
-      ).toThrow("Claude SDK sent an invalid claudeMetaQueuedCommandAttachment payload.");
-    },
-  );
 
   test("rejects malformed pre-tool input before authorization", async () => {
     const hook = createClaudePreToolUseHook({ session: createClaudeSession() });

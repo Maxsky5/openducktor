@@ -163,9 +163,11 @@ export const createClaudeRunningToolPart = ({
 };
 
 export const createClaudePendingToolPart = ({
+  inputStreaming = false,
   messageId,
   toolUse,
 }: {
+  inputStreaming?: boolean;
   messageId: string;
   toolUse: ClaudeDecodedToolUse;
 }): Extract<AgentStreamPart, { kind: "tool" }> => {
@@ -177,7 +179,13 @@ export const createClaudePendingToolPart = ({
     tool: toolUse.toolName,
     ...toolPartPresentation(toolUse.toolName),
     status: "pending",
+    inputStreaming,
   };
+  if (toolUse.input) {
+    part.input = parseClaudeCanonicalJsonObject(toolUse.input, "claudeToolInput");
+    const preview = previewInput(toolUse.input);
+    if (preview) part.preview = preview;
+  }
   if (toolUse.metadata) {
     part.metadata = toolUse.metadata;
   }

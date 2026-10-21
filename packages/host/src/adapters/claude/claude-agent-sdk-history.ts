@@ -21,7 +21,7 @@ import {
   isClaudeHistoryBackgroundTasksChangedMessage,
   isClaudeHistoryCompactBoundaryMessage,
   isClaudeHistorySubagentSystemMessage,
-} from "./claude-agent-sdk-history-import";
+} from "./claude-agent-sdk-history-messages";
 import { toClaudeTaskNotificationMessage } from "./claude-agent-sdk-history-notifications";
 import {
   createClaudeHistoryInputProjector,
@@ -116,7 +116,7 @@ export const toClaudeHistoryMessages = (
     transcriptExternalSessionId: options.transcriptExternalSessionId,
   };
   const hasBackgroundWork = createClaudeHistoryTaskCheck(messages, options, liveUserMessages);
-  const projectHistoryInput = createClaudeHistoryInputProjector({ liveUserMessages });
+  const projectHistoryInput = createClaudeHistoryInputProjector({ ...options, liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastError: ReturnType<typeof toAssistantErrorNotice> = null;
   let lastAssistantTextMessage: MutableAssistantHistoryMessage | null = null;
