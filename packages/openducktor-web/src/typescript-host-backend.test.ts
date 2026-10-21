@@ -451,6 +451,7 @@ describe("TypeScript web host backend", () => {
   const createTerminalUpgradeTestServer = (
     basePath = TERMINAL_UPGRADE_BASE_PATH,
     bindHost = "127.0.0.1",
+    port = 0,
   ): Promise<
     NodeFetchServer<
       import("@openducktor/remote-host/terminals/terminal-websocket-handler").TerminalWebSocketData
@@ -458,7 +459,7 @@ describe("TypeScript web host backend", () => {
   > =>
     startNodeFetchServer({
       hostname: bindHost,
-      port: 0,
+      port,
       onError: (cause) => {
         throw cause;
       },
@@ -601,7 +602,12 @@ describe("TypeScript web host backend", () => {
 
   test("probes a normalized IPv6 wildcard bind through the allowed loopback Host", async () => {
     const bindHost = await Effect.runPromise(parseHostEffect("::", "--host", true));
-    const server = await createTerminalUpgradeTestServer("/api", bindHost);
+    // A wildcard bind can get a port that another process holds on ::1, which then takes the
+    // ::1 connections. A port that ::1 gave out has no such owner.
+    const loopback = await createTerminalUpgradeTestServer("/api", "::1");
+    const loopbackPort = loopback.port;
+    await loopback.stop(true);
+    const server = await createTerminalUpgradeTestServer("/api", bindHost, loopbackPort);
     try {
       const port = server.port;
       if (port === undefined) throw new Error("Expected the test server to expose a port.");

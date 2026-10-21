@@ -52,6 +52,11 @@ const startPreview = async () => {
         response.writeHead(302, { location: "https://accounts.example.com/login?next=%2F" });
         response.end();
         return;
+      case "/cut":
+        response.writeHead(200, { "content-type": "application/json", "content-length": "100" });
+        response.write('{"partial":');
+        setTimeout(() => response.destroy(), 20);
+        return;
       case "/echo":
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify(request.headers));
@@ -209,6 +214,13 @@ describe("browser preview proxy", () => {
 
     await previews.close();
     await closed;
+  });
+
+  test("ends a response at once when the dev server drops it", async () => {
+    const { origin } = await startPreview();
+    const response = await fetch(`${origin}/cut`);
+
+    await expect(response.text()).rejects.toThrow();
   });
 
   test("shows the error of a dev server that does not answer in the tab", async () => {

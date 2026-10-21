@@ -203,6 +203,8 @@ export const createBrowserPreviewProxies = (input: {
   ) => {
     const headers = downstreamHeaders(upstream.headers, preview, request.url);
     const status = upstream.statusCode ?? 502;
+    // `pipe` does not end the response when the dev server drops its answer.
+    upstream.on("error", (cause) => response.destroy(cause));
     const injects =
       request.method !== "HEAD" &&
       status !== 204 &&
@@ -217,7 +219,6 @@ export const createBrowserPreviewProxies = (input: {
     // The frame script changes the length of the page.
     delete headers["content-length"];
     response.writeHead(status, upstream.statusMessage, headers);
-    upstream.on("error", (cause) => response.destroy(cause));
     upstream.pipe(withFrameScript()).pipe(response);
   };
 
