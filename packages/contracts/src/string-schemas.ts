@@ -18,5 +18,4 @@ export const isoTimestampSchema = z.compile(
     z.string().datetime({ offset: true }),
     z.string().datetime({ offset: true, precision: -1 }),
   ]),
-  { strict: true },
 );

@@ -16,7 +16,7 @@ The client saves its host choice in this browser's local storage and restores it
 
 Remote control, app updates, external links, and clipboard functions belong to the local shell even when its client views another host. A standalone client has no local host and does not show Remote control.
 
-See [the web runner guide](web-runner.md#deploy-a-standalone-web-client) for the static client build.
+See [the web runner guide](web-runner.md#deploy-your-own-copy) for the static client build.
 
 ## Access and host ownership
 

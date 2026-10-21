@@ -108,6 +108,11 @@ jobs:
         # The Marketing website workflow builds the site when its inputs change.
         run: bun run --filter '*' --filter '!@openducktor/marketing-website' build
 
+      # Dry run of the release deploy, which runs on Linux. It needs no Cloudflare credentials.
+      - name: Check the web client headers and Cloudflare upload
+        if: runner.os == 'Linux'
+        run: bun run --filter @openducktor/web worker:check
+
       - name: Install Electron runtime for worker checks
         run: node apps/electron/node_modules/electron/install.js
 

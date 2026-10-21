@@ -9,6 +9,7 @@ GitHub Actions creates OpenDucktor releases. A maintainer starts `Prepare Releas
 - `.github/workflows/publish-mcp.yml`
 - `.github/workflows/publish-web.yml`
 - `.github/workflows/publish-homebrew-tap.yml`
+- `.github/workflows/deploy-web-client.yml`
 
 ## Prepare a release
 
@@ -58,6 +59,16 @@ This workflow starts after the draft becomes public so Homebrew never points to 
 ## Update the website
 
 The website header shows the latest public stable release. The `Marketing website` workflow starts when a stable release becomes public, builds `main`, and publishes the new version of the header. A beta does not change the website.
+
+## Deploy the web client
+
+`https://app.openducktor.dev` serves the standalone web client of the release that GitHub marks as Latest. The marketing website shows the same release. When a stable release becomes public, `Deploy Web Client` builds the client from the release tag and deploys it to the Cloudflare Worker `openducktor-web-client`. A beta does not change the site.
+
+The workflow checks that the package versions match the tag. Just before the upload, it checks that the release is still GitHub's latest release. If it is not, the workflow deploys nothing and gives the reason in the run summary.
+
+When you publish an older release, such as a `v0.9.5` backport after `v1.0.0`, clear "Set as the latest release". The site then keeps the newer client.
+
+If a check or the upload fails, the site keeps its earlier client. The workflow has no manual start. To retry, re-run the jobs of the failed run.
 
 ## Release notes
 
@@ -109,6 +120,7 @@ Stable releases use one version. Beta releases use:
 5. Open the draft. Check notes and every expected desktop file.
 6. Publish the draft.
 7. For a stable release, wait for the Homebrew workflow to update `Casks/openducktor.rb`.
+8. For a stable release, check the `Deploy Web Client` run summary.
 
 After a beta, check that `latest` still points to the last stable package:
 
