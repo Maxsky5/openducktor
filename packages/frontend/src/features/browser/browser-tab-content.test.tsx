@@ -96,7 +96,12 @@ const createChannelFixture = () => {
 const renderTab = (
   tab: BrowserTabSummary,
   engine: BrowserEngineState = READY,
-  options: { withLayer?: boolean; frames?: BrowserFrameBridge | null; listed?: boolean } = {},
+  options: {
+    withLayer?: boolean;
+    frames?: BrowserFrameBridge | null;
+    listed?: boolean;
+    inPanel?: boolean;
+  } = {},
 ) => {
   const channel = createChannelFixture();
   const openExternalUrl = mock(async (_url: string) => {});
@@ -131,24 +136,28 @@ const renderTab = (
     runtime = useBrowserRuntime();
     return null;
   }
-  const view = render(
+  /** `inPanel` false leaves the tab out of the panels, as for an owner that no panel shows. */
+  const tree = (inPanel: boolean) => (
     <QueryProvider connection={connection}>
       <BrowserRuntimeProvider>
         <Probe />
         {options.withLayer ? <BrowserLayer /> : null}
-        <BrowserTabContent
-          entry={{
-            id: `browser:${TAB_ID}`,
-            kind: "browser",
-            tabId: TAB_ID,
-          }}
-          tab={options.listed === false ? null : tab}
-          isShown
-          addressFocusRequest={0}
-        />
+        {inPanel ? (
+          <BrowserTabContent
+            entry={{
+              id: `browser:${TAB_ID}`,
+              kind: "browser",
+              tabId: TAB_ID,
+            }}
+            tab={options.listed === false ? null : tab}
+            isShown
+            addressFocusRequest={0}
+          />
+        ) : null}
       </BrowserRuntimeProvider>
-    </QueryProvider>,
+    </QueryProvider>
   );
+  const view = render(tree(options.inPanel ?? true));
   const requireRuntime = (): BrowserRuntime => {
     if (runtime === null) throw new Error("The runtime did not render.");
     return runtime;
@@ -169,6 +178,7 @@ const renderTab = (
     openExternalUrl,
     runtime: requireRuntime,
     webviewRuntime,
+    setInPanel: (inPanel: boolean) => view.rerender(tree(inPanel)),
   };
 };
 
@@ -398,6 +408,22 @@ describe("BrowserTabContent in the web runner", () => {
     for (const name of ["Annotate", "Share with agents", "Site settings"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
+  });
+
+  test("loads a frame page when the panels first show its tab, and keeps it after", async () => {
+    const { runtime, setInPanel } = renderTab(
+      createBrowserTabSummaryFixture({ tabId: TAB_ID, page: "frame", started: false }),
+      READY,
+      { withLayer: true, frames, inPanel: false },
+    );
+    await waitFor(() => expect(runtime().store.getSnapshot().tabs.has(TAB_ID)).toBe(true));
+    expect(screen.queryByTestId("browser-frame")).toBeNull();
+
+    setInPanel(true);
+    const frame = await screen.findByTestId("browser-frame");
+
+    setInPanel(false);
+    expect(screen.getByTestId("browser-frame")).toBe(frame);
   });
 
   test("offers to open a site that refuses frames in the browser of the user", async () => {

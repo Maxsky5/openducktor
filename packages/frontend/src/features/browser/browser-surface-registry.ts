@@ -34,6 +34,7 @@ export const createBrowserSurfaceRegistry = <Value>() => {
       };
     },
     get: (key: string): Value | undefined => values.get(key),
+    keys: (): string[] => Array.from(values.keys()),
     version: (): number => version,
     subscribe(listener: () => void): () => void {
       listeners.add(listener);

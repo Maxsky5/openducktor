@@ -56,6 +56,13 @@ export const startFrameTabController = ({
   let page: FramePage = { kind: "none" };
   /** The history of the preview page, which its frame script reports. */
   let previewHistory = { canGoBack: false, canGoForward: false };
+  /**
+   * True after the frame script of the current document reported. A document without it, such as
+   * JSON or an image, takes no commands, so the toolbar uses the history of the tab.
+   */
+  let scripted = false;
+  /** The address of the document that the preview page started to load. */
+  let pendingUrl: string | null = null;
   /** The pages that the address bar and page links opened, for Back and Forward between sites. */
   let history = { urls: [startUrl], index: 0 };
   let state: FrameState = {
@@ -69,7 +76,7 @@ export const startFrameTabController = ({
   };
 
   const previewCan = (command: BrowserFrameCommand): boolean => {
-    if (page.kind !== "preview") return false;
+    if (page.kind !== "preview" || !scripted) return false;
     if (command === "back") return previewHistory.canGoBack;
     if (command === "forward") return previewHistory.canGoForward;
     return true;
@@ -97,6 +104,8 @@ export const startFrameTabController = ({
     const id = ++loadId;
     const target = history.urls[history.index] ?? BROWSER_BLANK_URL;
     previewHistory = { canGoBack: false, canGoForward: false };
+    scripted = false;
+    pendingUrl = null;
     if (isBrowserBlankUrl(target)) {
       showNothing({ url: BROWSER_BLANK_URL, title: null, favicon: null, error: null });
       return;
@@ -174,6 +183,8 @@ export const startFrameTabController = ({
     const message = parsed.data;
     switch (message.type) {
       case "state": {
+        scripted = true;
+        pendingUrl = null;
         const pageUrl = limitBrowserUrl(message.url);
         previewHistory = { canGoBack: message.canGoBack, canGoForward: message.canGoForward };
         history.urls[history.index] = pageUrl;
@@ -192,6 +203,8 @@ export const startFrameTabController = ({
         return;
       }
       case "loading":
+        scripted = false;
+        pendingUrl = limitBrowserUrl(message.url);
         report({ loading: true });
         return;
       case "leave":
@@ -203,6 +216,16 @@ export const startFrameTabController = ({
     }
   };
   const onLoad = (): void => {
+    // The frame script reports before the load ends, so a silent document has no script.
+    if (page.kind === "preview" && !scripted && pendingUrl !== null) {
+      history = {
+        urls: [...history.urls.slice(0, history.index + 1), pendingUrl],
+        index: history.index + 1,
+      };
+      report({ url: pendingUrl, title: null, favicon: null, loading: false, error: null });
+      pendingUrl = null;
+      return;
+    }
     if (state.loading) report({ loading: false });
   };
 

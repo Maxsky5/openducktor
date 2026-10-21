@@ -28,8 +28,8 @@ export const browserFrameMessageSchema = z.discriminatedUnion("type", [
     /** The proxy could not reach the dev server. */
     error: z.string().nullable(),
   }),
-  /** The page starts to load a new document. */
-  z.strictObject({ ...frameMark, type: z.literal("loading") }),
+  /** The page starts to load a new document at `url`. */
+  z.strictObject({ ...frameMark, type: z.literal("loading"), url: browserTabUrlSchema }),
   /** The page wants to go to a site outside the host. The app loads the site in the frame. */
   z.strictObject({ ...frameMark, type: z.literal("leave"), url: browserTabUrlSchema }),
   /** F6 in the page moves the keyboard focus to the address bar. */

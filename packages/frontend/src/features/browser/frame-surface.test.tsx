@@ -127,6 +127,30 @@ describe("FrameBrowserSurface", () => {
     expect(posted).toHaveBeenCalledWith({ openducktorFrameCommand: "back" }, PREVIEW);
   });
 
+  test("follows a page without the frame script, such as JSON, and Back returns to the page before", async () => {
+    const { frame, reports, control, fromFrame } = await renderFrame();
+    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    fromFrame({ ...state, canGoBack: false });
+    if (!frame.contentWindow) throw new Error("The frame has no window.");
+    const posted = spyOn(frame.contentWindow, "postMessage").mockImplementation(() => {});
+
+    fromFrame({ openducktorFrame: 1, type: "loading", url: "http://localhost:3000/api/data" });
+    act(() => {
+      frame.dispatchEvent(new Event("load"));
+    });
+
+    expect(reports.at(-1)).toMatchObject({
+      url: "http://localhost:3000/api/data",
+      title: null,
+      loading: false,
+      canGoBack: true,
+    });
+    control().run("back");
+
+    expect(posted).not.toHaveBeenCalled();
+    await waitFor(() => expect(frame.src).toBe(`${PREVIEW}/settings`));
+  });
+
   test("loads a site at its own URL, and shows it after the host allows frames", async () => {
     let allow: () => void = () => {};
     const { frame } = await renderFrame(

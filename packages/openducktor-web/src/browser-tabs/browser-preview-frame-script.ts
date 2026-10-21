@@ -119,7 +119,7 @@ export const browserPreviewFrameScript = (input: {
       if (event.hashChange || event.downloadRequest !== null) return;
       const url = new URL(event.destination.url);
       if (url.origin === location.origin) {
-        if (!event.destination.sameDocument) post({ type: "loading" });
+        if (!event.destination.sameDocument) post({ type: "loading", url: toTarget(url) });
         return;
       }
       if (!event.cancelable || !isWeb(url)) return;

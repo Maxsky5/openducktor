@@ -76,15 +76,18 @@ function WebviewSurfaces({ runtime }: { runtime: WebviewBrowserRuntime }) {
 }
 
 /**
- * The iframe of each user tab in the web runner. An app on another machine has no frames, so its
+ * The iframe of each user tab in the web runner. Like a saved tab in Electron, a tab loads its page
+ * only after the panels of its owner show the tab. An app on another machine has no frames, so its
  * tabs show why they cannot show pages instead.
  */
 function FrameSurfaces({ runtime }: { runtime: FrameBrowserRuntime }) {
   const { tabs } = useBrowserTabs();
+  const placed = usePlacedSurfaceKeys(runtime.slots);
   const { frames } = runtime.bridge;
   if (frames === null) return null;
   return Array.from(tabs.values()).map((tab) => {
     const key = browserSurfaceKey(tab.tabId);
+    if (!placed.has(key)) return null;
     return (
       <SurfaceFrame key={key} slots={runtime.slots} overlays={null} surfaceKey={key} awake={false}>
         <FrameBrowserSurface
@@ -164,6 +167,21 @@ function DevToolsSurface({
     </SurfaceFrame>
   );
 }
+
+/** The surface keys that a panel slot held at least once. A page stays after its slot goes. */
+const usePlacedSurfaceKeys = (slots: BrowserSurfaceRegistry<BrowserSlot>): ReadonlySet<string> => {
+  const [placed, setPlaced] = useState<ReadonlySet<string>>(() => new Set(slots.keys()));
+  useEffect(() => {
+    const update = (): void =>
+      setPlaced((current) => {
+        const added = slots.keys().filter((key) => !current.has(key));
+        return added.length === 0 ? current : new Set([...current, ...added]);
+      });
+    update();
+    return slots.subscribe(update);
+  }, [slots]);
+  return placed;
+};
 
 /** Tabs that an agent or DevTools uses now. Their hidden `<webview>` must stay drawn. */
 const useAwakeTabs = (channel: BrowserChannel): ReadonlySet<string> => {

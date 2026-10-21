@@ -162,8 +162,9 @@ flowchart TD
 - A page of another site loads at its own URL. The host reads the `frame-ancestors` or `X-Frame-Options` rules of the site. A site that refuses frames shows `This site cannot show in a tab` with Open in browser.
 - The proxy adds `/__openducktor/frame.js` to each HTML page. The script reports the URL, title, favicon, and history to the app, and runs the Back, Forward, Reload, and Stop commands. The app sends this state to the host with `browser_tab_frame_state`.
 - A page of another site reports nothing, so the address bar keeps the address that the tab opened.
+- A page of the host without the frame script also reports nothing. Examples are JSON, images, and pages whose Content Security Policy blocks `'self'` scripts. The address bar shows the address that the previous page opened, and the toolbar moves through the history of the tab. Links in such a page do not change the address bar.
 - The proxy forwards WebSocket upgrades, so the hot reload of a dev server works.
-- A Content Security Policy that blocks `'self'` scripts also blocks the frame script. The page still shows, but the address bar does not follow it.
+- A tab loads its page when the panels of its owner first show the tab. The page stays loaded until the tab closes.
 - The browser of the user shows the dialogs, permissions, file chooser, downloads, and DevTools of the page. Web runner tabs have no picker, no annotations, no site settings, and no agent sharing.
 
 ## Links
