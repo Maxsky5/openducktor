@@ -70,6 +70,15 @@ const startPreview = async () => {
         response.write('{"partial":');
         setTimeout(() => response.destroy(), 20);
         return;
+      case "/cookie":
+        response.writeHead(200, {
+          "set-cookie": [
+            "session=abc; Domain=localhost; Path=/; HttpOnly",
+            "other=1; Domain=example.com; Path=/",
+          ],
+        });
+        response.end();
+        return;
       case "/echo":
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify(request.headers));
@@ -184,6 +193,22 @@ describe("browser preview proxy", () => {
     expect(headers.origin).toBe(`http://localhost:${targetPort}`);
     expect(headers.referer).toBe(`http://localhost:${targetPort}/settings?tab=1`);
     expect(headers.cookie).toBe("theme=dark");
+  });
+
+  test("keeps the cookies of the dev server name on a preview with another loopback name", async () => {
+    const { previews, targetPort } = await startPreview();
+    const origin = await previews.originFor({
+      target: `http://localhost:${targetPort}/`,
+      appOrigin: "http://127.0.0.1:5555",
+    });
+
+    const response = await fetch(`${origin}/cookie`);
+
+    expect(origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(response.headers.getSetCookie()).toEqual([
+      "session=abc; Path=/; HttpOnly",
+      "other=1; Domain=example.com; Path=/",
+    ]);
   });
 
   test("refuses a request for another host name, which DNS rebinding sends", async () => {

@@ -263,6 +263,13 @@ export const createBrowserPreviewProxies = (input: {
     if (incoming.location !== undefined) {
       headers.location = previewLocation(incoming.location, preview, requestPath);
     }
+    // The preview can use another loopback name than the dev server, such as `127.0.0.1`.
+    const cookies = incoming["set-cookie"];
+    if (cookies !== undefined) {
+      headers["set-cookie"] = cookies.map((cookie) =>
+        withoutDomainOf(cookie, preview.target.hostname),
+      );
+    }
     return headers;
   };
 
@@ -378,6 +385,12 @@ const scriptNonce = (policy: string | string[] | undefined): string | null =>
   /(?:^|[;,])\s*(?:script-src-elem|script-src|default-src)\s[^;,]*'nonce-([\w+/=-]+)'/i.exec(
     [policy ?? []].flat().join(", "),
   )?.[1] ?? null;
+
+/** Drops a cookie `Domain` that names `hostname`, so the cookie belongs to the preview host. */
+const withoutDomainOf = (cookie: string, hostname: string): string =>
+  cookie.replace(/;\s*domain=\.?([^;]*)/gi, (attribute, domain: string) =>
+    domain.trim().toLowerCase() === hostname ? "" : attribute,
+  );
 
 /** The index after the first `tag` in `html`, or null when `html` has no such tag. */
 const tagEnd = (html: Buffer, tag: RegExp): number | null => {
