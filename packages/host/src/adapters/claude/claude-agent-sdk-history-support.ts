@@ -38,11 +38,12 @@ const claudeHistorySourceSchema = z.looseObject({ media_type: z.string().optiona
 const claudeHistoryStringSchema = z.string().min(1);
 const claudeHistoryStringArraySchema = z.array(claudeHistoryStringSchema);
 
-export const appendUnmatchedLiveUserMessages = (
+export const mergeUnmatchedLiveUserMessages = (
   history: AgentSessionHistoryMessage[],
   liveUserMessages: readonly ClaudeLiveUserMessage[],
-): void => {
+): AgentSessionHistoryMessage[] => {
   const projectedMessageIds = new Set(history.map((message) => message.messageId));
+  const unmatched: AgentSessionHistoryMessage[] = [];
   for (const message of liveUserMessages) {
     if (message.isManualCompaction || projectedMessageIds.has(message.messageId)) {
       continue;
@@ -60,8 +61,23 @@ export const appendUnmatchedLiveUserMessages = (
     if (message.model) {
       historyMessage.model = message.model;
     }
-    history.push(historyMessage);
+    unmatched.push(historyMessage);
   }
+  if (unmatched.length === 0) return history;
+  unmatched.sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+  const merged: AgentSessionHistoryMessage[] = [];
+  let nextUserIndex = 0;
+  for (const message of history) {
+    const timestamp = Date.parse(message.timestamp);
+    while (nextUserIndex < unmatched.length) {
+      const userMessage = unmatched[nextUserIndex]!;
+      if (Date.parse(userMessage.timestamp) > timestamp) break;
+      merged.push(userMessage);
+      nextUserIndex += 1;
+    }
+    merged.push(message);
+  }
+  return merged.concat(unmatched.slice(nextUserIndex));
 };
 
 type MutableAssistantHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "assistant" }>;

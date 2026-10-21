@@ -28,7 +28,7 @@ import {
   type ManualCompactionInput,
 } from "./claude-agent-sdk-history-input";
 import {
-  appendUnmatchedLiveUserMessages,
+  mergeUnmatchedLiveUserMessages,
   type ClaudeLiveUserMessage,
   hasFinalStopStep,
   retractedHistoryMessageIds,
@@ -495,6 +495,5 @@ export const toClaudeHistoryMessages = (
     }
   }
   applyClaudeHistoryActiveTasks(toolResultState, options.currentBackgroundTaskIds, now);
-  appendUnmatchedLiveUserMessages(history, liveUserMessages);
-  return history;
+  return mergeUnmatchedLiveUserMessages(history, liveUserMessages);
 };

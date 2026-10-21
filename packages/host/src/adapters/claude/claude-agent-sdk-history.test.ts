@@ -309,6 +309,61 @@ describe("claude-agent-sdk-history", () => {
     expect(history.map((message) => message.messageId)).toEqual(["older-user", "live-user-1"]);
   });
 
+  test("keeps retained user turns in order when SDK history omits them", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "saved-assistant-1",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:01:00.000Z",
+          message: { role: "assistant", content: [{ type: "text", text: "First reply" }] },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "saved-user",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:03:00.000Z",
+          message: { role: "user", content: "Saved request" },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "saved-assistant-2",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          timestamp: "2026-06-26T11:05:00.000Z",
+          message: { role: "assistant", content: [{ type: "text", text: "Second reply" }] },
+        }),
+      ],
+      () => "2026-06-26T12:00:00.000Z",
+      [
+        {
+          messageId: "before-compaction",
+          text: "Earlier request",
+          timestamp: "2026-06-26T11:00:00.000Z",
+        },
+        {
+          messageId: "between-replies",
+          text: "Another request",
+          timestamp: "2026-06-26T11:02:00.000Z",
+        },
+        { messageId: "saved-user", text: "Saved request", timestamp: "2026-06-26T11:03:00.000Z" },
+        { messageId: "newest-user", text: "Newest request", timestamp: "2026-06-26T11:06:00.000Z" },
+      ],
+    );
+
+    expect(history.map((message) => message.messageId)).toEqual([
+      "before-compaction",
+      "saved-assistant-1",
+      "between-replies",
+      "saved-user",
+      "saved-assistant-2",
+      "newest-user",
+    ]);
+  });
+
   test("preserves matched live user message metadata during hydration", () => {
     const model = {
       runtimeKind: "claude" as const,
