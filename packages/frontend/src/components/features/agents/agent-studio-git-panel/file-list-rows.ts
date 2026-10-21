@@ -31,6 +31,9 @@ export type DirectoryRow = {
   name: RowLabel;
   depth: number;
   isOpen: boolean;
+  /** Line totals of all matching descendant files, including closed directories. */
+  additions: number;
+  deletions: number;
 };
 
 export type FileListRow = FileRow | DirectoryRow;
@@ -196,6 +199,14 @@ function toTreeDirectory(directory: DraftDirectory, depth: number): TreeDirector
     chainPaths.push(last.path);
     onlyChild = onlyChildDirectory(last);
   }
+  const children = toTreeNodes(last, depth + 1);
+  let additions = 0;
+  let deletions = 0;
+  for (const child of children) {
+    const stats = child.kind === "file" ? child.diff : child;
+    additions += stats.additions;
+    deletions += stats.deletions;
+  }
   return {
     kind: "directory",
     key: `dir:${last.path}`,
@@ -206,7 +217,9 @@ function toTreeDirectory(directory: DraftDirectory, depth: number): TreeDirector
       highlights: sliceRanges(last.firstFileRanges, directory.nameStart, last.path.length),
     },
     depth,
-    children: toTreeNodes(last, depth + 1),
+    additions,
+    deletions,
+    children,
   };
 }
 

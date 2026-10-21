@@ -35,6 +35,27 @@ const describeRow = (row: FileListRow): string => {
 };
 
 describe("buildFileTree", () => {
+  test("totals each directory's descendants once, including joined paths and zero-line changes", () => {
+    const diffs = [
+      { ...fileDiff("src/main.ts"), additions: 4, deletions: 0 },
+      { ...fileDiff("src/lib/deep/a.ts"), additions: 2, deletions: 7 },
+      { ...fileDiff("src/lib/deep/b.ts"), additions: 0, deletions: 3 },
+      { ...fileDiff("assets/image.png"), additions: 0, deletions: 0 },
+      { ...fileDiff("README.md"), additions: 100, deletions: 50 },
+    ];
+    const rows = flattenFileTree(buildFileTree(searchFiles(diffs, "")), new Set());
+
+    expect(
+      rows
+        .filter((row) => row.kind === "directory")
+        .map(({ path, additions, deletions }) => ({ path, additions, deletions })),
+    ).toEqual([
+      { path: "assets", additions: 0, deletions: 0 },
+      { path: "src", additions: 6, deletions: 10 },
+      { path: "src/lib/deep", additions: 2, deletions: 10 },
+    ]);
+  });
+
   test("groups files by directory with directories first and names in alphabetical order", () => {
     const rows = treeRows([
       "src/b.ts",
