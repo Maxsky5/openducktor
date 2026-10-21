@@ -117,7 +117,7 @@ export const createClaudeCompletedToolPart = ({
   text: string;
   tool: string;
 }): ClaudeToolPart => {
-  const resolvedPreview = preview ?? (input ? previewInput(input) : undefined);
+  const resolvedPreview = preview ?? (input ? previewInput(tool, input) : undefined);
   const canonicalInput = input
     ? parseClaudeCanonicalJsonObject(input, "claudeToolInput")
     : undefined;

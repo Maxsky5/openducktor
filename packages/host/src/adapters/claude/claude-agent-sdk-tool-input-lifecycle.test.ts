@@ -45,6 +45,58 @@ const modelSelection = (model: string) => ({
 });
 
 describe("Claude tool input lifecycle", () => {
+  test.each([
+    { input: { skill: "deslop" }, preview: "deslop" },
+    {
+      input: { skill: "plugin:review", args: "Scope: the changes on this branch" },
+      preview: "plugin:review · Scope: the changes on this branch",
+    },
+    { input: { skill: " deslop ", args: " \n " }, preview: "deslop" },
+  ])("shows the skill name and optional arguments for $preview", ({ input, preview }) => {
+    const session = createEventTestSession();
+    const events: AgentEvent[] = [];
+    const messages = [
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "skill-1", name: "Skill", input: {} },
+        },
+      }),
+      claudeSdkMessageFixture({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json: JSON.stringify(input) },
+        },
+      }),
+      stop,
+      claudeSdkMessageFixture({
+        type: "user",
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "skill-1", content: "Skill loaded" }],
+        },
+      }),
+    ];
+    for (const message of messages) {
+      handleClaudeSdkMessage({
+        session,
+        message,
+        timestamp,
+        modelSelection,
+        emit: (event) => events.push(event),
+      });
+    }
+    expect(events.filter((event) => event.type === "assistant_part")).toMatchObject([
+      { part: { tool: "Skill", status: "pending", inputStreaming: true } },
+      { part: { tool: "Skill", status: "running", input, preview } },
+      { part: { tool: "Skill", status: "completed", input, preview, output: "Skill loaded" } },
+    ]);
+  });
+
   test("reports malformed completed input through the session error path and closes the stream", async () => {
     const events: AgentEvent[] = [];
     const session = createClaudeSession({ query: claudeQueryWithMessages([start, delta, stop]) });
