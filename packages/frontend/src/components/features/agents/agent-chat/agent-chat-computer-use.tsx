@@ -4,9 +4,14 @@ import { type ReactElement, useState } from "react";
 import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
+import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 import { getToolDuration } from "./tool-duration";
-import { hasNonEmptyText, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
+import {
+  getToolLifecyclePhase,
+  hasNonEmptyText,
+  isToolMessageActive,
+  isToolMessageFailure,
+} from "./tool-lifecycle";
 
 type ComputerUseToolMessageProps = {
   meta: ToolMeta;
@@ -22,6 +27,7 @@ export const ComputerUseToolMessage = ({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const isFailed = isToolMessageFailure(meta);
+  const activity = getToolLifecyclePhase(meta) === "executing" ? "running" : "preparing";
   const action = meta.computerUse;
   const code = action?.code ?? "";
   const errorText = hasNonEmptyText(meta.error) ? meta.error : "";
@@ -33,7 +39,7 @@ export const ComputerUseToolMessage = ({
     <ComputerUseSummary
       actionTitle={action?.action ?? DEFAULT_ACTION_TITLE}
       isFailed={isFailed}
-      isActive={isToolMessageActive(meta)}
+      activity={isToolMessageActive(meta) ? activity : null}
       durationMs={getToolDuration(meta, messageTimestamp)}
       timeLabel={timeLabel}
       screenshotCount={previewMedia.length}
@@ -85,7 +91,7 @@ const DEFAULT_ACTION_TITLE = "Computer action";
 type ComputerUseSummaryProps = {
   actionTitle: string;
   isFailed: boolean;
-  isActive: boolean;
+  activity: ToolMessageActivity;
   durationMs: number | null;
   timeLabel: string;
   screenshotCount: number;
@@ -97,7 +103,7 @@ type ComputerUseSummaryProps = {
 const ComputerUseSummary = ({
   actionTitle,
   isFailed,
-  isActive,
+  activity,
   durationMs,
   timeLabel,
   screenshotCount,
@@ -140,7 +146,7 @@ const ComputerUseSummary = ({
         </button>
       ) : null}
       <ToolMessageTiming
-        showSpinner={isActive}
+        activity={activity}
         durationMs={durationMs}
         timeLabel={timeLabel}
         className="text-muted-foreground"

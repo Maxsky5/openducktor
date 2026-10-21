@@ -61,6 +61,7 @@ export const RegularToolSummary = ({
   const isPreparing = meta.status === "pending" && meta.inputStreaming !== undefined;
   const isActive =
     isToolMessageActive(meta) && (meta.status !== "pending" || meta.inputStreaming !== false);
+  const activity = lifecyclePhase === "executing" ? "running" : "preparing";
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
   const appearance = TOOL_APPEARANCE[lifecyclePhase];
   const summaryText = summary || appearance.emptySummary;
@@ -75,14 +76,12 @@ export const RegularToolSummary = ({
       )}
     >
       <span className={appearance.icon}>{toolIcon(meta)}</span>
-      <p className="shrink-0 font-medium text-current">
-        {isPreparing ? `Preparing ${displayName}` : displayName}
-      </p>
+      <p className="shrink-0 font-medium text-current">{displayName}</p>
       {summaryText.length > 0 ? (
         <p className="min-w-0 flex-1 truncate text-muted-foreground">{summaryText}</p>
       ) : null}
       <ToolMessageTiming
-        showSpinner={isActive}
+        activity={isActive ? activity : null}
         durationMs={durationMs}
         timeLabel={timeLabel}
         className="text-muted-foreground"

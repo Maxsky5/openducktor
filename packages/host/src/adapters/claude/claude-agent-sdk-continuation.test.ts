@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   decideClaudeContinuation,
@@ -58,8 +59,8 @@ const unfinishedTranscript = (): AgentSessionHistoryMessage[] => [
   assistantMessage("assistant-2", "end_turn"),
 ];
 
-const unusedTranscriptReader = (): Promise<readonly AgentSessionHistoryMessage[]> =>
-  Promise.reject(new Error("the live decision must not read the transcript"));
+const unusedTranscriptReader = (): Effect.Effect<readonly AgentSessionHistoryMessage[], Error> =>
+  Effect.fail(new Error("the live decision must not read the transcript"));
 
 describe("decideClaudeLiveContinuation", () => {
   test("rejects a session that waits for a pending approval or question", () => {
@@ -140,7 +141,7 @@ describe("decideClaudeLiveContinuation", () => {
     });
 
     await expect(
-      decideClaudeContinuation(session, "session-1", unusedTranscriptReader),
+      Effect.runPromise(decideClaudeContinuation(session, "session-1", unusedTranscriptReader)),
     ).resolves.toMatchObject({ kind: "reject", error: { reason: "live_turn" } });
 
     session.backgroundToolActiveTaskIds?.clear();
@@ -217,7 +218,9 @@ describe("decideClaudeContinuation", () => {
     const session = createClaudeSession();
 
     await expect(
-      decideClaudeContinuation(session, "session-1", async () => completedTranscript()),
+      Effect.runPromise(
+        decideClaudeContinuation(session, "session-1", () => Effect.succeed(completedTranscript())),
+      ),
     ).resolves.toMatchObject({ kind: "reject", error: { reason: "completed_turn" } });
   });
 
@@ -225,13 +228,19 @@ describe("decideClaudeContinuation", () => {
     const session = createClaudeSession();
 
     await expect(
-      decideClaudeContinuation(session, "session-1", async () => unfinishedTranscript()),
+      Effect.runPromise(
+        decideClaudeContinuation(session, "session-1", () =>
+          Effect.succeed(unfinishedTranscript()),
+        ),
+      ),
     ).resolves.toEqual({ kind: "allow" });
   });
 
   test("rejects a fresh session whose persisted transcript has no user turn", async () => {
     await expect(
-      decideClaudeContinuation(createClaudeSession(), "session-1", async () => []),
+      Effect.runPromise(
+        decideClaudeContinuation(createClaudeSession(), "session-1", () => Effect.succeed([])),
+      ),
     ).resolves.toMatchObject({ kind: "reject", error: { reason: "ineligible_turn_state" } });
   });
 
@@ -243,7 +252,7 @@ describe("decideClaudeContinuation", () => {
     });
 
     await expect(
-      decideClaudeContinuation(session, "session-1", unusedTranscriptReader),
+      Effect.runPromise(decideClaudeContinuation(session, "session-1", unusedTranscriptReader)),
     ).resolves.toMatchObject({ kind: "reject", error: { reason: "completed_turn" } });
   });
 });

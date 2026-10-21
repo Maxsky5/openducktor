@@ -341,7 +341,7 @@ describe("AgentChatMessageCard tool presentation", () => {
       expect(summary?.textContent).toContain(expected);
       expect(summary?.textContent).not.toContain("Old document");
       expect(summary?.textContent).not.toContain("Returned document body");
-      expect(html.includes("animate-spin")).toBe(status === "running");
+      expect(html.includes('aria-label="Running tool"')).toBe(status === "running");
       expect(html).toContain("Output");
       expect(html).toContain("Returned document body");
     },
@@ -700,7 +700,7 @@ describe("AgentChatMessageCard tool presentation", () => {
       }),
     );
 
-    expect(html).toContain("animate-spin");
+    expect(html).toContain('aria-label="Running tool"');
     expect(html).toContain("border-info-border");
     expect(html).not.toContain("border-pending-border");
     expect(html).toContain("RUNNING");
@@ -729,7 +729,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     );
 
     expect(html).toContain("PREPARING");
-    expect(html).toContain("animate-spin");
+    expect(html).toContain('aria-label="Preparing tool"');
     expect(html).toContain("border-info-border");
     expect(html).not.toContain("QUEUED");
     expect(html).not.toContain("RUNNING");
@@ -758,7 +758,8 @@ describe("AgentChatMessageCard tool presentation", () => {
       }),
     );
 
-    expect(html).not.toContain("animate-spin");
+    expect(html).not.toContain('aria-label="Preparing tool"');
+    expect(html).not.toContain('aria-label="Running tool"');
     expect(html).toContain("border-pending-border");
     expect(html).not.toContain("border-info-border");
     expect(html).toContain("PREPARING");
@@ -766,9 +767,9 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain("RUNNING");
   });
 
-  test.each([true, false])(
-    "marks tools as preparing when input completion is explicit: %s",
-    (inputComplete) => {
+  test.each([true, false, undefined])(
+    "distinguishes pending tool activity without visible status text for inputStreaming: %s",
+    (inputStreaming) => {
       const meta: ToolMeta = {
         kind: "tool",
         partId: "part-execute-queued",
@@ -777,8 +778,8 @@ describe("AgentChatMessageCard tool presentation", () => {
         toolType: "generic",
         status: "pending",
       };
-      if (inputComplete) {
-        meta.inputStreaming = false;
+      if (inputStreaming !== undefined) {
+        meta.inputStreaming = inputStreaming;
         meta.input = { code: "console.log(42)" };
       }
       const html = renderToStaticMarkup(
@@ -792,21 +793,20 @@ describe("AgentChatMessageCard tool presentation", () => {
           },
         }),
       );
-      const text = new DOMParser().parseFromString(html, "text/html").body.textContent;
-      if (inputComplete) {
-        const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
-        expect(summary?.querySelector("p")?.textContent).toBe("Preparing execute");
-        expect(summary?.firstElementChild?.classList.contains("opacity-50")).toBe(true);
-        expect(text).toContain("console.log(42)");
-        expect(html).not.toContain("border-dashed");
+      const document = new DOMParser().parseFromString(html, "text/html");
+      const text = document.body.textContent;
+      const title = document.querySelector("p");
+      expect(title?.textContent).toBe("execute");
+      if (inputStreaming !== undefined) {
+        expect(title?.parentElement?.classList.contains("opacity-50")).toBe(true);
         expect(html).not.toContain("pending-");
-      } else {
-        expect(text).not.toContain("Preparing");
-        expect(html).not.toContain("border-dashed");
       }
+      if (inputStreaming === false) expect(text).toContain("console.log(42)");
+      expect(text).not.toContain("Preparing");
+      expect(html).not.toContain("border-dashed");
       expect(text).not.toContain("Queued");
-      expect(text).not.toContain("Preparing arguments");
-      expect(html.includes("animate-spin")).toBe(!inputComplete);
+      expect(html.includes('aria-label="Preparing tool"')).toBe(inputStreaming !== false);
+      expect(html).not.toContain('aria-label="Running tool"');
     },
   );
 

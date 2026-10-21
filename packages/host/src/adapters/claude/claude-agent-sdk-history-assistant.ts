@@ -92,8 +92,11 @@ export const addClaudeHistoryFinishStep = (
   message.parts.push(part);
 };
 
-export const removeClaudeHistoryFinishStep = (message: MutableAssistantHistoryMessage): void => {
+export const clearClaudeHistoryAssistantFinality = (
+  message: MutableAssistantHistoryMessage,
+): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
+  delete message.model;
 };
 
 export const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>
@@ -183,7 +186,7 @@ export const projectClaudeHistoryAssistantMessage = ({
   if (text.trim().length === 0 && parts.length === 0) {
     return null;
   }
-  const model = readHistoryAssistantModel(entry);
+  const model = readHistoryAssistantModel(entry, assistantEntry.message.model);
   const assistantMessage: MutableAssistantHistoryMessage = {
     messageId,
     role: "assistant",

@@ -77,6 +77,7 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "[name].[ext]",
       "src/cli.ts",
       "src/generated-image-worker.ts",
+      "src/claude-transcript-worker.ts",
     ] as const;
     yield* Effect.tryPromise({
       try: () => runCommand({ command, cwd: packageRoot, label: "Web CLI build" }),

@@ -176,7 +176,7 @@ export const buildToolSummary = (
   const toolType = meta.toolType;
   const isTodoTool = toolType === "todo";
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  if (lifecyclePhase === "preparing") return "Preparing arguments";
+  if (lifecyclePhase === "preparing") return "";
   const fileEditData =
     toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
   const isTaskDocumentRead =

@@ -10,7 +10,12 @@ import {
 import { AgentSessionTurnActiveError } from "@openducktor/core";
 import { Effect } from "effect";
 import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
-import { fromPromise, mutationForTool, toolPartType } from "./claude-agent-sdk-utils";
+import {
+  fromPromise,
+  mutationForTool,
+  readStringProp,
+  toolPartType,
+} from "./claude-agent-sdk-utils";
 
 const slashCommand = {
   id: "review",
@@ -26,6 +31,20 @@ const fileReference = {
   name: "index.ts",
   kind: "code" as const,
 };
+
+describe("readStringProp", () => {
+  test("reads SDK text when an unrelated optional field is undefined", () => {
+    expect(readStringProp({ message: "Ready", error: undefined }, "message")).toBe("Ready");
+    expect(readStringProp({ message: " \t", error: undefined }, "message")).toBeUndefined();
+    const source = Object.defineProperty({ message: "Ready" }, "error", {
+      get: () => {
+        throw new Error("SDK accessors must not run during a text read.");
+      },
+    });
+    expect(readStringProp(source, "error")).toBeUndefined();
+    expect(readStringProp(source, "message")).toBe("Ready");
+  });
+});
 
 describe("encodeClaudePromptText", () => {
   test("preserves confirmed text whitespace through native message encoding", async () => {

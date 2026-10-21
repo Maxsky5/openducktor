@@ -448,7 +448,7 @@ describe("external workspace session import", () => {
   });
 });
 
-test("import releases the directory guard before runtime admission reads the same directory", async () => {
+test("import releases the directory guard before runtime admission acquires it exclusively", async () => {
   const h = await setup();
   await h.discover();
   const inspectSession = h.adapter.sessionImport.inspectSession;
@@ -456,7 +456,13 @@ test("import releases the directory guard before runtime admission reads the sam
     inspectSession(ref).pipe(
       Effect.map((source) => ({
         ...source,
-        attach: h.lifecycle.runWorktreeRead(ref.workingDirectory, source.attach).pipe(
+        attach: Effect.gen(function* () {
+          const exclusive = yield* Effect.forkChild(
+            Effect.scoped(h.lifecycle.acquireWorktreeLifecycle([ref.workingDirectory])),
+          );
+          yield* Fiber.join(exclusive);
+          return yield* source.attach;
+        }).pipe(
           Effect.timeoutOrElse({
             duration: "1 second",
             orElse: () =>

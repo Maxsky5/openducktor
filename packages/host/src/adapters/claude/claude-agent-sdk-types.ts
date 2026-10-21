@@ -48,6 +48,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   fileSearch?: ClaudeWorkspaceFileSearch;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
+  historyStorage?: "memory" | "disk";
   resolveMcpBridgeConnection: ClaudeMcpBridgeConnectionResolver;
   runtimeDistribution: HostRuntimeDistribution;
   sessionStore?: ClaudeSessionStore;

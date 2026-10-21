@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentRuntimeQueryError } from "@openducktor/core";
+import { Effect } from "effect";
 import {
   isClaudeSessionMissingError,
   loadClaudeSessionMessages,
@@ -13,13 +14,15 @@ describe("Claude SDK history reader", () => {
     const workingDirectory = await mkdtemp(join(tmpdir(), "openducktor-claude-history-"));
     try {
       await expect(
-        loadClaudeSessionMessages({
-          repoPath: workingDirectory,
-          runtimeKind: "claude",
-          workingDirectory,
-          externalSessionId: "00000000-0000-4000-8000-000000000001",
-          runtimePolicy: { kind: "claude" },
-        }),
+        Effect.runPromise(
+          loadClaudeSessionMessages({
+            repoPath: workingDirectory,
+            runtimeKind: "claude",
+            workingDirectory,
+            externalSessionId: "00000000-0000-4000-8000-000000000001",
+            runtimePolicy: { kind: "claude" },
+          }),
+        ),
       ).rejects.toMatchObject({
         code: "request_failed",
       });

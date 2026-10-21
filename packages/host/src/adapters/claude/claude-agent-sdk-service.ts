@@ -1,3 +1,11 @@
+import {
+  createClaudeTranscriptReader,
+  type ManagedClaudeTranscriptReader,
+} from "./claude-transcript-reader";
+import {
+  createClaudeTranscriptReadOwner,
+  type ClaudeTranscriptReadOwner,
+} from "./claude-transcript-read-owner";
 import { resolveClaudePendingApprovalOwner } from "./claude-pending-approval-owner";
 import { updateClaudeSessionModel } from "./claude-session-model-update";
 import {
@@ -81,7 +89,7 @@ import type {
   ClaudeSessionStore,
   CreateClaudeAgentSdkServiceInput,
 } from "./claude-agent-sdk-types";
-import { fromPromise, fromSync, unsupported } from "./claude-agent-sdk-utils";
+import { fromPromise, fromSync, toClaudeServiceError, unsupported } from "./claude-agent-sdk-utils";
 
 const defaultClaudeAgentSdkServiceDependencies: ClaudeContextUsageDependencies = {
   loadDetachedSessionContextUsage: (input) =>
@@ -94,6 +102,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   private readonly sessionStore: ClaudeSessionStore;
   private readonly fileSearch: ClaudeWorkspaceFileSearch;
   private readonly untrackFileSearchSessions: () => void;
+  private readonly historyReader: ClaudeTranscriptReadOwner;
+  private readonly transcriptReader: ManagedClaudeTranscriptReader;
 
   constructor(
     private readonly input: CreateClaudeAgentSdkServiceInput,
@@ -101,6 +111,11 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   ) {
     this.now = input.now ?? (() => new Date().toISOString());
     this.randomId = input.randomId ?? randomUUID;
+    this.transcriptReader = createClaudeTranscriptReader({
+      processEnv: input.processEnv ?? process.env,
+      storage: input.historyStorage ?? "memory",
+    });
+    this.historyReader = createClaudeTranscriptReadOwner(this.transcriptReader);
     const sessionStoreInput: Parameters<typeof createClaudeAgentSdkSessionStore>[0] = {
       now: this.now,
     };
@@ -116,6 +131,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   }
 
   dispose(): void {
+    this.historyReader.dispose();
+    this.transcriptReader.dispose();
     this.untrackFileSearchSessions();
     this.fileSearch.dispose();
   }
@@ -242,8 +259,8 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     const liveContext = session
       ? claudeLiveHistoryContext(session, input.externalSessionId)
       : undefined;
-    return fromPromise("claudeRuntime.loadSessionHistory", () =>
-      loadClaudeHistory(input, this.now, liveContext),
+    return loadClaudeHistory(input, this.now, liveContext, { reader: this.historyReader }).pipe(
+      Effect.mapError((cause) => toClaudeServiceError("claudeRuntime.loadSessionHistory", cause)),
     );
   }
 
@@ -252,7 +269,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     if (session && !target.subpath) {
       return Effect.succeed([...session.todosById.values()]);
     }
-    return fromPromise("claudeRuntime.loadSessionTodos", () => loadClaudeTodos(input));
+    return loadClaudeTodos(input, { reader: this.historyReader }).pipe(
+      Effect.mapError((cause) => toClaudeServiceError("claudeRuntime.loadSessionTodos", cause)),
+    );
   }
 
   loadSessionContextUsage(input: LoadAgentSessionHistoryInput) {
@@ -407,11 +426,16 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       const launchSessionInput = { ...sessionInput, claudePolicy };
       const resumeSessionId = sessionInput.options.resume;
       const initialTodos = resumeSessionId
-        ? yield* fromPromise("claudeRuntime.loadSessionTodos", () =>
-            loadClaudeTodos({
+        ? yield* loadClaudeTodos(
+            {
               ...input,
               externalSessionId: resumeSessionId,
-            }),
+            },
+            { reader: this.historyReader },
+          ).pipe(
+            Effect.mapError((cause) =>
+              toClaudeServiceError("claudeRuntime.loadSessionTodos", cause),
+            ),
           )
         : [];
       const mcpCommand = yield* resolveOpenDucktorMcpCommand({

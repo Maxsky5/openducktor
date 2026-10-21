@@ -1,6 +1,5 @@
 import {
   AgentRuntimeQueryError,
-  type AgentSessionHistoryMessage,
   interruptedTurnResumeError,
   type InterruptedTurnResumeError,
   type InterruptedTurnResumeFailureReason,
@@ -26,7 +25,7 @@ import {
 import { assertClaudeSessionRef } from "./claude-agent-sdk-session-shape";
 import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession, ClaudeSessionStore } from "./claude-agent-sdk-types";
-import { fromPromise } from "./claude-agent-sdk-utils";
+import { toClaudeServiceError } from "./claude-agent-sdk-utils";
 
 const continuationOperation = "claudeRuntime.continueInterruptedTurn";
 
@@ -71,25 +70,20 @@ export const resolveFailedClaudeContinuationSession = <Failure>(input: {
     return yield* Effect.fail(cause);
   });
 
-/**
- * Reads the persisted transcript for a continuation. The read covers the full
- * transcript, subagent imports included, because the installed SDK exposes no tail
- * read. Resume is user-initiated, so the cost stays acceptable.
- */
-const readClaudeContinuationTranscript = async (
+/** Reads the saved transcript and classifies expected continuation failures. */
+const readClaudeContinuationTranscript = (
   input: ResumeAgentSessionInput,
   now: () => string,
   liveContext?: ClaudeLiveHistoryContext,
-): Promise<readonly AgentSessionHistoryMessage[]> => {
-  try {
-    return await loadClaudeHistory(input, now, liveContext);
-  } catch (cause) {
-    throw interruptedTurnResumeError({
-      ...classifyPersistedClaudeContinuationFailure(cause, input.externalSessionId),
-      cause,
-    });
-  }
-};
+) =>
+  loadClaudeHistory(input, now, liveContext).pipe(
+    Effect.mapError((cause) =>
+      interruptedTurnResumeError({
+        ...classifyPersistedClaudeContinuationFailure(cause, input.externalSessionId),
+        cause,
+      }),
+    ),
+  );
 
 /**
  * Rejects a continuation that the registered live session cannot start. The live state
@@ -102,23 +96,26 @@ export const checkLiveClaudeContinuationEligibility = (
   input: ResumeAgentSessionInput,
   now: () => string,
 ) =>
-  fromPromise(continuationOperation, async () => {
-    try {
-      assertClaudeSessionRef(session, input, "continue interrupted turn");
-    } catch (cause) {
-      if (cause instanceof HostValidationError) {
-        throw interruptedTurnResumeError({
-          reason: "identity_mismatch",
-          message: cause.message,
-          cause,
-        });
-      }
-      throw cause;
-    }
-    return decideClaudeContinuation(session, input.externalSessionId, () =>
+  Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => assertClaudeSessionRef(session, input, "continue interrupted turn"),
+      catch: (cause) => {
+        if (cause instanceof HostValidationError)
+          return interruptedTurnResumeError({
+            reason: "identity_mismatch",
+            message: cause.message,
+            cause,
+          });
+        throw cause;
+      },
+    });
+    return yield* decideClaudeContinuation(session, input.externalSessionId, () =>
       readClaudeContinuationTranscript(input, now, claudeLiveHistoryContext(session)),
     );
-  }).pipe(Effect.flatMap(finishClaudeContinuationDecision));
+  }).pipe(
+    Effect.mapError((cause) => toClaudeServiceError(continuationOperation, cause)),
+    Effect.flatMap(finishClaudeContinuationDecision),
+  );
 
 type PersistedContinuationFailure = {
   readonly reason: InterruptedTurnResumeFailureReason;
@@ -164,9 +161,8 @@ export const checkPersistedClaudeContinuationEligibility = (
   input: ResumeAgentSessionInput,
   now: () => string,
 ) =>
-  fromPromise(continuationOperation, async () =>
-    decideClaudePersistedContinuation(
-      await readClaudeContinuationTranscript(input, now),
-      input.externalSessionId,
-    ),
-  ).pipe(Effect.flatMap(finishClaudeContinuationDecision));
+  readClaudeContinuationTranscript(input, now).pipe(
+    Effect.map((history) => decideClaudePersistedContinuation(history, input.externalSessionId)),
+    Effect.mapError((cause) => toClaudeServiceError(continuationOperation, cause)),
+    Effect.flatMap(finishClaudeContinuationDecision),
+  );

@@ -3,16 +3,21 @@ import {
   type AgentSessionHistoryMessage,
   type LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
+import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import {
   isClaudeSessionMissingError,
-  loadClaudeSessionMessages,
+  loadClaudeHistoryProjectionInput,
+  type ClaudeHistoryReadFailure,
 } from "./claude-agent-sdk-history-messages";
+import type { ClaudeTranscriptReadOptions } from "./claude-transcript-reader";
 import type { ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
+import { createClaudeTranscriptSubagentReader } from "./claude-transcript-subagents";
 
 export type ClaudeLiveHistoryContext = {
   activeBackgroundTaskIds: () => ReadonlySet<string>;
@@ -34,6 +39,7 @@ export const claudeLiveHistoryContext = (
       const ids = new Set<string>();
       const collect = (work: ClaudeEventSession): void => {
         for (const id of work.backgroundToolActiveTaskIds ?? []) ids.add(id);
+        for (const id of work.activeBackgroundSubagentTaskIds ?? []) ids.add(id);
         for (const child of work.subagentEventSessionsByToolUseId?.values() ?? []) collect(child);
       };
       const work = isSubagent ? findClaudeHistoryWork(session, externalSessionId) : session;
@@ -48,7 +54,9 @@ export const claudeLiveHistoryContext = (
         ? "persisted"
         : "fresh",
     subagentAgentIdsByToolUseId: work?.subagentAgentIdsByToolUseId ?? new Map(),
-    userMessages: isSubagent ? [] : [...session.acceptedUserMessages],
+    get userMessages() {
+      return isSubagent ? [] : [...session.acceptedUserMessages];
+    },
   };
 };
 
@@ -86,41 +94,54 @@ export const finalizeClaudeHistory = (
   ];
 };
 
-export const loadClaudeHistory = async (
+export const loadClaudeHistory = (
   input: LoadAgentSessionHistoryInput,
   now: () => string,
   liveContext?: ClaudeLiveHistoryContext,
-): Promise<AgentSessionHistoryMessage[]> => {
-  if (liveContext?.source === "fresh" && liveContext.userMessages.length === 0) {
-    return finalizeClaudeHistory(input, []);
-  }
-  const savedMessages = await loadClaudeSessionMessages(input).catch((cause: unknown) => {
-    // The UI can read history after the first live message but before Claude writes the
-    // transcript. In this gap, the fresh session and its live events hold the new messages.
-    if (
-      liveContext?.source !== "fresh" ||
-      !liveContext.hasActiveWork() ||
-      !isClaudeSessionMissingError(cause)
-    ) {
-      throw cause;
+  options: ClaudeTranscriptReadOptions = {},
+): Effect.Effect<AgentSessionHistoryMessage[], ClaudeHistoryReadFailure> =>
+  Effect.gen(function* () {
+    if (liveContext?.source === "fresh" && liveContext.userMessages.length === 0) {
+      return finalizeClaudeHistory(input, []);
     }
-    return null;
+    const projectionInput = yield* loadClaudeHistoryProjectionInput(input, options).pipe(
+      Effect.catch((cause) => {
+        // The UI can read history after the first live message but before Claude writes the
+        // transcript. In this gap, the fresh session and its live events hold the new messages.
+        if (
+          liveContext?.source !== "fresh" ||
+          !liveContext.hasActiveWork() ||
+          !isClaudeSessionMissingError(cause)
+        ) {
+          return Effect.fail(cause);
+        }
+        return Effect.succeed(null);
+      }),
+    );
+    const messages = projectionInput?.messages ?? [];
+    const subagents = projectionInput
+      ? createClaudeTranscriptSubagentReader(projectionInput.source, messages)
+      : undefined;
+    const isSubagentTranscript = isClaudeSubagentTranscriptTarget(input.externalSessionId);
+    const projectionOptions: NonNullable<Parameters<typeof toClaudeHistoryMessages>[3]> = {
+      includeNestedEntries: isSubagentTranscript,
+      transcriptExternalSessionId: input.externalSessionId,
+    };
+    if (subagents) {
+      projectionOptions.subagentAgentIdsByToolUseId = yield* subagents.correlations(
+        liveContext?.subagentAgentIdsByToolUseId,
+      );
+    }
+    projectionOptions.currentBackgroundTaskIds =
+      liveContext?.activeBackgroundTaskIds() ?? new Set();
+    const history = yield* Effect.try({
+      try: () =>
+        toClaudeHistoryMessages(messages, now, liveContext?.userMessages ?? [], projectionOptions),
+      catch: (cause) => {
+        if (cause instanceof HostValidationError) return cause;
+        throw cause;
+      },
+    });
+    if (subagents) yield* subagents.reconcile(history);
+    return finalizeClaudeHistory(input, history);
   });
-  const messages = savedMessages ?? [];
-  const isSubagentTranscript = isClaudeSubagentTranscriptTarget(input.externalSessionId);
-  const projectionOptions: NonNullable<Parameters<typeof toClaudeHistoryMessages>[3]> = {
-    includeNestedEntries: isSubagentTranscript,
-    transcriptExternalSessionId: input.externalSessionId,
-  };
-  if (liveContext?.subagentAgentIdsByToolUseId) {
-    projectionOptions.subagentAgentIdsByToolUseId = liveContext.subagentAgentIdsByToolUseId;
-  }
-  projectionOptions.currentBackgroundTaskIds = liveContext?.activeBackgroundTaskIds() ?? new Set();
-  const history = toClaudeHistoryMessages(
-    messages,
-    now,
-    liveContext?.userMessages ?? [],
-    projectionOptions,
-  );
-  return finalizeClaudeHistory(input, history);
-};

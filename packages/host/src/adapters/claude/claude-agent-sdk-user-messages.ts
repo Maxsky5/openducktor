@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 
 const claudeUserTurnSchema = z.looseObject({
+  isReplay: z.boolean().optional(),
   isSynthetic: z.boolean().optional(),
   origin: z.looseObject({ kind: z.string().optional() }).optional(),
   shouldQuery: z.boolean().optional(),
@@ -21,7 +22,7 @@ export const isClaudeWakeUserMessage = (
 
 export const readClaudeTurnOriginKind = (message: ClaudeUserTurn): string | undefined => {
   const parsed = claudeUserTurnSchema.safeParse(message);
-  if (!parsed.success || parsed.data.shouldQuery === false) {
+  if (!parsed.success || parsed.data.shouldQuery === false || parsed.data.isReplay === true) {
     return undefined;
   }
   return parsed.data.origin?.kind;
@@ -40,6 +41,6 @@ export const isClaudeHumanUserMessage = (message: ClaudeUserTurn): boolean => {
   if (!parsed.success || parsed.data.isSynthetic === true || parsed.data.shouldQuery === false) {
     return false;
   }
-  const originKind = readClaudeTurnOriginKind(message);
+  const originKind = parsed.data.origin?.kind;
   return originKind === undefined || originKind === "human";
 };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { useAgentSessionsContext } from "@openducktor/frontend-core/sessions/session-contexts";
@@ -32,6 +32,7 @@ export function useChatSessionPreparation({
   const session = useAgentSession(identity);
   const presence = session?.livePresence ?? "unobserved";
   const [attempt, setAttempt] = useState(() => createAttempt(targetKey, enabled, prepare));
+  const pendingPreparation = useRef<{ token: object; promise: Promise<void> } | null>(null);
   const changed =
     attempt.key !== targetKey || attempt.enabled !== enabled || attempt.prepare !== prepare;
   // Reset during render so a new target cannot use the previous target's ready state.
@@ -62,7 +63,9 @@ export function useChatSessionPreparation({
         return { ...current, result: { error } };
       });
     };
-    void prepare().then(
+    if (pendingPreparation.current?.token !== token)
+      pendingPreparation.current = { token, promise: prepare() };
+    void pendingPreparation.current.promise.then(
       () => settle(null),
       (cause: unknown) => settle(errorMessage(cause)),
     );

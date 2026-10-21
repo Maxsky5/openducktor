@@ -1,4 +1,4 @@
-import { Effect, Semaphore } from "effect";
+import { Effect, TxReentrantLock } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostOperationError } from "../../../effect/host-errors";
 
@@ -9,19 +9,19 @@ export type TaskSessionLifecycleCoordinator = ReturnType<
 export const createTaskSessionLifecycleCoordinator = () => {
   const lifecycleLocks = new Set<string>();
   const workspaceLifecycleLocks = new Set<string>();
-  const worktreeGates = new Map<string, Semaphore.Semaphore>();
+  const worktreeGates = new Map<string, TxReentrantLock.TxReentrantLock>();
   const taskKey = (repoPath: string, taskId: string): string => `${repoPath}\0${taskId}`;
   const hasTaskLifecycle = (repoPath: string): boolean => {
     const prefix = `${repoPath}\0`;
     return [...lifecycleLocks].some((key) => key.startsWith(prefix));
   };
-  const worktreeGate = (path: string): Semaphore.Semaphore => {
+  const worktreeGate = (path: string): TxReentrantLock.TxReentrantLock => {
     const pathKey = normalizePathForComparison(path);
     const current = worktreeGates.get(pathKey);
     if (current) {
       return current;
     }
-    const gate = Semaphore.makeUnsafe(1);
+    const gate = Effect.runSync(TxReentrantLock.make());
     worktreeGates.set(pathKey, gate);
     return gate;
   };
@@ -93,7 +93,7 @@ export const createTaskSessionLifecycleCoordinator = () => {
       return Effect.gen(function* () {
         for (const path of uniquePaths) {
           const gate = worktreeGate(path);
-          yield* Effect.acquireRelease(gate.take(1), () => gate.release(1));
+          yield* TxReentrantLock.writeLock(gate);
         }
       });
     },
@@ -101,7 +101,7 @@ export const createTaskSessionLifecycleCoordinator = () => {
       path: string,
       read: Effect.Effect<Value, Error, Requirements>,
     ): Effect.Effect<Value, Error, Requirements> {
-      return worktreeGate(path).withPermits(1)(read);
+      return TxReentrantLock.withReadLock(worktreeGate(path), read);
     },
   };
 };

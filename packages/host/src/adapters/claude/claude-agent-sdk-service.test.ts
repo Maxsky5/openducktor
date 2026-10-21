@@ -77,7 +77,7 @@ describe("createClaudeAgentSdkService", () => {
           return createSession().summary;
         },
       );
-      const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+      const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
       const service = createService(null, undefined, undefined, {
         launchPolicy: { resolve },
         resolveMcpBridgeConnection: () =>
@@ -127,7 +127,7 @@ describe("createClaudeAgentSdkService", () => {
       providerId: "claude",
       modelId: "native-claude",
     });
-    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
     const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async (request) => {
         expect(request.sessionInput).toEqual({
@@ -262,7 +262,7 @@ describe("createClaudeAgentSdkService", () => {
 
   test("reconciles the durable repository title when a cold role-less session resumes", async () => {
     const store = createClaudeAgentSdkSessionStore();
-    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
     const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async (request) => {
         expect(request.sessionInput).toEqual({
@@ -1152,7 +1152,7 @@ describe("createClaudeAgentSdkService", () => {
         title: "Native title",
         updatedAt: null,
       });
-      const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+      const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
       const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
         async (request) => {
           operations.push("attach");
@@ -1238,7 +1238,7 @@ describe("createClaudeAgentSdkService", () => {
           return { ...ref, title: null, updatedAt: null };
         },
       );
-      const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+      const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
       const attach = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockRejectedValue(
         new Error("Native attachment refused"),
       );
@@ -1719,7 +1719,7 @@ describe("continueInterruptedTurn eligibility", () => {
     const resolvePolicy = mock(() =>
       Effect.succeed({ permissionMode: "bypassPermissions" as const }),
     );
-    const loadTodos = spyOn(todos, "loadClaudeTodos").mockResolvedValue([]);
+    const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
     const start = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async ({ sessionStore, sessionInput }) => {
         expect(sessionInput.claudePolicy).toBeNull();

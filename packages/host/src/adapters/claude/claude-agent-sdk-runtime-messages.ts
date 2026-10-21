@@ -81,19 +81,21 @@ export const readClaudeTaskNotifications = (
   }
   const outputFile = readXmlElement(content, "output-file");
   const summary = readXmlElement(content, "summary");
-  return taskIds.map((taskId) => {
-    const notification: ClaudeTaskNotification = { taskId, status };
-    if (toolUseId) {
-      notification.toolUseId = toolUseId;
-    }
-    if (outputFile) {
-      notification.outputFile = outputFile;
-    }
-    if (summary) {
-      notification.summary = summary;
-    }
-    return notification;
-  });
+  return taskIds
+    .filter((taskId) => !taskId.startsWith("__orphan_summary__"))
+    .map((taskId) => {
+      const notification: ClaudeTaskNotification = { taskId, status };
+      if (toolUseId) {
+        notification.toolUseId = toolUseId;
+      }
+      if (outputFile) {
+        notification.outputFile = outputFile;
+      }
+      if (summary) {
+        notification.summary = summary;
+      }
+      return notification;
+    });
 };
 
 export const readClaudeTaskNotification = (

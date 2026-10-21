@@ -42,6 +42,7 @@ export const mergeUnmatchedLiveUserMessages = (
   history: AgentSessionHistoryMessage[],
   liveUserMessages: readonly ClaudeLiveUserMessage[],
 ): AgentSessionHistoryMessage[] => {
+  if (liveUserMessages.length === 0) return history;
   const projectedMessageIds = new Set(history.map((message) => message.messageId));
   const unmatched: AgentSessionHistoryMessage[] = [];
   for (const message of liveUserMessages) {

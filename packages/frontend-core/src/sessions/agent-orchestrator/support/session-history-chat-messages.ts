@@ -254,6 +254,23 @@ export const historyToChatMessages = (
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
     const assistantTextMessageIndexes: number[] = [];
+    const content = message.text;
+    const isStructuredAsyncQuestion =
+      message.role === "assistant" && message.questionRequest !== undefined;
+    const isFinalAssistantMessage =
+      message.role === "assistant" && isFinalAssistantHistoryMessage(message);
+    const completedAtMs = Date.parse(message.timestamp);
+    const activityStartedAtMs =
+      isFinalAssistantMessage && !Number.isNaN(completedAtMs)
+        ? mergeTurnActivityTimestamp(
+            readAssistantActivityStartedAtMsFromMessages({
+              messages: next,
+              previousAssistantCompletedAtMs,
+              completedAtMs,
+            }),
+            readAssistantActivityStartedAtMsFromParts(message.parts),
+          )
+        : undefined;
 
     for (const part of message.parts) {
       if (
@@ -295,23 +312,6 @@ export const historyToChatMessages = (
       }
     }
 
-    const content = message.text;
-    const isStructuredAsyncQuestion =
-      message.role === "assistant" && message.questionRequest !== undefined;
-    const isFinalAssistantMessage =
-      message.role === "assistant" && isFinalAssistantHistoryMessage(message);
-    const completedAtMs = Date.parse(message.timestamp);
-    const activityStartedAtMs =
-      isFinalAssistantMessage && !Number.isNaN(completedAtMs)
-        ? mergeTurnActivityTimestamp(
-            readAssistantActivityStartedAtMsFromMessages({
-              messages: next,
-              previousAssistantCompletedAtMs,
-              completedAtMs,
-            }),
-            readAssistantActivityStartedAtMsFromParts(message.parts, completedAtMs),
-          )
-        : undefined;
     let assistantDurationMs: number | undefined;
     if (isFinalAssistantMessage && !Number.isNaN(completedAtMs)) {
       if (message.durationMs !== undefined) {
@@ -404,11 +404,8 @@ export const historyToChatMessages = (
       userAnchorAtMs = Number.isNaN(parsed) ? userAnchorAtMs : parsed;
     }
 
-    if (message.role === "assistant" && isFinalAssistantHistoryMessage(message)) {
-      const parsed = Date.parse(message.timestamp);
-      if (!Number.isNaN(parsed)) {
-        previousAssistantCompletedAtMs = parsed;
-      }
+    if (isFinalAssistantMessage && !Number.isNaN(completedAtMs)) {
+      previousAssistantCompletedAtMs = completedAtMs;
     }
   }
 

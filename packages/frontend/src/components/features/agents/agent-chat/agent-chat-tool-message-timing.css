@@ -1,0 +1,49 @@
+.agent-tool-running {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 12px;
+  height: 12px;
+}
+
+.agent-tool-running > span {
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background-color: currentColor;
+  opacity: 0.45;
+  transform: scaleY(0.4);
+  animation: agent-tool-running-pulse 1200ms var(--motion-ease-out) infinite;
+}
+
+.agent-tool-running > span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.agent-tool-running > span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes agent-tool-running-pulse {
+  0%,
+  45%,
+  100% {
+    opacity: 0.45;
+    transform: scaleY(0.4);
+  }
+
+  15% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-tool-running > span {
+    animation: none;
+    opacity: 0.75;
+    transform: scaleY(0.75);
+  }
+}

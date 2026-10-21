@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { LoadAgentSessionHistoryInput } from "@openducktor/core";
@@ -35,7 +36,7 @@ const writeTranscript = (entries: unknown[]) =>
   );
 const readHistory = async (context?: ClaudeLiveHistoryContext) => {
   try {
-    return { history: await loadClaudeHistory(input, () => timestamp, context) };
+    return { history: await Effect.runPromise(loadClaudeHistory(input, () => timestamp, context)) };
   } catch (cause) {
     if (!(cause instanceof AgentRuntimeQueryError)) throw cause;
     return { code: cause.code, message: cause.message };

@@ -300,7 +300,7 @@ Current context use is live state, not total result use. If a direct read races 
 
 Live and loaded items use the same identity, role, order, time, completion, error, tool name, display parts, prompt references, todos, subagents, and compaction meaning.
 
-Feed thin native live and history readers into one projector. Use the public SDK or API for history. A history read does not resume the session, consume live events, discover pending input, or change live state.
+Feed thin native live and history readers into one projector. Use the public SDK or API for history. Claude uses one read-only streaming JSONL reader because the SDK message reader excludes earlier turns after compaction. Its shared retention policy runs before memory or temporary disk storage. A history read does not resume the session, consume live events, discover pending input, or change live state.
 
 Use native fields to classify tool-result wrappers, synthetic messages, queue operations, command output, compaction, and child delivery. Do not classify them by displayed text or a regular expression.
 
