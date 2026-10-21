@@ -12,7 +12,7 @@ const oldPanelSchema = z.record(z.string(), z.json());
 export function useRightPanelOpen() {
   const store = storeOf(useClientConnection());
   const isOpen = useSyncExternalStore(store.subscribe, store.read, store.read);
-  return { isOpen, toggle: store.toggle, close: store.close };
+  return { isOpen, toggle: store.toggle, open: store.open, close: store.close };
 }
 
 const storeOf = perConnection(createRightPanelOpenStore);
@@ -37,6 +37,7 @@ function createRightPanelOpenStore() {
       };
     },
     toggle: () => set(!isOpen),
+    open: () => set(true),
     close: () => set(false),
   };
 }

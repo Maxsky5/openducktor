@@ -1,10 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
-import { TERMINAL_PROTOCOL_VERSION, type TerminalSummary } from "@openducktor/contracts";
+import {
+  type BrowserTabSummary,
+  TERMINAL_PROTOCOL_VERSION,
+  type TerminalSummary,
+} from "@openducktor/contracts";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactElement, useCallback, useState } from "react";
 import type { TerminalTab } from "@/features/terminals";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
+  browserTabIdFixture,
+  createBrowserTabSummaryFixture,
   createTerminalSessionsFixture,
   createSessionPanelFixture,
   createSessionPanelsFixture,
@@ -12,6 +18,8 @@ import {
 import { createTerminalActivityStore } from "@/features/terminals/terminal-activity-store";
 import { createTerminalTransportController } from "@/features/terminals/terminal-transport-controller";
 import { SessionPanel } from "./session-panel";
+import type { BrowserTabViewProps } from "./use-session-panel-browser-tabs";
+import type { ResolvedBrowserTab } from "./session-panel-layout";
 import { SessionPanelsRoot } from "./session-panels-root";
 
 const terminal: TerminalTab = {
@@ -304,5 +312,172 @@ describe("SessionPanel", () => {
 
     expect(screen.getByRole("tab", { name: "CI Checks, failing checks" })).toBeDefined();
     expect(screen.getByTestId("ci-indicator")).toBeDefined();
+  });
+});
+
+const TAB_1 = browserTabIdFixture(1);
+const TAB_2 = browserTabIdFixture(2);
+const TAB_3 = browserTabIdFixture(3);
+const TAB_4 = browserTabIdFixture(4);
+const FAVICON = "data:image/png;base64,iVBORw0KGgo=";
+
+const browserTab = (tabId: string, tab: Partial<BrowserTabSummary> | null): ResolvedBrowserTab => ({
+  id: `browser:${tabId}`,
+  kind: "browser",
+  entry: { id: `browser:${tabId}`, kind: "browser", tabId },
+  tab: tab === null ? null : createBrowserTabSummaryFixture({ tabId, ...tab }),
+});
+
+describe("SessionPanel browser tabs", () => {
+  test("fills browser tabs from the browser view and keeps them mounted", () => {
+    const page = browserTab(TAB_1, {});
+    const other = browserTab(TAB_2, {});
+    const views: BrowserTabViewProps[] = [];
+    renderWithConnection(
+      <SessionPanel
+        model={createSessionPanelFixture({
+          panel: "bottom",
+          tabs: [page, other],
+          selectedTabId: page.id,
+          browserAddressFocus: { tabId: TAB_1, request: 2 },
+          browserTabView: (props) => {
+            views.push(props);
+            return <p>{props.tab.entry.tabId} view</p>;
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(`${TAB_1} view`).closest("[hidden]")).toBeNull();
+    expect(screen.getByText(`${TAB_2} view`).closest("[hidden]")).not.toBeNull();
+    expect(views.find((view) => view.tab === page)).toEqual({
+      tab: page,
+      isShown: true,
+      addressFocusRequest: 2,
+    });
+    expect(views.find((view) => view.tab === other)).toEqual({
+      tab: other,
+      isShown: false,
+      addressFocusRequest: 0,
+    });
+  });
+
+  test("does not show the selected browser tab of a closed panel", () => {
+    const page = browserTab(TAB_1, {});
+    const views: BrowserTabViewProps[] = [];
+    renderWithConnection(
+      <SessionPanel
+        model={createSessionPanelFixture({
+          panel: "bottom",
+          presence: "closed",
+          tabs: [page],
+          selectedTabId: page.id,
+          browserTabView: (props) => {
+            views.push(props);
+            return <p>browser view</p>;
+          },
+        })}
+      />,
+    );
+
+    expect(views.at(-1)?.isShown).toBe(false);
+  });
+
+  test("names each browser tab with its page, owner badge, activity, and popup window", () => {
+    const dashboard = browserTab(TAB_1, { title: "Dashboard", favicon: FAVICON, shared: true });
+    const login = browserTab(TAB_2, {
+      title: null,
+      url: "http://localhost:5173/login",
+      createdBy: "agent",
+      agentActive: true,
+      prompts: [
+        {
+          promptId: "prompt-1",
+          kind: "dialog",
+          type: "alert",
+          message: "Saved",
+          defaultPrompt: "",
+          startedByAgent: true,
+        },
+      ],
+    });
+    const blank = browserTab(TAB_3, null);
+    const popup = browserTab(TAB_4, {
+      title: "Sign in",
+      favicon: FAVICON,
+      surface: "popup_window",
+      openerTabId: TAB_1,
+    });
+    const tabs = [dashboard, login, blank, popup];
+    const view = renderWithConnection(
+      <SessionPanel model={createSessionPanelFixture({ tabs, selectedTabId: dashboard.id })} />,
+    );
+
+    const tablist = screen.getByRole("tablist", { name: "Right panel tabs" });
+    expect(
+      within(tablist)
+        .getAllByRole("tab")
+        .map((tab) => tab.getAttribute("aria-label")),
+    ).toEqual([
+      "Dashboard, shared with agents",
+      "localhost:5173, agent tab, an agent uses the page, waits for your answer",
+      "Blank page",
+      "Sign in, open in a popup window",
+    ]);
+    const dashboardTab = screen.getByRole("tab", { name: "Dashboard, shared with agents" });
+    expect(dashboardTab.querySelector("img")?.getAttribute("src")).toBe(FAVICON);
+    expect(dashboardTab.textContent).toBe("DashboardShared");
+    const loginTab = screen.getByRole("tab", { name: /^localhost:5173/ });
+    expect(loginTab.textContent).toBe("localhost:5173Agent");
+    expect(
+      [...loginTab.querySelectorAll("[data-panel-tab-mark]")].map((mark) =>
+        mark.getAttribute("data-panel-tab-mark"),
+      ),
+    ).toEqual(["agent-active", "prompts"]);
+    // A popup window tab shows a window icon, not the page favicon.
+    expect(
+      screen.getByRole("tab", { name: "Sign in, open in a popup window" }).querySelector("img"),
+    ).toBeNull();
+
+    // The selected tab shows its prompt in its content, so its label has no prompt mark.
+    view.rerender(
+      <SessionPanel model={createSessionPanelFixture({ tabs, selectedTabId: login.id })} />,
+    );
+    expect(
+      screen.getByRole("tab", { name: "localhost:5173, agent tab, an agent uses the page" }),
+    ).toBeDefined();
+  });
+
+  test("shows the full page URL in the tooltip of a browser tab", async () => {
+    renderWithConnection(
+      <SessionPanel
+        model={createSessionPanelFixture({
+          tabs: [browserTab(TAB_1, { title: "Dashboard", url: "http://localhost:3000/a/b?c=1" })],
+          selectedTabId: `browser:${TAB_1}`,
+        })}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.focus(screen.getByRole("tab", { name: "Dashboard" }));
+    });
+
+    expect(screen.getByRole("tooltip").textContent).toBe("Dashboardhttp://localhost:3000/a/b?c=1");
+  });
+
+  test("offers a Browser card with its reason when a new browser tab cannot open", () => {
+    renderWithConnection(
+      <SessionPanel
+        model={createSessionPanelFixture({
+          tabs: [],
+          selectedTabId: null,
+          launcher: [{ kind: "browser", disabledReason: "Open OpenDucktor in a window first." }],
+        })}
+      />,
+    );
+
+    const card = screen.getByRole("button", { name: "Browser" });
+    expect(card.hasAttribute("disabled")).toBe(true);
+    expect(card.textContent).toContain("Open OpenDucktor in a window first.");
   });
 });

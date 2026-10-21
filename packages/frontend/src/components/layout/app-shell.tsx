@@ -16,6 +16,8 @@ import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-pr
 import { WorkspaceDialogsProvider } from "@/components/layout/workspace-dialogs";
 import { Button } from "@/components/ui/button";
 import { CommandPaletteProvider } from "@/features/command-palette/command-palette-provider";
+import { LinkOpenMenu } from "@/components/features/link-open-menu";
+import { BrowserLayer, BrowserRuntimeProvider, BrowserTabCoordinator } from "@/features/browser";
 import type { CommandPaletteShell } from "@/features/command-palette/command-palette-types";
 import { RecentItemsRecorder } from "@/features/command-palette/recent-items-recorder";
 import { VisibleSessionTargetProvider } from "@/features/session-navigation/visible-session-target";
@@ -122,38 +124,43 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
           <SessionMenuProvider>
             <CommandPaletteProvider shell={paletteShell}>
               <RecentItemsRecorder />
-              <div
-                className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
-                data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
-              >
+              <BrowserRuntimeProvider>
+                <BrowserTabCoordinator />
                 <div
-                  className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
-                  aria-hidden="true"
-                />
-                <div className="flex h-full min-h-0 w-full">
-                  <WorkspaceRail onOpenRepositoryModal={openDefaultRepositoryModal} />
-
-                  <WorkspaceSidebar
-                    isOpen={isSidebarOpen}
-                    onHide={handleHideSidebar}
-                    onShow={handleShowSidebar}
-                    onOpenRepositoryModal={openDefaultRepositoryModal}
+                  className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
+                  data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
+                >
+                  <div
+                    className="electron-native-controls-surface absolute left-0 top-0 z-10 w-[72px] bg-sidebar"
+                    aria-hidden="true"
                   />
+                  <div className="flex h-full min-h-0 w-full">
+                    <WorkspaceRail onOpenRepositoryModal={openDefaultRepositoryModal} />
 
-                  <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-                    <main
-                      data-main-scroll-container="true"
-                      className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
-                    >
-                      <DiffWorkerProvider>
-                        <AgentChatTranscriptCacheProvider>
-                          <Outlet />
-                        </AgentChatTranscriptCacheProvider>
-                      </DiffWorkerProvider>
-                    </main>
-                  </section>
+                    <WorkspaceSidebar
+                      isOpen={isSidebarOpen}
+                      onHide={handleHideSidebar}
+                      onShow={handleShowSidebar}
+                      onOpenRepositoryModal={openDefaultRepositoryModal}
+                    />
+
+                    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+                      <main
+                        data-main-scroll-container="true"
+                        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
+                      >
+                        <DiffWorkerProvider>
+                          <AgentChatTranscriptCacheProvider>
+                            <Outlet />
+                          </AgentChatTranscriptCacheProvider>
+                        </DiffWorkerProvider>
+                      </main>
+                    </section>
+                  </div>
+                  <BrowserLayer />
+                  <LinkOpenMenu />
                 </div>
-              </div>
+              </BrowserRuntimeProvider>
             </CommandPaletteProvider>
           </SessionMenuProvider>
         </WorkspaceDialogsProvider>

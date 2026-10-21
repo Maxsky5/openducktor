@@ -1,3 +1,5 @@
+import type { BrowserTabOwner } from "@openducktor/contracts";
+import { useBrowserPanelModel } from "@/features/browser";
 import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
@@ -152,6 +154,14 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
         : null,
     [activeWorkspaceId, selection.view.taskId],
   );
+  const browserOwner = useMemo<BrowserTabOwner | null>(
+    () =>
+      activeWorkspaceId && selection.view.taskId
+        ? { kind: "task", workspaceId: activeWorkspaceId, taskId: selection.view.taskId }
+        : null,
+    [activeWorkspaceId, selection.view.taskId],
+  );
+  const browser = useBrowserPanelModel(browserOwner);
   const { canShowPullRequestReview, hasLinkedPullRequest } = orchestration.pullRequestReview;
   const panels = useSessionPanels({
     owner: panelOwner,
@@ -160,6 +170,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unavailableKinds:
       canShowPullRequestReview && hasLinkedPullRequest ? NO_KINDS : WITHOUT_CI_CHECKS,
     terminals,
+    browser,
   });
   const buildTools = useAgentsPageBuildTools({
     activeWorkspace,

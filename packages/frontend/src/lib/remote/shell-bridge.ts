@@ -57,6 +57,8 @@ export const createRemoteShellBridge = ({
         blob: resourceBlob(await remote.readStagedPreview(path, signal)),
       };
     },
+    // The pages of browser tabs load on the host machine, so a remote client cannot show them.
+    browser: { surface: "frame", frames: null },
     terminals: {
       subscribeRecovery,
       connect: async (onFrame, onState, onFailure) => {

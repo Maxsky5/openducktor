@@ -1,16 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import type { TerminalSummary } from "@openducktor/contracts";
+import type { BrowserTabSummary, TerminalSummary } from "@openducktor/contracts";
 import type { TerminalTab } from "@/features/terminals";
 import {
+  browserTabIdFixture,
+  createBrowserTabSummaryFixture,
+} from "@/test-utils/session-panel-fixtures";
+import {
   addNewPanelTab,
-  appendTerminalPanelTab,
-  closePanelTab,
+  appendPanelTab,
+  type BrowserTabEntry,
   canMovePanelTab,
+  closePanelTab,
   emptySessionPanelLayout,
+  findPanelTab,
   findTerminalEntry,
+  type HostTabSource,
   movePanelTab,
+  type PanelTabEntry,
   pickPanelTabKind,
   reconcileSessionPanelLayout,
+  removePanelEntry,
   type SessionPanelContext,
   type SessionPanelLayout,
   selectedPanelTabId,
@@ -18,13 +27,26 @@ import {
   shownPanelTabs,
 } from "./session-panel-layout";
 
-const context = (overrides: Partial<SessionPanelContext> = {}): SessionPanelContext => ({
+const hostTabSource = <Tab>(overrides: Partial<HostTabSource<Tab>> = {}): HostTabSource<Tab> => ({
+  tabs: [],
+  synced: true,
+  closingIds: new Set(),
+  openingIds: new Set(),
+  ...overrides,
+});
+
+const context = ({
+  terminal,
+  browser,
+  ...overrides
+}: Partial<Omit<SessionPanelContext, "hostTabs">> & {
+  terminal?: Partial<HostTabSource<TerminalTab>>;
+  browser?: Partial<HostTabSource<BrowserTabSummary>>;
+} = {}): SessionPanelContext => ({
   ownerKind: "task",
   selectionKey: "build",
   unavailableKinds: new Set(["ci_checks"]),
-  terminalTabs: [],
-  closingTabIds: new Set(),
-  terminalTabsSynced: true,
+  hostTabs: { terminal: hostTabSource(terminal), browser: hostTabSource(browser) },
   ...overrides,
 });
 
@@ -195,7 +217,7 @@ describe("session panel layout", () => {
       error: null,
       requestState: "creating",
     };
-    const ctx = context({ terminalTabs: [creating] });
+    const ctx = context({ terminal: { tabs: [creating] } });
     let layout = addNewPanelTab(reconciled(ctx), ctx, "right");
 
     layout = pickPanelTabKind(layout, ctx, "right", { kind: "terminal", tabId: "creating:1" });
@@ -207,9 +229,9 @@ describe("session panel layout", () => {
     ]);
 
     const created = readyTab("terminal-1", "creating:1");
-    layout = reconcileSessionPanelLayout(layout, context({ terminalTabs: [created] }));
+    layout = reconcileSessionPanelLayout(layout, context({ terminal: { tabs: [created] } }));
     // A later page mount finds the terminal with a new tab ID and keeps its position.
-    const rediscovered = context({ terminalTabs: [readyTab("terminal-1")] });
+    const rediscovered = context({ terminal: { tabs: [readyTab("terminal-1")] } });
     layout = reconcileSessionPanelLayout(layout, rediscovered);
 
     expect(ids(layout, "right", rediscovered)).toEqual([
@@ -231,8 +253,8 @@ describe("session panel layout", () => {
 
   test("opens terminals without a position in the bottom panel once the host list is known", () => {
     const tabs = [readyTab("terminal-1"), readyTab("terminal-2")];
-    const unsynced = context({ terminalTabs: tabs, terminalTabsSynced: false });
-    const synced = context({ terminalTabs: tabs });
+    const unsynced = context({ terminal: { tabs, synced: false } });
+    const synced = context({ terminal: { tabs } });
 
     expect(ids(reconciled(unsynced), "bottom", unsynced)).toEqual([]);
     expect(ids(reconciled(synced), "bottom", synced)).toEqual([
@@ -243,22 +265,21 @@ describe("session panel layout", () => {
 
   test("keeps terminal entries until the host list proves that their terminal ended", () => {
     const tab = readyTab("terminal-1");
-    const layout = reconciled(context({ terminalTabs: [tab] }));
+    const layout = reconciled(context({ terminal: { tabs: [tab] } }));
 
-    const waiting = reconcileSessionPanelLayout(
-      layout,
-      context({ terminalTabs: [], terminalTabsSynced: false }),
-    );
+    const waiting = reconcileSessionPanelLayout(layout, context({ terminal: { synced: false } }));
     expect(waiting).toBe(layout);
 
-    const ended = reconcileSessionPanelLayout(layout, context({ terminalTabs: [] }));
+    const ended = reconcileSessionPanelLayout(layout, context({ terminal: { tabs: [] } }));
     expect(ended.panels.bottom).toEqual([]);
   });
 
   test("hides a closing terminal but keeps its position", () => {
     const tabs = [readyTab("terminal-1"), readyTab("terminal-2")];
-    const layout = reconciled(context({ terminalTabs: tabs }));
-    const closing = context({ terminalTabs: tabs, closingTabIds: new Set(["tab:terminal-1"]) });
+    const layout = reconciled(context({ terminal: { tabs } }));
+    const closing = context({
+      terminal: { tabs, closingIds: new Set(["tab:terminal-1"]) },
+    });
 
     expect(ids(layout, "bottom", closing)).toEqual(["terminal:tab:terminal-2"]);
     expect(layout.panels.bottom.map((entry) => entry.id)).toEqual([
@@ -269,7 +290,7 @@ describe("session panel layout", () => {
 
   test("moves a terminal to the other panel and selects it there", () => {
     const tabs = [readyTab("terminal-1"), readyTab("terminal-2")];
-    const ctx = context({ terminalTabs: tabs });
+    const ctx = context({ terminal: { tabs } });
     let layout = selectPanelTab(reconciled(ctx), ctx, "bottom", "terminal:tab:terminal-1");
 
     layout = movePanelTab(layout, ctx, "terminal:tab:terminal-1", "right", {
@@ -292,7 +313,9 @@ describe("session panel layout", () => {
     const layout = reconciled(ctx);
 
     expect(movePanelTab(layout, ctx, "diffs", "bottom", null)).toBe(layout);
-    expect(appendTerminalPanelTab(layout, ctx, "right", "creating:1").panels.right).toHaveLength(4);
+    expect(
+      appendPanelTab(layout, ctx, "right", { kind: "terminal", tabId: "creating:1" }).panels.right,
+    ).toHaveLength(4);
     const withNewTab = addNewPanelTab(layout, ctx, "bottom");
     expect(pickPanelTabKind(withNewTab, ctx, "bottom", { kind: "files" })).toEqual({
       ...withNewTab,
@@ -348,7 +371,7 @@ describe("session panel layout", () => {
 
   test("allows a reorder in each panel and a move only to a panel that the kind allows", () => {
     const tabs = [readyTab("terminal-1")];
-    const ctx = context({ terminalTabs: tabs });
+    const ctx = context({ terminal: { tabs } });
     const layout = addNewPanelTab(reconciled(ctx), ctx, "right");
 
     expect(canMovePanelTab(layout, ctx, "diffs", "right")).toBe(true);
@@ -375,8 +398,8 @@ describe("session panel layout", () => {
 
   test("selects the first tab when a moved terminal was the remembered tab of another role", () => {
     const tabs = [readyTab("terminal-1")];
-    const builder = context({ selectionKey: "build", terminalTabs: tabs });
-    const spec = context({ selectionKey: "spec", terminalTabs: tabs });
+    const builder = context({ selectionKey: "build", terminal: { tabs } });
+    const spec = context({ selectionKey: "spec", terminal: { tabs } });
     let layout = movePanelTab(
       reconciled(builder),
       builder,
@@ -389,5 +412,162 @@ describe("session panel layout", () => {
     layout = reconcileSessionPanelLayout(layout, builder);
 
     expect(selectedPanelTabId(layout, "right", builder)).toBe("document");
+  });
+});
+
+const TAB_1 = browserTabIdFixture(1);
+const TAB_2 = browserTabIdFixture(2);
+const TAB_3 = browserTabIdFixture(3);
+const DEFAULT_RIGHT_IDS = ["document", "diffs", "files"];
+
+const browserEntry = (tabId: string): BrowserTabEntry => ({
+  id: `browser:${tabId}`,
+  kind: "browser",
+  tabId,
+});
+
+const hostTab = (tabId: string, overrides: Partial<BrowserTabSummary> = {}): BrowserTabSummary =>
+  createBrowserTabSummaryFixture({ tabId, ...overrides });
+
+/** A shown task layout with its default tool tabs, then the given entries. */
+const withEntries = (right: PanelTabEntry[], bottom: PanelTabEntry[] = []): SessionPanelLayout => {
+  const base = reconciled(context());
+  return { ...base, panels: { right: [...base.panels.right, ...right], bottom } };
+};
+
+describe("browser tabs in the session panel layout", () => {
+  test("keeps saved browser tabs as they are until the host list is synced", () => {
+    const saved = withEntries([browserEntry(TAB_1)], [browserEntry(TAB_2)]);
+    const waiting = context({ browser: { synced: false } });
+
+    expect(reconcileSessionPanelLayout(saved, waiting)).toBe(saved);
+    expect(ids(saved, "right", waiting)).toEqual([...DEFAULT_RIGHT_IDS, `browser:${TAB_1}`]);
+    expect(ids(saved, "bottom", waiting)).toEqual([`browser:${TAB_2}`]);
+  });
+
+  test("after sync, drops an entry whose tab the host does not have, but keeps a tab that opens", () => {
+    const layout = withEntries([browserEntry(TAB_1), browserEntry(TAB_2), browserEntry(TAB_3)]);
+    const ctx = context({
+      browser: {
+        tabs: [hostTab(TAB_1, { started: false, live: false })],
+        openingIds: new Set([TAB_3]),
+      },
+    });
+
+    const next = reconcileSessionPanelLayout(layout, ctx);
+
+    expect(next.panels.right.map((entry) => entry.id)).toEqual([
+      ...DEFAULT_RIGHT_IDS,
+      `browser:${TAB_1}`,
+      `browser:${TAB_3}`,
+    ]);
+    expect(shownPanelTabs(next, "right", ctx).at(-1)).toEqual({
+      id: `browser:${TAB_3}`,
+      kind: "browser",
+      entry: browserEntry(TAB_3),
+      tab: null,
+    });
+  });
+
+  test("puts a host tab without an entry at the end of the right panel and keeps the selection", () => {
+    const ctx = context({
+      browser: {
+        tabs: [hostTab(TAB_1, { createdBy: "agent" }), hostTab(TAB_2, { openerTabId: TAB_3 })],
+      },
+    });
+    const layout = selectPanelTab(reconciled(context()), ctx, "right", "files");
+
+    const next = reconcileSessionPanelLayout(layout, ctx);
+
+    expect(next.panels.right.map((entry) => entry.id)).toEqual([
+      ...DEFAULT_RIGHT_IDS,
+      `browser:${TAB_1}`,
+      `browser:${TAB_2}`,
+    ]);
+    expect(next.selectedRight).toEqual({ build: "files" });
+  });
+
+  test("hides a closing browser tab, and drops it once the host closed it", () => {
+    const layout = withEntries([browserEntry(TAB_1)], [browserEntry(TAB_2)]);
+    const closingIds = new Set([TAB_1]);
+    const closing = context({ browser: { tabs: [hostTab(TAB_1), hostTab(TAB_2)], closingIds } });
+
+    expect(reconcileSessionPanelLayout(layout, closing)).toBe(layout);
+    expect(ids(layout, "right", closing)).toEqual(DEFAULT_RIGHT_IDS);
+    expect(ids(layout, "bottom", closing)).toEqual([`browser:${TAB_2}`]);
+
+    const closed = reconcileSessionPanelLayout(
+      layout,
+      context({ browser: { tabs: [hostTab(TAB_2)], closingIds } }),
+    );
+    expect(findPanelTab(closed, `browser:${TAB_1}`)).toBeNull();
+    expect(closed.panels.bottom).toEqual([browserEntry(TAB_2)]);
+    // A closing tab that the host still lists never comes back as a new tab.
+    const removed = removePanelEntry(layout, `browser:${TAB_1}`);
+    expect(reconcileSessionPanelLayout(removed, closing)).toBe(removed);
+  });
+
+  test("opens each picked browser tab as a blank user tab in place of the New tab", () => {
+    const ctx = context();
+    let layout = addNewPanelTab(reconciled(ctx), ctx, "bottom");
+
+    layout = pickPanelTabKind(layout, ctx, "bottom", { kind: "browser", tabId: TAB_1 });
+    layout = pickPanelTabKind(layout, ctx, "bottom", { kind: "browser", tabId: TAB_2 });
+
+    expect(layout.panels.bottom).toEqual([browserEntry(TAB_1), browserEntry(TAB_2)]);
+    expect(selectedPanelTabId(layout, "bottom", ctx)).toBe(`browser:${TAB_2}`);
+    expect(layout.closedKinds).toEqual([]);
+  });
+
+  test("removes a closed browser tab and forgets its selection", () => {
+    const ctx = context();
+    let layout = withEntries([browserEntry(TAB_1), browserEntry(TAB_2)], [browserEntry(TAB_3)]);
+    layout = selectPanelTab(layout, ctx, "right", `browser:${TAB_1}`);
+    layout = selectPanelTab(layout, ctx, "bottom", `browser:${TAB_3}`);
+
+    const removed = removePanelEntry(
+      removePanelEntry(layout, `browser:${TAB_1}`),
+      `browser:${TAB_3}`,
+    );
+
+    expect(ids(removed, "right", ctx)).toEqual([...DEFAULT_RIGHT_IDS, `browser:${TAB_2}`]);
+    expect(removed.panels.bottom).toEqual([]);
+    expect(removed.selectedRight).toEqual({ build: null });
+    expect(removed.selectedBottom).toBeNull();
+    expect(removePanelEntry(removed, `browser:${TAB_1}`)).toBe(removed);
+  });
+
+  test("moves browser tabs between panels like terminal tabs", () => {
+    const ctx = context();
+    const layout = withEntries([browserEntry(TAB_1)], [browserEntry(TAB_2)]);
+
+    expect(canMovePanelTab(layout, ctx, `browser:${TAB_1}`, "bottom")).toBe(true);
+    const moved = movePanelTab(layout, ctx, `browser:${TAB_1}`, "bottom", {
+      id: `browser:${TAB_2}`,
+      position: "before",
+    });
+
+    expect(moved.panels.bottom.map((entry) => entry.id)).toEqual([
+      `browser:${TAB_1}`,
+      `browser:${TAB_2}`,
+    ]);
+    expect(selectedPanelTabId(moved, "bottom", ctx)).toBe(`browser:${TAB_1}`);
+  });
+
+  test("resolves a browser tab with its host tab, and hides browser tabs on a page without them", () => {
+    const tab = hostTab(TAB_2);
+    const layout = withEntries([browserEntry(TAB_1)], [browserEntry(TAB_2)]);
+
+    expect(shownPanelTabs(layout, "bottom", context({ browser: { tabs: [tab] } }))).toEqual([
+      { id: `browser:${TAB_2}`, kind: "browser", entry: browserEntry(TAB_2), tab },
+    ]);
+
+    const withoutBrowser = context({
+      unavailableKinds: new Set(["ci_checks", "browser"]),
+      browser: { synced: false },
+    });
+    expect(ids(layout, "right", withoutBrowser)).toEqual(DEFAULT_RIGHT_IDS);
+    expect(ids(layout, "bottom", withoutBrowser)).toEqual([]);
+    expect(reconcileSessionPanelLayout(layout, withoutBrowser)).toBe(layout);
   });
 });

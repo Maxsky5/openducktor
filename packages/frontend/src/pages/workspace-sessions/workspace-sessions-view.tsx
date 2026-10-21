@@ -1,4 +1,5 @@
-import type { WorkspaceSession } from "@openducktor/contracts";
+import type { BrowserTabOwner, WorkspaceSession } from "@openducktor/contracts";
+import { useBrowserPanelModel } from "@/features/browser";
 import {
   type ReactElement,
   type ReactNode,
@@ -130,11 +131,20 @@ export function WorkspaceSessions({
         : { kind: "chat", workspaceId: workspace.workspaceId, sessionId: selectedId },
     [selectedId, workspace.workspaceId],
   );
+  const browserOwner = useMemo<BrowserTabOwner | null>(
+    () =>
+      selectedId === null
+        ? null
+        : { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: selectedId },
+    [selectedId, workspace.workspaceId],
+  );
+  const browser = useBrowserPanelModel(browserOwner);
   const panels = useSessionPanels({
     owner: panelOwner,
     selectionKey: "chat",
     terminals,
     shortcutsEnabled: isActive && selectedId !== null,
+    browser,
   });
   const { selectedFile, onSelectedFileChange } = useSelectedFiles(
     workspace.workspaceId,

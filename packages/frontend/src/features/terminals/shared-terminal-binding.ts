@@ -2,7 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { openClickedLink } from "@/lib/link-open";
 import { createLinkController } from "./terminal-link-controller";
 import { createTerminalTheme } from "./terminal-xterm-options";
 
@@ -25,7 +25,8 @@ export const createTerminalBinding = (
 ): TerminalBinding => {
   const links = createLinkController({
     container,
-    openUrl: openExternalUrl,
+    openUrl: (url, click) =>
+      openClickedLink(url, click, { x: click.clientX, y: click.clientY, width: 0, height: 0 }),
     reportOpenError,
   });
   const terminal = new Terminal({ ...options, linkHandler: links.linkHandler });

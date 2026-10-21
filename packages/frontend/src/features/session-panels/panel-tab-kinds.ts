@@ -2,6 +2,7 @@ import {
   FileDiff,
   FileText,
   FolderTree,
+  Globe,
   ListChecks,
   type LucideIcon,
   SquareTerminal,
@@ -14,8 +15,12 @@ export type SessionOwnerKind = "task" | "chat";
 export const TOOL_TAB_KINDS = ["document", "diffs", "files", "ci_checks"] as const;
 export type ToolTabKind = (typeof TOOL_TAB_KINDS)[number];
 
+/** Kinds whose tabs the host owns. Each entry of these kinds shows one host tab. */
+export const HOST_TAB_KINDS = ["terminal", "browser"] as const;
+export type HostTabKind = (typeof HOST_TAB_KINDS)[number];
+
 /** All kinds in launcher order. */
-export const PANEL_TAB_KINDS = [...TOOL_TAB_KINDS, "terminal"] as const;
+export const PANEL_TAB_KINDS = [...TOOL_TAB_KINDS, ...HOST_TAB_KINDS] as const;
 export type PanelTabKind = (typeof PANEL_TAB_KINDS)[number];
 
 export type PanelTabKindRule = {
@@ -84,10 +89,23 @@ export const PANEL_TAB_KIND_RULES = {
     openByDefault: false,
     keepMounted: true,
   },
+  browser: {
+    label: "Browser",
+    description: "Open a web page.",
+    icon: Globe,
+    cardinality: "many",
+    panels: ["right", "bottom"],
+    owners: ["task", "chat"],
+    openByDefault: false,
+    keepMounted: true,
+  },
 } as const satisfies Record<PanelTabKind, PanelTabKindRule>;
 
 export const isToolTabKind = (value: string): value is ToolTabKind =>
   TOOL_TAB_KINDS.some((kind) => kind === value);
+
+export const isHostTabKind = (value: string): value is HostTabKind =>
+  HOST_TAB_KINDS.some((kind) => kind === value);
 
 export const PANEL_NAMES = {
   right: "right panel",

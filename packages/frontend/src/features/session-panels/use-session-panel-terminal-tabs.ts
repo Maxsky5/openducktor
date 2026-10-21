@@ -9,6 +9,8 @@ import {
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { PanelId } from "./panel-tab-kinds";
 import {
+  type HostTabActions,
+  pickPanelTabKind,
   type ResolvedPanelTab,
   type SessionPanelLayoutUpdate,
   selectPanelTab,
@@ -24,33 +26,29 @@ export type LatestPanelState = {
 
 type CloseCandidate = { ownerKey: string; panel: PanelId; entryId: string; tab: TerminalTab };
 
-type SessionPanelTerminalClose = {
-  /** Closes a terminal tab. Resolves to true when the terminal closed. */
-  closeTerminalTab: (
-    panel: PanelId,
-    entryId: string,
-    tab: TerminalTab,
-    confirmTerminate: boolean,
-  ) => Promise<boolean>;
+type SessionPanelTerminalTabs = {
+  actions: HostTabActions<"terminal">;
   terminalClose: TerminalCloseDialogModel;
 };
 
 /**
- * Closes a terminal tab. A terminal without a running command closes at once: its tab hides while
- * the host ends it. A terminal that runs a command asks for a confirmation first. A rejected or
- * failed close gives the tab back.
+ * Opens and closes terminal tabs. A new terminal takes the keyboard focus. A terminal without a
+ * running command closes at once: its tab hides while the host ends it. A terminal that runs a
+ * command asks for a confirmation first. A rejected or failed close gives the tab back.
  */
-export function useSessionPanelTerminalClose({
+export function useSessionPanelTerminalTabs({
   ownerKey,
   latest,
   update,
   setBottomOpen,
+  requestFocus,
 }: {
   ownerKey: string | null;
   latest: RefObject<LatestPanelState>;
   update: SessionPanelLayoutUpdate;
   setBottomOpen: (value: boolean) => void;
-}): SessionPanelTerminalClose {
+  requestFocus: (panel: PanelId) => void;
+}): SessionPanelTerminalTabs {
   const [candidate, setCandidate] = useState<CloseCandidate | null>(null);
   const [confirmingOwnerKey, setConfirmingOwnerKey] = useState<string | null>(null);
 
@@ -98,6 +96,23 @@ export function useSessionPanelTerminalClose({
     [latest, setBottomOpen, update],
   );
 
+  const actions = useMemo<HostTabActions<"terminal">>(
+    () => ({
+      pick: (panel) => {
+        const { terminals, ownerKey: currentOwnerKey } = latest.current;
+        if (terminals.scopeKey !== currentOwnerKey) return;
+        const tabId = terminals.createTerminal();
+        if (tabId === null) return;
+        update((current, context) =>
+          pickPanelTabKind(current, context, panel, { kind: "terminal", tabId }),
+        );
+        requestFocus(panel);
+      },
+      close: (panel, tab) => void closeTerminalTab(panel, tab.id, tab.terminal, false),
+    }),
+    [closeTerminalTab, latest, requestFocus, update],
+  );
+
   const visibleCandidate = candidate?.ownerKey === ownerKey ? candidate : null;
   const isConfirming =
     visibleCandidate !== null && confirmingOwnerKey === visibleCandidate.ownerKey;
@@ -121,5 +136,5 @@ export function useSessionPanelTerminalClose({
     [candidateTab, isConfirming, onCancel, onConfirm],
   );
 
-  return { closeTerminalTab, terminalClose };
+  return { actions, terminalClose };
 }

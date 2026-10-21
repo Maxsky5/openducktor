@@ -21,7 +21,10 @@ const createLine = (text: string, columns: number): IBufferLine => ({
   translateToString: () => text,
 });
 
-const createHarness = (openUrl: (url: string) => Promise<void>) => {
+const createHarness = (
+  openUrl: (url: string, click: MouseEvent) => Promise<void>,
+  mouseTrackingMode: Terminal["modes"]["mouseTrackingMode"] = "none",
+) => {
   const columns = 20;
   const container = document.createElement("div");
   const terminalElement = document.createElement("div");
@@ -50,6 +53,7 @@ const createHarness = (openUrl: (url: string) => Promise<void>) => {
     },
     cols: columns,
     element: terminalElement,
+    modes: { mouseTrackingMode },
     onRender: event,
     onResize: event,
     onScroll: event,
@@ -102,7 +106,7 @@ describe("terminal link controller", () => {
   });
 
   test("opens one link for a modified primary click and blocks the browser click", async () => {
-    const openUrl = mock(async (_url: string) => undefined);
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
     try {
       harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);
@@ -114,16 +118,34 @@ describe("terminal link controller", () => {
       expect(up.defaultPrevented).toBe(true);
       expect(click.defaultPrevented).toBe(true);
       expect(openUrl).toHaveBeenCalledTimes(1);
-      expect(openUrl).toHaveBeenCalledWith("https://a.test");
+      expect(openUrl.mock.calls.map(([url]) => url)).toEqual(["https://a.test"]);
     } finally {
       harness.controller.dispose();
       harness.container.remove();
     }
   });
 
-  test("does not open for an ordinary click or a drag", () => {
-    const openUrl = mock(async (_url: string) => undefined);
+  test("opens a plain click without blocking it, so the terminal still gets it", () => {
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
+    try {
+      harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);
+      const down = harness.dispatchMouse("mousedown", { ctrlKey: false });
+      const up = harness.dispatchMouse("mouseup", { ctrlKey: false });
+
+      expect(down.defaultPrevented).toBe(false);
+      expect(up.defaultPrevented).toBe(false);
+      expect(openUrl).toHaveBeenCalledTimes(1);
+      expect(openUrl.mock.calls[0]?.[1].ctrlKey).toBe(false);
+    } finally {
+      harness.controller.dispose();
+      harness.container.remove();
+    }
+  });
+
+  test("does not open a drag, or a plain click while the program reads the mouse", () => {
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
+    const harness = createHarness(openUrl, "any");
     try {
       harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);
       harness.dispatchMouse("mousedown", { ctrlKey: false });
@@ -140,7 +162,7 @@ describe("terminal link controller", () => {
   });
 
   test("opens a validated OSC 8 destination instead of its visible label", () => {
-    const openUrl = mock(async (_url: string) => undefined);
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
     try {
       const event = harness.dispatchMouse("mousemove");
@@ -149,7 +171,7 @@ describe("terminal link controller", () => {
       harness.dispatchMouse("mousedown");
       harness.dispatchMouse("mouseup");
 
-      expect(openUrl).toHaveBeenCalledWith("https://osc.test/path");
+      expect(openUrl.mock.calls.map(([url]) => url)).toEqual(["https://osc.test/path"]);
       expect(openUrl).toHaveBeenCalledTimes(1);
     } finally {
       harness.controller.dispose();
@@ -158,7 +180,7 @@ describe("terminal link controller", () => {
   });
 
   test("resolves an OSC 8 destination before the first modified press", () => {
-    const openUrl = mock(async (_url: string) => undefined);
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
     const parentMouseMove = mock(() => undefined);
     const handleMouseMove = (event: MouseEvent) => {
@@ -174,7 +196,7 @@ describe("terminal link controller", () => {
       harness.dispatchMouse("mousedown");
       harness.dispatchMouse("mouseup");
 
-      expect(openUrl).toHaveBeenCalledWith("https://osc.test/first-press");
+      expect(openUrl.mock.calls.map(([url]) => url)).toEqual(["https://osc.test/first-press"]);
       expect(openUrl).toHaveBeenCalledTimes(1);
       expect(parentMouseMove).not.toHaveBeenCalled();
     } finally {
@@ -186,7 +208,7 @@ describe("terminal link controller", () => {
   });
 
   test("does not replace an unresolved xterm link with its visible URL", () => {
-    const openUrl = mock(async (_url: string) => undefined);
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
     try {
       harness.screen.classList.add("xterm-cursor-pointer");
@@ -201,7 +223,7 @@ describe("terminal link controller", () => {
   });
 
   test("stops press listeners when the window loses focus", () => {
-    const openUrl = mock(async (_url: string) => undefined);
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
     try {
       harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);
@@ -222,7 +244,8 @@ describe("terminal link controller", () => {
 
   test("updates the pointer on modifier changes and reports opener errors", async () => {
     const failure = new Error("opener unavailable");
-    const harness = createHarness(async () => Promise.reject(failure));
+    // While the program reads the mouse, only Mod+Click opens links.
+    const harness = createHarness(async () => Promise.reject(failure), "any");
     try {
       harness.link.hover?.(
         harness.dispatchMouse("mousemove", { ctrlKey: false }),
@@ -247,7 +270,7 @@ describe("terminal link controller", () => {
   });
 
   test("disposes subscriptions and stops link input", () => {
-    const openUrl = mock(async (_url: string) => undefined);
+    const openUrl = mock(async (_url: string, _click: MouseEvent) => undefined);
     const harness = createHarness(openUrl);
     try {
       harness.link.hover?.(harness.dispatchMouse("mousemove"), harness.link.text);

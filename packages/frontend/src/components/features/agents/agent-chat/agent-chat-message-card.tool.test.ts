@@ -35,6 +35,34 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain(formatTime(timestamp));
   });
 
+  test("renders a browser tool call as a browser action row", () => {
+    const html = renderToStaticMarkup(
+      createMessageCardElement({
+        message: {
+          id: "browser-tool",
+          role: "tool",
+          content: "Tool openducktor_odt_browser_click completed",
+          timestamp: "2026-07-10T20:33:19.261Z",
+          meta: {
+            kind: "tool",
+            partId: "browser-tool-part",
+            callId: "browser-tool-call",
+            tool: "openducktor_odt_browser_click",
+            toolType: "workflow",
+            status: "completed",
+            input: { tabId: "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b", ref: "e12" },
+            output: "Clicked e12.",
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain("Browser click");
+    expect(html).toContain(">e12<");
+    expect(html).not.toContain("browser_click");
+    expect(html).toContain("lucide-globe");
+  });
+
   test("keeps exact tool timestamps visible", () => {
     const timestamp = "2026-07-10T20:33:19.261Z";
     const html = renderToStaticMarkup(

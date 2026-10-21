@@ -95,7 +95,10 @@ if (testRoot === repoRoot || testRoot === frontendRoot) {
   );
 
   if (globalThis.document === undefined) {
-    GlobalRegistrator.register();
+    // An iframe in a test must not load its page from the network.
+    GlobalRegistrator.register({
+      settings: { navigation: { disableChildFrameNavigation: true } },
+    });
   }
 
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {

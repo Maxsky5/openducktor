@@ -28,10 +28,12 @@ import { HostPullRequestReviewClient } from "./pull-request-review-client";
 import { HostSystemClient } from "./system-client";
 import { HostTaskClient } from "./task-client";
 import { HostTerminalClient } from "./terminal-client";
+import { HostBrowserClient } from "./browser-client";
 
 export { HostInvokeError } from "./invoke-utils";
 export type { InvokeFn } from "./invoke-utils";
 export { HostTerminalClientError } from "./terminal-client";
+export { HostBrowserClientError } from "./browser-client";
 
 import { HostWorkspaceClient } from "./workspace-client";
 import { HostWorkspaceSessionClient } from "./workspace-session-client";
@@ -53,6 +55,7 @@ type HostClientApi = {
   PublicMethods<HostSystemClient> &
   PublicMethods<HostTaskClient> &
   PublicMethods<HostTerminalClient> &
+  PublicMethods<HostBrowserClient> &
   PublicMethods<HostAgentClient> &
   PublicMethods<HostAgentSessionLiveClient> &
   PublicMethods<HostAgentRuntimeQueryClient> &
@@ -68,6 +71,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
   const systemClient = new HostSystemClient(invokeFn);
   const taskClient = new HostTaskClient(invokeFn);
   const terminalClient = new HostTerminalClient(invokeFn);
+  const browserClient = new HostBrowserClient(invokeFn);
   const agentClient = new HostAgentClient(invokeFn);
   const agentSessionLiveClient = new HostAgentSessionLiveClient(invokeFn);
   const agentRuntimeQueryClient = new HostAgentRuntimeQueryClient(invokeFn);
@@ -242,6 +246,22 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     terminalPreparePathInput: terminalClient.terminalPreparePathInput.bind(terminalClient),
     terminalRestart: terminalClient.terminalRestart.bind(terminalClient),
     terminalClose: terminalClient.terminalClose.bind(terminalClient),
+    browserStateRead: browserClient.browserStateRead.bind(browserClient),
+    browserTabsList: browserClient.browserTabsList.bind(browserClient),
+    browserTabOpen: browserClient.browserTabOpen.bind(browserClient),
+    browserTabStart: browserClient.browserTabStart.bind(browserClient),
+    browserTabFrameState: browserClient.browserTabFrameState.bind(browserClient),
+    browserTabClose: browserClient.browserTabClose.bind(browserClient),
+    browserTabNavigate: browserClient.browserTabNavigate.bind(browserClient),
+    browserTabSetShared: browserClient.browserTabSetShared.bind(browserClient),
+    browserPromptAnswer: browserClient.browserPromptAnswer.bind(browserClient),
+    browserSitePermissionsRead: browserClient.browserSitePermissionsRead.bind(browserClient),
+    browserSitePermissionsReset: browserClient.browserSitePermissionsReset.bind(browserClient),
+    browserPickerSet: browserClient.browserPickerSet.bind(browserClient),
+    browserAnnotationCapture: browserClient.browserAnnotationCapture.bind(browserClient),
+    browserDownloadReveal: browserClient.browserDownloadReveal.bind(browserClient),
+    browserPopupWindowShow: browserClient.browserPopupWindowShow.bind(browserClient),
+    browserDevToolsOpen: browserClient.browserDevToolsOpen.bind(browserClient),
     pathCheck: agentClient.pathCheck.bind(agentClient),
     gitCheck: agentClient.gitCheck.bind(agentClient),
     runtimeExecutablesCheck: agentClient.runtimeExecutablesCheck.bind(agentClient),

@@ -1,12 +1,4 @@
-import {
-  AlertTriangle,
-  Bot,
-  BrainCog,
-  LoaderCircle,
-  Paperclip,
-  SendHorizontal,
-  Square,
-} from "lucide-react";
+import { Bot, BrainCog, Paperclip, Square } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -55,6 +47,10 @@ import {
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
 } from "./agent-chat-composer-surface";
 import { focusEditorEnd } from "./agent-chat-composer-selection";
+import {
+  AgentChatComposerPendingNotices,
+  AgentChatComposerSendControl,
+} from "./agent-chat-composer-pending-items";
 import { AgentContextUsageIndicator } from "./agent-context-usage-indicator";
 import { useAgentChatComposerDraftState } from "./use-agent-chat-composer-draft-state";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
@@ -115,6 +111,7 @@ export function AgentChatComposer({
     defaultSendDisabled,
     sendDisabled,
     sendBlockedReason,
+    pendingSendBlockedReason,
   } = useComposerPolicy({ model, draft, primaryMode, settingsReady });
   const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
 
@@ -261,6 +258,7 @@ export function AgentChatComposer({
       hasSlashAttachmentConflict={hasSlashAttachmentConflict}
       isComposerInputDisabled={isComposerInputDisabled}
       isSubmitting={isSubmitting}
+      pendingSendBlockedReason={pendingSendBlockedReason}
       selectorDisabled={selectorDisabled}
       modelPickerDisabled={modelPickerDisabled}
       sendDisabled={sendDisabled}
@@ -287,6 +285,7 @@ type AgentChatComposerFormViewProps = {
   hasSlashAttachmentConflict: boolean;
   isComposerInputDisabled: boolean;
   isSubmitting: boolean;
+  pendingSendBlockedReason: string | null;
   selectorDisabled: boolean;
   modelPickerDisabled: boolean;
   sendDisabled: boolean;
@@ -304,47 +303,6 @@ const COMPOSER_SELECTOR_TRIGGER_CLASS_NAME = cn(
   COMPOSER_QUIET_CONTROL_CLASS_NAME,
   "!h-7 !w-auto shrink !rounded-lg !border-transparent !bg-transparent text-xs hover:!bg-muted focus-visible:ring-2 data-[state=open]:!bg-muted",
 );
-
-const SEND_PENDING_ITEMS_BADGE_CLASS_NAME =
-  "pointer-events-none absolute -right-2 -top-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-none text-neutral-950 ring-2 ring-card";
-
-const AgentChatComposerSendControl = memo(function AgentChatComposerSendControl({
-  sendDisabled,
-  showSubmittingState,
-  pendingSendItems,
-}: {
-  sendDisabled: boolean;
-  showSubmittingState: boolean;
-  pendingSendItems: AgentChatComposerModel["pendingSendItems"];
-}): ReactElement {
-  return (
-    <div className="relative">
-      <Button
-        type="submit"
-        size="icon"
-        className="size-8 rounded-lg"
-        aria-label={showSubmittingState ? "Preparing message" : "Send message"}
-        disabled={sendDisabled}
-      >
-        {showSubmittingState ? (
-          <LoaderCircle className="size-3.5 animate-spin" />
-        ) : (
-          <SendHorizontal className="size-3.5" />
-        )}
-      </Button>
-      {pendingSendItems && pendingSendItems.count > 0 ? (
-        <span
-          aria-label={pendingSendItems.accessibleLabel}
-          className={SEND_PENDING_ITEMS_BADGE_CLASS_NAME}
-          data-testid="agent-chat-send-pending-items-badge"
-          role="status"
-        >
-          {pendingSendItems.count}
-        </span>
-      ) : null}
-    </div>
-  );
-});
 
 const AgentChatComposerControls = memo(function AgentChatComposerControls({
   speed,
@@ -585,6 +543,7 @@ function AgentChatComposerFormView({
   hasSlashAttachmentConflict,
   isComposerInputDisabled,
   isSubmitting,
+  pendingSendBlockedReason,
   selectorDisabled,
   modelPickerDisabled,
   sendDisabled,
@@ -634,9 +593,6 @@ function AgentChatComposerFormView({
     composerEditorRef,
     onComposerEditorInput,
   } = model;
-  const pendingItemsWarning = pendingSendItems?.warning ?? null;
-  const showPendingItemsWarning =
-    pendingItemsWarning !== null && (pendingSendItems?.count ?? 0) > 0;
   // One object while the catalogs stay the same, so other model changes skip the editor.
   const editorCatalog = useMemo<AgentChatComposerEditorCatalog>(
     () => ({
@@ -720,16 +676,10 @@ function AgentChatComposerFormView({
           {model.messageQueue && !model.isReadOnly ? (
             <AgentChatMessageQueuePauseNotice model={model.messageQueue} />
           ) : null}
-          {showPendingItemsWarning ? (
-            <div
-              className="flex items-start gap-1.5 px-3 pt-2.5 text-[11px] text-amber-700 dark:text-amber-300"
-              data-testid="agent-chat-pending-items-warning"
-              role="status"
-            >
-              <AlertTriangle className="mt-px size-3.5 shrink-0" />
-              <span>{pendingItemsWarning}</span>
-            </div>
-          ) : null}
+          <AgentChatComposerPendingNotices
+            pendingSendItems={pendingSendItems}
+            pendingSendBlockedReason={pendingSendBlockedReason}
+          />
           <AgentChatComposerAttachments
             draft={draft}
             attachmentErrors={attachmentErrors}

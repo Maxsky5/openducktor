@@ -3,6 +3,7 @@ import type { ClientStorage } from "../platform/client-storage";
 import type { InlineCommentOwner } from "./inline-comment-owner";
 import type { DiffScope } from "../types/diff-scope";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
+import { lockPendingItems, restorePendingItem, settlePendingItems } from "./pending-send-batch";
 import {
   type PersistedInlineCommentDraft,
   pruneInlineCommentDraftsFromStorage,
@@ -447,95 +448,53 @@ export const createInlineCommentDraftStore = ({
         .sort(compareDrafts),
 
     beginSubmittingDrafts: (ownerKey, drafts) => {
-      if (drafts.length === 0) {
+      const submissionId = generateSubmissionId();
+      const next = lockPendingItems(get().draftsByOwner[ownerKey] ?? [], drafts, submissionId);
+      if (next === null) {
         return null;
       }
-
-      const submissionId = generateSubmissionId();
-      let didTransition = false;
-      set((state) => ({
-        draftsByOwner: {
-          ...state.draftsByOwner,
-          [ownerKey]: (state.draftsByOwner[ownerKey] ?? []).map((draft) => {
-            if (
-              draft.status === "pending" &&
-              drafts.some((snapshot) => matchesRevision(draft, snapshot))
-            ) {
-              didTransition = true;
-              return {
-                ...draft,
-                status: "submitting",
-                submissionId,
-              };
-            }
-            return draft;
-          }),
-        },
-      }));
-      return didTransition ? submissionId : null;
+      set((state) => ({ draftsByOwner: { ...state.draftsByOwner, [ownerKey]: next } }));
+      return submissionId;
     },
 
     restoreSubmittingDrafts: (submissionId) => {
-      if (submissionId.length === 0) {
-        return;
-      }
-
       const missingDrafts = missingDraftsBySubmission.get(submissionId) ?? [];
       missingDraftsBySubmission.delete(submissionId);
-      const changedOwnerKeys: string[] = [];
-      set((state) => {
-        let didChange = false;
-        const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
-        for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
-          const nextDrafts: InlineCommentDraft[] = [];
-          for (const draft of drafts) {
-            if (draft.status !== "submitting" || draft.submissionId !== submissionId) {
-              nextDrafts.push(draft);
-              continue;
-            }
-            didChange = true;
-            if (
-              !missingDrafts.some(
-                (snapshot) => snapshot.ownerKey === ownerKey && matchesRevision(draft, snapshot),
-              )
-            ) {
-              nextDrafts.push({ ...draft, status: "pending", submissionId: null });
-            }
-          }
-          if (nextDrafts.length !== drafts.length) changedOwnerKeys.push(ownerKey);
-          draftsByOwner[ownerKey] = nextDrafts;
+      const state = get();
+      // A draft whose file went away during the send does not come back.
+      const settled = settlePendingItems<InlineCommentDraft>(
+        state.draftsByOwner,
+        submissionId,
+        (draft, ownerKey) =>
+          missingDrafts.some(
+            (snapshot) => snapshot.ownerKey === ownerKey && matchesRevision(draft, snapshot),
+          )
+            ? null
+            : restorePendingItem(draft),
+      );
+      if (!settled) {
+        return;
+      }
+      set({ draftsByOwner: settled.itemsByOwner });
+      for (const ownerKey of settled.changedOwnerKeys) {
+        if (settled.itemsByOwner[ownerKey]?.length !== state.draftsByOwner[ownerKey]?.length) {
+          markOwnerChangedNow(ownerKey);
         }
-        return didChange ? { draftsByOwner } : state;
-      });
-      for (const ownerKey of changedOwnerKeys) markOwnerChangedNow(ownerKey);
+      }
     },
 
     completeSubmittingDrafts: (submissionId) => {
-      if (submissionId.length === 0) {
-        return;
-      }
-
       missingDraftsBySubmission.delete(submissionId);
-      const state = get();
-      const changedOwnerKeys: string[] = [];
-      const draftsByOwner: Record<string, InlineCommentDraft[]> = {};
-      let didChange = false;
-      for (const [ownerKey, drafts] of Object.entries(state.draftsByOwner)) {
-        const nextDrafts = drafts.filter(
-          (draft) => !(draft.status === "submitting" && draft.submissionId === submissionId),
-        );
-        didChange = didChange || nextDrafts.length !== drafts.length;
-        if (nextDrafts.length !== drafts.length) {
-          changedOwnerKeys.push(ownerKey);
-        }
-        draftsByOwner[ownerKey] = nextDrafts;
-      }
-      if (!didChange) {
+      const settled = settlePendingItems<InlineCommentDraft>(
+        get().draftsByOwner,
+        submissionId,
+        () => null,
+      );
+      if (!settled) {
         return;
       }
-
-      set({ draftsByOwner });
-      for (const ownerKey of changedOwnerKeys) {
+      set({ draftsByOwner: settled.itemsByOwner });
+      for (const ownerKey of settled.changedOwnerKeys) {
         markOwnerChangedNow(ownerKey);
       }
     },

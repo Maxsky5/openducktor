@@ -37,6 +37,8 @@ export type SessionPanelVisibility = {
   focusRequest: PanelCounts;
   setBottomOpen: (value: boolean, motion?: PanelMotion) => void;
   toggleRight: () => void;
+  /** Slides the right panel in when it is hidden. */
+  showRight: () => void;
   /** Hides the right panel at once, as after a drag that made it zero wide. */
   hideRightAtOnce: () => void;
   requestFocus: (panel: PanelId) => void;
@@ -79,7 +81,11 @@ const isBottomPanelShown = (
 ): boolean => {
   if (state.ownerKey === null) return false;
   if (state.bottomVisibility.isExplicit) return state.bottomVisibility.value;
-  return bottomTabs.some((tab) => tab.kind === "terminal" && isUserStartedTab(tab.terminal));
+  // Browser tabs go to the bottom panel only after a user action, so they show it like the
+  // terminals that the user started.
+  return bottomTabs.some(
+    (tab) => tab.kind === "browser" || (tab.kind === "terminal" && isUserStartedTab(tab.terminal)),
+  );
 };
 
 /**
@@ -160,11 +166,15 @@ export function useSessionPanelVisibility(
       })),
     [updateView],
   );
-  const { toggle, close } = rightPanel;
+  const { toggle, open, close } = rightPanel;
   const toggleRight = useCallback((): void => {
     updateView((state) => ({ ...state, motion: { ...state.motion, right: "slide" } }));
     toggle();
   }, [toggle, updateView]);
+  const showRight = useCallback((): void => {
+    updateView((state) => ({ ...state, motion: { ...state.motion, right: "slide" } }));
+    open();
+  }, [open, updateView]);
   const hideRightAtOnce = useCallback((): void => {
     updateView((state) => ({ ...state, motion: { ...state.motion, right: "instant" } }));
     close();
@@ -197,6 +207,7 @@ export function useSessionPanelVisibility(
     focusRequest: view.focusRequest,
     setBottomOpen,
     toggleRight,
+    showRight,
     hideRightAtOnce,
     requestFocus,
     settleRight,

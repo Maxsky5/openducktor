@@ -14,11 +14,14 @@ import {
 } from "@openducktor/host-client";
 import {
   type OpenDucktorElectronApi,
+  type OpenDucktorElectronTerminalApi,
   PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE,
 } from "../shared/electron-bridge-contract";
+import { electronBrowserPartition } from "../shared/electron-browser-partitions";
 import { createElectronTaskAssetUrl } from "../shared/electron-task-asset-url";
 
 const RUN_EVENT_CHANNEL = "openducktor://run-event";
+const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
@@ -70,6 +73,37 @@ const subscribeElectronEvent =
     electronApi.subscribe(channel, (payload: HostEventPayload<typeof RUN_EVENT_CHANNEL>) =>
       logListenerFailure(listener(payload)),
     );
+
+/**
+ * Opens one client of a frame channel. A channel with a `connect` step must accept the client
+ * before the client counts as connected.
+ */
+const connectFrameChannel = async (
+  channel: OpenDucktorElectronTerminalApi & { connect?(clientId: string): Promise<void> },
+  onFrame: (frame: Uint8Array) => void,
+  onStateChange: (state: "connected" | "disconnected") => void,
+) => {
+  const clientId = globalThis.crypto.randomUUID();
+  const unsubscribe = channel.subscribe(clientId, onFrame);
+  try {
+    await channel.connect?.(clientId);
+  } catch (cause) {
+    unsubscribe();
+    throw cause;
+  }
+  onStateChange("connected");
+  return {
+    send: (frame: Uint8Array) => channel.send(clientId, frame),
+    close: async () => {
+      try {
+        await channel.disconnect(clientId);
+      } finally {
+        unsubscribe();
+        onStateChange("disconnected");
+      }
+    },
+  };
+};
 
 export const createElectronShellBridge = (): ShellBridge => {
   const electronApi = getElectronApi();
@@ -169,23 +203,22 @@ export const createElectronShellBridge = (): ShellBridge => {
         return electronApi.editorClipboard.readText(type);
       },
     },
+    subscribeBrowserTabEvents: async (listener) =>
+      electronApi.subscribe(BROWSER_EVENT_CHANNEL, listener),
+    // Mount each browser tab as `<webview partition={partition(workspaceId)} src="about:blank"
+    // allowpopups>`, then call `bindGuest` with its `getWebContentsId()`. The engine takes control
+    // of the page first, then loads the tab URL, so the page never runs without the host.
+    browser: {
+      surface: "webview",
+      partition: electronBrowserPartition,
+      connect: (onFrame, onStateChange) =>
+        connectFrameChannel(electronApi.browser, onFrame, onStateChange),
+      bindGuest: (tabId, webContentsId) => electronApi.browser.bindGuest(tabId, webContentsId),
+      pickFiles: (input) => electronApi.browser.pickFiles(input),
+    },
     terminals: {
-      connect: async (onFrame, onStateChange) => {
-        const clientId = globalThis.crypto.randomUUID();
-        const unsubscribe = electronApi.terminals.subscribe(clientId, onFrame);
-        onStateChange("connected");
-        return {
-          send: (frame) => electronApi.terminals.send(clientId, frame),
-          close: async () => {
-            try {
-              await electronApi.terminals.disconnect(clientId);
-            } finally {
-              unsubscribe();
-              onStateChange("disconnected");
-            }
-          },
-        };
-      },
+      connect: (onFrame, onStateChange) =>
+        connectFrameChannel(electronApi.terminals, onFrame, onStateChange),
     },
   };
 };

@@ -4,6 +4,8 @@ import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
 import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useCallback } from "react";
+import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
+import { BrowserAnnotationMessageChips } from "@/features/browser-annotations/browser-annotation-message-chips";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
@@ -535,33 +537,67 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
   );
 };
 
-// What a user message bubble shows: its text with reference chips inline, and its attachments.
+/** The parts with their visible text cut at `end`. Text that starts at `end` or later goes. */
+const withVisibleTextEndingAt = (
+  parts: AgentUserMessageDisplayPart[],
+  end: number,
+): AgentUserMessageDisplayPart[] => {
+  let offset = 0;
+  return parts.flatMap((part) => {
+    if (part.kind !== "text" || part.synthetic) return [part];
+    const start = offset;
+    offset += part.text.length;
+    if (start >= end) return [];
+    return [{ ...part, text: part.text.slice(0, end - start).trimEnd() }];
+  });
+};
+
+// What a user message bubble shows: its text with reference chips inline, its sent browser
+// annotations, and its attachments.
 type UserMessageDisplay = {
   inline: ReactElement | null;
+  annotations: ReactElement | null;
   attachments: UserAttachmentPart[];
 };
 
 const readUserMessageDisplay = (message: AgentChatMessage): UserMessageDisplay => {
   const userParts = readUserMessageParts(message);
   const userText = readRenderableUserMessageText(userParts, message.content);
+  const attachments = userParts.filter(isUserAttachmentPart);
+  // Pending browser annotations go after the user text. The chat shows them as chips.
+  const sent = readSentBrowserAnnotations(userText);
+  if (!sent) {
+    return {
+      inline: renderUserMessageInlineContent(userText, userParts),
+      annotations: null,
+      attachments,
+    };
+  }
   return {
-    inline: renderUserMessageInlineContent(userText, userParts),
-    attachments: userParts.filter(isUserAttachmentPart),
+    inline: renderUserMessageInlineContent(
+      userText.slice(0, sent.textEnd).trimEnd(),
+      withVisibleTextEndingAt(userParts, sent.textEnd),
+    ),
+    annotations: <BrowserAnnotationMessageChips annotations={sent.annotations} />,
+    attachments,
   };
 };
 
-const hasUserMessageDisplay = ({ inline, attachments }: UserMessageDisplay): boolean =>
-  inline !== null || attachments.length > 0;
+const hasUserMessageDisplay = ({ inline, annotations, attachments }: UserMessageDisplay): boolean =>
+  inline !== null || annotations !== null || attachments.length > 0;
 
 const UserMessageDisplayContent = ({
-  display: { inline, attachments },
+  display: { inline, annotations, attachments },
 }: {
   display: UserMessageDisplay;
 }): ReactElement => (
   <>
     {inline}
+    {annotations ? <div className={cn(inline && "mt-2")}>{annotations}</div> : null}
     {attachments.length > 0 ? (
-      <div className={cn("flex flex-wrap items-center gap-2", inline && "mt-2 mb-1")}>
+      <div
+        className={cn("flex flex-wrap items-center gap-2", (inline || annotations) && "mt-2 mb-1")}
+      >
         {attachments.map((part) => (
           <AgentChatAttachmentChip
             key={part.attachment.id}

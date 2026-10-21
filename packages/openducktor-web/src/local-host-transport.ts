@@ -21,6 +21,7 @@ import {
   connectionStreamWarningEvent,
 } from "@openducktor/frontend-core/recovery/connection-control-events";
 import {
+  type BrowserTabEventListener,
   logListenerFailure,
   type RuntimeChangeListener,
   type TaskStreamFrame,
@@ -50,6 +51,7 @@ import {
   readLocalHostInvokeErrorPayloadEffect,
 } from "./local-host-errors";
 import {
+  BROWSER_EVENT_STREAM_NAME,
   hostEventStreamEventName,
   liveSessionStreamEventName,
 } from "@openducktor/remote-host/host-event-stream-name";
@@ -69,8 +71,9 @@ const RUN_EVENT_CHANNEL = "openducktor://run-event";
 const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event";
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
+const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
 const HOST_EVENT_STREAM_PATH = "events";
-const APP_TOKEN_HEADER = "x-openducktor-app-token";
+export const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const SESSION_PATH = "session";
 const INITIAL_SSE_READY_TIMEOUT_MS = 10_000;
 const eventSourceDataSchema = z.object({ data: z.string() });
@@ -637,6 +640,24 @@ export const subscribeLocalHostRuntimeChanges = async (
         return listener(event.payload);
       }
     }),
+  );
+};
+
+export const subscribeLocalHostBrowserTabEvents = async (
+  listener: BrowserTabEventListener,
+): Promise<() => void> => {
+  return runWebBoundary(
+    subscribeReadyLocalHostEventsEffect(
+      BROWSER_EVENT_CHANNEL,
+      (event) => {
+        if (isBrowserSseControlEvent(event)) {
+          return listener(event);
+        } else if (event.channel === BROWSER_EVENT_CHANNEL) {
+          return listener(event.payload);
+        }
+      },
+      BROWSER_EVENT_STREAM_NAME,
+    ),
   );
 };
 

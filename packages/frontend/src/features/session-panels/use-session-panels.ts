@@ -1,4 +1,4 @@
-import type { RepoAction } from "@openducktor/contracts";
+import type { BrowserTabSummary, RepoAction } from "@openducktor/contracts";
 import {
   useCallback,
   useEffect,
@@ -18,6 +18,8 @@ import {
   type TerminalTab,
 } from "@/features/terminals";
 import {
+  type HostTabKind,
+  isHostTabKind,
   PANEL_TAB_KINDS,
   type PanelId,
   type PanelTabKind,
@@ -25,17 +27,20 @@ import {
 } from "./panel-tab-kinds";
 import {
   addNewPanelTab,
-  appendTerminalPanelTab,
+  appendPanelTab,
   canMovePanelTab,
   canPlacePanelTab,
   closePanelTab,
   emptySessionPanelLayout,
   findPanelTab,
   findTerminalEntry,
+  type HostTabActionMap,
+  isResolvedHostTab,
   movePanelTab,
   type PanelDropTarget,
   pickPanelTabKind,
   reconcileSessionPanelLayout,
+  type ResolvedHostTab,
   type ResolvedPanelTab,
   type SessionPanelContext,
   type SessionPanelLayout,
@@ -49,15 +54,26 @@ import {
 } from "./session-panel-layout";
 import { useSessionPanelLayoutStore } from "./session-panel-layout-store";
 import {
+  type BrowserAddressFocus,
+  type BrowserTabView,
+  type LatestBrowserState,
+  type SessionPanelBrowserModel,
+  useSessionPanelBrowserTabs,
+} from "./use-session-panel-browser-tabs";
+import {
   type LatestPanelState,
-  useSessionPanelTerminalClose,
-} from "./use-session-panel-terminal-close";
+  useSessionPanelTerminalTabs,
+} from "./use-session-panel-terminal-tabs";
 import {
   type PanelMotion,
   type PanelPresence,
   useSessionPanelVisibility,
 } from "./use-session-panel-visibility";
 
+export type {
+  BrowserAddressFocus,
+  SessionPanelBrowserModel,
+} from "./use-session-panel-browser-tabs";
 export type { PanelPresence } from "./use-session-panel-visibility";
 
 export type PanelLauncherEntry = { kind: PanelTabKind; disabledReason: string | null };
@@ -78,6 +94,10 @@ export type SessionPanelModel = {
   selectedTabId: string | null;
   launcher: PanelLauncherEntry[];
   focusRequest: number;
+  /** The last browser tab that the user opened from a launcher. Its address bar takes focus. */
+  browserAddressFocus: BrowserAddressFocus | null;
+  /** Renders browser tabs, or null when the page has no browser model. */
+  browserTabView: BrowserTabView | null;
   terminals: TerminalSessionsModel;
   terminalMounts: MountedTerminal[];
   /** The mount key of the selected terminal, or null when another tab is selected. */
@@ -116,34 +136,46 @@ type SessionPanelsInput = {
   unavailableKinds?: ReadonlySet<ToolTabKind>;
   terminals: TerminalSessionsModel;
   shortcutsEnabled?: boolean;
+  /** The browser tabs of the owner. Without it, the panels offer no browser tabs and hide saved ones. */
+  browser?: SessionPanelBrowserModel | null;
 };
 
-type LatestControllerState = LatestPanelState & {
-  owner: SessionPanelOwner | null;
-  context: SessionPanelContext;
-  layout: SessionPanelLayout;
-  isRightOpen: boolean;
-  isBottomOpen: boolean;
-};
+type LatestControllerState = LatestPanelState &
+  LatestBrowserState & {
+    owner: SessionPanelOwner | null;
+    isBottomOpen: boolean;
+  };
 
 const EMPTY_LAYOUT = emptySessionPanelLayout();
 const EMPTY_TERMINAL_TABS: readonly TerminalTab[] = [];
+const EMPTY_BROWSER_TABS: readonly BrowserTabSummary[] = [];
 const EMPTY_TAB_IDS: ReadonlySet<string> = new Set();
 const NO_UNAVAILABLE_KINDS: ReadonlySet<ToolTabKind> = new Set();
 const EMPTY_LAYOUT_SNAPSHOT = (): SessionPanelLayout => EMPTY_LAYOUT;
+
+/** Why the launcher cannot open a tab of each host-tab kind now, or null when it can. */
+type LauncherBlockedReasons = Record<HostTabKind, string | null>;
 
 /** The kinds that a panel can open now. An open unique kind has no entry, because its tab shows. */
 const launcherFor = (
   panel: PanelId,
   layout: SessionPanelLayout,
   context: SessionPanelContext,
-  terminalStartBlockedReason: string | null,
+  blockedReasons: LauncherBlockedReasons,
 ): PanelLauncherEntry[] =>
   PANEL_TAB_KINDS.flatMap((kind): PanelLauncherEntry[] => {
-    if (kind !== "terminal" && context.unavailableKinds.has(kind)) return [];
+    if (context.unavailableKinds.has(kind)) return [];
     if (!canPlacePanelTab(layout, context, kind, panel)) return [];
-    return [{ kind, disabledReason: kind === "terminal" ? terminalStartBlockedReason : null }];
+    return [{ kind, disabledReason: isHostTabKind(kind) ? blockedReasons[kind] : null }];
   });
+
+/** Closes a host tab with the actions of its kind. */
+const closeHostTab = <Kind extends HostTabKind>(
+  actions: HostTabActionMap,
+  kind: Kind,
+  panel: PanelId,
+  tab: ResolvedHostTab<Kind>,
+): void => actions[kind].close(panel, tab);
 
 const mountKey = (scopeKey: string, tabId: string): string => `${scopeKey}:${tabId}`;
 
@@ -194,6 +226,9 @@ const usePanelModel = (
     context: SessionPanelContext;
     ownerKey: string | null;
     focusRequest: number;
+    browserAddressFocus: BrowserAddressFocus | null;
+    blockedReasons: LauncherBlockedReasons;
+    browserTabView: BrowserTabView | null;
     terminals: TerminalSessionsModel;
     terminalMounts: MountedTerminal[];
   },
@@ -201,7 +236,9 @@ const usePanelModel = (
 ): SessionPanelModel => {
   const { presence, onSettled, onCollapsed, layout, tabs, selectedTabId, context, ownerKey } =
     state;
-  const { focusRequest, terminals, terminalMounts } = state;
+  const { focusRequest, browserAddressFocus, blockedReasons } = state;
+  const { browserTabView } = state;
+  const { terminals, terminalMounts } = state;
   const { selectTab, closeTab, addTab, pickKind, hideBottom } = actions;
   const tabIdBase = useId();
   return useMemo(() => {
@@ -216,8 +253,10 @@ const usePanelModel = (
       activeKind: isVisible ? (selectedTab?.kind ?? null) : null,
       tabs,
       selectedTabId,
-      launcher: launcherFor(panel, layout, context, terminals.startBlockedReason),
+      launcher: launcherFor(panel, layout, context, blockedReasons),
       focusRequest,
+      browserAddressFocus,
+      browserTabView,
       terminals,
       terminalMounts,
       activeTerminalKey:
@@ -233,6 +272,9 @@ const usePanelModel = (
     };
   }, [
     addTab,
+    blockedReasons,
+    browserAddressFocus,
+    browserTabView,
     closeTab,
     context,
     focusRequest,
@@ -303,35 +345,58 @@ export function useSessionPanels({
   unavailableKinds = NO_UNAVAILABLE_KINDS,
   terminals,
   shortcutsEnabled = true,
+  browser = null,
 }: SessionPanelsInput): SessionPanelsModel {
   const isActive = useSessionViewActive();
   const layoutStore = useSessionPanelLayoutStore();
   const ownerKey = owner ? sessionPanelOwnerKey(owner) : null;
   const isOwnerTerminals = ownerKey !== null && terminals.scopeKey === ownerKey;
+  const hasBrowser = browser !== null;
+  const ownerBrowser = browser !== null && browser.scopeKey === ownerKey ? browser : null;
+  const allUnavailableKinds = useMemo<ReadonlySet<PanelTabKind>>(
+    () => (hasBrowser ? unavailableKinds : new Set([...unavailableKinds, "browser"])),
+    [hasBrowser, unavailableKinds],
+  );
   const context = useMemo<SessionPanelContext>(
     () => ({
       ownerKind: owner?.kind ?? "task",
       selectionKey,
-      unavailableKinds,
-      terminalTabs: isOwnerTerminals ? terminals.tabs : EMPTY_TERMINAL_TABS,
-      closingTabIds: isOwnerTerminals ? terminals.closingTabIds : EMPTY_TAB_IDS,
-      terminalTabsSynced: isOwnerTerminals && terminals.isSynced,
+      unavailableKinds: allUnavailableKinds,
+      hostTabs: {
+        terminal: {
+          tabs: isOwnerTerminals ? terminals.tabs : EMPTY_TERMINAL_TABS,
+          synced: isOwnerTerminals && terminals.isSynced,
+          closingIds: isOwnerTerminals ? terminals.closingTabIds : EMPTY_TAB_IDS,
+          openingIds: EMPTY_TAB_IDS,
+        },
+        browser: {
+          tabs: ownerBrowser?.tabs ?? EMPTY_BROWSER_TABS,
+          synced: ownerBrowser?.isSynced ?? false,
+          closingIds: ownerBrowser?.closingTabIds ?? EMPTY_TAB_IDS,
+          openingIds: ownerBrowser?.openingTabIds ?? EMPTY_TAB_IDS,
+        },
+      },
     }),
     [
       isOwnerTerminals,
       owner?.kind,
+      ownerBrowser?.closingTabIds,
+      ownerBrowser?.isSynced,
+      ownerBrowser?.openingTabIds,
+      ownerBrowser?.tabs,
       selectionKey,
+      allUnavailableKinds,
       terminals.closingTabIds,
       terminals.isSynced,
       terminals.tabs,
-      unavailableKinds,
     ],
   );
   const { layout, layouts } = useOwnerLayout(owner, context);
   const rightTabs = useMemo(() => shownPanelTabs(layout, "right", context), [context, layout]);
   const bottomTabs = useMemo(() => shownPanelTabs(layout, "bottom", context), [context, layout]);
   const visibility = useSessionPanelVisibility(ownerKey, bottomTabs, isActive);
-  const { isRightOpen, isBottomOpen, setBottomOpen, toggleRight, requestFocus } = visibility;
+  const { isRightOpen, isBottomOpen, setBottomOpen, toggleRight, showRight, requestFocus } =
+    visibility;
   const rightSelected = selectedPanelTabId(layout, "right", context, rightTabs);
   const bottomSelected = selectedPanelTabId(layout, "bottom", context, bottomTabs);
 
@@ -341,6 +406,7 @@ export function useSessionPanels({
     context,
     layout,
     terminals,
+    browser: ownerBrowser,
     isRightOpen,
     isBottomOpen,
     tabs: { right: rightTabs, bottom: bottomTabs },
@@ -361,11 +427,20 @@ export function useSessionPanels({
     },
     [layoutStore],
   );
-  const { closeTerminalTab, terminalClose } = useSessionPanelTerminalClose({
+  const { actions: terminalActions, terminalClose } = useSessionPanelTerminalTabs({
     ownerKey,
     latest,
     update,
     setBottomOpen,
+    requestFocus,
+  });
+  const { addressFocus, actions: browserActions } = useSessionPanelBrowserTabs({
+    ownerKey,
+    layout,
+    browser: ownerBrowser,
+    latest,
+    update,
+    showRight,
   });
 
   const pendingBottomOpen = useRef<string | null>(null);
@@ -382,15 +457,15 @@ export function useSessionPanels({
       pendingBottomOpen.current = null;
       return;
     }
-    if (isLoadingTerminals || !context.terminalTabsSynced) return;
+    if (isLoadingTerminals || !context.hostTabs.terminal.synced) return;
     // Consume the open request once, so a later refresh cannot start a closed terminal again.
     pendingBottomOpen.current = null;
     const tabId = createTerminal();
     if (tabId !== null) {
-      update((current, ctx) => appendTerminalPanelTab(current, ctx, "bottom", tabId));
+      update((current, ctx) => appendPanelTab(current, ctx, "bottom", { kind: "terminal", tabId }));
     }
   }, [
-    context.terminalTabsSynced,
+    context.hostTabs.terminal.synced,
     createTerminal,
     discoveryError,
     hasBottomEntries,
@@ -448,17 +523,21 @@ export function useSessionPanels({
     },
     [requestFocus, update],
   );
+  const hostTabActions = useMemo<HostTabActionMap>(
+    () => ({ terminal: terminalActions, browser: browserActions }),
+    [browserActions, terminalActions],
+  );
   const closeTab = useCallback(
     (panel: PanelId, entryId: string): void => {
       const tab = latest.current.tabs[panel].find((candidate) => candidate.id === entryId);
       if (!tab) return;
-      if (tab.kind === "terminal") {
-        void closeTerminalTab(panel, entryId, tab.terminal, false);
+      if (isResolvedHostTab(tab)) {
+        closeHostTab(hostTabActions, tab.kind, panel, tab);
         return;
       }
       update((current, ctx) => closePanelTab(current, ctx, panel, entryId));
     },
-    [closeTerminalTab, update],
+    [hostTabActions, update],
   );
   const addTab = useCallback(
     (panel: PanelId): void => update((current, ctx) => addNewPanelTab(current, ctx, panel)),
@@ -466,20 +545,13 @@ export function useSessionPanels({
   );
   const pickKind = useCallback(
     (panel: PanelId, kind: PanelTabKind): void => {
-      if (kind !== "terminal") {
-        update((current, ctx) => pickPanelTabKind(current, ctx, panel, { kind }));
+      if (isHostTabKind(kind)) {
+        hostTabActions[kind].pick(panel);
         return;
       }
-      const current = latest.current;
-      if (current.terminals.scopeKey !== current.ownerKey) return;
-      const tabId = current.terminals.createTerminal();
-      if (tabId === null) return;
-      update((layoutState, ctx) =>
-        pickPanelTabKind(layoutState, ctx, panel, { kind: "terminal", tabId }),
-      );
-      requestFocus(panel);
+      update((current, ctx) => pickPanelTabKind(current, ctx, panel, { kind }));
     },
-    [requestFocus, update],
+    [hostTabActions, update],
   );
   // The panels call this during render, so it reads the layout of the current render.
   const canMove = useCallback(
@@ -507,7 +579,7 @@ export function useSessionPanels({
     (action: RepoAction): void => {
       const tabId = latest.current.terminals.createTerminal(action);
       if (tabId === null) return;
-      update((current, ctx) => appendTerminalPanelTab(current, ctx, "bottom", tabId));
+      update((current, ctx) => appendPanelTab(current, ctx, "bottom", { kind: "terminal", tabId }));
       setBottomOpen(true);
       requestFocus("bottom");
     },
@@ -519,7 +591,21 @@ export function useSessionPanels({
     [layout, layouts, ownerKey, terminals.mountedTabs],
   );
   const actions: PanelActions = { selectTab, closeTab, addTab, pickKind, hideBottom };
-  const shared = { context, layout, ownerKey, terminals };
+  const terminalBlockedReason = terminals.startBlockedReason;
+  const browserBlockedReason = browser?.startBlockedReason ?? null;
+  const blockedReasons = useMemo<LauncherBlockedReasons>(
+    () => ({ terminal: terminalBlockedReason, browser: browserBlockedReason }),
+    [browserBlockedReason, terminalBlockedReason],
+  );
+  const shared = {
+    context,
+    layout,
+    ownerKey,
+    terminals,
+    browserAddressFocus: addressFocus,
+    blockedReasons,
+    browserTabView: browser?.tabView ?? null,
+  };
   const right = usePanelModel(
     "right",
     {

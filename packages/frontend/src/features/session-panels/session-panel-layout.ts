@@ -1,7 +1,10 @@
-import { agentRoleValues } from "@openducktor/contracts";
+import { agentRoleValues, type BrowserTabSummary } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TerminalTab } from "@/features/terminals";
 import {
+  HOST_TAB_KINDS,
+  type HostTabKind,
+  isHostTabKind,
   PANEL_TAB_KIND_RULES,
   type PanelId,
   type PanelTabKind,
@@ -32,8 +35,10 @@ type TerminalTabEntry = {
   tabId: string;
   terminalId: string | null;
 };
+/** The place of a browser tab. The host saves the tab itself, with its URL and sharing state. */
+export type BrowserTabEntry = { id: string; kind: "browser"; tabId: string };
 type NewTabEntry = { id: string; kind: "new_tab" };
-export type PanelTabEntry = ToolTabEntry | TerminalTabEntry | NewTabEntry;
+export type PanelTabEntry = ToolTabEntry | TerminalTabEntry | BrowserTabEntry | NewTabEntry;
 
 export type SessionPanelLayout = {
   panels: PanelEntries;
@@ -47,23 +52,69 @@ export type SessionPanelLayout = {
   selectedBottom: string | null;
 };
 
+/** The entry and host tab types of each host-tab kind. */
+type HostTabTypes = {
+  terminal: { entry: TerminalTabEntry; tab: TerminalTab };
+  browser: { entry: BrowserTabEntry; tab: BrowserTabSummary };
+};
+
+type HostTabEntry<Kind extends HostTabKind> = HostTabTypes[Kind]["entry"];
+type HostTab<Kind extends HostTabKind> = HostTabTypes[Kind]["tab"];
+
+/** A browser tab entry and its host tab. The host tab is null until the host lists the tab. */
+export type ResolvedBrowserTab = {
+  id: string;
+  kind: "browser";
+  entry: BrowserTabEntry;
+  tab: BrowserTabSummary | null;
+};
+
+type ResolvedHostTabs = {
+  terminal: { id: string; kind: "terminal"; terminal: TerminalTab };
+  browser: ResolvedBrowserTab;
+};
+
+/** A shown tab of a host-tab kind. */
+export type ResolvedHostTab<Kind extends HostTabKind = HostTabKind> = ResolvedHostTabs[Kind];
+
 export type ResolvedPanelTab =
   | { id: string; kind: ToolTabKind }
-  | { id: string; kind: "terminal"; terminal: TerminalTab }
+  | ResolvedHostTab
   | { id: string; kind: "new_tab" };
+
+export const isResolvedHostTab = (tab: ResolvedPanelTab): tab is ResolvedHostTab =>
+  isHostTabKind(tab.kind);
+
+/** The host tabs of the owner for one host-tab kind. */
+export type HostTabSource<Tab> = {
+  /** All host tabs of the owner, also the tabs that close now. */
+  tabs: readonly Tab[];
+  /** True when `tabs` is the latest host list, so an entry without a host tab is gone. */
+  synced: boolean;
+  /** Tabs that the user closes now. They hide, and they leave when the host closes them. */
+  closingIds: ReadonlySet<string>;
+  /** New tabs that this client asked to open. Their entries stay until the host list has them. */
+  openingIds: ReadonlySet<string>;
+};
 
 /** The live facts that decide which entries a layout keeps and shows. */
 export type SessionPanelContext = {
   ownerKind: SessionOwnerKind;
   selectionKey: SessionPanelSelectionKey;
   /** Kinds that the rules allow but that the page cannot show now, such as CI Checks without a pull request. */
-  unavailableKinds: ReadonlySet<ToolTabKind>;
-  /** All terminal tabs of the owner, also the tabs that are closing. */
-  terminalTabs: readonly TerminalTab[];
-  closingTabIds: ReadonlySet<string>;
-  /** True when `terminalTabs` shows the latest host list, so a missing tab means a closed terminal. */
-  terminalTabsSynced: boolean;
+  unavailableKinds: ReadonlySet<PanelTabKind>;
+  hostTabs: { [Kind in HostTabKind]: HostTabSource<HostTab<Kind>> };
 };
+
+/** What the panels do with the tabs of one host-tab kind. */
+export type HostTabActions<Kind extends HostTabKind> = {
+  /** Opens a new tab in place of the New tab of the panel. */
+  pick: (panel: PanelId) => void;
+  /** Closes the host tab. Its entry leaves when the host closes it. */
+  close: (panel: PanelId, tab: ResolvedHostTab<Kind>) => void;
+};
+
+export type HostTabActionMap = { [Kind in HostTabKind]: HostTabActions<Kind> };
 
 export type PanelDropTarget = { id: string; position: "before" | "after" } | null;
 
@@ -81,6 +132,11 @@ const DEFAULT_RIGHT_SELECTION = {
   qa: "document",
   chat: "diffs",
 } satisfies Record<SessionPanelSelectionKey, ToolTabKind>;
+
+const SELECTION_KEYS_BY_OWNER_KIND = {
+  task: agentRoleValues,
+  chat: ["chat"],
+} as const satisfies Record<SessionOwnerKind, readonly SessionPanelSelectionKey[]>;
 
 const rememberedRightTabId = (
   layout: SessionPanelLayout,
@@ -106,6 +162,8 @@ export const emptySessionPanelLayout = (): SessionPanelLayout => ({
 
 const terminalEntryId = (tabId: string): string => `terminal:${tabId}`;
 
+export const browserEntryId = (tabId: string): string => `browser:${tabId}`;
+
 const newTabEntryId = (panel: PanelId): string => `new_tab:${panel}`;
 
 const canHoldKind = (kind: PanelTabKind, panel: PanelId, ownerKind: SessionOwnerKind): boolean => {
@@ -119,25 +177,95 @@ const isEntryOfTab = (
 ): boolean =>
   entry.tabId === tab.tabId || (entry.terminalId !== null && entry.terminalId === tab.terminalId);
 
-const findEntryTab = (
-  entry: TerminalTabEntry,
-  tabs: readonly TerminalTab[],
-): TerminalTab | undefined =>
-  tabs.find((tab) => tab.tabId === entry.tabId) ??
-  (entry.terminalId === null ? undefined : tabs.find((tab) => tab.terminalId === entry.terminalId));
+/** The entry of a new browser tab. */
+export const browserTabEntry = (tabId: string): BrowserTabEntry => ({
+  id: browserEntryId(tabId),
+  kind: "browser",
+  tabId,
+});
 
-const bindTerminalEntry = (entry: TerminalTabEntry, tab: TerminalTab): TerminalTabEntry => {
-  const terminalId = tab.terminalId ?? entry.terminalId;
-  if (entry.tabId === tab.tabId && entry.terminalId === terminalId) return entry;
-  return { ...entry, tabId: tab.tabId, terminalId };
+/** How the entries of one host-tab kind match their host tabs. */
+type HostTabRules<Kind extends HostTabKind> = {
+  /** The panel of a host tab that has no entry. */
+  defaultPanel: PanelId;
+  newEntry: (tabId: string) => HostTabEntry<Kind>;
+  findTab: (entry: HostTabEntry<Kind>, tabs: readonly HostTab<Kind>[]) => HostTab<Kind> | undefined;
+  /** The entry with the latest IDs of its host tab. */
+  bindEntry: (entry: HostTabEntry<Kind>, tab: HostTab<Kind>) => HostTabEntry<Kind>;
 };
 
-const newTerminalEntry = (tab: Pick<TerminalTab, "tabId" | "terminalId">): TerminalTabEntry => ({
-  id: terminalEntryId(tab.tabId),
-  kind: "terminal",
-  tabId: tab.tabId,
-  terminalId: tab.terminalId,
-});
+type HostTabRuleMap = { [Kind in HostTabKind]: HostTabRules<Kind> };
+
+const HOST_TAB_RULES: HostTabRuleMap = {
+  terminal: {
+    // A terminal with no position, such as one found again after a reload, opens in the bottom panel.
+    defaultPanel: "bottom",
+    newEntry: (tabId) => ({
+      id: terminalEntryId(tabId),
+      kind: "terminal",
+      tabId,
+      terminalId: null,
+    }),
+    // A terminal keeps its entry when the host gives its tab a new ID.
+    findTab: (entry, tabs) =>
+      tabs.find((tab) => tab.tabId === entry.tabId) ??
+      (entry.terminalId === null
+        ? undefined
+        : tabs.find((tab) => tab.terminalId === entry.terminalId)),
+    bindEntry: (entry, tab) => {
+      const terminalId = tab.terminalId ?? entry.terminalId;
+      if (entry.tabId === tab.tabId && entry.terminalId === terminalId) return entry;
+      return { ...entry, tabId: tab.tabId, terminalId };
+    },
+  },
+  browser: {
+    // The browser feature places new popups and agent tabs before a page shows them. Any other
+    // host tab without an entry goes to the end of the right panel.
+    defaultPanel: "right",
+    newEntry: browserTabEntry,
+    findTab: (entry, tabs) => tabs.find((tab) => tab.tabId === entry.tabId),
+    bindEntry: (entry) => entry,
+  },
+};
+
+/**
+ * Keeps an entry while its host tab exists, or while its tab opens. Before the host list is
+ * synced, saved entries stay as they are.
+ */
+const reconcileHostEntry = <Kind extends HostTabKind>(
+  kind: Kind,
+  entry: HostTabEntry<Kind>,
+  context: SessionPanelContext,
+  placedTabIds: Set<string>,
+): PanelTabEntry[] => {
+  const rules = HOST_TAB_RULES[kind];
+  const source = context.hostTabs[kind];
+  const tab = source.synced ? rules.findTab(entry, source.tabs) : undefined;
+  if (source.synced && !tab && !source.openingIds.has(entry.tabId)) return [];
+  const bound = tab ? rules.bindEntry(entry, tab) : entry;
+  if (placedTabIds.has(bound.tabId)) return [];
+  placedTabIds.add(bound.tabId);
+  return [bound];
+};
+
+/** Adds an entry for each synced host tab that has none, at the end of the default panel. */
+const withUnplacedHostTabs = <Kind extends HostTabKind>(
+  panels: PanelEntries,
+  kind: Kind,
+  context: SessionPanelContext,
+  placedTabIds: ReadonlySet<string>,
+): PanelEntries => {
+  const rules = HOST_TAB_RULES[kind];
+  const source = context.hostTabs[kind];
+  if (!source.synced) return panels;
+  const unplaced = source.tabs.filter(
+    (tab) => !placedTabIds.has(tab.tabId) && !source.closingIds.has(tab.tabId),
+  );
+  if (unplaced.length === 0) return panels;
+  const panel = rules.defaultPanel;
+  const added = unplaced.map((tab) => rules.bindEntry(rules.newEntry(tab.tabId), tab));
+  return { ...panels, [panel]: [...panels[panel], ...added] };
+};
 
 const sameItems = <Value>(left: readonly Value[], right: readonly Value[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -147,6 +275,39 @@ const sameSelection = (
   right: SessionPanelLayout["selectedRight"],
 ): boolean => SESSION_PANEL_SELECTION_KEYS.every((key) => left[key] === right[key]);
 
+const insertAt = <Value>(items: readonly Value[], index: number, item: Value): Value[] => [
+  ...items.slice(0, index),
+  item,
+  ...items.slice(index),
+];
+
+/** Adds the default-open tool tabs that the layout does not have and that the user did not close. */
+const withDefaultToolTabs = (
+  panels: PanelEntries,
+  openKinds: Set<ToolTabKind>,
+  closedKinds: readonly ToolTabKind[],
+  ownerKind: SessionOwnerKind,
+  unavailableKinds: ReadonlySet<PanelTabKind>,
+): PanelEntries => {
+  let next = panels;
+  for (const kind of TOOL_TAB_KINDS) {
+    const rule = PANEL_TAB_KIND_RULES[kind];
+    const panel = rule.panels[0];
+    if (
+      !rule.openByDefault ||
+      openKinds.has(kind) ||
+      closedKinds.includes(kind) ||
+      unavailableKinds.has(kind) ||
+      !canHoldKind(kind, panel, ownerKind)
+    ) {
+      continue;
+    }
+    next = { ...next, [panel]: [...next[panel], { id: kind, kind }] };
+    openKinds.add(kind);
+  }
+  return next;
+};
+
 /**
  * Applies the current rules to a layout. It returns the same layout when nothing changes, so the
  * caller can write the result back without a render loop.
@@ -155,48 +316,31 @@ export const reconcileSessionPanelLayout = (
   layout: SessionPanelLayout,
   context: SessionPanelContext,
 ): SessionPanelLayout => {
-  const syncedTabs = context.terminalTabsSynced ? context.terminalTabs : null;
   const openKinds = new Set<ToolTabKind>();
-  const boundTabIds = new Set<string>();
+  const placedTabIds = { terminal: new Set<string>(), browser: new Set<string>() };
   const reconcilePanel = (panel: PanelId): PanelTabEntry[] =>
     layout.panels[panel].flatMap((entry): PanelTabEntry[] => {
       if (entry.kind === "new_tab") return [entry];
       if (!canHoldKind(entry.kind, panel, context.ownerKind)) return [];
       if (entry.kind === "terminal") {
-        if (syncedTabs === null) return [entry];
-        const tab = findEntryTab(entry, syncedTabs);
-        if (!tab || boundTabIds.has(tab.tabId)) return [];
-        boundTabIds.add(tab.tabId);
-        return [bindTerminalEntry(entry, tab)];
+        return reconcileHostEntry("terminal", entry, context, placedTabIds.terminal);
+      }
+      if (entry.kind === "browser") {
+        return reconcileHostEntry("browser", entry, context, placedTabIds.browser);
       }
       if (openKinds.has(entry.kind)) return [];
       openKinds.add(entry.kind);
       return [entry];
     });
-  const panels: PanelEntries = {
-    right: reconcilePanel("right"),
-    bottom: reconcilePanel("bottom"),
-  };
-
-  for (const kind of TOOL_TAB_KINDS) {
-    const rule = PANEL_TAB_KIND_RULES[kind];
-    if (
-      !rule.openByDefault ||
-      openKinds.has(kind) ||
-      layout.closedKinds.includes(kind) ||
-      context.unavailableKinds.has(kind) ||
-      !canHoldKind(kind, rule.panels[0], context.ownerKind)
-    ) {
-      continue;
-    }
-    const panel = rule.panels[0];
-    panels[panel] = [...panels[panel], { id: kind, kind }];
-    openKinds.add(kind);
-  }
-  if (syncedTabs !== null) {
-    // A terminal with no position, such as one found again after a reload, opens in the bottom panel.
-    const unplaced = syncedTabs.filter((tab) => !boundTabIds.has(tab.tabId));
-    if (unplaced.length > 0) panels.bottom = [...panels.bottom, ...unplaced.map(newTerminalEntry)];
+  let panels: PanelEntries = withDefaultToolTabs(
+    { right: reconcilePanel("right"), bottom: reconcilePanel("bottom") },
+    openKinds,
+    layout.closedKinds,
+    context.ownerKind,
+    context.unavailableKinds,
+  );
+  for (const kind of HOST_TAB_KINDS) {
+    panels = withUnplacedHostTabs(panels, kind, context, placedTabIds[kind]);
   }
 
   const closedKinds = layout.closedKinds.filter((kind) => !openKinds.has(kind));
@@ -233,10 +377,21 @@ export const shownPanelTabs = (
 ): ResolvedPanelTab[] =>
   layout.panels[panel].flatMap((entry): ResolvedPanelTab[] => {
     if (entry.kind === "new_tab") return [entry];
-    if (entry.kind !== "terminal") return context.unavailableKinds.has(entry.kind) ? [] : [entry];
-    const terminal = findEntryTab(entry, context.terminalTabs);
-    if (!terminal || context.closingTabIds.has(terminal.tabId)) return [];
-    return [{ id: entry.id, kind: "terminal", terminal }];
+    if (entry.kind === "terminal") {
+      const { tabs, closingIds } = context.hostTabs.terminal;
+      const terminal = HOST_TAB_RULES.terminal.findTab(entry, tabs);
+      if (!terminal || closingIds.has(terminal.tabId)) return [];
+      return [{ id: entry.id, kind: "terminal", terminal }];
+    }
+    if (context.unavailableKinds.has(entry.kind)) return [];
+    if (entry.kind === "browser") {
+      // A new tab shows before the host lists it.
+      const { tabs, closingIds } = context.hostTabs.browser;
+      if (closingIds.has(entry.tabId)) return [];
+      const tab = HOST_TAB_RULES.browser.findTab(entry, tabs) ?? null;
+      return [{ id: entry.id, kind: "browser", entry, tab }];
+    }
+    return [entry];
   });
 
 export const selectedPanelTabId = (
@@ -267,10 +422,11 @@ export const findTerminalEntry = (
 export const findPanelTab = (
   layout: SessionPanelLayout,
   entryId: string,
-): { panel: PanelId; entry: PanelTabEntry } | null => {
+): { panel: PanelId; index: number; entry: PanelTabEntry } | null => {
   for (const panel of PANEL_IDS) {
-    const entry = layout.panels[panel].find((candidate) => candidate.id === entryId);
-    if (entry) return { panel, entry };
+    const index = layout.panels[panel].findIndex((candidate) => candidate.id === entryId);
+    const entry = layout.panels[panel][index];
+    if (entry) return { panel, index, entry };
   }
   return null;
 };
@@ -331,12 +487,6 @@ const withPanelEntries = (
   entries: PanelTabEntry[],
 ): SessionPanelLayout => ({ ...layout, panels: { ...layout.panels, [panel]: entries } });
 
-const insertAt = <Value>(items: readonly Value[], index: number, item: Value): Value[] => [
-  ...items.slice(0, index),
-  item,
-  ...items.slice(index),
-];
-
 export const selectPanelTab = (
   layout: SessionPanelLayout,
   context: SessionPanelContext,
@@ -376,7 +526,13 @@ export const addNewPanelTab = (
   );
 };
 
-export type PanelTabChoice = { kind: ToolTabKind } | { kind: "terminal"; tabId: string };
+/** A tool kind, or a new host tab. The caller gives a new host tab its tab ID. */
+export type PanelTabChoice = { kind: ToolTabKind } | { kind: HostTabKind; tabId: string };
+
+const choiceEntry = (choice: PanelTabChoice): PanelTabEntry =>
+  "tabId" in choice
+    ? HOST_TAB_RULES[choice.kind].newEntry(choice.tabId)
+    : { id: choice.kind, kind: choice.kind };
 
 /** Opens the picked kind in place of the panel New tab, or at the end when the panel has none. */
 export const pickPanelTabKind = (
@@ -388,7 +544,7 @@ export const pickPanelTabKind = (
   const entries = layout.panels[panel];
   const newTabIndex = entries.findIndex((entry) => entry.kind === "new_tab");
   const withoutNewTab = entries.filter((_entry, index) => index !== newTabIndex);
-  if (choice.kind !== "terminal") {
+  if (PANEL_TAB_KIND_RULES[choice.kind].cardinality === "unique") {
     const open = findPanelTab(layout, choice.kind);
     if (open) {
       const next = withPanelEntries(layout, panel, withoutNewTab);
@@ -396,10 +552,7 @@ export const pickPanelTabKind = (
     }
   }
   if (!canPlacePanelTab(layout, context, choice.kind, panel)) return layout;
-  const entry: PanelTabEntry =
-    choice.kind === "terminal"
-      ? newTerminalEntry({ tabId: choice.tabId, terminalId: null })
-      : { id: choice.kind, kind: choice.kind };
+  const entry = choiceEntry(choice);
   const index = newTabIndex < 0 ? withoutNewTab.length : newTabIndex;
   const next = withPanelEntries(layout, panel, insertAt(withoutNewTab, index, entry));
   return withSelection(
@@ -410,15 +563,15 @@ export const pickPanelTabKind = (
   );
 };
 
-/** Puts a new terminal at the end of a panel and selects it. */
-export const appendTerminalPanelTab = (
+/** Puts a new host tab at the end of a panel and selects it. */
+export const appendPanelTab = (
   layout: SessionPanelLayout,
   context: SessionPanelContext,
   panel: PanelId,
-  tabId: string,
+  choice: Extract<PanelTabChoice, { tabId: string }>,
 ): SessionPanelLayout => {
-  if (!canPlacePanelTab(layout, context, "terminal", panel)) return layout;
-  const entry = newTerminalEntry({ tabId, terminalId: null });
+  if (!canPlacePanelTab(layout, context, choice.kind, panel)) return layout;
+  const entry = choiceEntry(choice);
   return withSelection(
     withPanelEntries(layout, panel, [...layout.panels[panel], entry]),
     panel,
@@ -427,7 +580,77 @@ export const appendTerminalPanelTab = (
   );
 };
 
-/** Removes a tool tab or the New tab. A terminal tab leaves the layout when its terminal closes. */
+/**
+ * Removes an entry, such as the entry of a host tab that closed. A selection of the entry becomes a
+ * selection whose tab is gone, so its panel selects its first tab.
+ */
+export const removePanelEntry = (
+  layout: SessionPanelLayout,
+  entryId: string,
+): SessionPanelLayout => {
+  const found = findPanelTab(layout, entryId);
+  if (!found) return layout;
+  const selectedRight = { ...layout.selectedRight };
+  for (const key of SESSION_PANEL_SELECTION_KEYS) {
+    if (selectedRight[key] === entryId) selectedRight[key] = null;
+  }
+  const entries = layout.panels[found.panel].filter((entry) => entry.id !== entryId);
+  return {
+    ...withPanelEntries(layout, found.panel, entries),
+    selectedRight,
+    selectedBottom: layout.selectedBottom === entryId ? null : layout.selectedBottom,
+  };
+};
+
+/**
+ * Puts a new entry right after an anchor entry, in the panel of the anchor. With `takeSelection`,
+ * the new entry takes each remembered selection of the anchor. A layout without the anchor does
+ * not change.
+ */
+export const insertPanelEntryAfter = (
+  layout: SessionPanelLayout,
+  anchorId: string,
+  entry: PanelTabEntry,
+  { takeSelection }: { takeSelection: boolean },
+): SessionPanelLayout => {
+  const anchor = findPanelTab(layout, anchorId);
+  if (!anchor) return layout;
+  const entries = insertAt(layout.panels[anchor.panel], anchor.index + 1, entry);
+  const placed = withPanelEntries(layout, anchor.panel, entries);
+  if (!takeSelection) return placed;
+  if (anchor.panel === "bottom") {
+    return layout.selectedBottom === anchorId ? { ...placed, selectedBottom: entry.id } : placed;
+  }
+  const selectedRight = { ...layout.selectedRight };
+  for (const key of SESSION_PANEL_SELECTION_KEYS) {
+    if (selectedRight[key] === anchorId) selectedRight[key] = entry.id;
+  }
+  return { ...placed, selectedRight };
+};
+
+/**
+ * Puts a new entry at the end of the right panel of an owner whose page may not show, and selects
+ * it there for each selection key of the owner. A layout that never showed gets its default tool
+ * tabs first, so the entry is the last tab.
+ */
+export const appendRightPanelEntry = (
+  layout: SessionPanelLayout,
+  ownerKind: SessionOwnerKind,
+  entry: PanelTabEntry,
+): SessionPanelLayout => {
+  const isNew =
+    layout.panels.right.length === 0 &&
+    layout.panels.bottom.length === 0 &&
+    layout.closedKinds.length === 0;
+  const panels = isNew
+    ? withDefaultToolTabs(layout.panels, new Set(), [], ownerKind, new Set())
+    : layout.panels;
+  const selectedRight = { ...layout.selectedRight };
+  for (const key of SELECTION_KEYS_BY_OWNER_KIND[ownerKind]) selectedRight[key] = entry.id;
+  return { ...layout, panels: { ...panels, right: [...panels.right, entry] }, selectedRight };
+};
+
+/** Removes a tool tab or the New tab. A host tab leaves the layout when the host closes it. */
 export const closePanelTab = (
   layout: SessionPanelLayout,
   context: SessionPanelContext,
@@ -435,7 +658,7 @@ export const closePanelTab = (
   entryId: string,
 ): SessionPanelLayout => {
   const entry = layout.panels[panel].find((candidate) => candidate.id === entryId);
-  if (!entry || entry.kind === "terminal") return layout;
+  if (!entry || isHostTabKind(entry.kind)) return layout;
   const selected = selectPanelTabNeighbor(layout, context, panel, entryId);
   const next = withPanelEntries(
     selected,
