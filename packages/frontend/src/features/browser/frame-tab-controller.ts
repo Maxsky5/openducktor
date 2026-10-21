@@ -61,6 +61,8 @@ export const startFrameTabController = ({
    * JSON or an image, takes no commands, so the toolbar uses the history of the tab.
    */
   let scripted = false;
+  /** True while a new document loads and its frame script has not reported yet. */
+  let reportPending = false;
   /** The address of the document that the preview page started to load. */
   let pendingUrl: string | null = null;
   /** The pages that the address bar and page links opened, for Back and Forward between sites. */
@@ -104,7 +106,7 @@ export const startFrameTabController = ({
     const id = ++loadId;
     const target = history.urls[history.index] ?? BROWSER_BLANK_URL;
     previewHistory = { canGoBack: false, canGoForward: false };
-    scripted = false;
+    reportPending = true;
     pendingUrl = null;
     if (isBrowserBlankUrl(target)) {
       showNothing({ url: BROWSER_BLANK_URL, title: null, favicon: null, error: null });
@@ -184,6 +186,7 @@ export const startFrameTabController = ({
     switch (message.type) {
       case "state": {
         scripted = true;
+        reportPending = false;
         pendingUrl = null;
         const pageUrl = limitBrowserUrl(message.url);
         previewHistory = { canGoBack: message.canGoBack, canGoForward: message.canGoForward };
@@ -202,8 +205,9 @@ export const startFrameTabController = ({
         });
         return;
       }
+      // The current document keeps its script, and Stop, until the new document loads.
       case "loading":
-        scripted = false;
+        reportPending = true;
         pendingUrl = limitBrowserUrl(message.url);
         report({ loading: true });
         return;
@@ -217,14 +221,18 @@ export const startFrameTabController = ({
   };
   const onLoad = (): void => {
     // The frame script reports before the load ends, so a silent document has no script.
-    if (page.kind === "preview" && !scripted && pendingUrl !== null) {
-      history = {
-        urls: [...history.urls.slice(0, history.index + 1), pendingUrl],
-        index: history.index + 1,
-      };
-      report({ url: pendingUrl, title: null, favicon: null, loading: false, error: null });
-      pendingUrl = null;
-      return;
+    if (page.kind === "preview" && reportPending) {
+      scripted = false;
+      reportPending = false;
+      if (pendingUrl !== null) {
+        history = {
+          urls: [...history.urls.slice(0, history.index + 1), pendingUrl],
+          index: history.index + 1,
+        };
+        report({ url: pendingUrl, title: null, favicon: null, loading: false, error: null });
+        pendingUrl = null;
+        return;
+      }
     }
     if (state.loading) report({ loading: false });
   };

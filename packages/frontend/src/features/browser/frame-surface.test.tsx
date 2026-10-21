@@ -151,6 +151,19 @@ describe("FrameBrowserSurface", () => {
     await waitFor(() => expect(frame.src).toBe(`${PREVIEW}/settings`));
   });
 
+  test("sends Stop to the page while a link loads, before the next document replaces it", async () => {
+    const { frame, control, fromFrame } = await renderFrame();
+    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    fromFrame(state);
+    if (!frame.contentWindow) throw new Error("The frame has no window.");
+    const posted = spyOn(frame.contentWindow, "postMessage").mockImplementation(() => {});
+
+    fromFrame({ openducktorFrame: 1, type: "loading", url: "http://localhost:3000/slow" });
+    control().run("stop");
+
+    expect(posted).toHaveBeenCalledWith({ openducktorFrameCommand: "stop" }, PREVIEW);
+  });
+
   test("loads a site at its own URL, and shows it after the host allows frames", async () => {
     let allow: () => void = () => {};
     const { frame } = await renderFrame(
