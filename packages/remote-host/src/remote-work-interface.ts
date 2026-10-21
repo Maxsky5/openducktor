@@ -242,6 +242,8 @@ export const createRemoteWorkInterface = (
           ...cors,
           "access-control-allow-headers": `content-type, last-event-id, ${REMOTE_CONNECTION_HEADER}`,
           "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+          // Custom headers make each command preflight. Browsers reuse a preflight for 10 minutes.
+          "access-control-max-age": "600",
         },
       });
     if (closed)

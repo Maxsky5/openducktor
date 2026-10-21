@@ -16,7 +16,7 @@ The client saves its host choice in this browser's local storage and restores it
 
 Remote control, app updates, external links, and clipboard functions belong to the local shell even when its client views another host. A standalone client has no local host and does not show Remote control.
 
-See [the web runner guide](web-runner.md#deploy-a-standalone-web-client) for the static client build.
+See [the web runner guide](web-runner.md#deploy-your-own-copy) for the static client build.
 
 ## Access and host ownership
 
@@ -95,7 +95,7 @@ HTTPS clients must validate certificates; they must not downgrade to HTTP or ign
 
 The normal launcher needs no network parameters to open Remote control or Host connection. Enabling Remote control starts a separate work listener while the local frontend stays private. It does not publish the browser UI.
 
-The work listener accepts `https://app.openducktor.dev`, loopback web client origins, packaged Electron's opaque origin, and its own public origin. Add another static web deployment's origin in Advanced, Other web clients. An origin contains the scheme, hostname, and optional port, with no path or trailing slash. This allowlist applies to HTTP and terminal WebSocket requests. Unlisted browser origins get a `403` response.
+The work listener accepts `https://app.openducktor.dev`, loopback web client origins, packaged Electron's opaque origin, and its own public origin. Add another static web deployment's origin in Advanced, Other web clients. An origin contains the scheme, hostname, and optional port, with no path or trailing slash. This allowlist applies to HTTP and terminal WebSocket requests. Unlisted browser origins get a `403` response. Allowed preflight responses send `access-control-max-age: 600`, so a browser reuses one preflight for up to 10 minutes.
 
 An HTTPS web client must use an HTTPS host endpoint. A native client can use HTTP if its platform permits it. Hosting the client and exposing the host are separate operations.
 
@@ -270,7 +270,8 @@ Changing browser tabs keeps the live host connection and work state. One page ow
 A cached page reloads if the selected host changed or its previous client was released. Local clients release their owners on cache entry and rebuild on history restore. Leaving the page closes the client and its notification owners.
 Transport loss cancels old-generation handles and permits active reconnect with exponential backoff capped at 15 seconds, or manual `retry()`.
 `setActive(false)` and `disconnect()` cancel attempts.
-Permanent endpoint, protocol, capability, TLS, and synchronization failures require correction and explicit retry.
+Permanent endpoint, protocol, capability, TLS, local network, and synchronization failures require correction and explicit retry.
+The browser transport reports `transportCause: "local_network"` when the browser blocks Local Network Access before the host first answers.
 Same-host reconnect resumes retained cursors; a replay gap requires the affected current state.
 A new host instance replaces stale live state and old handles.
 

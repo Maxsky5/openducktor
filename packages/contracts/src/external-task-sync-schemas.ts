@@ -244,7 +244,6 @@ export type TaskEventSnapshotRequiredFrame = z.infer<typeof taskEventSnapshotReq
 
 export const taskEventStreamFrameSchema = z.compile(
   z.discriminatedUnion("type", [taskEventChangeFrameSchema, taskEventSnapshotRequiredFrameSchema]),
-  { strict: true },
 );
 export type TaskEventStreamFrame = z.infer<typeof taskEventStreamFrameSchema>;
 

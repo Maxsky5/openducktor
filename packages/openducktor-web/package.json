@@ -33,7 +33,8 @@
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --preload ../../scripts/bun-test-preload.ts --timeout 1000",
     "lint": "oxlint -c ../../.oxlintrc.json src scripts",
-    "publish:dry-run": "npm publish --dry-run --access public"
+    "publish:dry-run": "npm publish --dry-run --access public",
+    "worker:check": "cmp client/_headers dist/client/_headers && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json"
   },
   "dependencies": {
     "@azure/msal-node-extensions": "^5.5.2",
@@ -63,6 +64,7 @@
     "react-dom": "^19.3.0",
     "undici": "^8.11.2",
     "vite": "^8.3.4",
+    "wrangler": "4.149.0",
     "ws": "8.22.0",
     "zod": "^4.6.5"
   },

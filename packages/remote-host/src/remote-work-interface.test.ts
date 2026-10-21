@@ -433,6 +433,7 @@ test("automatic setup advertises the bound port and serves work without a manual
       });
       expect(preflight.status).toBe(204);
       expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(preflight.headers.get("access-control-max-age")).toBe("600");
       const admission = await fetch(`${endpoint}/connections`, {
         method: "POST",
         headers: { origin, "content-type": "application/json" },

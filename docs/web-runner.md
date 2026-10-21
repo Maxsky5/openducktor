@@ -31,21 +31,40 @@ This command serves only the frontend at `http://127.0.0.1:1421`. It starts with
 
 Keep the host runner open in a second terminal. In that app, enable Settings, Remote control and copy the host address. Paste the address into the standalone client's connection screen. A direct address looks like `http://192.168.1.9:14328`, with no path suffix.
 
-## Deploy a standalone web client
+## Standalone web client
 
-Build the browser client without a launcher or host:
+`https://app.openducktor.dev` serves the standalone web client of the latest stable release. The browser connects directly to the host; the site does not forward host work. A stable release deploys the site, as [Deploy the web client](release-process.md#deploy-the-web-client) explains.
+
+On the host computer, enable Remote control and copy its host address. Open the client on the other device and paste that address. The client remembers the host in this browser.
+
+### Limits of a hosted client
+
+- The host address must use HTTPS. For an HTTP address, the client shows "This web app needs an HTTPS host address." The default Remote control address, such as `http://192.168.1.9:14328`, does not work. Put the host behind Tailscale Serve or another HTTPS proxy, as [Web entry points and proxies](remote-host-protocol.md#web-entry-points-and-proxies) shows.
+- The host address cannot be a loopback address, such as `https://localhost:14328`. Use a network address on the host computer too.
+- The site serves one client for all hosts. Run the latest stable release on each host. The client refuses data from an older host and tells you to update it.
+- Reload open tabs after a release. A tab of the earlier client can fail when it loads a file that the release removed.
+
+### Local network access
+
+Chrome 142 and later ask for permission before a public site connects to an address on your local network. Private network addresses and Tailscale addresses (`100.64.0.0/10`) are local, so a host behind Tailscale Serve or a LAN HTTPS proxy causes this prompt. Allow access when Chrome asks.
+
+If you block access at this prompt, the client shows "This browser blocked access to your local network." and stops reconnecting. To allow access again, open the browser's site settings for the client, allow local network access, and select Retry.
+
+### Deploy your own copy
+
+Build the client:
 
 ```sh
 bun run --filter @openducktor/web build:client
 ```
 
-Deploy `packages/openducktor-web/dist/client` to a static HTTPS site. This build loads without `/openducktor-config.json`, an app token, or a local host. It shows the connection page on the first visit and remembers the chosen host in local storage. The connection page uses the same theme choices as onboarding and saves its theme in this browser.
+Deploy `packages/openducktor-web/dist/client` to the root of a static HTTPS site. The client needs no server code or configuration file. It uses hash routes, so the site needs no fallback page.
 
-On the host computer, enable Remote control and copy its host address. Open the static client on the other device and paste that address. The browser connects directly to the host; the static site does not forward host work. The default host address has no path suffix. A proxy can use an explicit path prefix.
+The build writes the security headers to `dist/client/_headers`. Cloudflare and Netlify read this file. On another static host, send the same headers from the host configuration. The Content-Security-Policy blocks framing and scripts from other origins, because a page that runs the client has full work access to the host. The rules name no domain, so they work on any site.
 
-An HTTPS client needs an HTTPS host address that its device can reach. `https://app.openducktor.dev` is allowed by default. For another static site, add its origin in the host's Advanced, Other web app URLs field.
+The source of the headers is `packages/openducktor-web/client/_headers`. When a client change loads a script, style, or font from a new origin, update this file in the same change.
 
-The build produces deployment files. It does not deploy a public site or set up TLS for a host.
+Add the origin of your site in the host's Advanced, Other web clients field. The host already allows `https://app.openducktor.dev`.
 
 ## Serve the runner on another machine
 

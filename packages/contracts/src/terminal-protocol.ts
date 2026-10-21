@@ -86,7 +86,6 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
           });
         }
       }),
-    { strict: true },
   ),
   protocolBaseSchema
     .extend({

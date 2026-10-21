@@ -1,15 +1,15 @@
 import { createOpenDucktorStartupSplashPlugin } from "@openducktor/frontend/startup-splash/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import packageJson from "./package.json" with { type: "json" };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendSrc = path.resolve(__dirname, "../frontend/src");
-
 export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string {
   const versionOverride = env.ODT_APP_VERSION?.trim();
   return versionOverride || packageJson.version;
@@ -17,7 +17,12 @@ export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string 
 
 export default defineConfig(({ mode }) => ({
   ...(mode === "standalone" && { cacheDir: "node_modules/.vite-client" }),
-  plugins: [createOpenDucktorStartupSplashPlugin(), react(), tailwindcss()],
+  plugins: [
+    createOpenDucktorStartupSplashPlugin(),
+    react(),
+    tailwindcss(),
+    ...(mode === "standalone" ? [clientHeaders()] : []),
+  ],
   resolve: {
     dedupe: ["@tanstack/react-query", "react", "react-dom", "react-router"],
     alias: [
@@ -50,3 +55,16 @@ export default defineConfig(({ mode }) => ({
     },
   },
 }));
+
+/** Static hosts send the security headers in `_headers` of the standalone client output. */
+const clientHeaders = (): Plugin => ({
+  name: "openducktor-client-headers",
+  apply: "build",
+  generateBundle() {
+    this.emitFile({
+      type: "asset",
+      fileName: "_headers",
+      source: readFileSync(path.join(__dirname, "client/_headers"), "utf8"),
+    });
+  },
+});

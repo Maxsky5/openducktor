@@ -1,0 +1,94 @@
+name: Deploy Web Client
+
+# A published stable release deploys the standalone web client of its tag to
+# https://app.openducktor.dev. A release event runs the workflow file of its tag.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.3
+
+jobs:
+  build:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # A release event checks out the commit of its tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Check that the package versions match the tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: bun run release:version:check "${TAG#v}"
+      - name: Build the standalone web client
+        run: bun run --filter @openducktor/web build:client
+      # The check needs no Cloudflare credentials.
+      - name: Check the web client headers and Cloudflare upload
+        run: bun run --filter @openducktor/web worker:check
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: web-client
+          path: packages/openducktor-web/dist/client/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Deploys run one at a time, and the queue keeps every waiting deploy.
+    concurrency:
+      group: web-client-production
+      cancel-in-progress: false
+      queue: max
+    environment:
+      name: web-client-production
+      url: https://app.openducktor.dev
+    steps:
+      # This job runs no build step. It installs the locked Wrangler without install scripts and
+      # uploads the built files of the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: web-client
+          path: packages/openducktor-web/dist/client
+      # The site follows GitHub's latest release, like the marketing website. The check runs just
+      # before the upload, so a backport, an older run, or a rerun cannot replace a newer client.
+      - name: Deploy to Cloudflare
+        working-directory: packages/openducktor-web
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          WRANGLER_SEND_METRICS: 'false'
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          if [ "$latest" != "$TAG" ]; then
+            echo "Release $TAG is not the latest release ($latest), so https://app.openducktor.dev keeps its client." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          ./node_modules/.bin/wrangler deploy --config wrangler.json
+          echo "Deployed the web client of $TAG to https://app.openducktor.dev" >> "$GITHUB_STEP_SUMMARY"
