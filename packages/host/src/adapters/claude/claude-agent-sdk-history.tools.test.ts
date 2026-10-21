@@ -3,6 +3,43 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history tool projection", () => {
+  test("restores the skill preview without losing its arguments or result", () => {
+    const input = { skill: "deslop", args: "Scope: docs on this branch" };
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-skill",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "skill-1", name: "Skill", input }],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "skill-result",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "skill-1", content: "Skill loaded" }],
+          },
+        }),
+      ],
+      () => "2026-10-21T00:00:00.000Z",
+    );
+    expect(history[0]?.parts[0]).toMatchObject({
+      kind: "tool",
+      tool: "Skill",
+      status: "completed",
+      preview: "deslop · Scope: docs on this branch",
+      input,
+      output: "Skill loaded",
+    });
+  });
+
   test("keeps a tool call's known arguments without inventing execution timing or a result", () => {
     const history = toClaudeHistoryMessages(
       [

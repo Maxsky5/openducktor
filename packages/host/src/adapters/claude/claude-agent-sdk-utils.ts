@@ -170,7 +170,17 @@ export const mutationForTool = (
   return "unknown";
 };
 
-export const previewInput = (input: Parameters<CanUseTool>[1]): string | undefined => {
+export const previewInput = (
+  toolName: string,
+  input: Parameters<CanUseTool>[1],
+): string | undefined => {
+  if (toolName === "Skill") {
+    const skill = readStringProp(input, "skill")?.trim();
+    if (skill) {
+      const args = readStringProp(input, "args")?.trim();
+      return (args ? `${skill} · ${args}` : skill).slice(0, 500);
+    }
+  }
   const command = readStringProp(input, "command");
   if (command) {
     return command;

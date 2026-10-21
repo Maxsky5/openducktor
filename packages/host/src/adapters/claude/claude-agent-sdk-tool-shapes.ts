@@ -155,7 +155,7 @@ export const createClaudeRunningToolPart = ({
   }
   if (toolUse.input) {
     part.input = parseClaudeCanonicalJsonObject(toolUse.input, "claudeToolInput");
-    const preview = previewInput(toolUse.input);
+    const preview = previewInput(toolUse.toolName, toolUse.input);
     if (preview) {
       part.preview = preview;
     }
@@ -184,7 +184,7 @@ export const createClaudePendingToolPart = ({
   };
   if (toolUse.input) {
     part.input = parseClaudeCanonicalJsonObject(toolUse.input, "claudeToolInput");
-    const preview = previewInput(toolUse.input);
+    const preview = previewInput(toolUse.toolName, toolUse.input);
     if (preview) part.preview = preview;
   }
   if (toolUse.metadata) {
