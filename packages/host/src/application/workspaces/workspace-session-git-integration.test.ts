@@ -355,6 +355,8 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
     const h = setup({ actions: false });
     gitCommand("branch", "release", "main~1");
+    // A tag with the same name must not replace the selected branch.
+    gitCommand("tag", "release", "main");
     const { session } = await h.router.invoke("workspace_session_create", {
       ...h.createInput,
       targetBranch: { branch: "release" },

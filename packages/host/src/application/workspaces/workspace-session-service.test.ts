@@ -143,8 +143,6 @@ describe("host-owned Workspace Session lifecycle", () => {
       startPoint: undefined as string | undefined,
       // SAFETY: The fake records the upstream remote after upstream setup.
       upstreamRemote: null as string | null,
-      // SAFETY: The fake reports a created tracking ref only when a test sets it.
-      createdTrackingRef: null as string | null,
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
     };
@@ -208,7 +206,9 @@ describe("host-owned Workspace Session lifecycle", () => {
             state.changed ? [{ path: "changed.ts", status: "modified", staged: false }] : [],
           ),
         referenceExists: (_repo, reference) =>
-          Effect.succeed(reference === "origin/main" || state.collision || branches.has(reference)),
+          Effect.succeed(
+            reference === "refs/remotes/origin/main" || state.collision || branches.has(reference),
+          ),
         listBranches: () =>
           Effect.succeed(
             [...branches].map((reference) => ({
@@ -231,14 +231,23 @@ describe("host-owned Workspace Session lifecycle", () => {
             registered.add(directory);
             return state.partialCreate ? failure("git add failed after creation") : Effect.void;
           }),
-        configureBranchUpstream: (_repo, _directory, _branch, upstreamRemote) =>
+        configureBranchUpstream: (_repo, _directory, branch, upstreamRemote) =>
           Effect.sync(() => {
             state.upstreamRemote = upstreamRemote;
-            return { createdTrackingRef: state.createdTrackingRef };
+            // Git creates the tracking ref when the remote branch does not exist yet.
+            const trackingRef = `refs/remotes/${upstreamRemote}/${branch}`;
+            const created = !branches.has(trackingRef);
+            branches.add(trackingRef);
+            return { createdTrackingRef: created ? trackingRef : null };
           }),
+        getTrackedUpstreamReference: () =>
+          Effect.succeed(
+            state.upstreamRemote ? `refs/remotes/${state.upstreamRemote}/${state.branch}` : null,
+          ),
         deleteReference: (_repo, reference) =>
           Effect.sync(() => {
             state.deletedReferences.push(reference);
+            branches.delete(reference);
           }),
         removeWorktree: (_repo, directory) =>
           Effect.suspend(() => {
@@ -876,7 +885,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(session.targetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(h.state.branch).toBe("odt/my-feature");
     expect(h.state.createBranch).toBe(true);
-    expect(h.state.startPoint).toBe("origin/main");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
     expect(h.state.upstreamRemote).toBe("origin");
     expect(h.paths.has(h.state.worktree)).toBe(true);
     expect(h.actionRuns).toEqual([
@@ -947,7 +956,9 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     expect(h.calls).toEqual(["worktree", "copy", "actions", "save", "close-action-terminals"]);
     expect(h.paths.size).toBe(1);
-    expect(h.branches.size).toBe(1);
+    expect(h.branches).toEqual(
+      new Set(["refs/heads/odt/my-feature", "refs/remotes/origin/odt/my-feature"]),
+    );
   });
 
   test("accepts drive-qualified paths from a Windows worktree port", async () => {
@@ -974,17 +985,17 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     expect(h.state.branch).toBe("feature/custom-ui");
     expect(h.state.createBranch).toBe(true);
-    expect(h.state.startPoint).toBe("origin/main");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
   });
 
   test("a new branch from a local target sets no upstream", async () => {
     const h = setup();
-    h.branches.add("develop");
+    h.branches.add("refs/heads/develop");
     const { session } = await Effect.runPromise(
       h.service.create({ ...worktreeInput(), targetBranch: { branch: "develop" } }),
     );
     expect(session.targetBranch).toEqual({ branch: "develop" });
-    expect(h.state.startPoint).toBe("develop");
+    expect(h.state.startPoint).toBe("refs/heads/develop");
     expect(h.state.upstreamRemote).toBeNull();
   });
 
@@ -1019,9 +1030,28 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.paths.size).toBe(0);
   });
 
+  test("archive with worktree removal deletes the branch tracking ref, so the name is free again", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    await Effect.runPromise(
+      h.service.archive({
+        workspaceId: "fairnest",
+        sessionId: session.id,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    expect(h.state.deletedReferences).toEqual(["refs/remotes/origin/odt/my-feature"]);
+    const { session: again } = await Effect.runPromise(h.service.create(worktreeInput()));
+    expect(again.executionTarget).toMatchObject({ branchName: "odt/my-feature" });
+  });
+
   test("creation cleanup deletes the tracking ref that the upstream setup created", async () => {
     const h = setup();
-    h.state.createdTrackingRef = "refs/remotes/origin/odt/my-feature";
     h.state.failActions = true;
     await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
     expect(h.state.deletedReferences).toEqual(["refs/remotes/origin/odt/my-feature"]);
@@ -1100,14 +1130,14 @@ describe("host-owned Workspace Session lifecycle", () => {
         h.service.setTargetBranch({ ...ref, targetBranch: { branch: "@{upstream}" } }),
       ),
     ).rejects.toThrow("Tracked upstream is available only for the current checkout.");
-    h.branches.add("develop");
+    h.branches.add("refs/heads/develop");
     const changed = await Effect.runPromise(
       h.service.setTargetBranch({ ...ref, targetBranch: { branch: "develop" } }),
     );
     expect(changed.archivedAt).not.toBeNull();
     expect(changed.targetBranch).toEqual({ branch: "develop" });
     await Effect.runPromise(h.service.restore(ref));
-    expect(h.state.startPoint).toBe("develop");
+    expect(h.state.startPoint).toBe("refs/heads/develop");
   });
 
   test("restore rejects a Tracked upstream default before any Git write", async () => {
@@ -1145,7 +1175,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const h = setup();
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
     const ref = { workspaceId: "fairnest", sessionId: session.id };
-    h.branches.add("develop");
+    h.branches.add("refs/heads/develop");
     await Effect.runPromise(
       h.service.setTargetBranch({ ...ref, targetBranch: { branch: "develop" } }),
     );
@@ -1162,7 +1192,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     const restored = await Effect.runPromise(h.service.restore(ref));
     expect(restored.targetBranch).toEqual({ branch: "develop" });
-    expect(h.state.startPoint).toBe("develop");
+    expect(h.state.startPoint).toBe("refs/heads/develop");
   });
 
   test.each(["from_name", "from_branch"] as const)(
@@ -1996,7 +2026,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.branches.size).toBe(0);
     const restored = await Effect.runPromise(h.service.restore(ref));
     expect(restored).toEqual(started.session);
-    expect(h.state.startPoint).toBe("origin/main");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
     expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
     expect(h.starts).toHaveLength(1);
     const callsBefore = h.calls.length;
@@ -2043,7 +2073,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         worktreeState: "removed",
       });
       expect(h.paths.size).toBe(0);
-      expect(h.branches.size).toBe(0);
+      expect([...h.branches].filter((ref) => ref.startsWith("refs/heads/"))).toEqual([]);
     },
   );
 

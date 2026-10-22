@@ -6,7 +6,11 @@ import type {
   WorkspaceSessionRefInput,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
-import { canonicalTargetBranch, checkoutBranch } from "../../domain/task/task-branch-policy";
+import {
+  canonicalTargetBranch,
+  checkoutBranch,
+  targetBranchRef,
+} from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   validateWorkspaceSessionTarget,
@@ -94,6 +98,7 @@ export const removeWorkspaceSessionWorktree = (
             target.workingDirectory,
             worktreePath,
           );
+    let trackingRef: string | null = null;
     // An explicit archive retry can finish a previous partial cleanup.
     if (yield* git.isRegisteredWorktree(repoPath, worktreePath)) {
       const current = yield* git.getCurrentBranch(worktreePath);
@@ -102,14 +107,27 @@ export const removeWorkspaceSessionWorktree = (
           field: "branchName",
           message: "The worktree branch changed. Reopen Archive chat to confirm it.",
         });
+      trackingRef = sameNameTrackingRef(
+        yield* git.getTrackedUpstreamReference(worktreePath),
+        target.branchName,
+      );
       yield* git.removeWorktree(repoPath, worktreePath, true);
     }
     if (aliasRemoval) yield* aliasRemoval.remove;
     if (yield* git.referenceExists(repoPath, `refs/heads/${target.branchName}`)) {
       yield* git.deleteLocalBranch(repoPath, target.branchName, true);
     }
+    // A new branch from a remote target gets a local tracking ref with its own name, also before a
+    // push. A later chat would read that leftover ref as a remote branch with the same name.
+    if (trackingRef && (yield* git.referenceExists(repoPath, trackingRef))) {
+      yield* git.deleteReference(repoPath, trackingRef);
+    }
     return { ...target, worktreeState: "removed" as const };
   });
+
+/** The upstream ref of a branch when it tracks the remote branch with the same name. */
+const sameNameTrackingRef = (upstream: string | null, branchName: string): string | null =>
+  upstream?.startsWith("refs/remotes/") && upstream.endsWith(`/${branchName}`) ? upstream : null;
 
 export const withRestoredWorkspaceSessionWorktree = <A, E>(
   dependencies: WorkspaceSessionTargetDependencies,
@@ -144,11 +162,11 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
           message: `Cannot restore because branch ${target.branchName} already exists. Rename it before retrying.`,
         });
       }
-      const startPoint = canonicalTargetBranch(targetBranch);
+      const startPoint = targetBranchRef(targetBranch);
       if (!(yield* git.referenceExists(repoPath, startPoint))) {
         return yield* new HostValidationError({
           field: "targetBranch",
-          message: `Target branch ${startPoint} is unavailable. Fetch it, or choose another target branch for this chat.`,
+          message: `Target branch ${canonicalTargetBranch(targetBranch)} is unavailable. Fetch it, or choose another target branch for this chat.`,
         });
       }
       let acquired = false;

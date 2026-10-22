@@ -7,7 +7,7 @@ import {
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
-import { canonicalTargetBranch } from "../../domain/task/task-branch-policy";
+import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -288,10 +288,10 @@ const planNewBranch = (
   targetBranch: GitTargetBranch,
 ) =>
   Effect.gen(function* () {
-    const startPoint = canonicalTargetBranch(targetBranch);
+    const startPoint = targetBranchRef(targetBranch);
     if (!(yield* git.referenceExists(repoPath, startPoint))) {
       return yield* new HostValidationError({
-        message: `Target branch ${startPoint} is unavailable. Fetch it or select another target branch.`,
+        message: `Target branch ${canonicalTargetBranch(targetBranch)} is unavailable. Fetch it or select another target branch.`,
         field: "targetBranch",
       });
     }

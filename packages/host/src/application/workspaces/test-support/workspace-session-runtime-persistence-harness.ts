@@ -239,6 +239,7 @@ export const createPersistenceHarness = async (
       isGitRepository: () => Effect.succeed(true),
       shareGitCommonDirectory: () => Effect.succeed(true),
       isRegisteredWorktree: () => Effect.succeed(state.registered),
+      getTrackedUpstreamReference: () => Effect.succeed(null),
     }),
     publishUpdated: (workspaceId, session) =>
       Effect.suspend(() =>
@@ -487,6 +488,7 @@ export const createPersistenceHarness = async (
       isGitRepository: () => Effect.succeed(true),
       shareGitCommonDirectory: () => Effect.succeed(true),
       isRegisteredWorktree: () => Effect.succeed(state.registered),
+      getTrackedUpstreamReference: () => Effect.succeed(null),
     }),
     settingsConfig: createSettingsConfigTestDouble({}),
     worktreeFiles: createWorktreeFilePortTestDouble({}),

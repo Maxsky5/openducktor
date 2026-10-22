@@ -35,7 +35,7 @@ The New chat dialog has a Target branch field for both work locations. It presel
 
 The chat saves its target in its record on the host. Every client of the host shows the same target. The target stays after an app reload, a host restart, an archive, and a restore. A later change of the repository default does not change a saved target.
 
-A New branch worktree starts its branch from the target branch, as a task build does. A remote target also sets the branch upstream. An Existing branch worktree uses the target only for comparison. If the target is unavailable, creation fails and leaves no worktree or branch. If the new branch name already exists on the target remote, creation also fails, because Git would track that unrelated remote branch.
+A New branch worktree starts its branch from the target branch, as a task build does. A remote target also sets the branch upstream. An Existing branch worktree uses the target only for comparison. If the target is unavailable, creation fails and leaves no worktree or branch. If the new branch name already exists on the target remote, creation also fails, because Git would track that unrelated remote branch. An archive that removes the worktree and branch also deletes the local tracking ref of that branch, so its name is free for a new chat.
 
 An imported chat saves the repository default target at import time. A chat from before this field has no saved target and follows the current repository default. A worktree chat cannot use a Tracked upstream default. An imported worktree chat then saves no target, and its Git panel asks the user to choose a target branch.
 

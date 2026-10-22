@@ -713,6 +713,7 @@ describe("Workspace Session persistence through the shared command module", () =
         isGitRepository: () => Effect.succeed(true),
         shareGitCommonDirectory: () => Effect.succeed(true),
         isRegisteredWorktree: () => Effect.succeed(h.state.registered),
+        getTrackedUpstreamReference: () => Effect.succeed(null),
         getCurrentBranch: (directory) =>
           Effect.succeed({
             name: directory === database.repoPath ? "main" : "feature/session",
