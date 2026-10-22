@@ -257,10 +257,9 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...buildModel(),
           onSend,
-          pendingSendItems: {
-            count: 1,
-            accessibleLabel: "1 pending review comment",
-          },
+          pendingSendItems: [
+            { key: "review_comments", count: 1, accessibleLabel: "1 pending review comment" },
+          ],
         }}
       />,
     );

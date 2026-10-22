@@ -18,6 +18,7 @@ import type {
   ThemePreference,
 } from "@openducktor/contracts";
 import {
+  browserTabIdSchema,
   hostInvokeFailureSchema,
   taskEventStreamAcknowledgeSchema,
   taskEventStreamFrameSchema,
@@ -56,6 +57,12 @@ export const PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE =
 export type EditorClipboardReadType = typeof PIERRE_MULTI_SELECTION_CLIPBOARD_TYPE;
 export const ELECTRON_TERMINAL_DISCONNECT_CHANNEL = "openducktor:terminal:disconnect";
 export const ELECTRON_TERMINAL_EVENT_CHANNEL = "openducktor:terminal:event";
+export const ELECTRON_BROWSER_CONNECT_CHANNEL = "openducktor:browser:connect";
+export const ELECTRON_BROWSER_SEND_CHANNEL = "openducktor:browser:send";
+export const ELECTRON_BROWSER_DISCONNECT_CHANNEL = "openducktor:browser:disconnect";
+export const ELECTRON_BROWSER_EVENT_CHANNEL = "openducktor:browser:event";
+export const ELECTRON_BROWSER_BIND_GUEST_CHANNEL = "openducktor:browser:bind-guest";
+export const ELECTRON_BROWSER_PICK_FILES_CHANNEL = "openducktor:browser:pick-files";
 export const ELECTRON_TASK_STREAM_SUBSCRIBE_CHANNEL = "openducktor:task-stream:subscribe";
 export const ELECTRON_TASK_STREAM_FRAME_CHANNEL = "openducktor:task-stream:frame";
 export const ELECTRON_TASK_STREAM_TERMINAL_FAILURE_CHANNEL =
@@ -132,6 +139,32 @@ export const electronTerminalEventEnvelopeSchema: z.ZodType<ElectronTerminalEven
     frame: z.instanceof(Uint8Array),
   });
 
+export const electronBrowserClientIdSchema = z.string().min(1).max(128);
+
+export type ElectronBrowserEventEnvelope = {
+  clientId: string;
+  frame: Uint8Array;
+};
+export const electronBrowserEventEnvelopeSchema: z.ZodType<ElectronBrowserEventEnvelope> =
+  z.strictObject({
+    clientId: z.string(),
+    frame: z.instanceof(Uint8Array),
+  });
+export const electronBrowserSendRequestSchema = z.strictObject({
+  clientId: electronBrowserClientIdSchema,
+  frame: z.instanceof(Uint8Array),
+});
+export const electronBrowserBindGuestRequestSchema = z.strictObject({
+  tabId: browserTabIdSchema,
+  webContentsId: z.number().int().positive(),
+});
+export const electronBrowserPickFilesRequestSchema = z.strictObject({
+  multiple: z.boolean(),
+  accept: z.array(z.string().max(256)).max(200),
+});
+export type ElectronBrowserPickFilesRequest = z.infer<typeof electronBrowserPickFilesRequestSchema>;
+export const electronBrowserPickFilesResultSchema = z.array(z.string().min(1));
+
 export const electronTaskStreamSubscriptionSchema = taskEventStreamAcknowledgeSchema.pick({
   subscriptionId: true,
 });
@@ -176,6 +209,16 @@ export type OpenDucktorElectronTerminalApi = {
   subscribe(clientId: string, listener: (frame: Uint8Array) => void): () => void;
 };
 
+/** The browser channel of each renderer client, and the Electron `<webview>` helpers. */
+export type OpenDucktorElectronBrowserApi = {
+  connect(clientId: string): Promise<void>;
+  send(clientId: string, frame: Uint8Array): Promise<void>;
+  disconnect(clientId: string): Promise<void>;
+  subscribe(clientId: string, listener: (frame: Uint8Array) => void): () => void;
+  bindGuest(tabId: string, webContentsId: number): Promise<void>;
+  pickFiles(input: { multiple: boolean; accept: readonly string[] }): Promise<string[]>;
+};
+
 export type OpenDucktorElectronTaskStreamApi = {
   subscribe(
     input: TaskEventStreamSubscribe,
@@ -217,6 +260,7 @@ export type OpenDucktorElectronApi = {
   openExternalUrl(url: string): Promise<void>;
   resolveLocalAttachmentPreviewSrc(path: string): Promise<string>;
   terminals: OpenDucktorElectronTerminalApi;
+  browser: OpenDucktorElectronBrowserApi;
   taskStream: OpenDucktorElectronTaskStreamApi;
   notificationStream: {
     subscribe(

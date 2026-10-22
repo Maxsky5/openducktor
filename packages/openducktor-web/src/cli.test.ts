@@ -135,6 +135,7 @@ describe("web CLI argument parsing", () => {
     "/task-events/subscriptions",
     "/task-assets/workspace/task",
     "/terminal",
+    "/browser",
   ])("rejects backend namespace base path %s", (basePath) => {
     expect(() => parseCliArgs(["--base-path", basePath])).toThrow(
       "Use /api or another nonconflicting path",

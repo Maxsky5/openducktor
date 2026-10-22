@@ -7,5 +7,7 @@ export default {
     "@azure/msal-node-extensions",
     // The host bundle externalizes the native terminal package.
     "node-pty",
+    // The host bundle externalizes the browser automation package.
+    "playwright-core",
   ],
 };

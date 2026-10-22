@@ -4,6 +4,8 @@ import type {
   AppUpdateState,
   TaskAssetRenderContext,
   TerminalFailure,
+  BrowserFailure,
+  BrowserFrameSource,
 } from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
@@ -39,6 +41,48 @@ export type TerminalBridge = {
   ): Promise<TerminalTransportConnection>;
 };
 
+export type BrowserChannelState = "connected" | "disconnected";
+
+export type BrowserChannelConnection = {
+  send(message: Uint8Array): Promise<void>;
+  close(): void | Promise<void>;
+};
+
+/** Electron shows each tab in its own `<webview>`. */
+export type WebviewBrowserBridge = {
+  surface: "webview";
+  /** Opens the browser channel of this window: picker, anchors, agent markers, and shortcuts. */
+  connect(
+    onMessage: (message: Uint8Array) => void,
+    onStateChange: (state: BrowserChannelState) => void,
+    onFailure: (failure: BrowserFailure) => void,
+  ): Promise<BrowserChannelConnection>;
+  /** The `<webview>` partition that holds the browser data of a workspace. */
+  partition(workspaceId: string): string;
+  /** Binds a mounted `<webview>` guest to its tab, so the host can drive the page. */
+  bindGuest(tabId: string, webContentsId: number): Promise<void>;
+  /** Opens the OS file dialog. An empty list means that the user canceled. */
+  pickFiles(input: { multiple: boolean; accept: readonly string[] }): Promise<string[]>;
+};
+
+/** Pages that this browser shows itself, in the iframes of user tabs. */
+export type BrowserFrameBridge = {
+  /** How the iframe shows a page: from a preview of a host page, at its own URL, or not at all. */
+  source(url: string): Promise<BrowserFrameSource>;
+};
+
+/**
+ * The web runner shows each user tab in an iframe that this browser draws itself. Agent tabs run
+ * on the host and do not show.
+ */
+export type FrameBrowserBridge = {
+  surface: "frame";
+  /** Null when the app does not run on the host machine, so it cannot show browser tabs. */
+  frames: BrowserFrameBridge | null;
+};
+
+export type BrowserBridge = WebviewBrowserBridge | FrameBrowserBridge;
+
 export type ShellBridge = HostConnection & {
   dispose?: () => Promise<void>;
   setActive?: (active: boolean) => void;
@@ -57,6 +101,7 @@ export type ShellBridge = HostConnection & {
     signal: AbortSignal,
   ) => Promise<ResourceData>;
   terminals: TerminalBridge;
+  browser: BrowserBridge;
   editorClipboard?: {
     readText(type?: string): Promise<string> | string;
   };
@@ -120,6 +165,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   client: createHostClient(unavailable),
   subscribeWorkspaceSessionUpdates: failUnavailable,
   subscribeRuntimeChanges: failUnavailable,
+  subscribeBrowserTabEvents: failUnavailable,
   subscribeRunEvents: failUnavailable,
   subscribeAzureDevOpsConnectionUpdates: failUnavailable,
   observeAgentSessionLive: failUnavailable,
@@ -166,6 +212,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   resolveLocalAttachmentPreview: failUnavailable,
   resolveTaskAssetSource: failUnavailable,
   terminals: { connect: failUnavailable },
+  browser: { surface: "frame", frames: null },
 });
 
 let configuredShellBridge: ShellBridge = createUnavailableShellBridge();

@@ -15,6 +15,7 @@ import {
   repoConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { BrowserServiceError } from "../browser/browser-service-error";
 import { TestClock } from "effect/testing";
 import { createRuntimeRegistryPort } from "../runtimes/host-runtime-ports";
 import {
@@ -144,6 +145,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
+      browserTabs: { closeOwnerTabs: () => Effect.void },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
       },
@@ -1368,6 +1370,38 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.calls.indexOf(`stop-terminals:${session.id}`)).toBeLessThan(
       h.calls.indexOf("remove-worktree"),
     );
+  });
+
+  test("closes the chat browser tabs when it archives, and keeps the chat after a close failure", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const owners: unknown[] = [];
+    h.dependencies.browserTabs.closeOwnerTabs = (owner) => {
+      owners.push(owner);
+      return Effect.fail(
+        new BrowserServiceError({
+          code: "browser_engine_error",
+          operation: "browser.tab.close",
+          message: "The engine did not close the page.",
+        }),
+      );
+    };
+    const archive = () =>
+      Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: false }));
+
+    await expect(archive()).rejects.toThrow(
+      "Could not close the browser tabs of this chat: The engine did not close the page.",
+    );
+    expect((await Effect.runPromise(h.service.get(ref))).archivedAt).toBeNull();
+
+    h.dependencies.browserTabs.closeOwnerTabs = (owner) =>
+      Effect.sync(() => void owners.push(owner));
+    expect((await archive()).archivedAt).not.toBeNull();
+    expect(owners).toEqual([
+      { kind: "workspace_session", workspaceId: "fairnest", sessionId: session.id },
+      { kind: "workspace_session", workspaceId: "fairnest", sessionId: session.id },
+    ]);
   });
 
   test.each(["missing directory", "unregistered worktree"] as const)(

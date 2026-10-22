@@ -31,6 +31,7 @@ import {
 } from "@/features/terminals";
 import { cn } from "@/lib/utils";
 import {
+  isToolTabKind,
   PANEL_NAMES,
   PANEL_TAB_KIND_RULES,
   type PanelId,
@@ -38,6 +39,7 @@ import {
 } from "./panel-tab-kinds";
 import type { ResolvedPanelTab } from "./session-panel-layout";
 import { SessionPanelLauncher } from "./session-panel-launcher";
+import { PanelTabBadgeView, PanelTabIcon } from "./session-panel-tab-icon";
 import { type PanelTabPresentation, panelTabPresentation } from "./session-panel-tab-presentation";
 import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
@@ -148,7 +150,15 @@ function PanelTabContent({
       </TabsContent>
     );
   }
-  const content = toolTabs?.[tab.kind]?.content ?? null;
+  const content =
+    tab.kind === "browser"
+      ? (model.browserTabView?.({
+          tab,
+          // A closed panel keeps its content mounted but hides it, so the page shows no surface.
+          isShown: isSelected && model.presence !== "closed",
+          addressFocusRequest: addressFocusRequestOf(model, tab),
+        }) ?? null)
+      : (toolTabs?.[tab.kind]?.content ?? null);
   if (PANEL_TAB_KIND_RULES[tab.kind].keepMounted) {
     return (
       <TabsContent value={tab.id} {...ids} forceMount hidden={!isSelected} className={className}>
@@ -163,6 +173,12 @@ function PanelTabContent({
   );
 }
 
+/** The address bar focus request of a browser tab, or zero for any other tab. */
+const addressFocusRequestOf = (model: SessionPanelModel, tab: ResolvedPanelTab): number =>
+  tab.kind === "browser" && model.browserAddressFocus?.tabId === tab.entry.tabId
+    ? model.browserAddressFocus.request
+    : 0;
+
 function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElement {
   const hostClient = useHostClient();
   const stripData: PanelDragData = { type: "strip", panel: model.panel };
@@ -171,9 +187,16 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!model.selectedTabId) return;
-    scrollRef.current
-      ?.querySelector<HTMLElement>('[data-panel-tab][data-selected="true"]')
-      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const selected = scrollRef.current?.querySelector<HTMLElement>(
+      '[data-panel-tab][data-selected="true"]',
+    );
+    if (!selected) return;
+    const reveal = () => selected.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    reveal();
+    // A tab label can grow after the selection, such as when a new page loads its title.
+    const observer = new ResizeObserver(reveal);
+    observer.observe(selected);
+    return () => observer.disconnect();
   }, [model.selectedTabId]);
   const scrollEdges = useScrollEdges(scrollRef);
   const dropGaps = useDropGaps(model.panel, model.tabs);
@@ -226,11 +249,7 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
                 panel={model.panel}
                 dropGap={dropGaps[index] ?? 0}
                 isSelected={tab.id === model.selectedTabId}
-                view={
-                  tab.kind === "terminal" || tab.kind === "new_tab"
-                    ? undefined
-                    : toolTabs?.[tab.kind]
-                }
+                view={isToolTabKind(tab.kind) ? toolTabs?.[tab.kind] : undefined}
                 model={model}
               />
             ))}
@@ -381,6 +400,7 @@ function SessionPanelTab({
             idBase={model.tabIdBase}
             presentation={presentation}
             view={view}
+            isSelected={isSelected}
             tooltipSide={panel === "bottom" ? "top" : "bottom"}
           />
           <SessionPanelTabCloseButton
@@ -406,11 +426,14 @@ function SessionPanelTab({
   );
 }
 
+const PROMPTS_DESCRIPTION = "waits for your answer";
+
 function SessionPanelTabTrigger({
   entryId,
   idBase,
   presentation,
   view,
+  isSelected,
   tooltipSide,
 }: {
   entryId: string;
@@ -418,38 +441,45 @@ function SessionPanelTabTrigger({
   idBase: string;
   presentation: PanelTabPresentation;
   view: ToolTabView | undefined;
+  isSelected: boolean;
   /** The tooltip opens away from the page edge of the panel. */
   tooltipSide: "top" | "bottom";
 }): ReactElement {
-  const Icon = presentation.icon;
   const labelRef = useRef<HTMLSpanElement | null>(null);
-  // The tooltip shows the full label only when the tab cuts it off. It stays mounted, so the tab
-  // keeps its focus when its label changes.
+  // The tooltip shows the full label when the tab cuts it off, and it always shows a tooltip text
+  // such as a page URL. It stays mounted, so the tab keeps its focus when its label changes.
   const [isTooltipOpen, setTooltipOpen] = useState(false);
   const onTooltipOpenChange = (open: boolean): void => {
     const label = labelRef.current;
-    setTooltipOpen(open && label !== null && label.scrollWidth > label.clientWidth);
+    const isLabelCut = label !== null && label.scrollWidth > label.clientWidth;
+    setTooltipOpen(open && (presentation.tooltip !== null || isLabelCut));
   };
+  // A selected tab shows its prompts in its content, so only another tab needs the mark.
+  const showsPromptMark = presentation.hasPrompts && !isSelected;
+  const ariaLabel = view?.ariaLabel ?? presentation.ariaLabel;
   return (
     <Tooltip open={isTooltipOpen} onOpenChange={onTooltipOpenChange}>
       <TooltipTrigger asChild>
         <TabsTrigger
           value={entryId}
           {...tabLinkIds(idBase, entryId).trigger}
-          aria-label={view?.ariaLabel ?? presentation.ariaLabel}
+          aria-label={showsPromptMark ? `${ariaLabel}, ${PROMPTS_DESCRIPTION}` : ariaLabel}
           className="h-7 min-w-0 flex-1 cursor-pointer justify-start gap-1.5 rounded-md border-0 bg-transparent py-0 pr-7 pl-2 text-xs font-medium text-inherit shadow-none outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-transparent data-[state=active]:bg-transparent data-[state=active]:text-inherit data-[state=active]:shadow-none"
         >
-          <span className="relative inline-flex shrink-0">
-            <Icon className="size-3.5" aria-hidden="true" />
+          <PanelTabIcon presentation={presentation} showsPromptMark={showsPromptMark}>
             {view?.indicator}
-          </span>
+          </PanelTabIcon>
           <span ref={labelRef} className="min-w-0 truncate">
             {presentation.label}
           </span>
+          {presentation.badge ? <PanelTabBadgeView badge={presentation.badge} /> : null}
         </TabsTrigger>
       </TooltipTrigger>
       <TooltipContent side={tooltipSide} className="max-w-80 break-words">
         {presentation.label}
+        {presentation.tooltip ? (
+          <span className="block whitespace-pre-line opacity-80">{presentation.tooltip}</span>
+        ) : null}
       </TooltipContent>
     </Tooltip>
   );

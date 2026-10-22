@@ -62,6 +62,18 @@ const createFakeLocalAttachmentPort = (options: FakeLocalAttachmentPortOptions =
       }
       return "../outside";
     },
+    fileInfo(path) {
+      const file = files.get(path);
+      return file
+        ? Effect.succeed({ isFile: true, byteSize: file.bytes.byteLength })
+        : Effect.die(new Error(`missing file fixture: ${path}`));
+    },
+    readFile(path) {
+      const file = files.get(path);
+      return file
+        ? Effect.succeed(file.bytes)
+        : Effect.die(new Error(`missing file fixture: ${path}`));
+    },
     isAbsolutePath(path) {
       return path.startsWith("/");
     },

@@ -2,6 +2,7 @@ import type { MouseEvent } from "react";
 import type { Components } from "react-markdown";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { openClickedLink } from "@/lib/link-open";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 
@@ -11,21 +12,24 @@ type MarkdownComponentRegistry = {
   document: Components;
 };
 
+const showOpenFailure = (description: string): void => {
+  toast.error("Failed to open link", { description });
+};
+
 const openMarkdownUrl = (url: string): void => {
-  void openExternalUrl(url).catch((error) => {
-    toast.error("Failed to open link", {
-      description: errorMessage(error),
-    });
-  });
+  void openExternalUrl(url).catch((error) => showOpenFailure(errorMessage(error)));
 };
 
 const SHARED_COMPONENTS: Components = {
   a: ({ node: _node, children, className, href, ...props }) => {
+    // A click asks where the link opens, or opens it where its modifier keys choose.
     const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
       event.preventDefault();
-      if (href) {
-        openMarkdownUrl(href);
-      }
+      if (!href) return;
+      const { x, y, width, height } = event.currentTarget.getBoundingClientRect();
+      void openClickedLink(href, event, { x, y, width, height }).catch((error) =>
+        showOpenFailure(errorMessage(error)),
+      );
     };
 
     return (

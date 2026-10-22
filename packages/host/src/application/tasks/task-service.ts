@@ -57,6 +57,7 @@ import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
 import type { GitProviderResolver } from "../git/git-provider-resolver";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import type { TerminalService, TerminalServiceError } from "../terminals/terminal-service";
+import type { BrowserOwnerCleanupPort } from "../browser/browser-owner-cleanup";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
@@ -273,6 +274,7 @@ export type CreateTaskServiceInput = {
       ) => Effect.Effect<void, import("../../effect/host-errors").HostError>)
     | undefined;
   terminalService?: TaskTerminalCleanupPort;
+  browserTabs?: BrowserOwnerCleanupPort;
   worktreeActions?: WorktreeActionRunner;
   gitPort?: GitPort;
   gitProviderResolver?: GitProviderResolver;

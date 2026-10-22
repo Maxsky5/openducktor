@@ -452,6 +452,7 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
+    browserTabs: { closeOwnerTabs: () => Effect.void },
     terminalService: {
       acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
     },

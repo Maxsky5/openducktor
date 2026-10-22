@@ -20,7 +20,6 @@ import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
 import { createNodeWorkspaceProviderSetup } from "./node-workspace-provider-setup";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
 import {
   createMcpHostBridgeServer,
   resolveMcpBridgeDiscoveryPath,
@@ -79,6 +78,9 @@ import { createNodeMessageDelivery } from "./node-message-delivery";
 import { createLiveSessionFaultLogger, defaultLifecycleLogger } from "./node-host-lifecycle-logger";
 import { createNodeRuntimeExecutableCommandHandlers } from "./node-runtime-executable-command-handlers";
 import { createNodeHostRouterLifecycle } from "./node-host-router-lifecycle";
+import { createNodeBrowser } from "./node-browser-composition";
+import { createNodeWorkspaceStorageRemoval } from "./node-workspace-storage-removal";
+import { createBrowserCommandHandlers } from "../../interface/commands/browser-command-handlers";
 import { createNodeHostRuntimeComposition } from "./node-host-runtime-composition";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
@@ -113,6 +115,8 @@ export const assembleNodeEffectHostCommandRouter = (
     settingsConfig: baseSettingsConfig,
     systemCommands,
     terminalPty,
+    browserEngine,
+    browserAutomation,
     toolDiscovery,
     userEnvironment,
     readEnv,
@@ -200,11 +204,7 @@ export const assembleNodeEffectHostCommandRouter = (
     repoStoreDiagnostics: taskStore,
     userEnvironment,
   });
-  const workingDirectoryDependencies = {
-    gitPort: git,
-    settingsConfig,
-    workspaceSettingsService,
-  };
+  const workingDirectoryDependencies = { gitPort: git, settingsConfig, workspaceSettingsService };
   let resolvedMcpHostBridge = mcpHostBridge;
   const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
   const {
@@ -245,6 +245,19 @@ export const assembleNodeEffectHostCommandRouter = (
       launchEnvironment: createTerminalLaunchEnvironment({ readEnv }),
     }),
   );
+  const { service: browserService, callers: browserCallers } = createNodeBrowser({
+    engine: browserEngine,
+    automation: browserAutomation,
+    configRoot: configDir.root,
+    settings: workspaceSettingsService,
+    git,
+    tasks: taskStore,
+    workspaceSessions: assets.workspaceSessionStore,
+    liveSessions: liveSessionAdapterRegistry,
+    localAttachments: localAttachmentService,
+    eventBus,
+    lifecycleLogger,
+  });
   const repoActionService = createRepoActionService({
     terminals: terminalService,
     settings: workspaceSettingsService,
@@ -259,33 +272,11 @@ export const assembleNodeEffectHostCommandRouter = (
     admission: workspaceAdmissionService,
     gitPort: git,
     settingsConfig,
-    storage: {
-      removeWorkspaceTaskAssets: assets.removeWorkspaceTaskAssets,
-      removeWorkspaceTaskStore: assets.removeWorkspaceTaskStore,
-      removeWorkspaceCredentials: (repoConfig) => {
-        if (!azureDevOpsConnection) {
-          const provider = repoConfig.git.provider;
-          if (provider?.id !== "azure_devops") return Effect.void;
-          return Effect.fail(
-            new HostOperationError({
-              operation: "workspace.removeWorkspace.credentials",
-              message:
-                "Azure DevOps credential cleanup is unavailable. Retry workspace removal after restarting the host.",
-            }),
-          );
-        }
-        return azureDevOpsConnection.removeWorkspaceCredentials(repoConfig).pipe(
-          Effect.mapError(
-            (cause) =>
-              new HostOperationError({
-                operation: "workspace.removeWorkspace.credentials",
-                message: `Failed to remove Azure DevOps credentials: ${cause.message}. The workspace remains registered. Retry removal to continue.`,
-                cause,
-              }),
-          ),
-        );
-      },
-    },
+    storage: createNodeWorkspaceStorageRemoval({
+      taskAssets: assets,
+      azureDevOpsConnection,
+      browserService,
+    }),
     taskSessionLifecycleCoordinator,
     taskStore,
     workspaceSettingsService,
@@ -294,6 +285,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const taskSessions = createNodeTaskSessionServices({
     taskServiceInput: {
       terminalService,
+      browserTabs: browserService,
       worktreeActions,
       gitPort: git,
       gitProviderResolver,
@@ -354,6 +346,8 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   autopilot = autopilotService;
   const odtMcpBridgeService = createOdtMcpBridgeService({
+    browserAgentTools: browserService,
+    browserCallers,
     taskAssetReadService,
     taskService,
     workspaceSettingsService,
@@ -377,6 +371,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const workspaceChats = createNodeWorkspaceSessionServices({
     terminalService,
+    browserTabs: browserService,
     lifecycle: taskSessionLifecycleCoordinator,
     operationGate: workspaceSessions.operationGate,
     sessionTitleGate: workspaceSessions.sessionTitleGate,
@@ -430,6 +425,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskAssetStagingService,
     taskSyncService,
     terminalService,
+    browserService,
     sessionLaunches: {
       ...launchControls,
       shutdown: () => workflowShutdown(launchControls, agentSessionCommandService, taskSessions),
@@ -486,6 +482,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createTaskCommandHandlers(taskService),
     ...createTaskWorktreeCommandHandlers(taskWorktreeService),
     ...createTerminalCommandHandlers(terminalService),
+    ...createBrowserCommandHandlers(browserService),
     ...createRepoActionCommandHandlers(repoActionService),
     ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
@@ -496,5 +493,6 @@ export const assembleNodeEffectHostCommandRouter = (
     taskEventStream,
     notificationStream: notificationService.stream,
     terminalService,
+    browserService,
   });
 };

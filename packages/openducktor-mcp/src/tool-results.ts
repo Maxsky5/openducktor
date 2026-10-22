@@ -4,7 +4,7 @@ import type {
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
-import { readTaskAssetsResultSchema } from "@openducktor/contracts";
+import { odtBrowserToolResultSchema, readTaskAssetsResultSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 
 export type ToolResult = CallToolResult;
@@ -139,6 +139,18 @@ export const toTaskAssetsToolResult = (
     ]),
   };
 };
+
+export const toBrowserToolResult = (
+  payload: z.input<typeof odtBrowserToolResultSchema>,
+): ToolResult => ({
+  content: odtBrowserToolResultSchema
+    .parse(payload)
+    .content.map((block) =>
+      block.type === "text"
+        ? { type: "text" as const, text: block.text }
+        : { type: "image" as const, data: block.dataBase64, mimeType: block.mimeType },
+    ),
+});
 
 export const toToolError = (cause: unknown): ToolResult => {
   const message = toErrorMessage(cause);

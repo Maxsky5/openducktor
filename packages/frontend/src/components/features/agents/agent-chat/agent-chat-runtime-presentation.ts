@@ -11,6 +11,7 @@ import {
 } from "@openducktor/core";
 import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { AgentChatTaskToolName, AgentChatRuntimePresentation } from "./agent-chat.types";
+import { readBrowserToolAction } from "./browser-tool-summary";
 
 const resolveTaskTool = (odtTool: OdtToolName | null): AgentChatTaskToolName | null => {
   switch (odtTool) {
@@ -48,6 +49,11 @@ export const resolveAgentChatRuntimePresentation = ({
       const taskTool = resolveTaskTool(odtTool);
       if (taskTool) {
         return { kind: "task", displayName: taskTool, taskTool };
+      }
+      // Browser tools act on web pages, so they show as browser actions, not workflow steps.
+      const browserAction = odtTool === null ? null : readBrowserToolAction(odtTool);
+      if (browserAction !== null) {
+        return { kind: "browser", displayName: `Browser ${browserAction}`, action: browserAction };
       }
       return {
         kind: isOdtWorkflowMutationToolName(toolName, workflowToolAliasesByCanonical)

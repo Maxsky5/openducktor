@@ -19,6 +19,8 @@ This matrix lists every allowed task transition. The backend validates it. The U
 - `odt_qa_approved`: `taskId`, `reportMarkdown`
 - `odt_qa_rejected`: `taskId`, `reportMarkdown`
 
+The browser tools never change task status or documents. They are `odt_browser_list`, `odt_browser_open`, `odt_browser_navigate`, `odt_browser_close`, `odt_browser_snapshot`, `odt_browser_click`, `odt_browser_hover`, `odt_browser_type`, `odt_browser_press`, `odt_browser_select`, `odt_browser_scroll`, `odt_browser_screenshot`, `odt_browser_console`, `odt_browser_wait`, and `odt_browser_dialog`. See [External MCP](external-mcp.md#browser-tools).
+
 The public create tool rejects an `issueType` of `epic`. The public update tool rejects epics and never changes `status` or documents.
 
 Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.

@@ -4,7 +4,11 @@ import * as fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ClaudePolicyFields, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import {
+  type ClaudePolicyFields,
+  ODT_BROWSER_TOOL_NAMES,
+  ODT_MCP_TOOL_NAMES,
+} from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import { Effect } from "effect";
@@ -693,6 +697,8 @@ describe("buildClaudeAgentSdkOptions", () => {
       ODT_WORKSPACE_ID: "workspace-1",
       ODT_HOST_URL: "http://127.0.0.1:1",
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+      ODT_RUNTIME_KIND: "claude",
+      ODT_RUNTIME_SESSION_ID: session.externalSessionId,
     });
     expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(ODT_MCP_TOOL_NAMES.join(","));
     expect(openducktorServer.env?.ODT_ALLOWED_TOOLS?.split(",")).toEqual(
@@ -719,6 +725,8 @@ describe("buildClaudeAgentSdkOptions", () => {
       ODT_HOST_URL: "http://127.0.0.1:1",
       ODT_FORBID_WORKSPACE_ID_INPUT: "true",
       ODT_ALLOWED_TOOLS: expect.stringContaining("odt_read_task"),
+      ODT_RUNTIME_KIND: "claude",
+      ODT_RUNTIME_SESSION_ID: "session-1",
     });
     if (!workflowAllowedTools) {
       throw new Error("Expected workflow ODT tool policy in the Claude MCP environment.");
@@ -790,8 +798,37 @@ describe("buildClaudeAgentSdkOptions", () => {
       throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
     }
     expect(openducktorServer.env?.ODT_ALLOWED_TOOLS).toBe(
-      "odt_read_task,odt_read_task_assets,odt_read_task_documents,odt_search_tasks,odt_create_task,odt_update_task,odt_set_spec",
+      [
+        "odt_read_task",
+        "odt_read_task_assets",
+        "odt_read_task_documents",
+        "odt_search_tasks",
+        "odt_create_task",
+        "odt_update_task",
+        "odt_set_spec",
+        ...ODT_BROWSER_TOOL_NAMES,
+      ].join(","),
     );
+    session.abortController.abort();
+  });
+
+  test("names the forked session, not its parent, in the OpenDucktor MCP environment", async () => {
+    const session = createSession();
+    session.externalSessionId = "fork-1";
+    session.parentExternalSessionId = "session-1";
+
+    const options = await buildOptions(session, undefined, undefined, {
+      resume: "session-1",
+      forkSession: true,
+      sessionId: "fork-1",
+    });
+
+    const openducktorServer = options.mcpServers?.openducktor;
+    if (!openducktorServer || !("env" in openducktorServer)) {
+      throw new Error("Expected OpenDucktor MCP server to use stdio env config.");
+    }
+    expect(openducktorServer.env?.ODT_RUNTIME_SESSION_ID).toBe("fork-1");
+    expect(openducktorServer.env?.ODT_RUNTIME_KIND).toBe("claude");
     session.abortController.abort();
   });
 

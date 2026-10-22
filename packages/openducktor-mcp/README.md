@@ -99,6 +99,8 @@ The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and
 
 The remaining `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
 
+The `odt_browser_*` tools are only for agent sessions that OpenDucktor starts. The server lists them only when `ODT_ALLOWED_TOOLS` names them, so external clients never get them. See [External MCP](../../docs/external-mcp.md#browser-tools).
+
 ## `odt_get_workspaces`
 
 Lists the workspaces currently known to the running OpenDucktor host.

@@ -467,7 +467,44 @@ describe("handleCodexServerRequest", () => {
     },
   );
 
-  test.each(["odt_create_task", "odt_search_tasks", "odt_read_task"])(
+  test.each([
+    ["spec", "odt_browser_open"],
+    ["planner", "odt_browser_snapshot"],
+    ["build", "odt_browser_click"],
+    ["qa", "odt_browser_type"],
+  ] as const)(
+    "automatically approves trusted browser tools for the %s role: %s",
+    async (role, toolName) => {
+      const respondServerRequest = mock(async () => {});
+      const pendingInput = new CodexPendingInputState();
+      const events: EmittedAgentEvent[] = [];
+
+      await expect(
+        handleCodexServerRequest(
+          createRequestContext({ events, pendingInput, respondServerRequest }),
+          createSession(role),
+          mcpToolApprovalRequest({
+            id: 38,
+            serverName: "openducktor",
+            toolName,
+            threadId: `thread-${role}`,
+          }),
+          new Set(),
+        ),
+      ).resolves.toBe(false);
+
+      expect(pendingInput.nativeRequest("runtime-live", `thread-${role}`, 38)).toBeUndefined();
+      expect(respondServerRequest).toHaveBeenCalledWith(
+        "runtime-live",
+        38,
+        expect.objectContaining({ action: "accept" }),
+        undefined,
+      );
+      expect(events).toEqual([]);
+    },
+  );
+
+  test.each(["odt_create_task", "odt_search_tasks", "odt_read_task", "odt_browser_click"])(
     "automatically approves trusted %s for repository sessions",
     async (toolName) => {
       const respondServerRequest = mock(async () => {});

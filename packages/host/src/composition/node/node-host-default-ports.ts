@@ -6,6 +6,9 @@ import {
 } from "../../ports/generated-image-file-port";
 import { Context, Effect, Layer } from "effect";
 import { createLocalAttachmentAdapter } from "../../adapters/attachments/local-attachment-adapter";
+import { createPlaywrightBrowserAutomation } from "../../adapters/browser/playwright/playwright-browser-automation";
+import type { BrowserAutomationPort } from "../../ports/browser-automation-port";
+import type { BrowserEngineError, BrowserEnginePort } from "../../ports/browser-engine-port";
 import {
   type CodexAppServerTransportRegistry,
   createCodexAppServerTransportRegistry,
@@ -78,6 +81,8 @@ export type NodeHostDefaultPorts = {
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   terminalPty: TerminalPtyPort;
+  browserEngine: BrowserEnginePort;
+  browserAutomation: BrowserAutomationPort;
   userEnvironment: UserEnvironmentPort;
   /** Reads the current environment. Call it when a child process starts. */
   readEnv: () => NodeJS.ProcessEnv;
@@ -101,10 +106,16 @@ type CodexAppServerInput =
       codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
     };
 
+type BrowserEngineFactory = (input: {
+  configRoot: string;
+}) => Effect.Effect<BrowserEnginePort, BrowserEngineError>;
+
 export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
   configDirScope: OpenDucktorConfigDirScope;
   runtimeDistribution: HostRuntimeDistribution;
   terminalPty: TerminalPtyPort;
+  /** Creates the browser engine of the shell. It gets the config root for its browser data. */
+  browserEngine: BrowserEngineFactory;
 } & Partial<{
     clientVersion: string;
     filesystem: FilesystemPort;
@@ -153,7 +164,7 @@ const makeNodeHostDefaultPorts = (
       : // Each run reads the login shell and builds a new environment.
         Effect.suspend(() => createProcessEnvironment(input.processEnvironmentInput));
     const startupEnvironment = yield* resolveEnvironment;
-    return yield* Effect.try({
+    const ports = yield* Effect.try({
       try: () => {
         const configDir: OpenDucktorConfigDir = {
           root: resolveOpenDucktorBaseDir(input.configDirScope, startupEnvironment.environment),
@@ -247,6 +258,7 @@ const makeNodeHostDefaultPorts = (
           systemCommands,
           toolDiscovery,
           terminalPty: input.terminalPty,
+          browserAutomation: createPlaywrightBrowserAutomation(),
           userEnvironment,
           readEnv,
           startupEnv,
@@ -255,6 +267,8 @@ const makeNodeHostDefaultPorts = (
       },
       catch: (cause) => cause,
     });
+    const browserEngine = yield* input.browserEngine({ configRoot: ports.configDir.root });
+    return { ...ports, browserEngine };
   });
 
 const makeNodeHostDefaultPortContext = (

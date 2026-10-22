@@ -11,7 +11,6 @@ import {
   createElectronTerminalIpcController,
   type ElectronTerminalIpcHandler,
   registerElectronTerminalIpc,
-  shouldDetachTerminalSenderForNavigation,
 } from "./electron-terminal-ipc";
 
 const makeAttachFrame = (): Uint8Array =>
@@ -152,7 +151,7 @@ describe("Electron terminal IPC", () => {
   });
 
   test("reports lifecycle detach failures and retries on destruction", async () => {
-    let navigate = (_details: { isMainFrame: boolean; isSameDocument: boolean }): void => undefined;
+    let navigate = (): void => undefined;
     let destroy = (): void => undefined;
     const attempts: string[] = [];
     const reported: unknown[] = [];
@@ -169,7 +168,7 @@ describe("Electron terminal IPC", () => {
       id: 7,
       isDestroyed: () => false,
       send: () => undefined,
-      on: (_event: "did-start-navigation", listener: typeof navigate) => {
+      on: (_event: "did-navigate", listener: typeof navigate) => {
         navigate = listener;
       },
       once: (_event: "destroyed", listener: typeof destroy) => {
@@ -216,7 +215,7 @@ describe("Electron terminal IPC", () => {
       },
     );
 
-    navigate({ isMainFrame: true, isSameDocument: false });
+    navigate();
     await failureReported;
     expect(reported).toHaveLength(1);
     expect(reported[0]).toMatchObject({ message: "Injected lifecycle detach failure" });
@@ -444,75 +443,6 @@ describe("Electron terminal IPC", () => {
       expect([...attachments]).toEqual([]);
     },
   );
-
-  test("keeps live attachments during same-document main-frame navigation", async () => {
-    const attachments = new Set<string>();
-    const terminalService: TerminalService = {
-      attach: (input: Parameters<TerminalService["attach"]>[0]) =>
-        Effect.sync(() => attachments.add(input.attachmentId)),
-      detach: (_terminalId: string, attachmentId: string) =>
-        Effect.sync(() => attachments.delete(attachmentId)),
-      acknowledge: (terminalId: string, attachmentId: string) =>
-        attachments.has(attachmentId)
-          ? Effect.void
-          : Effect.fail(
-              new TerminalServiceError({
-                code: "terminal_not_found",
-                operation: "ack",
-                message: `Terminal attachment not found: ${attachmentId}`,
-                terminalId,
-              }),
-            ),
-    };
-    const controller = createElectronTerminalIpcController(terminalService);
-    const sender = { id: 7, isDestroyed: () => false, send: () => undefined };
-    await Effect.runPromise(
-      controller.handleFrame(
-        sender,
-        "client-a",
-        encodeTerminalProtocolFrame({
-          message: {
-            version: TERMINAL_PROTOCOL_VERSION,
-            type: "attach",
-            terminalId: "terminal-1",
-            lastConsumedSequence: null,
-          },
-          payload: new Uint8Array(),
-        }),
-      ),
-    );
-
-    if (shouldDetachTerminalSenderForNavigation({ isMainFrame: true, isSameDocument: true })) {
-      await Effect.runPromise(controller.detachSender(sender.id));
-    }
-
-    await expect(
-      Effect.runPromise(
-        controller.handleFrame(
-          sender,
-          "client-a",
-          encodeTerminalProtocolFrame({
-            message: {
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "ack",
-              terminalId: "terminal-1",
-              sequenceEnd: 1,
-            },
-            payload: new Uint8Array(),
-          }),
-        ),
-      ),
-    ).resolves.toBeUndefined();
-  });
-
-  test("detaches terminal senders only for cross-document main-frame navigation", () => {
-    expect(
-      shouldDetachTerminalSenderForNavigation({ isMainFrame: true, isSameDocument: false }),
-    ).toBe(true);
-    expect(
-      shouldDetachTerminalSenderForNavigation({ isMainFrame: false, isSameDocument: false }),
-    ).toBe(false);
-  });
 
   test("reports repeated stale attaches without retaining sender attachments", async () => {
     const detached: string[] = [];

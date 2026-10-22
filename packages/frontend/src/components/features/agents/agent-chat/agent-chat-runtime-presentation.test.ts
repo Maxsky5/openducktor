@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { ODT_BROWSER_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
 
 describe("resolveAgentChatRuntimePresentation", () => {
@@ -41,6 +41,40 @@ describe("resolveAgentChatRuntimePresentation", () => {
       expect(presentation.presentToolCall(`other_server.odt_${name}`).kind).toBe("regular");
     },
   );
+  test.each([
+    ["opencode", "openducktor_odt_browser_click"],
+    ["opencode", "functions.openducktor_odt_browser_click"],
+    ["claude", "mcp__openducktor__odt_browser_click"],
+    ["codex", "odt_browser_click"],
+  ] as const)("presents %s %s as a browser action", (runtimeKind, toolName) => {
+    const presentation = resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeKind,
+    });
+
+    expect(presentation.presentToolCall(toolName, toolName)).toEqual({
+      kind: "browser",
+      displayName: "Browser click",
+      action: "click",
+    });
+  });
+
+  test("never presents a browser tool as a workflow step", () => {
+    const presentation = resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+      runtimeKind: "opencode",
+    });
+
+    for (const toolName of ODT_BROWSER_TOOL_NAMES) {
+      const action = toolName.slice("odt_browser_".length);
+      expect(presentation.presentToolCall(`openducktor_${toolName}`)).toEqual({
+        kind: "browser",
+        displayName: `Browser ${action}`,
+        action,
+      });
+    }
+  });
+
   test("projects tool presentation and approval outcomes above the chat render tree", () => {
     const presentation = resolveAgentChatRuntimePresentation({
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],

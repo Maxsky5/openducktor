@@ -16,6 +16,7 @@ import { parseJson } from "../../effect/json";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { RuntimeStartInput, RuntimeStarterPort } from "../../ports/runtime-registry-port";
+import { createBrowserEngineTestDouble } from "../../test-support/browser-engine-test-double";
 import { createFixedRuntimeSettingsConfig } from "../../test-support/runtime-settings-config";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createDefaultGlobalConfig } from "../../config/global-config";
@@ -111,6 +112,7 @@ const createEventBus = (): HostEventBusPort => ({
   },
 });
 
+const browserEngine = () => Effect.succeed(createBrowserEngineTestDouble().engine);
 const terminalPty: TerminalPtyPort = {
   start: () => Effect.die("Terminal PTY is not expected in this composition test."),
 };
@@ -137,6 +139,7 @@ const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
   },
   taskEventPublicationReporter: { report: () => Effect.void },
   terminalPty,
+  browserEngine,
 });
 
 const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
@@ -151,6 +154,7 @@ const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput =>
   taskEventPublicationReporter: { report: () => Effect.void },
   taskStore: createTaskStoreTestDouble({}),
   terminalPty,
+  browserEngine,
 });
 
 const createRouter = (input: {
@@ -174,6 +178,7 @@ const createRouter = (input: {
     runtimeStarter: input.runtimeStarter ?? unusedRuntimeStarter,
     taskStore: createTaskStoreTestDouble({}),
     terminalPty,
+    browserEngine,
   };
   if (input.runtimeStarter) {
     routerInput.settingsConfig = createFixedRuntimeSettingsConfig("opencode", "opencode");
@@ -266,6 +271,7 @@ describe("createNodeEffectHostCommandRouter", () => {
           },
         }),
         terminalPty,
+        browserEngine,
       }),
     );
     configReads = 0;
@@ -374,6 +380,7 @@ describe("createNodeEffectHostCommandRouter", () => {
         runtimeDistribution: createRuntimeDistribution(),
         taskEventPublicationReporter: { report: () => Effect.void },
         terminalPty,
+        browserEngine,
       }).pipe(Effect.result),
     );
 
@@ -431,6 +438,7 @@ describe("createNodeEffectHostCommandRouter", () => {
         taskEventPublicationReporter: { report: () => Effect.void },
         taskStore: createTaskStoreTestDouble({}),
         terminalPty,
+        browserEngine,
       }),
     );
 

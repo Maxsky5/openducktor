@@ -50,6 +50,7 @@ import {
 } from "../agent-studio-test-utils";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
+import { BrowserRuntimeProvider } from "@/features/browser";
 import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import {
   createGitActionsFixture,
@@ -542,7 +543,7 @@ const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
               <NotificationContext.Provider value={notificationContextValue}>
                 <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
                   <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture()}>
-                    {children}
+                    <BrowserRuntimeProvider>{children}</BrowserRuntimeProvider>
                   </TaskWorkflowActionsContext.Provider>
                 </RuntimeDefinitionsContext.Provider>
               </NotificationContext.Provider>

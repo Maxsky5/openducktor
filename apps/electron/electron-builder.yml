@@ -29,6 +29,8 @@ files:
   - node_modules/file-uri-to-path/**/*
   - node_modules/node-mac-permissions/**/*
   - node_modules/node-pty/**/*
+  # Agent browser tools load playwright-core at runtime. The main bundle keeps it external.
+  - node_modules/playwright-core/**/*
   - node_modules/@ff-labs/fff-node/**/*
   - node_modules/@ff-labs/fff-bin-*/**/*
   - node_modules/ffi-rs/**/*

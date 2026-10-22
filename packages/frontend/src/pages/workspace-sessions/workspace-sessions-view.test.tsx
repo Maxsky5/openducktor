@@ -47,6 +47,7 @@ import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
+import { BrowserRuntimeProvider } from "@/features/browser";
 import WorkspaceSessionsPage from "./workspace-sessions-page";
 import { useWorkspaceSessionPreview } from "./use-workspace-session-preview";
 import { workspaceSessionSelectionStorageKey } from "./use-workspace-session-selection";
@@ -475,7 +476,13 @@ function renderSessions(
                     <VisibleSessionTargetProvider>
                       <SettingsModalProvider>
                         <CommandPaletteTestContext>
-                          {options.viaSessionsPage ? <SessionsPage /> : <ActiveWorkspaceSessions />}
+                          <BrowserRuntimeProvider>
+                            {options.viaSessionsPage ? (
+                              <SessionsPage />
+                            ) : (
+                              <ActiveWorkspaceSessions />
+                            )}
+                          </BrowserRuntimeProvider>
                         </CommandPaletteTestContext>
                         {previewControls}
                       </SettingsModalProvider>

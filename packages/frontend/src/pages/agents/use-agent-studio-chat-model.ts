@@ -33,7 +33,7 @@ import {
   toAgentStudioTranscriptTarget,
 } from "./agent-studio-transcript";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
+import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
 
 export type AgentStudioChatSessionActionsContext = {
   isStarting: boolean;
@@ -295,10 +295,11 @@ export function useAgentStudioChatModel({
     [draftPersistence, draftStateKey],
   );
   const onResumeSession = sessionActions.onResumeSession;
-  const reviewCommentComposer = useReviewCommentComposer({
+  const pendingSendContext = usePendingSendContext({
     owner: composer.workspaceId
       ? { kind: "task", workspaceId: composer.workspaceId, taskId: selectedSession.taskId }
       : null,
+    workingDirectory: selectedSessionIdentity?.workingDirectory ?? null,
     onSend: sessionActions.messageDelivery.onSend,
   });
   const { messageDelivery } = sessionActions;
@@ -320,7 +321,7 @@ export function useAgentStudioChatModel({
       transcriptSession?.messages,
     ],
   );
-  const pendingSendItems = reviewCommentComposer.pendingSendItems;
+  const pendingSendItems = pendingSendContext.pendingSendItems;
 
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
     const config: AgentChatComposerConfig = {
@@ -342,7 +343,8 @@ export function useAgentStudioChatModel({
       isReadOnly: surfaceState.composerReadOnly || selectedSessionState.preparation.error !== null,
       readOnlyReason: surfaceState.composerReadOnlyReason ?? selectedSessionState.preparation.error,
       draftScope: composerDraftScope,
-      onSend: reviewCommentComposer.onSend,
+      pendingSendItems,
+      onSend: pendingSendContext.onSend,
       isStarting: sessionActions.isStarting,
       contextUsage: chatContextUsage,
       selectedModelSelection: modelSelection.selectedModelSelection,
@@ -380,9 +382,6 @@ export function useAgentStudioChatModel({
       onSelectAgent: modelSelection.onSelectAgent,
       onSelectVariant: modelSelection.onSelectVariant,
     };
-    if (pendingSendItems) {
-      config.pendingSendItems = pendingSendItems;
-    }
     return config;
   }, [
     chatContextUsage,
@@ -422,7 +421,7 @@ export function useAgentStudioChatModel({
     modelSelection.supportsSlashCommands,
     modelSelection.supportsSubagentReferences,
     modelSelection.variantOptions,
-    reviewCommentComposer.onSend,
+    pendingSendContext.onSend,
     messageDelivery,
     pendingSendItems,
     selectedSession.pendingInput.waitingInputPlaceholder,

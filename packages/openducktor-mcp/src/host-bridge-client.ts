@@ -1,7 +1,13 @@
 import {
   type GetWorkspacesResult,
+  isOdtBrowserToolName,
+  ODT_BROWSER_BRIDGE_TIMEOUT_MS,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
+  type OdtBrowserCaller,
+  type OdtBrowserToolName,
+  type OdtBrowserToolResult,
+  odtBrowserToolResultSchema,
   type OdtHostBridgeReady,
   type OdtToolName,
   odtHostBridgeReadySchema,
@@ -16,8 +22,13 @@ type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Nam
 type ToolOutput<Name extends OdtToolName> = z.infer<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
-type WorkspaceScopedToolName = WorkspaceScopedOdtToolName;
+/** Workspace tools without a calling session. Browser tools also send their caller. */
+export type WorkspaceTaskToolName = Exclude<WorkspaceScopedOdtToolName, OdtBrowserToolName>;
 type OdtToolInput = ToolInput<OdtToolName>;
+type BrowserBridgeBody = ToolInput<OdtBrowserToolName> & {
+  workspaceId: string;
+  caller: OdtBrowserCaller;
+};
 type BridgeRequestHeaders = {
   Accept: "application/json";
   "Content-Type": "application/json";
@@ -27,11 +38,18 @@ type BridgeRequestHeaders = {
 export type OdtHostBridgeClientPort = {
   ready(): Promise<OdtHostBridgeReady>;
   getWorkspaces(): Promise<GetWorkspacesResult>;
-  call<Name extends WorkspaceScopedToolName>(
+  call<Name extends WorkspaceTaskToolName>(
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
   ): Promise<ToolOutput<Name>>;
+  /** The host resolves the task or Workspace Session of the call from `caller`. */
+  callBrowserTool<Name extends OdtBrowserToolName>(
+    toolName: Name,
+    workspaceId: string,
+    input: ToolInput<Name>,
+    caller: OdtBrowserCaller,
+  ): Promise<OdtBrowserToolResult>;
 };
 
 export type OdtHostBridgeClientOptions = {
@@ -110,6 +128,9 @@ function parseToolResponse<Name extends OdtToolName>(
   payload: McpToolPayload,
 ): ToolOutput<Name>;
 function parseToolResponse(command: OdtToolName, payload: McpToolPayload) {
+  if (isOdtBrowserToolName(command)) {
+    return parseHostResponse(odtBrowserToolResultSchema, payload, command);
+  }
   switch (command) {
     case "odt_get_workspaces":
       return parseHostResponse(
@@ -251,7 +272,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     return this.invokeJson("odt_get_workspaces", {});
   }
 
-  async call<Name extends WorkspaceScopedToolName>(
+  async call<Name extends WorkspaceTaskToolName>(
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
@@ -262,17 +283,33 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     });
   }
 
+  async callBrowserTool<Name extends OdtBrowserToolName>(
+    toolName: Name,
+    workspaceId: string,
+    input: ToolInput<Name>,
+    caller: OdtBrowserCaller,
+  ): Promise<OdtBrowserToolResult> {
+    const body: BrowserBridgeBody = { ...input, workspaceId, caller };
+    return this.invokeJson(toolName, body, ODT_BROWSER_BRIDGE_TIMEOUT_MS);
+  }
+
   private async invokeJson(
     command: typeof READY_TOOL_NAME,
     input: Record<string, never>,
   ): Promise<OdtHostBridgeReady>;
+  private async invokeJson<Name extends OdtBrowserToolName>(
+    command: Name,
+    input: BrowserBridgeBody,
+    timeoutMs: number,
+  ): Promise<OdtBrowserToolResult>;
   private async invokeJson<Name extends OdtToolName>(
     command: Name,
     input: OdtToolInput,
   ): Promise<ToolOutput<Name>>;
   private async invokeJson(
     command: typeof READY_TOOL_NAME | OdtToolName,
-    input: Record<string, never> | OdtToolInput,
+    input: Record<string, never> | OdtToolInput | BrowserBridgeBody,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
   ): Promise<OdtHostBridgeReady | ToolOutput<OdtToolName>> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;
@@ -289,7 +326,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
         method: "POST",
         headers,
         body: JSON.stringify(input),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       },
       action,
     );

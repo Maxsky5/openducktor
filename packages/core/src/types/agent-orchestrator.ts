@@ -45,6 +45,7 @@ import type {
   RuntimeCapabilities,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
+import { ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
 
 export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
 
@@ -226,6 +227,7 @@ export const AGENT_ROLE_TOOL_POLICY = {
     "odt_create_task",
     "odt_update_task",
     "odt_set_spec",
+    ...ODT_BROWSER_TOOL_NAMES,
   ],
   planner: [
     "odt_read_task",
@@ -235,6 +237,7 @@ export const AGENT_ROLE_TOOL_POLICY = {
     "odt_create_task",
     "odt_update_task",
     "odt_set_plan",
+    ...ODT_BROWSER_TOOL_NAMES,
   ],
   build: [
     "odt_read_task",
@@ -249,6 +252,7 @@ export const AGENT_ROLE_TOOL_POLICY = {
     "odt_build_resumed",
     "odt_build_completed",
     "odt_set_pull_request",
+    ...ODT_BROWSER_TOOL_NAMES,
   ],
   qa: [
     "odt_read_task",
@@ -259,6 +263,7 @@ export const AGENT_ROLE_TOOL_POLICY = {
     "odt_update_task",
     "odt_qa_approved",
     "odt_qa_rejected",
+    ...ODT_BROWSER_TOOL_NAMES,
   ],
 } satisfies AgentRoleToolPolicy;
 

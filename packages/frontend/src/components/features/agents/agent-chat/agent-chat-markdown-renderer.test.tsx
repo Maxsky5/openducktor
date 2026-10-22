@@ -1,10 +1,12 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { act, render as renderView, waitFor, within } from "@testing-library/react";
 import type { Nodes } from "mdast";
 import { createElement, type ReactElement } from "react";
 import { MermaidSvgCacheProvider } from "@/components/ui/markdown-mermaid-svg-cache-context";
 import * as markdownStreamTree from "@/components/ui/markdown-stream-tree";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { QueryProvider } from "@/test-utils/query-provider";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
 const DIAGRAM_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>';
@@ -71,6 +73,44 @@ describe("AgentChatMarkdownRenderer", () => {
     } finally {
       rendered.unmount();
     }
+  });
+
+  test("shows images of host files through the host, and keeps web images as they are", async () => {
+    const localImageRead = mock(async ({ path }: { path: string }) => ({
+      mediaType: "image/png" as const,
+      bytesBase64: path === "/tmp/shot.png" ? "AAAA" : "BBBB",
+    }));
+    const connection = createTestClientConnection({ client: { localImageRead } });
+    const view = renderView(
+      <AgentChatMarkdownRenderer
+        markdown={
+          "![Shot](/tmp/shot.png) ![File](file:///tmp/a%20b.png) ![Web](https://example.com/logo.png)"
+        }
+      />,
+      {
+        wrapper: ({ children }) => (
+          <QueryProvider connection={connection}>
+            <MermaidSvgCacheProvider>{children}</MermaidSvgCacheProvider>
+          </QueryProvider>
+        ),
+      },
+    );
+
+    await waitFor(() =>
+      expect(view.getByRole("img", { name: "Shot" }).getAttribute("src")).toBe(
+        "data:image/png;base64,AAAA",
+      ),
+    );
+    expect(view.getByRole("img", { name: "File" }).getAttribute("src")).toBe(
+      "data:image/png;base64,BBBB",
+    );
+    expect(view.getByRole("img", { name: "Web" }).getAttribute("src")).toBe(
+      "https://example.com/logo.png",
+    );
+    expect(localImageRead.mock.calls.map(([input]) => input.path).sort()).toEqual([
+      "/tmp/a b.png",
+      "/tmp/shot.png",
+    ]);
   });
 
   test("keeps raw html out of rendered chat markdown", async () => {

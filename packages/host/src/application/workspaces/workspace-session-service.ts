@@ -27,6 +27,10 @@ import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { acquireWorkspaceSessionTerminalCleanup } from "./workspace-session-terminal-cleanup";
+import {
+  type BrowserOwnerCleanupPort,
+  closeOwnerBrowserTabs,
+} from "../browser/browser-owner-cleanup";
 import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
 import {
   validateWorkspaceSessionTarget,
@@ -50,6 +54,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
   store: WorkspaceSessionStorePort;
   terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
+  browserTabs: BrowserOwnerCleanupPort;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
   runtime: Pick<RuntimeRegistryPort, "requireReady">;
   live: Pick<
@@ -355,6 +360,17 @@ export const createWorkspaceSessionService = (
               }
             }
             yield* acquireWorkspaceSessionTerminalCleanup(dependencies.terminalService, input);
+            yield* closeOwnerBrowserTabs(
+              dependencies.browserTabs,
+              [
+                {
+                  kind: "workspace_session",
+                  workspaceId: input.workspaceId,
+                  sessionId: input.sessionId,
+                },
+              ],
+              "workspaceSession.archive.browser_tabs",
+            );
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
                 if (

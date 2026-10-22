@@ -182,6 +182,36 @@ describe("ComputerUseToolMessage", () => {
     }
   });
 
+  test("keeps the code and output closed in the open card, and shows an error at once", () => {
+    const code = "await tab.click('#submit')";
+    const view = render(
+      <ComputerUseToolMessage
+        {...baseProps}
+        meta={toolMeta({
+          status: "error",
+          error: "The page closed.",
+          output: "clicked",
+          computerUse: { action: "Submit the form", code },
+        })}
+      />,
+    );
+    try {
+      const [card, ...sections] = Array.from(view.container.querySelectorAll("details"));
+      if (!card) throw new Error("Expected computer use details.");
+      toggle(card, true);
+      const openState = Object.fromEntries(
+        Array.from(card.querySelectorAll("details")).map((section) => [
+          section.querySelector("summary")?.textContent,
+          section.open,
+        ]),
+      );
+      expect(sections).toEqual([]);
+      expect(openState).toEqual({ JavaScript: false, Error: true, Output: false });
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("hides the JavaScript section for js_reset calls", () => {
     const view = render(
       <ComputerUseToolMessage

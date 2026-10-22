@@ -1,22 +1,41 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import type { RepoAction, TerminalSummary } from "@openducktor/contracts";
+import {
+  type BrowserTabSummary,
+  type RepoAction,
+  type TerminalSummary,
+} from "@openducktor/contracts";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import type { TerminalSessionsModel, TerminalTab } from "@/features/terminals";
+import { inAppLinkTarget } from "@/lib/link-open";
 import { withMockedToast } from "@/test-utils/mock-toast";
-import { createTerminalSessionsFixture } from "@/test-utils/session-panel-fixtures";
+import {
+  browserTabIdFixture,
+  createBrowserTabSummaryFixture,
+  createSessionPanelBrowserFixture,
+  createTerminalSessionsFixture,
+} from "@/test-utils/session-panel-fixtures";
 import type { PanelId, ToolTabKind } from "./panel-tab-kinds";
 import {
+  appendRightPanelEntry,
+  type BrowserTabEntry,
+  browserTabEntry,
+  findPanelTab,
+  type PanelTabEntry,
   type SessionPanelOwner,
   type SessionPanelSelectionKey,
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
-import { sessionPanelLayoutStorageKey } from "./session-panel-layout-store";
+import {
+  type SessionPanelLayoutStore,
+  sessionPanelLayoutStorageKey,
+  useSessionPanelLayoutStore,
+} from "./session-panel-layout-store";
 import { RIGHT_PANEL_OPEN_STORAGE_KEY } from "./use-right-panel-open";
-import { useSessionPanels } from "./use-session-panels";
+import { type SessionPanelBrowserModel, useSessionPanels } from "./use-session-panels";
 import { SessionViewContext } from "../session-navigation/session-view-context";
 
 const WITHOUT_CI_CHECKS: ReadonlySet<ToolTabKind> = new Set(["ci_checks"]);
@@ -39,6 +58,10 @@ const wrapper = ({ children }: { children: ReactNode }) => (
 beforeEach(() => {
   connection = createTestClientConnection();
 });
+
+/** The panel layout store of the test connection. */
+const layoutStore = (): SessionPanelLayoutStore =>
+  renderHook(() => useSessionPanelLayoutStore(), { wrapper }).result.current;
 
 afterEach(() => {
   localStorage.removeItem(RIGHT_PANEL_OPEN_STORAGE_KEY);
@@ -594,5 +617,325 @@ describe("useSessionPanels", () => {
       expect(toastErrorMock).toHaveBeenCalledTimes(1);
       expect(toastErrorMock.mock.calls[0]?.[0]).toBe("Could not restore the saved panel layout");
     });
+  });
+});
+
+const TAB_1 = browserTabIdFixture(1);
+const TAB_2 = browserTabIdFixture(2);
+const DEFAULT_RIGHT_IDS = ["document", "diffs", "files"];
+
+const savedBrowserEntry = (tabId: string): BrowserTabEntry => ({
+  id: `browser:${tabId}`,
+  kind: "browser",
+  tabId,
+});
+
+/** Saves the default tool tabs of a task and the given browser entries before the page shows. */
+const saveLayout = (
+  owner: SessionPanelOwner,
+  right: PanelTabEntry[],
+  bottom: PanelTabEntry[] = [],
+): void =>
+  layoutStore().update(owner, (layout) => ({
+    ...layout,
+    panels: {
+      right: [
+        { id: "document", kind: "document" },
+        { id: "diffs", kind: "diffs" },
+        { id: "files", kind: "files" },
+        ...right,
+      ],
+      bottom,
+    },
+  }));
+
+type BrowserHarnessProps = { browser: Partial<SessionPanelBrowserModel> };
+
+/** The calls that the panels made to the browser feature, in order. */
+type BrowserFeatureCalls = { started: string[]; closed: string[] };
+
+/** Renders the controller with a browser model that records each call to the browser feature. */
+const renderBrowserPanels = (
+  owner: SessionPanelOwner,
+  initialBrowser: Partial<SessionPanelBrowserModel>,
+  { isActive: initialActive = true }: { isActive?: boolean } = {},
+) => {
+  const scopeKey = sessionPanelOwnerKey(owner);
+  const calls: BrowserFeatureCalls = { started: [], closed: [] };
+  let isActive = initialActive;
+  let latestBrowser = initialBrowser;
+  const view = renderHook(
+    ({ browser }: BrowserHarnessProps) => {
+      const terminals = useMemo(() => createTerminalSessionsFixture({ scopeKey }), []);
+      // The browser feature owns `openingTabIds` and `closingTabIds`. Each test gives them.
+      const model = useMemo(
+        () =>
+          createSessionPanelBrowserFixture({
+            scopeKey,
+            startTab: (tabId) => calls.started.push(tabId),
+            closeTab: async (tabId) => {
+              calls.closed.push(tabId);
+            },
+            ...browser,
+          }),
+        [browser],
+      );
+      return useSessionPanels({
+        owner,
+        selectionKey: "build",
+        unavailableKinds: WITHOUT_CI_CHECKS,
+        terminals,
+        browser: model,
+      });
+    },
+    {
+      initialProps: { browser: initialBrowser },
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <ClientConnectionProvider connection={connection}>
+          <SessionViewContext value={{ id: "view", isActive }}>{children}</SessionViewContext>
+        </ClientConnectionProvider>
+      ),
+    },
+  );
+  return {
+    ...view,
+    calls,
+    setBrowser: (browser: Partial<SessionPanelBrowserModel>) => {
+      latestBrowser = browser;
+      view.rerender({ browser });
+    },
+    setActive: (active: boolean) => {
+      isActive = active;
+      view.rerender({ browser: latestBrowser });
+    },
+  };
+};
+
+const hostTab = (tabId: string, overrides: Partial<BrowserTabSummary> = {}): BrowserTabSummary =>
+  createBrowserTabSummaryFixture({ tabId, ...overrides });
+
+describe("useSessionPanels browser tabs", () => {
+  test("offers a Browser card in both panels with its blocked reason", () => {
+    const view = renderBrowserPanels(newTaskOwner(), {
+      startBlockedReason: "Close a browser tab to open another one.",
+    });
+
+    const browserCard = {
+      kind: "browser" as const,
+      disabledReason: "Close a browser tab to open another one.",
+    };
+    expect(view.result.current.right.launcher).toEqual([
+      { kind: "terminal", disabledReason: null },
+      browserCard,
+    ]);
+    expect(view.result.current.bottom.launcher).toEqual([
+      { kind: "terminal", disabledReason: null },
+      browserCard,
+    ]);
+  });
+
+  test("opens a picked browser tab, asks the browser feature to open it, and focuses its address bar", async () => {
+    const opened: string[] = [];
+    // Before the host list syncs, the panels keep every entry.
+    const view = renderBrowserPanels(newTaskOwner(), {
+      isSynced: false,
+      openTab: async (tabId) => {
+        opened.push(tabId);
+      },
+    });
+
+    act(() => view.result.current.right.onAddTab());
+    act(() => view.result.current.right.onPick("browser"));
+
+    const entry = view.result.current.right.tabs.at(-1);
+    if (entry?.kind !== "browser") throw new Error("Expected an opened browser tab.");
+    const { tabId } = entry.entry;
+    expect(view.result.current.right.tabs.map((tab) => tab.id)).toEqual([
+      ...DEFAULT_RIGHT_IDS,
+      `browser:${tabId}`,
+    ]);
+    expect(view.result.current.right.selectedTabId).toBe(`browser:${tabId}`);
+    expect(view.result.current.right.browserAddressFocus).toEqual({ tabId, request: 1 });
+    expect(view.result.current.right.focusRequest).toBe(0);
+    expect(opened).toEqual([tabId]);
+
+    // The new tab keeps its place while it opens and the host list does not have it yet.
+    view.setBrowser({ tabs: [], openingTabIds: new Set([tabId]) });
+    expect(view.result.current.right.selectedTabId).toBe(`browser:${tabId}`);
+    // Once the tab is open, the host list decides: a closed tab leaves.
+    view.setBrowser({ tabs: [] });
+    expect(view.result.current.right.tabs.map((tab) => tab.id)).toEqual(DEFAULT_RIGHT_IDS);
+  });
+
+  test("asks once to start each saved tab, and drops saved tabs that the host does not have", () => {
+    const owner = newTaskOwner();
+    saveLayout(owner, [savedBrowserEntry(TAB_1), savedBrowserEntry(TAB_2)]);
+    const view = renderBrowserPanels(owner, { isSynced: false });
+    const saved = hostTab(TAB_1, { started: false, live: false });
+
+    view.setBrowser({ tabs: [saved] });
+    view.setBrowser({ tabs: [saved] });
+    expect(view.calls.started).toEqual([TAB_1]);
+    expect(view.result.current.right.tabs.map((tab) => tab.id)).toEqual([
+      ...DEFAULT_RIGHT_IDS,
+      `browser:${TAB_1}`,
+    ]);
+
+    // After a host restart, the tab has not started again, so it starts again.
+    view.setBrowser({ tabs: [hostTab(TAB_1)] });
+    view.setBrowser({ tabs: [saved] });
+    expect(view.calls.started).toEqual([TAB_1, TAB_1]);
+  });
+
+  test("hides a closing browser tab, and removes it once the host list no longer has it", async () => {
+    const owner = newTaskOwner();
+    saveLayout(owner, [savedBrowserEntry(TAB_1), savedBrowserEntry(TAB_2)]);
+    const view = renderBrowserPanels(owner, { tabs: [hostTab(TAB_1), hostTab(TAB_2)] });
+    act(() => view.result.current.right.onSelect(`browser:${TAB_1}`));
+
+    await act(async () => view.result.current.right.onClose(`browser:${TAB_1}`));
+
+    expect(view.calls.closed).toEqual([TAB_1]);
+    expect(view.result.current.right.selectedTabId).toBe(`browser:${TAB_2}`);
+
+    view.setBrowser({ tabs: [hostTab(TAB_1), hostTab(TAB_2)], closingTabIds: new Set([TAB_1]) });
+    expect(view.result.current.right.tabs.map((tab) => tab.id)).toEqual([
+      ...DEFAULT_RIGHT_IDS,
+      `browser:${TAB_2}`,
+    ]);
+
+    view.setBrowser({ tabs: [hostTab(TAB_2)] });
+    expect(findPanelTab(layoutStore().read(owner), `browser:${TAB_1}`)).toBeNull();
+  });
+
+  test("shows a browser tab again and reports the error when its close fails", async () => {
+    await withMockedToast(async ({ toastErrorMock }) => {
+      const owner = newTaskOwner();
+      saveLayout(owner, [savedBrowserEntry(TAB_1)]);
+      const view = renderBrowserPanels(owner, {
+        tabs: [hostTab(TAB_1, { title: "Dashboard" })],
+        closeTab: async () => {
+          throw new Error("The host is not ready.");
+        },
+      });
+      act(() => view.result.current.right.onSelect(`browser:${TAB_1}`));
+
+      await act(async () => view.result.current.right.onClose(`browser:${TAB_1}`));
+
+      expect(view.result.current.right.tabs.map((tab) => tab.id)).toContain(`browser:${TAB_1}`);
+      expect(view.result.current.right.selectedTabId).toBe(`browser:${TAB_1}`);
+      expect(toastErrorMock).toHaveBeenCalledWith("Could not close Dashboard", {
+        description: "The host is not ready.",
+      });
+    });
+  });
+
+  test("opens a link of the page in a new tab at the end of the right panel and shows the panel", async () => {
+    localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
+    const addresses: Array<string | null> = [];
+    let listed: () => void = () => {};
+    // Before the host list syncs, the panels keep every entry.
+    const view = renderBrowserPanels(newTaskOwner(), {
+      isSynced: false,
+      // The open resolves when the host list has the tab.
+      openTab: (_tabId, address) => {
+        addresses.push(address);
+        return new Promise<void>((resolve) => {
+          listed = resolve;
+        });
+      },
+    });
+    const target = inAppLinkTarget();
+    if (target === null) throw new Error("Expected the page to open links in browser tabs.");
+
+    let opened: Promise<void> = Promise.resolve();
+    act(() => {
+      opened = target.open("http://localhost:3000/docs");
+    });
+
+    const entry = view.result.current.right.tabs.at(-1);
+    if (entry?.kind !== "browser") throw new Error("Expected a new browser tab.");
+    expect(addresses).toEqual(["http://localhost:3000/docs"]);
+    expect(view.result.current.right.selectedTabId).toBe(entry.id);
+    expect(view.result.current.rightToggle?.isOpen).toBe(true);
+    expect(view.result.current.right.browserAddressFocus).toBeNull();
+    await act(async () => {
+      listed();
+      await opened;
+    });
+    view.unmount();
+    expect(inAppLinkTarget()).toBeNull();
+  });
+
+  test("lets only the shown page open links in its browser tabs", () => {
+    const view = renderBrowserPanels(newTaskOwner(), {}, { isActive: false });
+    expect(inAppLinkTarget()).toBeNull();
+
+    view.setActive(true);
+    expect(inAppLinkTarget()).not.toBeNull();
+
+    view.setActive(false);
+    expect(inAppLinkTarget()).toBeNull();
+    view.unmount();
+  });
+
+  test("gives links the reason why the page cannot open a browser tab", () => {
+    const view = renderBrowserPanels(newTaskOwner(), {
+      startBlockedReason: "Close a browser tab to open another one.",
+    });
+
+    expect(inAppLinkTarget()?.blockedReason).toBe("Close a browser tab to open another one.");
+    view.unmount();
+  });
+
+  test("shows a hidden right panel without a focus change when an agent opens a tab", () => {
+    localStorage.setItem(RIGHT_PANEL_OPEN_STORAGE_KEY, "false");
+    const owner = newTaskOwner();
+    const view = renderBrowserPanels(owner, {});
+    const userTab = hostTab(TAB_1);
+
+    view.setBrowser({ tabs: [userTab] });
+    expect(view.result.current.right.isVisible).toBe(false);
+    expect(view.result.current.right.tabs.map((tab) => tab.id)).toContain(`browser:${TAB_1}`);
+
+    // As with the browser tab coordinator, the new tab enters the layout before the page renders.
+    const agentTab = hostTab(TAB_2, {
+      createdBy: "agent",
+      owner: { kind: "task", workspaceId: owner.workspaceId, taskId: "task-1" },
+    });
+    const store = layoutStore();
+    act(() => {
+      store.update(owner, (layout) =>
+        appendRightPanelEntry(layout, "task", browserTabEntry(TAB_2)),
+      );
+      view.setBrowser({ tabs: [userTab, agentTab] });
+    });
+
+    expect(view.result.current.rightToggle?.isOpen).toBe(true);
+    expect(view.result.current.right.presence).toBe("opening");
+    expect(view.result.current.right.selectedTabId).toBe(`browser:${TAB_2}`);
+    expect(view.result.current.right.focusRequest).toBe(0);
+    expect(view.result.current.right.browserAddressFocus).toBeNull();
+  });
+
+  test("shows the bottom panel on load when it holds a saved browser tab", () => {
+    const owner = newTaskOwner();
+    saveLayout(owner, [], [savedBrowserEntry(TAB_1)]);
+
+    const view = renderBrowserPanels(owner, { isSynced: false });
+
+    expect(view.result.current.bottom.isVisible).toBe(true);
+    expect(view.result.current.bottom.tabs.map((tab) => tab.id)).toEqual([`browser:${TAB_1}`]);
+  });
+
+  test("hides saved browser tabs and offers no Browser card on a page without browser tabs", () => {
+    const owner = newTaskOwner();
+    saveLayout(owner, [savedBrowserEntry(TAB_1)]);
+
+    const view = renderPanels(owner, {});
+
+    expect(view.result.current.right.tabs.map((tab) => tab.id)).toEqual(DEFAULT_RIGHT_IDS);
+    expect(view.result.current.right.launcher.map((entry) => entry.kind)).toEqual(["terminal"]);
+    expect(findPanelTab(layoutStore().read(owner), `browser:${TAB_1}`)).not.toBeNull();
   });
 });

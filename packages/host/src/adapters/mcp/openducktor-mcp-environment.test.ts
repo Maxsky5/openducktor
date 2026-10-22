@@ -13,7 +13,7 @@ describe("OpenDucktor managed MCP environment", () => {
         hostUrl: "http://127.0.0.1:14327",
         workspaceId: "workspace-1",
       },
-      "Codex",
+      "codex",
     );
 
     expect(environment.ODT_HOST_URL).toBe("http://127.0.0.1:14327");
@@ -23,5 +23,25 @@ describe("OpenDucktor managed MCP environment", () => {
     expect(environment.ODT_ALLOWED_TOOLS).toContain("odt_search_tasks");
     expect(environment).not.toHaveProperty("OPENDUCKTOR_CHANNEL");
     expect(OPENDUCKTOR_MCP_ENV_VAR_NAMES).not.toContain("OPENDUCKTOR_CHANNEL");
+  });
+
+  test("names the runtime kind so browser tools know where the caller comes from", () => {
+    for (const runtimeKind of ["opencode", "codex", "claude"] as const) {
+      const environment = buildOpenDucktorMcpBridgeEnvironment(
+        { hostToken: "host-token", hostUrl: "http://127.0.0.1:14327", workspaceId: "workspace-1" },
+        runtimeKind,
+      );
+      expect(environment.ODT_RUNTIME_KIND).toBe(runtimeKind);
+      expect(environment).not.toHaveProperty("ODT_RUNTIME_SESSION_ID");
+    }
+  });
+
+  test("names the runtime in a missing bridge value error", () => {
+    expect(() =>
+      buildOpenDucktorMcpBridgeEnvironment(
+        { hostToken: " ", hostUrl: "http://127.0.0.1:14327", workspaceId: "workspace-1" },
+        "opencode",
+      ),
+    ).toThrow("OpenCode MCP bridge hostToken is required.");
   });
 });

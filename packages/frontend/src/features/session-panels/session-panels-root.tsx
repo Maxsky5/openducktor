@@ -33,6 +33,7 @@ import {
   sameDrop,
 } from "./session-panel-drop";
 import type { PanelDropTarget, ResolvedPanelTab } from "./session-panel-layout";
+import { PanelTabIcon } from "./session-panel-tab-icon";
 import { panelTabPresentation } from "./session-panel-tab-presentation";
 import type { SessionPanelsModel } from "./use-session-panels";
 import { useSessionViewActive } from "../session-navigation/session-view-context";
@@ -65,14 +66,14 @@ function PanelTabDragPreview({
   tab: ResolvedPanelTab;
   isRejected: boolean;
 }): ReactElement {
-  const { icon: Icon, label } = panelTabPresentation(tab);
+  const presentation = panelTabPresentation(tab);
   return (
     <div
       aria-hidden="true"
       className="inline-flex h-7 max-w-48 items-center gap-1.5 rounded-md border border-border bg-card/80 px-2 text-xs font-medium text-foreground shadow-md backdrop-blur-[1px]"
     >
-      <Icon className="size-3.5 shrink-0" />
-      <span className="min-w-0 truncate">{label}</span>
+      <PanelTabIcon presentation={presentation} showsPromptMark={false} />
+      <span className="min-w-0 truncate">{presentation.label}</span>
       {isRejected ? <Ban className="size-3.5 shrink-0 text-destructive" /> : null}
     </div>
   );

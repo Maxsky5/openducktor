@@ -138,6 +138,8 @@ const capture = {
     ODT_HOST_TOKEN: process.env.ODT_HOST_TOKEN,
     ODT_FORBID_WORKSPACE_ID_INPUT: process.env.ODT_FORBID_WORKSPACE_ID_INPUT,
     ODT_ALLOWED_TOOLS: process.env.ODT_ALLOWED_TOOLS,
+    ODT_RUNTIME_KIND: process.env.ODT_RUNTIME_KIND,
+    ODT_RUNTIME_SESSION_ID: process.env.ODT_RUNTIME_SESSION_ID,
   },
   initializeVersion: null,
 };

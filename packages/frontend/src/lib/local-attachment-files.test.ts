@@ -16,6 +16,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
   client: createHostClientFixture({}),
   subscribeWorkspaceSessionUpdates: async () => () => {},
   subscribeRuntimeChanges: async () => () => {},
+  subscribeBrowserTabEvents: async () => () => {},
   subscribeRunEvents: async () => () => {},
   subscribeWorkspaceProviderSetupUpdates: async () => () => {},
   subscribeAzureDevOpsConnectionUpdates: async () => () => {},
@@ -41,6 +42,7 @@ const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridg
   resolveLocalAttachmentPreview: async () => ({ kind: "url", src: "asset://preview" }),
   resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
   terminals: createUnavailableShellBridge().terminals,
+  browser: createUnavailableShellBridge().browser,
   ...overrides,
 });
 

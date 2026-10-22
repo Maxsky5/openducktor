@@ -1,10 +1,17 @@
+import type { RequestMeta } from "@modelcontextprotocol/sdk/types.js";
 import {
   ODT_TOOL_SCHEMAS,
+  type OdtBrowserToolName,
   type OdtToolName,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
-import { OdtHostBridgeClient, type OdtHostBridgeClientPort } from "./host-bridge-client";
+import { type BrowserCallerSource, resolveBrowserCaller } from "./browser-caller";
+import {
+  OdtHostBridgeClient,
+  type OdtHostBridgeClientPort,
+  type WorkspaceTaskToolName,
+} from "./host-bridge-client";
 import type { OdtStoreOptions } from "./store-context";
 import { OdtToolError } from "./tool-results";
 
@@ -17,10 +24,12 @@ type WorkspaceScopedToolName = WorkspaceScopedOdtToolName;
 
 export class OdtTaskStore {
   readonly workspaceId: string | undefined;
+  private readonly browserCallerSource: BrowserCallerSource | undefined;
   private readonly client: OdtHostBridgeClientPort;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.workspaceId = options.workspaceId;
+    this.browserCallerSource = options.browserCallerSource;
     this.client =
       deps.client ??
       new OdtHostBridgeClient({ baseUrl: options.hostUrl, appToken: options.hostToken });
@@ -42,12 +51,23 @@ export class OdtTaskStore {
     });
   }
 
-  private async executeWorkspaceScoped<Name extends WorkspaceScopedToolName>(
+  private async executeWorkspaceScoped<Name extends WorkspaceTaskToolName>(
     toolName: Name,
     input: ToolInput<Name>,
   ) {
     const workspaceId = this.resolveWorkspaceId(toolName, input);
     return this.client.call(toolName, workspaceId, input);
+  }
+
+  /** `meta` is the `_meta` of the MCP request. OpenCode and Codex name the calling session there. */
+  async callBrowserTool<Name extends OdtBrowserToolName>(
+    toolName: Name,
+    input: ToolInput<Name>,
+    meta: RequestMeta | undefined,
+  ) {
+    const caller = resolveBrowserCaller(this.browserCallerSource, meta);
+    const workspaceId = this.resolveWorkspaceId(toolName, input);
+    return this.client.callBrowserTool(toolName, workspaceId, input, caller);
   }
 
   async getWorkspaces(_input: ToolInput<"odt_get_workspaces">) {

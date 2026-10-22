@@ -427,6 +427,13 @@ body,
   min-height: 100%;
 }
 
+/* The app never bounces at a scroll end. A macOS bounce moved the panels away from the browser
+   layer, and a page scroll that ends inside a browser tab chains to the app root. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 body {
   font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   color: var(--foreground);
@@ -629,6 +636,12 @@ html.onboarding-stage-transition::view-transition-old(onboarding-stage-content),
 html.onboarding-stage-transition::view-transition-new(onboarding-stage-content) {
   animation-duration: 180ms;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* A page surface takes pointer moves from the app, so a panel resize stops at the first page
+   that the pointer crosses. While a separator moves, the pages let the pointer through. */
+body:has([data-separator="active"]) [data-browser-surface] {
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

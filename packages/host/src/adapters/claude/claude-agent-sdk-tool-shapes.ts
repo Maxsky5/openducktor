@@ -209,6 +209,9 @@ const stringifyToolResultContent = (value: ClaudeProtocolValue): string => {
   return JSON.stringify(value, null, 2);
 };
 
+/** An image block of a tool result, such as a browser screenshot. History reads drop its data. */
+const claudeToolResultImageSchema = z.object({ type: z.literal("image") });
+
 const toolResultBlockText = (block: ClaudeProtocolValue): string => {
   const text = toolContentStringSchema.safeParse(block);
   if (text.success) {
@@ -217,6 +220,10 @@ const toolResultBlockText = (block: ClaudeProtocolValue): string => {
   const record = claudeProtocolObjectSchema.safeParse(block);
   if (!record.success) {
     return stringifyToolResultContent(block);
+  }
+  // The image data is not text, so the output keeps only the text blocks.
+  if (claudeToolResultImageSchema.safeParse(record.data).success) {
+    return "";
   }
   return (
     readStringProp(record.data, "text") ??

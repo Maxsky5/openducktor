@@ -1,3 +1,4 @@
+import type { BrowserService } from "../../application/browser/browser-service-types";
 import type { Effect } from "effect";
 import type { McpBridgeDiscoveryMode } from "../../adapters/mcp/mcp-bridge-discovery-file";
 import type { AzureDevOpsFetch } from "../../adapters/git-providers/azure-devops/rest-client";
@@ -32,4 +33,5 @@ export type EffectNodeHostCommandRouter = EffectHostCommandRouter & {
   readonly hostInstanceId: string;
   readonly taskEventStream: import("../../events/task-event-stream").TaskEventStreamPort;
   readonly terminalService: import("../../application/terminals/terminal-service").TerminalService;
+  readonly browserService: BrowserService;
 };

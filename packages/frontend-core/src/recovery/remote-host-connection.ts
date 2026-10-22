@@ -146,6 +146,11 @@ export const createRemoteHostConnection = ({
         if (event.channel === "openducktor://runtime-changed")
           logListenerFailure(listener(event.payload));
       }, listener),
+    subscribeBrowserTabEvents: (listener) =>
+      subscribe((event) => {
+        if (event.channel === "openducktor://browser-event")
+          logListenerFailure(listener(event.payload));
+      }, listener),
     subscribeRunEvents: (listener) =>
       subscribe((event) => {
         if (event.channel === "openducktor://run-event")

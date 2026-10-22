@@ -749,6 +749,12 @@ export const draftHasMeaningfulContent = (draft: AgentChatComposerDraft): boolea
 
 export const draftHasSlashCommandSegment = hasExistingSlashCommandSegment;
 
+/** System commands, such as `/compact`, never carry pending review comments or annotations. */
+export const draftHasSystemSlashCommand = (draft: AgentChatComposerDraft): boolean =>
+  draft.segments.some(
+    (segment) => segment.kind === "slash_command" && segment.command.source === "system",
+  );
+
 export const appendTextToDraft = (
   draft: AgentChatComposerDraft,
   appendedText: string,

@@ -389,6 +389,8 @@ describe("createOpenCodeRuntimeStarter", () => {
           ODT_HOST_TOKEN: "inherited-token",
           ODT_FORBID_WORKSPACE_ID_INPUT: "true",
           ODT_ALLOWED_TOOLS: "odt_read_task",
+          ODT_RUNTIME_KIND: "claude",
+          ODT_RUNTIME_SESSION_ID: "inherited-session",
         }),
         launchDirectory,
         toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),

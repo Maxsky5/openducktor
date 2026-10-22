@@ -28,6 +28,7 @@ import {
   type TaskAssetReadService,
   type ToolDiscoveryId,
 } from "@openducktor/host";
+import { createChromeForTestingBrowserEngine } from "@openducktor/host/chrome-for-testing";
 import { createNodePtyPort } from "@openducktor/host/node-pty";
 import { Cause, Effect } from "effect";
 import { z } from "zod";
@@ -40,6 +41,12 @@ import {
   WebHostRequestError,
   WebOperationError,
 } from "@openducktor/remote-host/effect/web-errors";
+import {
+  type BrowserPreviewProxies,
+  createBrowserPreviewProxies,
+} from "./browser-tabs/browser-preview-proxy";
+import { checkSiteFraming } from "./browser-tabs/browser-frame-check";
+import { routeBrowserFrameHttpRequest } from "./browser-tabs/browser-frame-routes";
 import { type WebLogger, writeWebLogEffect } from "./logger";
 import {
   startNodeFetchServer,
@@ -468,6 +475,7 @@ const parseJsonObjectBody = (
 const routeCorsRequest = ({
   appSessionCookieName,
   appToken,
+  browserPreviews,
   controlToken,
   corsHeaders,
   eventBus,
@@ -489,6 +497,7 @@ const routeCorsRequest = ({
 }: {
   appSessionCookieName: string;
   appToken: string;
+  browserPreviews: BrowserPreviewProxies;
   controlToken: string;
   corsHeaders: HeadersInit;
   eventBus: BufferedHostEventBus;
@@ -642,6 +651,18 @@ const routeCorsRequest = ({
       return taskAssetResponse;
     }
 
+    const browserFrameResponse = yield* routeBrowserFrameHttpRequest({
+      appToken,
+      corsHeaders,
+      previews: browserPreviews,
+      checkSiteFraming: (input) => checkSiteFraming({ ...input, fetch }),
+      request,
+      validateAppTokenHeader,
+    });
+    if (browserFrameResponse) {
+      return browserFrameResponse;
+    }
+
     const invokeMatch = /^\/invoke\/([^/]+)$/.exec(requestUrl.pathname);
     if (invokeMatch && request.method === "POST") {
       yield* validateAppTokenHeader(request, appToken);
@@ -684,6 +705,7 @@ export const handleTypescriptHostBackendRequest = ({
   allowedOrigins,
   appSessionCookieName,
   appToken,
+  browserPreviews,
   controlToken,
   eventBus,
   hostCommandRouter,
@@ -705,6 +727,7 @@ export const handleTypescriptHostBackendRequest = ({
   allowedOrigins: Set<string>;
   appSessionCookieName: string;
   appToken: string;
+  browserPreviews: BrowserPreviewProxies;
   controlToken: string;
   eventBus: BufferedHostEventBus;
   hostCommandRouter: EffectHostCommandRouter;
@@ -736,6 +759,7 @@ export const handleTypescriptHostBackendRequest = ({
     const routeInput: Parameters<typeof routeCorsRequest>[0] = {
       appSessionCookieName,
       appToken,
+      browserPreviews,
       controlToken,
       corsHeaders,
       eventBus,
@@ -861,6 +885,9 @@ export const startTypescriptHostBackendEffect = ({
         ),
     });
     const localAttachments = createLocalAttachmentAdapter();
+    const browserPreviews = createBrowserPreviewProxies({
+      reportFailure: (message, cause) => scheduleNonFatalWebEventFailure(logger, message, cause),
+    });
     let shutdownStarted = false;
     const beginShutdown = (): void => {
       shutdownStarted = true;
@@ -899,6 +926,12 @@ export const startTypescriptHostBackendEffect = ({
       },
       runtimeDistribution,
       terminalPty: createNodePtyPort(),
+      browserEngine: ({ configRoot }) =>
+        createChromeForTestingBrowserEngine({
+          configRoot,
+          platform: process.platform,
+          arch: process.arch,
+        }),
     };
     if (processEnv) {
       routerInput.processEnvironmentInput = { baseEnv: processEnv };
@@ -954,6 +987,11 @@ export const startTypescriptHostBackendEffect = ({
         ),
       taskEventStream: hostCommandRouter.taskEventStream,
     });
+    // Close the preview servers after the host stops, also when that fails.
+    const disposeHost = () =>
+      hostCommandRouter
+        .dispose()
+        .pipe(Effect.ensuring(Effect.promise(() => browserPreviews.close())));
 
     const stop = async (): Promise<void> => {
       if (stopPromise) {
@@ -965,7 +1003,7 @@ export const startTypescriptHostBackendEffect = ({
         const remoteResult = await Effect.runPromise(Effect.result(remoteAccess.close()));
         await Effect.runPromise(commandLifetime.drain());
         await stopHostBackend({
-          disposeHost: () => hostCommandRouter.dispose(),
+          disposeHost,
           logger,
           resolveExited,
           stopServer: () => server.stop(true),
@@ -978,7 +1016,7 @@ export const startTypescriptHostBackendEffect = ({
     const cleanupStartedServerEffect = (): Effect.Effect<void> =>
       Effect.gen(function* () {
         yield* Effect.sync(() => taskEventLeaseManager.dispose());
-        const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
+        const disposeExit = yield* Effect.exit(disposeHost());
         yield* Effect.promise(() => server.stop(true));
         if (disposeExit._tag === "Failure") {
           const loggingExit = yield* Effect.exit(
@@ -1015,6 +1053,7 @@ export const startTypescriptHostBackendEffect = ({
                   allowedOrigins,
                   appSessionCookieName,
                   appToken,
+                  browserPreviews,
                   controlToken,
                   eventBus,
                   hostCommandRouter,

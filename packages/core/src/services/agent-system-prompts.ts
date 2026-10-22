@@ -6,6 +6,7 @@ import {
   type GitConflictOperation,
   type RepoPromptOverrides,
   validatePromptTemplatePlaceholders,
+  isOdtBrowserToolName,
 } from "@openducktor/contracts";
 import { AGENT_ROLE_TOOL_POLICY, type AgentRole } from "../types/agent-orchestrator";
 import { formatOdtToolArgs } from "./odt-tool-args";
@@ -576,7 +577,15 @@ const toRoleBaseTemplateId = (role: AgentRole): AgentPromptTemplateId => {
 
 const buildToolListPlaceholder = (role: AgentRole): string => {
   const allowedTools = AGENT_ROLE_TOOL_POLICY[role];
-  return allowedTools.map((tool) => `- ${formatOdtToolArgs(tool)}`).join("\n");
+  const lines = allowedTools
+    .filter((tool) => !isOdtBrowserToolName(tool))
+    .map((tool) => `- ${formatOdtToolArgs(tool)}`);
+  // The MCP definitions of the browser tools describe their input, so the prompt only names them.
+  const browserTools = allowedTools.filter(isOdtBrowserToolName);
+  if (browserTools.length > 0) {
+    lines.push(`- Browser tools: ${browserTools.join(", ")}`);
+  }
+  return lines.join("\n");
 };
 
 const buildPlaceholderValues = ({

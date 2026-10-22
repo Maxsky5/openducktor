@@ -3,6 +3,7 @@ import type { RuntimeQueryError } from "../../ports/runtime-query-error";
 import type { FilesystemListDirectoryError } from "../../application/filesystem/filesystem-service";
 import { WorkspaceTextFileWriteError } from "../../application/filesystem/workspace-text-file-service";
 import type { TerminalServiceError } from "../../application/terminals/terminal-service-error";
+import type { BrowserServiceError } from "../../application/browser/browser-service-error";
 import type { TaskPolicyError } from "../../domain/task/task-policy-error";
 import type { HostError } from "../../effect/host-errors";
 import {
@@ -26,6 +27,7 @@ export type HostCommandResult<Command extends HostCommandName = HostCommandName>
   HostCommandResultMap[Command];
 export type { HostCommandArgs } from "../commands/command-inputs";
 export type HostCommandHandlerError =
+  | BrowserServiceError
   | RuntimeQueryError
   | CodexSessionHistoryError
   | FilesystemListDirectoryError

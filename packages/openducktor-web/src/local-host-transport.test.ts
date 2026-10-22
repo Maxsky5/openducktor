@@ -1,4 +1,7 @@
-import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
+import {
+  BROWSER_EVENT_STREAM_NAME,
+  liveSessionStreamEventName,
+} from "@openducktor/remote-host/host-event-stream-name";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -7,6 +10,7 @@ import { configureBrowserRuntimeConfig } from "./browser-config";
 import { WebDependencyError } from "@openducktor/remote-host/effect/web-errors";
 import { createFetchFixture } from "./test-support";
 import type {
+  BrowserTabEventListener,
   RunEventListener,
   RuntimeChangeListener,
 } from "@openducktor/frontend-core/connection/host-connection";
@@ -767,6 +771,44 @@ describe("local host SSE subscriptions", () => {
       missedEvents: false,
     });
     unsubscribe();
+  });
+
+  test("delivers browser tab events from their own stream event name", async () => {
+    const { subscribeLocalHostBrowserTabEvents } = await loadLocalHostTransport();
+    globalThis.fetch = createFetchFixture(
+      mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
+    const received: Array<Parameters<BrowserTabEventListener>[0]> = [];
+    const subscription = subscribeLocalHostBrowserTabEvents(
+      (payload: Parameters<BrowserTabEventListener>[0]) => {
+        received.push(payload);
+      },
+    );
+    const eventSource = await waitForEventSourceInstance();
+    eventSource.connect();
+    const unsubscribe = await subscription;
+    expect(eventSource.hasListener(BROWSER_EVENT_STREAM_NAME)).toBe(true);
+    const envelope = JSON.stringify({
+      channel: "openducktor://browser-event",
+      payload: {
+        type: "tab_closed",
+        tabId: "6f1d3f1e-8a52-4b8e-9d0c-2f4a5b6c7d8e",
+        owner: { kind: "task", workspaceId: "workspace", taskId: "task" },
+      },
+    });
+
+    eventSource.emit(BROWSER_EVENT_STREAM_NAME, envelope);
+    expect(() => eventSource.emit("message", envelope)).toThrow("wrong stream event name");
+    eventSource.connect({ hostChanged: false, gaps: ["message"] });
+    eventSource.connect({ hostChanged: false, gaps: [BROWSER_EVENT_STREAM_NAME] });
+
+    expect(received).toEqual([
+      JSON.parse(envelope).payload,
+      { __openducktorConnectionControl: true, kind: "reconnected", missedEvents: false },
+      { __openducktorConnectionControl: true, kind: "reconnected", missedEvents: true },
+    ]);
+    unsubscribe();
+    expect(eventSource.hasListener(BROWSER_EVENT_STREAM_NAME)).toBe(false);
   });
 
   test("delivers run events and reconnects that missed run events", async () => {

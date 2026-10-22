@@ -22,6 +22,7 @@ import {
   ensureLocalHostSessionDedupedEffect,
   observeLocalHostAgentSessions,
   subscribeLocalHostAzureDevOpsConnectionUpdates,
+  subscribeLocalHostBrowserTabEvents,
   subscribeLocalHostWorkspaceProviderSetupUpdates,
   subscribeLocalHostRunEvents,
   subscribeLocalHostRuntimeChanges,
@@ -29,6 +30,7 @@ import {
   subscribeLocalHostTaskStream,
   subscribeLocalHostWorkspaceSessionUpdates,
 } from "./local-host-transport";
+import { createBrowserTabBridge } from "./browser-tabs/browser-tab-bridge";
 import { createBrowserTerminalBridge } from "./terminals/browser-terminal-transport";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
 
@@ -96,6 +98,7 @@ export const createBrowserShellBridge = (): ShellBridge => {
     },
     notifications: createBrowserNotificationBridge(),
     subscribeRuntimeChanges: subscribeLocalHostRuntimeChanges,
+    subscribeBrowserTabEvents: subscribeLocalHostBrowserTabEvents,
     subscribeRunEvents: subscribeLocalHostRunEvents,
     subscribeAzureDevOpsConnectionUpdates: subscribeLocalHostAzureDevOpsConnectionUpdates,
     subscribeWorkspaceProviderSetupUpdates: subscribeLocalHostWorkspaceProviderSetupUpdates,
@@ -122,5 +125,6 @@ export const createBrowserShellBridge = (): ShellBridge => {
         }),
       ),
     terminals: createBrowserTerminalBridge(),
+    browser: createBrowserTabBridge(),
   };
 };

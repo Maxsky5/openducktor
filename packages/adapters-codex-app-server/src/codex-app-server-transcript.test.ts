@@ -60,6 +60,34 @@ describe("Codex App Server transcript parsing", () => {
     );
   });
 
+  test("keeps the images of an MCP tool result, such as a browser screenshot", () => {
+    const message = toHistoryMessage({
+      id: "tool-1",
+      type: "mcpToolCall",
+      server: "openducktor",
+      tool: "odt_browser_screenshot",
+      status: "completed",
+      arguments: { tabId: "tab-1" },
+      result: {
+        content: [
+          { type: "text", text: "Screenshot of the visible page." },
+          { type: "image", mimeType: "image/png", data: "iVBORw0KGgo=" },
+        ],
+      },
+    });
+
+    expect(message?.parts[0]).toMatchObject({
+      output: "Screenshot of the visible page.",
+      resultContent: [
+        { kind: "text", text: "Screenshot of the visible page." },
+        {
+          kind: "file",
+          file: { downloadUri: "data:image/png;base64,iVBORw0KGgo=", mime: "image/png" },
+        },
+      ],
+    });
+  });
+
   test("derives tool timing from Codex duration and explicit completion timestamp", () => {
     const completedAtMs = Date.parse("2026-05-07T00:00:10.000Z");
     const message = toHistoryMessage({

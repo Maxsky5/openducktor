@@ -311,6 +311,12 @@ describe("focused MCP task reads", () => {
         ),
     });
     return createOdtMcpToolContext({
+      browserAgentTools: {
+        runAgentTool: () => Effect.die(new Error("Task reads never run browser tools.")),
+      },
+      browserCallers: {
+        resolve: () => Effect.die(new Error("Task reads never resolve a browser caller.")),
+      },
       taskService: createTaskService({ taskStore: store }),
       workspaceSettingsService: {
         getRepoConfig: () =>

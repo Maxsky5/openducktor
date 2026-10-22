@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { agentSessionLiveEnvelopeSchema } from "./agent-session-live-schemas";
 import { autopilotRunEventSchema } from "./autopilot-schemas";
+import { browserHostEventSchema } from "./browser-tab-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import { hostRuntimeEventSchema } from "./host-runtime-schemas";
 import { workspaceSessionSchema } from "./workspace-session-schemas";
@@ -12,11 +13,16 @@ export const HOST_EVENT_CHANNELS = [
   "openducktor://azure-devops-connection-updated",
   "openducktor://workspace-provider-setup-updated",
   "openducktor://runtime-changed",
+  "openducktor://browser-event",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
 
 export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
+  z.strictObject({
+    channel: z.literal("openducktor://browser-event"),
+    payload: browserHostEventSchema,
+  }),
   z.strictObject({
     channel: z.literal("openducktor://workspace-provider-setup-updated"),
     payload: z.strictObject({

@@ -10,6 +10,8 @@ export default {
     "@azure/msal-node-extensions",
     // The Node bundle externalizes the host's native terminal package for the packaged app.
     "node-pty",
+    // The Node bundle externalizes playwright-core, which the agent browser tools load at runtime.
+    "playwright-core",
   ],
   project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
 };

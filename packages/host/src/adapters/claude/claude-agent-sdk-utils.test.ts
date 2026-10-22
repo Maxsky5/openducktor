@@ -324,6 +324,13 @@ describe("mutationForTool", () => {
     expect(mutationForTool("Write")).toBe("mutating");
     expect(mutationForTool("TodoWrite")).toBe("mutating");
   });
+
+  test("classifies OpenDucktor task and page reads, workflow writes, and browser actions", () => {
+    expect(mutationForTool("mcp__openducktor__odt_read_task")).toBe("read_only");
+    expect(mutationForTool("mcp__openducktor__odt_set_spec")).toBe("mutating");
+    expect(mutationForTool("mcp__openducktor__odt_browser_click")).toBe("unknown");
+    expect(mutationForTool("mcp__openducktor__odt_browser_snapshot")).toBe("read_only");
+  });
 });
 
 describe("fromPromise", () => {

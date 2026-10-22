@@ -12,6 +12,7 @@ const BACKEND_ROUTE_NAMESPACES = new Set([
   "task-events",
   "task-assets",
   "terminal",
+  "browser",
 ]);
 
 export const parseBasePathEffect = (

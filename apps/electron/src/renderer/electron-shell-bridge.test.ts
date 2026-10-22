@@ -148,6 +148,14 @@ const createElectronApi = () => {
         send: mock(async () => {}),
         subscribe: mock(() => unsubscribe),
       },
+      browser: {
+        connect: mock(async () => {}),
+        disconnect: mock(async () => {}),
+        send: mock(async () => {}),
+        subscribe: mock(() => unsubscribe),
+        bindGuest: mock(async () => {}),
+        pickFiles: mock(async () => ["/tmp/photo.png"]),
+      },
     },
     emitAppUpdate(state: Parameters<NonNullable<typeof appUpdateListener>>[0]) {
       if (!appUpdateListener) {
@@ -478,6 +486,39 @@ describe("electron shell bridge", () => {
     expect(electronApi.appUpdates.download).toHaveBeenCalled();
     expect(electronApi.appUpdates.install).toHaveBeenCalled();
     expect(unsubscribeAppUpdates).toHaveBeenCalled();
+  });
+
+  test("uses the preload bridge for webview browser tabs", async () => {
+    const { electronApi, unsubscribe } = createElectronApi();
+    setElectronApi(electronApi);
+    const bridge = createElectronShellBridge();
+    if (bridge.browser.surface !== "webview") {
+      throw new Error("Expected the webview browser bridge.");
+    }
+    const onFrame = mock(() => {});
+    const onStateChange = mock(() => {});
+    const listener = mock(() => {});
+
+    await bridge.subscribeBrowserTabEvents(listener);
+    const connection = await bridge.browser.connect(onFrame, onStateChange, () => {});
+    const clientId = electronApi.browser.connect.mock.calls[0]?.[0];
+    await connection.send(new Uint8Array([1]));
+    await connection.close();
+    await bridge.browser.bindGuest("11111111-1111-4111-8111-111111111111", 42);
+    const paths = await bridge.browser.pickFiles({ multiple: true, accept: [".png"] });
+
+    expect(bridge.browser.partition("my-repo")).toBe("persist:openducktor-browser-my-repo");
+    expect(electronApi.subscribe).toHaveBeenCalledWith("openducktor://browser-event", listener);
+    expect(electronApi.browser.subscribe).toHaveBeenCalledWith(clientId, onFrame);
+    expect(electronApi.browser.send).toHaveBeenCalledWith(clientId, new Uint8Array([1]));
+    expect(electronApi.browser.disconnect).toHaveBeenCalledWith(clientId);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(onStateChange.mock.calls).toEqual([["connected"], ["disconnected"]]);
+    expect(electronApi.browser.bindGuest).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111",
+      42,
+    );
+    expect(paths).toEqual(["/tmp/photo.png"]);
   });
 
   test("uses the preload bridge for shell actions", async () => {

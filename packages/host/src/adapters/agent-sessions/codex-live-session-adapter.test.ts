@@ -130,6 +130,7 @@ const mcpServerConfigFor = (repoPath: string) => ({
     ODT_HOST_TOKEN: "host-token",
     ODT_FORBID_WORKSPACE_ID_INPUT: "true",
     ODT_ALLOWED_TOOLS: "odt_read_task",
+    ODT_RUNTIME_KIND: "codex",
   },
 });
 

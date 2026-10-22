@@ -71,6 +71,8 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "@azure/msal-node-extensions",
       "--external",
       "node-pty",
+      "--external",
+      "playwright-core",
       "--outdir",
       dirname(outputPath),
       "--entry-naming",

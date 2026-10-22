@@ -462,10 +462,9 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          pendingSendItems: {
-            count: 3,
-            accessibleLabel: "3 pending review comments",
-          },
+          pendingSendItems: [
+            { key: "review_comments", count: 3, accessibleLabel: "3 pending review comments" },
+          ],
         },
       }),
     );
@@ -483,7 +482,9 @@ describe("AgentChatComposer", () => {
         createElement(AgentChatComposer, {
           model: {
             ...buildModel(),
-            pendingSendItems: { count: 1, accessibleLabel: "1 pending review comment" },
+            pendingSendItems: [
+              { key: "review_comments", count: 1, accessibleLabel: "1 pending review comment" },
+            ],
             speed: {
               key: "session",
               choice: "fast",
@@ -510,11 +511,14 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          pendingSendItems: {
-            count: 2,
-            accessibleLabel: "2 pending review comments",
-            warning: "These comments are not saved for this session.",
-          },
+          pendingSendItems: [
+            {
+              key: "review_comments",
+              count: 2,
+              accessibleLabel: "2 pending review comments",
+              warning: "These comments are not saved for this session.",
+            },
+          ],
         },
       }),
     );
@@ -536,11 +540,14 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          pendingSendItems: {
-            count: 0,
-            accessibleLabel: "0 pending review comments",
-            warning: "These comments are not saved for this session.",
-          },
+          pendingSendItems: [
+            {
+              key: "review_comments",
+              count: 0,
+              accessibleLabel: "0 pending review comments",
+              warning: "These comments are not saved for this session.",
+            },
+          ],
         },
       }),
     );

@@ -1,11 +1,14 @@
+import { browserTabIdSchema } from "@openducktor/contracts";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { ClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import { perConnection } from "@/lib/per-connection";
-import { isToolTabKind, TOOL_TAB_KINDS, type ToolTabKind } from "./panel-tab-kinds";
+import { isToolTabKind, TOOL_TAB_KINDS } from "./panel-tab-kinds";
+import { fromV1Record, V1_STORAGE_PREFIX } from "./session-panel-layout-v1";
 import {
+  browserTabEntry,
   emptySessionPanelLayout,
   type PanelTabEntry,
   type SessionPanelLayout,
@@ -34,8 +37,16 @@ export type SessionPanelLayoutStore = {
     owner: SessionPanelOwner,
     change: (layout: SessionPanelLayout) => SessionPanelLayout,
   ) => void;
-  /** Removes the saved and in-memory layouts of tasks, chats, and workspaces that no longer exist. */
+  /**
+   * Removes the saved and in-memory layouts of tasks, chats, and workspaces that no longer exist.
+   * Then it tells each prune listener the owners that it removed.
+   */
   prune: (input: SessionPanelLayoutPruneInput) => void;
+  /**
+   * Tells a listener the owners whose layouts a prune removed, so that the browser feature can
+   * remove their pending annotations.
+   */
+  subscribePrunes: (listener: (owners: readonly SessionPanelOwner[]) => void) => () => void;
 };
 
 /** The panel layouts of the selected host. */
@@ -51,6 +62,7 @@ const storeOf = perConnection((connection) => createSessionPanelLayoutStore(conn
 export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPanelLayoutStore => {
   const entries = new Map<string, StoreEntry>();
   const listeners = new Set<() => void>();
+  const pruneListeners = new Set<(owners: readonly SessionPanelOwner[]) => void>();
   let snapshot: ReadonlyMap<string, SessionPanelLayout> = new Map();
   let pruneErrorShown = false;
 
@@ -69,22 +81,30 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
     return entry;
   };
 
-  const removeStaleRecords = (input: SessionPanelLayoutPruneInput): void => {
+  /** Removes the stale records and returns their owners. */
+  const removeStaleRecords = (input: SessionPanelLayoutPruneInput): SessionPanelOwner[] => {
     try {
       const staleKeys: string[] = [];
+      const owners: SessionPanelOwner[] = [];
       for (let index = 0; index < storage.length; index += 1) {
         const key = storage.key(index);
-        const owner = key === null ? null : parseStorageKey(key);
-        if (key !== null && owner !== null && isStaleOwner(owner, input)) staleKeys.push(key);
+        const stored = key === null ? null : parseStorageKey(key);
+        if (key === null || stored === null || !isStaleOwner(stored, input)) continue;
+        staleKeys.push(key);
+        const owner = panelOwnerOf(stored);
+        if (owner) owners.push(owner);
       }
       for (const key of staleKeys) storage.removeItem(key);
+      return owners;
     } catch (error) {
       console.error("[session-panels] Failed to remove old panel layouts.", { error });
-      if (pruneErrorShown) return;
-      pruneErrorShown = true;
-      toast.error("Could not remove old panel layouts", {
-        description: `${errorMessage(error)} Saved layouts of removed tasks and chats stay on this computer.`,
-      });
+      if (!pruneErrorShown) {
+        pruneErrorShown = true;
+        toast.error("Could not remove old panel layouts", {
+          description: `${errorMessage(error)} Saved layouts of removed tasks and chats stay on this computer.`,
+        });
+      }
+      return [];
     }
   };
 
@@ -126,61 +146,109 @@ export const createSessionPanelLayoutStore = (storage: ClientStorage): SessionPa
       notify();
     },
     prune: (input) => {
-      removeStaleRecords(input);
+      const removedOwners = new Map<string, SessionPanelOwner>();
+      for (const owner of removeStaleRecords(input)) {
+        removedOwners.set(sessionPanelOwnerKey(owner), owner);
+      }
       let removed = false;
       for (const [ownerKey, entry] of entries) {
         if (isStaleOwner(storedOwner(entry.owner), input)) {
           entries.delete(ownerKey);
+          removedOwners.set(ownerKey, entry.owner);
           removed = true;
         }
       }
       if (removed) notify();
+      if (removedOwners.size === 0) return;
+      const owners = [...removedOwners.values()];
+      for (const listener of pruneListeners) listener(owners);
+    },
+    subscribePrunes: (listener) => {
+      pruneListeners.add(listener);
+      return () => {
+        pruneListeners.delete(listener);
+      };
     },
   };
 };
 
-const STORAGE_PREFIX = "openducktor:session-panel-layout:v1:";
+const STORAGE_PREFIX = "openducktor:session-panel-layout:v2:";
 
 const toolTabKindSchema = z.enum(TOOL_TAB_KINDS);
 const selectionKeySchema = z.enum(SESSION_PANEL_SELECTION_KEYS);
+
+const persistedPanelTabSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: toolTabKindSchema }),
+  z.object({ kind: z.literal("browser"), tabId: browserTabIdSchema }),
+]);
+
+type PersistedPanelTab = z.infer<typeof persistedPanelTabSchema>;
+
 const persistedLayoutSchema = z.object({
-  version: z.literal(1),
-  panels: z.object({ right: z.array(toolTabKindSchema), bottom: z.array(toolTabKindSchema) }),
+  version: z.literal(2),
+  panels: z.object({
+    right: z.array(persistedPanelTabSchema),
+    bottom: z.array(persistedPanelTabSchema),
+  }),
   closedKinds: z.array(toolTabKindSchema),
-  /** Null keeps a selection whose tab is gone, such as a terminal that ended on restart. */
-  selectedRight: z.partialRecord(selectionKeySchema, toolTabKindSchema.nullable()),
+  /** Entry IDs. Null keeps a selection whose tab is gone, such as a terminal that ended on restart. */
+  selectedRight: z.partialRecord(selectionKeySchema, z.string().nullable()),
+  selectedBottom: z.string().nullable(),
 });
 
 type PersistedLayout = z.infer<typeof persistedLayoutSchema>;
 
-/** The saved part of a layout. Terminals end on restart, so the record has tool tabs only. */
+/** The saved part of an entry. Terminals end on restart, and the New tab is not kept. */
+const toPersistedTab = (entry: PanelTabEntry): PersistedPanelTab | null => {
+  if (entry.kind === "browser") return { kind: "browser", tabId: entry.tabId };
+  if (isToolTabKind(entry.kind)) return { kind: entry.kind };
+  return null;
+};
+
 const toPersistedLayout = (layout: SessionPanelLayout): PersistedLayout => {
-  const toolKinds = (entries: PanelTabEntry[]): ToolTabKind[] =>
-    entries.flatMap((entry) => (isToolTabKind(entry.kind) ? [entry.kind] : []));
+  const savedIds = new Set<string>();
+  const persistedTabs = (panelEntries: PanelTabEntry[]): PersistedPanelTab[] =>
+    panelEntries.flatMap((entry) => {
+      const persisted = toPersistedTab(entry);
+      if (!persisted) return [];
+      savedIds.add(entry.id);
+      return [persisted];
+    });
+  const panels = {
+    right: persistedTabs(layout.panels.right),
+    bottom: persistedTabs(layout.panels.bottom),
+  };
+  const savedSelection = (entryId: string | null): string | null =>
+    entryId !== null && savedIds.has(entryId) ? entryId : null;
   const selectedRight: PersistedLayout["selectedRight"] = {};
   for (const key of SESSION_PANEL_SELECTION_KEYS) {
     const entryId = layout.selectedRight[key];
     if (entryId === undefined) continue;
-    selectedRight[key] = entryId !== null && isToolTabKind(entryId) ? entryId : null;
+    selectedRight[key] = savedSelection(entryId);
   }
   return {
-    version: 1,
-    panels: { right: toolKinds(layout.panels.right), bottom: toolKinds(layout.panels.bottom) },
+    version: 2,
+    panels,
     closedKinds: [...layout.closedKinds],
     selectedRight,
+    selectedBottom: savedSelection(layout.selectedBottom),
   };
 };
 
-const fromPersistedLayout = (record: PersistedLayout): SessionPanelLayout => {
-  const entries = (kinds: ToolTabKind[]): PanelTabEntry[] =>
-    kinds.map((kind) => ({ id: kind, kind }));
-  return {
-    panels: { right: entries(record.panels.right), bottom: entries(record.panels.bottom) },
-    closedKinds: [...record.closedKinds],
-    selectedRight: { ...record.selectedRight },
-    selectedBottom: null,
-  };
+const fromPersistedTab = (tab: PersistedPanelTab): PanelTabEntry => {
+  if (tab.kind === "browser") return browserTabEntry(tab.tabId);
+  return { id: tab.kind, kind: tab.kind };
 };
+
+const fromPersistedLayout = (record: PersistedLayout): SessionPanelLayout => ({
+  panels: {
+    right: record.panels.right.map(fromPersistedTab),
+    bottom: record.panels.bottom.map(fromPersistedTab),
+  },
+  closedKinds: [...record.closedKinds],
+  selectedRight: { ...record.selectedRight },
+  selectedBottom: record.selectedBottom,
+});
 
 type StoreEntry = {
   owner: SessionPanelOwner;
@@ -201,27 +269,43 @@ const readEntry = (storage: ClientStorage, owner: SessionPanelOwner): StoreEntry
     writeErrorShown: false,
   };
   try {
-    const saved = storage.getItem(sessionPanelLayoutStorageKey(owner));
-    if (saved === null) return empty;
-    const record = persistedLayoutSchema.parse(JSON.parse(saved));
-    return { ...empty, layout: fromPersistedLayout(record), savedRecord: saved };
+    const key = sessionPanelLayoutStorageKey(owner);
+    const saved = storage.getItem(key);
+    if (saved !== null) {
+      const record = persistedLayoutSchema.parse(JSON.parse(saved));
+      return { ...empty, layout: fromPersistedLayout(record), savedRecord: saved };
+    }
+    // A layout of an app version before browser tabs upgrades once, then only v2 stays.
+    const oldKey = ownerStorageKey(V1_STORAGE_PREFIX, owner);
+    const old = storage.getItem(oldKey);
+    if (old === null) return empty;
+    const layout = fromV1Record(old);
+    const record = JSON.stringify(toPersistedLayout(layout));
+    storage.setItem(key, record);
+    storage.removeItem(oldKey);
+    return { ...empty, layout, savedRecord: record };
   } catch (error) {
     console.error("[session-panels] Failed to read the saved panel layout.", { owner, error });
     return { ...empty, readError: errorMessage(error) };
   }
 };
 
-export const sessionPanelLayoutStorageKey = (owner: SessionPanelOwner): string => {
+const ownerStorageKey = (prefix: string, owner: SessionPanelOwner): string => {
   const { workspaceId, kind, ownerId } = storedOwner(owner);
-  return `${STORAGE_PREFIX}${[workspaceId, kind, ownerId].map(encodeURIComponent).join(":")}`;
+  return `${prefix}${[workspaceId, kind, ownerId].map(encodeURIComponent).join(":")}`;
 };
+
+export const sessionPanelLayoutStorageKey = (owner: SessionPanelOwner): string =>
+  ownerStorageKey(STORAGE_PREFIX, owner);
 
 type StoredOwner = { workspaceId: string; kind: string; ownerId: string };
 
+/** Reads the owner of a v2 key, or of a v1 key that no read upgraded yet. */
 const parseStorageKey = (key: string): StoredOwner | null => {
-  if (!key.startsWith(STORAGE_PREFIX)) return null;
+  const prefix = [STORAGE_PREFIX, V1_STORAGE_PREFIX].find((candidate) => key.startsWith(candidate));
+  if (prefix === undefined) return null;
   const [workspaceId, kind, ownerId, ...rest] = key
-    .slice(STORAGE_PREFIX.length)
+    .slice(prefix.length)
     .split(":")
     .map(decodeURIComponent);
   if (workspaceId === undefined || kind === undefined || ownerId === undefined || rest.length > 0) {
@@ -235,6 +319,12 @@ const storedOwner = (owner: SessionPanelOwner): StoredOwner => ({
   kind: owner.kind,
   ownerId: owner.kind === "task" ? owner.taskId : owner.sessionId,
 });
+
+const panelOwnerOf = ({ workspaceId, kind, ownerId }: StoredOwner): SessionPanelOwner | null => {
+  if (kind === "task") return { kind, workspaceId, taskId: ownerId };
+  if (kind === "chat") return { kind, workspaceId, sessionId: ownerId };
+  return null;
+};
 
 /** One current list of owners. Each list removes the layouts of the owners that it no longer has. */
 export type SessionPanelLayoutPruneInput =

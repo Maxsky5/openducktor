@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { ODT_BROWSER_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   buildRoleScopedOdtToolSelection,
   isOdtWorkflowMutationToolName,
@@ -62,6 +62,24 @@ describe("odt workflow tools", () => {
     expect(isOdtWorkflowMutationToolName("odt_search_tasks")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_create_task")).toBe(true);
     expect(isOdtWorkflowMutationToolName("odt_update_task")).toBe(true);
+  });
+
+  test("keeps browser tools out of the workflow mutation set", () => {
+    for (const toolName of ODT_BROWSER_TOOL_NAMES) {
+      expect(isOdtWorkflowMutationToolName(toolName)).toBe(false);
+      expect(isOdtWorkflowToolName(toolName)).toBe(true);
+    }
+  });
+
+  test("grants browser tools to every role, with runtime aliases", () => {
+    for (const role of ["spec", "planner", "build", "qa"] as const) {
+      const selection = buildRoleScopedOdtToolSelection(role, { workflowToolAliasesByCanonical });
+      for (const toolName of ODT_BROWSER_TOOL_NAMES) {
+        expect(selection[toolName]).toBe(true);
+        expect(selection[`openducktor_${toolName}`]).toBe(true);
+        expect(selection[`functions.openducktor_${toolName}`]).toBe(true);
+      }
+    }
   });
 
   test("resolves trusted workflow tool ids for authorization with exact case-sensitive matching", () => {

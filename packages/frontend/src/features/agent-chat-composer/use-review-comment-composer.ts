@@ -5,10 +5,11 @@ import {
   type AgentChatComposerDraft,
   appendTextToDraft,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { sendWithPendingItems } from "@/components/features/agents/agent-chat/agent-chat-pending-send";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   AgentChatComposerModel,
-  AgentChatPendingSendItems,
+  AgentChatPendingSendGroup,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
 import {
   type InlineCommentDraftStore,
@@ -35,7 +36,7 @@ export function useReviewCommentComposer({
   owner: InlineCommentOwner | null;
   onSend: AgentChatComposerModel["onSend"];
 }): {
-  pendingSendItems: AgentChatPendingSendItems | null;
+  pendingSendItems: AgentChatPendingSendGroup | null;
   onSend: AgentChatComposerModel["onSend"];
 } {
   const ownerKey = toInlineCommentDraftOwnerKey(owner);
@@ -46,9 +47,10 @@ export function useReviewCommentComposer({
   const warning = useInlineCommentDraftStore((store) =>
     ownerKey === null ? null : store.getPersistenceWarning(ownerKey),
   );
-  const pendingSendItems = useMemo<AgentChatPendingSendItems | null>(() => {
+  const pendingSendItems = useMemo<AgentChatPendingSendGroup | null>(() => {
     if (count <= 0) return null;
-    const items: AgentChatPendingSendItems = {
+    const items: AgentChatPendingSendGroup = {
+      key: "review_comments",
       count,
       accessibleLabel: `${count} pending review ${count === 1 ? "comment" : "comments"}`,
     };
@@ -104,51 +106,32 @@ export async function sendReviewComments(
   onSend: AgentChatComposerModel["onSend"],
   getStore: () => ReviewCommentStore,
 ): Promise<AgentChatSendResult> {
-  if (
-    ownerKey === null ||
-    draft.segments.some(
-      (segment) => segment.kind === "slash_command" && segment.command.source === "system",
-    )
-  ) {
+  if (ownerKey === null) {
     return onSend(draft, mode);
   }
 
-  const store = getStore();
-  const pending = store.getPendingDrafts(ownerKey);
-  const revisions = pending.map(({ id, revision }) => ({ id, revision }));
-  const comments = store.formatBatchMessage(pending);
-  const message = comments.length > 0 ? appendTextToDraft(draft, comments) : draft;
-  const submissionId = store.beginSubmittingDrafts(ownerKey, revisions);
-
-  let accepted = false;
-  try {
-    const result = await onSend(message, mode);
-    if (!submissionId) {
-      return result;
-    }
-
-    if (result === true) {
-      accepted = true;
+  return sendWithPendingItems(draft, mode, onSend, {
+    itemName: "comment",
+    lock: (current) => {
+      const store = getStore();
+      const pending = store.getPendingDrafts(ownerKey);
+      const revisions = pending.map(({ id, revision }) => ({ id, revision }));
+      const comments = store.formatBatchMessage(pending);
+      return {
+        message: comments.length > 0 ? appendTextToDraft(current, comments) : current,
+        submissionId: store.beginSubmittingDrafts(ownerKey, revisions),
+      };
+    },
+    complete: (submissionId) => {
       getStore().completeSubmittingDrafts(submissionId);
       const warning = getStore().getPersistenceWarning(ownerKey);
       if (warning !== null)
         toast.error("Message sent, but the comment save failed", {
           description: PERSISTENCE_WARNINGS[warning],
         });
-    } else {
-      getStore().restoreSubmittingDrafts(submissionId);
-    }
-    return result;
-  } catch (error) {
-    if (accepted) {
-      toast.error("Message sent, but comment cleanup failed", { description: String(error) });
-      return true;
-    }
-    if (submissionId) {
-      getStore().restoreSubmittingDrafts(submissionId);
-    }
-    throw error;
-  }
+    },
+    restore: (submissionId) => getStore().restoreSubmittingDrafts(submissionId),
+  });
 }
 
 const PERSISTENCE_WARNINGS = {

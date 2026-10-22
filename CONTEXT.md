@@ -578,6 +578,14 @@ _Avoid_: workflow tool, task action
 A tool built into a specific **Runtime**, such as read, edit, or bash. **Native Runtime Tools** exist independently from OpenDucktor and are not **OpenDucktor MCP Tools**.
 _Avoid_: OpenDucktor MCP Tool, Workflow MCP Tool, odt tool
 
+**Browser Tab**:
+A web page in the right or bottom panel of a task or Workspace Session page. A **Browser Tab** belongs to one **Task** or one **Workspace Session**. The user or an agent of the same owner creates it. A user tab is visible to agents only when the user shares it.
+_Avoid_: preview, webview, iframe
+
+**Browser MCP Tool**:
+An **OpenDucktor MCP Tool** with the `odt_browser_` prefix that lets a managed agent open, read, and act on **Browser Tabs** of its own **Task** or **Workspace Session**. External MCP clients do not get **Browser MCP Tools**.
+_Avoid_: Workflow MCP Tool, Playwright tool, preview tool
+
 **Tool Call**:
 A concrete invocation of a **Native Runtime Tool** or **OpenDucktor MCP Tool** during an **Agent Session**, surfaced in the **Transcript** with its request, progress, result, denial, interruption, or failure as available. A **Tool Call** remains a **Tool Call** whether it succeeds, fails, is denied by a user, is denied automatically by runtime configuration, or is interrupted.
 _Avoid_: tool entry

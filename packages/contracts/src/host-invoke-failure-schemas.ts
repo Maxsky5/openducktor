@@ -6,6 +6,7 @@ import {
 } from "./agent-session-control-schemas";
 import { runtimeOperationFailureSchema } from "./runtime-operation-failure-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
+import { browserFailureSchema } from "./browser-tab-schemas";
 import { workspaceTextFileWriteFailureSchema } from "./filesystem-schemas";
 import { sessionHistoryFailureSchema } from "./session-history-failure-schemas";
 import { taskAssetFailureSchema } from "./task-asset-schemas";
@@ -79,6 +80,7 @@ export const hostInvokeFailureSchema = z.discriminatedUnion("kind", [
       terminalFailure: terminalFailureSchema,
     })
     .strict(),
+  z.strictObject({ kind: z.literal("browser"), browserFailure: browserFailureSchema }),
   z
     .object({
       kind: z.literal("task_asset"),

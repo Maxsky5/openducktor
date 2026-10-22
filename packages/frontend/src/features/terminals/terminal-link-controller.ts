@@ -20,11 +20,14 @@ type LinkPress = {
   startY: number;
   stopped: boolean;
   target: LinkTarget;
+  /** True for Mod+Click, which the terminal never sees. A plain press can start a selection. */
+  modified: boolean;
 };
 
 type LinkControllerOptions = {
   container: HTMLElement;
-  openUrl(url: string): Promise<void>;
+  /** Opens a clicked link. The click tells its modifier keys and its point. */
+  openUrl(url: string, click: MouseEvent): Promise<void>;
   reportOpenError(url: string, cause: unknown): void;
 };
 
@@ -88,8 +91,12 @@ export const createLinkController = ({
     view.removeEventListener("click", handleClick, true);
   };
 
+  /** True while the program in the terminal reads mouse input, so a plain click is its own. */
+  const tracksMouse = (): boolean => terminal?.modes.mouseTrackingMode !== "none";
+
   const setPointer = (event?: Pick<KeyboardEvent, "ctrlKey" | "metaKey">): void => {
-    const show = hovered !== null && event !== undefined && hasOpenKey(event, platform);
+    const show =
+      hovered !== null && event !== undefined && (hasOpenKey(event, platform) || !tracksMouse());
     container.classList.toggle(LINK_POINTER_CLASS, show);
   };
 
@@ -149,8 +156,8 @@ export const createLinkController = ({
     );
   };
 
-  const openLink = (target: LinkTarget): void => {
-    void openUrl(target.url).catch((cause) => {
+  const openLink = (target: LinkTarget, click: MouseEvent): void => {
+    void openUrl(target.url, click).catch((cause) => {
       if (!disposed) reportOpenError(target.url, cause);
     });
   };
@@ -169,7 +176,9 @@ export const createLinkController = ({
   };
 
   const handleMouseDown = (event: MouseEvent): void => {
-    if (event.button !== 0 || !hasOpenKey(event, platform)) return;
+    if (event.button !== 0 || event.altKey) return;
+    const modified = hasOpenKey(event, platform);
+    if (!modified && tracksMouse()) return;
     findOscLink(event);
     const target = readLink(event);
     if (!target) return;
@@ -178,19 +187,20 @@ export const createLinkController = ({
       startY: event.clientY,
       stopped: false,
       target,
+      modified,
     };
     startDragWatch();
-    stopEvent(event);
+    if (modified) stopEvent(event);
   };
 
   const handleMouseMove = (event: MouseEvent): void => {
     if (!press) return;
-    stopEvent(event);
+    if (press.modified) stopEvent(event);
     const distance = Math.hypot(event.clientX - press.startX, event.clientY - press.startY);
     const target = readLink(event);
     if (
       distance > LINK_DRAG_PX ||
-      !hasOpenKey(event, platform) ||
+      hasOpenKey(event, platform) !== press.modified ||
       !target ||
       !sameLink(target, press.target)
     ) {
@@ -203,24 +213,26 @@ export const createLinkController = ({
     const completedPress = press;
     press = null;
     stopDragWatch();
-    stopEvent(event);
-    blockClick = true;
-    startClickBlock();
-    if (clickBlockTimer !== null) view.clearTimeout(clickBlockTimer);
-    clickBlockTimer = view.setTimeout(() => {
-      blockClick = false;
-      clickBlockTimer = null;
-      stopClickBlock();
-    }, 0);
+    if (completedPress.modified) {
+      stopEvent(event);
+      blockClick = true;
+      startClickBlock();
+      if (clickBlockTimer !== null) view.clearTimeout(clickBlockTimer);
+      clickBlockTimer = view.setTimeout(() => {
+        blockClick = false;
+        clickBlockTimer = null;
+        stopClickBlock();
+      }, 0);
+    }
 
     const target = readLink(event);
     if (
       !completedPress.stopped &&
-      hasOpenKey(event, platform) &&
+      hasOpenKey(event, platform) === completedPress.modified &&
       target &&
       sameLink(target, completedPress.target)
     ) {
-      openLink(completedPress.target);
+      openLink(completedPress.target, event);
     }
   };
 
@@ -235,7 +247,7 @@ export const createLinkController = ({
 
   const handleKeyChange = (event: KeyboardEvent): void => {
     setPointer(event);
-    if (press && !hasOpenKey(event, platform)) stopPress();
+    if (press && hasOpenKey(event, platform) !== press.modified) stopPress();
   };
 
   const handleBlur = (): void => {

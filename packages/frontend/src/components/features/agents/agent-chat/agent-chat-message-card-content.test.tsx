@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
+import { formatBrowserAnnotationsMessage } from "@/features/browser-annotations/browser-annotation-message";
+import {
+  buildAnnotation,
+  buildCapture,
+} from "@/features/browser-annotations/browser-annotation-test-support";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { MessageBody } from "./agent-chat-message-card-content";
@@ -55,7 +60,53 @@ const createReasoningMessageBody = (content: string) =>
     toolCallPresentation: null,
   });
 
+const createUserMessageBody = (text: string) =>
+  createElement(MessageBody, {
+    message: {
+      id: "user-annotations",
+      role: "user",
+      content: text,
+      timestamp: "2026-10-16T21:00:00.000Z",
+      meta: { kind: "user", state: "read", parts: [{ kind: "text", text }] },
+    },
+    modelCatalog: null,
+    sessionRuntimeKind: null,
+    parentSession: null,
+    assistantAccentColor: undefined,
+    isStreamingAssistantMessage: false,
+    timeLabel: "",
+    systemPromptBody: "",
+    sessionWorkingDirectory: null,
+    toolCallPresentation: null,
+  });
+
 describe("MessageBody", () => {
+  test("shows the browser annotations of a user message as chips, not as their text", async () => {
+    const elements = buildCapture().elements.map((element) => ({ ...element, source: null }));
+    const block = formatBrowserAnnotationsMessage(
+      [buildAnnotation({ comment: "Make it blue" }), buildAnnotation({ number: 2, elements })],
+      "/repo",
+    );
+    const rendered = render(createUserMessageBody(`Fix these.\n\n${block}`));
+
+    const chips = rendered.getAllByTestId("browser-annotation-message-chip");
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      "Make it blue",
+      "Make the save button blue.",
+    ]);
+    expect(chips[0]?.getAttribute("aria-label")).toBe(
+      "Browser annotation 1: Make it blue. “Save” button on localhost:5173/settings",
+    );
+    expect(rendered.container.textContent).toContain("Fix these.");
+    expect(rendered.container.textContent).not.toContain("browser_annotations");
+
+    const [first] = chips;
+    if (!first) throw new Error("Expected an annotation chip");
+    fireEvent.focus(first);
+    const tooltip = await rendered.findByRole("tooltip");
+    expect(tooltip.textContent).toContain("save-button.tsx:12");
+  });
+
   test("renders the computer use card without a generic tool presentation", () => {
     const message: AgentChatMessage = {
       id: "cua-tool",

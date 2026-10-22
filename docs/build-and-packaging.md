@@ -28,6 +28,7 @@ Both Vite builds set `reportCompressedSize: false` to skip gzip work that only p
 | `@azure/msal-node-extensions` | External; retain its native persistence dependencies. |
 | `@ff-labs/fff-node` | External; retain the binary for the package platform. |
 | `node-pty` | External; retain its native terminal dependencies. |
+| `playwright-core` | External; the agent browser tools load it from the installed package at runtime. |
 | `node-mac-permissions` | Retain the optional Electron dependency on macOS. |
 | Bundled JavaScript libraries | Declare them as build dependencies in the shell package. |
 

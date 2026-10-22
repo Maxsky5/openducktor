@@ -8,7 +8,7 @@ import type {
   AgentStreamPart,
   SessionRef,
 } from "@openducktor/core";
-import { isOdtMutationToolName, normalizeOdtToolName } from "@openducktor/core";
+import { classifyOdtToolMutation, normalizeOdtToolName } from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -164,11 +164,7 @@ export const mutationForTool = (
   if (/write|edit|patch|notebook|todo/i.test(toolName)) {
     return "mutating";
   }
-  const odtTool = canonicalOdtToolName(toolName);
-  if (odtTool) {
-    return isOdtMutationToolName(odtTool) ? "mutating" : "read_only";
-  }
-  return "unknown";
+  return classifyOdtToolMutation(toolName, toClaudeOdtToolAliases) ?? "unknown";
 };
 
 export const previewInput = (

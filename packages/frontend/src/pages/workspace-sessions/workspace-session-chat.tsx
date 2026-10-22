@@ -1,7 +1,7 @@
 import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
 import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
-import { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
+import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
 import {
   canInteractWithWorkspaceSession,
   canResumeWorkspaceSession,
@@ -242,8 +242,9 @@ export function WorkspaceSessionChat({
     sendAgentMessage: operations.sendAgentMessage,
     target,
   });
-  const reviewComments = useReviewCommentComposer({
+  const pendingSendContext = usePendingSendContext({
     owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
+    workingDirectory: record.executionTarget.workingDirectory,
     onSend: messageDelivery.onSend,
   });
   const surface = useAgentChatSurfaceModel({
@@ -299,7 +300,7 @@ export function WorkspaceSessionChat({
       identity,
       actions,
       delivery: messageDelivery,
-      reviewComments,
+      pendingSend: pendingSendContext,
       draftPersistence,
       picker,
       promptInput,

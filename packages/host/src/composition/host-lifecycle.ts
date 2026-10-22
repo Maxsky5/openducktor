@@ -1,5 +1,6 @@
 import { Cause, Effect } from "effect";
 import type { McpHostBridgeServer } from "../adapters/mcp/mcp-host-bridge-server";
+import type { BrowserService } from "../application/browser/browser-service-types";
 import type {
   TerminalService,
   TerminalServiceError,
@@ -27,6 +28,12 @@ class HostLifecycleLoggingError extends HostOperationError {}
 export const createStopTerminalsStep = (terminalService: TerminalService): HostShutdownStep => ({
   label: "interactive terminals",
   run: () => terminalService.dispose(),
+});
+
+/** Ends every browser page and stops the browser engine. */
+export const createStopBrowserStep = (browserService: BrowserService): HostShutdownStep => ({
+  label: "browser tabs",
+  run: () => browserService.dispose(),
 });
 
 export const writeHostLifecycleLog = (

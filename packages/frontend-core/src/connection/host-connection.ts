@@ -38,6 +38,11 @@ export type RuntimeChangeListener = (
   payload: HostEventPayload<"openducktor://runtime-changed"> | ConnectionControlEvent,
 ) => void | Promise<void>;
 
+/** Browser tab changes. Control events report stream loss and reconnects. */
+export type BrowserTabEventListener = (
+  payload: HostEventPayload<"openducktor://browser-event"> | ConnectionControlEvent,
+) => void | Promise<void>;
+
 export type TaskStreamFrame = TaskEventStreamFrame;
 
 export type TaskStreamSubscription = {
@@ -56,6 +61,7 @@ export type HostConnection = {
     listener: WorkspaceSessionUpdateListener,
   ) => Promise<() => void>;
   subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
+  subscribeBrowserTabEvents: (listener: BrowserTabEventListener) => Promise<() => void>;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
   subscribeAzureDevOpsConnectionUpdates: (
     listener: AzureDevOpsConnectionUpdateListener,

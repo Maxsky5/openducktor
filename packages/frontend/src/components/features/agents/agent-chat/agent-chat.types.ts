@@ -38,7 +38,10 @@ import type {
   SessionMessagesState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
-import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import type {
+  AgentChatComposerAttachment,
+  AgentChatComposerDraft,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatDraftScope } from "./agent-chat-draft-scope";
 import type { AgentSessionTranscriptTarget } from "./agent-session-transcript-target";
 
@@ -109,7 +112,9 @@ export type AgentChatToolCallPresentation =
       kind: "regular" | "workflow";
       displayName: string;
     }
-  | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName };
+  | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName }
+  /** An `odt_browser_*` call. `action` is the browser action, such as `click`. */
+  | { kind: "browser"; displayName: string; action: string };
 
 export type AgentChatRuntimePresentation = {
   runtimeKind: RuntimeKind | null;
@@ -155,10 +160,26 @@ export type AgentChatThreadModel = {
   scrollToBottomOnSendRef: MutableRefObject<(() => void) | null>;
 };
 
-export type AgentChatPendingSendItems = {
+export type AgentChatPendingSendAttachment = Pick<
+  AgentChatComposerAttachment,
+  "kind" | "mime" | "name"
+>;
+
+export type AgentChatPendingSendGroupKey = "review_comments" | "browser_annotations";
+
+/** Items, such as review comments, that the next regular message carries after the user text. */
+export type AgentChatPendingSendGroup = {
+  key: AgentChatPendingSendGroupKey;
   count: number;
   accessibleLabel: string;
+  /** A save problem. Send stays available. */
   warning?: string;
+  /** Files that the next message adds. Send checks them like composer attachments. */
+  attachments?: {
+    items: AgentChatPendingSendAttachment[];
+    /** Tells the user how to send the items without these files. */
+    removalHint: string;
+  };
 };
 
 export type AgentChatModelPicker = {
@@ -189,7 +210,7 @@ export type AgentChatComposerModel = {
   isReadOnly: boolean;
   canSend?: boolean;
   readOnlyReason: string | null;
-  pendingSendItems?: AgentChatPendingSendItems;
+  pendingSendItems?: readonly AgentChatPendingSendGroup[];
   draftScope: AgentChatDraftScope;
   onSend: (
     draft: AgentChatComposerDraft,

@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { agentToolNameValues, ODT_TOOL_SCHEMAS } from "@openducktor/contracts";
 import { formatOdtToolArgs } from "./odt-tool-args";
 
+/** Reads the top-level argument names. Nested object members are not arguments. */
 const parseArgNames = (toolArgs: string): string[] => {
   const names: string[] = [];
   for (const match of toolArgs.matchAll(/"([^"]+)"\??:/g)) {
     const name = match[1];
-    if (name !== undefined) {
+    const prefix = toolArgs.slice(0, match.index);
+    const depth = prefix.split("{").length - prefix.split("}").length;
+    if (name !== undefined && depth === 1) {
       names.push(name);
     }
   }
@@ -46,5 +49,12 @@ describe("formatOdtToolArgs", () => {
     expect(formatOdtToolArgs("odt_set_pull_request")).toBe(
       'odt_set_pull_request({"taskId": string, "number": number})',
     );
+  });
+
+  test("formats object members of a union argument", () => {
+    expect(formatOdtToolArgs("odt_browser_wait")).toBe(
+      'odt_browser_wait({"tabId": string, "text"?: string, "ref"?: string, "url"?: string, "load"?: "load"|"domcontentloaded"|"networkidle", "timeoutMs"?: number})',
+    );
+    expect(formatOdtToolArgs("odt_browser_list")).toBe("odt_browser_list({})");
   });
 });

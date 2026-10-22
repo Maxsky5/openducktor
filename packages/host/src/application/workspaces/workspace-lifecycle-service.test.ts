@@ -191,6 +191,7 @@ const createService = ({
     removeWorkspaceTaskAssets,
     removeWorkspaceTaskStore,
     removeWorkspaceCredentials,
+    removeWorkspaceBrowserData: () => Effect.void,
   };
   return createWorkspaceLifecycleService({
     onWorkspaceReopened,

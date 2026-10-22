@@ -127,7 +127,7 @@ describe("AgentChatComposer review comments", () => {
           onSend: review.onSend,
           draftScope: { key: selectedPersistence.targetKey, persistence: selectedPersistence },
         };
-        if (review.pendingSendItems) model.pendingSendItems = review.pendingSendItems;
+        if (review.pendingSendItems) model.pendingSendItems = [review.pendingSendItems];
         return <AgentChatComposer model={model} />;
       }
       const view = render(<CommentComposer selectedOwner={owner} />, connection);

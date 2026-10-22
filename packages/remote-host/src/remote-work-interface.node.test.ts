@@ -1,20 +1,23 @@
 import { test } from "bun:test";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 // Both shells use Node Request semantics, which differ from Bun's body transfer behavior.
 test("remote POST routes retain their bodies on Node", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "openducktor-remote-node-"));
+  // Like the shells, the bundle loads playwright-core from the dependencies of the host.
+  const cache = fileURLToPath(new URL("../../host/node_modules/.cache", import.meta.url));
+  await mkdir(cache, { recursive: true });
+  const directory = await mkdtemp(join(cache, "openducktor-remote-node-"));
   try {
     const result = await Bun.build({
       entrypoints: [
         fileURLToPath(new URL("./remote-work-interface.node-fixture.ts", import.meta.url)),
       ],
       target: "node",
+      external: ["playwright-core"],
       outdir: directory,
       naming: "remote-check.mjs",
     });

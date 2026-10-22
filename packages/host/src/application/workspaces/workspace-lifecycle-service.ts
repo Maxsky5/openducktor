@@ -45,6 +45,8 @@ export type WorkspaceStoragePort = {
   removeWorkspaceTaskAssets(workspaceId: string): Effect.Effect<void, TaskAssetError>;
   removeWorkspaceTaskStore(workspaceId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   removeWorkspaceCredentials(repoConfig: RepoConfig): Effect.Effect<void, HostOperationError>;
+  /** Closes the browser tabs of the workspace and deletes its browser profile. Idempotent. */
+  removeWorkspaceBrowserData(workspaceId: string): Effect.Effect<void, HostOperationError>;
 };
 
 export type WorkspaceLifecycleService = {
@@ -294,6 +296,7 @@ export const createWorkspaceLifecycleService = ({
         }
       }
       yield* storage.removeWorkspaceCredentials(repoConfig);
+      yield* storage.removeWorkspaceBrowserData(input.workspaceId);
       const catalog = yield* workspaceSettingsService.removeWorkspaceRegistration(
         input.workspaceId,
         input.expectedRepoPath,

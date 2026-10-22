@@ -1,9 +1,11 @@
-import type { MenuItemConstructorOptions } from "electron";
+import type { BaseWindow, MenuItemConstructorOptions } from "electron";
 
 export type MainMenuInput = {
   isDevelopment: boolean;
   appName?: string;
   onCheckForUpdates?: () => void;
+  /** Reloads the page of the focused window itself. */
+  onReloadWindow: (window: BaseWindow | undefined, ignoreCache: boolean) => void;
 };
 
 const checkForUpdatesMenuItem = (
@@ -16,14 +18,33 @@ const checkForUpdatesMenuItem = (
   },
 });
 
+/**
+ * The `reload` and `forceReload` roles reload the focused page, and Electron names a `<webview>`
+ * as focused whenever its window has the focus. These items reload the window page instead.
+ */
+const reloadMenuItems = (
+  onReloadWindow: MainMenuInput["onReloadWindow"],
+): MenuItemConstructorOptions[] => [
+  {
+    label: "Reload",
+    accelerator: "CmdOrCtrl+R",
+    click: (_item, window) => onReloadWindow(window, false),
+  },
+  {
+    label: "Force Reload",
+    accelerator: "Shift+CmdOrCtrl+R",
+    click: (_item, window) => onReloadWindow(window, true),
+  },
+];
+
 const mainMenu = (
   appName: string,
   onCheckForUpdates: (() => void) | undefined,
+  onReloadWindow: MainMenuInput["onReloadWindow"],
 ): MenuItemConstructorOptions => ({
   label: appName,
   submenu: [
-    { role: "reload" },
-    { role: "forceReload" },
+    ...reloadMenuItems(onReloadWindow),
     { type: "separator" },
     ...(process.platform === "darwin"
       ? ([
@@ -78,9 +99,10 @@ export const createApplicationMenuTemplate = ({
   isDevelopment,
   appName = "OpenDucktor",
   onCheckForUpdates,
+  onReloadWindow,
 }: MainMenuInput): MenuItemConstructorOptions[] => {
   return [
-    mainMenu(appName, onCheckForUpdates),
+    mainMenu(appName, onCheckForUpdates, onReloadWindow),
     editMenu,
     createViewMenu(isDevelopment),
     { role: "windowMenu" },

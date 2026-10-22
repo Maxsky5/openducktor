@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { withMaxUtf16Length } from "./string-schemas";
-import { workspaceIdSchema } from "./config-schemas";
+import { workspaceIdSchema } from "./workspace-id-schemas";
 
 export const TASK_ASSET_MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const TASK_ASSET_MAX_DESCRIPTION_ASSETS = 50;

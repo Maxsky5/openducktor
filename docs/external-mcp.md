@@ -104,6 +104,43 @@ Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Age
 
 Builder sessions can call `odt_set_spec` and `odt_set_plan` for their session task. See [document actions](task-workflow-actions.md#document-actions) for revision and approval rules.
 
+External clients do not get the `odt_browser_*` tools. [Browser tools](#browser-tools) describes them.
+
+## Tool listing
+
+The tool list keeps tool descriptions short, because runtimes send the whole list to the model.
+
+- `annotations.readOnlyHint: true` marks the tools that change nothing. A client can run them without an approval.
+- A server that forbids `workspaceId` input hides `workspaceId` in the tool schemas. It sends no server instructions, because Codex repeats them in front of each tool description. Other servers send one sentence about `workspaceId`.
+- The listed input and output schemas omit the `$schema` URL, UUID patterns, and size limits. The server still checks each input with the full schema.
+
+## Browser tools
+
+The `odt_browser_*` tools let an agent use the browser tabs of its task or Workspace Session. Only sessions that OpenDucktor starts get them. These are Spec, Planner, Builder, QA, and Workspace Sessions on OpenCode, Codex, and Claude. [Browser tabs](browser-tabs.md#agent-tools) describes how the host runs them.
+
+- `odt_browser_list`, `odt_browser_open`, `odt_browser_navigate`, and `odt_browser_close` manage tabs.
+- `odt_browser_snapshot` reads the accessibility tree of a tab with element refs.
+- `odt_browser_click`, `odt_browser_hover`, `odt_browser_type`, `odt_browser_press`, `odt_browser_select`, and `odt_browser_scroll` act on a tab.
+- `odt_browser_screenshot`, `odt_browser_console`, `odt_browser_wait`, and `odt_browser_dialog` read the page, wait for it, or answer a JS dialog.
+
+The server lists a browser tool only when `ODT_ALLOWED_TOOLS` names it. A client without `ODT_ALLOWED_TOOLS` gets every other tool. Managed runtimes always set `ODT_ALLOWED_TOOLS`.
+
+The host finds the task or Workspace Session of a call from the runtime session that made it. Tool input never selects it. The MCP server reads the calling session from the runtime.
+
+| `ODT_RUNTIME_KIND` | Calling session |
+|---|---|
+| `opencode` | `_meta["ai.opencode/sessionID"]` of each `tools/call` request. One MCP process serves all sessions of a directory. |
+| `codex` | `_meta.threadId` of each `tools/call` request. Codex `core/src/mcp_tool_call.rs` adds it to every model tool call. |
+| `claude` | `ODT_RUNTIME_SESSION_ID` of the MCP process. Claude starts one MCP process for each session and sends no session ID with a call. |
+
+- A call without a calling session fails with an error that says that browser tools need a managed OpenDucktor session.
+- The host follows the live parent links of a subagent session to its root session.
+- The root session must belong to a task or to an active Workspace Session of the call workspace, with the same runtime kind. Otherwise the call fails with `browser_unmanaged_caller`.
+
+The bridge request body is the tool input plus `workspaceId` and `caller: { runtime, runtimeSessionId }`. Browser calls wait up to 35 seconds for the host, which ends each call within 30 seconds. Other tools wait up to 10 seconds.
+
+Browser tools have no MCP `outputSchema` or `structuredContent`. The result has text blocks and, for `odt_browser_screenshot`, an `image` block. A browser failure returns its message to the agent. `details.browserFailure.code` keeps the browser failure code.
+
 ## List workspaces
 
 Call `odt_get_workspaces` when the process has no default workspace or when the client needs canonical workspace IDs. The tool takes no input.
@@ -267,7 +304,7 @@ The host stores and returns plain Markdown. If it cannot decode the latest store
 
 ## Ownership
 
-- `packages/openducktor-mcp` owns MCP transport, request and response checks, image-block conversion, and packaging.
-- The host owns SQLite readiness, task reads and writes, workflow rules, recovery, and document writes.
+- `packages/openducktor-mcp` owns MCP transport, request and response checks, image-block conversion, the calling session of browser tools, and packaging.
+- The host owns SQLite readiness, task reads and writes, workflow rules, recovery, document writes, and the owner of each browser tool call.
 - The bridge mirrors MCP tool names so all MCP clients use one execution path.
 - The host bridge sends task images as a checked base64 DTO. Only the MCP adapter converts it to image blocks.

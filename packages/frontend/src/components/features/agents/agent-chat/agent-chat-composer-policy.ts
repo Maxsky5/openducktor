@@ -8,6 +8,7 @@ import {
   draftHasMeaningfulContent,
   draftHasSlashCommandSegment,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { hasPendingSendItems, readPendingSendBlockedReason } from "./agent-chat-pending-send";
 import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
 
 export function useComposerPolicy({
@@ -49,14 +50,15 @@ export function useComposerPolicy({
   const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
   const hasSlashAttachmentConflict =
     (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
+  const pendingSendBlockedReason = pendingSendBlockedReasonFor(model, draft, steersTurn);
 
   const sendInputBlocked =
     model.canSend === false ||
     isSubmitting ||
-    Boolean(model.isSavingModel) ||
     isComposerInputDisabled ||
-    model.speed?.pending === true ||
     hasSlashAttachmentConflict ||
+    pendingSendBlockedReason !== null ||
+    modelBlocksSend(model) ||
     !hasComposerSendContent(draft, model.pendingSendItems);
   const defaultSendDisabled = sendInputBlocked || hasBlockingAttachments;
   const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
@@ -79,6 +81,7 @@ export function useComposerPolicy({
     defaultSendDisabled,
     sendDisabled,
     sendBlockedReason,
+    pendingSendBlockedReason,
   };
 }
 
@@ -98,6 +101,7 @@ type ComposerPolicyModel = Pick<
   | "isResumingSession"
   | "speed"
   | "pendingSendItems"
+  | "supportsAttachments"
   | "steerBlockedReason"
   | "supportsFileSearch"
   | "supportsSubagentReferences"
@@ -118,6 +122,8 @@ type ComposerPolicy = {
   defaultSendDisabled: boolean;
   sendDisabled: boolean;
   sendBlockedReason: string | null;
+  /** Why the pending items, such as review comments or annotations, block Send, or null. */
+  pendingSendBlockedReason: string | null;
 };
 
 const composerPlaceholderFor = (
@@ -174,11 +180,30 @@ const queuePlaceholderParts = (
   return [`${queueKey} to queue`, `${steerKey} to ${steerAction}`];
 };
 
+/** Pending items, such as annotation images, go to the model of the turn that they join. */
+const pendingSendBlockedReasonFor = (
+  model: ComposerPolicyModel,
+  draft: AgentChatComposerDraft,
+  steersTurn: boolean,
+): string | null =>
+  readPendingSendBlockedReason({
+    groups: model.pendingSendItems,
+    draft,
+    supportsAttachments: model.supportsAttachments,
+    attachmentSupport: steersTurn
+      ? model.runningTurnModel?.attachmentSupport
+      : model.selectedModelDescriptor?.attachmentSupport,
+  });
+
+/** True while a model or speed change is still saving. */
+const modelBlocksSend = ({ isSavingModel, speed }: ComposerPolicyModel): boolean =>
+  Boolean(isSavingModel) || speed?.pending === true;
+
 const hasComposerSendContent = (
   draft: AgentChatComposerDraft,
   pendingSendItems: ComposerPolicyModel["pendingSendItems"],
 ): boolean => {
-  return draftHasMeaningfulContent(draft) || (pendingSendItems?.count ?? 0) > 0;
+  return draftHasMeaningfulContent(draft) || hasPendingSendItems(pendingSendItems);
 };
 
 const composerInputDisabledFor = ({

@@ -1,4 +1,4 @@
-import type { WorkspaceScopedOdtToolName } from "@openducktor/contracts";
+import type { OdtBrowserToolName, WorkspaceScopedOdtToolName } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   type HostOperationErrorAggregate,
@@ -6,6 +6,8 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
+import type { BrowserCallerResolver } from "../browser/browser-caller-resolver";
+import type { BrowserService } from "../browser/browser-service-types";
 import type { TaskAssetReadService } from "../task-assets/task-asset-read-service";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type {
@@ -29,7 +31,10 @@ export const ODT_MCP_READ_TOOL_NAMES = [
 
 export type OdtMcpReadToolName = (typeof ODT_MCP_READ_TOOL_NAMES)[number];
 
-export type OdtMcpMutationToolName = Exclude<WorkspaceScopedOdtToolName, OdtMcpReadToolName>;
+/** Workspace tools that act on tasks. Browser tools also need the calling session. */
+export type OdtMcpTaskToolName = Exclude<WorkspaceScopedOdtToolName, OdtBrowserToolName>;
+
+export type OdtMcpMutationToolName = Exclude<OdtMcpTaskToolName, OdtMcpReadToolName>;
 
 type OdtMcpTaskAssetReadService = Pick<TaskAssetReadService, "readBatch">;
 type OdtMcpTaskService = Pick<
@@ -55,12 +60,16 @@ type OdtMcpWorkspaceSettingsService = Pick<
 >;
 
 export type CreateOdtMcpToolContextInput = {
+  browserAgentTools: Pick<BrowserService, "runAgentTool">;
+  browserCallers: BrowserCallerResolver;
   taskAssetReadService: OdtMcpTaskAssetReadService;
   taskService: OdtMcpTaskService;
   workspaceSettingsService: OdtMcpWorkspaceSettingsService;
 };
 
 export const createOdtMcpToolContext = ({
+  browserAgentTools,
+  browserCallers,
   taskAssetReadService,
   taskService,
   workspaceSettingsService,
@@ -93,6 +102,8 @@ export const createOdtMcpToolContext = ({
     });
 
   return {
+    browserAgentTools,
+    browserCallers,
     taskAssetReadService,
     taskService,
     workspaceSettingsService,

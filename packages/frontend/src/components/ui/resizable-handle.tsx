@@ -24,7 +24,8 @@ export function ResizableHandle({
       {...props}
     >
       {withHandle ? (
-        <div className="relative z-10 flex h-8 w-4 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm group-data-[separator=active]:border-selected-accent group-data-[separator=active]:bg-accent group-data-[separator=active]:text-selected-accent group-data-[separator=hover]:border-selected-accent group-data-[separator=hover]:bg-accent group-data-[separator=hover]:text-selected-accent group-aria-[orientation=horizontal]:h-4 group-aria-[orientation=horizontal]:w-8">
+        // Above the browser layer (`z-10`), whose pages sit next to the handle.
+        <div className="relative z-20 flex h-8 w-4 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm group-data-[separator=active]:border-selected-accent group-data-[separator=active]:bg-accent group-data-[separator=active]:text-selected-accent group-data-[separator=hover]:border-selected-accent group-data-[separator=hover]:bg-accent group-data-[separator=hover]:text-selected-accent group-aria-[orientation=horizontal]:h-4 group-aria-[orientation=horizontal]:w-8">
           <EllipsisVertical className="size-3.5 shrink-0 group-aria-[orientation=horizontal]:rotate-90" />
         </div>
       ) : null}

@@ -1,4 +1,8 @@
-import type { SessionPanelModel, SessionPanelsModel } from "@/features/session-panels";
+import type {
+  SessionPanelBrowserModel,
+  SessionPanelModel,
+  SessionPanelsModel,
+} from "@/features/session-panels";
 import type { TerminalSessionsModel } from "@/features/terminals";
 
 export const createTerminalSessionsFixture = (
@@ -28,6 +32,28 @@ export const createTerminalSessionsFixture = (
   ...overrides,
 });
 
+export {
+  browserTabIdFixture,
+  createBrowserTabSummaryFixture,
+} from "@openducktor/frontend-core/test-support/browser-tab-fixtures";
+
+/** The browser model of a synced owner with no tabs. */
+export const createSessionPanelBrowserFixture = (
+  overrides: Partial<SessionPanelBrowserModel> = {},
+): SessionPanelBrowserModel => ({
+  scopeKey: "",
+  tabView: () => null,
+  tabs: [],
+  isSynced: true,
+  startBlockedReason: null,
+  openingTabIds: new Set(),
+  closingTabIds: new Set(),
+  openTab: async () => {},
+  startTab: () => {},
+  closeTab: async () => {},
+  ...overrides,
+});
+
 /** A right panel with Diffs and Files tabs. A hidden panel has the closed presence. */
 export const createSessionPanelFixture = (
   overrides: Partial<SessionPanelModel> = {},
@@ -47,6 +73,8 @@ export const createSessionPanelFixture = (
     selectedTabId: "diffs",
     launcher: [],
     focusRequest: 0,
+    browserAddressFocus: null,
+    browserTabView: null,
     terminals: createTerminalSessionsFixture(),
     terminalMounts: [],
     activeTerminalKey: null,

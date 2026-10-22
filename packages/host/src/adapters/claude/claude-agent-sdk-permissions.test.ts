@@ -121,6 +121,22 @@ describe("createClaudeCanUseTool", () => {
   );
 
   test.each(["spec", "planner", "qa", "build"] as const)(
+    "auto-allows browser tools in %s sessions, also for read-only roles",
+    async (role) => {
+      const session = createSession(role);
+      for (const tool of ["odt_browser_snapshot", "odt_browser_click", "odt_browser_type"]) {
+        expect(
+          await authorizeClaudeToolUse({
+            session,
+            toolName: `mcp__openducktor__${tool}`,
+            toolInput: { tabId: "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b", ref: "e12" },
+          }),
+        ).toMatchObject({ behavior: "allow", approval: "workflow_role" });
+      }
+    },
+  );
+
+  test.each(["spec", "planner", "qa", "build"] as const)(
     "honors native approval requests for read and workflow tools in %s sessions",
     async (role) => {
       const session = createSession(role);

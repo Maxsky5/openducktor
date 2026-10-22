@@ -15,7 +15,9 @@ import {
   taskSummarySchema,
   UpdateTaskInputSchema,
 } from "./odt-mcp-schemas";
+import { ODT_BROWSER_TOOL_NAMES } from "./odt-browser-tool-schemas";
 import {
+  ODT_EXTERNAL_MCP_TOOL_NAMES,
   ODT_MCP_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
   ODT_WORKFLOW_AGENT_TOOL_NAMES,
@@ -95,6 +97,7 @@ describe("odt mcp public task schemas", () => {
         "odt_set_pull_request",
         "odt_set_spec",
         "odt_update_task",
+        ...ODT_BROWSER_TOOL_NAMES,
       ].sort(),
     );
   });
@@ -121,7 +124,9 @@ describe("odt mcp public task schemas", () => {
       "odt_set_pull_request",
       "odt_qa_approved",
       "odt_qa_rejected",
+      ...ODT_BROWSER_TOOL_NAMES,
     ]);
+    expect(ODT_EXTERNAL_MCP_TOOL_NAMES).toEqual(ODT_MCP_TOOL_NAMES.slice(0, 15));
     expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
     expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
     expect(Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS)).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES]);

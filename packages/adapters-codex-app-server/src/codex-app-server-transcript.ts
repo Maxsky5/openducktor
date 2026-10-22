@@ -16,7 +16,7 @@ import {
   fileDiffsPatchOutput,
   toFileDiffs,
 } from "./codex-file-diffs";
-import { codexToolResultDisplayText } from "./codex-mcp-result";
+import { codexToolResultContent, codexToolResultDisplayText } from "./codex-mcp-result";
 import {
   codexDynamicToolDisplayPayload,
   codexDynamicToolErrorFromItem,
@@ -666,6 +666,10 @@ const codexMcpToolCallStreamParts = (
     const output = codexToolResultDisplayText(value.result);
     toolInvocation.output = error ? null : output;
     toolInvocation.error = error;
+    const resultContent = error ? undefined : codexToolResultContent(value.result, output);
+    if (resultContent) {
+      toolInvocation.resultContent = resultContent;
+    }
   }
 
   if (args) {

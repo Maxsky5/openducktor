@@ -29,6 +29,9 @@ import {
 import { createAgentMessageQueuesStore } from "@openducktor/frontend-core/sessions/agent-message-queues-store";
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
+import { toBrowserAnnotationOwnerKey } from "@/features/browser-annotations";
+import { browserAnnotationStoreOf } from "@/features/browser-annotations/browser-annotation-store";
+import { buildCapture } from "@/features/browser-annotations/browser-annotation-test-support";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { loadSessionHistoryIntoStore } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/session-history-loader";
 import { createSessionHistoryReadGeneration } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/session-history-read-generation";
@@ -99,7 +102,7 @@ function QueryStatus() {
 }
 
 test.each(["local_repo_root", "local_worktree"] as const)(
-  "sends both diff scopes from a prepared %s chat",
+  "sends both diff scopes and annotations from a prepared %s chat",
   async (kind) => {
     const workspace = {
       workspaceId: `comment-chat-${kind}`,
@@ -143,6 +146,15 @@ test.each(["local_repo_root", "local_worktree"] as const)(
       workspaceId: workspace.workspaceId,
       workspaceSessionId: entry.id,
     });
+    const annotationOwner = {
+      kind: "workspace_session" as const,
+      workspaceId: workspace.workspaceId,
+      sessionId: entry.id,
+    };
+    const annotationKey = toBrowserAnnotationOwnerKey(annotationOwner);
+    if (!annotationKey) throw new Error("Expected an annotation owner key");
+    const [element] = buildCapture().elements;
+    if (!element) throw new Error("Expected an element fixture");
     const { Harness, connection } = createWorkspaceChatHarness({
       workspace,
       entry,
@@ -156,6 +168,24 @@ test.each(["local_repo_root", "local_worktree"] as const)(
         return createAgentMessageSendReceipt(identity);
       },
     });
+    browserAnnotationStoreOf(connection)
+      .getState()
+      .addAnnotation(annotationKey, {
+        capture: buildCapture({
+          elements: [
+            {
+              ...element,
+              source: {
+                path: `${executionTarget.workingDirectory}/src/header.tsx`,
+                line: 3,
+                column: null,
+              },
+            },
+          ],
+        }),
+        comment: "Annotate the header",
+        includeScreenshot: false,
+      });
     const inlineComments = connection.drafts.inlineComments;
     for (const diffScope of ["uncommitted", "target"] as const) {
       inlineComments.getState().addDraft(ownerKey, {
@@ -177,11 +207,19 @@ test.each(["local_repo_root", "local_worktree"] as const)(
         fireEvent.click(send);
       });
       await waitFor(() => expect(sends).toHaveLength(1));
+      const [sentPart] = sends[0]?.[1] ?? [];
+      const sentText = sentPart?.kind === "text" ? sentPart.text : "";
+      expect(sentText).toContain("<browser_annotations>");
+      expect(sentText).toContain('1. "Annotate the header"');
+      expect(sentText).toContain("source: src/header.tsx:3");
       expect(sends[0]?.[1]).toEqual([
         { kind: "text", text: expect.stringContaining("Review uncommitted") },
       ]);
       expect(sends[0]?.[1][0]).toMatchObject({ text: expect.stringContaining("Review target") });
       expect(inlineComments.getState().getDraftCount(ownerKey)).toBe(0);
+      expect(
+        browserAnnotationStoreOf(connection).getState().getPendingAnnotations(annotationKey),
+      ).toEqual([]);
     } finally {
       view.unmount();
     }

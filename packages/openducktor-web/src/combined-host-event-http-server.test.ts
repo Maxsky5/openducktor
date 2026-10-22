@@ -4,7 +4,10 @@ import { browserEventCursorSchema } from "@openducktor/contracts";
 import { createNotificationStream } from "../../host/src/application/notifications/notification-stream";
 import { BufferedHostEventStream } from "@openducktor/remote-host/host-event-bus";
 import { createCombinedHostSseResponse } from "@openducktor/remote-host/combined-host-event-http-server";
-import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-stream-name";
+import {
+  BROWSER_EVENT_STREAM_NAME,
+  liveSessionStreamEventName,
+} from "@openducktor/remote-host/host-event-stream-name";
 
 const decode = (value: Uint8Array | undefined) => new TextDecoder().decode(value);
 const readCursor = (text: string) => {
@@ -374,6 +377,51 @@ test("a busy event name cannot evict the replay of another one", async () => {
     expect(replayed.slice(1).map((frame) => readCursor(frame).hostEventId)).toEqual([4, 5, 6, 7]);
     expect(decode((await reader.read()).value)).toContain(
       replayComplete(false, [liveSessionStreamEventName("/busy")]),
+    );
+  } finally {
+    await reader.cancel();
+  }
+});
+
+test("browser tab events use their own event name, so they cannot evict other events", async () => {
+  const host = new BufferedHostEventStream({
+    events: 4,
+    bytes: 1024 * 1024,
+    totalBytes: 1024 * 1024,
+  });
+  host.emit(
+    { channel: "openducktor://run-event", payload: { type: "autopilot_failure", failure: null } },
+    () => {},
+  );
+  for (let index = 1; index <= 6; index++) {
+    host.emit(
+      {
+        channel: "openducktor://browser-event",
+        payload: {
+          type: "notice",
+          tabId: "6f1d3f1e-8a52-4b8e-9d0c-2f4a5b6c7d8e",
+          owner: { kind: "task", workspaceId: "workspace", taskId: "task" },
+          notice: { kind: "popup_limit", limit: index },
+        },
+      },
+      () => {},
+    );
+  }
+
+  const reader = (
+    await resume(host, { hostEpoch: host.hostEpoch, hostEventId: 0 })
+  ).body!.getReader();
+  try {
+    await reader.read();
+    const replayed: string[] = [];
+    for (let index = 0; index < 5; index++) replayed.push(decode((await reader.read()).value));
+    expect(replayed[0]).toContain("event: message\n");
+    for (const frame of replayed.slice(1)) {
+      expect(frame).toContain(`event: ${BROWSER_EVENT_STREAM_NAME}\n`);
+    }
+    expect(replayed.slice(1).map((frame) => readCursor(frame).hostEventId)).toEqual([4, 5, 6, 7]);
+    expect(decode((await reader.read()).value)).toContain(
+      replayComplete(false, [BROWSER_EVENT_STREAM_NAME]),
     );
   } finally {
     await reader.cancel();

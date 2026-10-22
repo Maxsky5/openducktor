@@ -1,6 +1,6 @@
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
 import type { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
-import type { useReviewCommentComposer } from "@/features/agent-chat-composer/use-review-comment-composer";
+import type { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
 import type { useSelectedSessionContextUsage } from "@/features/agent-chat-composer/context-usage/use-selected-session-context-usage";
 import {
   getAgentSessionWaitingInputPlaceholder,
@@ -22,7 +22,7 @@ type WorkspaceSessionComposerInput = {
     "isStarting" | "isSavingModel" | "isResumingSession"
   >;
   delivery: ReturnType<typeof useAgentChatSend>;
-  reviewComments: Pick<ReturnType<typeof useReviewCommentComposer>, "onSend" | "pendingSendItems">;
+  pendingSend: ReturnType<typeof usePendingSendContext>;
   draftPersistence: ReturnType<typeof createWorkspaceSessionChatDraftPersistence>;
   picker: ReturnType<typeof useWorkspaceSessionModelPicker>;
   promptInput: ReturnType<typeof useWorkspaceSessionPromptInput>;
@@ -35,7 +35,7 @@ export function buildWorkspaceSessionComposer({
   identity,
   actions,
   delivery,
-  reviewComments,
+  pendingSend,
   draftPersistence,
   picker,
   promptInput,
@@ -58,8 +58,8 @@ export function buildWorkspaceSessionComposer({
     isReadOnly: state.isReadOnly,
     readOnlyReason: state.readOnlyReason,
     draftScope: { key: draftPersistence.targetKey, persistence: draftPersistence },
-    onSend: reviewComments.onSend,
-    pendingSendItems: reviewComments.pendingSendItems ?? undefined,
+    onSend: pendingSend.onSend,
+    pendingSendItems: pendingSend.pendingSendItems,
     isStarting: identity === null && actions.isStarting,
     isSavingModel: actions.isSavingModel,
     contextUsage,

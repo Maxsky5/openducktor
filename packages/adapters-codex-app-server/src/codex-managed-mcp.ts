@@ -10,7 +10,7 @@ export type CodexThreadConfig = {
   "mcp_servers.openducktor.env": Record<string, string>;
   "mcp_servers.openducktor.enabled": true;
   "mcp_servers.openducktor.required": true;
-  "mcp_servers.openducktor.default_tools_approval_mode": "prompt";
+  "mcp_servers.openducktor.default_tools_approval_mode": "approve";
   "mcp_servers.openducktor.enabled_tools": string[];
 };
 
@@ -36,7 +36,9 @@ export const resolveCodexThreadConfig = async (
     "mcp_servers.openducktor.env": { ...server.environment },
     "mcp_servers.openducktor.enabled": true,
     "mcp_servers.openducktor.required": true,
-    "mcp_servers.openducktor.default_tools_approval_mode": "prompt",
+    // OpenDucktor tools never ask for approval, so neither the user nor Codex auto review sees
+    // them. `enabled_tools` holds only the tools of the session scope.
+    "mcp_servers.openducktor.default_tools_approval_mode": "approve",
     "mcp_servers.openducktor.enabled_tools": [...enabledTools],
   };
 };
