@@ -148,6 +148,7 @@ const sendFirstMessage = async (
   registry.registerTransport(runtimeId, transport);
   const controller = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+    directoriesMatch: async (left, right) => left === right,
     runtime: { kind: "codex", runtimeId, runtimeRoute: { type: "stdio", identity: runtimeId } },
     resolveManagedMcpServer: async () => ({ command: ["odt-mcp"], environment: {} }),
     transportFactory: () => createCodexRuntimeTransport(registry, runtimeId),

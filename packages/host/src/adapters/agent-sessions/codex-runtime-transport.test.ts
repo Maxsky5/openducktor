@@ -312,6 +312,7 @@ const assertFreshWorkspaceQueries = async (method: "thread/read" | "thread/turns
   const firstTurnCompleted = Promise.withResolvers<void>();
   const adapter = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+    directoriesMatch: async (left, right) => left === right,
     runtime: {
       kind: "codex",
       runtimeId,

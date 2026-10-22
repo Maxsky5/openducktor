@@ -152,6 +152,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
@@ -269,6 +270,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
@@ -291,6 +293,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
     });
@@ -983,6 +986,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: () => transport,
       onRuntimeEventQueueFailure: () => {

@@ -11,6 +11,7 @@ import {
 import { Effect } from "effect";
 import { createCodexLiveSessionAdapterPreparer } from "../../adapters/agent-sessions/codex-live-session-adapter";
 import { createCodexRuntimeStarter } from "../../adapters/codex/codex-runtime-starter";
+import { createCodexDirectoryMatcher } from "../../adapters/codex/codex-directory-identity";
 import type { McpHostBridgeServer } from "../../adapters/mcp/mcp-host-bridge-server";
 import { createOpenDucktorMcpServerConfigResolver } from "../../adapters/mcp/openducktor-mcp-server-config";
 import { createRuntimeDrivers } from "../../adapters/runtimes/runtime-drivers";
@@ -87,6 +88,7 @@ export const createNodeHostRuntimeComposition = ({
     userEnvironment,
     readEnv,
   } = defaultPorts;
+  const directoriesMatch = createCodexDirectoryMatcher(defaultPorts.filesystem);
   const mcpServerConfigFor = (runtimeKind: RuntimeKind) =>
     createOpenDucktorMcpServerConfigResolver({
       resolveBridge,
@@ -115,6 +117,7 @@ export const createNodeHostRuntimeComposition = ({
     launchDirectory,
     liveSessionLifecycle: liveState,
     prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
+      directoriesMatch,
       prepareImageGenerations: defaultPorts.imageWorkers.prepareHistory,
       liveSessionLifecycle: liveState,
       codexAppServer,
@@ -198,6 +201,7 @@ export const createNodeHostRuntimeComposition = ({
       descriptorFor,
       starters: { opencode: startGuard, codex: startGuard, claude: startGuard },
       sessionOperations: createRuntimeSessionOperations({
+        directoriesMatch,
         opencode: opencodeRuntime.sessionOperations,
         codexAppServer,
         claudeAgentSdk: claudeRuntime.sessionOperations,

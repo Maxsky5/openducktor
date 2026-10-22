@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   codexAppServerClientRequestSchema,
@@ -10,6 +13,8 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError, HostResourceError } from "../../effect/host-errors";
+import { createCodexDirectoryMatcher } from "../codex/codex-directory-identity";
+import { createFilesystemAdapter } from "../filesystem/filesystem-adapter";
 import { createClaudeAgentSdkSessionStore } from "../claude/claude-agent-sdk-session-store";
 import {
   type CreateRuntimeSessionOperationsInput,
@@ -91,6 +96,7 @@ const unusedPort = (): never => {
 
 const createOperations = (operationsInput: Partial<CreateRuntimeSessionOperationsInput>) =>
   createRuntimeSessionOperations({
+    directoriesMatch: createCodexDirectoryMatcher({ canonicalize: (path) => Effect.succeed(path) }),
     opencode: { stopSession: unusedPort, probeSessionStatus: unusedPort },
     codexAppServer: { request: unusedPort },
     claudeAgentSdk: { stopSession: unusedPort, probeSessionStatus: unusedPort },
@@ -238,7 +244,7 @@ describe("Codex runtime session operations", () => {
     const expectedLiveSessions: Array<[string, boolean]> = [
       ["session-1", true],
       ["session-2", false],
-      ["session-3", true],
+      ["session-3", false],
       ["session-4", false],
       ["session-5", false],
     ];
@@ -293,43 +299,70 @@ describe("Codex runtime session operations", () => {
     ).rejects.toThrow('"thread"');
   });
 
-  test("interrupts an active Codex session through the app-server port", async () => {
+  test("probes and interrupts an active Codex session through its worktree symlink", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-codex-stop-directory-"));
+    const nativeDirectory = join(temporaryDirectory, "native-worktree");
+    const savedDirectory = join(temporaryDirectory, "saved-worktree");
+    await mkdir(nativeDirectory);
+    await symlink(
+      nativeDirectory,
+      savedDirectory,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const nativeCwd = await realpath(nativeDirectory);
     const calls: unknown[] = [];
-    await expect(
-      stopSession(createCodexRuntime(), {
-        codexAppServer: {
-          request(input) {
-            calls.push(input);
-            if (input.method === "thread/read") {
-              return codexThreadReadResult("session-1", "/repo/worktree", {
-                type: "active",
-                activeFlags: [],
-              });
-            }
-            if (input.method === "thread/turns/list") {
-              return codexResult("thread/turns/list", {
-                data: [
-                  {
-                    id: "turn-1",
-                    startedAt: 1_778_112_001,
-                    completedAt: null,
-                    durationMs: null,
-                    error: null,
-                    items: [],
-                    itemsView: "summary",
-                    status: "inProgress",
-                  },
-                ],
-                nextCursor: null,
-                backwardsCursor: null,
-              });
-            }
-            return codexResult("turn/interrupt", {});
-          },
+    const operations = createOperations({
+      directoriesMatch: createCodexDirectoryMatcher(createFilesystemAdapter()),
+      codexAppServer: {
+        request(input) {
+          calls.push(input);
+          if (input.method === "thread/read") {
+            return codexThreadReadResult("session-1", nativeCwd, {
+              type: "active",
+              activeFlags: [],
+            });
+          }
+          if (input.method === "thread/turns/list") {
+            return codexResult("thread/turns/list", {
+              data: [
+                {
+                  id: "turn-1",
+                  startedAt: 1_778_112_001,
+                  completedAt: null,
+                  durationMs: null,
+                  error: null,
+                  items: [],
+                  itemsView: "summary",
+                  status: "inProgress",
+                },
+              ],
+              nextCursor: null,
+              backwardsCursor: null,
+            });
+          }
+          return codexResult("turn/interrupt", {});
         },
-      }),
-    ).resolves.toBeUndefined();
+      },
+    });
+    const runtime = createCodexRuntime();
+    const target = { ...sessionTarget("codex"), workingDirectory: savedDirectory };
+    try {
+      expect(await Effect.runPromise(operations.codex.probeSessionStatus(target, runtime))).toEqual(
+        {
+          supported: true,
+          hasLiveSession: true,
+        },
+      );
+      await Effect.runPromise(operations.codex.stopSession(target, runtime));
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
     expect(calls).toEqual([
+      {
+        runtimeId: "runtime-1",
+        method: "thread/read",
+        params: { threadId: "session-1", includeTurns: false },
+      },
       {
         runtimeId: "runtime-1",
         method: "thread/read",
@@ -352,6 +385,83 @@ describe("Codex runtime session operations", () => {
       },
     ]);
   });
+
+  test.each(["stopSession", "probeSessionStatus"] as const)(
+    "rejects a wrong native thread before %s can inspect or interrupt it",
+    async (operation) => {
+      const calls: string[] = [];
+      const operations = createOperations({
+        codexAppServer: {
+          request: (input) => {
+            calls.push(input.method);
+            return codexThreadReadResult("different-thread", "/repo/worktree", {
+              type: "active",
+              activeFlags: [],
+            });
+          },
+        },
+      });
+      const failure = await Effect.runPromise(
+        Effect.flip(operations.codex[operation](sessionTarget("codex"), createCodexRuntime())),
+      );
+      expect(failure).toMatchObject({
+        _tag: "HostValidationError",
+        field: "threadId",
+        details: { threadId: "session-1", returnedThreadId: "different-thread" },
+      });
+      expect(calls).toEqual(["thread/read"]);
+    },
+  );
+
+  test("does not interrupt a Codex thread in a different directory", async () => {
+    const calls: string[] = [];
+    const failure = await stopSession(createCodexRuntime(), {
+      codexAppServer: {
+        request: (input) => {
+          calls.push(input.method);
+          return codexThreadReadResult("session-1", "/repo/other-worktree", {
+            type: "active",
+            activeFlags: [],
+          });
+        },
+      },
+    }).catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({
+      _tag: "HostOperationError",
+      operation: "codexSessionStop.requireExactThread",
+    });
+    expect(calls).toEqual(["thread/read"]);
+  });
+
+  test.each(["stopSession", "probeSessionStatus"] as const)(
+    "reports failed directory resolution from %s without further native requests",
+    async (operation) => {
+      const resolutionFailure = new HostOperationError({
+        operation: "filesystem.canonicalize",
+        message: "Cannot read the worktree directory. Restore access and retry.",
+      });
+      const calls: string[] = [];
+      const operations = createOperations({
+        directoriesMatch: createCodexDirectoryMatcher({
+          canonicalize: () => Effect.fail(resolutionFailure),
+        }),
+        codexAppServer: {
+          request: (input) => {
+            calls.push(input.method);
+            return codexThreadReadResult("session-1", "/repo/native-worktree", {
+              type: "active",
+              activeFlags: [],
+            });
+          },
+        },
+      });
+      const failure = await Effect.runPromise(
+        Effect.flip(operations.codex[operation](sessionTarget("codex"), createCodexRuntime())),
+      );
+      expect(failure).toBe(resolutionFailure);
+      expect(calls).toEqual(["thread/read"]);
+    },
+  );
 
   test.each([["idle" as const], ["systemError" as const]])(
     "treats Codex %s sessions as already stopped",

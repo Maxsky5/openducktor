@@ -13,6 +13,7 @@ test("reports workspace runtime failures without session identity", async () => 
   const adapter = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     runtime: {
       ...makeRuntimeSummary("runtime-wrong-route"),
       runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },
@@ -39,6 +40,7 @@ test("validates operation working directories before creating a transport", asyn
   const adapter = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     runtime: makeRuntimeSummary("runtime-live"),
     transportFactory,
   });

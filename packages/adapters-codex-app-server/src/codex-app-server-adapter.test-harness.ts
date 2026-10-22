@@ -608,6 +608,7 @@ export const createAdapterWithTransport = (
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     runtime: makeRuntimeSummary("runtime-live"),
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     transportFactory: () => transport,
     onRuntimeEventQueueFailure: () => {
       return undefined;
@@ -637,6 +638,7 @@ export const createHarness = (
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     runtime: makeRuntimeSummary("runtime-live"),
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     transportFactory,
     onRuntimeEventQueueFailure: () => {
       return undefined;

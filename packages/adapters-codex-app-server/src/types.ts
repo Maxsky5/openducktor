@@ -214,6 +214,8 @@ type CodexAppServerAdapterBaseOptions = {
   runtime: BoundRuntimeRoute;
   /** Resolves the managed MCP server sent with every thread start, resume, and fork. */
   resolveManagedMcpServer: ManagedMcpServerResolver;
+  /** Compares native and saved directory paths without changing the saved session identity. */
+  directoriesMatch: (left: string, right: string) => Promise<boolean>;
   /** The tools and workspace access of a workflow role in the task workflow of the repository. */
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   transportFactory: CodexJsonRpcTransportFactory;

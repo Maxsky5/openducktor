@@ -1,5 +1,6 @@
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import type { CodexSessionHistoryPort } from "../../ports/codex-session-history-port";
+import type { CodexDirectoryMatcher } from "../codex/codex-directory-identity";
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
@@ -69,6 +70,7 @@ export type CodexLiveSessionAdapterPreparer = (
 ) => Effect.Effect<PreparedCodexLiveSessionAdapter, HostError>;
 
 export type CreateCodexLiveSessionAdapterPreparerInput = {
+  readonly directoriesMatch: CodexDirectoryMatcher;
   readonly prepareImageGenerations: CodexImageGenerationPreparer;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
   readonly codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;

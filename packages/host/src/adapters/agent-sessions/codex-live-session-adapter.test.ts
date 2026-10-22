@@ -6,6 +6,11 @@ import {
   type AgentSessionSendOptions,
 } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createFilesystemAdapter } from "../filesystem/filesystem-adapter";
+import { createCodexDirectoryMatcher } from "../codex/codex-directory-identity";
 import { CodexMessageAcceptedError } from "@openducktor/adapters-codex-app-server";
 import type {
   CodexAppServerAdapter,
@@ -123,6 +128,10 @@ const resolveRuntimePolicy = (_input: { repoPath: string; sessionScope: AgentSes
   Effect.succeed(codexPolicy);
 
 const noBackgroundFailure = () => Effect.void;
+
+const directoriesMatch = createCodexDirectoryMatcher({
+  canonicalize: (path) => Effect.succeed(path),
+});
 
 const mcpServerConfigFor = (repoPath: string) => ({
   command: ["odt-mcp", "--stdio"] as const,
@@ -431,6 +440,84 @@ const createControllerHarness = ({
 };
 
 describe("createCodexLiveSessionAdapterPreparer", () => {
+  test("loads saved history through a directory symlink and rejects unresolved or different directories", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-codex-directory-"));
+    const nativeDirectory = join(temporaryDirectory, "native-worktree");
+    const savedDirectory = join(temporaryDirectory, "saved-worktree");
+    const otherDirectory = join(temporaryDirectory, "other-worktree");
+    await mkdir(nativeDirectory);
+    await mkdir(otherDirectory);
+    await symlink(
+      nativeDirectory,
+      savedDirectory,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const nativeCwd = await realpath(nativeDirectory);
+    const savedRef = { ...ref, workingDirectory: savedDirectory };
+    const historyRequests: unknown[] = [];
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch: createCodexDirectoryMatcher(createFilesystemAdapter()),
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer: {
+          ...codexAppServer,
+          request: (input) => {
+            if (input.method !== "thread/read") {
+              return Effect.die(new Error(`Unexpected request ${input.method}`));
+            }
+            return Effect.succeed(threadReadResult(ref.externalSessionId, nativeCwd));
+          },
+          listThreadTurns: (input) => {
+            historyRequests.push(input);
+            return Effect.succeed({ data: [], nextCursor: null, backwardsCursor: null });
+          },
+        },
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+      })(runtime),
+    );
+    const loadHistory = (workingDirectory: string) =>
+      prepared.adapter.queries.loadSessionHistory({
+        ...savedRef,
+        workingDirectory,
+        sessionScope: { kind: "repository" },
+        runtimePolicy: { kind: "codex", policy: codexPolicy },
+      });
+    try {
+      const history = await Effect.runPromise(loadHistory(savedDirectory));
+      expect(history).toEqual([]);
+      expect(historyRequests).toEqual([
+        expect.objectContaining({ runtimeId: runtime.runtimeId, threadId: ref.externalSessionId }),
+      ]);
+      expect(await Effect.runPromise(prepared.adapter.listSnapshots())).toEqual([]);
+      for (const [workingDirectory, code] of [
+        [otherDirectory, "scope_mismatch"],
+        [join(temporaryDirectory, "missing-worktree"), "request_failed"],
+      ] as const) {
+        const failure = await Effect.runPromise(Effect.flip(loadHistory(workingDirectory)));
+        expect(failure).toMatchObject({ _tag: "RuntimeQueryError", failure: { code } });
+        if (code === "request_failed") {
+          expect(failure.cause).toMatchObject({
+            _tag: "HostOperationError",
+            operation: "filesystem.canonicalize",
+          });
+        }
+      }
+      expect(historyRequests).toHaveLength(1);
+      await rm(nativeDirectory, { recursive: true });
+      expect(await Effect.runPromise(loadHistory(nativeCwd))).toEqual([]);
+      expect(historyRequests).toHaveLength(2);
+    } finally {
+      await Effect.runPromise(prepared.discard());
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
   test.each(["start", "fork"] as const)(
     "records ownership before publishing a Codex %s without a saved record",
     async (operation) => {
@@ -451,6 +538,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+          directoriesMatch,
           resolveMcpServerConfig,
           prepareImageGenerations: async () => {
             throw new Error("Unexpected image preparation");
@@ -507,6 +595,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig: (repoPath) =>
           repoPath === "/repo-missing"
             ? Effect.fail(
@@ -546,6 +635,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation.");
@@ -582,6 +672,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const histories: CodexAppServerAdapterOptions["questionHistory"][] = [];
     const prepare = createCodexLiveSessionAdapterPreparer({
       resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+      directoriesMatch,
       resolveMcpServerConfig,
       prepareImageGenerations: async () => {
         throw new Error("Unexpected image preparation.");
@@ -625,6 +716,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation.");
@@ -727,6 +819,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -787,6 +880,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -831,6 +925,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -883,6 +978,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -949,6 +1045,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1023,6 +1120,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+          directoriesMatch,
           resolveMcpServerConfig,
           prepareImageGenerations: async () => {
             throw new Error("Unexpected image preparation");
@@ -1073,6 +1171,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1157,6 +1256,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1187,6 +1287,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1238,6 +1339,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1281,6 +1383,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1317,6 +1420,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1369,6 +1473,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1425,6 +1530,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1467,6 +1573,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1526,6 +1633,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1585,6 +1693,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1632,6 +1741,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1709,6 +1819,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1745,6 +1856,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1805,6 +1917,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1841,6 +1954,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1893,6 +2007,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1933,6 +2048,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -1986,6 +2102,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
         resolveMcpServerConfig,
         prepareImageGenerations: async () => {
           throw new Error("Unexpected image preparation");
@@ -2048,6 +2165,7 @@ for (const action of ["stop", "release"] as const) {
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+          directoriesMatch,
           resolveMcpServerConfig,
           prepareImageGenerations: async () => {
             throw new Error("Unexpected image preparation");
@@ -2119,6 +2237,7 @@ test("interrupting an image read aborts the controller's preparation signal", as
   const prepared = await Effect.runPromise(
     createCodexLiveSessionAdapterPreparer({
       resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+      directoriesMatch,
       resolveMcpServerConfig,
       prepareImageGenerations: async () => {
         throw new Error("Unexpected image preparation");

@@ -86,6 +86,7 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
       const workflowRole = builtinTaskWorkflow.role(role);
       return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
     },
+    directoriesMatch: async (left, right) => left === right,
     resolveManagedMcpServer: async () => ({ command: ["odt-mcp"], environment: {} }),
     subscribeEvents: (id, listener) => {
       listeners.set(id, listener);
@@ -162,6 +163,7 @@ export const createCodexImageSessionHarness = async (runtimeIds = ["runtime-live
         runtime: imageRuntime(runtimeId),
         resolveWorkflowRolePolicy: options.resolveWorkflowRolePolicy,
         resolveManagedMcpServer: options.resolveManagedMcpServer,
+        directoriesMatch: options.directoriesMatch,
         transportFactory: options.transportFactory,
       }),
     ]),

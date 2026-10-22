@@ -53,6 +53,8 @@ A new runtime kind plugs in through one `RuntimeDriver` from `@openducktor/runti
 
 Each session operation sends the directory of its session to the shared runtime. Do not depend on the directory of one workspace.
 
+Codex can return a canonical directory path such as `/private/tmp` for a session saved under `/tmp`. The host compares differing paths through the filesystem port. It reports resolution failures and rejects different directories. Keep exact session ID and ownership checks, and retain the saved directory in live session references.
+
 ### Workspace binding of OpenDucktor tools
 
 A shared process must not give every workspace the same workspace ID. Bind the managed OpenDucktor MCP server to the workspace of each session, and keep `ODT_FORBID_WORKSPACE_ID_INPUT=true`. A failed binding fails the operation that needs it, with its cause.

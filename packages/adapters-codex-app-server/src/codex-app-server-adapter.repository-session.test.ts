@@ -949,6 +949,7 @@ describe("CodexAppServerAdapter repository sessions", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: {
         ...makeRuntimeSummary("runtime-wrong-route"),
         runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:43123" },

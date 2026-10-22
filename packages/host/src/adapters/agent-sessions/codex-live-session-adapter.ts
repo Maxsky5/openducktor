@@ -59,6 +59,7 @@ const defaultCreateController = (options: CodexAppServerAdapterOptions): CodexSe
   new CodexAppServerAdapter(options);
 
 export const createCodexLiveSessionAdapterPreparer = ({
+  directoriesMatch,
   liveSessionLifecycle,
   codexAppServer,
   onBackgroundFailure,
@@ -82,6 +83,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
       const controller = yield* Effect.try({
         try: () =>
           createController({
+            directoriesMatch: (left, right) => Effect.runPromise(directoriesMatch(left, right)),
             questionHistory,
             prepareImageGenerations,
             resolveWorkflowRolePolicy,
@@ -478,6 +480,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         stopSession: (input) =>
           stopCodexSession({
             codexAppServer,
+            directoriesMatch,
             runtimeId: runtime.runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,

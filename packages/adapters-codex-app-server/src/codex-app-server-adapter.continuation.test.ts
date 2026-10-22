@@ -73,6 +73,7 @@ const createContinuationAdapter = ({
   const adapter = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,
     resolveManagedMcpServer: testManagedMcpServer,
+    directoriesMatch: async (left, right) => left === right,
     runtime: makeRuntimeSummary("runtime-live"),
     transportFactory: (): CodexJsonRpcTransport => ({
       async request({ method, params }) {
@@ -398,6 +399,7 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: (): CodexJsonRpcTransport => ({
         async request({ method, params }) {
@@ -438,6 +440,7 @@ describe("CodexAppServerAdapter interrupted-turn continuation", () => {
     const adapter = new CodexAppServerAdapter({
       resolveWorkflowRolePolicy: testWorkflowRolePolicy,
       resolveManagedMcpServer: testManagedMcpServer,
+      directoriesMatch: async (left, right) => left === right,
       runtime: makeRuntimeSummary("runtime-live"),
       transportFactory: (): CodexJsonRpcTransport => ({
         async request({ method, params }) {

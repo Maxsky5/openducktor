@@ -31,6 +31,27 @@ const createInventory = (thread: CodexThreadSnapshot): CodexThreadInventory => (
   threadsById: new Map([[thread.id, thread]]),
 });
 
+const createSession = (
+  thread: CodexThreadSnapshot,
+  workingDirectory = "/repo",
+): CodexSessionState => ({
+  summary: {
+    externalSessionId: thread.id,
+    runtimeKind: "codex",
+    workingDirectory,
+    sessionAssociation: { kind: "unbound" },
+    startedAt: thread.startedAt,
+    status: "running",
+  },
+  systemPrompt: "",
+  runtimeId: "runtime-1",
+  repoPath: "/repo",
+  threadId: thread.id,
+  workingDirectory,
+  runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
+  liveStatus: codexThreadStatusSnapshot("active"),
+});
+
 const createDeps = (
   inventory: CodexThreadInventory,
   sessions: CodexSessionState[] = [],
@@ -53,6 +74,7 @@ const createDeps = (
   pendingInput: new CodexPendingInputState(),
   asyncQuestions: new CodexAsyncQuestionState(),
   hasActiveTurn: () => false,
+  directoriesMatch: async (left, right) => left === right,
 });
 
 const client = createCodexAppServerClient({
@@ -65,23 +87,7 @@ describe("Codex session runtime snapshot reader", () => {
   test("reads one Codex inventory when local sessions use the resolved runtime", async () => {
     const thread = createChildThread();
     const inventory = createInventory(thread);
-    const localSession: CodexSessionState = {
-      summary: {
-        externalSessionId: thread.id,
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        sessionAssociation: { kind: "unbound" },
-        startedAt: thread.startedAt,
-        status: "running",
-      },
-      systemPrompt: "",
-      runtimeId: "runtime-1",
-      repoPath: "/repo",
-      threadId: thread.id,
-      workingDirectory: "/repo",
-      runtimePolicy: { kind: "codex", policy: defaultCodexEffectivePolicy() },
-      liveStatus: codexThreadStatusSnapshot("active"),
-    };
+    const localSession = createSession(thread);
     const deps = createDeps(inventory, [localSession]);
     let inventoryReadCount = 0;
     deps.threadInventory = {
@@ -110,19 +116,63 @@ describe("Codex session runtime snapshot reader", () => {
     expect(inventoryReadCount).toBe(1);
   });
 
-  test("reads child parent metadata without learning a live route", async () => {
-    await expect(
-      readCodexSessionRuntimeSnapshot(createDeps(createInventory(createChildThread())), {
+  test.each([
+    { workingDirectory: "/repo", nativeDirectory: "/repo" },
+    { workingDirectory: "/tmp/repo", nativeDirectory: "/private/tmp/repo" },
+  ])(
+    "reads child metadata in $workingDirectory without changing its reference",
+    async ({ workingDirectory, nativeDirectory }) => {
+      const child = { ...createChildThread(), cwd: nativeDirectory };
+      const inventory = createInventory(child);
+      inventory.threadsById.set("unrelated-thread", {
+        ...child,
+        id: "unrelated-thread",
+        cwd: "/deleted-directory",
+      });
+      const deps = createDeps(inventory);
+      const aliases = new Set([workingDirectory, nativeDirectory]);
+      deps.directoriesMatch = async (left, right) => {
+        if (!aliases.has(left) || !aliases.has(right)) {
+          throw new Error("Directory check must only inspect the selected thread");
+        }
+        return true;
+      };
+      const input = {
         repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
+        runtimeKind: "codex" as const,
+        workingDirectory,
         externalSessionId: "child-thread",
-      }),
-    ).resolves.toMatchObject({
-      availability: "runtime",
-      parentExternalSessionId: "parent-thread",
-    });
-  });
+      };
+
+      expect(await readCodexSessionRuntimeSnapshot(deps, input)).toMatchObject({
+        availability: "runtime",
+        parentExternalSessionId: "parent-thread",
+        ref: input,
+      });
+    },
+  );
+
+  test.each([false, true])(
+    "rejects a different directory with local registration %s",
+    async (registered) => {
+      const child = { ...createChildThread(), cwd: "/other-repo" };
+      const deps = createDeps(createInventory(child), registered ? [createSession(child)] : []);
+      const input = {
+        repoPath: "/repo",
+        runtimeKind: "codex" as const,
+        workingDirectory: "/repo",
+        externalSessionId: child.id,
+      };
+
+      expect(await readCodexSessionRuntimeSnapshot(deps, input)).toEqual({
+        availability: "missing",
+        classification: "missing",
+        ref: input,
+        pendingApprovals: [],
+        pendingQuestions: [],
+      });
+    },
+  );
 
   test("does not admit an unregistered child from runtime inventory", async () => {
     const child = {
@@ -155,42 +205,33 @@ describe("Codex session runtime snapshot reader", () => {
   test("settles a previously materialized child during repository hydration", async () => {
     const child = {
       ...createChildThread(),
+      cwd: "/private/tmp/repo",
       status: codexThreadStatusSnapshot("notLoaded"),
     };
     const inventory = {
       ...createInventory(child),
       loadedIds: new Set<string>(),
     };
-    const localChild: CodexSessionState = {
-      summary: {
-        externalSessionId: child.id,
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        sessionAssociation: { kind: "unbound" },
-        startedAt: child.startedAt,
-        status: "running",
-      },
-      systemPrompt: "",
-      role: null,
-      runtimeId: "runtime-1",
-      repoPath: "/repo",
-      threadId: child.id,
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      liveStatus: codexThreadStatusSnapshot("active"),
-    };
+    const localChild = createSession(child, "/tmp/repo");
+
+    const deps = createDeps(inventory, [localChild]);
+    const aliases = new Set([child.cwd, localChild.workingDirectory]);
+    deps.directoriesMatch = async (left, right) => aliases.has(left) && aliases.has(right);
 
     await expect(
-      listCodexSessionRuntimeSnapshots(createDeps(inventory, [localChild]), {
+      listCodexSessionRuntimeSnapshots(deps, {
         repoPath: "/repo",
         runtimeKind: "codex",
-        directories: ["/repo"],
+        directories: [localChild.workingDirectory],
       }),
     ).resolves.toEqual([
       expect.objectContaining({
         classification: "idle",
         parentExternalSessionId: "parent-thread",
-        ref: expect.objectContaining({ externalSessionId: "child-thread" }),
+        ref: expect.objectContaining({
+          externalSessionId: "child-thread",
+          workingDirectory: "/tmp/repo",
+        }),
       }),
     ]);
   });
