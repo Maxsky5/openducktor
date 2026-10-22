@@ -468,6 +468,97 @@ describe("useSessionStartModalState", () => {
     await harness.unmount();
   });
 
+  test.each<{
+    name: string;
+    startMode: AgentSessionStartMode;
+    catalog: AgentModelCatalog | null;
+    expectedProfiles: string[];
+  }>([
+    {
+      name: "empty catalog",
+      startMode: "fresh",
+      catalog: { ...CATALOG, profiles: [] },
+      expectedProfiles: [],
+    },
+    {
+      name: "catalog without selectable profiles",
+      startMode: "fresh",
+      catalog: {
+        ...CATALOG,
+        profiles: [
+          { name: "hidden", mode: "primary", hidden: true },
+          { name: "helper", mode: "subagent", hidden: false },
+        ],
+      },
+      expectedProfiles: [],
+    },
+    {
+      name: "empty fork catalog",
+      startMode: "fork",
+      catalog: { ...CATALOG, profiles: [] },
+      expectedProfiles: [],
+    },
+    {
+      name: "reused session",
+      startMode: "reuse",
+      catalog: { ...CATALOG, profiles: [] },
+      expectedProfiles: ["spec-agent"],
+    },
+    {
+      name: "unloaded catalog",
+      startMode: "fresh",
+      catalog: null,
+      expectedProfiles: ["spec-agent"],
+    },
+    {
+      name: "unknown profiles",
+      startMode: "fresh",
+      catalog: {
+        runtime: CATALOG.runtime,
+        models: CATALOG.models,
+        defaultModelsByProvider: CATALOG.defaultModelsByProvider,
+      },
+      expectedProfiles: ["spec-agent"],
+    },
+  ])(
+    "uses known profile availability for $name",
+    async ({ startMode, catalog, expectedProfiles }) => {
+      const source = createExistingSessionWithModel({
+        runtimeKind: "opencode",
+        value: "session-profile",
+      });
+      const harness = createHookHarness(createBaseProps({ initialCatalog: catalog }));
+
+      await harness.mount();
+      try {
+        await harness.run((state) => {
+          state.openStartModal({
+            source: "task_action",
+            taskId: "TASK-PROFILE",
+            role: "build",
+            launchActionId:
+              startMode === "fresh"
+                ? "build_implementation_start"
+                : "build_pull_request_generation",
+            initialStartMode: startMode,
+            existingSessionOptions: [source],
+            selectedModel: source.selectedModel,
+            postStartAction: "kickoff",
+            title: "Start Builder Session",
+          });
+        });
+
+        expect(harness.getLatest().selectedStartMode).toBe(startMode);
+        expect(harness.getLatest().selection?.modelId).toBe("gpt-5");
+        expect(harness.getLatest().runtimeProfileOptions.map((option) => option.value)).toEqual(
+          expectedProfiles,
+        );
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
   test("drops a stale default that is absent from the loaded catalog", async () => {
     const harness = createHookHarness(
       createBaseProps({

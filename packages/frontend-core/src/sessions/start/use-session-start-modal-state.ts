@@ -284,7 +284,7 @@ export function useSessionStartModalState({
 
   const runtimeProfileOptions = useMemo<SelectOption[]>(() => {
     const options = toPrimaryAgentOptions(catalog);
-    if (options.length > 0) {
+    if (options.length > 0 || (selectedStartMode !== "reuse" && catalog?.profiles !== undefined)) {
       return options;
     }
 
@@ -298,7 +298,7 @@ export function useSessionStartModalState({
       description: "Current default runtime profile",
     };
     return [fallbackOption];
-  }, [catalog, visibleSelection?.profileId]);
+  }, [catalog, selectedStartMode, visibleSelection?.profileId]);
 
   const variantOptions = useMemo<SelectOption[]>(() => {
     if (selectedModelEntry) {
