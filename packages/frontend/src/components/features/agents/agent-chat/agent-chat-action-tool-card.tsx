@@ -3,9 +3,9 @@ import { type ReactElement, useState } from "react";
 import { MediaPreviewDialog, type MediaPreviewItem } from "@/components/ui/media-preview-dialog";
 import { cn } from "@/lib/utils";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
+import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 import { getToolDuration } from "./tool-duration";
-import { isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
+import { getToolLifecyclePhase, isToolMessageActive, isToolMessageFailure } from "./tool-lifecycle";
 
 /** A detail of an action tool call. A section with no text does not show. */
 export type ActionToolSection = { label: string; text: string; tone?: "error" };
@@ -162,7 +162,7 @@ const ActionToolSummary = ({
       </button>
     ) : null}
     <ToolMessageTiming
-      showSpinner={isToolMessageActive(meta)}
+      activity={toolActivity(meta)}
       durationMs={getToolDuration(meta, messageTimestamp)}
       timeLabel={timeLabel}
       className="text-muted-foreground"
@@ -215,6 +215,12 @@ const ActionToolScreenshotPreview = ({
       media={media}
     />
   );
+};
+
+/** What the tool does now: it prepares its input, it runs, or it has ended. */
+const toolActivity = (meta: ToolMeta): ToolMessageActivity => {
+  if (!isToolMessageActive(meta)) return null;
+  return getToolLifecyclePhase(meta) === "executing" ? "running" : "preparing";
 };
 
 const SECTION_APPEARANCE = {
