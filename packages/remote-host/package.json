@@ -17,10 +17,10 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
-    "effect": "4.0.2",
+    "effect": "4.0.5",
     "mime-types": "^3.0.2",
     "ws": "8.22.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/mime-types": "^3.0.1",
