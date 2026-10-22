@@ -470,6 +470,56 @@ describe("Claude task tools", () => {
     ]);
   });
 
+  test("keeps mixed tool results and a missing-call tool name fallback separate", () => {
+    const messages = claudeHistoryMessagesFixture([
+      {
+        type: "assistant",
+        uuid: "known-tools",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "shell", name: "Bash", input: { command: "bun test" } },
+            { type: "tool_use", id: "create", name: "TaskCreate", input: { subject: "Run tests" } },
+          ],
+        },
+      },
+      {
+        type: "user",
+        uuid: "mixed-results",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "shell",
+              tool_name: "TaskCreate",
+              toolUseResult: { task: { id: "shell-output", subject: "Ignore this shell output" } },
+              content: "Tests passed",
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "create",
+              toolUseResult: { task: { id: "1", subject: "Run tests" } },
+              content: "Task created",
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "missing-call",
+              tool_name: "TaskCreate",
+              toolUseResult: { task: { id: "2", subject: "Review the output" } },
+              content: "Task created",
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(toClaudeTodos(messages)).toEqual([
+      { id: "1", content: "Run tests", status: "pending", priority: "medium" },
+      { id: "2", content: "Review the output", status: "pending", priority: "medium" },
+    ]);
+  });
+
   test("removes tasks deleted by TaskUpdate", () => {
     const state = new Map([
       [

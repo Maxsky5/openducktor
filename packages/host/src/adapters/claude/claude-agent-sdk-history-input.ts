@@ -140,13 +140,21 @@ export const createClaudeHistoryInputProjector = (options: {
       };
     }
 
-    if (entry.type !== "user" || readHistoryToolResults(entry).length > 0) {
+    if (entry.type !== "user") {
       return notHandled;
     }
     if (
       (entry.parent_tool_use_id && !options.includeNestedEntries) ||
       isClaudeMetaHistoryMessage(entry) ||
       !isClaudeHumanUserMessage(entryValue)
+    ) {
+      return handledWithoutMessage;
+    }
+
+    const entryMessage = parseClaudeHistoryConversationEntry(entryValue).message;
+    if (
+      readHistoryToolResults(entry).length > 0 &&
+      readClaudeHistoryDisplayParts(entry.uuid, entryMessage).length === 0
     ) {
       return handledWithoutMessage;
     }
@@ -163,7 +171,6 @@ export const createClaudeHistoryInputProjector = (options: {
       compactPromptIds.add(promptId);
     }
 
-    const entryMessage = parseClaudeHistoryConversationEntry(entryValue).message;
     const rawText = historyMessageText(entryMessage);
     const command = readClaudeCommandEnvelope(rawText);
     if (promptId && compactPromptIds.has(promptId) && !command) {

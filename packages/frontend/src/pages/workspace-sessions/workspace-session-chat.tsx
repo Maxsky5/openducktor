@@ -131,12 +131,14 @@ export function WorkspaceSessionChat({
     update: actions.updateSessionModel,
   });
   const { catalog: modelCatalog, error: catalogError } = modelTarget;
-  const sessionLoad = {
+  useSelectedSessionHistoryLoad({
+    session: isVisible ? session : null,
+    runtimeReadinessState: runtimeReadiness.state,
+  });
+  const contextError = useSelectedSessionContextLoad({
     session: isStarting ? null : session,
     runtimeReadinessState: runtimeReadiness.state,
-  };
-  useSelectedSessionHistoryLoad(sessionLoad);
-  const contextError = useSelectedSessionContextLoad(sessionLoad);
+  });
   const picker = useWorkspaceSessionModelPicker(workspace.repoPath, modelTarget);
   const runtimePresentation = useMemo(
     () =>
@@ -188,20 +190,22 @@ export function WorkspaceSessionChat({
     readOnlyReason: chatState.isReadOnly ? chatState.readOnlyReason : null,
     onActionsReady,
   });
-  const canResumeSession = canResumeWorkspaceSession({
-    identity,
-    isStarting,
-    activityState: chatState.activityState,
-    messages: session?.messages.items ?? [],
-    runtimeDefinitions: runtime.allRuntimeDefinitions,
-    runtimeKind: record.runtimeKind,
-  });
   const canInteract = canInteractWithWorkspaceSession({
     runtimeInteractionEnabled: readiness.interactionEnabled,
     observationReady: chatState.observationReady,
     recordsError,
     targetFault: chatState.targetFault,
   });
+  const canResumeSession =
+    canInteract &&
+    canResumeWorkspaceSession({
+      identity,
+      isStarting,
+      activityState: chatState.activityState,
+      messages: session?.messages.items ?? [],
+      runtimeDefinitions: runtime.allRuntimeDefinitions,
+      runtimeKind: record.runtimeKind,
+    });
   const approvalActions = useAgentSessionApprovalActions({
     sessionIdentity: identity,
     pendingApprovals: chatState.pendingApprovals,
@@ -257,7 +261,7 @@ export function WorkspaceSessionChat({
         runtimeData.runtimePolicyError,
         runtimeData.todosError,
         catalogError,
-        canResumeSession && canInteract ? null : actions.persistentResumeError,
+        canResumeSession ? null : actions.persistentResumeError,
       ].find((error) => error != null) ?? null,
     interactionEnabled: canInteract,
     runtimePresentation,
@@ -279,18 +283,17 @@ export function WorkspaceSessionChat({
       isSubmittingByRequestId: questionActions.isSubmittingQuestionByRequestId,
       onSubmit: questionActions.onSubmitQuestionAnswers,
     },
-    interruptedTurnResume:
-      canResumeSession && canInteract
-        ? {
-            isPending: actions.isResumingSession,
-            isDisabled: isSavingModel,
-            error: actions.resumeSessionError,
-            usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
-            onResume: () => {
-              if (identity) actions.resumeInterruptedTurn(identity);
-            },
-          }
-        : undefined,
+    interruptedTurnResume: canResumeSession
+      ? {
+          isPending: actions.isResumingSession,
+          isDisabled: isSavingModel,
+          error: actions.resumeSessionError,
+          usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
+          onResume: () => {
+            if (identity) actions.resumeInterruptedTurn(identity);
+          },
+        }
+      : undefined,
     composer: buildWorkspaceSessionComposer({
       state: chatState,
       identity,

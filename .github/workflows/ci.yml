@@ -116,5 +116,5 @@ jobs:
       - name: Install Electron runtime for worker checks
         run: node apps/electron/node_modules/electron/install.js
 
-      - name: Check built image workers in Node, Bun, and Electron
+      - name: Check built workers in Node, Bun, and Electron
         run: bun run test:workers

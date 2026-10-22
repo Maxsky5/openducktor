@@ -1,12 +1,13 @@
-import {
-  getSessionInfo,
-  getSessionMessages,
-  getSubagentMessages,
-  type SessionMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Effect } from "effect";
 import { AgentRuntimeQueryError, type LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { z } from "zod";
-import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  HostOperationError,
+  HostValidationError,
+  type HostValidationErrorAggregate,
+} from "../../effect/host-errors";
 import {
   parseClaudeHistoryAssistantEntry,
   parseClaudeHistoryConversationEntry,
@@ -14,9 +15,12 @@ import {
   type ClaudeHistorySubagentSystemMessageIngress,
 } from "./claude-agent-sdk-ingress-schemas";
 import {
-  claudeSubagentAgentId,
-  parseClaudeTranscriptTarget,
-} from "./claude-agent-sdk-subagent-transcripts";
+  CLAUDE_TRANSCRIPT_MISSING_MESSAGE,
+  readClaudeTranscript,
+  type ClaudeTranscriptReadOptions,
+  type ClaudeTranscriptReadFailure,
+  type ClaudeTranscriptSource,
+} from "./claude-transcript-reader";
 import { readText } from "./claude-agent-sdk-utils";
 
 type ClaudeHistoryEntry = {
@@ -26,6 +30,7 @@ type ClaudeHistoryEntry = {
   subtype?: unknown;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
+  isVisibleInTranscriptOnly?: boolean;
   isMeta?: boolean;
   is_meta?: boolean;
   interruptedByShutdown?: boolean;
@@ -134,54 +139,58 @@ export const isClaudeHistoryCompactBoundaryMessage = (
 ): entry is ClaudeHistoryCompactBoundaryMessage =>
   entry.type === "system" && readText(entry.subtype) === "compact_boundary";
 
-const CLAUDE_SESSION_MISSING_MESSAGE =
-  "The selected Claude session is unavailable. Check its history on the host.";
+const claudeNativeConversationIdentitySchema = z.object({
+  uuid: z.string(),
+  session_id: z.string(),
+});
 
 export const isClaudeSessionMissingError = (cause: unknown): boolean =>
   cause instanceof AgentRuntimeQueryError &&
   cause.code === "request_failed" &&
-  cause.message === CLAUDE_SESSION_MISSING_MESSAGE;
+  cause.message === CLAUDE_TRANSCRIPT_MISSING_MESSAGE;
 
-export const loadClaudeSessionMessages = async (
+export type ClaudeHistoryReadFailure = ClaudeTranscriptReadFailure | HostValidationErrorAggregate;
+
+export const loadClaudeHistoryProjectionInput = (
   input: LoadAgentSessionHistoryInput,
-): Promise<SessionMessage[]> => {
-  const target = parseClaudeTranscriptTarget(input.externalSessionId);
-  if (!z.uuid().safeParse(target.sessionId).success) {
-    throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
-  }
-  try {
-    const session = await getSessionInfo(target.sessionId, { dir: input.workingDirectory });
-    if (!session || session.sessionId !== target.sessionId || !session.cwd) {
-      throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
-    }
-    if (session.cwd !== input.workingDirectory) {
-      throw new AgentRuntimeQueryError(
-        "scope_mismatch",
-        "The Claude session belongs to another working directory. Select the matching session.",
-      );
-    }
-    const agentId = claudeSubagentAgentId(input.externalSessionId);
-    const messages = agentId
-      ? await getSubagentMessages(target.sessionId, agentId, { dir: input.workingDirectory })
-      : await getSessionMessages(target.sessionId, {
-          dir: input.workingDirectory,
-          includeSystemMessages: true,
-        });
-    if (messages.length === 0) {
-      throw new AgentRuntimeQueryError("request_failed", CLAUDE_SESSION_MISSING_MESSAGE);
-    }
-    return parseClaudeHistoryMessages(messages);
-  } catch (cause) {
-    if (cause instanceof AgentRuntimeQueryError || cause instanceof HostValidationError)
-      throw cause;
-    throw new HostOperationError({
-      operation: "claude.session.history.read",
-      message: `Failed to read Claude session '${target.sessionId}' history: ${errorMessage(cause)}`,
-      cause,
-      details: {
-        externalSessionId: input.externalSessionId,
-        workingDirectory: input.workingDirectory,
+  options: ClaudeTranscriptReadOptions = {},
+): Effect.Effect<
+  { messages: readonly ClaudeHistoryMessage[]; source: ClaudeTranscriptSource },
+  ClaudeHistoryReadFailure
+> =>
+  Effect.gen(function* () {
+    const result = yield* options.reader
+      ? options.reader.read(input)
+      : readClaudeTranscript(input, options);
+    return yield* Effect.try({
+      try: () => {
+        for (const record of result.messages) {
+          if (record.type === "user" || record.type === "assistant") {
+            claudeNativeConversationIdentitySchema.parse(record);
+            const entry = { ...record, type: record.type };
+            if (record.type === "assistant") parseClaudeHistoryAssistantEntry(entry);
+            else parseClaudeHistoryConversationEntry(entry);
+          }
+        }
+        // SAFETY: Conversation identities and payloads are validated above; the reader retains only recognized native history record kinds.
+        return {
+          messages: result.messages as readonly ClaudeHistoryMessage[],
+          source: result.source,
+        };
       },
+      catch: (cause) =>
+        cause instanceof HostValidationError
+          ? cause
+          : new HostOperationError({
+              operation: "claude.session.history.read",
+              message: `Failed to read Claude session '${input.externalSessionId}' history: ${errorMessage(cause)}`,
+              cause,
+            }),
     });
-  }
-};
+  });
+
+export const loadClaudeSessionMessages = (
+  input: LoadAgentSessionHistoryInput,
+  options: ClaudeTranscriptReadOptions = {},
+): Effect.Effect<readonly ClaudeHistoryMessage[], ClaudeHistoryReadFailure> =>
+  loadClaudeHistoryProjectionInput(input, options).pipe(Effect.map((result) => result.messages));

@@ -1,32 +1,12 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
-import { resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { checkWorkerBundles } from "./worker-bundle-checks.mjs";
 
-const script = fileURLToPath(import.meta.url);
-const root = fileURLToPath(new URL("../", import.meta.url));
 const workerPath = process.argv[2];
 if (!workerPath) {
-  const electron = createRequire(new URL("../apps/electron/package.json", import.meta.url))(
-    "electron",
-  );
-  for (const [runtime, artifact] of [
-    [process.execPath, "apps/electron/dist/generated-image-worker.js"],
-    [process.execPath, "packages/openducktor-web/dist/generated-image-worker.js"],
-    ["bun", "packages/openducktor-web/dist/generated-image-worker.js"],
-    [electron, "apps/electron/dist/generated-image-worker.js"],
-  ]) {
-    const result = spawnSync(runtime, [script, resolve(root, artifact)], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-      stdio: "inherit",
-      timeout: 5000,
-    });
-    if (result.error) throw result.error;
-    assert.equal(result.status, 0, `Worker bundle check failed under ${runtime}`);
-  }
+  checkWorkerBundles(import.meta.url, "generated-image-worker.js");
 } else {
   const worker = new Worker(pathToFileURL(workerPath));
   let id = 0;

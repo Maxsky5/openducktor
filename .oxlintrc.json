@@ -148,7 +148,7 @@
               {
                 "name": "@anthropic-ai/claude-agent-sdk",
                 "importNames": ["importSessionToStore"],
-                "message": "Read Claude history through getSessionMessages or getSubagentMessages. Raw transcript imports are forbidden."
+                "message": "Read complete Claude history through the streaming transcript reader. Raw SDK session-store imports are forbidden."
               }
             ]
           }

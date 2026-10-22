@@ -54,7 +54,7 @@ export type ClaudeHistoryToolResultState = ClaudeBackgroundToolState & {
 
 /** Live task IDs may be newer than saved snapshots or belong to a later prompt. */
 export const createClaudeHistoryTaskCheck = (
-  messages: ClaudeHistoryMessage[],
+  messages: readonly ClaudeHistoryMessage[],
   options: {
     currentBackgroundTaskIds?: ReadonlySet<string>;
     includeNestedEntries?: boolean;
@@ -72,12 +72,19 @@ export const createClaudeHistoryTaskCheck = (
   const newerPrompt = liveUserMessages.some(
     (message) => !replyTime || Date.parse(message.timestamp) > Date.parse(replyTime),
   );
-  return (index: number, state: ClaudeHistoryToolResultState): boolean =>
-    hasActiveClaudeBackgroundWork(state) ||
-    (index > lastSnapshot &&
+  return (index: number, state: ClaudeHistoryToolResultState): boolean => {
+    if (
+      options.currentBackgroundTaskIds !== undefined &&
+      index > lastSnapshot &&
       index >= lastReply &&
-      !newerPrompt &&
-      (options.currentBackgroundTaskIds?.size ?? 0) > 0);
+      !newerPrompt
+    ) {
+      return (
+        state.activeBackgroundSubagentTaskIds.size > 0 || options.currentBackgroundTaskIds.size > 0
+      );
+    }
+    return hasActiveClaudeBackgroundWork(state);
+  };
 };
 
 export const applyClaudeHistoryTaskSnapshot = (
@@ -206,6 +213,7 @@ export const appendClaudeHistorySubagentSystemMessage = ({
     message,
     session: {
       activeBackgroundSubagentTaskIds: state.activeBackgroundSubagentTaskIds,
+      backgroundToolTasksById: state.backgroundToolTasksById,
       externalSessionId: historySessionId(state, entry),
       hiddenSubagentTaskIds: state.hiddenSubagentTaskIds,
       retractedSubagentTaskIds: state.retractedSubagentTaskIds,

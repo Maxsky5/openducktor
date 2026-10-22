@@ -1,4 +1,8 @@
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentModelSelection,
+  LoadAgentSessionHistoryInput,
+} from "@openducktor/core";
 import { expect, mock, spyOn, test } from "bun:test";
 import {
   DEFAULT_AGENT_RUNTIMES,
@@ -26,6 +30,8 @@ import { createAgentMessageQueuesStore } from "@openducktor/frontend-core/sessio
 import { createAgentSessionsStore } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/drafts/inline-comment-draft-storage";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { loadSessionHistoryIntoStore } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/session-history-loader";
+import { createSessionHistoryReadGeneration } from "@openducktor/frontend-core/sessions/agent-orchestrator/history/session-history-read-generation";
 import {
   RuntimeDefinitionsContext,
   type RuntimeDefinitionsContextValue,
@@ -399,6 +405,117 @@ const createPresentationScenario = (
     }),
   };
 };
+
+test("loads scoped Claude history before preparation completes and keeps Send locked", async () => {
+  const { Harness, connection, workspace, entry, session, store, definitions, operations } =
+    createPresentationScenario("claude");
+  definitions.runtimeDefinitions = [CLAUDE_RUNTIME_DESCRIPTOR];
+  definitions.availableRuntimeDefinitions = [CLAUDE_RUNTIME_DESCRIPTOR];
+  const model = { providerId: "claude", modelId: "claude-haiku-5-5", variant: "low" };
+  entry.selectedModel = { ...model, runtimeKind: "claude" };
+  const coldSession = {
+    ...session,
+    historyLoadState: "not_requested" as const,
+    selectedModel: model,
+    livePresence: "unobserved" as const,
+  };
+  store.replaceSession(coldSession);
+  definitions.loadRepoRuntimeCatalog = async () => ({
+    models: {
+      status: "available",
+      catalog: {
+        models: [
+          {
+            id: "claude/claude-haiku-5-5",
+            providerId: "claude",
+            providerName: "Claude",
+            modelId: "claude-haiku-5-5",
+            modelName: "Haiku 5.5",
+            variants: ["low"],
+          },
+        ],
+        defaultModelsByProvider: {},
+      },
+    },
+  });
+  const preparation = Promise.withResolvers<void>();
+  const start = mock(async () => {
+    await preparation.promise;
+    return preparedChatClient(entry, coldSession).workspaceSessionStart();
+  });
+  connection.host.client.workspaceSessionStart = start;
+  const readHistory = mock(async (_input: LoadAgentSessionHistoryInput) => [
+    {
+      messageId: "stored-reply",
+      role: "assistant" as const,
+      timestamp: "2026-10-21T18:21:27.097Z",
+      text: "Stored Claude reply",
+      parts: [],
+    },
+  ]);
+  const context = spyOn(operations, "loadAgentSessionContext");
+  const historyReadGeneration = createSessionHistoryReadGeneration();
+  const chat = (visible: boolean) => (
+    <Harness>
+      <AgentSessionHistoryLoadContext
+        value={{
+          loadAgentSessionHistory: (identity) =>
+            loadSessionHistoryIntoStore({
+              repoPath: workspace.repoPath,
+              identity,
+              adapter: { loadSessionHistory: readHistory },
+              readSessionSnapshot: store.getSessionSnapshot,
+              updateSession: store.updateSession,
+              historyReadGeneration,
+              isStaleRepoOperation: () => false,
+            }),
+        }}
+      >
+        <SessionViewContext value={{ id: entry.id, isActive: visible }}>
+          <WorkspaceSessionChat
+            isVisible={visible}
+            workspace={workspace}
+            record={entry}
+            chatSettings={DEFAULT_CHAT_SETTINGS}
+            reusablePrompts={[]}
+            onToolRefresh={() => {}}
+            isMounted={() => true}
+          />
+        </SessionViewContext>
+      </AgentSessionHistoryLoadContext>
+    </Harness>
+  );
+  const view = render(chat(false));
+  try {
+    await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+    expect(start).not.toHaveBeenCalled();
+    expect(readHistory).not.toHaveBeenCalled();
+    view.rerender(chat(true));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(readHistory).toHaveBeenCalledTimes(1));
+    expect(readHistory.mock.calls[0]?.[0]).toMatchObject({
+      repoPath: workspace.repoPath,
+      runtimeKind: "claude",
+      workingDirectory: coldSession.workingDirectory,
+      externalSessionId: coldSession.externalSessionId,
+      sessionScope: { kind: "repository" },
+      runtimePolicy: { kind: "claude" },
+    });
+    await view.findByText("Stored Claude reply");
+    typeIntoComposer(view.container, "Draft while preparation waits");
+    const send = view.getByRole("button", { name: "Send message" });
+    expect(send.hasAttribute("disabled")).toBe(true);
+    expect(context).not.toHaveBeenCalled();
+    await act(async () => preparation.resolve());
+    await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false));
+    expect(view.getByText("Stored Claude reply")).toBeTruthy();
+    expect(readHistory).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => preparation.resolve());
+    view.unmount();
+    context.mockRestore();
+  }
+});
 
 test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR])(
   "keeps the $kind composer and session settings stable while a selected session prepares",

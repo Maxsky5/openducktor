@@ -33,6 +33,36 @@ const setup = (livePresence: "present" | "unobserved" = "present") => {
   return { wrapper, remove, attach };
 };
 
+test.each([true, false])(
+  "effect replay shares preparation and receives its result, success=%s",
+  async (succeeds) => {
+    const h = setup();
+    const pending = Promise.withResolvers<void>();
+    const prepare = mock(() => pending.promise);
+    const view = renderHook(
+      () => useChatSessionPreparation({ identity, targetKey: "A", enabled: true, prepare }),
+      { wrapper: h.wrapper, reactStrictMode: true },
+    );
+    try {
+      expect(prepare).toHaveBeenCalledTimes(1);
+      expect(view.result.current).toEqual({ ready: false, error: null });
+      await act(async () => {
+        if (succeeds) pending.resolve();
+        else pending.reject(new Error("Runtime could not attach"));
+      });
+      expect(view.result.current).toEqual({
+        ready: succeeds,
+        error: succeeds ? null : "Runtime could not attach",
+      });
+      view.rerender();
+      expect(prepare).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      pending.resolve();
+    }
+  },
+);
+
 test("a hidden view waits to reopen a closed session and reuses a live preparation on return", async () => {
   const h = setup();
   let isActive = true;
@@ -59,10 +89,17 @@ test("a hidden view waits to reopen a closed session and reuses a live preparati
     view.rerender();
     expect(view.result.current.ready).toBe(false);
     expect(prepare).toHaveBeenCalledTimes(2);
+    isActive = false;
+    view.rerender();
     await act(async () => {
       h.attach();
       next.resolve();
     });
+    expect(view.result.current.ready).toBe(false);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    isActive = true;
+    view.rerender();
+    await act(async () => {});
     expect(view.result.current.ready).toBe(true);
     isActive = false;
     view.rerender();

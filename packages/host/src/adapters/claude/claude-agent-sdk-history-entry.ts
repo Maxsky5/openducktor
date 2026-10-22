@@ -1,8 +1,16 @@
+import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
-import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { readStringProp } from "./claude-agent-sdk-utils";
+
+const claudeEffortLevels = new Set<string>([
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] satisfies EffortLevel[]);
 
 export const readHistoryTimestamp = (entry: ClaudeHistoryMessage, now: () => string): string => {
   const timestamp = readStringProp(entry, "timestamp");
@@ -17,18 +25,20 @@ export const readHistorySessionId = (entry: ClaudeHistoryMessage): string =>
 
 export const readHistoryAssistantModel = (
   entry: ClaudeHistoryMessage,
+  model: string | undefined,
 ): AgentModelSelection | undefined => {
   if (entry.type !== "assistant" || isClaudeSyntheticAssistantMessage(entry)) {
     return undefined;
   }
-  const model = readStringProp(parseClaudeHistoryAssistantEntry(entry).message, "model");
-  return model
-    ? {
-        providerId: "claude",
-        modelId: model,
-        runtimeKind: "claude",
-      }
-    : undefined;
+  if (!model) return undefined;
+  const selection: AgentModelSelection = {
+    providerId: "claude",
+    modelId: model,
+    runtimeKind: "claude",
+  };
+  const effort = readStringProp(entry, "perTurnEffort") ?? readStringProp(entry, "effort");
+  if (effort && claudeEffortLevels.has(effort)) selection.variant = effort;
+  return selection;
 };
 
 export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {

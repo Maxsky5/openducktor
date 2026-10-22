@@ -287,12 +287,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 }),
               )
               .pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => {
-                    service.dispose();
-                    unsubscribe();
-                  }),
-                ),
+                Effect.tap(() => service.dispose().pipe(Effect.andThen(Effect.sync(unsubscribe)))),
               );
           }),
         resolvePendingApproval: createClaudePendingApprovalResolver(service, state),

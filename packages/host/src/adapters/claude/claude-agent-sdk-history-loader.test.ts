@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { Effect } from "effect";
 import {
   claudeLiveHistoryContext,
   finalizeClaudeHistory,
@@ -95,25 +96,27 @@ describe("finalizeClaudeHistory", () => {
 describe("loadClaudeHistory", () => {
   test("does not import a transcript for a fresh live session without user turns", async () => {
     await expect(
-      loadClaudeHistory(
-        {
-          repoPath: "/repo",
-          runtimeKind: "claude",
-          workingDirectory: "/missing-worktree",
-          externalSessionId: "fresh-session",
-          runtimePolicy: { kind: "claude" },
-          systemPromptContext: {
-            systemPrompt: "Write a spec.",
-            startedAt: "2026-07-17T10:01:00.000Z",
+      Effect.runPromise(
+        loadClaudeHistory(
+          {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory: "/missing-worktree",
+            externalSessionId: "fresh-session",
+            runtimePolicy: { kind: "claude" },
+            systemPromptContext: {
+              systemPrompt: "Write a spec.",
+              startedAt: "2026-07-17T10:01:00.000Z",
+            },
           },
-        },
-        () => "2026-07-17T10:01:01.000Z",
-        {
-          activeBackgroundTaskIds: () => new Set(),
-          hasActiveWork: () => false,
-          source: "fresh",
-          userMessages: [],
-        },
+          () => "2026-07-17T10:01:01.000Z",
+          {
+            activeBackgroundTaskIds: () => new Set(),
+            hasActiveWork: () => false,
+            source: "fresh",
+            userMessages: [],
+          },
+        ),
       ),
     ).resolves.toEqual([
       {
@@ -129,27 +132,29 @@ describe("loadClaudeHistory", () => {
   test("keeps a fresh accepted user turn visible before Claude creates its transcript", async () => {
     await withEmptyWorktree(async (workingDirectory) => {
       await expect(
-        loadClaudeHistory(
-          {
-            repoPath: "/repo",
-            runtimeKind: "claude",
-            workingDirectory,
-            externalSessionId: "00000000-0000-4000-8000-000000000001",
-            runtimePolicy: { kind: "claude" },
-          },
-          () => "2026-07-17T10:01:01.000Z",
-          {
-            activeBackgroundTaskIds: () => new Set(),
-            hasActiveWork: () => true,
-            source: "fresh",
-            userMessages: [
-              {
-                messageId: "user-1",
-                text: "Inspect the prompt builder.",
-                timestamp: "2026-07-17T10:01:00.000Z",
-              },
-            ],
-          },
+        Effect.runPromise(
+          loadClaudeHistory(
+            {
+              repoPath: "/repo",
+              runtimeKind: "claude",
+              workingDirectory,
+              externalSessionId: "00000000-0000-4000-8000-000000000001",
+              runtimePolicy: { kind: "claude" },
+            },
+            () => "2026-07-17T10:01:01.000Z",
+            {
+              activeBackgroundTaskIds: () => new Set(),
+              hasActiveWork: () => true,
+              source: "fresh",
+              userMessages: [
+                {
+                  messageId: "user-1",
+                  text: "Inspect the prompt builder.",
+                  timestamp: "2026-07-17T10:01:00.000Z",
+                },
+              ],
+            },
+          ),
         ),
       ).resolves.toEqual([
         {
@@ -168,6 +173,36 @@ describe("loadClaudeHistory", () => {
 
   test("throws for a missing transcript after fresh live work stops", async () => {
     await expect(
+      Effect.runPromise(
+        loadClaudeHistory(
+          {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory: "/missing-worktree",
+            externalSessionId: "fresh-session",
+            runtimePolicy: { kind: "claude" },
+          },
+          () => "2026-07-17T10:01:01.000Z",
+          {
+            activeBackgroundTaskIds: () => new Set(),
+            hasActiveWork: () => false,
+            source: "fresh",
+            userMessages: [
+              {
+                messageId: "user-1",
+                text: "Inspect the prompt builder.",
+                timestamp: "2026-07-17T10:01:00.000Z",
+              },
+            ],
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "request_failed" });
+  });
+
+  test("rechecks fresh work after the transcript read starts", async () => {
+    let hasActiveWork = true;
+    const history = Effect.runPromise(
       loadClaudeHistory(
         {
           repoPath: "/repo",
@@ -179,7 +214,7 @@ describe("loadClaudeHistory", () => {
         () => "2026-07-17T10:01:01.000Z",
         {
           activeBackgroundTaskIds: () => new Set(),
-          hasActiveWork: () => false,
+          hasActiveWork: () => hasActiveWork,
           source: "fresh",
           userMessages: [
             {
@@ -190,32 +225,6 @@ describe("loadClaudeHistory", () => {
           ],
         },
       ),
-    ).rejects.toMatchObject({ code: "request_failed" });
-  });
-
-  test("rechecks fresh work after the transcript read starts", async () => {
-    let hasActiveWork = true;
-    const history = loadClaudeHistory(
-      {
-        repoPath: "/repo",
-        runtimeKind: "claude",
-        workingDirectory: "/missing-worktree",
-        externalSessionId: "fresh-session",
-        runtimePolicy: { kind: "claude" },
-      },
-      () => "2026-07-17T10:01:01.000Z",
-      {
-        activeBackgroundTaskIds: () => new Set(),
-        hasActiveWork: () => hasActiveWork,
-        source: "fresh",
-        userMessages: [
-          {
-            messageId: "user-1",
-            text: "Inspect the prompt builder.",
-            timestamp: "2026-07-17T10:01:00.000Z",
-          },
-        ],
-      },
     );
 
     hasActiveWork = false;
@@ -225,21 +234,23 @@ describe("loadClaudeHistory", () => {
 
   test("imports persisted history for a resumed live session without new user turns", async () => {
     await expect(
-      loadClaudeHistory(
-        {
-          repoPath: "/repo",
-          runtimeKind: "claude",
-          workingDirectory: "/missing-worktree",
-          externalSessionId: "resumed-session",
-          runtimePolicy: { kind: "claude" },
-        },
-        () => "2026-07-17T10:01:01.000Z",
-        {
-          activeBackgroundTaskIds: () => new Set(),
-          hasActiveWork: () => false,
-          source: "persisted",
-          userMessages: [],
-        },
+      Effect.runPromise(
+        loadClaudeHistory(
+          {
+            repoPath: "/repo",
+            runtimeKind: "claude",
+            workingDirectory: "/missing-worktree",
+            externalSessionId: "resumed-session",
+            runtimePolicy: { kind: "claude" },
+          },
+          () => "2026-07-17T10:01:01.000Z",
+          {
+            activeBackgroundTaskIds: () => new Set(),
+            hasActiveWork: () => false,
+            source: "persisted",
+            userMessages: [],
+          },
+        ),
       ),
     ).rejects.toMatchObject({
       code: "request_failed",

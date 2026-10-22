@@ -1,8 +1,12 @@
+import type { ClaudeTranscriptReadOptions } from "./claude-transcript-reader";
 import { type AgentSessionTodoItem, type LoadAgentSessionTodosInput } from "@openducktor/core";
 import { z } from "zod";
+import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import { isNestedHistoryEntry } from "./claude-agent-sdk-history-entry";
 import {
   type ClaudeHistoryMessage,
+  type ClaudeHistoryReadFailure,
   loadClaudeSessionMessages,
 } from "./claude-agent-sdk-history-messages";
 import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
@@ -15,6 +19,7 @@ import {
   type ClaudeDecodedToolResult,
   type ClaudeDecodedToolUse,
   decodeClaudeToolUseBlock,
+  isClaudeToolUseBlockType,
 } from "./claude-agent-sdk-tool-shapes";
 import {
   isClaudeToolUseRetracted,
@@ -169,7 +174,7 @@ export const applyClaudeTaskToolResult = ({
   state,
   tool,
 }: ClaudeTaskToolResultInput): AgentSessionTodoItem[] | null => {
-  if (isError) {
+  if (isError || !isClaudeTodoTool(tool)) {
     return null;
   }
   const output = readTaskOutput(raw);
@@ -245,7 +250,7 @@ export const retractClaudeTodoToolResults = (
 };
 
 export const toClaudeTodos = (
-  messages: ClaudeHistoryMessage[],
+  messages: readonly ClaudeHistoryMessage[],
   options: { includeNestedEntries?: boolean } = {},
 ): AgentSessionTodoItem[] => {
   const projectionState: ClaudeTodoProjectionState = { todosById: new Map() };
@@ -262,17 +267,20 @@ export const toClaudeTodos = (
   };
 
   for (const entry of messages) {
-    const retracted = retractClaudeTranscriptCorrelations(
-      correlationState,
-      retractedHistoryMessageIds(entry),
-    );
-    retractClaudeTodoToolResults(projectionState, retracted.toolUseIds);
+    const retractedMessageIds = retractedHistoryMessageIds(entry);
+    if (retractedMessageIds.length > 0) {
+      const retracted = retractClaudeTranscriptCorrelations(correlationState, retractedMessageIds);
+      retractClaudeTodoToolResults(projectionState, retracted.toolUseIds);
+    }
     if (!options.includeNestedEntries && isNestedHistoryEntry(entry)) {
       continue;
     }
     if (entry.type === "assistant") {
       const content = parseClaudeHistoryAssistantEntry(entry).message.content;
       for (const [index, block] of content.entries()) {
+        if (!isClaudeToolUseBlockType(block.type)) {
+          continue;
+        }
         const toolUse = decodeClaudeToolUseBlock({
           block,
           fallbackMessageId: entry.uuid,
@@ -283,7 +291,7 @@ export const toClaudeTodos = (
         }
         toolMessageIdsByCallId.set(toolUse.callId, entry.uuid);
         toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
-        if (toolUse.input) {
+        if (toolUse.input && isClaudeTodoTool(toolUse.toolName)) {
           toolInputsByCallId.set(toolUse.callId, toolUse.input);
         }
       }
@@ -297,7 +305,7 @@ export const toClaudeTodos = (
         continue;
       }
       const tool = toolNamesByCallId.get(result.toolUseId) ?? result.toolName;
-      if (!tool) {
+      if (!tool || !isClaudeTodoTool(tool)) {
         continue;
       }
       const input = toolInputsByCallId.get(result.toolUseId);
@@ -321,11 +329,21 @@ export const toClaudeTodos = (
   return [...projectionState.todosById.values()];
 };
 
-export const loadClaudeTodos = async (
+export const loadClaudeTodos = (
   input: LoadAgentSessionTodosInput,
-): Promise<AgentSessionTodoItem[]> => {
-  const messages = await loadClaudeSessionMessages(input);
-  return toClaudeTodos(messages, {
-    includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
-  });
-};
+  options: ClaudeTranscriptReadOptions = {},
+): Effect.Effect<AgentSessionTodoItem[], ClaudeHistoryReadFailure> =>
+  loadClaudeSessionMessages(input, options).pipe(
+    Effect.flatMap((messages) =>
+      Effect.try({
+        try: () =>
+          toClaudeTodos(messages, {
+            includeNestedEntries: isClaudeSubagentTranscriptTarget(input.externalSessionId),
+          }),
+        catch: (cause) => {
+          if (cause instanceof HostValidationError) return cause;
+          throw cause;
+        },
+      }),
+    ),
+  );

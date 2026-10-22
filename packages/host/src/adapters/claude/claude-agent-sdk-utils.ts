@@ -13,10 +13,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { toAgentSessionSendError } from "../../ports/agent-session-send-error";
-import {
-  type ClaudeProtocolObject,
-  claudeProtocolObjectSchema,
-} from "./claude-agent-sdk-ingress-schemas";
+import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import type {
   ClaudeAgentSdkServiceError,
   ClaudeSessionContext,
@@ -47,7 +44,10 @@ type ClaudeStringPropertySource =
 export const INIT_TIMEOUT_MS = 60_000;
 export const CONTINUATION_ADMISSION_TIMEOUT_MS = 30_000;
 
-const toClaudeServiceError = (operation: string, cause: unknown): ClaudeAgentSdkServiceError => {
+export const toClaudeServiceError = (
+  operation: string,
+  cause: unknown,
+): ClaudeAgentSdkServiceError => {
   const sendError = toAgentSessionSendError(cause);
   if (sendError) return sendError;
   if (cause instanceof HostValidationError || cause instanceof HostOperationError) {
@@ -108,8 +108,9 @@ export const readStringProp = (
   value: ClaudeStringPropertySource,
   key: string,
 ): string | undefined => {
-  const parsed = claudeProtocolObjectSchema.safeParse(value);
-  return parsed.success ? readText(parsed.data[key]) : undefined;
+  return value === undefined
+    ? undefined
+    : readText(Object.getOwnPropertyDescriptor(value, key)?.value);
 };
 
 export const claudeSessionScope = (input: ClaudeSessionInput) => input.sessionScope;

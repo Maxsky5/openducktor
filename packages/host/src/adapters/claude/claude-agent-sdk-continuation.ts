@@ -1,4 +1,5 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { Effect } from "effect";
 import {
   interruptedTurnResumeError,
   type InterruptedTurnResumeError,
@@ -101,14 +102,15 @@ export const decideClaudePersistedContinuation = (
  * the live state cannot answer the latest-turn question. `readTranscript` reads the
  * persisted history for the session and runs only for that second step.
  */
-export const decideClaudeContinuation = async (
+export const decideClaudeContinuation = <Failure>(
   session: ClaudeSession,
   externalSessionId: string,
-  readTranscript: () => Promise<readonly AgentSessionHistoryMessage[]>,
-): Promise<ClaudeContinuationDecision> => {
-  const liveDecision = decideClaudeLiveContinuation(session, externalSessionId);
-  if (liveDecision.kind !== "needs_transcript") {
-    return liveDecision;
-  }
-  return decideClaudePersistedContinuation(await readTranscript(), externalSessionId);
-};
+  readTranscript: () => Effect.Effect<readonly AgentSessionHistoryMessage[], Failure>,
+): Effect.Effect<ClaudeContinuationDecision, Failure> =>
+  Effect.gen(function* () {
+    const liveDecision = decideClaudeLiveContinuation(session, externalSessionId);
+    if (liveDecision.kind !== "needs_transcript") {
+      return liveDecision;
+    }
+    return decideClaudePersistedContinuation(yield* readTranscript(), externalSessionId);
+  });

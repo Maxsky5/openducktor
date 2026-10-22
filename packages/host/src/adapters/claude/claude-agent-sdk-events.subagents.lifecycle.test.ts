@@ -9,10 +9,14 @@ import {
 } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage subagent task lifecycle", () => {
-  test("maps Claude task events for Agent tool calls without subagent_type", () => {
+  test.each([
+    ["Agent", undefined],
+    ["SendMessage", "local_agent"],
+    ["SendMessage", "remote_agent"],
+  ] as const)("maps Claude agent task starts from %s with task type %s", (toolName, taskType) => {
     const events: AgentEvent[] = [];
     const session = createSession();
-    session.toolNamesByCallId.set("toolu_agent_1", "Agent");
+    session.toolNamesByCallId.set("toolu_agent_1", toolName);
     session.toolMessageIdsByCallId.set("toolu_agent_1", "assistant-1");
     const emit = (event: AgentEvent) => events.push(event);
     const modelSelection = (model: string) => ({
@@ -20,20 +24,37 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
       modelId: model,
       runtimeKind: "claude" as const,
     });
+    const startMessage: Parameters<typeof claudeSdkMessageFixture>[0] = {
+      type: "system",
+      subtype: "task_started",
+      task_id: "agent-task-1",
+      tool_use_id: "toolu_agent_1",
+      description: "Locate package.json",
+      prompt: "Find the root package.json",
+      uuid: "8c6e09b4-c141-40b5-8cc2-56a175dee427",
+      session_id: "session-1",
+    };
+    if (taskType) startMessage.task_type = taskType;
 
     handleClaudeSdkMessage({
       session,
       timestamp: "2026-06-25T20:00:00.000Z",
       modelSelection,
       emit,
+      message: claudeSdkMessageFixture(startMessage),
+    });
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:01.000Z",
+      modelSelection,
+      emit,
       message: claudeSdkMessageFixture({
         type: "system",
-        subtype: "task_started",
+        subtype: "task_notification",
         task_id: "agent-task-1",
-        tool_use_id: "toolu_agent_1",
-        description: "Locate package.json",
-        prompt: "Find the root package.json",
-        uuid: "8c6e09b4-c141-40b5-8cc2-56a175dee427",
+        status: "completed",
+        summary: "Located package.json",
+        uuid: "8c6e09b4-c141-40b5-8cc2-56a175dee428",
         session_id: "session-1",
       }),
     });
@@ -49,6 +70,15 @@ describe("handleClaudeSdkMessage subagent task lifecycle", () => {
           externalSessionId: "session-1::claude-subagent::agent-task-1",
           description: "Locate package.json",
           prompt: "Find the root package.json",
+        }),
+      }),
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "subagent",
+          correlationKey: "toolu_agent_1",
+          status: "completed",
+          externalSessionId: "session-1::claude-subagent::agent-task-1",
         }),
       }),
     ]);

@@ -11,37 +11,43 @@ import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { toolIcon } from "./agent-chat-tool-icon";
 import { ToolInputDetails } from "./agent-chat-tool-input-details";
 import { ToolJsonDetails } from "./agent-chat-tool-json-details";
-import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
+import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 
 const WORKFLOW_TOOL_APPEARANCE = {
   preparing: {
+    activity: "preparing",
     label: "PREPARING",
     statusClassName: "border-info-border bg-info-surface text-info-surface-foreground",
     foregroundClassName: "text-info-surface-foreground",
   },
   queued: {
+    activity: null,
     label: "PREPARING",
     statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
     foregroundClassName: "text-pending-surface-foreground",
   },
   executing: {
+    activity: "running",
     label: "RUNNING",
     statusClassName: "border-info-border bg-info-surface text-info-surface-foreground",
     foregroundClassName: "text-info-surface-foreground",
   },
   failed: {
+    activity: null,
     label: "FAILED",
     statusClassName:
       "border-destructive-border bg-destructive-surface text-destructive-surface-foreground",
     foregroundClassName: "text-destructive-surface-foreground",
   },
   cancelled: {
+    activity: null,
     label: "CANCELLED",
     statusClassName:
       "border-cancelled-border bg-cancelled-surface text-cancelled-surface-foreground",
     foregroundClassName: "text-cancelled-surface-foreground",
   },
   completed: {
+    activity: null,
     label: null,
     statusClassName: "border-pending-border bg-pending-surface text-pending-surface-foreground",
     foregroundClassName: "text-success-surface-foreground",
@@ -49,6 +55,7 @@ const WORKFLOW_TOOL_APPEARANCE = {
 } satisfies Record<
   ReturnType<typeof getToolLifecyclePhase>,
   {
+    activity: ToolMessageActivity;
     label: string | null;
     statusClassName: string;
     foregroundClassName: string;
@@ -76,8 +83,8 @@ export const WorkflowToolMessage = ({
   const hasError = hasNonEmptyText(meta.error);
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const isFailure = lifecyclePhase === "failed";
-  const isActive = lifecyclePhase === "preparing" || lifecyclePhase === "executing";
   const {
+    activity,
     label: statusLabel,
     statusClassName,
     foregroundClassName,
@@ -99,7 +106,7 @@ export const WorkflowToolMessage = ({
           </span>
         ) : null}
         <ToolMessageTiming
-          showSpinner={isActive}
+          activity={activity}
           durationMs={durationMs}
           timeLabel={timeLabel}
           className="text-current/75 font-normal normal-case"

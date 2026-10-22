@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import { canResumeInterruptedTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import {
   createSessionMessagesFixture,
   findSessionMessageForTest,
@@ -8,6 +10,8 @@ import {
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { getToolDuration } from "@/components/features/agents/agent-chat/tool-duration";
+import { buildAgentChatTranscriptModel } from "@/components/features/agents/agent-chat/agent-chat-transcript-model";
+import { getAssistantFooterData } from "@/components/features/agents/agent-chat/message-formatting";
 import {
   applyLoadedSessionHistory,
   historyToChatMessages,
@@ -1082,48 +1086,81 @@ describe("agent-orchestrator/support/session-history-chat-messages", () => {
     expect(assistant.meta.durationMs).toBe(46_000);
   });
 
-  test("uses Codex turn user and final assistant timestamps for history-loaded duration", () => {
-    const messages = historyToChatMessages(
-      [
-        {
-          messageId: "codex-user-1",
-          role: "user",
-          state: "read",
-          timestamp: "2026-02-22T08:00:00.000Z",
-          text: "Write the spec",
-          displayParts: [{ kind: "text", text: "Write the spec" }],
-          parts: [],
-        },
-        {
-          messageId: "codex-agent-final",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:30.000Z",
-          text: "Persisted the canonical spec.",
-          parts: [
-            {
-              kind: "step",
-              messageId: "codex-agent-final",
-              partId: "codex-agent-final-finish",
-              phase: "finish",
-              reason: "stop",
-            },
-          ],
-        },
-      ],
-      {
-        role: "spec",
-      },
-    );
+  test.each([false, true])(
+    "hydrates a completed turn with its duration and model footer (structured text: %s)",
+    (structuredText) => {
+      const session = applyLoadedSessionHistory(
+        createAgentSessionFixture({
+          runtimeKind: "claude",
+          livePresence: "absent",
+          historyLoadState: "not_requested",
+          messages: [],
+          selectedModel: { providerId: "anthropic", modelId: "claude-opus-4-6", variant: "low" },
+        }),
+        [
+          {
+            messageId: "user-1",
+            role: "user",
+            state: "read",
+            timestamp: "2026-02-22T08:00:00.000Z",
+            text: "Write the spec",
+            displayParts: [{ kind: "text", text: "Write the spec" }],
+            parts: [],
+          },
+          {
+            messageId: "agent-final",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:30.000Z",
+            text: "Persisted the canonical spec.",
+            model: { providerId: "anthropic", modelId: "claude-sonnet-4-6", variant: "high" },
+            parts: [
+              ...(structuredText
+                ? [
+                    {
+                      kind: "text" as const,
+                      messageId: "agent-final",
+                      partId: "agent-final-text",
+                      text: "Persisted the canonical spec.",
+                      completed: true,
+                    },
+                  ]
+                : []),
+              {
+                kind: "step",
+                messageId: "agent-final",
+                partId: "agent-final-finish",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+        ],
+      );
 
-    expect(messages).toHaveLength(2);
-    const assistant = sessionMessageAt(historyOwner(messages), 1);
-    if (assistant?.meta?.kind !== "assistant") {
-      throw new Error("Expected assistant message with assistant meta");
-    }
+      const assistant = session.messages.items.at(-1);
+      if (assistant?.meta?.kind !== "assistant") {
+        throw new Error("Expected assistant message with assistant meta");
+      }
 
-    expect(assistant.meta.isFinal).toBe(true);
-    expect(assistant.meta.durationMs).toBe(30_000);
-  });
+      const shouldShowResume = canResumeInterruptedTurn({
+        activityState: "idle",
+        messages: session.messages.items,
+        runtimeDescriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+      });
+      expect(shouldShowResume).toBe(false);
+      expect(getAssistantFooterData(assistant, session.runtimeKind).infoParts).toEqual([
+        "anthropic/claude-sonnet-4-6",
+        "high",
+      ]);
+      const transcript = buildAgentChatTranscriptModel(
+        { ...session, activityState: "idle" },
+        { showThinkingMessages: false },
+      );
+      expect(transcript.rows.filter((row) => row.kind === "turn_duration")).toEqual([
+        expect.objectContaining({ durationMs: 30_000 }),
+      ]);
+    },
+  );
 
   test("uses explicit history-loaded assistant turn duration when provided", () => {
     const messages = historyToChatMessages(

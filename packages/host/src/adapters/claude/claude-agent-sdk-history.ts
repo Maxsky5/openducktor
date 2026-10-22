@@ -3,12 +3,12 @@ import { z } from "zod";
 import { CLAUDE_COMPACTED_MESSAGE } from "./claude-agent-sdk-compaction";
 import {
   addClaudeHistoryFinishStep,
+  clearClaudeHistoryAssistantFinality,
   isLiveFinalAssistantStopReason,
   type MutableAssistantHistoryMessage,
   moveNestedResultToEnd,
   projectClaudeHistoryAssistantMessage,
   toAssistantErrorNotice,
-  removeClaudeHistoryFinishStep,
   updateClaudeHistoryAssistantSnapshot,
 } from "./claude-agent-sdk-history-assistant";
 import {
@@ -16,6 +16,10 @@ import {
   readHistorySessionId,
   readHistoryTimestamp,
 } from "./claude-agent-sdk-history-entry";
+import {
+  createClaudeHistoryFinality,
+  readClaudeHistoryAssistantTracking,
+} from "./claude-agent-sdk-history-finality";
 import {
   type ClaudeHistoryMessage,
   isClaudeHistoryBackgroundTasksChangedMessage,
@@ -28,9 +32,8 @@ import {
   type ManualCompactionInput,
 } from "./claude-agent-sdk-history-input";
 import {
-  appendUnmatchedLiveUserMessages,
+  mergeUnmatchedLiveUserMessages,
   type ClaudeLiveUserMessage,
-  hasFinalStopStep,
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
 import {
@@ -65,7 +68,7 @@ import {
 const claudeCompactMetadataSchema = z.object({ trigger: z.string().optional() });
 
 export const toClaudeHistoryMessages = (
-  messages: ClaudeHistoryMessage[],
+  messages: readonly ClaudeHistoryMessage[],
   now: () => string,
   liveUserMessages: readonly ClaudeLiveUserMessage[] = [],
   options: {
@@ -116,6 +119,7 @@ export const toClaudeHistoryMessages = (
     transcriptExternalSessionId: options.transcriptExternalSessionId,
   };
   const hasBackgroundWork = createClaudeHistoryTaskCheck(messages, options, liveUserMessages);
+  const finality = createClaudeHistoryFinality(toolResultState);
   const projectHistoryInput = createClaudeHistoryInputProjector({ ...options, liveUserMessages });
   let lastAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastError: ReturnType<typeof toAssistantErrorNotice> = null;
@@ -123,7 +127,6 @@ export const toClaudeHistoryMessages = (
   let lastAssistantText: string | undefined;
   let lastFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastFinalAssistantText: string | undefined;
-  let lastAutonomousFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let assistantTurnOriginKind: string | undefined;
   let pendingManualCompaction: ManualCompactionInput | null = null;
   let manualCompactionBoundaryReceived = false;
@@ -147,26 +150,10 @@ export const toClaudeHistoryMessages = (
     lastFinalAssistantMessage = null;
     lastFinalAssistantText = undefined;
   };
-  const rebuildLastAssistantTracking = () => {
-    resetCurrentUserTurnAssistantTracking();
-    for (const message of history) {
-      if (message.role !== "assistant") {
-        continue;
-      }
-      lastAssistantMessage = message;
-      const messageText = message.text.trim();
-      if (messageText.length > 0) {
-        lastAssistantTextMessage = message;
-        lastAssistantText = messageText;
-      }
-      if (messageText.length > 0 && hasFinalStopStep(message)) {
-        lastFinalAssistantMessage = message;
-        lastFinalAssistantText = messageText;
-      }
-    }
-  };
   const removeRetractedMessages = (messageIds: string[]) => {
+    if (messageIds.length === 0) return;
     const retractedIds = new Set(messageIds);
+    finality.retract(retractedIds);
     const retractedCorrelations = retractClaudeTranscriptCorrelations(correlationState, messageIds);
     retractClaudeTodoToolResults(todoProjectionState, retractedCorrelations.toolUseIds);
     for (const toolUseId of retractedCorrelations.toolUseIds) {
@@ -182,13 +169,14 @@ export const toClaudeHistoryMessages = (
       removed = true;
     }
     if (removed) {
-      if (
-        lastAutonomousFinalAssistantMessage &&
-        retractedIds.has(lastAutonomousFinalAssistantMessage.messageId)
-      ) {
-        lastAutonomousFinalAssistantMessage = null;
-      }
-      rebuildLastAssistantTracking();
+      lastError = null;
+      ({
+        lastAssistantMessage,
+        lastAssistantTextMessage,
+        lastAssistantText,
+        lastFinalAssistantMessage,
+        lastFinalAssistantText,
+      } = readClaudeHistoryAssistantTracking(history));
     }
   };
   for (let entryIndex = 0; entryIndex < messages.length; entryIndex += 1) {
@@ -201,13 +189,15 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "user") {
+      if (entry.interruptedByShutdown === true) finality.clearPending();
+      if (entry.interruptedByShutdown === true && lastFinalAssistantMessage) {
+        clearClaudeHistoryAssistantFinality(lastFinalAssistantMessage);
+        lastFinalAssistantMessage = null;
+        lastFinalAssistantText = undefined;
+      }
       const originKind = readClaudeTurnOriginKind(entry);
       if (originKind !== undefined) {
-        if (originKind !== "human" && lastAutonomousFinalAssistantMessage) {
-          removeClaudeHistoryFinishStep(lastAutonomousFinalAssistantMessage);
-          delete lastAutonomousFinalAssistantMessage.model;
-        }
-        lastAutonomousFinalAssistantMessage = null;
+        finality.observeUser(originKind);
         assistantTurnOriginKind = originKind;
         resetCurrentUserTurnAssistantTracking();
       }
@@ -215,6 +205,7 @@ export const toClaudeHistoryMessages = (
     const timestamp = readHistoryTimestamp(entry, now);
     const taskNotifications = readClaudeTaskNotifications(entry);
     if (taskNotifications.length > 0) {
+      finality.clearPending();
       for (const notification of taskNotifications) {
         appendClaudeHistorySubagentSystemMessage({
           entry,
@@ -225,9 +216,13 @@ export const toClaudeHistoryMessages = (
       }
       continue;
     }
+    if (entry.type === "user") {
+      projectClaudeHistoryToolResults({ entry, state: toolResultState, timestamp });
+    }
     const projectedInput = projectHistoryInput(entry, timestamp);
     if (projectedInput.handled) {
       if (projectedInput.manualCompaction) {
+        finality.finishPreviousUserTurn();
         pendingManualCompaction = projectedInput.manualCompaction;
         manualCompactionBoundaryReceived = unclaimedManualCompactionBoundary;
         unclaimedManualCompactionBoundary = false;
@@ -240,7 +235,7 @@ export const toClaudeHistoryMessages = (
       }
       history.push(projectedMessage);
       if (projectedMessage.role === "user") {
-        lastAutonomousFinalAssistantMessage = null;
+        finality.startHumanTurn();
         assistantTurnOriginKind = undefined;
         resetCurrentUserTurnAssistantTracking();
         continue;
@@ -288,13 +283,10 @@ export const toClaudeHistoryMessages = (
       applyClaudeHistoryTaskSnapshot(toolResultState, entry, timestamp);
       continue;
     }
-    if (entry.type === "user") {
-      projectClaudeHistoryToolResults({ entry, state: toolResultState, timestamp });
-      continue;
-    }
     if (entry.type === "assistant") {
       const errorMessage = toAssistantErrorNotice(entry, timestamp);
       if (errorMessage) {
+        finality.clearPending();
         removeRetractedMessages([errorMessage.messageId]);
         lastError = errorMessage;
         history.push(errorMessage);
@@ -310,6 +302,7 @@ export const toClaudeHistoryMessages = (
       });
       if (!projection) continue;
       const { message: assistantSnapshot, stopReason } = projection;
+      const nativeModel = assistantSnapshot.model;
       applyClaudeHistoryToolUses(toolResultState, assistantSnapshot, timestamp);
       assistantSnapshot.parts = assistantSnapshot.parts.flatMap((part) => {
         if (part.kind !== "tool" || part.tool !== "Agent") {
@@ -356,21 +349,25 @@ export const toClaudeHistoryMessages = (
         hasBackgroundWork(entryIndex, toolResultState) ? 1 : 0,
       );
       if (!shouldFinalize) {
-        removeClaudeHistoryFinishStep(assistantSnapshot);
-        delete assistantSnapshot.model;
+        clearClaudeHistoryAssistantFinality(assistantSnapshot);
       }
       const assistantMessage = appendOrMergeAssistantSnapshot(assistantSnapshot);
       lastAssistantMessage = assistantMessage;
       const assistantText = assistantMessage.text.trim();
+      finality.captureAssistant(
+        assistantMessage,
+        nativeModel,
+        stopReason,
+        assistantTurnOriginKind,
+        shouldFinalize,
+      );
       if (assistantText.length > 0) {
         lastAssistantTextMessage = assistantMessage;
         lastAssistantText = assistantText;
         if (shouldFinalize && isLiveFinalAssistantStopReason(stopReason)) {
           lastFinalAssistantMessage = assistantMessage;
           lastFinalAssistantText = assistantText;
-          if (assistantTurnOriginKind && assistantTurnOriginKind !== "human") {
-            lastAutonomousFinalAssistantMessage = assistantMessage;
-          }
+          finality.rememberFinal(assistantMessage, assistantTurnOriginKind);
         }
       }
       for (const part of assistantMessage.parts) {
@@ -420,6 +417,7 @@ export const toClaudeHistoryMessages = (
         continue;
       }
       if (isFailedClaudeResult(entry)) {
+        finality.clearPending();
         if (lastError) {
           lastError.text = failedClaudeResultText(entry);
           lastError.timestamp = timestamp;
@@ -451,6 +449,7 @@ export const toClaudeHistoryMessages = (
         resultText !== lastFinalAssistantText &&
         !lastMatchingAssistantTextMessage
       ) {
+        finality.clearPending();
         const assistantMessage: MutableAssistantHistoryMessage = {
           messageId: entry.uuid ?? `claude-result:${history.length}`,
           role: "assistant",
@@ -468,9 +467,7 @@ export const toClaudeHistoryMessages = (
         if (shouldFinalize) {
           lastFinalAssistantMessage = assistantMessage;
           lastFinalAssistantText = resultText;
-          if (resultOriginKind && resultOriginKind !== "human") {
-            lastAutonomousFinalAssistantMessage = assistantMessage;
-          }
+          finality.rememberFinal(assistantMessage, resultOriginKind);
         }
         continue;
       }
@@ -480,21 +477,18 @@ export const toClaudeHistoryMessages = (
         lastAssistantMessage = resultTarget;
       }
       if (!shouldFinalize) {
-        removeClaudeHistoryFinishStep(resultTarget);
-        delete resultTarget.model;
+        clearClaudeHistoryAssistantFinality(resultTarget);
       } else {
         addClaudeHistoryFinishStep(resultTarget, finishReasonForClaudeResult(entry));
       }
       if (resultText && shouldFinalize) {
         lastFinalAssistantMessage = resultTarget;
         lastFinalAssistantText = resultText;
-        if (resultOriginKind && resultOriginKind !== "human") {
-          lastAutonomousFinalAssistantMessage = resultTarget;
-        }
+        finality.rememberFinal(resultTarget, resultOriginKind);
       }
     }
   }
   applyClaudeHistoryActiveTasks(toolResultState, options.currentBackgroundTaskIds, now);
-  appendUnmatchedLiveUserMessages(history, liveUserMessages);
-  return history;
+  finality.finishBeforeLiveUser(history, liveUserMessages);
+  return mergeUnmatchedLiveUserMessages(history, liveUserMessages);
 };

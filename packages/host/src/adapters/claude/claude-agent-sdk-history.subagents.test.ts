@@ -3,6 +3,127 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { claudeSessionMessageFixture as toSessionMessage } from "./claude-agent-sdk-test-messages";
 
 describe("claude-agent-sdk-history subagents", () => {
+  test("settles grouped shell tasks without creating child cards for tasks or scan markers", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-shells",
+          session_id: "session-1",
+          message: {
+            role: "assistant",
+            content: ["shell-1", "shell-2"].map((id) => ({
+              type: "tool_use",
+              id,
+              name: "Bash",
+              input: { command: "sleep 4", run_in_background: true },
+            })),
+          },
+        }),
+        ...["shell-1", "shell-2"].map((id) =>
+          toSessionMessage({
+            type: "user",
+            uuid: `${id}-result`,
+            session_id: "session-1",
+            message: {
+              role: "user",
+              content: [{ type: "tool_result", tool_use_id: id, content: "Running" }],
+            },
+            toolUseResult: { backgroundTaskId: `${id}-task` },
+          }),
+        ),
+        toSessionMessage({
+          type: "user",
+          uuid: "shells-stopped",
+          session_id: "session-1",
+          message: {
+            role: "user",
+            content: `<task-notification>
+<task-id>shell-1-task</task-id>
+<task-id>shell-2-task</task-id>
+<task-id>__orphan_summary__:shell</task-id>
+<status>stopped</status>
+<summary>2 background shell command tasks did not finish.</summary>
+</task-notification>`,
+          },
+        }),
+      ],
+      () => "2026-10-21T12:00:00.000Z",
+    );
+
+    const parts = history.flatMap((message) => message.parts);
+    expect(parts.filter((part) => part.kind === "subagent")).toEqual([]);
+    expect(parts.filter((part) => part.kind === "tool")).toEqual(
+      ["shell-1", "shell-2"].map((callId) =>
+        expect.objectContaining({
+          callId,
+          tool: "Bash",
+          status: "error",
+          metadata: expect.objectContaining({ backgroundTaskStatus: "stopped" }),
+        }),
+      ),
+    );
+  });
+
+  test("keeps a Bash notification without task_started on its completed tool part", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-bash",
+          session_id: "session-1",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "bash-tool-1",
+                name: "Bash",
+                input: { command: "bun test" },
+              },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "bash-result",
+          session_id: "session-1",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "bash-tool-1", content: "Tests passed" }],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "bash-notification",
+          session_id: "session-1",
+          message: {
+            role: "user",
+            content: `<task-notification>
+<task-id>shell-task-1</task-id>
+<tool-use-id>bash-tool-1</tool-use-id>
+<output-file>/tmp/shell-task-1.output</output-file>
+<status>completed</status>
+<summary>Tests passed</summary>
+</task-notification>`,
+          },
+        }),
+      ],
+      () => "2026-10-21T12:00:00.000Z",
+    );
+
+    const parts = history.flatMap((message) => message.parts);
+    expect(parts.filter((part) => part.kind === "subagent")).toEqual([]);
+    expect(parts.filter((part) => part.kind === "tool")).toEqual([
+      expect.objectContaining({
+        callId: "bash-tool-1",
+        tool: "Bash",
+        status: "completed",
+        output: expect.stringContaining("Tests passed"),
+      }),
+    ]);
+  });
+
   test("places a completed subagent response after tool work that followed its forwarded text", () => {
     const history = toClaudeHistoryMessages(
       [
@@ -372,80 +493,83 @@ describe("claude-agent-sdk-history subagents", () => {
     ]);
   });
 
-  test("completes a hydrated background Agent from the SDK task notification", () => {
-    const history = toClaudeHistoryMessages(
-      [
-        toSessionMessage({
-          type: "assistant",
-          uuid: "assistant-1",
-          session_id: "session-1",
-          parent_tool_use_id: null,
-          timestamp: "2026-06-26T11:04:10.000Z",
-          message: {
-            role: "assistant",
-            content: [
-              {
-                type: "tool_use",
-                id: "agent-tool-1",
-                name: "Agent",
-                input: {
-                  description: "Review spec compliance",
-                  subagent_type: "general-purpose",
-                  run_in_background: true,
-                  prompt: "Review the spec",
+  test.each(["Agent", "Task"])(
+    "completes a hydrated background %s from the SDK task notification",
+    (toolName) => {
+      const history = toClaudeHistoryMessages(
+        [
+          toSessionMessage({
+            type: "assistant",
+            uuid: "assistant-1",
+            session_id: "session-1",
+            parent_tool_use_id: null,
+            timestamp: "2026-06-26T11:04:10.000Z",
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "agent-tool-1",
+                  name: toolName,
+                  input: {
+                    description: "Review spec compliance",
+                    subagent_type: "general-purpose",
+                    run_in_background: true,
+                    prompt: "Review the spec",
+                  },
                 },
-              },
-            ],
-            stop_reason: "tool_use",
-          },
-        }),
-        toSessionMessage({
-          type: "user",
-          uuid: "agent-launch-1",
-          session_id: "session-1",
-          timestamp: "2026-06-26T11:04:11.000Z",
-          message: {
-            role: "user",
-            content: [
-              {
-                type: "tool_result",
-                tool_use_id: "agent-tool-1",
-                content: "Agent launched",
-              },
-            ],
-          },
-          toolUseResult: {
-            status: "async_launched",
-            agentId: "agent-1",
-          },
-        }),
-        toSessionMessage({
-          type: "user",
-          uuid: "00000000-0000-4000-8000-000000000001",
-          session_id: "session-1",
-          timestamp: "2026-06-26T11:04:12.000Z",
-          message: {
-            role: "user",
-            content: `<task-notification>
+              ],
+              stop_reason: "tool_use",
+            },
+          }),
+          toSessionMessage({
+            type: "user",
+            uuid: "agent-launch-1",
+            session_id: "session-1",
+            timestamp: "2026-06-26T11:04:11.000Z",
+            message: {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "agent-tool-1",
+                  content: "Agent launched",
+                },
+              ],
+            },
+            toolUseResult: {
+              status: "async_launched",
+              agentId: "agent-1",
+            },
+          }),
+          toSessionMessage({
+            type: "user",
+            uuid: "00000000-0000-4000-8000-000000000001",
+            session_id: "session-1",
+            timestamp: "2026-06-26T11:04:12.000Z",
+            message: {
+              role: "user",
+              content: `<task-notification>
 <task-id>agent-1</task-id>
 <tool-use-id>agent-tool-1</tool-use-id>
 <output-file>/tmp/agent-1.output</output-file>
 <status>completed</status>
 <summary>Agent "Review spec compliance" finished</summary>
 </task-notification>`,
-          },
-        }),
-      ],
-      () => "2026-06-26T12:00:00.000Z",
-    );
+            },
+          }),
+        ],
+        () => "2026-06-26T12:00:00.000Z",
+      );
 
-    expect(
-      history
-        .flatMap((message) => message.parts)
-        .filter((part) => part.kind === "subagent")
-        .map((part) => part.status),
-    ).toEqual(["completed"]);
-  });
+      expect(
+        history
+          .flatMap((message) => message.parts)
+          .filter((part) => part.kind === "subagent")
+          .map((part) => [part.externalSessionId, part.status]),
+      ).toEqual([["session-1::claude-subagent::agent-1", "completed"]]);
+    },
+  );
 
   test("updates the original card when a resumed subagent completes through SendMessage", () => {
     const history = toClaudeHistoryMessages(

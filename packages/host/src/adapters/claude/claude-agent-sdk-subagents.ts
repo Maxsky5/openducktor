@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { z } from "zod";
+import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeHistorySubagentSystemMessageIngress } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSdkSubagentSystemMessageProjection } from "./claude-agent-sdk-message-projection";
@@ -49,6 +50,7 @@ type ClaudeSubagentPartDetails = Partial<
 
 type ClaudeSubagentSession = {
   activeBackgroundSubagentTaskIds?: Set<string>;
+  backgroundToolTasksById?: ClaudeBackgroundToolState["backgroundToolTasksById"];
   externalSessionId: string;
   hiddenSubagentTaskIds?: Set<string>;
   retractedSubagentTaskIds?: Set<string>;
@@ -87,7 +89,7 @@ const shouldSuppressSubagentTask = (
   return session.hiddenSubagentTaskIds?.has(taskId) ?? false;
 };
 const isAgentToolName = (toolName: string | undefined): boolean =>
-  toolName?.toLowerCase() === "agent";
+  toolName?.toLowerCase() === "agent" || toolName?.toLowerCase() === "task";
 const isVisibleSubagentTaskStart = (
   message: ClaudeSubagentSystemMessage,
   toolName: string | undefined,
@@ -340,7 +342,9 @@ export const handleClaudeSubagentSystemMessage = ({
   session: ClaudeSubagentSession;
   timestamp: string;
 }): void => {
-  const toolUseId = "tool_use_id" in message ? message.tool_use_id : undefined;
+  const toolUseId =
+    ("tool_use_id" in message ? message.tool_use_id : undefined) ??
+    session.backgroundToolTasksById?.get(message.task_id)?.toolUseId;
   const toolMessageId = toolUseId ? session.toolMessageIdsByCallId.get(toolUseId) : undefined;
   const toolName = toolUseId ? session.toolNamesByCallId.get(toolUseId) : undefined;
   const launchAgentId = toolUseId && session.subagentAgentIdsByToolUseId?.get(toolUseId);
@@ -396,6 +400,17 @@ export const handleClaudeSubagentSystemMessage = ({
     emitSubagentPart(emit, session, agentId, toolUseId, "running", timestamp, details);
     return;
   }
+  const knownSubagentToolUseId = resolveClaudeSubagentToolUseId(
+    session.subagentTaskIdsByToolUseId,
+    session.subagentAgentIdsByToolUseId,
+    message.task_id,
+    undefined,
+  );
+  if (!knownSubagentToolUseId && toolName && !isAgentToolName(toolName)) {
+    shouldSuppressSubagentTask(session, message.task_id, true);
+    return;
+  }
+  const resolvedToolUseId = toolUseId ?? knownSubagentToolUseId;
   if (message.subtype === "task_progress") {
     if (shouldSuppressSubagentTask(session, message.task_id)) {
       return;
@@ -404,12 +419,6 @@ export const handleClaudeSubagentSystemMessage = ({
     if (message.subagent_type) {
       details.agent = message.subagent_type;
     }
-    const resolvedToolUseId = resolveClaudeSubagentToolUseId(
-      session.subagentTaskIdsByToolUseId,
-      session.subagentAgentIdsByToolUseId,
-      message.task_id,
-      toolUseId,
-    );
     const agentId =
       (resolvedToolUseId
         ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId)
@@ -436,12 +445,6 @@ export const handleClaudeSubagentSystemMessage = ({
     if (patch.end_time !== undefined) {
       details.endedAtMs = patch.end_time;
     }
-    const resolvedToolUseId = resolveClaudeSubagentToolUseId(
-      session.subagentTaskIdsByToolUseId,
-      session.subagentAgentIdsByToolUseId,
-      message.task_id,
-      toolUseId,
-    );
     const agentId =
       (resolvedToolUseId
         ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId)
@@ -465,12 +468,6 @@ export const handleClaudeSubagentSystemMessage = ({
     message.status === "failed"
       ? (readClaudeFailedTaskMessage(message) ?? `Claude subagent ${message.task_id} failed.`)
       : undefined;
-  const resolvedToolUseId = resolveClaudeSubagentToolUseId(
-    session.subagentTaskIdsByToolUseId,
-    session.subagentAgentIdsByToolUseId,
-    message.task_id,
-    toolUseId,
-  );
   const agentId =
     (resolvedToolUseId ? session.subagentAgentIdsByToolUseId?.get(resolvedToolUseId) : undefined) ??
     message.task_id;
