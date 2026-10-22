@@ -381,8 +381,8 @@ describe("buildSessionNavigationModel", () => {
   test.each(["task", "none"] as const)(
     "keeps running task and workspace sessions in start order as activity changes: %s",
     (grouping) => {
-      const hour = Date.parse("2026-09-30T00:00:00.000Z");
-      const at = (hours: number) => hour + hours * 60 * 60 * 1000;
+      const dayStart = Date.parse("2026-09-30T00:00:00.000Z");
+      const at = (hours: number) => dayStart + hours * 60 * 60 * 1000;
       const taskKey = `task_session:alpha:${key("working")}`;
       const alphaKey = "workspace_session:alpha:chat";
       const betaKey = "workspace_session:beta:chat";
@@ -427,14 +427,11 @@ describe("buildSessionNavigationModel", () => {
   );
 
   test("keeps the same running task session selected when another running role reports activity", () => {
+    const olderSession = record("older", { startedAt: "2026-09-30T07:00:00.000Z" });
+    const newerSession = record("newer", { role: "qa" });
     const input = sources({
       tasks: [createTaskCardFixture({ id: "task-1", status: "in_progress" })],
-      sessionsByTask: {
-        "task-1": ready([
-          record("older", { startedAt: "2026-09-30T07:00:00.000Z" }),
-          record("newer", { role: "qa" }),
-        ]),
-      },
+      sessionsByTask: { "task-1": ready([olderSession, newerSession]) },
       live: liveReady([
         [key("older"), facts({ activityState: "running" })],
         [key("newer"), facts({ activityState: "running" })],
@@ -449,11 +446,11 @@ describe("buildSessionNavigationModel", () => {
         [
           "task-1",
           ready([
-            record("older", {
-              startedAt: "2026-09-30T07:00:00.000Z",
+            {
+              ...olderSession,
               lastActivityAt: Date.parse("2026-09-30T10:00:00.000Z"),
-            }),
-            record("newer", { role: "qa", lastActivityAt: Date.parse("2026-09-30T09:00:00.000Z") }),
+            },
+            { ...newerSession, lastActivityAt: Date.parse("2026-09-30T09:00:00.000Z") },
           ]),
         ],
       ]),
