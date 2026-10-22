@@ -11,6 +11,7 @@ export const workspaceSessions = sqliteTable(
     selectedModelJson: text("selected_model_json"),
     generatedTitle: text("generated_title"),
     manualTitle: text("manual_title"),
+    targetBranchJson: text("target_branch_json"),
     createdAt: integer("created_at_ms").notNull(),
     lastActivityAt: integer("last_activity_at_ms"),
     updatedAt: integer("updated_at_ms").notNull(),

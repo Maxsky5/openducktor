@@ -120,6 +120,7 @@ const chatRecord = (id: string, archived = false): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: null,
   manualTitle: null,
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: archived ? 2000 : null,

@@ -57,6 +57,7 @@ const chat = (id: string, workingDirectory: string, updatedAt: number): Workspac
   selectedModel: null,
   generatedTitle: `Chat ${id}`,
   manualTitle: null,
+  targetBranch: null,
   createdAt: updatedAt,
   lastActivityAt: updatedAt,
   updatedAt,

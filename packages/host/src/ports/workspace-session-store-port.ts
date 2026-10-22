@@ -1,5 +1,6 @@
 import type {
   AgentSessionModelSelection,
+  GitTargetBranch,
   RuntimeKind,
   WorkspaceSession,
   WorkspaceSessionActivity,
@@ -53,6 +54,7 @@ export type WorkspaceSessionStorePort = {
   restore(
     input: WorkspaceSessionStoreRef & { executionTarget?: WorkspaceSessionExecutionTarget },
   ): Result;
+  setTargetBranch(input: WorkspaceSessionStoreRef & { targetBranch: GitTargetBranch }): Result;
   setSelectedModel(
     input: WorkspaceSessionStoreRef & { selectedModel: AgentSessionModelSelection },
   ): Result;

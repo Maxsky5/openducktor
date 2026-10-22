@@ -1,9 +1,8 @@
-import type { GitCurrentBranch } from "@openducktor/contracts";
+import { type GitCurrentBranch, UPSTREAM_TARGET_BRANCH } from "@openducktor/contracts";
 import { useMemo } from "react";
 import {
   canonicalTargetBranch,
   targetBranchFromSelection,
-  UPSTREAM_TARGET_BRANCH,
 } from "@openducktor/frontend-core/lib/target-branch";
 import type { DiffDataState } from "./contracts";
 import { toStatusSnapshotKey } from "./model/scope-state";

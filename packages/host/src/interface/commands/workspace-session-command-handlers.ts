@@ -5,6 +5,7 @@ import {
   workspaceSessionRefInputSchema,
   workspaceSessionRenameInputSchema,
   workspaceSessionSetDraftModelInputSchema,
+  workspaceSessionSetTargetBranchInputSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { z } from "zod";
@@ -68,6 +69,14 @@ export const createWorkspaceSessionCommandHandlers = (
         Effect.flatMap((input) =>
           service
             .setDraftModel(input)
+            .pipe(Effect.tap((session) => publishUpdated(input.workspaceId, session))),
+        ),
+      ),
+    workspace_session_set_target_branch: (args) =>
+      parseInput(workspaceSessionSetTargetBranchInputSchema, args).pipe(
+        Effect.flatMap((input) =>
+          service
+            .setTargetBranch(input)
             .pipe(Effect.tap((session) => publishUpdated(input.workspaceId, session))),
         ),
       ),

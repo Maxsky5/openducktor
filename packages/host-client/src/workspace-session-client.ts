@@ -17,6 +17,7 @@ import {
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
   type WorkspaceSessionRefInput,
+  type WorkspaceSessionSetTargetBranchInput,
   workspaceSessionCreateResultSchema,
   workspaceSessionArchivePreviewSchema,
   workspaceSessionSchema,
@@ -91,6 +92,12 @@ export class HostWorkspaceSessionClient {
     input: WorkspaceSessionRefInput & { selectedModel: AgentSessionModelSelection },
   ): Promise<WorkspaceSession> {
     return this.invoke("workspace_session_set_draft_model", input, workspaceSessionSchema);
+  }
+
+  workspaceSessionSetTargetBranch(
+    input: WorkspaceSessionSetTargetBranchInput,
+  ): Promise<WorkspaceSession> {
+    return this.invoke("workspace_session_set_target_branch", input, workspaceSessionSchema);
   }
 
   workspaceSessionRename(

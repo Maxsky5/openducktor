@@ -44,6 +44,7 @@ const chat = (id: string, overrides: Partial<WorkspaceSession> = {}): WorkspaceS
   executionTarget: { kind: "local_repo_root", workingDirectory: "/repos/alpha" },
   roleSnapshot: null,
   selectedModel: null,
+  targetBranch: null,
   generatedTitle: `Chat ${id}`,
   manualTitle: null,
   createdAt: Date.parse("2026-09-30T07:00:00.000Z"),

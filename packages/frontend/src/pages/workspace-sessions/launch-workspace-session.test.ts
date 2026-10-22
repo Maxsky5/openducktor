@@ -16,6 +16,7 @@ const createRecord = (): WorkspaceSession => ({
   roleSnapshot: null,
   generatedTitle: null,
   manualTitle: "Old title",
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: null,

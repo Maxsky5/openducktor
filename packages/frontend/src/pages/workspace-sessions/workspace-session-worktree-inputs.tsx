@@ -93,19 +93,6 @@ export function ExistingWorktreeBranchFields({
         Uses this branch directly. It must not be checked out elsewhere.
       </p>
       <WorktreeBranchValidation message={branchFailure} />
-      {branches.isError && (
-        <div role="alert">
-          <p className="text-sm text-destructive">{errorMessage(branches.error)}</p>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={disabled}
-            onClick={() => void branches.refetch()}
-          >
-            Retry branches
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

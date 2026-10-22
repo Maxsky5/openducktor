@@ -1,6 +1,5 @@
-import type { GitTargetBranch } from "@openducktor/contracts";
+import { type GitTargetBranch, UPSTREAM_TARGET_BRANCH } from "@openducktor/contracts";
 
-export const UPSTREAM_TARGET_BRANCH = "@{upstream}";
 export const INVALID_TASK_TARGET_BRANCH_LABEL = "Invalid task target branch";
 
 export const DEFAULT_TARGET_BRANCH: GitTargetBranch = {

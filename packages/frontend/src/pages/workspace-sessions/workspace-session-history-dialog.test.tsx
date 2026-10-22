@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { WORKSPACE_SESSION_ARCHIVE_LIMIT, type WorkspaceSession } from "@openducktor/contracts";
+import {
+  repoConfigSchema,
+  WORKSPACE_SESSION_ARCHIVE_LIMIT,
+  type WorkspaceSession,
+} from "@openducktor/contracts";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -19,6 +23,7 @@ const archivedRecord = (index: number): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: `Chat ${index}`,
   manualTitle: null,
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: 2000 - index,
@@ -163,4 +168,65 @@ describe("Workspace Session archive refresh", () => {
       }
     },
   );
+});
+
+test("an archived chat with a removed worktree picks the target branch that restore uses", async () => {
+  const removed: WorkspaceSession = {
+    ...archivedRecord(1),
+    executionTarget: {
+      kind: "local_worktree",
+      workingDirectory: "/worktrees/chat",
+      branchName: "odt/chat",
+      worktreeState: "removed",
+    },
+    targetBranch: { remote: "origin", branch: "release" },
+  };
+  const requests: unknown[] = [];
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionListArchived: async () => [removed],
+      workspaceGetRepoConfig: async () =>
+        repoConfigSchema.parse({ workspaceId: "A", workspaceName: "A", repoPath: "/repo" }),
+      gitGetBranches: async () => [
+        { name: "main", isRemote: false, isCurrent: true },
+        { name: "origin/release", isRemote: true, isCurrent: false },
+      ],
+      workspaceSessionSetTargetBranch: async (input) => {
+        requests.push(input);
+        return { ...removed, targetBranch: input.targetBranch };
+      },
+      workspaceSessionRestore: async () => {
+        throw new Error("Target branch origin/release is unavailable.");
+      },
+    },
+  });
+  const view = render(
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceSessionHistoryDialog workspaceId="A" repoPath="/repo" onClose={() => {}} />
+    </ClientConnectionProvider>,
+  );
+  try {
+    const selector = await view.findByRole(
+      "button",
+      { name: "Worktree removed. Restore recreates it from this target branch." },
+      { timeout: 800 },
+    );
+    expect(selector.textContent).toContain("origin/release");
+    fireEvent.click(view.getByRole("button", { name: "Restore Chat 1" }));
+    await view.findByText("Target branch origin/release is unavailable.", {}, { timeout: 800 });
+    fireEvent.click(selector);
+    fireEvent.click(await view.findByRole("option", { name: /^main/ }, { timeout: 800 }));
+    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
+    expect(requests[0]).toEqual({
+      workspaceId: "A",
+      sessionId: removed.id,
+      targetBranch: { branch: "main" },
+    });
+    await waitFor(() => expect(selector.textContent).toContain("main"), { timeout: 800 });
+    expect(selector.textContent).not.toContain("origin/release");
+    expect(view.queryByText("Target branch origin/release is unavailable.")).toBeNull();
+  } finally {
+    view.unmount();
+    await connection.dispose();
+  }
 });

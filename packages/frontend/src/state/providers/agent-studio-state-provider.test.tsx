@@ -51,6 +51,7 @@ const record = (repoPath: string): WorkspaceSession => ({
   roleSnapshot: null,
   generatedTitle: null,
   manualTitle: repoPath,
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: null,

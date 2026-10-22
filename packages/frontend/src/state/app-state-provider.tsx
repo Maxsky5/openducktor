@@ -60,7 +60,6 @@ import { WorkspaceActivityProvider } from "./providers/workspace-activity-provid
 import { TerminalActivityProvider } from "./providers/terminal-activity-provider";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { workspaceComparisonChoices } from "@openducktor/frontend-core/queries/workspace-comparison-choices";
 import { RemoteAccessProvider } from "./remote-access-provider";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
@@ -73,7 +72,6 @@ export function ShellStateProvider({
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
-  workspaceComparisonChoices(queryClient);
   const hostClient = useHostClient();
   const { agentEngine, runtimeCatalogOperations } = useMemo(
     () => createAgentRuntimeServices(hostClient, queryClient),

@@ -225,7 +225,7 @@ function ArchiveWorktreeNotice({
     <p className="text-sm text-muted-foreground">
       Branch <span className="font-mono">{preview.data?.branchName ?? "…"}</span> will be deleted.
       Commits that exist only on this branch may be lost. Restoring this chat creates a fresh
-      worktree from the default branch. It does not recover deleted changes.
+      worktree from the chat's target branch. It does not recover deleted changes.
     </p>
   );
 }

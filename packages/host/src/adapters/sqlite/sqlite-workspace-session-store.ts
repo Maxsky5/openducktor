@@ -38,6 +38,7 @@ const decodeRecord = (row: WorkspaceSessionRow) =>
         selectedModel: row.selectedModelJson === null ? null : JSON.parse(row.selectedModelJson),
         generatedTitle: row.generatedTitle,
         manualTitle: row.manualTitle,
+        targetBranch: row.targetBranchJson === null ? null : JSON.parse(row.targetBranchJson),
         createdAt: row.createdAt,
         lastActivityAt: row.lastActivityAt ?? undefined,
         updatedAt: row.updatedAt,
@@ -61,6 +62,7 @@ const encodeRecord = (record: WorkspaceSession): WorkspaceSessionRow => ({
   selectedModelJson: record.selectedModel === null ? null : JSON.stringify(record.selectedModel),
   generatedTitle: record.generatedTitle,
   manualTitle: record.manualTitle,
+  targetBranchJson: record.targetBranch === null ? null : JSON.stringify(record.targetBranch),
   createdAt: record.createdAt,
   lastActivityAt: record.lastActivityAt ?? null,
   updatedAt: record.updatedAt,
@@ -347,6 +349,11 @@ export const createSqliteWorkspaceSessionStore = (
         ...current,
         archivedAt: null,
         executionTarget: input.executionTarget ?? current.executionTarget,
+      })),
+    setTargetBranch: (input) =>
+      update(input, "workspaceSessionStore.setTargetBranch", (current) => ({
+        ...current,
+        targetBranch: input.targetBranch,
       })),
     setSelectedModel: (input) =>
       update(input, "workspaceSessionStore.setSelectedModel", (current) => ({

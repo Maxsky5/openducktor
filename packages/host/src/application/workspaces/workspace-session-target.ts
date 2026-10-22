@@ -1,4 +1,5 @@
 import {
+  type GitTargetBranch,
   type RepoConfig,
   type WorkspaceSessionExecutionTarget,
   type WorkspaceSessionRefInput,
@@ -6,6 +7,7 @@ import {
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
+import { canonicalTargetBranch } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -78,6 +80,7 @@ export const withWorkspaceSessionTarget = <A, E>(
     worktree: WorkspaceSessionWorktreeInput | undefined;
     repoConfig: RepoConfig;
     location: WorkspaceSessionExecutionTarget["kind"];
+    targetBranch: GitTargetBranch;
   },
   use: (target: WorkspaceSessionExecutionTarget, retainTarget: () => void) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
@@ -142,6 +145,9 @@ export const withWorkspaceSessionTarget = <A, E>(
           );
         }
       }
+      const newBranch = createBranch
+        ? yield* planNewBranch(git, repoPath, branch, input.targetBranch)
+        : null;
       const base =
         repoConfig.worktreeBasePath === undefined
           ? settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId)
@@ -159,6 +165,7 @@ export const withWorkspaceSessionTarget = <A, E>(
       yield* worktreeFiles.ensureDirectory(namespace);
       let acquired = false;
       let retained = false;
+      let createdTrackingRef: string | null = null;
       const actionRun = dependencies.worktreeActions.createRun({
         worktreePath: workingDirectory,
         branch,
@@ -177,7 +184,7 @@ export const withWorkspaceSessionTarget = <A, E>(
                     workingDirectory,
                     branch,
                     createBranch,
-                    createBranch ? "HEAD" : undefined,
+                    newBranch?.startPoint,
                   )
                   .pipe(
                     Effect.mapError(
@@ -190,6 +197,15 @@ export const withWorkspaceSessionTarget = <A, E>(
                     ),
                   );
                 acquired = true;
+                if (newBranch?.upstreamRemote) {
+                  const upstream = yield* git.configureBranchUpstream(
+                    repoPath,
+                    workingDirectory,
+                    branch,
+                    newBranch.upstreamRemote,
+                  );
+                  createdTrackingRef = upstream.createdTrackingRef;
+                }
               }),
             );
             yield* worktreeFiles.copyConfiguredPaths(
@@ -243,6 +259,9 @@ export const withWorkspaceSessionTarget = <A, E>(
           if (createBranch && (yield* git.referenceExists(repoPath, `refs/heads/${branch}`))) {
             yield* git.deleteLocalBranch(repoPath, branch, true);
           }
+          if (createdTrackingRef !== null) {
+            yield* git.deleteReference(repoPath, createdTrackingRef);
+          }
         }),
       );
       if (Exit.isFailure(cleanup)) {
@@ -257,3 +276,35 @@ export const withWorkspaceSessionTarget = <A, E>(
       return yield* Effect.failCause(result.cause);
     }),
   );
+
+/**
+ * A new branch starts from the target branch. A remote target also gives the branch its upstream,
+ * which Git names `<remote>/<branch>`. Both checks run before any Git write.
+ */
+const planNewBranch = (
+  git: Pick<GitPort, "referenceExists">,
+  repoPath: string,
+  branch: string,
+  targetBranch: GitTargetBranch,
+) =>
+  Effect.gen(function* () {
+    const startPoint = canonicalTargetBranch(targetBranch);
+    if (!(yield* git.referenceExists(repoPath, startPoint))) {
+      return yield* new HostValidationError({
+        message: `Target branch ${startPoint} is unavailable. Fetch it or select another target branch.`,
+        field: "targetBranch",
+      });
+    }
+    const upstreamRemote = targetBranch.remote?.trim() || null;
+    // An existing remote branch with this name would become the upstream of an unrelated branch.
+    if (
+      upstreamRemote &&
+      (yield* git.referenceExists(repoPath, `refs/remotes/${upstreamRemote}/${branch}`))
+    ) {
+      return yield* new HostValidationError({
+        message: `Branch ${branch} already exists on ${upstreamRemote}. Choose another name.`,
+        field: "worktree.branchName",
+      });
+    }
+    return { startPoint, upstreamRemote };
+  });

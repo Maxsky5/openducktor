@@ -115,6 +115,7 @@ export const workspaceSessionEntry = (
           executionTarget: { kind: "local_repo_root", workingDirectory: workspace.repoPath },
           roleSnapshot: null,
           selectedModel: null,
+          targetBranch: null,
           generatedTitle: null,
           manualTitle: `Chat ${sessionId}`,
           createdAt: NOW - 3600000,

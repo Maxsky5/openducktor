@@ -112,6 +112,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceSessionClient.workspaceSessionLaunch.bind(workspaceSessionClient),
     workspaceSessionSetDraftModel:
       workspaceSessionClient.workspaceSessionSetDraftModel.bind(workspaceSessionClient),
+    workspaceSessionSetTargetBranch:
+      workspaceSessionClient.workspaceSessionSetTargetBranch.bind(workspaceSessionClient),
     workspaceSessionRename:
       workspaceSessionClient.workspaceSessionRename.bind(workspaceSessionClient),
     workspaceSessionArchive:

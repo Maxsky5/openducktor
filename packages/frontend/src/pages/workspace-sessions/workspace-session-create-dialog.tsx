@@ -45,6 +45,10 @@ import {
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useMountedRef } from "./use-mounted-ref";
+import {
+  useWorkspaceSessionLocationTarget,
+  WorkspaceSessionTargetBranchField,
+} from "./workspace-session-target-branch-field";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
@@ -79,17 +83,15 @@ export function WorkspaceSessionCreateDialog({
   );
   const [name, setName] = useState("");
   const [roleId, setRoleId] = useState("none");
-  const [location, setLocation] =
-    useState<WorkspaceSessionCreateInput["location"]>("local_repo_root");
   const [worktree, setWorktree] = useState<WorkspaceSessionWorktreeInput>({
     mode: "from_name",
     name: "",
     branchName: null,
   });
-  const branches = useQuery({
-    ...repoBranchesQueryOptions(workspace.repoPath),
-    enabled: location === "local_worktree" && worktree.mode === "from_branch",
-  });
+  const defaultTarget = repoConfig.data?.defaultTargetBranch ?? null;
+  const { location, targetBranch, changeLocation, pickTarget } =
+    useWorkspaceSessionLocationTarget(defaultTarget);
+  const branches = useQuery({ ...repoBranchesQueryOptions(workspace.repoPath), enabled: open });
   const mounted = useMountedRef();
   const create = useMutation({
     mutationFn: (input: WorkspaceSessionCreateInput) => host.workspaceSessionCreate(input),
@@ -116,6 +118,7 @@ export function WorkspaceSessionCreateDialog({
     roleId,
     location,
     worktree,
+    targetBranch,
     selection: model.selection,
     selectedModelAvailable: Boolean(model.selectedModelEntry),
     rolesReady: roles.isSuccess,
@@ -162,10 +165,11 @@ export function WorkspaceSessionCreateDialog({
               {repoConfig.isError && (
                 <div role="alert">
                   <p className="text-sm text-destructive">
-                    The repository Default Model could not load. {errorMessage(repoConfig.error)}
+                    The repository Default Model and default target branch could not load.{" "}
+                    {errorMessage(repoConfig.error)}
                   </p>
                   <Button type="button" variant="ghost" onClick={() => void repoConfig.refetch()}>
-                    Retry default model
+                    Retry repository defaults
                   </Button>
                 </div>
               )}
@@ -230,7 +234,7 @@ export function WorkspaceSessionCreateDialog({
                       variant="outline"
                       onClick={() => {
                         create.reset();
-                        setLocation(target.kind);
+                        changeLocation(target.kind);
                       }}
                       className={cn(
                         "h-auto items-start justify-start gap-3 whitespace-normal p-3 text-left",
@@ -249,6 +253,17 @@ export function WorkspaceSessionCreateDialog({
                   ))}
                 </div>
               </fieldset>
+              <WorkspaceSessionTargetBranchField
+                value={targetBranch}
+                defaultTarget={defaultTarget}
+                allowUpstream={location === "local_repo_root"}
+                branches={branches}
+                disabled={create.isPending}
+                onChange={(value) => {
+                  create.reset();
+                  pickTarget(value);
+                }}
+              />
               {location === "local_worktree" && (
                 <WorkspaceSessionWorktreeFields
                   workspace={workspace}

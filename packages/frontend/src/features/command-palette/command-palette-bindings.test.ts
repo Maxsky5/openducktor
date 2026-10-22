@@ -37,6 +37,7 @@ const chat: PaletteChat = {
     selectedModel: null,
     generatedTitle: "Release notes",
     manualTitle: null,
+    targetBranch: null,
     createdAt: 0,
     lastActivityAt: 0,
     updatedAt: 0,

@@ -233,6 +233,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       location: "local_worktree",
       worktree: { mode: "from_name", name: "named-chat", branchName: null },
       manualTitle: null,
+      targetBranch: { branch: "main" },
     };
     return {
       router,
@@ -293,6 +294,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
             selectedModel: null,
             generatedTitle: null,
             manualTitle: null,
+            targetBranch: null,
             createdAt: 1,
             updatedAt: 2,
             archivedAt: 2,
@@ -348,6 +350,27 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     },
     15_000,
   );
+
+  test("creates from_name from the target branch instead of the source checkout HEAD", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    const h = setup({ actions: false });
+    gitCommand("branch", "release", "main~1");
+    const { session } = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      targetBranch: { branch: "release" },
+    });
+    expect(session.targetBranch).toEqual({ branch: "release" });
+    expect(
+      gitCommand(
+        "-C",
+        session.executionTarget.workingDirectory,
+        "rev-parse",
+        "HEAD",
+        "--symbolic-full-name",
+        "HEAD",
+      ).split("\n"),
+    ).toEqual([initialHead, "refs/heads/odt/named-chat"]);
+  });
 
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("creates from_name from a dirty checkout with copy, worktree actions, and dirty-source isolation", async () => {
@@ -429,6 +452,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           selectedModel: null,
           generatedTitle: null,
           manualTitle: null,
+          targetBranch: null,
           createdAt: 1,
           updatedAt: 2,
           archivedAt: null,
@@ -485,6 +509,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           selectedModel: null,
           generatedTitle: null,
           manualTitle: null,
+          targetBranch: null,
           createdAt: 1,
           updatedAt: 2,
           archivedAt: 2,

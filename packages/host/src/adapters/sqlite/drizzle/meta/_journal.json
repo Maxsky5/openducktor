@@ -43,6 +43,13 @@
       "when": 1791125128897,
       "tag": "0005_session_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792650076564,
+      "tag": "0006_workspace_session_target_branch",
+      "breakpoints": true
     }
   ]
 }

@@ -63,6 +63,7 @@ const record = {
   selectedModel: null,
   generatedTitle: null,
   manualTitle: "Chat",
+  targetBranch: null,
   createdAt: 1,
   updatedAt: 1,
   archivedAt: null,
@@ -319,6 +320,7 @@ test("changing the chat owner resets its input and file preview", () => {
       id: "other",
       externalSessionId: "native-other",
       manualTitle: "Other",
+      targetBranch: null,
     };
     view.setSession(other, { rootPath: "/repo", relativePath: "other.ts" });
     expect(screen.getByText("Preview: other.ts")).toBeTruthy();

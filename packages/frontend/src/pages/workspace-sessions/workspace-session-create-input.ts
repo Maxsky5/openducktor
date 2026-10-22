@@ -1,5 +1,6 @@
 import {
   type GitBranch,
+  type GitTargetBranch,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionWorktreeInput,
   workspaceSessionWorktreeInputSchema,
@@ -13,6 +14,7 @@ export function buildWorkspaceSessionCreateInput({
   roleId,
   location,
   worktree,
+  targetBranch,
   selection,
   selectedModelAvailable,
   rolesReady,
@@ -23,12 +25,14 @@ export function buildWorkspaceSessionCreateInput({
   roleId: string;
   location: WorkspaceSessionCreateInput["location"];
   worktree: WorkspaceSessionWorktreeInput;
+  targetBranch: GitTargetBranch | null;
   selection: AgentModelSelection | null;
   selectedModelAvailable: boolean;
   rolesReady: boolean;
   availableBranches: readonly GitBranch[] | null;
 }): WorkspaceSessionCreateInput | null {
-  if (!selection?.runtimeKind || !selectedModelAvailable || !rolesReady) return null;
+  if (!selection?.runtimeKind || !selectedModelAvailable || !rolesReady || !targetBranch)
+    return null;
   const input: WorkspaceSessionCreateInput = {
     workspaceId,
     runtimeKind: selection.runtimeKind,
@@ -36,6 +40,7 @@ export function buildWorkspaceSessionCreateInput({
     customAgentRoleId: roleId === "none" ? null : roleId,
     location,
     manualTitle: name,
+    targetBranch,
   };
   if (location === "local_repo_root") return input;
   const parsed = workspaceSessionWorktreeInputSchema.safeParse(worktree);

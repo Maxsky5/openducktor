@@ -230,6 +230,7 @@ test("workspace activity has its own saved time and keeps legacy records", async
     selectedModel: null,
     generatedTitle: null,
     manualTitle: null,
+    targetBranch: null,
     createdAt: 10,
     updatedAt: 100,
     archivedAt: null,

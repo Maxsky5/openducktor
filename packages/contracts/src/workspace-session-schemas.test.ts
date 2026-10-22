@@ -14,12 +14,23 @@ const session = () => ({
   selectedModel: null,
   generatedTitle: null,
   manualTitle: null,
+  targetBranch: null,
   createdAt: 1,
   updatedAt: 1,
   archivedAt: null,
 });
 
 describe("Workspace Session contracts", () => {
+  test("requires an explicit saved target or null for a chat from before targets", () => {
+    const { targetBranch: _, ...legacy } = session();
+    expect(workspaceSessionSchema.safeParse(legacy).success).toBe(false);
+    expect(
+      workspaceSessionSchema.parse({
+        ...session(),
+        targetBranch: { remote: "origin", branch: "dev" },
+      }).targetBranch,
+    ).toEqual({ remote: "origin", branch: "dev" });
+  });
   test("represents a persisted draft with an explicit null runtime identity", () => {
     expect(
       workspaceSessionSchema.parse({ ...session(), externalSessionId: null }).externalSessionId,

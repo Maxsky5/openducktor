@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  effectiveWorkspaceSessionTargetBranch,
   workspaceSessionArchiveInputSchema,
   workspaceSessionBranchNameSchema,
   workspaceSessionCreateInputSchema,
@@ -15,6 +16,7 @@ describe("named chat worktree inputs", () => {
       selectedModel: null,
       customAgentRoleId: null,
       manualTitle: null,
+      targetBranch: { remote: "origin", branch: "main" },
       location: "local_worktree",
       worktree: { mode: "from_name", name: "review", branchName: null },
     };
@@ -106,6 +108,43 @@ describe("named chat worktree inputs", () => {
       }).success,
     ).toBe(true);
   });
+  test("a chat without a saved target uses the repository default that its location allows", () => {
+    const saved = { branch: "release" };
+    const upstream = { branch: "@{upstream}" };
+    expect(effectiveWorkspaceSessionTargetBranch("local_worktree", saved, upstream)).toBe(saved);
+    expect(effectiveWorkspaceSessionTargetBranch("local_repo_root", null, upstream)).toBe(upstream);
+    expect(effectiveWorkspaceSessionTargetBranch("local_worktree", null, upstream)).toBeNull();
+    expect(effectiveWorkspaceSessionTargetBranch("local_worktree", null, null)).toBeNull();
+  });
+  test("allows Tracked upstream only for the current checkout", () => {
+    const input = {
+      workspaceId: "repo",
+      runtimeKind: "codex",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: null,
+      targetBranch: { branch: "@{upstream}" },
+    };
+    expect(
+      workspaceSessionCreateInputSchema.safeParse({ ...input, location: "local_repo_root" })
+        .success,
+    ).toBe(true);
+    const worktree = workspaceSessionCreateInputSchema.safeParse({
+      ...input,
+      location: "local_worktree",
+      worktree: { mode: "from_name", name: "review", branchName: null },
+    });
+    expect(worktree.error?.issues.map((issue) => issue.message)).toEqual([
+      "Tracked upstream is available only for the current checkout.",
+    ]);
+    expect(
+      workspaceSessionCreateInputSchema.safeParse({
+        ...input,
+        location: "local_repo_root",
+        targetBranch: undefined,
+      }).success,
+    ).toBe(false);
+  });
   test("requires worktree options exactly when a worktree is selected", () => {
     const input = {
       workspaceId: "repo",
@@ -113,6 +152,7 @@ describe("named chat worktree inputs", () => {
       selectedModel: null,
       customAgentRoleId: null,
       manualTitle: null,
+      targetBranch: { branch: "main" },
     };
     const worktree = { mode: "from_name", name: "review", branchName: null };
     expect(

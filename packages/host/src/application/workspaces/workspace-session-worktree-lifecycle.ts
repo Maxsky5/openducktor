@@ -1,4 +1,5 @@
 import type {
+  GitTargetBranch,
   RepoConfig,
   WorkspaceSessionArchivePreview,
   WorkspaceSessionExecutionTarget,
@@ -115,6 +116,7 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
   owner: WorkspaceSessionRefInput,
   config: RepoConfig,
   target: WorktreeTarget,
+  targetBranch: GitTargetBranch,
   use: (target: WorktreeTarget) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
   Effect.uninterruptibleMask((restore) =>
@@ -142,11 +144,11 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
           message: `Cannot restore because branch ${target.branchName} already exists. Rename it before retrying.`,
         });
       }
-      const startPoint = canonicalTargetBranch(config.defaultTargetBranch);
+      const startPoint = canonicalTargetBranch(targetBranch);
       if (!(yield* git.referenceExists(repoPath, startPoint))) {
         return yield* new HostValidationError({
-          field: "defaultTargetBranch",
-          message: `Configured default branch ${startPoint} is unavailable. Fetch it or update the repository settings before restoring.`,
+          field: "targetBranch",
+          message: `Target branch ${startPoint} is unavailable. Fetch it, or choose another target branch for this chat.`,
         });
       }
       let acquired = false;

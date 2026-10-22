@@ -8,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { act, type ComponentProps } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -189,6 +189,92 @@ async function selectModel(view: ReturnType<typeof renderCreation>) {
   );
 }
 
+async function selectTarget(view: ReturnType<typeof renderCreation>, name: RegExp) {
+  fireEvent.click(view.getByRole("button", { name: "Target branch" }));
+  fireEvent.click(await view.findByRole("option", { name }, { timeout: 800 }));
+}
+
+/** Opens the Target branch list, runs the checks, and closes the list. */
+function inTargetOptions(view: ReturnType<typeof renderCreation>, check: () => void) {
+  fireEvent.click(view.getByRole("button", { name: "Target branch" }));
+  try {
+    check();
+  } finally {
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+  }
+}
+
+test("preselects the repository default target, marks it, and sends it", async () => {
+  const requests: WorkspaceSessionCreateInput[] = [];
+  const view = renderCreation(async (input) => {
+    requests.push(input);
+    throw new Error("Keep form open");
+  });
+  try {
+    await selectModel(view);
+    await waitFor(() =>
+      inTargetOptions(view, () => {
+        expect(view.getByRole("option", { name: /^origin\/remote-only/ })).toBeTruthy();
+        const defaultOption = view.getByRole("option", { name: /^origin\/main/ });
+        expect(within(defaultOption).getByText("default")).toBeTruthy();
+        expect(view.getByRole("option", { name: /^Tracked upstream/ })).toBeTruthy();
+      }),
+    );
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
+    expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
+  } finally {
+    view.unmount();
+  }
+});
+
+test("New worktree hides Tracked upstream and returns an upstream pick to the default", async () => {
+  const requests: WorkspaceSessionCreateInput[] = [];
+  const view = renderCreation(async (input) => {
+    requests.push(input);
+    throw new Error("Keep form open");
+  });
+  try {
+    await selectModel(view);
+    await selectTarget(view, /^Tracked upstream/);
+    fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
+    expect(view.getByText("Creates a new branch from the target branch.")).not.toBeNull();
+    inTargetOptions(view, () =>
+      expect(view.queryByRole("option", { name: /^Tracked upstream/ })).toBeNull(),
+    );
+    fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
+    expect(requests[0]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
+    fireEvent.click(view.getByRole("radio", { name: /Current checkout/ }));
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    await waitFor(() => expect(requests).toHaveLength(2), { timeout: 800 });
+    expect(requests[1]?.location).toBe("local_repo_root");
+    expect(requests[1]?.targetBranch).toEqual({ remote: "origin", branch: "main" });
+  } finally {
+    view.unmount();
+  }
+});
+
+test("sends a picked local target and keeps it across a location change", async () => {
+  const requests: WorkspaceSessionCreateInput[] = [];
+  const view = renderCreation(async (input) => {
+    requests.push(input);
+    throw new Error("Keep form open");
+  });
+  try {
+    await selectModel(view);
+    await selectTarget(view, /^feature\/existing/);
+    fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
+    fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });
+    fireEvent.click(view.getByRole("button", { name: "Create chat" }));
+    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
+    expect(requests[0]?.targetBranch).toEqual({ branch: "feature/existing" });
+  } finally {
+    view.unmount();
+  }
+});
+
 test("matches the task modal width and footer surface, separates actions and disables name autocomplete", () => {
   const view = renderCreation(async () => {
     throw new Error("Unexpected creation");
@@ -345,6 +431,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       location: "local_worktree",
       worktree: { mode: "from_name", name: "my-feature", branchName: null },
       manualTitle: "My session",
+      targetBranch: { remote: "origin", branch: "main" },
     });
     const name = view.getByLabelText("Name optional");
     const fieldset = name.closest("fieldset");
@@ -363,7 +450,7 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
   }
 });
 
-test("shows the repository Default Model read failure, keeps creation usable and retries", async () => {
+test("shows the repository defaults read failure, keeps a target pick usable and retries", async () => {
   let readAttempts = 0;
   const view = renderCreation(
     async () => {
@@ -388,11 +475,14 @@ test("shows the repository Default Model read failure, keeps creation usable and
   );
   try {
     const alert = await view.findByRole("alert");
-    expect(alert.textContent).toContain("The repository Default Model could not load.");
+    expect(alert.textContent).toContain(
+      "The repository Default Model and default target branch could not load.",
+    );
     expect(alert.textContent).toContain("Settings file is unreadable.");
     expect(readAttempts).toBe(1);
+    await selectTarget(view, /^main/);
     await selectModel(view);
-    fireEvent.click(view.getByRole("button", { name: "Retry default model" }));
+    fireEvent.click(view.getByRole("button", { name: "Retry repository defaults" }));
     await waitFor(() => expect(view.queryByRole("alert") === null).toBe(true), { timeout: 800 });
     expect(readAttempts).toBe(2);
   } finally {
@@ -421,6 +511,7 @@ test("creates a worktree chat with one request and no confirmation step", async 
           roleSnapshot: null,
           generatedTitle: null,
           manualTitle: null,
+          targetBranch: input.targetBranch,
           createdAt: 1000,
           updatedAt: 1000,
           archivedAt: null,

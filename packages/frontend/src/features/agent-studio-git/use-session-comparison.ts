@@ -1,4 +1,9 @@
-import type { GitBranch, GitComparisonTarget, GitTargetBranch } from "@openducktor/contracts";
+import {
+  type GitBranch,
+  type GitComparisonTarget,
+  type GitTargetBranch,
+  UPSTREAM_TARGET_BRANCH,
+} from "@openducktor/contracts";
 import {
   type QueryClient,
   useQuery,
@@ -7,6 +12,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useId, useMemo, useState } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import {
   canonicalTargetBranch,
@@ -95,7 +101,7 @@ function comparisonRefreshStep(
   const { repoPath, workingDirectory, target, branchKey } = input;
   if (!canCheck(input) || workingDirectory === null || target === null) return null;
   const targetBranch =
-    target.branch === "@{upstream}" ? target.branch : targetBranchSelectionValue(target);
+    target.branch === UPSTREAM_TARGET_BRANCH ? target.branch : targetBranchSelectionValue(target);
   return {
     // Fetch also updates the current branch's upstream when the comparison target is fixed.
     fetchKey: JSON.stringify([repoPath, workingDirectory, targetBranch, branchKey]),
@@ -140,7 +146,7 @@ export function useSessionComparisonControl(input: {
   const selectionValue = input.target ? targetBranchSelectionValue(input.target) : "";
   const { target, allowUpstream } = input;
   const options = useMemo(
-    () => sessionComparisonOptions(branches.data ?? [], target, allowUpstream),
+    () => sessionComparisonOptions(branches.data ?? [], target, { allowUpstream }),
     [allowUpstream, branches.data, target],
   );
   const { refetch } = branches;
@@ -168,10 +174,14 @@ export function useSessionComparisonControl(input: {
   };
 }
 
+/** A default target marks its option, so the user can see the repository default. */
 export function sessionComparisonOptions(
   branches: GitBranch[],
   target: GitTargetBranch | null,
-  allowUpstream = false,
+  {
+    allowUpstream = false,
+    defaultTarget = null,
+  }: { allowUpstream?: boolean | undefined; defaultTarget?: GitTargetBranch | null } = {},
 ) {
   const selection = target ? targetBranchSelectionValue(target) : "";
   const label = target ? canonicalTargetBranch(target) : selection;
@@ -179,14 +189,29 @@ export function sessionComparisonOptions(
     ? [
         {
           value: selection,
-          label: selection === "@{upstream}" ? "Tracked upstream" : label,
+          label: selection === UPSTREAM_TARGET_BRANCH ? "Tracked upstream" : label,
           secondaryLabel: "selected",
         },
       ]
     : [];
-  if (allowUpstream && selection !== "@{upstream}")
-    included.push({ value: "@{upstream}", label: "Tracked upstream", secondaryLabel: "upstream" });
-  return toBranchSelectorOptions(branches, { valueFormat: "full_ref", includeOptions: included });
+  if (allowUpstream && selection !== UPSTREAM_TARGET_BRANCH)
+    included.push({
+      value: UPSTREAM_TARGET_BRANCH,
+      label: "Tracked upstream",
+      secondaryLabel: "upstream",
+    });
+  const options = toBranchSelectorOptions(branches, {
+    valueFormat: "full_ref",
+    includeOptions: included,
+  });
+  if (!defaultTarget) return options;
+  const defaultValue = targetBranchSelectionValue(defaultTarget);
+  return options.map((option) => (option.value === defaultValue ? markDefault(option) : option));
+}
+
+function markDefault(option: ComboboxOption): ComboboxOption {
+  const description = option.description ? `${option.description}, default` : "default";
+  return { ...option, description };
 }
 
 function comparisonState(

@@ -1,3 +1,4 @@
+import type { WorkspaceSession } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, RotateCcw } from "lucide-react";
 import { useState } from "react";
@@ -12,7 +13,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { invalidateRepoBranchesQuery } from "@openducktor/frontend-core/queries/git";
+import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import {
+  invalidateRepoBranchesQuery,
+  repoBranchesQueryOptions,
+} from "@openducktor/frontend-core/queries/git";
 import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import {
@@ -21,6 +26,7 @@ import {
   workspaceSessionQueryKeys,
 } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import { WorkspaceSessionRemovedWorktreeTarget } from "./workspace-session-removed-worktree-target";
 
 export function WorkspaceSessionHistoryDialog({
   workspaceId,
@@ -36,6 +42,12 @@ export function WorkspaceSessionHistoryDialog({
   const host = useHostClient();
   const queryClient = useQueryClient();
   const archived = useQuery(workspaceSessionListQueryOptions(workspaceId, true));
+  const repoConfig = useQuery(repoConfigQueryOptions(workspaceId));
+  const defaultTarget = repoConfig.data?.defaultTargetBranch ?? null;
+  const branches = useQuery({
+    ...repoBranchesQueryOptions(repoPath),
+    enabled: archived.data?.some(hasRemovedWorktree) ?? false,
+  });
   const [filter, setFilter] = useState("");
   const search = filter.trim().toLowerCase();
   const filteredSessions = archived.data?.filter((record) =>
@@ -102,6 +114,14 @@ export function WorkspaceSessionHistoryDialog({
               </Button>
             </div>
           )}
+          {branches.isError && (
+            <div role="alert">
+              <p className="text-sm text-destructive">{errorMessage(branches.error)}</p>
+              <Button variant="ghost" onClick={() => void branches.refetch()}>
+                Retry branches
+              </Button>
+            </div>
+          )}
           {restore.error && (
             <p role="alert" className="text-sm text-destructive">
               {errorMessage(restore.error)}
@@ -121,12 +141,17 @@ export function WorkspaceSessionHistoryDialog({
                   {record.roleSnapshot?.name ?? "No role"} ·{" "}
                   {record.executionTarget.workingDirectory}
                 </p>
-                {record.executionTarget.kind === "local_worktree" &&
-                  record.executionTarget.worktreeState === "removed" && (
-                    <p className="text-xs text-muted-foreground">
-                      Worktree removed. Restore recreates it from the default branch.
-                    </p>
-                  )}
+                {hasRemovedWorktree(record) && (
+                  <WorkspaceSessionRemovedWorktreeTarget
+                    workspaceId={workspaceId}
+                    record={record}
+                    defaultTarget={defaultTarget}
+                    branches={branches}
+                    disabled={restore.isPending}
+                    // A new target answers the last restore failure.
+                    onSaved={restore.reset}
+                  />
+                )}
               </div>
               <Button
                 size="sm"
@@ -155,5 +180,12 @@ export function WorkspaceSessionHistoryDialog({
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function hasRemovedWorktree(record: WorkspaceSession): boolean {
+  return (
+    record.executionTarget.kind === "local_worktree" &&
+    record.executionTarget.worktreeState === "removed"
   );
 }

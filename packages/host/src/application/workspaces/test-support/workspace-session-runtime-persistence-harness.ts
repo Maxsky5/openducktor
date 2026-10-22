@@ -101,6 +101,7 @@ export const createPersistenceHarness = async (
     },
     generatedTitle: null,
     manualTitle: null,
+    targetBranch: null,
     createdAt: 0,
     updatedAt: 0,
     archivedAt: null,

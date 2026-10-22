@@ -14,6 +14,7 @@ const archivedRecord = (externalSessionId: string): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: null,
   manualTitle: null,
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: 2000,
