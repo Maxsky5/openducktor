@@ -93,6 +93,8 @@ Provide an `AgentRuntimeQueryAdapterPort` with each live-session adapter. Reuse 
 
 The host saves `lastActivityAt` in task and workspace session records as epoch milliseconds. The session list reads that field through its existing record queries. Older task records use `startedAt`; older workspace records use `createdAt`. Never read native metadata or load a transcript to get a navigation date.
 
+The sidebar orders Running entries by saved session start time, newest first, with the target key to break ties. Task grouping uses this same order to select one running role session. Activity updates do not change this order or selection. Needs you and Recent entries use activity time.
+
 `agent-session-activity-persistence.ts` saves dates from the ordered live stream at message and turn boundaries. New pending input uses the host clock because request snapshots have no event timestamp. Child activity updates its saved root. Saves use the full session identity and never move the date backwards. Task activity saves do not change the task's edit time. Committed records reach the frontend through the existing live channel.
 
 Restore baselines, repeated status reports, title and model edits, streamed text, and idle connection cleanup do not change activity dates. Claude writes native bookkeeping records on restore and shutdown; do not use those records as activity. A context usage read must not persist a resumed Claude session.

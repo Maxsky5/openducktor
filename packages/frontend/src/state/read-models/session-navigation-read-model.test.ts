@@ -266,7 +266,7 @@ describe("Task grouping", () => {
       asking: [],
       running: ["old-running", "new-running"],
       needs: [],
-      working: ["old-running"],
+      working: ["new-running"],
       recent: [],
     },
     {
@@ -282,7 +282,7 @@ describe("Task grouping", () => {
       asking: ["question", "permission"],
       running: ["old-running", "new-running"],
       needs: ["question", "permission"],
-      working: ["old-running"],
+      working: ["new-running"],
       recent: [],
     },
   ] as const)(
@@ -378,6 +378,93 @@ describe("Task grouping", () => {
 });
 
 describe("buildSessionNavigationModel", () => {
+  test.each(["task", "none"] as const)(
+    "keeps running task and workspace sessions in start order as activity changes: %s",
+    (grouping) => {
+      const hour = Date.parse("2026-09-30T00:00:00.000Z");
+      const at = (hours: number) => hour + hours * 60 * 60 * 1000;
+      const taskKey = `task_session:alpha:${key("working")}`;
+      const alphaKey = "workspace_session:alpha:chat";
+      const betaKey = "workspace_session:beta:chat";
+      const snapshots = [
+        { task: 8, alpha: 7, beta: 7, recent: [taskKey, alphaKey, betaKey] },
+        { task: 9, alpha: 10, beta: 11, recent: [betaKey, alphaKey, taskKey] },
+        { task: 12, alpha: 10, beta: 11, recent: [taskKey, betaKey, alphaKey] },
+      ];
+      for (const activity of snapshots) {
+        const inputs = [
+          sources({
+            tasks: [createTaskCardFixture({ id: "task-1", status: "in_progress" })],
+            sessionsByTask: {
+              "task-1": ready([record("working", { lastActivityAt: at(activity.task) })]),
+            },
+            chats: [chat("chat", { lastActivityAt: at(activity.alpha) })],
+            live: liveReady([
+              [key("working"), facts({ activityState: "running" })],
+              [key("native-chat"), facts({ activityState: "running" })],
+            ]),
+          }),
+          sources({
+            owner: workspace("beta"),
+            chats: [chat("chat", { lastActivityAt: at(activity.beta) })],
+            live: liveReady([[key("native-chat"), facts({ activityState: "starting" })]]),
+          }),
+        ];
+        for (const ordered of [inputs, [...inputs].reverse()]) {
+          const running = buildSessionNavigationModel(ordered, grouping).groups[1]?.entries ?? [];
+          expect(groupKeys(running)).toEqual([taskKey, alphaKey, betaKey]);
+          expect(running.map((entry) => entry.time)).toEqual([
+            { kind: "activity", at: at(activity.task) },
+            { kind: "activity", at: at(activity.alpha) },
+            { kind: "activity", at: at(activity.beta) },
+          ]);
+        }
+        const settled = inputs.map((input) => ({ ...input, live: liveReady() }));
+        const recent = buildSessionNavigationModel(settled, grouping).groups[2]?.entries ?? [];
+        expect(groupKeys(recent)).toEqual(activity.recent);
+      }
+    },
+  );
+
+  test("keeps the same running task session selected when another running role reports activity", () => {
+    const input = sources({
+      tasks: [createTaskCardFixture({ id: "task-1", status: "in_progress" })],
+      sessionsByTask: {
+        "task-1": ready([
+          record("older", { startedAt: "2026-09-30T07:00:00.000Z" }),
+          record("newer", { role: "qa" }),
+        ]),
+      },
+      live: liveReady([
+        [key("older"), facts({ activityState: "running" })],
+        [key("newer"), facts({ activityState: "running" })],
+      ]),
+    });
+    expect(groupsOf(buildSessionNavigationModel([input], "task")).running).toEqual([
+      `task_session:alpha:${key("newer")}`,
+    ]);
+    const updated = {
+      ...input,
+      taskSessions: new Map([
+        [
+          "task-1",
+          ready([
+            record("older", {
+              startedAt: "2026-09-30T07:00:00.000Z",
+              lastActivityAt: Date.parse("2026-09-30T10:00:00.000Z"),
+            }),
+            record("newer", { role: "qa", lastActivityAt: Date.parse("2026-09-30T09:00:00.000Z") }),
+          ]),
+        ],
+      ]),
+    };
+    expect(groupsOf(buildSessionNavigationModel([updated], "task")).running).toEqual([
+      `task_session:alpha:${key("newer")}`,
+    ]);
+    const settled = buildSessionNavigationModel([{ ...updated, live: liveReady() }], "task");
+    expect(groupsOf(settled).recent).toEqual([`task_session:alpha:${key("older")}`]);
+  });
+
   test("removes all sessions of a closed task from every group and restores them when reopened", () => {
     const task = createTaskCardFixture({ id: "task-1", status: "in_progress" });
     const input = sources({
