@@ -7,6 +7,9 @@ import { Effect } from "effect";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
+import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
+import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
+import { HostValidationError } from "../../effect/host-errors";
 
 test("does not import Issues into SQLite when a custom Task store is active", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "odt-custom-task-store-"));
@@ -21,6 +24,7 @@ test("does not import Issues into SQLite when a custom Task store is active", as
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
   };
   const services = createNodeTaskAssetServices({
+    assertOwnershipReadAdmitted: () => Effect.void,
     configDir: { root, scope: "test" },
     configuredTaskStore: createTaskStoreTestDouble({}),
     onBackgroundFailure: () => Effect.void,
@@ -86,6 +90,7 @@ test("custom config session ownership and import do not read other installations
     getRepoConfigByRepoPath: () => Effect.succeed(repoConfig),
   };
   const services = createNodeTaskAssetServices({
+    assertOwnershipReadAdmitted: () => Effect.void,
     configDir: { root: configDir, scope: "dev" },
     processEnv: { OPENDUCKTOR_CONFIG_DIR: configDir },
     onBackgroundFailure: () => Effect.void,
@@ -131,6 +136,85 @@ test("custom config session ownership and import do not read other installations
   } finally {
     await Effect.runPromise(services.taskStoreConnectionShutdownStep.run());
     home.mockRestore();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ownership reads reject removal and stale configured scopes without recreating the database", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "odt-ownership-removal-"));
+  const scope = { repoPath: path.join(root, "missing-repo"), workspaceId: "repo" };
+  let configured = true;
+  const config = repoConfigSchema.parse({ ...scope, workspaceName: "Repo" });
+  const settings = createWorkspaceSettingsServiceTestDouble({
+    getRepoConfig: () =>
+      configured
+        ? Effect.succeed(config)
+        : Effect.fail(
+            new HostValidationError({
+              field: "workspaceId",
+              message: "Workspace is not configured: repo",
+            }),
+          ),
+    getRepoConfigByRepoPath: () => Effect.succeed(config),
+    getWorkspaceCatalog: () =>
+      Effect.succeed({ openWorkspaces: [], closedWorkspaces: [], incompleteRemovals: [] }),
+  });
+  const admission = createWorkspaceAdmissionService({ workspaceSettingsService: settings });
+  const services = createNodeTaskAssetServices({
+    configDir: { root, scope: "test" },
+    assertWorkspaceAdmitted: admission.assertTaskStoreAccess,
+    assertOwnershipReadAdmitted: admission.assertTaskStoreOwnershipReadAccess,
+    onBackgroundFailure: () => Effect.void,
+    processEnv: {},
+    workspaceSettingsService: settings,
+  });
+  const record: WorkspaceSession = {
+    id: "owner",
+    runtimeKind: "codex",
+    externalSessionId: null,
+    executionTarget: { kind: "local_repo_root", workingDirectory: scope.repoPath },
+    roleSnapshot: null,
+    selectedModel: null,
+    generatedTitle: null,
+    manualTitle: null,
+    createdAt: 1,
+    updatedAt: 1,
+    archivedAt: null,
+  };
+  const databasePath = path.join(root, "task-stores", scope.workspaceId, "database.sqlite");
+  try {
+    await Effect.runPromise(services.workspaceSessionStore.create({ ...scope, session: record }));
+    admission.blockWorkspace({ ...scope, reason: "closed" });
+    expect(
+      await Effect.runPromise(services.workspaceSessionStore.listForWorktreeOwnership(scope)),
+    ).toEqual([record]);
+    await expect(
+      Effect.runPromise(
+        services.workspaceSessionStore.listForWorktreeOwnership({
+          ...scope,
+          repoPath: path.join(root, "another-repo"),
+        }),
+      ),
+    ).rejects.toThrow("no longer matches this Repository");
+    await Effect.runPromise(admission.reserveWorkspace({ ...scope, operation: "remove" }));
+    await Effect.runPromise(services.removeWorkspaceTaskStore(scope.workspaceId));
+    await expect(
+      Effect.runPromise(services.workspaceSessionStore.listForWorktreeOwnership(scope)),
+    ).rejects.toThrow("remove operation is already in progress");
+    expect(await Bun.file(databasePath).exists()).toBe(false);
+    admission.releaseReservation(scope.workspaceId);
+    admission.blockWorkspace({ ...scope, reason: "removal" });
+    await expect(
+      Effect.runPromise(services.workspaceSessionStore.listForWorktreeOwnership(scope)),
+    ).rejects.toThrow("Workspace removal is incomplete");
+    configured = false;
+    admission.forgetWorkspace(scope.workspaceId);
+    await expect(
+      Effect.runPromise(services.workspaceSessionStore.listForWorktreeOwnership(scope)),
+    ).rejects.toThrow("Workspace is not configured");
+    expect(await Bun.file(databasePath).exists()).toBe(false);
+  } finally {
+    await Effect.runPromise(services.taskStoreConnectionShutdownStep.run());
     await rm(root, { recursive: true, force: true });
   }
 });

@@ -1474,6 +1474,7 @@ describe("CodexAppServerAdapter streaming", () => {
       expect.objectContaining({
         type: "assistant_message",
         message: "Done before idle.",
+        forkPoint: { messageId: "agent-idle-final" },
         totalTokens: 321,
         durationMs: 1_200,
       }),

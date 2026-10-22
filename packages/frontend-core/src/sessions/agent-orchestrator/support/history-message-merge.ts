@@ -81,7 +81,8 @@ export const mergeHistoryMessages = (
         finalAssistantSourceIds.add(message.meta.sourceMessageId);
       }
     });
-    forEachSessionMessage(loadedOwner, (message) => {
+    forEachSessionMessage(loadedOwner, (loadedMessage) => {
+      let message = loadedMessage;
       // A retraction or compaction during this read must not restore removed rows.
       if (
         removedSourceIds.has(sessionMessageSourceId(message)) ||
@@ -98,6 +99,17 @@ export const mergeHistoryMessages = (
         }
         // Whole-message text can span several parts. Keep it out of each part's merge.
         absorbedCurrentMessageIds.add(wholeMessage.id);
+        if (
+          isFinalAssistantChatMessage(message) &&
+          wholeMessage.meta?.kind === "assistant" &&
+          wholeMessage.meta.forkPoint &&
+          !message.meta.forkPoint
+        ) {
+          message = {
+            ...message,
+            meta: { ...message.meta, forkPoint: wholeMessage.meta.forkPoint },
+          };
+        }
       }
       const sameIdCurrentMessage = currentIndex.firstById.get(message.id);
       const matchingCurrentMessages = findMatchingCurrentMessages({

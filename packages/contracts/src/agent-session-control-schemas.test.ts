@@ -10,12 +10,61 @@ import {
   agentSessionModelSettingsSchema,
   agentRepositorySessionStartInputSchema,
   agentWorkflowSessionStartInputSchema,
+  agentWorkflowSessionForkInputSchema,
 } from "./agent-session-control-schemas";
 
 const workflowScope = { kind: "workflow" as const, taskId: "task-1", role: "build" as const };
 const repositoryScope = { kind: "repository" as const };
 
 describe("agent session control contracts", () => {
+  test("keeps completed-reply forks separate from legacy history-anchor forks", () => {
+    const prepared = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/fork",
+      sessionScope: workflowScope,
+      systemPrompt: "Build the feature",
+      parentExternalSessionId: "source",
+    };
+    expect(agentSessionControlForkInputSchema.parse(prepared)).toEqual(prepared);
+    expect(
+      agentSessionControlForkInputSchema.parse({ ...prepared, runtimeHistoryAnchor: "turn-1" }),
+    ).toMatchObject({ runtimeHistoryAnchor: "turn-1" });
+    const replyFork = {
+      ...prepared,
+      sourceWorkingDirectory: "/repo/source",
+      forkPoint: { messageId: "reply-1" },
+    };
+    expect(agentSessionControlForkInputSchema.parse(replyFork)).toEqual(replyFork);
+    expect(
+      agentSessionControlForkInputSchema.safeParse({
+        ...replyFork,
+        runtimeHistoryAnchor: "turn-1",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("workflow fork intents require an exact reply and leave model preparation to the host", () => {
+    const intent = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/source",
+      externalSessionId: "source",
+      sessionScope: workflowScope,
+      forkPoint: { messageId: "reply-1" },
+    };
+    expect(agentWorkflowSessionForkInputSchema.parse(intent)).toEqual(intent);
+    for (const invalid of [
+      { ...intent, forkPoint: undefined },
+      { ...intent, forkPoint: { messageId: " " } },
+      { ...intent, sessionScope: repositoryScope },
+      { ...intent, model: { providerId: "openai", modelId: "gpt-5" } },
+      { ...intent, forkPoint: { messageId: "reply-1", lastTurnId: "native-turn" } },
+    ]) {
+      expect(agentWorkflowSessionForkInputSchema.safeParse(invalid).success).toBe(false);
+    }
+  });
+
   test("parses one host-owned workflow start request without a working directory", () => {
     expect(
       agentWorkflowSessionStartInputSchema.parse({

@@ -132,6 +132,9 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     lastAssistantTextFinal?: boolean;
     lastAssistantTextTurnIndex?: number;
     lastSuccessfulResultTurnIndex?: number;
+    lastAssistantNativeUuid?: string;
+    lastAssistantNativeUuidTurnIndex?: number;
+    completedReplyChainIds?: Map<string, string>;
     model: AgentModelSelection | undefined;
     parentExternalSessionId?: string;
     pendingApprovals: Map<string, PendingApproval>;

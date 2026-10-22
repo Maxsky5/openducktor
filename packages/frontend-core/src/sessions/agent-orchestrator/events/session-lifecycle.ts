@@ -13,6 +13,7 @@ import {
   appendSessionMessage,
   createSessionMessagesState,
   findLastSessionMessageByRole,
+  findSessionMessageById,
   getSessionMessageAt,
   getSessionMessageCount,
   replaceSessionMessageById,
@@ -86,6 +87,7 @@ const resolveFinalAssistantSnapshot = ({
       durationMs,
       event.totalTokens ?? resolvedContextUsage?.totalTokens,
       model ?? undefined,
+      event.forkPoint,
     ),
   };
   if (resolvedContextUsage?.contextWindow !== undefined) {
@@ -147,6 +149,15 @@ export const handleAssistantMessage = (
           )
         : undefined;
     let assistantMessage = nextSnapshot.assistantMessage;
+    const previousAssistantMessage =
+      sourceTextMessage ?? findSessionMessageById(settledOwner, event.messageId);
+    if (
+      !event.forkPoint &&
+      previousAssistantMessage?.meta?.kind === "assistant" &&
+      previousAssistantMessage.meta.forkPoint
+    ) {
+      assistantMessage.meta.forkPoint = previousAssistantMessage.meta.forkPoint;
+    }
     if (sourceTextMessage?.meta?.kind === "assistant") {
       const assistantMeta: Extract<AgentChatMessageMeta, { kind: "assistant" }> = {
         ...nextSnapshot.assistantMessage.meta,

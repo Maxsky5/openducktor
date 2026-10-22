@@ -1,4 +1,5 @@
 import { createCodexSessionImportAdapter } from "./codex-session-import";
+import { withForkedSessionCleanup } from "./forked-session-cleanup";
 import { createCodexControlPolicyBinder } from "./codex-control-policy";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
@@ -41,7 +42,7 @@ import {
   refreshAfterAcceptedCodexMessage,
   toCodexMessageSendError,
 } from "./codex-live-session-acceptance";
-import { toCodexSendRequest } from "./codex-live-session-inputs";
+import { toCodexForkRequest, toCodexSendRequest } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 import {
   parseCodexLiveSessionOutput,
@@ -422,18 +423,13 @@ export const createCodexLiveSessionAdapterPreparer = ({
         forkSession: (input) =>
           bindControlPolicy(input, "fork-session").pipe(
             Effect.flatMap((boundInput) => {
-              const { model, runtimeHistoryAnchor, ...requiredInput } = boundInput;
-              const request: Parameters<typeof controller.forkSession>[0] = requiredInput;
-              if (model !== undefined) {
-                request.model = model;
-              }
-              if (runtimeHistoryAnchor !== undefined) {
-                request.runtimeHistoryAnchor = runtimeHistoryAnchor;
-              }
-              return runSummary(
-                "codex-live-session.fork-session",
-                () => controller.forkSession(request),
-                input,
+              const request = toCodexForkRequest(boundInput);
+              return withForkedSessionCleanup(input, adapter, (capture) =>
+                runSummary(
+                  "codex-live-session.fork-session",
+                  () => controller.forkSession(request).then(capture),
+                  input,
+                ),
               );
             }),
           ),

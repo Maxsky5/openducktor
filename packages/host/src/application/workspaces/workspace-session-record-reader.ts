@@ -4,15 +4,17 @@ import type { GitPort } from "../../ports/git-port";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
+export type WorkspaceSessionRecordReaderDependencies = {
+  settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
+  git: Pick<GitPort, "canonicalizePath">;
+  store: Pick<WorkspaceSessionStorePort, "get">;
+};
+
 export const createWorkspaceSessionRecordReader = ({
   settings,
   git,
   store,
-}: {
-  settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
-  git: Pick<GitPort, "canonicalizePath">;
-  store: Pick<WorkspaceSessionStorePort, "get">;
-}) => {
+}: WorkspaceSessionRecordReaderDependencies) => {
   const scopeFor = (workspaceId: string) =>
     Effect.gen(function* () {
       const config = yield* settings.getRepoConfig(workspaceId);

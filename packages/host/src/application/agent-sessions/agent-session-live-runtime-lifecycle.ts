@@ -35,6 +35,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
   observedRepoPaths,
   onDetach,
   admitRoot,
+  releaseRoot,
 }: {
   readonly adapterRegistry: AgentSessionLiveAdapterRegistryPort;
   readonly coordinator: LiveStateCoordinator;
@@ -56,6 +57,7 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
     binding: AgentSessionLiveRegistration,
     root: AgentSessionAuthorizedRoot,
   ) => void;
+  readonly releaseRoot: (ref: AgentSessionLiveRef) => void;
   readonly onDetach: (binding: AgentSessionLiveRegistration) => void;
 }): LiveRuntimeLifecycle => {
   const detachedBindings = new WeakSet<AgentSessionLiveRegistration>();
@@ -170,6 +172,8 @@ export const createAgentSessionLiveRuntimeLifecycle = ({
             // Cleanup can drain native events. A detached lease cannot publish them.
             if (activeRegistrations.has(registration)) {
               if (result.admittedRoot) admitRoot(registration, result.admittedRoot);
+              for (const change of result.changes)
+                if (change.type === "session_removed") releaseRoot(change.ref);
               yield* publishChanges(result.changes);
             }
             return result.value;

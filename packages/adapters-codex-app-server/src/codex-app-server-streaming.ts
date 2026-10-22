@@ -311,6 +311,7 @@ const emitFinalAgentMessage = (
       timestamp,
       messageId: itemId,
       message: text,
+      forkPoint: { messageId: itemId },
     };
     if (tokenUsage?.totalTokens !== undefined) {
       event.totalTokens = tokenUsage.totalTokens;

@@ -3,6 +3,7 @@ import {
   preAdmissionNextActionOverrides,
 } from "./claude-pending-approval-resolution";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
+import { withForkedSessionCleanup } from "./forked-session-cleanup";
 import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
@@ -377,20 +378,24 @@ export const createClaudeLiveSessionAdapterPreparer =
         forkSession: (input) =>
           requireSessionWorkingDirectory(input, "fork-session").pipe(
             Effect.flatMap(() =>
-              runSummary(
-                "claude-live-session.fork-session",
-                input.repoPath,
-                () =>
-                  service.forkSession(
-                    {
-                      ...toClaudeForkInput(input),
-                      workStartGuard: input.workStartGuard,
-                      onWorkIssued: input.onWorkIssued,
-                      onWorkAccepted: input.onWorkAccepted,
-                    },
-                    runtime.runtimeId,
-                  ),
-                { sessionScope: input.sessionScope },
+              withForkedSessionCleanup(input, adapter, (capture) =>
+                runSummary(
+                  "claude-live-session.fork-session",
+                  input.repoPath,
+                  () =>
+                    service
+                      .forkSession(
+                        {
+                          ...toClaudeForkInput(input),
+                          workStartGuard: input.workStartGuard,
+                          onWorkIssued: input.onWorkIssued,
+                          onWorkAccepted: input.onWorkAccepted,
+                        },
+                        runtime.runtimeId,
+                      )
+                      .pipe(Effect.map(capture)),
+                  { sessionScope: input.sessionScope },
+                ),
               ),
             ),
           ),

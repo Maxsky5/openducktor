@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "../types/agent-orchestrator";
 import { resolveSavedModelAlias } from "./model-catalog-selection";
-import { coerceVisibleSelectionToCatalog } from "./model-selection-state";
+import { coerceVisibleSelectionToCatalog, isSameSelection } from "./model-selection-state";
 
 const model = (modelId: string): AgentModelCatalog["models"][number] => ({
   id: modelId,
@@ -59,4 +59,29 @@ describe("coerceVisibleSelectionToCatalog", () => {
       variant: "max",
     });
   });
+});
+
+describe("isSameSelection", () => {
+  test.each([
+    { runtimeKind: "opencode", left: undefined, right: "default", equal: true },
+    { runtimeKind: "opencode", left: "default", right: undefined, equal: true },
+    { runtimeKind: "opencode", left: "unknown", right: "default", equal: false },
+    { runtimeKind: "opencode", left: "high", right: "default", equal: false },
+    { runtimeKind: "codex", left: undefined, right: "default", equal: false },
+    { runtimeKind: "claude", left: undefined, right: "default", equal: false },
+  ] satisfies {
+    runtimeKind: RuntimeKind;
+    left: string | undefined;
+    right: string | undefined;
+    equal: boolean;
+  }[])(
+    "compares $runtimeKind variants $left and $right as $equal",
+    ({ runtimeKind, left, right, equal }) => {
+      const selection = { runtimeKind, providerId: "provider", modelId: "model" };
+
+      expect(
+        isSameSelection({ ...selection, variant: left }, { ...selection, variant: right }),
+      ).toBe(equal);
+    },
+  );
 });

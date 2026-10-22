@@ -1,19 +1,38 @@
 import type {
   AgentSessionControlStartInput,
   AgentSessionControlSummary,
+  AgentSessionLiveRef,
   WorkspaceSessionRefInput,
   WorkspaceSessionStartResult,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
-import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
+import {
+  createWorkspaceSessionRecordReader,
+  type WorkspaceSessionRecordReaderDependencies,
+} from "./workspace-session-record-reader";
 import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
-import { validateWorkspaceSessionTarget } from "./workspace-session-target";
+import {
+  validateWorkspaceSessionTarget,
+  type WorkspaceSessionTargetValidationDependencies,
+} from "./workspace-session-target";
 import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
+import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+
+export type WorkspaceSessionStartDependencies = WorkspaceSessionRecordReaderDependencies &
+  WorkspaceSessionTargetValidationDependencies & {
+    store: Pick<WorkspaceSessionStorePort, "bindRuntimeSession">;
+    runtime: Pick<RuntimeRegistryPort, "requireReady">;
+    operationGate: Pick<ReturnType<typeof createWorkspaceSessionOperationGate>, "run">;
+    live: Pick<AgentSessionLiveStateService, "startSession" | "releaseSession">;
+    markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
+  };
 
 export const createWorkspaceSessionStart = (
-  dependencies: WorkspaceSessionServiceDependencies,
+  dependencies: WorkspaceSessionStartDependencies,
   onStarted: (session: AgentSessionControlSummary) => Effect.Effect<void, HostError> = () =>
     Effect.void,
   workStartGuard?: import("@openducktor/core").AgentWorkStartGuard,

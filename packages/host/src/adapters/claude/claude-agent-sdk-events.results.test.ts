@@ -265,6 +265,7 @@ describe("handleClaudeSdkMessage result events", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       messageId: "befb9ace-857d-4900-8d40-a428dd99cc46",
       message: "Final answer",
+      forkPoint: { messageId: "befb9ace-857d-4900-8d40-a428dd99cc46" },
       model: {
         providerId: "claude",
         modelId: "claude-sonnet-4-6",

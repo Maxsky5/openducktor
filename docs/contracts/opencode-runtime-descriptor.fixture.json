@@ -94,7 +94,7 @@
     "sessionLifecycle": {
       "supportedStartModes": ["fresh", "reuse", "fork"],
       "supportsSessionFork": true,
-      "forkTargets": ["session"],
+      "forkTargets": ["session", "message"],
       "supportsListLiveSessions": true,
       "supportsPendingInputSnapshots": true,
       "supportsInterruptedTurnResume": false

@@ -8,7 +8,7 @@ import {
   agentUserMessageDisplayPartSchema,
 } from "./agent-session-event-schemas";
 import { agentSessionPendingQuestionRequestSchema } from "./agent-session-pending-schemas";
-import { agentModelSelectionSchema } from "./agent-session-schemas";
+import { agentModelSelectionSchema, agentSessionForkPointSchema } from "./agent-session-schemas";
 import { fileDiffSchema, fileStatusSchema } from "./git-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -136,6 +136,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
     .object({
       ...sessionHistoryMessageFields,
       role: z.literal("assistant"),
+      forkPoint: agentSessionForkPointSchema.optional(),
       error: z.string().optional(),
       durationMs: z.number().optional(),
       totalTokens: z.number().optional(),

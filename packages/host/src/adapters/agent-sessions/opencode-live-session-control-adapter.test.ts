@@ -4,6 +4,12 @@ import { Effect } from "effect";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
+import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
+import { HostOperationError } from "../../effect/host-errors";
+import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
+import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
+import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { createTestOpenCodeLiveSessionAdapterPreparer as createOpenCodeLiveSessionAdapterPreparer } from "./opencode-live-session-adapter.test-support";
 import {
   controlMetadata,
@@ -16,6 +22,129 @@ import {
 } from "./opencode-live-session-adapter.test-support";
 
 describe("OpenCode live session controls", () => {
+  test("removes the failed fork from host root restoration after a publication defect", async () => {
+    const restored: string[][] = [];
+    const harness = createRuntimeHarness({
+      readSessionSources: async (_repoPath, roots) => {
+        restored.push(roots?.map((root) => root.externalSessionId) ?? []);
+        return { sources: [], failures: [] };
+      },
+    });
+    const live = createAgentSessionLiveStateService({
+      messageQueues: noMessageQueues,
+      runtimeAdmission: { admit: (_kind, work) => work },
+      adapterRegistry: createLiveSessionAdapterRegistry(),
+      readSessionRootRefs: () => Effect.succeed([]),
+      publish: () => {},
+      faultLog: () => Effect.void,
+      observeNotificationInput: (event) => {
+        if (
+          event.type === "session_upsert" &&
+          event.session.ref.externalSessionId === "controlled-session"
+        )
+          throw new Error("Notification publication failed");
+      },
+    });
+    const prepared = await Effect.runPromise(
+      createOpenCodeLiveSessionAdapterPreparer({
+        liveSessionLifecycle: live,
+        prepareRuntime: harness.prepareRuntime,
+      })(runtime, ignoreObservationLoss),
+    );
+    await Effect.runPromise(live.registerRuntimeAdapter(prepared.adapter));
+    await Effect.runPromise(prepared.startForwarding());
+    try {
+      const failure = await Effect.runPromise(
+        prepared.adapter.forkSession({
+          ...ref,
+          sessionScope: controlSummary.sessionAssociation,
+          systemPrompt: "Build it",
+          parentExternalSessionId: "source-session",
+          forkPoint: { messageId: "native-reply" },
+        }),
+      ).catch((cause: unknown) => cause);
+      expect(String(failure)).toContain("Notification publication failed");
+      await Effect.runPromise(live.refresh({ repoPath: ref.repoPath }));
+      expect(restored.at(-1)).toEqual([]);
+      expect(await Effect.runPromise(live.list({ repoPath: ref.repoPath }))).toEqual([]);
+    } finally {
+      await Effect.runPromise(live.releaseRuntime(runtime.runtimeId));
+    }
+  });
+
+  test.each([
+    { publication: "failure", stopFails: false },
+    { publication: "failure", stopFails: true },
+    { publication: "defect", stopFails: false },
+  ])(
+    "releases an unsaved native fork after publication $publication, even when Stop fails=$stopFails",
+    async ({ publication, stopFails }) => {
+      const harness = createRuntimeHarness();
+      const changes: AgentSessionLiveAdapterChange[] = [];
+      const lifecycle: RuntimeLiveSessionLifecyclePort = {
+        ...createLifecycle(changes),
+        createRuntimeRegistration: (binding) =>
+          new AgentSessionLiveRegistration(binding, (mutation) =>
+            mutation.pipe(
+              Effect.flatMap((result) => {
+                changes.push(...result.changes);
+                if (!result.admittedRoot) return Effect.succeed(result.value);
+                return publication === "defect"
+                  ? Effect.die(new Error("Publication failed"))
+                  : Effect.fail(
+                      new HostOperationError({
+                        operation: "test.publish",
+                        message: "Publication failed",
+                      }),
+                    );
+              }),
+            ),
+          ),
+      };
+      const prepared = await Effect.runPromise(
+        createOpenCodeLiveSessionAdapterPreparer({
+          liveSessionLifecycle: lifecycle,
+          prepareRuntime: async (input) => {
+            const native = await harness.prepareRuntime(input);
+            const stop = native.connection.stopSession;
+            native.connection.stopSession = async (ref) => {
+              await stop(ref);
+              if (stopFails) throw new Error("Stop failed");
+            };
+            return native;
+          },
+        })(runtime, ignoreObservationLoss),
+      );
+      await Effect.runPromise(prepared.startForwarding());
+      try {
+        const result = await Effect.runPromise(
+          prepared.adapter.forkSession({
+            ...ref,
+            sessionScope: controlSummary.sessionAssociation,
+            systemPrompt: "Build it",
+            parentExternalSessionId: "source-session",
+            forkPoint: { messageId: "native-reply" },
+          }),
+        ).catch((cause: unknown) => cause);
+        expect(String(result)).toContain("Publication failed");
+        expect(String(result)).toContain("controlled-session");
+        if (stopFails) expect(String(result)).toContain("Stop failed");
+        expect(harness.controlCalls.map(({ operation }) => operation)).toEqual([
+          "fork",
+          "stop",
+          "release",
+        ]);
+        expect(harness.controlCalls.slice(1)).toEqual([
+          { operation: "stop", input: { ...ref, externalSessionId: "controlled-session" } },
+          { operation: "release", input: { ...ref, externalSessionId: "controlled-session" } },
+        ]);
+        expect(await Effect.runPromise(prepared.adapter.listSnapshots())).toEqual([]);
+      } finally {
+        await Effect.runPromise(prepared.adapter.releaseRuntime());
+      }
+    },
+  );
+
   test("publishes created forks without task ownership or a subagent parent", async () => {
     const harness = createRuntimeHarness();
     const publishedChanges: AgentSessionLiveAdapterChange[] = [];
@@ -35,12 +164,18 @@ describe("OpenCode live session controls", () => {
           sessionScope: controlSummary.sessionAssociation,
           systemPrompt: "Build it",
           parentExternalSessionId: "planner-session",
+          sourceWorkingDirectory: "/repo/source",
+          forkPoint: { messageId: "native-reply" },
         }),
       );
 
       expect(harness.controlCalls).toContainEqual({
         operation: "fork",
-        input: expect.objectContaining({ parentExternalSessionId: "planner-session" }),
+        input: expect.objectContaining({
+          parentExternalSessionId: "planner-session",
+          sourceWorkingDirectory: "/repo/source",
+          forkPoint: { messageId: "native-reply" },
+        }),
       });
       const snapshots = await Effect.runPromise(prepared.adapter.listSnapshots());
       const fork = snapshots.find(

@@ -28,6 +28,7 @@ test.each(["default", "steer"] as const)(
         run: (_ref, _operation, work) => work,
         runSend: (_ref, work) => work,
         validateRef: unexpected,
+        prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
         prepareSend: unexpected,
         prepareResume: unexpected,
         prepareModelUpdate: unexpected,

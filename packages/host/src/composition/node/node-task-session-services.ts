@@ -1,4 +1,5 @@
 import { agentSessionRefKey } from "@openducktor/core";
+import { createTaskWorkflowSessionFork } from "../../application/agent-sessions/task-workflow-session-fork";
 import { createTaskSessionOperations } from "../../application/agent-sessions/task-session-operations";
 import { createRuntimeTaskActivityGuard } from "../../application/tasks/runtime-task-activity-guard";
 import {
@@ -45,6 +46,7 @@ export const createNodeTaskSessionServices = ({
   eventServiceInput,
   agentSessionLiveStateService,
   canonicalizeRepoPath,
+  runtimeAdmission,
   repositoryPolicy,
   workflowLaunch,
   pauseForStop,
@@ -54,6 +56,7 @@ export const createNodeTaskSessionServices = ({
   eventServiceInput: Omit<Parameters<typeof createNodeTaskEventServices>[0], "baseTaskService">;
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
+  runtimeAdmission: import("../../ports/runtime-admission-port").RuntimeAdmissionPort;
   repositoryPolicy: AgentSessionOperationPolicy;
   workflowLaunch: Pick<
     Parameters<typeof createWorkflowLaunchService>[0],
@@ -172,6 +175,27 @@ export const createNodeTaskSessionServices = ({
       tasks: eventServices.taskService,
     }),
   };
+  const taskSessions = createTaskSessionOperations({
+    canonicalizeRepoPath,
+    runtime: {
+      ...agentSessionLiveStateService,
+      ...agentSessionCommandService.prepareSessionCreation,
+    },
+    tasks: eventServices.taskService,
+    taskReader: taskServiceInput.taskStore,
+    taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
+    taskSessionStart,
+    writes: {
+      saveSession: eventServices.taskService.agentSessionUpsertDeferredPublication,
+      transitionTask: eventServices.taskService.transitionTaskDeferredPublication,
+    },
+  });
+  const forkWorkflowSession = createTaskWorkflowSessionFork({
+    runtimeAdmission,
+    commands: agentSessionCommandService,
+    sessions: taskSessions,
+    stop: agentSessionLiveStateService.stopSession,
+  });
   const workflowLaunchService = createWorkflowLaunchService({
     messageDelivery: workflowLaunch.messageDelivery,
     resolveParts: workflowLaunch.resolveParts,
@@ -193,28 +217,14 @@ export const createNodeTaskSessionServices = ({
       sendUserMessage: agentSessionCommandService.sendUserMessage,
       updateSessionModel: agentSessionCommandService.updateSessionModel,
     },
-    sessions: createTaskSessionOperations({
-      canonicalizeRepoPath,
-      runtime: {
-        ...agentSessionLiveStateService,
-        ...agentSessionCommandService.prepareSessionCreation,
-      },
-      tasks: eventServices.taskService,
-      taskReader: taskServiceInput.taskStore,
-      taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
-      taskSessionStart,
-      writes: {
-        saveSession: eventServices.taskService.agentSessionUpsertDeferredPublication,
-        transitionTask: eventServices.taskService.transitionTaskDeferredPublication,
-      },
-    }),
+    sessions: taskSessions,
     startPreparation: taskSessionStart,
   });
   return {
     ...eventServices,
     taskService,
     shutdownCompletionOperations: completionWorkers.shutdown,
-    agentSessionCommandService,
+    agentSessionCommandService: { ...agentSessionCommandService, forkWorkflowSession },
     workflowLaunchService,
     agentRuntimeQueries,
     approvalPolicy,

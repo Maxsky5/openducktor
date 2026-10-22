@@ -1,13 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { createTestClientConnection } from "../test-support/test-client-connection";
+import {
+  createTestClientConnection,
+  createTestHostConnection,
+} from "../test-support/test-client-connection";
 import {
   updateWorkspaceSessionQueries,
   workspaceSessionIdsQueryOptions,
   workspaceSessionListQueryOptions,
   workspaceSessionQueryKeys,
 } from "./workspace-sessions";
+import { workspaceSessionArchivePreviewQueryOptions } from "./workspace-session-archive";
+import { observeWorkspaceSessionRecords } from "./workspace-session-updates";
+import { connectionReconnectedEvent } from "../recovery/connection-control-events";
+import type { WorkspaceSessionUpdateListener } from "../connection/host-connection";
 
 const session = (id: string, updatedAt = 1000): WorkspaceSession => ({
   id,
@@ -25,6 +32,81 @@ const session = (id: string, updatedAt = 1000): WorkspaceSession => ({
 });
 
 describe("Workspace Session query cache", () => {
+  test("a lost record stream invalidates archive previews after reconnect", () => {
+    const listeners: WorkspaceSessionUpdateListener[] = [];
+    const { queryClient: client } = createTestClientConnection({
+      host: createTestHostConnection({
+        subscribeWorkspaceSessionUpdates: async (listener) => {
+          listeners.push(listener);
+          return () => {};
+        },
+      }),
+    });
+    const key = workspaceSessionArchivePreviewQueryOptions("workspace", "chat").queryKey;
+    client.setQueryData(key, {
+      branchName: "feature/chat",
+      worktreeExists: true,
+      hasUncommittedChanges: false,
+      sharedWith: [],
+    });
+    const stop = observeWorkspaceSessionRecords(client, () => {});
+    try {
+      const publish = listeners[0];
+      if (!publish) throw new Error("Expected a workspace session subscription.");
+      publish(connectionReconnectedEvent(false));
+      expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+      publish(connectionReconnectedEvent(true));
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally {
+      stop();
+      client.clear();
+    }
+  });
+
+  test("archive previews refresh for ownership and title changes, and keep activity updates local", () => {
+    const client = new QueryClient();
+    const entry = session("source");
+    const key = workspaceSessionArchivePreviewQueryOptions(
+      "other-workspace",
+      "other-chat",
+    ).queryKey;
+    const preview = {
+      branchName: "feature/chat",
+      worktreeExists: true,
+      hasUncommittedChanges: false,
+      sharedWith: [{ workspaceId: "A", sessionId: entry.id, title: "Untitled session" }],
+    };
+    client.setQueryData(workspaceSessionQueryKeys.list("A", false), [entry]);
+    try {
+      for (const changed of [
+        { ...entry, updatedAt: 2000, lastActivityAt: 2000 },
+        {
+          ...entry,
+          selectedModel: { runtimeKind: "codex" as const, providerId: "codex", modelId: "model" },
+        },
+      ]) {
+        client.setQueryData(key, preview);
+        updateWorkspaceSessionQueries(client, "A", changed);
+        expect(client.getQueryState(key)?.isInvalidated).toBe(false);
+      }
+      for (const changed of [
+        { ...entry, manualTitle: "Renamed source" },
+        { ...entry, archivedAt: 3000 },
+        {
+          ...entry,
+          executionTarget: { kind: "local_repo_root" as const, workingDirectory: "/other" },
+        },
+        session("new-owner"),
+      ]) {
+        client.setQueryData(key, preview);
+        updateWorkspaceSessionQueries(client, "A", changed);
+        expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+      }
+    } finally {
+      client.clear();
+    }
+  });
+
   test.each(["pending", "handoff"] as const)(
     "keeps chat IDs from events during the %s of a complete read",
     async (phase) => {

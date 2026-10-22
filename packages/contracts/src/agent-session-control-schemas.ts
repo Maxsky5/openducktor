@@ -5,6 +5,7 @@ import { agentUserMessageEventSchema } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
+  agentSessionForkPointSchema,
   agentSessionRepositoryScopeSchema,
   agentSessionScopeSchema,
   agentSessionWorkflowScopeSchema,
@@ -13,6 +14,7 @@ import { skillDescriptorSchema } from "./skill-schemas";
 import { slashCommandDescriptorSchema } from "./slash-command-schemas";
 import { subagentDescriptorSchema } from "./subagent-schemas";
 import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-limits";
+import { agentSessionRecordSchema } from "./session-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 
@@ -133,6 +135,14 @@ export const agentSessionResumeIntentSchema = agentSessionLiveRefSchema
   .strict();
 export type AgentSessionResumeIntent = z.infer<typeof agentSessionResumeIntentSchema>;
 
+export const agentWorkflowSessionForkInputSchema = agentSessionLiveRefSchema
+  .extend({
+    sessionScope: agentSessionWorkflowScopeSchema,
+    forkPoint: agentSessionForkPointSchema,
+  })
+  .strict();
+export type AgentWorkflowSessionForkInput = z.infer<typeof agentWorkflowSessionForkInputSchema>;
+
 export const agentSessionControlForkInputSchema = z
   .object({
     ...agentSessionControlWorkingDirectoryFields,
@@ -140,9 +150,15 @@ export const agentSessionControlForkInputSchema = z
     systemPrompt: z.string(),
     model: agentModelSelectionSchema.optional(),
     parentExternalSessionId: nonEmptyStringSchema,
+    sourceWorkingDirectory: nonEmptyStringSchema.optional(),
+    forkPoint: agentSessionForkPointSchema.optional(),
     runtimeHistoryAnchor: nonEmptyStringSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => input.forkPoint === undefined || input.runtimeHistoryAnchor === undefined, {
+    path: ["forkPoint"],
+    message: "Choose either a completed reply or a runtime history anchor for the fork.",
+  });
 export type AgentSessionControlForkInput = z.infer<typeof agentSessionControlForkInputSchema>;
 
 /** Rejects a message that combines a slash command with attachments. */
@@ -240,6 +256,13 @@ export const agentSessionControlSummarySchema = z
   })
   .strict();
 export type AgentSessionControlSummary = z.infer<typeof agentSessionControlSummarySchema>;
+
+export const agentWorkflowSessionForkResultSchema = z.strictObject({
+  record: agentSessionRecordSchema,
+  runtimeSession: agentSessionControlSummarySchema,
+  syncWarning: nonEmptyStringSchema.optional(),
+});
+export type AgentWorkflowSessionForkResult = z.infer<typeof agentWorkflowSessionForkResultSchema>;
 
 export const acceptedAgentUserMessageSchema = agentUserMessageEventSchema;
 export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;

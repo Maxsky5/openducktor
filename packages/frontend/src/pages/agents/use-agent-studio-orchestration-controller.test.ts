@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import { describe, expect, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
@@ -436,7 +437,11 @@ function TaskChatProviders({
             createElement(
               AgentSessionsContext.Provider,
               { value: createAgentSessionsStore() },
-              createElement(AgentChatSendProviders, null, children),
+              createElement(
+                AgentChatSendProviders,
+                null,
+                createElement(MemoryRouter, null, children),
+              ),
             ),
           ),
         ),

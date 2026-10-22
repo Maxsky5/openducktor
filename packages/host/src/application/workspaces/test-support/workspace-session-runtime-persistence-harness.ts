@@ -106,7 +106,7 @@ export const createPersistenceHarness = async (
     updatedAt: 0,
     archivedAt: null,
   };
-  const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+  const store = createSqliteWorkspaceSessionStore(database);
   await Effect.runPromise(store.create({ ...storeRef, session: record }));
   const updates: Array<{ workspaceId: string; session: WorkspaceSession }> = [];
   const events: AgentSessionLiveEnvelope[] = [];
@@ -453,6 +453,11 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
+    claudeSessionMetadata: {
+      readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
+    },
+    runtimeAdmission: { admit: (_kind, work) => work },
+    runForkSourceOperation: commands.runForkSourceOperation,
     browserTabs: { closeOwnerTabs: () => Effect.void },
     terminalService: {
       acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),

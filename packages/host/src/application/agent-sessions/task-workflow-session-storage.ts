@@ -95,7 +95,7 @@ export const readStoredWorkflowSession = (
   );
 };
 
-const workflowSessionRecord = (input: WorkflowSessionInput) => ({
+export const workflowSessionRecord = (input: WorkflowSessionInput) => ({
   repoPath: input.repoPath,
   taskId: input.sessionScope.taskId,
   session: {

@@ -104,6 +104,7 @@ import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
+import { prepareCodexReplyForkChild, resolveCodexReplyForkBoundary } from "./codex-reply-fork";
 import {
   assertCodexSessionRef,
   assertRuntimeContextCompatibleWithSession,
@@ -170,6 +171,7 @@ import type {
   CodexSessionContextUsage,
   CodexSessionState,
   CodexThreadResumeResult,
+  CodexThreadForkParams,
 } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
@@ -826,6 +828,9 @@ export class CodexAppServerAdapter
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
+    if (input.forkPoint && input.runtimeHistoryAnchor !== undefined) {
+      throw new Error("Select one Codex fork point. Do not combine a reply with a history anchor.");
+    }
     assertCodexRuntimePolicyBinding(input, "fork Codex session");
     const sessionPolicy = resolveCodexSessionScopePolicy(
       input.sessionScope,
@@ -836,6 +841,16 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "fork session");
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
+    const source = input.forkPoint
+      ? await this.threadInventory.readThreadHistory(client, {
+          externalSessionId: input.parentExternalSessionId,
+          workingDirectory: input.sourceWorkingDirectory ?? input.workingDirectory,
+        })
+      : undefined;
+    const replyBoundary =
+      source && input.forkPoint
+        ? resolveCodexReplyForkBoundary(source, input.forkPoint.messageId)
+        : undefined;
     const policy = sessionPolicy.runtimePolicy;
 
     this.options.logSessionPolicy?.(
@@ -849,7 +864,7 @@ export class CodexAppServerAdapter
     );
     const config = await this.threadConfig(input.repoPath, sessionPolicy);
     assertAgentWorkStartCurrent(input);
-    const response = await client.threadFork({
+    const request: CodexThreadForkParams = {
       ...codexTransportPolicy(policy),
       config,
       threadId: input.parentExternalSessionId,
@@ -857,21 +872,61 @@ export class CodexAppServerAdapter
       developerInstructions: input.systemPrompt,
       excludeTurns: true,
       model: toTransportModelSelection(model).model,
-    });
-    this.clearThreadInventory(runtimeId);
-    const title = sessionPolicy.title;
-    const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
-    const { summary } = session;
-    this.localSessions.remember(session);
-    if (title !== undefined) {
-      await client.threadSetName({
-        threadId: session.threadId,
-        name: title,
-      });
-      session.nativeName = title;
+    };
+    if (replyBoundary) {
+      request.lastTurnId = replyBoundary.lastTurnId;
+      request.deferGoalContinuation = true;
     }
+    const response = await client.threadFork(request);
+    const childThreadId = response.thread.id;
+    const isRegistered = this.localSessions.has(childThreadId);
+    const ownsReplyFork =
+      replyBoundary !== undefined &&
+      childThreadId !== input.parentExternalSessionId &&
+      !isRegistered &&
+      response.thread.forkedFromId === input.parentExternalSessionId;
+    try {
+      this.clearThreadInventory(runtimeId);
+      const preparedResponse = replyBoundary
+        ? await prepareCodexReplyForkChild({
+            client,
+            threadInventory: this.threadInventory,
+            response,
+            parentThreadId: input.parentExternalSessionId,
+            workingDirectory: input.workingDirectory,
+            boundary: replyBoundary,
+            isRegistered,
+          })
+        : response;
+      const title = sessionPolicy.title;
+      const session = sessionStateFromThreadFork(input, runtimeId, model, preparedResponse, title);
+      if (title !== undefined) {
+        await client.threadSetName({
+          threadId: session.threadId,
+          name: title,
+        });
+        session.nativeName = title;
+      }
+      this.localSessions.remember(session);
 
-    return summary;
+      return session.summary;
+    } catch (cause) {
+      if (!ownsReplyFork) throw cause;
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const failureMessage = `${message} The fork '${childThreadId}' remains in Codex history and is not registered in OpenDucktor. Inspect this fork before retrying.`;
+      try {
+        this.localSessions.release(childThreadId);
+      } catch (cleanupCause) {
+        const cleanupMessage =
+          cleanupCause instanceof Error ? cleanupCause.message : String(cleanupCause);
+        throw new AggregateError(
+          [cause, cleanupCause],
+          `${failureMessage} Could not release its local state: ${cleanupMessage}`,
+          { cause },
+        );
+      }
+      throw new Error(failureMessage, { cause });
+    }
   }
 
   /**

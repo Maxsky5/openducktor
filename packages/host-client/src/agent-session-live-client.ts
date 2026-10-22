@@ -50,6 +50,8 @@ import {
   type AgentSessionLiveSnapshot,
   type AgentSessionLiveSnapshotEnvelope,
   type AgentWorkflowSessionStartInput,
+  type AgentWorkflowSessionForkInput,
+  type AgentWorkflowSessionForkResult,
   type FileDiff,
   agentSessionContextUsageSchema,
   agentSessionControlForkInputSchema,
@@ -72,6 +74,8 @@ import {
   agentSessionLiveSnapshotEnvelopeSchema,
   agentSessionLiveSnapshotSchema,
   agentWorkflowSessionStartInputSchema,
+  agentWorkflowSessionForkInputSchema,
+  agentWorkflowSessionForkResultSchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
@@ -137,6 +141,16 @@ export class HostAgentSessionLiveClient {
       "agent_session_control_resume",
       agentSessionResumeIntentSchema.parse(input),
       agentSessionControlSummarySchema,
+    );
+  }
+
+  async agentSessionWorkflowFork(
+    input: AgentWorkflowSessionForkInput,
+  ): Promise<AgentWorkflowSessionForkResult> {
+    return this.invokeFn(
+      "agent_session_workflow_fork",
+      agentWorkflowSessionForkInputSchema.parse(input),
+      agentWorkflowSessionForkResultSchema,
     );
   }
 

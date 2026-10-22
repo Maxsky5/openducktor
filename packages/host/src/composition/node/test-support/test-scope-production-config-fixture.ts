@@ -96,6 +96,7 @@ const runTestScopeProductionConfigCase = async ({
 
   try {
     const services = createNodeTaskAssetServices({
+      assertOwnershipReadAdmitted: () => Effect.void,
       configDir: { root: configuredConfigDir, scope: "test" },
       configuredTaskStore: createTaskStoreTestDouble({
         deleteTask: () =>

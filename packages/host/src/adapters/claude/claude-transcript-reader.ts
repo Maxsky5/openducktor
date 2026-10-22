@@ -4,7 +4,13 @@ import { isAbsolute, join, resolve } from "node:path";
 import { AgentRuntimeQueryError, type LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  createDefaultGitRunner,
+  type GitCommandRunner,
+} from "../../infrastructure/git/git-command-runner";
+import type { CreateClaudeAgentSdkServiceInput } from "./claude-agent-sdk-types";
+import { verifyClaudeTranscriptScope } from "./claude-transcript-scope";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import {
   claudeSubagentAgentId,
@@ -34,6 +40,7 @@ export type ClaudeTranscriptReadOptions = {
   processEnv?: NodeJS.ProcessEnv;
   storage?: "memory" | "disk";
   reader?: ClaudeTranscriptReader;
+  gitRunner?: GitCommandRunner;
 };
 
 type RecordValue = ClaudeProtocolObject;
@@ -161,6 +168,7 @@ const readResolvedClaudeTranscript = (
   paths: ClaudeTranscriptSource,
   expectedCwd: string,
   onReadSnapshot?: (path: string, before: string, after: string) => void,
+  onScopeVerified?: (workingDirectory: string) => void,
 ): Effect.Effect<ClaudeTranscriptReadResult, ReadFailure> =>
   Effect.gen(function* () {
     const isChildTranscript = paths.selected !== paths.root;
@@ -182,13 +190,14 @@ const readResolvedClaudeTranscript = (
     const verifyScope = (): Effect.Effect<void, ReadFailure> =>
       Effect.gen(function* () {
         if (!cwd) return yield* Effect.fail(missingTranscript());
-        if (cwd.normalize("NFC") !== expectedCwd.normalize("NFC") && cwd !== input.workingDirectory)
-          return yield* Effect.fail(
-            new AgentRuntimeQueryError(
-              "scope_mismatch",
-              "The Claude session belongs to another working directory. Select the matching session.",
-            ),
-          );
+        yield* verifyClaudeTranscriptScope({
+          sessionId: paths.sessionId,
+          historicalWorkingDirectory: cwd,
+          workingDirectory: input.workingDirectory,
+          canonicalWorkingDirectory: expectedCwd,
+          gitRunner: options.gitRunner,
+        });
+        onScopeVerified?.(cwd);
       });
     if (isChildTranscript) {
       yield* scanClaudeTranscript(
@@ -308,13 +317,37 @@ export const readClaudeTranscript = (
 
 export type ManagedClaudeTranscriptReader = ClaudeTranscriptReader & { dispose(): void };
 
+export const createClaudeRuntimeTranscriptReader = (
+  input: Pick<CreateClaudeAgentSdkServiceInput, "processEnv" | "historyStorage" | "toolDiscovery">,
+): ManagedClaudeTranscriptReader =>
+  createClaudeTranscriptReader({
+    processEnv: input.processEnv ?? process.env,
+    storage: input.historyStorage ?? "memory",
+    gitRunner: createDefaultGitRunner(() => input.processEnv ?? process.env, {
+      resolveCommand: () =>
+        input.toolDiscovery
+          .resolveToolPath("git")
+          .pipe(
+            Effect.mapError((cause) =>
+              toHostOperationError(cause, "claude.transcript.resolveGitCommand"),
+            ),
+          ),
+    }),
+  });
+
 export const createClaudeTranscriptReader = (
-  options: Pick<ClaudeTranscriptReadOptions, "processEnv" | "storage">,
+  options: Pick<ClaudeTranscriptReadOptions, "processEnv" | "storage" | "gitRunner">,
 ): ManagedClaudeTranscriptReader => {
   const processEnv = { ...(options.processEnv ?? process.env) };
   const storage = options.storage ?? "memory";
-  const readOptions = { processEnv, storage };
-  let completed: { key: string; result: ClaudeTranscriptReadResult } | undefined;
+  const readOptions = {
+    processEnv,
+    storage,
+    ...(options.gitRunner && { gitRunner: options.gitRunner }),
+  };
+  let completed:
+    | { key: string; result: ClaudeTranscriptReadResult; historicalWorkingDirectory: string }
+    | undefined;
   let version = 0;
   let disposed = false;
   return {
@@ -334,10 +367,20 @@ export const createClaudeTranscriptReader = (
         for (const path of sourcePaths)
           fingerprints.set(path, yield* readClaudeTranscriptFingerprint(path));
         const key = JSON.stringify([expectedCwd, input.workingDirectory, paths, [...fingerprints]]);
-        if (completed?.key === key) return completed.result;
+        if (completed?.key === key) {
+          yield* verifyClaudeTranscriptScope({
+            sessionId: paths.sessionId,
+            historicalWorkingDirectory: completed.historicalWorkingDirectory,
+            workingDirectory: input.workingDirectory,
+            canonicalWorkingDirectory: expectedCwd,
+            gitRunner: options.gitRunner,
+          });
+          return completed.result;
+        }
         completed = undefined;
         const scanned = new Set<string>();
         let unchanged = true;
+        let historicalWorkingDirectory: string | undefined;
         const result = yield* readResolvedClaudeTranscript(
           input,
           readOptions,
@@ -347,12 +390,16 @@ export const createClaudeTranscriptReader = (
             scanned.add(path);
             if (before !== fingerprints.get(path) || before !== after) unchanged = false;
           },
+          (directory) => {
+            historicalWorkingDirectory = directory;
+          },
         );
         for (const path of sourcePaths) {
           const after = yield* readClaudeTranscriptFingerprint(path);
           if (!scanned.has(path) || after !== fingerprints.get(path)) unchanged = false;
         }
-        if (unchanged && !disposed && currentVersion === version) completed = { key, result };
+        if (unchanged && !disposed && currentVersion === version && historicalWorkingDirectory)
+          completed = { key, result, historicalWorkingDirectory };
         return result;
       }).pipe(
         Effect.tapError(() =>

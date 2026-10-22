@@ -66,6 +66,7 @@ export type NodeTaskAssetServices = {
 export const createNodeTaskAssetServices = ({
   configDir,
   assertWorkspaceAdmitted,
+  assertOwnershipReadAdmitted,
   configuredTaskStore,
   isWorkspaceBlocked,
   onBackgroundFailure,
@@ -74,6 +75,11 @@ export const createNodeTaskAssetServices = ({
 }: {
   configDir: OpenDucktorConfigDir;
   assertWorkspaceAdmitted?: (input: {
+    operation: string;
+    repoPath: string;
+    workspaceId: string;
+  }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
+  assertOwnershipReadAdmitted: (input: {
     operation: string;
     repoPath: string;
     workspaceId: string;
@@ -112,6 +118,27 @@ export const createNodeTaskAssetServices = ({
     onBackgroundFailure,
     processEnv,
     resolveWorkspaceIdForRepoPath,
+    assertWorkspaceOwnershipReadAdmitted: (scope) =>
+      Effect.gen(function* () {
+        const config = yield* workspaceSettingsService.getRepoConfig(scope.workspaceId);
+        if (config.repoPath !== scope.repoPath) {
+          return yield* new HostValidationError({
+            field: "workspaceId",
+            message:
+              "The Workspace no longer matches this Repository. Reload the Workspace before retrying.",
+          });
+        }
+        if (config.removal) {
+          return yield* new HostValidationError({
+            field: "workspaceId",
+            message: `Workspace removal is incomplete for ${scope.workspaceId}. Retry removal before accessing this workspace.`,
+          });
+        }
+        yield* assertOwnershipReadAdmitted({
+          ...scope,
+          operation: "workspaceSessionStore.worktreeOwners",
+        });
+      }),
   };
   if (assertWorkspaceAdmitted) {
     contextManagerInput.assertWorkspaceAdmitted = assertWorkspaceAdmitted;
@@ -149,7 +176,10 @@ export const createNodeTaskAssetServices = ({
   const taskStoreRoot = path.join(configDir.root, "task-stores");
 
   return {
-    workspaceSessionStore: createSqliteWorkspaceSessionStore(contextManager.withDatabase),
+    workspaceSessionStore: createSqliteWorkspaceSessionStore({
+      contextProvider: contextManager.withDatabase,
+      listForWorktreeOwnership: contextManager.listWorkspaceSessionsForWorktreeOwnership,
+    }),
     startupSweep: () =>
       taskAssetRecoveryService
         .startupSweep()
@@ -187,9 +217,9 @@ export const createNodeTaskAssetServices = ({
       : createSqliteIssueImportStore({ contextProvider: contextManager.withDatabase }),
     removeWorkspaceTaskAssets: (workspaceId) => filePort.removeWorkspaceData({ workspaceId }),
     removeWorkspaceTaskStore: (workspaceId) =>
-      Effect.gen(function* () {
-        yield* contextManager.closeWorkspace(workspaceId);
-        yield* Effect.tryPromise({
+      contextManager.closeWorkspace(
+        workspaceId,
+        Effect.tryPromise({
           try: () => rm(path.join(taskStoreRoot, workspaceId), { force: true, recursive: true }),
           catch: (cause) =>
             new HostOperationError({
@@ -197,7 +227,7 @@ export const createNodeTaskAssetServices = ({
               message: `Failed to remove the task store directory for workspace ${workspaceId}.`,
               cause,
             }),
-        });
-      }),
+        }),
+      ),
   };
 };

@@ -150,6 +150,7 @@ const setup = (
     repositoryPolicy: {
       run: (_ref, _op, work) => work,
       runSend: (_ref, work) => work,
+      prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
       prepareSend: unexpected,
       prepareResume: unexpected,
       prepareModelUpdate: unexpected,

@@ -753,11 +753,11 @@ function useAgentChatComposerFocus({
     null,
   );
 
-  const focusComposerEditor = useCallback(() => {
+  const focusComposerEditor = useCallback((): boolean => {
     const editor = composerEditorRef.current;
-    if (editor) {
-      focusEditorEnd(editor);
-    }
+    if (!editor?.isConnected) return false;
+    focusEditorEnd(editor);
+    return editor.contains(editor.ownerDocument.activeElement);
   }, [composerEditorRef]);
 
   const scheduleComposerFocus = useCallback(() => {
@@ -798,16 +798,20 @@ function useAgentChatComposerFocus({
       activeElement,
       focusInsideComposer,
     });
-    composerAutofocusStateRef.current = autofocusResult.nextState;
-    if (autofocusResult.shouldFocus) {
-      scheduleComposerFocus();
-    }
+    composerAutofocusStateRef.current =
+      autofocusResult.shouldFocus && !focusComposerEditor()
+        ? {
+            ...autofocusResult.nextState,
+            pendingAutofocusSessionKey: displayedSessionKey,
+            waitAnchor: activeElement,
+          }
+        : autofocusResult.nextState;
   }, [
     displayedSessionKey,
     isComposerInputDisabled,
     isFocusInsideComposer,
     isSubmitting,
-    scheduleComposerFocus,
+    focusComposerEditor,
   ]);
 
   return scheduleComposerFocus;

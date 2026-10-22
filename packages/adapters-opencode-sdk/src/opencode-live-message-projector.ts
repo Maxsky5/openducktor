@@ -58,7 +58,11 @@ export class OpenCodeLiveMessageProjector {
       const saved = completions.get(callID);
       if (!saved || saved.created < completion.created) completions.set(callID, completion);
     }
-    return projectMessages(merged, { ...context, completions }, settledInput);
+    const completedReplies = new Set([
+      ...context.completedReplies,
+      ...this.projectionContext.completedReplies,
+    ]);
+    return projectMessages(merged, { ...context, completions, completedReplies }, settledInput);
   }
 
   /**
@@ -582,9 +586,22 @@ export class OpenCodeLiveMessageProjector {
   }
 
   private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {
+    const completedReplies = this.projectionContext.completedReplies;
     this.messages.set(message.id, message);
     if (message.type === "synthetic" || message.type === "idle") this.updateProjectionContext();
     const events = messageEvents(sessionID, message, this.projectionContext, this.settledInput);
+    if (message.type === "idle" && message.outcome === "succeeded") {
+      for (const id of this.projectionContext.completedReplies) {
+        if (completedReplies.has(id)) continue;
+        const reply = this.messages.get(id);
+        if (reply)
+          events.push(
+            ...messageEvents(sessionID, reply, this.projectionContext, this.settledInput).filter(
+              (event) => event.type === "assistant_message",
+            ),
+          );
+      }
+    }
     if (message.type === "synthetic" && message.metadata?.source === "subagent") {
       for (const assistant of this.messages.values()) {
         if (

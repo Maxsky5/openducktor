@@ -1,31 +1,20 @@
 import {
   workspaceSessionArchiveInputSchema,
   workspaceSessionCreateInputSchema,
+  workspaceSessionForkInputSchema,
   workspaceSessionListInputSchema,
   workspaceSessionRefInputSchema,
   workspaceSessionRenameInputSchema,
   workspaceSessionSetDraftModelInputSchema,
   workspaceSessionSetTargetBranchInputSchema,
 } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import type { z } from "zod";
 import type { WorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import type { WorkspaceSessionUpdatedPublisher } from "../../application/workspaces/workspace-session-persistence-callbacks";
-import { HostValidationError } from "../../effect/host-errors";
+import { causeMessage, HostValidationError } from "../../effect/host-errors";
 import type { HostCommandHandlerDefinitions } from "../router/host-command-router";
 import type { HostCommandArgs } from "./command-inputs";
-
-const parseInput = <A>(schema: z.ZodType<A>, args: HostCommandArgs) =>
-  Effect.try({
-    try: () => schema.parse(args),
-    catch: (cause) =>
-      new HostValidationError({
-        message:
-          cause instanceof Error ? cause.message : "Invalid Workspace Session command input.",
-        field: "args",
-        cause,
-      }),
-  });
 
 export const createWorkspaceSessionCommandHandlers = (
   service: WorkspaceSessionService,
@@ -54,6 +43,20 @@ export const createWorkspaceSessionCommandHandlers = (
           service
             .create(input)
             .pipe(Effect.tap(({ session }) => publishUpdated(input.workspaceId, session))),
+        ),
+      ),
+    workspace_session_fork: (args) =>
+      parseInput(workspaceSessionForkInputSchema, args).pipe(
+        Effect.flatMap((input) =>
+          Effect.gen(function* () {
+            const result = yield* service.fork(input);
+            const published = yield* Effect.exit(
+              Effect.suspend(() => publishUpdated(input.workspaceId, result.record)),
+            );
+            if (Exit.isFailure(published))
+              result.syncWarning = `The fork was saved, but session updates could not sync: ${causeMessage(published.cause)}. Reconnect to refresh sessions.`;
+            return result;
+          }),
         ),
       ),
     workspace_session_start: (args) =>
@@ -105,3 +108,15 @@ export const createWorkspaceSessionCommandHandlers = (
         ),
       ),
   }) satisfies HostCommandHandlerDefinitions;
+
+const parseInput = <A>(schema: z.ZodType<A>, args: HostCommandArgs) =>
+  Effect.try({
+    try: () => schema.parse(args),
+    catch: (cause) =>
+      new HostValidationError({
+        message:
+          cause instanceof Error ? cause.message : "Invalid Workspace Session command input.",
+        field: "args",
+        cause,
+      }),
+  });

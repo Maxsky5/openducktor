@@ -28,7 +28,7 @@ const failure = (message: string) => new HostOperationError({ operation: "test.i
 const setup = async () => {
   const database = await createSqliteTaskStoreHarness({ repoPath: "/repo" });
   cleanups.push(database.cleanup);
-  const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+  const store = createSqliteWorkspaceSessionStore(database);
   const registry = createLiveSessionAdapterRegistry();
   const calls: string[] = [];
   type ImportTestState = {

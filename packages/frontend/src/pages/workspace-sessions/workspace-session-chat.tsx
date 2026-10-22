@@ -1,3 +1,5 @@
+import { sessionForkDisabledReason } from "@/components/features/agents/agent-chat/session-fork-availability";
+import { useWorkspaceSessionFork } from "./use-workspace-session-fork";
 import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
 import { useAgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
@@ -247,6 +249,18 @@ export function WorkspaceSessionChat({
     workingDirectory: record.executionTarget.workingDirectory,
     onSend: messageDelivery.onSend,
   });
+  const fork = useWorkspaceSessionFork({
+    workspace,
+    record,
+    visible: isVisible,
+    disabledReason: sessionForkDisabledReason({
+      runtimeReadiness,
+      interactionEnabled: canInteract,
+      readOnly: chatState.isReadOnly,
+      readOnlyReason: chatState.readOnlyReason,
+      error: recordsError,
+    }),
+  });
   const surface = useAgentChatSurfaceModel({
     transcript,
     chatSettings,
@@ -310,7 +324,13 @@ export function WorkspaceSessionChat({
   });
   return (
     <Activity mode={isVisible ? "visible" : "hidden"}>
-      <AgentChatSurface model={surface} visitKey={visitKey} />
+      <AgentChatSurface
+        model={{
+          ...surface,
+          thread: { ...surface.thread, forkActions: fork.actions, forkDialog: fork.dialog },
+        }}
+        visitKey={visitKey}
+      />
     </Activity>
   );
 }

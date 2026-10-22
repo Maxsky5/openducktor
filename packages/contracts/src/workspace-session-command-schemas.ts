@@ -4,6 +4,7 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { workspaceIdSchema } from "./workspace-id-schemas";
 import { type GitTargetBranch, gitTargetBranchSchema, UPSTREAM_TARGET_BRANCH } from "./git-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
+import { agentSessionForkPointSchema } from "./agent-session-schemas";
 import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
   type WorkspaceSessionExecutionTarget,
@@ -132,6 +133,26 @@ export const workspaceSessionStartResultSchema = z.strictObject({
   runtimeSession: agentSessionControlSummarySchema.nullable(),
 });
 export type WorkspaceSessionStartResult = z.infer<typeof workspaceSessionStartResultSchema>;
+
+export const workspaceSessionForkInputSchema = workspaceSessionRefInputSchema.extend({
+  forkPoint: agentSessionForkPointSchema,
+  destination: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("same_folder") }),
+    z.strictObject({
+      kind: z.literal("new_worktree"),
+      name: workspaceSessionWorktreeNameSchema,
+      branchName: workspaceSessionBranchNameSchema,
+    }),
+  ]),
+});
+export type WorkspaceSessionForkInput = z.infer<typeof workspaceSessionForkInputSchema>;
+
+export const workspaceSessionForkResultSchema = z.strictObject({
+  record: workspaceSessionSchema,
+  runtimeSession: agentSessionControlSummarySchema,
+  syncWarning: z.string().trim().min(1).optional(),
+});
+export type WorkspaceSessionForkResult = z.infer<typeof workspaceSessionForkResultSchema>;
 
 export const workspaceSessionSetDraftModelInputSchema = workspaceSessionRefInputSchema.extend({
   selectedModel: agentSessionModelSelectionSchema,

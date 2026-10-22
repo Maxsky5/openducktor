@@ -4,6 +4,9 @@ import {
   type AgentRepositorySessionStartInput,
   type AgentSessionControlSummary,
   type AgentWorkflowSessionStartInput,
+  type AgentWorkflowSessionForkInput,
+  type AgentWorkflowSessionForkResult,
+  agentWorkflowSessionForkInputSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlReleaseInputSchema,
@@ -53,6 +56,9 @@ type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSessi
   startSession: (
     input: AgentRepositorySessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
+  forkWorkflowSession: (
+    input: AgentWorkflowSessionForkInput,
+  ) => Effect.Effect<AgentWorkflowSessionForkResult, HostError>;
   startWorkflowSession: (
     input: AgentWorkflowSessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
@@ -110,6 +116,12 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_update_model",
       ).pipe(Effect.flatMap(service.updateSessionModel)),
+    agent_session_workflow_fork: (args) =>
+      parseCommandInput(
+        agentWorkflowSessionForkInputSchema,
+        args,
+        "agent_session_workflow_fork",
+      ).pipe(Effect.flatMap(service.forkWorkflowSession)),
     agent_session_workflow_start: (args) =>
       parseCommandInput(
         agentWorkflowSessionStartInputSchema,

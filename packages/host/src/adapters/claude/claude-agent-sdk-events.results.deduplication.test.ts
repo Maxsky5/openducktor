@@ -8,7 +8,7 @@ import {
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("handleClaudeSdkMessage result deduplication", () => {
-  test("does not duplicate successful result text already emitted by assistant messages", () => {
+  test("adds the fork point to the same reply only after the completed result", () => {
     const events: AgentEvent[] = [];
     const session = createSession();
     const commonInput = {
@@ -30,6 +30,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
         session_id: "session-1",
         parent_tool_use_id: null,
         message: {
+          id: "native-response-first",
           role: "assistant",
           model: "claude-sonnet-4-6",
           stop_reason: "end_turn",
@@ -37,6 +38,8 @@ describe("handleClaudeSdkMessage result deduplication", () => {
         },
       }),
     });
+
+    expect(events.at(-1)).not.toHaveProperty("forkPoint");
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -53,9 +56,20 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       }),
     });
 
-    expect(events.filter((event) => event.type === "assistant_message")).toHaveLength(1);
+    const replies = events.filter((event) => event.type === "assistant_message");
+    expect(new Set(replies.map((event) => event.messageId)).size).toBe(1);
+    expect(replies.at(-1)).toMatchObject({
+      forkPoint: { messageId: "native-response-first" },
+    });
+    expect(session.completedReplyChainIds?.get("native-response-first")).toBe(
+      "c7448f99-fd5e-4080-8ee9-a0821866c71f",
+    );
     expect(session.activity).toBe("idle");
-    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "assistant_message",
+      "assistant_message",
+      "session_idle",
+    ]);
   });
 
   test("finalizes successful result text already emitted as an intermediate assistant part", () => {

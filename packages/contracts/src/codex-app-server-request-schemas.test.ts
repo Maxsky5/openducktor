@@ -178,7 +178,6 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
       params: {
         threadId: "thread-1",
         lastTurnId: "turn-10",
-        beforeTurnId: null,
         path: "/repo/.codex/session.jsonl",
         model: "gpt-5.3-codex",
         modelProvider: "openai",
@@ -300,6 +299,7 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
     { method: "thread/resume", params: { threadId: "thread-1", effort: "high" } },
     { method: "thread/fork", params: { threadId: "thread-1", effort: "high" } },
     { method: "thread/fork", params: { threadId: "thread-1", personality: "friendly" } },
+    { method: "thread/fork", params: { threadId: "thread-1", beforeTurnId: "turn-1" } },
     { method: "skills/list", params: { cwd: "/repo" } },
     { method: "thread/resume", params: { threadId: "thread-1", excludeTurns: null } },
     { method: "thread/fork", params: { threadId: "thread-1", ephemeral: null } },

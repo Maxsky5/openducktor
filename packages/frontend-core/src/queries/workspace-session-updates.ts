@@ -56,6 +56,9 @@ export const observeWorkspaceSessionRecords = (
                 queryKey: workspaceSessionQueryKeys.all,
                 refetchType: "all",
               });
+              void queryClient.invalidateQueries({
+                queryKey: ["workspace-session-archive-preview"],
+              });
             }
           }
           return;

@@ -218,7 +218,7 @@ test("task activity rejects duplicate owners after matching their paths", async 
 });
 
 test("workspace activity has its own saved time and keeps legacy records", async () => {
-  const store = createSqliteWorkspaceSessionStore(harness.contextProvider);
+  const store = createSqliteWorkspaceSessionStore(harness);
   const scope = { repoPath: harness.repoPath, workspaceId: "fairnest" };
   const ref = { ...scope, sessionId: "activity" };
   const session = {

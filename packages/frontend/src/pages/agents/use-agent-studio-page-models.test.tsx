@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import type { AgentRole } from "@openducktor/core";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
@@ -396,7 +397,11 @@ const createHookHarness = (initialProps: HookArgs) => {
         createElement(
           ActiveWorkspaceContext.Provider,
           { value: { activeWorkspace: null, setActiveWorkspace: () => {} } },
-          createElement(AgentSessionsContext.Provider, { value: store }, children),
+          createElement(
+            AgentSessionsContext.Provider,
+            { value: store },
+            createElement(MemoryRouter, null, children),
+          ),
         ),
       ),
   });

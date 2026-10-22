@@ -18,6 +18,9 @@ export const agentSessionLiveRefSchema = runtimeWorkingDirectoryRefSchema
   .strict();
 export type AgentSessionLiveRef = z.infer<typeof agentSessionLiveRefSchema>;
 
+export const agentSessionForkPointSchema = z.strictObject({ messageId: nonEmptyStringSchema });
+export type AgentSessionForkPoint = z.infer<typeof agentSessionForkPointSchema>;
+
 export const agentSessionWorkflowScopeSchema = z
   .object({
     kind: z.literal("workflow"),

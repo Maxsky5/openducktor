@@ -11,22 +11,27 @@ import { normalizePathForComparison } from "../../domain/path-comparison";
 import { createSessionLaunchService } from "../agent-sessions/session-launch-service";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
-import { createWorkspaceSessionStart } from "./workspace-session-start";
-import type { WorkspaceSessionServiceDependencies } from "./workspace-session-service";
+import {
+  createWorkspaceSessionStart,
+  type WorkspaceSessionStartDependencies,
+} from "./workspace-session-start";
 import type { resolveSessionMessageParts } from "../attachments/resolve-session-message-parts";
 import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-persistence-callbacks";
 
+export type WorkspaceSessionLaunchDependencies = WorkspaceSessionStartDependencies & {
+  resolveParts: (
+    parts: Parameters<typeof resolveSessionMessageParts>[0],
+  ) => ReturnType<typeof resolveSessionMessageParts>;
+  commands: Pick<AgentSessionLiveStateService, "sendUserMessage" | "resumeSession">;
+  live: Pick<
+    AgentSessionLiveStateService,
+    "read" | "holdWorkflowLaunch" | "stopSession" | "reportLaunchFailure"
+  >;
+  publishUpdated: WorkspaceSessionUpdatedPublisher;
+};
+
 /** Binds a workspace chat to a runtime session and sends its first instruction. */
-export const createWorkspaceSessionLaunchService = (
-  deps: WorkspaceSessionServiceDependencies & {
-    resolveParts: (
-      parts: Parameters<typeof resolveSessionMessageParts>[0],
-    ) => ReturnType<typeof resolveSessionMessageParts>;
-    commands: Pick<AgentSessionLiveStateService, "sendUserMessage" | "resumeSession">;
-    live: AgentSessionLiveStateService;
-    publishUpdated: WorkspaceSessionUpdatedPublisher;
-  },
-) => {
+export const createWorkspaceSessionLaunchService = (deps: WorkspaceSessionLaunchDependencies) => {
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader(deps);
   return createSessionLaunchService<WorkspaceSessionLaunchRequest, WorkspaceSessionLaunchResult>({
     runtime: deps.live,

@@ -4,11 +4,46 @@ import {
   workspaceSessionArchiveInputSchema,
   workspaceSessionBranchNameSchema,
   workspaceSessionCreateInputSchema,
+  workspaceSessionForkInputSchema,
   workspaceSessionWorktreeInputSchema,
   workspaceSessionWorktreeNameSchema,
 } from "./workspace-session-command-schemas";
 
 describe("named chat worktree inputs", () => {
+  test("fork destinations reuse worktree validation without accepting implicit boundaries", () => {
+    const input = {
+      workspaceId: "repo",
+      sessionId: "source",
+      forkPoint: { messageId: "reply-1" },
+    };
+    expect(
+      workspaceSessionForkInputSchema.parse({ ...input, destination: { kind: "same_folder" } }),
+    ).toEqual({ ...input, destination: { kind: "same_folder" } });
+    expect(
+      workspaceSessionForkInputSchema.parse({
+        ...input,
+        destination: { kind: "new_worktree", name: "review fork", branchName: "feature/fork" },
+      }).destination,
+    ).toEqual({ kind: "new_worktree", name: "review-fork", branchName: "feature/fork" });
+    for (const destination of [
+      { kind: "new_worktree", name: "../escape", branchName: "feature/fork" },
+      { kind: "new_worktree", name: "fork", branchName: "HEAD" },
+      { kind: "new_worktree", name: "fork" },
+      { kind: "same_folder", workingDirectory: "/other" },
+    ]) {
+      expect(workspaceSessionForkInputSchema.safeParse({ ...input, destination }).success).toBe(
+        false,
+      );
+    }
+    expect(
+      workspaceSessionForkInputSchema.safeParse({
+        ...input,
+        forkPoint: undefined,
+        destination: { kind: "same_folder" },
+      }).success,
+    ).toBe(false);
+  });
+
   test("creation has no uncommitted-changes confirmation field", () => {
     const input = {
       workspaceId: "repo",

@@ -1,4 +1,11 @@
-import { createWorkspaceSessionStart } from "./workspace-session-start";
+import {
+  createWorkspaceSessionFork,
+  type WorkspaceSessionForkDependencies,
+} from "./workspace-session-fork";
+import {
+  createWorkspaceSessionStart,
+  type WorkspaceSessionStartDependencies,
+} from "./workspace-session-start";
 import {
   type WorkspaceSession,
   type WorkspaceSessionArchiveInput,
@@ -27,7 +34,6 @@ import {
   runtimeTitleWithManualTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import { acquireWorkspaceSessionTerminalCleanup } from "./workspace-session-terminal-cleanup";
@@ -49,28 +55,26 @@ import {
 
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
+import { readWorkspaceSessionWorktreeOwners } from "./workspace-session-worktree-owners";
+import type { ClaudeSessionMetadataPort } from "../../ports/claude-session-metadata-port";
 
-export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies & {
-  lifecycle: TaskSessionLifecycleCoordinator;
-  operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
-  sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
-  isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
-  markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
-  store: WorkspaceSessionStorePort;
-  terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
-  browserTabs: BrowserOwnerCleanupPort;
-  settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
-  runtime: Pick<RuntimeRegistryPort, "requireReady">;
-  live: Pick<
-    AgentSessionLiveStateService,
-    | "startSession"
-    | "resumeSession"
-    | "releaseSession"
-    | "read"
-    | "stopSession"
-    | "updateSessionTitle"
-  >;
-};
+export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies &
+  WorkspaceSessionForkDependencies &
+  WorkspaceSessionStartDependencies & {
+    lifecycle: TaskSessionLifecycleCoordinator;
+    operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+    sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+    isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
+    store: WorkspaceSessionStorePort;
+    claudeSessionMetadata: ClaudeSessionMetadataPort;
+    terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
+    browserTabs: BrowserOwnerCleanupPort;
+    settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
+    live: Pick<
+      AgentSessionLiveStateService,
+      "resumeSession" | "read" | "stopSession" | "updateSessionTitle"
+    >;
+  };
 
 export const createWorkspaceSessionService = (
   dependencies: WorkspaceSessionServiceDependencies,
@@ -78,6 +82,7 @@ export const createWorkspaceSessionService = (
   const { store, settings, live, git, operationGate, sessionTitleGate } = dependencies;
   const { scopeFor, recordFor } = createWorkspaceSessionRecordReader({ settings, git, store });
   return {
+    fork: createWorkspaceSessionFork(dependencies),
     listIds: (workspaceId: string) => scopeFor(workspaceId).pipe(Effect.flatMap(store.listIds)),
     listActive: (workspaceId: string) =>
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listActive)),
@@ -318,10 +323,12 @@ export const createWorkspaceSessionService = (
           });
         }
         const config = yield* settings.getRepoConfig(input.workspaceId);
+        const sharedWith = yield* readWorkspaceSessionWorktreeOwners(dependencies, ref, session);
         return yield* readWorkspaceSessionArchivePreview(
           dependencies,
           { ...config, repoPath: ref.repoPath },
           session.executionTarget,
+          sharedWith,
         );
       }),
     archive: (input: WorkspaceSessionArchiveInput) =>
@@ -347,6 +354,17 @@ export const createWorkspaceSessionService = (
                 });
               }
               const config = yield* settings.getRepoConfig(input.workspaceId);
+              const sharedWith = yield* readWorkspaceSessionWorktreeOwners(
+                dependencies,
+                ref,
+                session,
+              );
+              if (sharedWith.length > 0) {
+                return yield* new HostValidationError({
+                  field: "removeWorktree",
+                  message: `Cannot remove this worktree while saved chats need it for files or history: ${sharedWith.map((owner) => owner.title).join(", ")}. Turn off worktree removal to archive this chat.`,
+                });
+              }
               const preview = yield* readWorkspaceSessionArchivePreview(
                 dependencies,
                 { ...config, repoPath: ref.repoPath },
@@ -444,39 +462,53 @@ export const createWorkspaceSessionService = (
     restore: (input: WorkspaceSessionRefInput) =>
       operationGate.run(
         input,
-        Effect.gen(function* () {
-          const { ref, session } = yield* recordFor(input);
-          if (session.archivedAt === null) return session;
-          if (hasRemovedWorktree(session)) {
-            const config = yield* settings.getRepoConfig(input.workspaceId);
-            const targetBranch = effectiveWorkspaceSessionTargetBranch(
-              session.executionTarget.kind,
-              session.targetBranch,
-              config.defaultTargetBranch,
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { ref, session } = yield* recordFor(input);
+            if (session.archivedAt === null) return session;
+            const target = session.executionTarget;
+            const canonicalPath = yield* dependencies.worktreeFiles.resolveWorktreeRemovalPath(
+              target.workingDirectory,
             );
-            if (!targetBranch) {
-              return yield* new HostValidationError({
-                field: "targetBranch",
-                message:
-                  "The repository default target branch is Tracked upstream, which cannot recreate a branch. Choose a target branch for this chat, then restore it.",
+            yield* dependencies.lifecycle.acquireWorktreeLifecycle([canonicalPath]);
+            // A sibling can remove or recreate the checkout without updating this record.
+            if (
+              target.kind === "local_worktree" &&
+              (target.worktreeState === "removed" || target.branchName !== null) &&
+              !(yield* dependencies.settingsConfig.pathExists(target.workingDirectory))
+            ) {
+              const config = yield* settings.getRepoConfig(input.workspaceId);
+              const targetBranch = effectiveWorkspaceSessionTargetBranch(
+                target.kind,
+                session.targetBranch,
+                config.defaultTargetBranch,
+              );
+              if (!targetBranch) {
+                return yield* new HostValidationError({
+                  field: "targetBranch",
+                  message:
+                    "The repository default target branch is Tracked upstream, which cannot recreate a branch. Choose a target branch for this chat, then restore it.",
+                });
+              }
+              return yield* withRestoredWorkspaceSessionWorktree(
+                dependencies,
+                input,
+                { ...config, repoPath: ref.repoPath },
+                target,
+                targetBranch,
+                (executionTarget) => store.restore({ ...ref, executionTarget }),
+              );
+            }
+            yield* validateWorkspaceSessionTarget(dependencies, ref.repoPath, target);
+            if (target.kind === "local_worktree" && target.worktreeState === "removed") {
+              return yield* store.restore({
+                ...ref,
+                executionTarget: { ...target, worktreeState: "present" },
               });
             }
-            return yield* withRestoredWorkspaceSessionWorktree(
-              dependencies,
-              input,
-              { ...config, repoPath: ref.repoPath },
-              session.executionTarget,
-              targetBranch,
-              (executionTarget) => store.restore({ ...ref, executionTarget }),
-            );
-          }
-          yield* validateWorkspaceSessionTarget(
-            dependencies,
-            ref.repoPath,
-            session.executionTarget,
-          );
-          return yield* store.restore(ref);
-        }),
+            return yield* store.restore(ref);
+          }),
+        ),
       ),
   };
 };

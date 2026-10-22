@@ -15,6 +15,7 @@ const createHarness = async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-"));
   tempDirectories.add(configDir);
   const manager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     openConnection: openSqliteTaskStoreTestConnection,
     processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
@@ -31,6 +32,7 @@ const createCloseFailureHarness = async (
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-failure-"));
   tempDirectories.add(configDir);
   const manager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     onBackgroundFailure,
     processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
@@ -100,6 +102,7 @@ test("does not open configured workspace databases before their first operation"
 test("opens a connection using only the resolved database path", async () => {
   const inputs: unknown[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     openConnection: (databasePath) => {
       inputs.push(databasePath);
       return Effect.fail(
@@ -129,6 +132,7 @@ test("uses the explicit config directory instead of the environment", async () =
   tempDirectories.add(configDir);
   const inputs: string[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     configDir,
     openConnection: (databasePath) => {
       inputs.push(databasePath);
@@ -298,6 +302,53 @@ test("serializes complete operations that use the same database path", async () 
   }
 });
 
+test("ownership reads share database serialization and stop after disposal", async () => {
+  const { manager } = await createHarness();
+  const workspaceScope = { workspaceId: "alpha", repoPath: "/repos/alpha" };
+  try {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const operation = yield* Effect.forkChild(
+          manager.withDatabase(workspaceScope.repoPath, "test.active-operation", () =>
+            Effect.gen(function* () {
+              events.push("operation:start");
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+              events.push("operation:end");
+            }),
+          ),
+        );
+        yield* Deferred.await(entered);
+        const owners = yield* Effect.forkChild(
+          manager
+            .listWorkspaceSessionsForWorktreeOwnership(workspaceScope)
+            .pipe(Effect.tap(() => Effect.sync(() => events.push("owners")))),
+        );
+        yield* Effect.yieldNow;
+        const beforeRelease = [...events];
+        const disposal = yield* Effect.forkChild(manager.dispose());
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(operation);
+        const records = yield* Fiber.join(owners);
+        yield* Fiber.join(disposal);
+        const afterDisposal = yield* Effect.result(
+          manager.listWorkspaceSessionsForWorktreeOwnership(workspaceScope),
+        );
+        return { beforeRelease, events, records, afterDisposal };
+      }),
+    );
+    expect(result.beforeRelease).toEqual(["operation:start"]);
+    expect(result.events).toEqual(["operation:start", "operation:end", "owners"]);
+    expect(result.records).toEqual([]);
+    expect(result.afterDisposal._tag).toBe("Failure");
+  } finally {
+    await Effect.runPromise(manager.dispose());
+  }
+});
+
 test("waits for admitted workspace operations before closing their slot", async () => {
   const configDir = await mkdtemp(path.join(tmpdir(), "odt-sqlite-context-close-race-"));
   tempDirectories.add(configDir);
@@ -305,6 +356,7 @@ test("waits for admitted workspace operations before closing their slot", async 
   const releaseAdmission = Deferred.makeUnsafe<void>();
   const events: string[] = [];
   const manager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     assertWorkspaceAdmitted: () =>
       Effect.gen(function* () {
         events.push("admitted");
@@ -343,6 +395,71 @@ test("waits for admitted workspace operations before closing their slot", async 
   expect(result.afterRelease).toEqual(["admitted", "operation", "closed"]);
   await Effect.runPromise(manager.dispose());
 });
+
+test.each([false, true])(
+  "ownership reads cannot reopen a database during removal cleanup, failed=%s",
+  async (failed) => {
+    const { manager, configDir } = await createHarness();
+    const workspaceScope = { workspaceId: "alpha", repoPath: "/repos/alpha" };
+    const databaseDirectory = path.join(configDir, workspaceScope.workspaceId);
+    const databasePath = path.join(databaseDirectory, "database.sqlite");
+    try {
+      await Effect.runPromise(
+        manager.withDatabase(workspaceScope.repoPath, "test.open", () => Effect.void),
+      );
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const removed = yield* Deferred.make<void>();
+          const finishCleanup = yield* Deferred.make<void>();
+          const removal = yield* Effect.forkChild(
+            manager
+              .closeWorkspace(
+                workspaceScope.workspaceId,
+                Effect.gen(function* () {
+                  yield* Effect.promise(() =>
+                    rm(databaseDirectory, { recursive: true, force: true }),
+                  );
+                  yield* Deferred.succeed(removed, undefined);
+                  yield* Deferred.await(finishCleanup);
+                  if (failed)
+                    return yield* new HostOperationError({
+                      operation: "test.cleanup",
+                      message: "Cleanup failed after removing the database.",
+                    });
+                }),
+              )
+              .pipe(Effect.result),
+          );
+          yield* Deferred.await(removed);
+          const concurrentRead = yield* Effect.result(
+            manager.listWorkspaceSessionsForWorktreeOwnership(workspaceScope),
+          );
+          const existsDuringCleanup = yield* Effect.promise(() => Bun.file(databasePath).exists());
+          yield* Deferred.succeed(finishCleanup, undefined);
+          const removalResult = yield* Fiber.join(removal);
+          return { concurrentRead, existsDuringCleanup, removalResult };
+        }),
+      );
+      expect(result.concurrentRead._tag).toBe("Failure");
+      expect(result.existsDuringCleanup).toBe(false);
+      expect(result.removalResult._tag).toBe(failed ? "Failure" : "Success");
+      if (failed) {
+        await expect(
+          Effect.runPromise(manager.listWorkspaceSessionsForWorktreeOwnership(workspaceScope)),
+        ).rejects.toThrow("task store is closing");
+        await Effect.runPromise(
+          manager.closeWorkspace(
+            workspaceScope.workspaceId,
+            Effect.promise(() => rm(databaseDirectory, { recursive: true, force: true })),
+          ),
+        );
+      }
+      expect(await Bun.file(databasePath).exists()).toBe(false);
+    } finally {
+      await Effect.runPromise(manager.dispose());
+    }
+  },
+);
 
 test("stops admission and drains an active operation before disposal completes", async () => {
   const { manager } = await createHarness();

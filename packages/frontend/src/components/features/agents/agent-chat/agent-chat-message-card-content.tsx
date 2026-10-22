@@ -1,14 +1,12 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
+import { AgentChatAssistantMessage } from "./agent-chat-assistant-message";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
 import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
-import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useCallback } from "react";
+import { Fragment, type ReactElement, type ReactNode } from "react";
 import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
 import { BrowserAnnotationMessageChips } from "@/features/browser-annotations/browser-annotation-message-chips";
-import { CopyIconButton } from "@/components/ui/copy-icon-button";
-import { buildCopyPreview } from "@/lib/copy-preview";
-import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "./agent-chat.types";
@@ -17,11 +15,7 @@ import { toTranscriptAttachment } from "@openducktor/frontend-core/drafts/agent-
 import { BrowserToolMessage } from "./agent-chat-browser-tool";
 import { ComputerUseToolMessage } from "./agent-chat-computer-use";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
-import {
-  getAssistantFooterData,
-  roleLabel,
-  SYSTEM_PROMPT_PREFIX,
-} from "./agent-chat-message-card-model";
+import { roleLabel, SYSTEM_PROMPT_PREFIX } from "./agent-chat-message-card-model";
 import type { SubagentMeta, ToolMeta } from "./agent-chat-message-card-model.types";
 import { RegularToolMessage } from "./agent-chat-regular-tool-message";
 import { AgentChatTaskTool } from "./agent-chat-task-tool";
@@ -114,82 +108,6 @@ const ReasoningMessage = ({ content, streaming }: ReasoningMessageProps): ReactE
           />
         </div>
       </div>
-    </div>
-  );
-};
-
-type AssistantMessageProps = {
-  message: AgentChatMessage;
-  modelCatalog: AgentModelCatalog | null;
-  sessionRuntimeKind: RuntimeKind | null;
-  assistantAccentColor: string | undefined;
-  isStreamingAssistantMessage: boolean;
-};
-
-const canCopyAssistantMessage = (
-  message: AgentChatMessage,
-  isStreamingAssistantMessage: boolean,
-): boolean => {
-  if (message.role !== "assistant" || message.content.trim().length === 0) {
-    return false;
-  }
-
-  return !isStreamingAssistantMessage;
-};
-
-function AssistantMessageCopyButton({ markdown }: { markdown: string }): ReactElement {
-  const { copied, copyToClipboard } = useCopyToClipboard({
-    getSuccessDescription: buildCopyPreview,
-    errorLogContext: "AgentChatMessageCardContent",
-  });
-
-  const handleCopy = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-      void copyToClipboard(markdown);
-    },
-    [copyToClipboard, markdown],
-  );
-
-  return (
-    <CopyIconButton
-      copied={copied}
-      ariaLabel="Copy assistant message content"
-      dataTestId="copy-assistant-message-content"
-      className="absolute top-0 right-0 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
-      onClick={handleCopy}
-    />
-  );
-}
-
-const AssistantMessage = ({
-  message,
-  modelCatalog,
-  sessionRuntimeKind,
-  assistantAccentColor,
-  isStreamingAssistantMessage,
-}: AssistantMessageProps): ReactElement => {
-  const streaming = isStreamingAssistantMessage;
-  const copyable = canCopyAssistantMessage(message, isStreamingAssistantMessage);
-  const footer = getAssistantFooterData(message, sessionRuntimeKind, modelCatalog);
-  return (
-    <div className="group/message relative space-y-2 pr-9">
-      {copyable ? <AssistantMessageCopyButton markdown={message.content} /> : null}
-      <AgentChatMarkdownRenderer
-        markdown={message.content}
-        streaming={streaming}
-        variant="document"
-      />
-      {footer.infoParts.length > 0 ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            className="size-1.5 rounded-sm bg-warning-accent"
-            style={assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined}
-          />
-          <span className="min-w-0 truncate">{footer.infoParts.join(" · ")}</span>
-        </div>
-      ) : null}
     </div>
   );
 };
@@ -869,7 +787,7 @@ export const MessageBody = ({
 
   if (message.role === "assistant") {
     return (
-      <AssistantMessage
+      <AgentChatAssistantMessage
         message={message}
         modelCatalog={modelCatalog}
         sessionRuntimeKind={sessionRuntimeKind}

@@ -6,7 +6,7 @@ import {
   type WorkspaceSessionWorktreeInput,
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, type Scope } from "effect";
 import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
@@ -26,8 +26,37 @@ export type WorkspaceSessionTargetDependencies = {
   worktreeActions: WorktreeActionRunner;
 };
 
+export type WorkspaceSessionTargetValidationDependencies = {
+  git: Pick<GitPort, "canonicalizePath"> & WorkspaceCheckoutGitPort;
+};
+
+export type WorkspaceSessionTargetCreationDependencies = {
+  git: Pick<
+    GitPort,
+    | "canonicalizePath"
+    | "isGitRepository"
+    | "referenceExists"
+    | "listBranches"
+    | "createWorktree"
+    | "configureBranchUpstream"
+    | "isRegisteredWorktree"
+    | "removeWorktree"
+    | "deleteLocalBranch"
+    | "deleteReference"
+  >;
+  settingsConfig: Pick<
+    SettingsConfigPort,
+    "defaultWorktreeBasePath" | "resolveConfiguredPath" | "join" | "pathExists"
+  >;
+  worktreeFiles: Pick<
+    WorktreeFilePort,
+    "ensureDirectory" | "copyConfiguredPaths" | "pathIsWithinRoot" | "removePathIfPresent"
+  >;
+  worktreeActions: WorktreeActionRunner;
+};
+
 export const validateWorkspaceSessionTarget = (
-  { git }: { git: Pick<GitPort, "canonicalizePath"> & WorkspaceCheckoutGitPort },
+  { git }: WorkspaceSessionTargetValidationDependencies,
   repoPath: string,
   target: WorkspaceSessionExecutionTarget,
 ) =>
@@ -74,13 +103,16 @@ export const validateWorkspaceSessionTarget = (
   });
 
 export const withWorkspaceSessionTarget = <A, E>(
-  dependencies: WorkspaceSessionTargetDependencies,
+  dependencies: WorkspaceSessionTargetCreationDependencies,
   input: {
     owner: WorkspaceSessionRefInput;
     worktree: WorkspaceSessionWorktreeInput | undefined;
     repoConfig: RepoConfig;
     location: WorkspaceSessionExecutionTarget["kind"];
     targetBranch: GitTargetBranch;
+    startPoint?: string;
+    rollbackMode?: "all_owned";
+    guardWorktree?: (path: string) => Effect.Effect<void, HostError, Scope.Scope>;
   },
   use: (target: WorkspaceSessionExecutionTarget, retainTarget: () => void) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
@@ -162,6 +194,7 @@ export const withWorkspaceSessionTarget = <A, E>(
           }),
         );
       }
+      if (input.guardWorktree) yield* input.guardWorktree(workingDirectory);
       yield* worktreeFiles.ensureDirectory(namespace);
       let acquired = false;
       let retained = false;
@@ -184,7 +217,7 @@ export const withWorkspaceSessionTarget = <A, E>(
                     workingDirectory,
                     branch,
                     createBranch,
-                    newBranch?.startPoint,
+                    createBranch ? (input.startPoint ?? newBranch?.startPoint) : undefined,
                   )
                   .pipe(
                     Effect.mapError(
@@ -236,51 +269,67 @@ export const withWorkspaceSessionTarget = <A, E>(
       if (Exit.isSuccess(result)) return result.value;
       if (!acquired || retained) return yield* Effect.failCause(result.cause);
 
-      yield* stopWorktreeActionTerminals(actionRun, {
-        operation: "workspaceSession.create.cleanup",
-        message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}`,
+      const stopActions =
+        input.rollbackMode === "all_owned"
+          ? actionRun.stopTerminals().pipe(
+              Effect.mapError(
+                (cause) =>
+                  new HostOperationError({
+                    operation: "workspaceSession.create.cleanup",
+                    message: `Could not stop worktree action terminals ${cause.terminalIds.join(", ")}: ${cause.cause.map((failure) => failure.message).join("; ")}. Close these terminals before retrying.`,
+                    cause,
+                  }),
+              ),
+            )
+          : stopWorktreeActionTerminals(actionRun, {
+              operation: "workspaceSession.create.cleanup",
+              message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}`,
+            });
+      const stopped = yield* Effect.exit(stopActions);
+      if (Exit.isFailure(stopped) && input.rollbackMode !== "all_owned")
+        return yield* Effect.failCause(stopped.cause);
+      const removeWorktree = Effect.gen(function* () {
+        if (yield* git.isRegisteredWorktree(repoPath, workingDirectory))
+          yield* git.removeWorktree(repoPath, workingDirectory, true);
       });
-      const cleanup = yield* Effect.exit(
-        Effect.gen(function* () {
-          if (yield* git.isRegisteredWorktree(repoPath, workingDirectory)) {
-            yield* git.removeWorktree(repoPath, workingDirectory, true);
-          }
-          if (yield* settingsConfig.pathExists(workingDirectory)) {
-            if (!(yield* worktreeFiles.pathIsWithinRoot(namespace, workingDirectory))) {
-              return yield* Effect.fail(
-                new HostValidationError({
-                  message: `Cannot clean Workspace Session directory outside its namespace: ${workingDirectory}`,
-                  field: "workingDirectory",
-                }),
-              );
-            }
-            yield* worktreeFiles.removePathIfPresent(workingDirectory);
-          }
-          if (createBranch && (yield* git.referenceExists(repoPath, `refs/heads/${branch}`))) {
-            yield* git.deleteLocalBranch(repoPath, branch, true);
-          }
-          if (createdTrackingRef !== null) {
-            yield* git.deleteReference(repoPath, createdTrackingRef);
-          }
-        }),
-      );
-      if (Exit.isFailure(cleanup)) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "workspaceSession.create.cleanup",
-            message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}\nGit cleanup also failed: ${Cause.pretty(cleanup.cause)}`,
-            cause: { creation: result.cause, cleanup: cleanup.cause },
-          }),
-        );
+      const removeDirectory = Effect.gen(function* () {
+        if (yield* settingsConfig.pathExists(workingDirectory)) {
+          if (!(yield* worktreeFiles.pathIsWithinRoot(namespace, workingDirectory)))
+            return yield* new HostValidationError({
+              message: `Cannot clean Workspace Session directory outside its namespace: ${workingDirectory}`,
+              field: "workingDirectory",
+            });
+          yield* worktreeFiles.removePathIfPresent(workingDirectory);
+        }
+      });
+      const removeBranch = Effect.gen(function* () {
+        if (createBranch && (yield* git.referenceExists(repoPath, `refs/heads/${branch}`)))
+          yield* git.deleteLocalBranch(repoPath, branch, true);
+      });
+      const removeTrackingRef = Effect.gen(function* () {
+        if (createdTrackingRef !== null) yield* git.deleteReference(repoPath, createdTrackingRef);
+      });
+      const cleanups: Exit.Exit<void, HostError>[] = [stopped];
+      for (const cleanup of [removeWorktree, removeDirectory, removeBranch, removeTrackingRef]) {
+        const cleaned = yield* Effect.exit(cleanup);
+        cleanups.push(cleaned);
+        if (Exit.isFailure(cleaned) && input.rollbackMode !== "all_owned") break;
       }
+      const failures = cleanups.flatMap((cleanup) =>
+        Exit.isFailure(cleanup) ? [cleanup.cause] : [],
+      );
+      if (failures.length > 0)
+        return yield* new HostOperationError({
+          operation: "workspaceSession.create.cleanup",
+          message: `Workspace Session creation failed: ${Cause.pretty(result.cause)}\nCleanup for worktree ${workingDirectory} and branch ${branch} also failed: ${failures.map(Cause.pretty).join("; ")}. Inspect these resources before retrying.`,
+          cause: { creation: result.cause, cleanup: failures },
+          details: { workingDirectory, branch },
+        });
       return yield* Effect.failCause(result.cause);
     }),
-  );
+  ).pipe(Effect.scoped);
 
-/**
- * A new branch starts from the target branch, which must exist before any Git write. A remote
- * target also gives the branch its upstream, as a builder worktree gets.
- */
+/** Validate the selected target before Git writes. A remote target gives the new branch its upstream. */
 const planNewBranch = (
   git: Pick<GitPort, "referenceExists">,
   repoPath: string,

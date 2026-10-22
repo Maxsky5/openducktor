@@ -336,6 +336,7 @@ export const historyToChatMessages = (
             role: sessionContext.role,
             model: message.model,
             isFinal: isFinalAssistantMessage,
+            forkPoint: message.forkPoint,
             durationMs: isFinalAssistantMessage ? assistantDurationMs : undefined,
             totalTokens: isFinalAssistantMessage ? message.totalTokens : undefined,
             contextWindow: isFinalAssistantMessage ? message.contextWindow : undefined,

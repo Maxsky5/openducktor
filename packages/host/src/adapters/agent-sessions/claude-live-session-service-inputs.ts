@@ -173,6 +173,12 @@ export const toClaudeForkInput = (input: AgentSessionControlForkInput): ForkAgen
   if (input.runtimeHistoryAnchor !== undefined) {
     result.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
   }
+  if (input.sourceWorkingDirectory !== undefined) {
+    result.sourceWorkingDirectory = input.sourceWorkingDirectory;
+  }
+  if (input.forkPoint !== undefined) {
+    result.forkPoint = input.forkPoint;
+  }
   return result;
 };
 

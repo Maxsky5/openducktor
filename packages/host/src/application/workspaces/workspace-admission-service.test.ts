@@ -86,6 +86,31 @@ describe("workspace admission service", () => {
     ).rejects.toThrow("Workspace is closed: closed-ws");
   });
 
+  test.each(["close", "reopen", "remove"] as const)(
+    "ownership reads permit closed workspaces but reject a %s reservation",
+    async (operation) => {
+      const admission = createAdmission(
+        catalog({
+          closedWorkspaces: [workspaceRecord("closed-ws", "/repos/closed")],
+        }),
+      );
+      const scope = { workspaceId: "closed-ws", repoPath: "/repos/closed" };
+      const read = () =>
+        admission.assertTaskStoreOwnershipReadAccess({
+          ...scope,
+          operation: "workspaceSessionStore.worktreeOwners",
+        });
+      await Effect.runPromise(read());
+      await Effect.runPromise(admission.reserveWorkspace({ ...scope, operation }));
+      await expect(Effect.runPromise(read())).rejects.toThrow(
+        `${operation} operation is already in progress`,
+      );
+      admission.releaseReservation(scope.workspaceId);
+      admission.blockWorkspace({ ...scope, reason: "removal" });
+      await expect(Effect.runPromise(read())).rejects.toThrow("Workspace removal is incomplete");
+    },
+  );
+
   test("blocks all ordinary task store access while removal is incomplete", async () => {
     const admission = createAdmission(
       catalog({

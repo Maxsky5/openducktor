@@ -18,10 +18,14 @@ import {
   type WorkspaceSessionCreateResult,
   type WorkspaceSessionRefInput,
   type WorkspaceSessionSetTargetBranchInput,
+  type WorkspaceSessionForkInput,
+  type WorkspaceSessionForkResult,
   workspaceSessionCreateResultSchema,
   workspaceSessionArchivePreviewSchema,
   workspaceSessionSchema,
   workspaceSessionStartResultSchema,
+  workspaceSessionForkInputSchema,
+  workspaceSessionForkResultSchema,
 } from "@openducktor/contracts";
 import { arrayResultSchema, type InvokeFn } from "./invoke-utils";
 
@@ -86,6 +90,14 @@ export class HostWorkspaceSessionClient {
 
   workspaceSessionStart(input: WorkspaceSessionRefInput): Promise<WorkspaceSessionStartResult> {
     return this.invoke("workspace_session_start", input, workspaceSessionStartResultSchema);
+  }
+
+  workspaceSessionFork(input: WorkspaceSessionForkInput): Promise<WorkspaceSessionForkResult> {
+    return this.invoke(
+      "workspace_session_fork",
+      workspaceSessionForkInputSchema.parse(input),
+      workspaceSessionForkResultSchema,
+    );
   }
 
   workspaceSessionSetDraftModel(

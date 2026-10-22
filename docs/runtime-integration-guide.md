@@ -124,6 +124,8 @@ Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path
 | `sessionLifecycle.supportsPendingInputSnapshots` | Can keep unresolved input in snapshots |
 | `sessionLifecycle.supportsInterruptedTurnResume` | Can continue an unfinished turn with no user message |
 
+Expose a transient `forkPoint: { messageId }` in live events and history only after the final assistant reply's turn completes. Fork through that exact reply into a distinct idle child. Preserve the source and copy no pending inputs or queued messages. Honor separate source and destination directories. Fail if the runtime cannot meet this contract.
+
 ### Session speed
 
 Set `speed.support` to `model` when the adapter can apply a speed level. Otherwise set it to `none`.

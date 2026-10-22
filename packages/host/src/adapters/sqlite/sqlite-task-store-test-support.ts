@@ -12,6 +12,7 @@ import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
 import {
   createSqliteTaskRepositoryContextManager,
+  type SqliteTaskRepositoryContextManager,
   type SqliteTaskRepositoryContextProvider,
 } from "./sqlite-task-repository-context";
 import type { OpenSqliteTaskStoreConnection } from "./sqlite-task-store-connection";
@@ -88,6 +89,7 @@ export type SqliteTaskStoreTestHarness = {
   readonly cleanup: () => Promise<void>;
   readonly configDir: string;
   readonly contextProvider: SqliteTaskRepositoryContextProvider;
+  readonly listForWorktreeOwnership: SqliteTaskRepositoryContextManager["listWorkspaceSessionsForWorktreeOwnership"];
   readonly databasePath: string;
   readonly repoPath: string;
   readonly store: TaskStorePort;
@@ -107,6 +109,7 @@ export const createSqliteTaskStoreHarness = async ({
     resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
   );
   const contextManager = createSqliteTaskRepositoryContextManager({
+    assertWorkspaceOwnershipReadAdmitted: () => Effect.void,
     openConnection: openSqliteTaskStoreTestConnection,
     processEnv: {},
     resolveDatabasePath: ({ workspaceId }) =>
@@ -128,6 +131,7 @@ export const createSqliteTaskStoreHarness = async ({
     configDir,
     contextProvider: contextManager.withDatabase,
     databasePath,
+    listForWorktreeOwnership: contextManager.listWorkspaceSessionsForWorktreeOwnership,
     repoPath,
     store,
   };

@@ -34,6 +34,7 @@ import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalizat
 import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createSerialGate } from "../../effect/serial-gate";
+import { withForkedSessionCleanup } from "./forked-session-cleanup";
 
 type OpenCodeLiveSessionState = ReturnType<typeof createOpenCodeLiveSessionState>;
 
@@ -147,7 +148,7 @@ export const createOpenCodeSessionControlAdapter = ({
       ),
     );
 
-  return {
+  const controls: AgentSessionControlAdapterPort = {
     startSession: (input) => {
       const request: Parameters<typeof connection.startSession>[0] = {
         repoPath: input.repoPath,
@@ -240,14 +241,22 @@ export const createOpenCodeSessionControlAdapter = ({
       if (input.runtimeHistoryAnchor) {
         request.runtimeHistoryAnchor = input.runtimeHistoryAnchor;
       }
+      if (input.sourceWorkingDirectory !== undefined) {
+        request.sourceWorkingDirectory = input.sourceWorkingDirectory;
+      }
+      if (input.forkPoint !== undefined) {
+        request.forkPoint = input.forkPoint;
+      }
       if (input.model) {
         request.model = input.model;
       }
-      return runSummary(
-        "opencode-live-session.fork-session",
-        input.repoPath,
-        () => connection.forkSession(request),
-        input.sessionScope,
+      return withForkedSessionCleanup(input, controls, (capture) =>
+        runSummary(
+          "opencode-live-session.fork-session",
+          input.repoPath,
+          () => connection.forkSession(request).then(capture),
+          input.sessionScope,
+        ),
       );
     },
     sendUserMessage: (input, options) => {
@@ -371,4 +380,5 @@ export const createOpenCodeSessionControlAdapter = ({
         ),
       ),
   };
+  return controls;
 };
