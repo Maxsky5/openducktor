@@ -246,6 +246,7 @@ describe("createTerminalTransportController", () => {
     const sentByConnection: Uint8Array[][] = [];
     const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
     const observedStates: Array<"connected" | "disconnected"> = [];
+    const { promise: reattachSent, resolve: markReattachSent } = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async (_onFrame, onStateChange) => {
         const sent: Uint8Array[] = [];
@@ -255,6 +256,7 @@ describe("createTerminalTransportController", () => {
         return {
           send: async (frame) => {
             sent.push(frame);
+            if (sentByConnection.length === 2) markReattachSent();
           },
           close: () => undefined,
         };
@@ -269,7 +271,8 @@ describe("createTerminalTransportController", () => {
     await controller.acknowledge(terminalId, 41);
 
     stateListeners[0]?.("disconnected");
-    await Bun.sleep(10);
+    // The reconnect runs on a timer and awaits the bridge, so wait for its first frame.
+    await reattachSent;
 
     expect(sentByConnection).toHaveLength(2);
     const reattachFrame = sentByConnection[1]?.[0];
