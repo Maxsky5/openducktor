@@ -1148,16 +1148,9 @@ describe("Claude live and hydrated transcript parity", () => {
     expect(
       assistantParts(liveEvents).flatMap((part) => (part.kind === "tool" ? [part.callId] : [])),
     ).toEqual(["tool-read", "tool-bash", "tool-screenshot"]);
-    expect(hydratedToolParts.at(-1)).toMatchObject({
-      output: "Screenshot of the visible page.",
-      resultContent: [
-        { kind: "text", text: "Screenshot of the visible page." },
-        {
-          kind: "file",
-          file: { downloadUri: "data:image/png;base64,iVBORw0KGgo=", mime: "image/png" },
-        },
-      ],
-    });
+    // The image data is not text, and history reads drop it.
+    expect(hydratedToolParts.at(-1)).toMatchObject({ output: "Screenshot of the visible page." });
+    expect(hydratedToolParts.at(-1)).not.toHaveProperty("resultContent");
   });
 
   test("releases completed tool input and timing metadata", () => {

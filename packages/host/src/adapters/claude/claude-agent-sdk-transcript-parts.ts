@@ -1,10 +1,7 @@
 import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { readClaudeFileEditPayload } from "./claude-agent-sdk-file-edits";
 import { parseClaudeCanonicalJsonObject } from "./claude-agent-sdk-ingress-schemas";
-import {
-  type ClaudeDecodedToolResult,
-  claudeToolResultContent,
-} from "./claude-agent-sdk-tool-shapes";
+import type { ClaudeDecodedToolResult } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { previewInput, readStringProp, toolPartPresentation } from "./claude-agent-sdk-utils";
 
@@ -156,10 +153,6 @@ export const createClaudeCompletedToolPart = ({
   }
   if (!isError && raw) {
     Object.assign(part, readClaudeFileEditPayload({ tool, input, raw }));
-    const resultContent = claudeToolResultContent(raw, text);
-    if (resultContent) {
-      part.resultContent = resultContent;
-    }
   }
   return part;
 };
