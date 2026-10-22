@@ -145,6 +145,8 @@ describe("host-owned Workspace Session lifecycle", () => {
       upstreamRemote: null as string | null,
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
+      // SAFETY: A test can set another upstream for the worktree branch.
+      trackedUpstream: null as string | null,
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const pendingTitles = new Set<string>();
@@ -242,7 +244,10 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
         getTrackedUpstreamReference: () =>
           Effect.succeed(
-            state.upstreamRemote ? `refs/remotes/${state.upstreamRemote}/${state.branch}` : null,
+            state.trackedUpstream ??
+              (state.upstreamRemote
+                ? `refs/remotes/${state.upstreamRemote}/${state.branch}`
+                : null),
           ),
         deleteReference: (_repo, reference) =>
           Effect.sync(() => {
@@ -1048,6 +1053,27 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.state.deletedReferences).toEqual(["refs/remotes/origin/odt/my-feature"]);
     const { session: again } = await Effect.runPromise(h.service.create(worktreeInput()));
     expect(again.executionTarget).toMatchObject({ branchName: "odt/my-feature" });
+  });
+
+  test("archive keeps the tracking ref of a remote branch with another name", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    h.state.trackedUpstream = "refs/remotes/origin/team/odt/my-feature";
+    h.branches.add("refs/remotes/origin/team/odt/my-feature");
+    await Effect.runPromise(
+      h.service.archive({
+        workspaceId: "fairnest",
+        sessionId: session.id,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    expect(h.state.deletedReferences).toEqual([]);
+    expect(h.branches.has("refs/remotes/origin/team/odt/my-feature")).toBe(true);
   });
 
   test("creation cleanup deletes the tracking ref that the upstream setup created", async () => {

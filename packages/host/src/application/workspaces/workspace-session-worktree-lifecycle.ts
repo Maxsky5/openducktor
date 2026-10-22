@@ -126,8 +126,14 @@ export const removeWorkspaceSessionWorktree = (
   });
 
 /** The upstream ref of a branch when it tracks the remote branch with the same name. */
-const sameNameTrackingRef = (upstream: string | null, branchName: string): string | null =>
-  upstream?.startsWith("refs/remotes/") && upstream.endsWith(`/${branchName}`) ? upstream : null;
+const sameNameTrackingRef = (upstream: string | null, branchName: string): string | null => {
+  if (!upstream?.startsWith("refs/remotes/")) return null;
+  const remoteBranch = upstream.slice("refs/remotes/".length);
+  if (!remoteBranch.endsWith(`/${branchName}`)) return null;
+  // `origin/team/feature` ends with `/feature`, but it tracks `team/feature`, not `feature`.
+  const remote = remoteBranch.slice(0, -branchName.length - 1);
+  return remote && !remote.includes("/") ? upstream : null;
+};
 
 export const withRestoredWorkspaceSessionWorktree = <A, E>(
   dependencies: WorkspaceSessionTargetDependencies,
