@@ -8,7 +8,7 @@
     "typecheck": "bun check -p tsconfig.json"
   },
   "devDependencies": {
-    "@oxlint/plugins": "1.87.0"
+    "@oxlint/plugins": "1.88.0"
   },
   "version": "1.0.0"
 }
