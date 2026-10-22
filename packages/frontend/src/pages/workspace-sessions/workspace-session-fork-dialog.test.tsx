@@ -120,6 +120,11 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
       },
     ]);
     expect(view.getByRole("button", { name: "Forking chat…" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(view.getByRole("radio", { name: "New worktree" }));
+    expect(view.getByRole("radio", { name: "Same folder" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(view.queryByLabelText("Worktree name")).toBeNull();
     fireEvent.submit(view.getByRole("button", { name: "Forking chat…" }).closest("form")!);
     expect(view.queryByRole("button", { name: "Close" })).toBeNull();
     expect(calls).toHaveLength(1);

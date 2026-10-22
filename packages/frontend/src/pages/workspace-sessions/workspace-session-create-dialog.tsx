@@ -5,7 +5,7 @@ import {
   type WorkspaceSessionWorktreeInput,
 } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Folder, GitBranch, LoaderCircle } from "lucide-react";
+import { Folder, GitBranch, LoaderCircle } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 import { WorkspaceSessionModelFields } from "./workspace-session-model-fields";
 import {
@@ -28,7 +28,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { repoDefaultModelSelectionFor } from "@/features/session-start/session-start-selection";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { cn } from "@/lib/utils";
 import {
   invalidateRepoBranchesQuery,
   repoBranchesQueryOptions,
@@ -50,6 +49,7 @@ import {
   WorkspaceSessionTargetBranchField,
 } from "./workspace-session-target-branch-field";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
+import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 
 type WorkspaceSessionCreateDialogProps = {
@@ -203,56 +203,28 @@ export function WorkspaceSessionCreateDialog({
                   </div>
                 )}
               </div>
-              <fieldset className="space-y-2">
-                <legend className="mb-2 text-sm font-medium">Work location</legend>
-                <div
-                  role="radiogroup"
-                  aria-label="Work location"
-                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                >
-                  {(
-                    [
-                      {
-                        kind: "local_repo_root",
-                        label: "Current checkout",
-                        description: "Work with the files already here.",
-                        icon: Folder,
-                      },
-                      {
-                        kind: "local_worktree",
-                        label: "New worktree",
-                        description: "Use an isolated directory and branch.",
-                        icon: GitBranch,
-                      },
-                    ] as const
-                  ).map((target) => (
-                    <Button
-                      key={target.kind}
-                      type="button"
-                      role="radio"
-                      aria-checked={location === target.kind}
-                      variant="outline"
-                      onClick={() => {
-                        create.reset();
-                        changeLocation(target.kind);
-                      }}
-                      className={cn(
-                        "h-auto items-start justify-start gap-3 whitespace-normal p-3 text-left",
-                        location === target.kind && "border-primary bg-accent",
-                      )}
-                    >
-                      <target.icon />
-                      <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span>{target.label}</span>
-                        <span className="text-xs font-normal text-muted-foreground">
-                          {target.description}
-                        </span>
-                      </span>
-                      {location === target.kind && <Check />}
-                    </Button>
-                  ))}
-                </div>
-              </fieldset>
+              <WorkspaceSessionWorkLocationField
+                value={location}
+                onValueChange={(value) => {
+                  create.reset();
+                  changeLocation(value);
+                }}
+                disabled={create.isPending}
+                options={[
+                  {
+                    value: "local_repo_root",
+                    label: "Current checkout",
+                    description: "Work with the files already here.",
+                    icon: Folder,
+                  },
+                  {
+                    value: "local_worktree",
+                    label: "New worktree",
+                    description: "Use an isolated directory and branch.",
+                    icon: GitBranch,
+                  },
+                ]}
+              />
               <WorkspaceSessionTargetBranchField
                 value={targetBranch}
                 defaultTarget={defaultTarget}

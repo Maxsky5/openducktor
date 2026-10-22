@@ -7,7 +7,7 @@ import {
   workspaceSessionForkInputSchema,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LoaderCircle } from "lucide-react";
+import { Folder, GitBranch, LoaderCircle } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { forkWorkspaceSession } from "@openducktor/frontend-core/sessions/session-forks";
@@ -30,6 +28,7 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { workspaceSessionValidationError } from "./workspace-session-create-input";
 import { NewWorktreeBranchFields, WorktreeNameField } from "./workspace-session-worktree-inputs";
+import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 
 export function WorkspaceSessionForkDialog({
   open,
@@ -108,7 +107,7 @@ export function WorkspaceSessionForkDialog({
       }}
     >
       <DialogContent
-        className="gap-0 p-0 sm:max-w-lg"
+        className="my-0 gap-0 p-0 sm:max-w-2xl"
         closeButton={pending ? null : undefined}
         onCloseAutoFocus={onCloseAutoFocus}
       >
@@ -127,38 +126,39 @@ export function WorkspaceSessionForkDialog({
         >
           <fieldset disabled={pending} className="contents">
             <DialogBody className="flex flex-col gap-4 px-6 py-4">
-              <RadioGroup
+              <WorkspaceSessionWorkLocationField
                 value={destination}
-                onValueChange={(value) => {
-                  if (value === "same_folder" || value === "new_worktree") setDestination(value);
-                }}
-                aria-label="Fork work location"
-              >
-                <div className="flex items-start gap-3 rounded-md border border-border p-3">
-                  <RadioGroupItem value="same_folder" id="fork-same-folder" className="mt-0.5" />
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <Label htmlFor="fork-same-folder">Same folder</Label>
-                    {record.executionTarget.kind === "local_worktree" &&
-                    record.executionTarget.branchName ? (
-                      <p className="break-all text-xs text-muted-foreground">
-                        {record.executionTarget.branchName}
-                      </p>
-                    ) : null}
-                    <p className="break-all font-mono text-xs text-muted-foreground">
-                      {record.executionTarget.workingDirectory}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-md border border-border p-3">
-                  <RadioGroupItem value="new_worktree" id="fork-new-worktree" className="mt-0.5" />
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor="fork-new-worktree">New worktree</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Start a new branch from the last commit in the source folder.
-                    </p>
-                  </div>
-                </div>
-              </RadioGroup>
+                onValueChange={setDestination}
+                disabled={pending}
+                ariaLabel="Fork work location"
+                options={[
+                  {
+                    value: "same_folder",
+                    label: "Same folder",
+                    description: "Work with the files already here.",
+                    icon: Folder,
+                  },
+                  {
+                    value: "new_worktree",
+                    label: "New worktree",
+                    description: "Start from the last commit in the source folder.",
+                    icon: GitBranch,
+                  },
+                ]}
+              />
+              <div className="grid gap-1">
+                <p className="text-sm font-medium">Source folder</p>
+                <p className="break-all font-mono text-xs text-muted-foreground dark:text-foreground/80">
+                  {record.executionTarget.workingDirectory}
+                </p>
+                {record.executionTarget.kind === "local_worktree" &&
+                record.executionTarget.branchName ? (
+                  <p className="flex items-start gap-1.5 text-xs text-muted-foreground dark:text-foreground/80">
+                    <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
+                    <span className="break-all">{record.executionTarget.branchName}</span>
+                  </p>
+                ) : null}
+              </div>
               {destination === "new_worktree" ? (
                 <div className="flex flex-col gap-3">
                   <WorktreeNameField
@@ -192,7 +192,7 @@ export function WorkspaceSessionForkDialog({
                   {disabledReason}
                 </p>
               ) : null}
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-between gap-2">
                 <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
                   Cancel
                 </Button>
