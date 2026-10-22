@@ -59,20 +59,24 @@ function AssistantMessageFooter({
   const forkPoint = meta?.forkPoint;
   if (!finalReply && infoParts.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
       {infoParts.length > 0 ? (
-        <>
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
           <span
-            className="size-1.5 rounded-sm bg-warning-accent"
+            className="size-1.5 shrink-0 rounded-sm bg-warning-accent"
             style={assistantAccentColor ? { backgroundColor: assistantAccentColor } : undefined}
           />
           <span className="min-w-0 truncate">{infoParts.join(" · ")}</span>
-        </>
+        </span>
       ) : null}
-      {finalReply && canCopyAssistantMessage(message, streaming) ? (
-        <AssistantMessageCopyButton markdown={message.content} footer />
+      {finalReply && !streaming ? (
+        <span className="inline-flex shrink-0 items-center gap-0.5">
+          {canCopyAssistantMessage(message, streaming) ? (
+            <AssistantMessageCopyButton markdown={message.content} footer />
+          ) : null}
+          {forkPoint ? <AgentChatForkButton point={forkPoint} /> : null}
+        </span>
       ) : null}
-      {finalReply && forkPoint && !streaming ? <AgentChatForkButton point={forkPoint} /> : null}
     </div>
   );
 }
@@ -103,11 +107,12 @@ function AssistantMessageCopyButton({
       copied={copied}
       ariaLabel="Copy assistant message content"
       dataTestId="copy-assistant-message-content"
-      className={
-        footer
-          ? ""
-          : "absolute top-0 right-0 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto"
-      }
+      className={cn(
+        "border-0 bg-transparent hover:bg-transparent",
+        footer && "size-6 [&_svg]:size-3",
+        !footer &&
+          "absolute top-0 right-0 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto",
+      )}
       onClick={handleCopy}
     />
   );

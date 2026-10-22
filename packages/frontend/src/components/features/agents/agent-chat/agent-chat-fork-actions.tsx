@@ -26,9 +26,9 @@ export function AgentChatForkButton({
           >
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="size-7 text-muted-foreground hover:text-foreground"
+              className="size-6 text-muted-foreground hover:bg-transparent hover:text-foreground"
               aria-label="Fork from this reply"
               disabled={disabled}
               onClick={(event) => {
@@ -37,9 +37,9 @@ export function AgentChatForkButton({
               }}
             >
               {pending ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
+                <LoaderCircle className="size-3 animate-spin" />
               ) : (
-                <GitFork className="size-3.5" />
+                <GitFork className="size-3" />
               )}
             </Button>
           </span>
