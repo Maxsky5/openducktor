@@ -9,6 +9,7 @@ import { type ReactElement, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
+import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 import type { SessionPanelsModel } from "@/features/session-panels";
 
 type SessionViewControlsProps = {
@@ -48,8 +49,10 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
         : null,
     [rightIsOpen, rightOnToggle],
   );
-  useCommandPalettePageCommand(bottomCommand);
-  useCommandPalettePageCommand(rightCommand);
+  // Kept views also show these controls, but only the active view owns the palette commands.
+  const isActive = useSessionViewActive();
+  useCommandPalettePageCommand(isActive ? bottomCommand : null);
+  useCommandPalettePageCommand(isActive ? rightCommand : null);
   return (
     <TooltipProvider>
       <div role="group" aria-label="Session views" className="flex shrink-0 items-center gap-2">

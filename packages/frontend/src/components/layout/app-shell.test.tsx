@@ -1154,6 +1154,24 @@ describe("AppShell session navigation", () => {
     configureHostFakes({});
   });
 
+  test("opens a session of another workspace by its address before the workspace opens", async () => {
+    function SessionAddress() {
+      return <output aria-label="Session address">{useLocation().search}</output>;
+    }
+    renderAppShellForTest({
+      extraWorkspaces: [secondWorkspace],
+      sessionContent: <SessionAddress />,
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Show sessions of all workspaces" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Chat theirs/ }));
+
+    // The Sessions page opens the workspace that the address names and shows its kept view.
+    expect((await screen.findByLabelText("Session address")).textContent).toBe(
+      `?workspace=${secondWorkspace.workspaceId}&kind=workspace&session=theirs`,
+    );
+  });
+
   test("keeps Kanban, New task, and Settings without page links for sessions or a branch selector", async () => {
     renderAppShellForTest();
 

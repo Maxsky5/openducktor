@@ -31,14 +31,8 @@ describe("session selection", () => {
       const selection = selectSessionEntry(model, visible, "task");
       const onOpen = mock((_entry: SessionNavigationEntry) => {});
       render(
-        <SessionNavigationTestProvider>
-          <Component
-            model={model}
-            selection={selection}
-            now={NOW}
-            onOpen={onOpen}
-            onRetry={() => {}}
-          />
+        <SessionNavigationTestProvider selection={selection}>
+          <Component model={model} now={NOW} onOpen={onOpen} onRetry={() => {}} />
         </SessionNavigationTestProvider>,
       );
       const row = screen.getByRole("button", { name: /Task builder/ });

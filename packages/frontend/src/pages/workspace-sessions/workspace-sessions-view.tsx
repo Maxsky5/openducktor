@@ -26,6 +26,10 @@ import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspac
 import { SessionNavigationError } from "@/features/session-navigation/session-navigation-error";
 import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
 import { usePublishVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import {
+  OnSessionViewHide,
+  WhileSessionViewShown,
+} from "@/features/session-navigation/session-view-visibility";
 import { workspaceSessionIdentity } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useArchiveWorkspaceSession } from "@/state/operations/use-archive-workspace-session";
@@ -208,7 +212,7 @@ export function WorkspaceSessions({
       <WorkspaceSessionActiveContent
         workspace={workspace}
         selected={selected}
-        isVisible={isActive}
+        isActive={isActive}
         missingSessionId={missingSessionId}
         onDismissMissing={() => updateNavigation({ sessionId: null })}
         panels={panels}
@@ -218,9 +222,7 @@ export function WorkspaceSessions({
         hasSessions={sessions.length > 0}
         onCreate={() => setCreating(true)}
         viewControls={
-          isActive ? (
-            <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
-          ) : null
+          <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
         }
         onArchive={(onCloseAutoFocus) => {
           if (!selected) return;
@@ -230,30 +232,37 @@ export function WorkspaceSessions({
         }}
         isArchiving={archive.isPending}
       />
-      {/* Dialog portals sit outside the hidden page, so remove them while inactive. */}
+      <OnSessionViewHide
+        onHide={() => {
+          if (archiveTarget !== null) setArchiveTarget(null);
+          setCreateWorkspaceId(null);
+        }}
+      />
       {isActive && (
-        <WorkspaceSessionDialogs
-          key={workspace.workspaceId}
-          workspace={workspace}
-          archiveTarget={archiveTarget}
-          archivePending={archive.isPending}
-          archiveError={archive.error}
-          onArchiveCloseAutoFocus={(event) => archiveCloseAutoFocusRef.current?.(event)}
-          onArchive={beginArchive}
-          onArchiveClose={() => {
-            setArchiveTarget(null);
-            archive.reset();
-          }}
-          createOpen={createOpen || creating}
-          createAttempt={createAttempt}
-          onCreateClose={() => setCreating(false)}
-          onCreated={(record) => {
-            if (mounted.current && workspaceIdRef.current === workspace.workspaceId) {
-              setCreateWorkspaceId(null);
-              updateNavigation({ sessionId: record.id, creating: false });
-            }
-          }}
-        />
+        <WhileSessionViewShown>
+          <WorkspaceSessionDialogs
+            key={workspace.workspaceId}
+            workspace={workspace}
+            archiveTarget={archiveTarget}
+            archivePending={archive.isPending}
+            archiveError={archive.error}
+            onArchiveCloseAutoFocus={(event) => archiveCloseAutoFocusRef.current?.(event)}
+            onArchive={beginArchive}
+            onArchiveClose={() => {
+              setArchiveTarget(null);
+              archive.reset();
+            }}
+            createOpen={createOpen || creating}
+            createAttempt={createAttempt}
+            onCreateClose={() => setCreating(false)}
+            onCreated={(record) => {
+              if (mounted.current && workspaceIdRef.current === workspace.workspaceId) {
+                setCreateWorkspaceId(null);
+                updateNavigation({ sessionId: record.id, creating: false });
+              }
+            }}
+          />
+        </WhileSessionViewShown>
       )}
     </div>
   );
@@ -283,7 +292,7 @@ function WorkspaceSessionRecordsRefreshNotice({
 function WorkspaceSessionActiveContent({
   workspace,
   selected,
-  isVisible,
+  isActive,
   missingSessionId,
   onDismissMissing,
   panels,
@@ -298,7 +307,7 @@ function WorkspaceSessionActiveContent({
 }: {
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
-  isVisible: boolean;
+  isActive: boolean;
   missingSessionId: string | null;
   onDismissMissing: () => void;
   panels: SessionPanelsModel;
@@ -311,29 +320,32 @@ function WorkspaceSessionActiveContent({
   onArchive: (onCloseAutoFocus: (event: Event) => void) => void;
   isArchiving: boolean;
 }): ReactElement {
-  const isChatVisible = isVisible && selected !== null;
+  const isChatActive = isActive && selected !== null;
   return (
     <>
-      {isVisible && selected && (
-        <WorkspaceSessionHeader
-          key={selected.id}
-          workspace={workspace}
-          record={selected}
-          repoActions={
-            <SessionRepoActions
-              workspace={workspace}
-              terminal={{
-                startBlockedReason: panels.startBlockedReason,
-                onRunAction: panels.runAction,
-              }}
-            />
-          }
-          viewControls={viewControls}
-          onArchive={onArchive}
-          isArchiving={isArchiving}
-        />
+      {/* Header dialogs and menus sit in portals, so the header leaves as soon as the view hides. */}
+      {selected && (
+        <WhileSessionViewShown>
+          <WorkspaceSessionHeader
+            key={selected.id}
+            workspace={workspace}
+            record={selected}
+            repoActions={
+              <SessionRepoActions
+                workspace={workspace}
+                terminal={{
+                  startBlockedReason: panels.startBlockedReason,
+                  onRunAction: panels.runAction,
+                }}
+              />
+            }
+            viewControls={viewControls}
+            onArchive={onArchive}
+            isArchiving={isArchiving}
+          />
+        </WhileSessionViewShown>
       )}
-      <SessionPanelsRoot panels={panels} isActive={isChatVisible}>
+      <SessionPanelsRoot panels={panels} isActive={isChatActive}>
         <BottomPanelSplit
           ids={TERMINAL_PANEL_SPLIT_IDS}
           model={panels.bottom}
@@ -347,7 +359,7 @@ function WorkspaceSessionActiveContent({
               selectedFile={selectedFile}
               onSelectedFileChange={onSelectedFileChange}
               onSafeToLeave={onSafeToLeave}
-              isVisible={isChatVisible}
+              isActive={isChatActive}
               rightPanel={panels.right}
             />
           )}

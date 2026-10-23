@@ -4,6 +4,7 @@ import { createWorkspaceRecordFixture } from "@/test-utils/shared-test-fixtures"
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   keptSessionViewAddress,
+  previewSessionViewId,
   resolveSessionViews,
   type SessionView,
   type SessionViewsInput,
@@ -195,6 +196,22 @@ describe("resolveSessionViews", () => {
       state: sessionless,
     });
     expect(keptSessionViewAddress(state.views, "alpha", "workspace")).toBeNull();
+  });
+
+  test("a kept view of the address shows while its workspace opens", () => {
+    const betaView = {
+      ...taskView("beta-view", "?workspace=beta&kind=task&task=other"),
+      workspace: beta,
+    };
+    const views = [taskView("planner", plannerSearch), betaView];
+
+    expect(previewSessionViewId(views, plannerSearch, "task")).toBe("planner");
+    expect(previewSessionViewId(views, "?workspace=beta&kind=task&task=other", "task")).toBe(
+      "beta-view",
+    );
+    expect(previewSessionViewId(views, "?workspace=beta&kind=task&task=next", "task")).toBeNull();
+    expect(previewSessionViewId(views, bareTaskSearch, "task")).toBeNull();
+    expect(previewSessionViewId(views, plannerSearch, "workspace")).toBeNull();
   });
 
   test("every result stays the same and no two kept views share a selection", () => {

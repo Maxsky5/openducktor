@@ -635,18 +635,27 @@ test.each(["Archive chat", "New chat", "Rename chat", "Session actions"] as cons
       const viewport = view.container.querySelector("[data-terminal-viewport]");
       const back = view.getByRole("button", { name: "Back" });
       const forward = view.getByRole("button", { name: "Forward" });
-      if (dialogName === "Archive chat") {
-        await openArchive(view, "First", "primary");
-      } else if (dialogName === "New chat") {
-        fireEvent.click(view.getByRole("button", { name: "New chat" }));
-      } else {
-        fireEvent.click(view.getByRole("button", { name: "Session actions" }));
-        if (dialogName === "Rename chat") {
-          const menu = await view.findByRole("dialog", { name: "Session actions" });
-          fireEvent.click(within(menu).getByRole("button", { name: "Rename" }));
+      const openDialog = async () => {
+        // A view that shows again takes input after its content turns active.
+        await waitFor(() =>
+          expect(view.getByRole("heading", { name: heading }).closest("[inert]") === null).toBe(
+            true,
+          ),
+        );
+        if (dialogName === "Archive chat") {
+          await openArchive(view, "First", "primary");
+        } else if (dialogName === "New chat") {
+          fireEvent.click(view.getByRole("button", { name: "New chat" }));
+        } else {
+          fireEvent.click(view.getByRole("button", { name: "Session actions" }));
+          if (dialogName === "Rename chat") {
+            const menu = await view.findByRole("dialog", { name: "Session actions" });
+            fireEvent.click(within(menu).getByRole("button", { name: "Rename" }));
+          }
         }
-      }
-      const dialog = await view.findByRole("dialog", { name: dialogName });
+        return view.findByRole("dialog", { name: dialogName });
+      };
+      const dialog = await openDialog();
       fireEvent.click(back);
       await view.findByText("Loading chats…");
       expect(view.getByTestId("session-url").textContent).toBe(otherUrl);
@@ -660,6 +669,15 @@ test.each(["Archive chat", "New chat", "Rename chat", "Session actions"] as cons
       await view.findByRole("heading", { name: heading });
       expect(view.queryByRole("dialog")).toBeNull();
       if (viewport) expect(view.container.querySelector("[data-terminal-viewport]")).toBe(viewport);
+
+      // A return before the hidden view turns inactive also keeps the dialog closed.
+      await openDialog();
+      fireEvent.click(back);
+      fireEvent.click(forward);
+      await view.findByRole("heading", { name: heading });
+      expect(view.queryByRole("dialog")).toBeNull();
+      expect(archives).toHaveLength(0);
+      expect(creates).toHaveLength(0);
     } finally {
       view.unmount();
       chatList.resolve([]);
@@ -739,14 +757,14 @@ test.each(["cached", "pending", "cached empty", "pending empty"] as const)(
     const empty = listState.endsWith("empty");
     const otherSessions = empty ? [] : [sessionRecord("First")];
     const activeChats = new Set<string>();
-    chatStub.mockImplementation(({ workspace, isVisible }) => {
+    chatStub.mockImplementation(({ workspace, isActive }) => {
       useEffect(() => {
-        if (!isVisible) return;
+        if (!isActive) return;
         activeChats.add(workspace.workspaceId);
         return () => {
           activeChats.delete(workspace.workspaceId);
         };
-      }, [isVisible, workspace.workspaceId]);
+      }, [isActive, workspace.workspaceId]);
       return <input data-chat-draft data-testid={`${workspace.workspaceId} draft`} />;
     });
     const workspaces = ["A", "B"].map((name) => ({
@@ -800,7 +818,8 @@ test.each(["cached", "pending", "cached empty", "pending empty"] as const)(
         await view.findByText("Loading chats…");
         expect(first?.isConnected).toBe(true);
         expect(view.queryByRole("heading", { name: "First", level: 2 })).toBeNull();
-        expect(activeChats.size).toBe(0);
+        // The hidden view turns inactive after the switch paints.
+        await waitFor(() => expect(activeChats.size).toBe(0));
         await act(async () => {
           chatList.resolve(otherSessions);
           await chatList.promise;
@@ -817,7 +836,9 @@ test.each(["cached", "pending", "cached empty", "pending empty"] as const)(
       );
       expect(first?.isConnected).toBe(true);
       expect(draft.isConnected).toBe(true);
-      expect([...activeChats]).toEqual(empty ? [] : [workspaces[1]!.workspaceId]);
+      await waitFor(() =>
+        expect([...activeChats]).toEqual(empty ? [] : [workspaces[1]!.workspaceId]),
+      );
       fireEvent.click(view.getByRole("button", { name: "Open workspace A" }));
       await waitFor(() => expect([...activeChats]).toEqual([workspaces[0]!.workspaceId]));
       expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(

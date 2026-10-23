@@ -1,8 +1,8 @@
 import { expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type ReactElement, startTransition, useState } from "react";
-import { MemoryRouter, useLocation } from "react-router";
+import { type ReactElement, startTransition, useRef, useState } from "react";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import {
   createWorkspaceRecordFixture,
@@ -65,12 +65,16 @@ const renderWorkspaceMatch = ({
 }) => {
   function Harness(): ReactElement {
     const [active, setActive] = useState<WorkspaceRecord>(alpha);
+    const navigate = useNavigate();
+    // As in the app, a later selection replaces an earlier one that did not apply yet.
+    const versionRef = useRef(0);
     const state = createWorkspaceStateFixture({
       workspaces: [alpha, beta, gamma],
       closedWorkspaces: [closed],
       activeWorkspace: active,
       selectWorkspace: async (workspaceId, onSelected) => {
-        if (await selectWorkspace(workspaceId)) {
+        const version = ++versionRef.current;
+        if ((await selectWorkspace(workspaceId)) && versionRef.current === version) {
           startTransition(() => {
             setActive(recordsById.get(workspaceId) ?? alpha);
             onSelected?.();
@@ -85,6 +89,18 @@ const renderWorkspaceMatch = ({
         </button>
         <button type="button" onClick={() => setActive(gamma)}>
           Select Gamma from the rail
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate("/sessions?workspace=beta&kind=workspace&session=chat-1")}
+        >
+          Open a Beta chat
+        </button>
+        <button type="button" onClick={() => navigate(-1)}>
+          Back
+        </button>
+        <button type="button" onClick={() => navigate(1)}>
+          Forward
         </button>
         <Probe keptViews={keptViews} />
       </WorkspaceStateContext.Provider>
@@ -232,4 +248,41 @@ test("offers a retry when another workspace action replaced the switch", async (
   await waitFor(() => expect(state()).toBe("ready"));
   expect(attempts).toBe(2);
   expect(address()).toBe("/sessions?workspace=beta&kind=task&task=t-1");
+});
+
+test("Back during a pending switch keeps the earlier workspace and its address", async () => {
+  const finish = new Map<string, (applied: boolean) => void>();
+  const selectWorkspace = mock(
+    (workspaceId: string) =>
+      new Promise<boolean>((resolve) => {
+        finish.set(workspaceId, resolve);
+      }),
+  );
+  renderWorkspaceMatch({
+    initialEntry: "/sessions?workspace=alpha&kind=workspace&session=chat-0",
+    selectWorkspace,
+  });
+  await waitFor(() => expect(state()).toBe("ready"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Open a Beta chat" }));
+  await waitFor(() => expect(selectWorkspace).toHaveBeenCalledWith("beta"));
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  await waitFor(() => expect(selectWorkspace).toHaveBeenLastCalledWith("alpha"));
+  await act(async () => {
+    finish.get("beta")?.(true);
+    finish.get("alpha")?.(true);
+  });
+
+  expect(address()).toBe("/sessions?workspace=alpha&kind=workspace&session=chat-0");
+  expect(state()).toBe("ready");
+
+  // The cancelled address opens its workspace again.
+  fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+  await waitFor(() => expect(selectWorkspace).toHaveBeenCalledTimes(3));
+  expect(selectWorkspace).toHaveBeenLastCalledWith("beta");
+  await act(async () => {
+    finish.get("beta")?.(true);
+  });
+  await waitFor(() => expect(state()).toBe("ready"));
+  expect(address()).toBe("/sessions?workspace=beta&kind=workspace&session=chat-1");
 });

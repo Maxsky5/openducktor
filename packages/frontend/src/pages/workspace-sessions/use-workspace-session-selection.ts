@@ -102,7 +102,12 @@ export function useWorkspaceSessionSelection({
         selectedId === savedSelection.current.sessionId)
     )
       return;
-    setLastSelection({ workspaceId, sessionId: selectedId, error: null });
+    // An equal selection keeps its state, so a view that turns active again does not render again.
+    setLastSelection((current) =>
+      current.workspaceId === workspaceId && current.sessionId === selectedId && !current.error
+        ? current
+        : { workspaceId, sessionId: selectedId, error: null },
+    );
     let pending = true;
     let cancel = () => {};
     const flush = (): void => {

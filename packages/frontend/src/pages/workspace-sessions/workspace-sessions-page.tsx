@@ -48,7 +48,6 @@ const WorkspaceSessionsPage = memo(function WorkspaceSessionsPage({
   const [lastReady, setLastReady] = useState(current);
   if (current !== null && current !== lastReady) setLastReady(current);
   const shown = current ?? lastReady;
-  const isVisible = isActive && current !== null;
 
   return (
     <>
@@ -65,16 +64,12 @@ const WorkspaceSessionsPage = memo(function WorkspaceSessionsPage({
           </Button>
         </div>
       ) : null}
-      {/* CSS hiding keeps terminal effects running; hidden Activity would detach them. */}
-      <div
-        className="h-full min-h-0"
-        style={{ display: isVisible ? undefined : "none" }}
-        inert={!isVisible}
-      >
+      {/* The session view hides and blocks a view that is not shown. This hides chats that load. */}
+      <div className="h-full min-h-0" style={{ display: current !== null ? undefined : "none" }}>
         {shown ? (
           <WorkspaceSessions
             {...shown}
-            isActive={isVisible}
+            isActive={isActive && current !== null}
             setSearchParams={setSearchParams}
             retryRecords={() => void records.refetch()}
           />

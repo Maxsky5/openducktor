@@ -29,7 +29,7 @@ import {
 } from "./session-navigation-parts";
 import { CssPresenceList } from "@/components/ui/css-presence";
 import { SessionPresence } from "./session-navigation-presence";
-import type { SessionSelection } from "./session-navigation-selection";
+import { useSessionEntrySelection } from "./session-navigation-selection";
 import {
   SESSION_GROUP_COUNT_CLASSES,
   SESSION_GROUP_ICON_CLASSES,
@@ -41,17 +41,18 @@ import { SessionCommandIcon } from "./session-command-activity";
 
 type SessionNavigationListProps = {
   model: SessionNavigationModel;
-  selection: SessionSelection;
   now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
   onRetry: (issue: SessionNavigationSourceIssue) => void;
   footer?: ReactElement | null;
 };
 
-/** The expanded session list: Needs you, Running, and Recent in one scrollable column. */
+/**
+ * The expanded session list: Needs you, Running, and Recent in one scrollable column. Its rows
+ * read the selection from `SessionSelectionContext`.
+ */
 export function SessionNavigationList({
   model,
-  selection,
   now,
   onOpen,
   onRetry,
@@ -73,7 +74,6 @@ export function SessionNavigationList({
                 key={group.id}
                 group={group}
                 isLoading={model.isLoading}
-                selection={selection}
                 now={now}
                 onOpen={onOpen}
               />
@@ -126,6 +126,27 @@ function SessionRowMetadata({
         </span>
       ) : null}
     </span>
+  );
+}
+
+function SessionListRow({
+  entry,
+  now,
+  onOpen,
+}: {
+  entry: SessionNavigationEntry;
+  now: number;
+  onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
+}): ReactElement {
+  const { isSelected, isVisible } = useSessionEntrySelection(entry.key);
+  return (
+    <SessionRow
+      entry={entry}
+      isSelected={isSelected}
+      isVisible={isVisible}
+      now={now}
+      onOpen={onOpen}
+    />
   );
 }
 
@@ -215,13 +236,11 @@ const SessionRow = memo(function SessionRow({
 function SessionGroupSection({
   group,
   isLoading,
-  selection,
   now,
   onOpen,
 }: {
   group: SessionNavigationGroup;
   isLoading: boolean;
-  selection: SessionSelection;
   now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
@@ -267,13 +286,7 @@ function SessionGroupSection({
               {group.entries.map((entry) => (
                 <SessionPresence as="li" key={entry.key}>
                   <div className="py-0.5">
-                    <SessionRow
-                      entry={entry}
-                      isSelected={entry.key === selection.entryKey}
-                      isVisible={entry.key === selection.visibleKey}
-                      now={now}
-                      onOpen={onOpen}
-                    />
+                    <SessionListRow entry={entry} now={now} onOpen={onOpen} />
                   </div>
                 </SessionPresence>
               ))}

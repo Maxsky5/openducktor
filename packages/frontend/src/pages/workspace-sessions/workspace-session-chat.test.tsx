@@ -366,7 +366,7 @@ const createWorkspaceChatHarness = ({
                       <AgentMessageQueuesContext value={messageQueues}>
                         {children ?? (
                           <WorkspaceSessionChat
-                            isVisible
+                            isActive
                             workspace={workspace}
                             record={entry}
                             chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -516,7 +516,7 @@ test("loads scoped Claude history before preparation completes and keeps Send lo
       >
         <SessionViewContext value={{ id: entry.id, isActive: visible }}>
           <WorkspaceSessionChat
-            isVisible={visible}
+            isActive={visible}
             workspace={workspace}
             record={entry}
             chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -617,7 +617,7 @@ test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME
     const chat = (record: WorkspaceSession, visitKey: number) => (
       <Harness>
         <WorkspaceSessionChat
-          isVisible
+          isActive
           workspace={workspace}
           record={record}
           visitKey={visitKey}
@@ -730,7 +730,7 @@ test.each(["model", "effort", "profile"] as const)(
       updateRecord = setRecord;
       return (
         <WorkspaceSessionChat
-          isVisible
+          isActive
           workspace={workspace}
           record={record}
           chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -985,7 +985,7 @@ test("workspace Recheck disables repeat input and shows pending feedback", async
     return (
       <HostRuntimeStatusContext value={status}>
         <WorkspaceSessionChat
-          isVisible
+          isActive
           workspace={workspace}
           record={entry}
           chatSettings={DEFAULT_CHAT_SETTINGS}
@@ -1145,7 +1145,7 @@ test("returning to a retained chat expands requests without clearing drafts, whi
             <WorkspaceSessionChatPane
               workspace={workspace}
               record={pane}
-              isVisible={pane.id === record.id}
+              isActive={pane.id === record.id}
               workingDirectory="/repo"
               branchKey="main"
               onToolRefresh={onToolRefresh}

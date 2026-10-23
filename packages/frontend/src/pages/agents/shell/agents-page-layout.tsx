@@ -4,7 +4,6 @@ import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/
 import { ChatArtifactLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-provider";
 import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
 import {
-  Activity,
   type ComponentProps,
   memo,
   type ReactElement,
@@ -42,7 +41,10 @@ import {
   AgentsPageSelectedFileRefreshRuntime,
 } from "./agents-page-right-panel-runtime";
 import { AgentsPageShell } from "./agents-page-shell";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import {
+  SessionViewShownActivity,
+  WhileSessionViewShown,
+} from "@/features/session-navigation/session-view-visibility";
 import type {
   AgentStudioRightPanelBridgeModel,
   AgentStudioSelectedFileRefreshModel,
@@ -199,11 +201,10 @@ export function AgentsPageWorkspace({
 const MemoizedAgentChatPane = memo(function AgentChatPane({
   chatModel,
 }: AgentChatPaneProps): ReactElement {
-  const isActive = useSessionViewActive();
   return (
-    <Activity mode={isActive ? "visible" : "hidden"}>
+    <SessionViewShownActivity>
       <AgentChatSurface model={chatModel} />
-    </Activity>
+    </SessionViewShownActivity>
   );
 });
 
@@ -237,7 +238,6 @@ type AgentsPageLayoutProps = {
 };
 
 export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement {
-  const isActive = useSessionViewActive();
   const {
     chatFileLinkOwner,
     chatArtifactLinkOwner,
@@ -292,9 +292,10 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   const openInDisabledReason = buildToolsSnapshot
     ? buildToolsSnapshot.openInTarget.disabledReason
     : "The task working directory is unavailable.";
+  // Header dialogs and menus sit in portals, so the header leaves as soon as the view hides.
   const headerContent = useMemo(
-    () =>
-      isActive ? (
+    () => (
+      <WhileSessionViewShown>
         <AgentStudioHeader
           model={chatHeaderModel}
           repoActions={
@@ -319,9 +320,9 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
             <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
           }
         />
-      ) : null,
+      </WhileSessionViewShown>
+    ),
     [
-      isActive,
       activeWorkspace,
       chatHeaderModel,
       openInContextMode,

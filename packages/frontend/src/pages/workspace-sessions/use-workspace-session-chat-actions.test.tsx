@@ -721,7 +721,7 @@ async function renderChatPanes(
               <WorkspaceSessionChatPane
                 workspace={workspace}
                 record={pane}
-                isVisible={id === current.id}
+                isActive={id === current.id}
                 workingDirectory="/repo"
                 branchKey="main"
                 onToolRefresh={refresh}

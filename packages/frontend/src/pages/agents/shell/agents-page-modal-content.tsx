@@ -1,5 +1,8 @@
 import { type ComponentProps, type ReactElement, useEffect, useEffectEvent } from "react";
-import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
+import {
+  useSessionViewActive,
+  useSessionViewShown,
+} from "@/features/session-navigation/session-view-context";
 import { SessionStartModal } from "@/components/features/agents/session-start-modal";
 import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
@@ -17,6 +20,8 @@ type AgentsPageModalContentProps = {
 
 export function AgentsPageModalContent({ model }: AgentsPageModalContentProps): ReactElement {
   const { mergedPullRequestModal, humanReviewFeedbackModal, sessionStartModal } = model;
+  // Modal portals sit outside the hidden page, so a view that leaves the screen closes them.
+  const isShown = useSessionViewShown();
   const isActive = useSessionViewActive();
   const close = useEffectEvent(() => {
     mergedPullRequestModal?.onCancel();
@@ -24,14 +29,14 @@ export function AgentsPageModalContent({ model }: AgentsPageModalContentProps): 
     sessionStartModal?.onOpenChange(false);
   });
   useEffect(() => {
-    if (!isActive) close();
+    if (!isShown) close();
   }, [
-    isActive,
+    isShown,
     mergedPullRequestModal?.taskId,
     humanReviewFeedbackModal?.open,
     sessionStartModal?.open,
   ]);
-  if (!isActive) return <></>;
+  if (!isShown || !isActive) return <></>;
 
   return (
     <>

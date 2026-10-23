@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   buildSessionsPageHref,
@@ -42,6 +42,8 @@ export function useSessionsWorkspaceMatch(
   const originRef = useRef<{ locationKey: string; activeWorkspaceId: string } | null>(null);
   const matchedLocationKeyRef = useRef<string | null>(null);
   const attemptRef = useRef<SwitchAttempt | null>(null);
+  // The active workspace when this hook started a switch that did not apply or fail yet.
+  const switchOriginRef = useRef<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [failure, setFailure] = useState<{ locationKey: string; message: string } | null>(null);
   const [interruptedAttempt, setInterruptedAttempt] = useState<SwitchAttempt | null>(null);
@@ -52,6 +54,8 @@ export function useSessionsWorkspaceMatch(
 
   useEffect(() => {
     if (activeWorkspaceId === null) return;
+    // The switch applied, or another workspace action replaced it.
+    if (switchOriginRef.current !== activeWorkspaceId) switchOriginRef.current = null;
     if (requestedWorkspaceId === null) {
       // An address without a workspace refers to the active one.
       const next = new URLSearchParams(location.search);
@@ -64,6 +68,15 @@ export function useSessionsWorkspaceMatch(
     }
     if (requestedWorkspaceId === activeWorkspaceId) {
       matchedLocationKeyRef.current = location.key;
+      if (switchOriginRef.current === null) return;
+      // An address of the active workspace, also after Back, replaces a pending switch. The stale
+      // attempt is no longer current, so a return to its address starts a new switch.
+      switchOriginRef.current = null;
+      attemptRef.current = { locationKey: location.key, retry };
+      startTransition(() => {
+        // Selection reports host failures.
+        void selectWorkspace(activeWorkspaceId).catch(() => {});
+      });
       return;
     }
     if (originRef.current?.locationKey !== location.key) {
@@ -87,20 +100,26 @@ export function useSessionsWorkspaceMatch(
     if (previous?.locationKey === location.key && previous.retry === retry) return;
     const attempt = { locationKey: location.key, retry };
     attemptRef.current = attempt;
+    switchOriginRef.current = activeWorkspaceId;
     let queued = false;
-    selectWorkspace(requestedWorkspaceId, () => {
-      queued = true;
-    }).then(
-      () => {
-        // The queued workspace can commit after this promise resolves.
-        if (!queued && attemptRef.current === attempt) setInterruptedAttempt(attempt);
-      },
-      (cause: unknown) => {
-        if (attemptRef.current === attempt) {
+    // The switch state renders after the kept view of the address paints.
+    startTransition(() => {
+      selectWorkspace(requestedWorkspaceId, () => {
+        queued = true;
+      }).then(
+        () => {
+          if (queued || attemptRef.current !== attempt) return;
+          // The queued workspace can commit after this promise resolves.
+          switchOriginRef.current = null;
+          setInterruptedAttempt(attempt);
+        },
+        (cause: unknown) => {
+          if (attemptRef.current !== attempt) return;
+          switchOriginRef.current = null;
           setFailure({ locationKey: attempt.locationKey, message: errorMessage(cause) });
-        }
-      },
-    );
+        },
+      );
+    });
   }, [
     activeWorkspaceId,
     isOpen,

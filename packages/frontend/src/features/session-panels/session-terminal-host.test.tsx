@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { act, render, waitFor } from "@testing-library/react";
+import { Profiler, useState } from "react";
 import {
   createSessionPanelFixture,
   createTerminalSessionsFixture,
@@ -12,7 +13,10 @@ import { useTerminals, type TerminalTab } from "@/features/terminals";
 import * as transport from "@/features/terminals/use-terminal-transport";
 import { SessionPanel, sessionPanelOwnerKey, useSessionPanels } from ".";
 import { SessionTerminalHost, SessionTerminalSurface } from "./session-terminal-host";
-import { SessionViewContext } from "../session-navigation/session-view-context";
+import {
+  SessionViewContext,
+  SessionViewShownContext,
+} from "../session-navigation/session-view-context";
 
 const scopeKey = "task";
 const tab: TerminalTab = {
@@ -71,6 +75,41 @@ test("task views share one viewport through owner eviction and panel closure", (
   }
 });
 
+test("a surface update that keeps its terminals does not render the host again", () => {
+  const model = createSessionPanelFixture({
+    selectedTabId: tab.tabId,
+    terminals: createTerminalSessionsFixture({ scopeKey }),
+    terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
+    activeTerminalKey: "terminal",
+  });
+  let renderAgain = () => {};
+  function View() {
+    const [, setRenders] = useState(0);
+    renderAgain = () => setRenders((renders) => renders + 1);
+    // A new context value on each render runs the surface update again.
+    return (
+      <SessionViewContext value={{ id: "planner", isActive: true }}>
+        <SessionTerminalSurface model={model} />
+      </SessionViewContext>
+    );
+  }
+  let commits = 0;
+  const view = render(
+    <Profiler id="host" onRender={() => (commits += 1)}>
+      <SessionTerminalHost viewIds={["planner"]}>
+        <View />
+      </SessionTerminalHost>
+    </Profiler>,
+  );
+  try {
+    const before = commits;
+    act(() => renderAgain());
+    expect(commits - before).toBe(1);
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a terminal tab and its moved content link to each other in each kept view", () => {
   const panelOf = (tabIdBase: string) =>
     createSessionPanelFixture({
@@ -88,7 +127,9 @@ test("a terminal tab and its moved content link to each other in each kept view"
       <SessionTerminalHost viewIds={["planner", "build"]}>
         {(["planner", "build"] as const).map((id) => (
           <SessionViewContext key={id} value={{ id, isActive: id === active }}>
-            <SessionPanel model={panels[id]} />
+            <SessionViewShownContext value={id === active}>
+              <SessionPanel model={panels[id]} />
+            </SessionViewShownContext>
           </SessionViewContext>
         ))}
       </SessionTerminalHost>

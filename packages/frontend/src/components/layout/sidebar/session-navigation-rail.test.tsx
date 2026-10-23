@@ -19,14 +19,8 @@ const renderRail = (
   onRetry: (issue: ReturnType<typeof navigationModel>["issues"][number]) => void = () => {},
 ) =>
   render(
-    <SessionNavigationTestProvider>
-      <SessionNavigationRail
-        onRetry={onRetry}
-        model={model}
-        selection={{ entryKey: selectedKey, visibleKey: selectedKey }}
-        now={NOW}
-        onOpen={onOpen}
-      />
+    <SessionNavigationTestProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
+      <SessionNavigationRail onRetry={onRetry} model={model} now={NOW} onOpen={onOpen} />
     </SessionNavigationTestProvider>,
   );
 

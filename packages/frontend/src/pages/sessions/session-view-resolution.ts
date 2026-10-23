@@ -1,8 +1,11 @@
 import { MAX_CACHED_TRANSCRIPTS } from "@/components/features/agents/agent-chat/agent-chat-transcript-model-cache";
 import {
-  buildSessionNavigationHref,
-  SESSIONS_PATH,
+  buildSessionNavigationSearch,
+  sameSessionSelection,
+  SESSION_SELECTION_KEYS,
   SESSIONS_QUERY_KEYS,
+  TASK_SESSION_QUERY_KEYS,
+  WORKSPACE_SESSION_QUERY_KEYS,
   type SessionNavigationTarget,
   type SessionsPageKind,
 } from "@/features/session-navigation/session-navigation-target";
@@ -34,8 +37,11 @@ export type SessionViewsInput = {
   createId: () => string;
 };
 
-const SELECTION_KEYS = ["task", "session", "agent"] as const;
-const ADDRESS_KEYS = [SESSIONS_QUERY_KEYS.workspace, SESSIONS_QUERY_KEYS.kind, ...SELECTION_KEYS];
+const ADDRESS_KEYS = [
+  SESSIONS_QUERY_KEYS.workspace,
+  SESSIONS_QUERY_KEYS.kind,
+  ...SESSION_SELECTION_KEYS,
+];
 
 /**
  * Selects the views to keep and the view that shows the address. Returns `state` when nothing
@@ -106,6 +112,26 @@ export function keptSessionViewAddress(
   return { search: `?${new URLSearchParams(params).toString()}`, state: view.state };
 }
 
+/**
+ * The kept view that shows an address while its workspace opens. Its scope keeps the contexts of
+ * that workspace, so it can show at once and becomes active when the workspace is active.
+ */
+export function previewSessionViewId(
+  views: readonly SessionView[],
+  search: string,
+  kind: SessionsPageKind | null,
+): string | null {
+  if (kind === null || !hasSelection(search, kind)) return null;
+  const workspaceId = new URLSearchParams(search).get(SESSIONS_QUERY_KEYS.workspace);
+  const view = views.find(
+    (entry) =>
+      entry.workspace.workspaceId === workspaceId &&
+      entry.kind === kind &&
+      sameSessionSelection(entry.search, search),
+  );
+  return view?.id ?? null;
+}
+
 /** A selected view can leave before its own URL write reaches the router. */
 function followPublished(
   view: SessionView,
@@ -119,13 +145,13 @@ function followPublished(
     (target.kind === "workspace_session") !== (view.kind === "workspace")
   )
     return view;
-  const search = selectionSearch(target);
-  if (sameSelection(view.search, search)) return view;
+  const search = buildSessionNavigationSearch(target);
+  if (sameSessionSelection(view.search, search)) return view;
   const isHeld = liveViews.some(
     (other) =>
       other.id !== view.id &&
       sameOwner(other, view.workspace, view.kind) &&
-      sameSelection(other.search, search),
+      sameSessionSelection(other.search, search),
   );
   return !isHeld &&
     (!hasSelection(view.search, view.kind) || matchesResolvedSelection(view, search, target))
@@ -145,7 +171,7 @@ function resolveActiveView(
   const candidates = views.filter((view) => sameOwner(view, workspace, kind));
   const active = candidates.find((view) => view.id === activeId);
   // A view whose task or chat has gone can still share a selection, so the active view wins.
-  const exact = candidates.filter((view) => sameSelection(view.search, location.search));
+  const exact = candidates.filter((view) => sameSessionSelection(view.search, location.search));
   const activeAddress = new URLSearchParams(active?.search);
   // The active view stays for an address that names no selection, or less than the view.
   const keepsActive =
@@ -157,15 +183,19 @@ function resolveActiveView(
     exact.length === 0 &&
     active !== undefined &&
     (!hasSelection(active.search, kind) ||
-      (activeAddress.get("task") === params.get("task") && !activeAddress.has("session")));
+      (activeAddress.get(TASK_SESSION_QUERY_KEYS.task) ===
+        params.get(TASK_SESSION_QUERY_KEYS.task) &&
+        !activeAddress.has(TASK_SESSION_QUERY_KEYS.session)));
   const previous =
     (active && exact.includes(active) ? active : exact[0]) ??
     (keepsActive || growsActive ? active : undefined) ??
     // An address without a session goes back to the last view of its task.
-    (params.has("session")
+    (params.has(TASK_SESSION_QUERY_KEYS.session)
       ? undefined
       : candidates.findLast(
-          (view) => new URLSearchParams(view.search).get("task") === params.get("task"),
+          (view) =>
+            new URLSearchParams(view.search).get(TASK_SESSION_QUERY_KEYS.task) ===
+            params.get(TASK_SESSION_QUERY_KEYS.task),
         ));
   // The view takes the address. `followPublished` then adds what the content shows past it.
   const view = follow({
@@ -196,20 +226,18 @@ function sameOwner(view: SessionView, workspace: ActiveWorkspace, kind: Sessions
   );
 }
 
-function sameSelection(left: string, right: string): boolean {
-  const a = new URLSearchParams(left);
-  const b = new URLSearchParams(right);
-  return SELECTION_KEYS.every((key) => a.get(key) === b.get(key));
-}
-
 /** The address names no part of the selection that differs from the view. */
 function fitsAddress(view: SessionView, params: URLSearchParams): boolean {
   const address = new URLSearchParams(view.search);
-  return SELECTION_KEYS.every((key) => !params.has(key) || params.get(key) === address.get(key));
+  return SESSION_SELECTION_KEYS.every(
+    (key) => !params.has(key) || params.get(key) === address.get(key),
+  );
 }
 
 function hasSelection(search: string, kind: SessionsPageKind): boolean {
-  return new URLSearchParams(search).has(kind === "task" ? "task" : "session");
+  return new URLSearchParams(search).has(
+    kind === "task" ? TASK_SESSION_QUERY_KEYS.task : WORKSPACE_SESSION_QUERY_KEYS.session,
+  );
 }
 
 /** Either address can stay partial until the resolved session's URL write commits. */
@@ -224,16 +252,14 @@ function matchesResolvedSelection(
     target.workspaceId !== view.workspace.workspaceId
   )
     return false;
-  const resolved = new URLSearchParams(selectionSearch(target));
+  const resolved = new URLSearchParams(buildSessionNavigationSearch(target));
   return [view.search, search].every((address) => {
     const params = new URLSearchParams(address);
     return (
-      params.get("task") === target.taskId &&
-      ["session", "agent"].every((key) => !params.has(key) || params.get(key) === resolved.get(key))
+      params.get(TASK_SESSION_QUERY_KEYS.task) === target.taskId &&
+      [TASK_SESSION_QUERY_KEYS.session, TASK_SESSION_QUERY_KEYS.agent].every(
+        (key) => !params.has(key) || params.get(key) === resolved.get(key),
+      )
     );
   });
-}
-
-function selectionSearch(target: SessionNavigationTarget): string {
-  return buildSessionNavigationHref(target).slice(SESSIONS_PATH.length);
 }

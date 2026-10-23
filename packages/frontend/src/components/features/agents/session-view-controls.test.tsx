@@ -6,6 +6,7 @@ import {
   type CommandPaletteContextValue,
 } from "@/features/command-palette/command-palette-context";
 import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
+import { SessionViewContext } from "@/features/session-navigation/session-view-context";
 import { SessionViewControls } from "./session-view-controls";
 
 /** A palette that keeps the page commands that are registered now. */
@@ -92,4 +93,24 @@ test("adds a palette command for each panel that the page can toggle", () => {
     ),
   );
   expect(commands.size).toBe(0);
+});
+
+test("only the active session view adds the palette commands", () => {
+  const { commands, wrap } = recordingPalette();
+  const controls = (isActive: boolean) =>
+    wrap(
+      <SessionViewContext value={{ id: "kept", isActive }}>
+        <SessionViewControls
+          bottom={{ isAvailable: true, isOpen: false, onToggle: () => {} }}
+          right={{ isOpen: false, onToggle: () => {} }}
+        />
+      </SessionViewContext>,
+    );
+  const view = render(controls(false));
+
+  expect(screen.getByRole("button", { name: "Show bottom panel" })).toBeTruthy();
+  expect(commands.size).toBe(0);
+
+  view.rerender(controls(true));
+  expect([...commands.keys()]).toEqual(["bottom-panel", "right-panel"]);
 });

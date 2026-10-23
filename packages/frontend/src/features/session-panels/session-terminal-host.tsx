@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -22,6 +23,13 @@ type Surface = {
   container: HTMLDivElement;
   bindings: Map<string, Binding>;
 };
+type SurfaceSnapshot = {
+  key: string;
+  container: HTMLDivElement;
+  model: SessionPanelModel;
+  isVisible: boolean;
+  focusRequest: number;
+};
 type Host = ReturnType<typeof createHost>;
 const TerminalHostContext = createContext<Host | null>(null);
 
@@ -41,25 +49,33 @@ export function SessionTerminalHost({
     <TerminalHostContext value={host}>
       {children}
       <div hidden ref={parking} />
-      {surfaces.map(({ key, container, model, isVisible, focusRequest }) =>
-        createPortal(
-          <Tabs value={model.selectedTabId ?? ""} className="contents">
-            <TerminalLayer
-              terminals={model.terminals}
-              mounts={model.terminalMounts}
-              activeKey={model.activeTerminalKey}
-              isVisible={isVisible}
-              focusRequest={focusRequest}
-              tabIdBase={model.tabIdBase}
-            />
-          </Tabs>,
-          container,
-          key,
-        ),
-      )}
+      {surfaces.map((surface) => (
+        <TerminalSurfacePortal key={surface.key} surface={surface} />
+      ))}
     </TerminalHostContext>
   );
 }
+
+// The host keeps an unchanged surface, so a change to one view renders only its terminals.
+const TerminalSurfacePortal = memo(function TerminalSurfacePortal({
+  surface: { container, model, isVisible, focusRequest },
+}: {
+  surface: SurfaceSnapshot;
+}) {
+  return createPortal(
+    <Tabs value={model.selectedTabId ?? ""} className="contents">
+      <TerminalLayer
+        terminals={model.terminals}
+        mounts={model.terminalMounts.filter((mount) => mount.scopeKey === model.terminals.scopeKey)}
+        activeKey={model.activeTerminalKey}
+        isVisible={isVisible}
+        focusRequest={focusRequest}
+        tabIdBase={model.tabIdBase}
+      />
+    </Tabs>,
+    container,
+  );
+});
 
 export function SessionTerminalSurface({ model }: { model: SessionPanelModel }) {
   const host = useContext(TerminalHostContext);
@@ -96,36 +112,36 @@ export function SessionTerminalSurface({ model }: { model: SessionPanelModel }) 
 function createHost(parking: RefObject<HTMLDivElement | null>) {
   const entries = new Map<string, Surface>();
   const listeners = new Set<() => void>();
-  let snapshot: Array<{
-    key: string;
-    container: HTMLDivElement;
-    model: SessionPanelModel;
-    isVisible: boolean;
-    focusRequest: number;
-  }> = [];
+  let snapshot: SurfaceSnapshot[] = [];
   const move = (entry: Surface) => {
     const binding = entry.bindings.get(entry.viewId);
     const target = binding?.anchor ?? parking.current;
     if (target && entry.container.parentNode !== target) target.appendChild(entry.container);
   };
   const notify = () => {
-    snapshot = [...entries.values()].map((entry) => {
+    const previous = new Map(snapshot.map((surface) => [surface.key, surface]));
+    const next = [...entries.values()].map((entry): SurfaceSnapshot => {
       const binding = entry.bindings.get(entry.viewId)!;
       const { model } = binding;
       const isShown = binding.anchor !== null && binding.isActive;
-      return {
-        key: entry.key,
-        container: entry.container,
-        isVisible: isShown && model.isVisible,
-        focusRequest: isShown ? model.focusRequest : 0,
-        model: {
-          ...model,
-          terminalMounts: model.terminalMounts.filter(
-            (mount) => mount.scopeKey === model.terminals.scopeKey,
-          ),
-        },
-      };
+      const isVisible = isShown && model.isVisible;
+      const focusRequest = isShown ? model.focusRequest : 0;
+      const last = previous.get(entry.key);
+      if (
+        last?.container === entry.container &&
+        last.model === model &&
+        last.isVisible === isVisible &&
+        last.focusRequest === focusRequest
+      )
+        return last;
+      return { key: entry.key, container: entry.container, model, isVisible, focusRequest };
     });
+    if (
+      next.length === snapshot.length &&
+      next.every((surface, index) => surface === snapshot[index])
+    )
+      return;
+    snapshot = next;
     for (const listener of listeners) listener();
   };
   const dropUnused = () => {

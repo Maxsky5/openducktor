@@ -1,3 +1,7 @@
+import {
+  SessionViewContext,
+  SessionViewShownContext,
+} from "@/features/session-navigation/session-view-context";
 import { expect, mock, spyOn, test } from "bun:test";
 import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { QueryClient, useQuery } from "@tanstack/react-query";
@@ -104,22 +108,27 @@ function renderClosedSession(
   let currentRecord = sessionRecord;
   let currentFile = selectedFile;
   let visible = true;
+  // As in a session view, hidden content is also inactive.
   function Content(): ReactElement {
     return (
-      <Tabs value={currentRecord.id}>
-        <WorkspaceSessionContent
-          workspace={currentWorkspace}
-          record={currentRecord}
-          isVisible={visible}
-          rightPanel={createSessionPanelFixture({
-            isVisible: panelOpen,
-            selectedTabId: "files",
-          })}
-          selectedFile={currentFile}
-          onSelectedFileChange={() => {}}
-          {...(onSafeToLeave ? { onSafeToLeave } : {})}
-        />
-      </Tabs>
+      <SessionViewContext value={{ id: "view", isActive: visible }}>
+        <SessionViewShownContext value={visible}>
+          <Tabs value={currentRecord.id}>
+            <WorkspaceSessionContent
+              workspace={currentWorkspace}
+              record={currentRecord}
+              isActive={visible}
+              rightPanel={createSessionPanelFixture({
+                isVisible: panelOpen,
+                selectedTabId: "files",
+              })}
+              selectedFile={currentFile}
+              onSelectedFileChange={() => {}}
+              {...(onSafeToLeave ? { onSafeToLeave } : {})}
+            />
+          </Tabs>
+        </SessionViewShownContext>
+      </SessionViewContext>
     );
   }
   const content = (
@@ -349,14 +358,14 @@ test("changing the chat owner resets its input and file preview", () => {
 test("changing the workspace owner resets its chat input and active effects", () => {
   const active = new Set<string>();
   const chat = spyOn(sessionChat, "WorkspaceSessionChat").mockImplementation(
-    ({ workspace, isVisible }) => {
+    ({ workspace, isActive }) => {
       useEffect(() => {
-        if (!isVisible) return;
+        if (!isActive) return;
         active.add(workspace.workspaceId);
         return () => {
           active.delete(workspace.workspaceId);
         };
-      }, [isVisible, workspace.workspaceId]);
+      }, [isActive, workspace.workspaceId]);
       return <input aria-label={`${workspace.workspaceName} draft`} />;
     },
   );
@@ -749,7 +758,7 @@ test("the tools panel stays beside the chat", () => {
             <WorkspaceSessionContent
               workspace={workspace}
               record={record}
-              isVisible
+              isActive
               rightPanel={createSessionPanelFixture()}
               selectedFile={null}
               onSelectedFileChange={() => {}}

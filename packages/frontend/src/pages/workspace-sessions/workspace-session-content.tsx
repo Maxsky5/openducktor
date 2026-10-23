@@ -49,7 +49,7 @@ const NARROW_TOOLS_PANEL_SIZES: SessionPanelSplitSizes = {
 type WorkspaceSessionContentProps = {
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
-  isVisible: boolean;
+  isActive: boolean;
   rightPanel: SessionPanelModel;
   selectedFile: TaskExecutionSelectedFile | null;
   onSelectedFileChange: (sessionId: string, selectedFile: TaskExecutionSelectedFile | null) => void;
@@ -59,13 +59,13 @@ type WorkspaceSessionContentProps = {
 export function WorkspaceSessionContent({
   workspace,
   record,
-  isVisible,
+  isActive,
   rightPanel,
   selectedFile,
   onSelectedFileChange,
   onSafeToLeave,
 }: WorkspaceSessionContentProps): ReactElement {
-  const isPanelOpen = isVisible && rightPanel.isVisible;
+  const isPanelOpen = isActive && rightPanel.isVisible;
   const [chatActions, setChatActions] = useState<WorkspaceConflictChatActions | null>(null);
   const selectedKey = workspaceConflictChatKey(workspace.workspaceId, record.id);
   const onActionsReady = useCallback(
@@ -150,7 +150,7 @@ export function WorkspaceSessionContent({
             key={selectedKey}
             workspace={workspace}
             record={record}
-            isVisible={isVisible}
+            isActive={isActive}
             onToolRefresh={onToolRefresh}
             onSelectFile={onSelectFile}
             workingDirectory={workingDirectory}
@@ -214,7 +214,9 @@ export function WorkspaceSessionContent({
         mainClassName="h-full min-h-0"
         panelClassName="bg-card"
         main={mainContent}
-        panel={<SessionPanel model={rightPanel} toolTabs={toolTabs} isActive={isPanelOpen} />}
+        panel={
+          <SessionPanel model={rightPanel} toolTabs={toolTabs} isShown={rightPanel.isVisible} />
+        }
       />
     </div>
   );

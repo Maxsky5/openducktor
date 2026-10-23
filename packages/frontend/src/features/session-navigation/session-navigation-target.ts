@@ -74,11 +74,12 @@ export const buildNewWorkspaceSessionHref = (workspaceId: string): string => {
   return `${SESSIONS_PATH}?${params.toString()}`;
 };
 
-export const buildSessionNavigationHref = (target: SessionNavigationTarget): string => {
+/** The search part of the Sessions address that opens the target. */
+export const buildSessionNavigationSearch = (target: SessionNavigationTarget): string => {
   if (target.kind === "workspace_session") {
     const params = pageSearchParams(target.workspaceId, "workspace");
     params.set(WORKSPACE_SESSION_QUERY_KEYS.session, target.sessionId);
-    return `${SESSIONS_PATH}?${params.toString()}`;
+    return `?${params.toString()}`;
   }
   const params = pageSearchParams(target.workspaceId, "task");
   params.set(TASK_SESSION_QUERY_KEYS.task, target.taskId);
@@ -88,5 +89,22 @@ export const buildSessionNavigationHref = (target: SessionNavigationTarget): str
   } else if (target.role) {
     params.set(TASK_SESSION_QUERY_KEYS.agent, target.role);
   }
-  return `${SESSIONS_PATH}?${params.toString()}`;
+  return `?${params.toString()}`;
+};
+
+export const buildSessionNavigationHref = (target: SessionNavigationTarget): string =>
+  `${SESSIONS_PATH}${buildSessionNavigationSearch(target)}`;
+
+/** The query keys that name the task, the session, and the role that an address selects. */
+export const SESSION_SELECTION_KEYS = [
+  TASK_SESSION_QUERY_KEYS.task,
+  TASK_SESSION_QUERY_KEYS.session,
+  TASK_SESSION_QUERY_KEYS.agent,
+] as const;
+
+/** Two Sessions address searches select the same task, session, and role. */
+export const sameSessionSelection = (left: string, right: string): boolean => {
+  const leftParams = new URLSearchParams(left);
+  const rightParams = new URLSearchParams(right);
+  return SESSION_SELECTION_KEYS.every((key) => leftParams.get(key) === rightParams.get(key));
 };

@@ -17,6 +17,7 @@ import type { SessionNavigationEntry } from "@/state/read-models/session-navigat
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";
+import { SessionSelectionContext } from "./session-navigation-selection";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   betaWorkspace,
@@ -69,13 +70,16 @@ function MenuHarness({
         {location.search}
       </output>
       <Link to="/kanban">Kanban</Link>
-      <List
-        model={navigationModel({ recent: visible })}
-        selection={{ entryKey: selected?.key ?? null, visibleKey: selected?.key ?? null }}
-        now={NOW}
-        onOpen={onOpen}
-        onRetry={() => {}}
-      />
+      <SessionSelectionContext
+        value={{ entryKey: selected?.key ?? null, visibleKey: selected?.key ?? null }}
+      >
+        <List
+          model={navigationModel({ recent: visible })}
+          now={NOW}
+          onOpen={onOpen}
+          onRetry={() => {}}
+        />
+      </SessionSelectionContext>
     </>
   );
 }

@@ -25,7 +25,7 @@ import {
 } from "./session-navigation-parts";
 import { CssPresenceList } from "@/components/ui/css-presence";
 import { SessionPresence } from "./session-navigation-presence";
-import type { SessionSelection } from "./session-navigation-selection";
+import { useSessionEntrySelection } from "./session-navigation-selection";
 import {
   SESSION_GROUP_COUNT_CLASSES,
   sessionEntryIconClassName,
@@ -34,16 +34,17 @@ import {
 
 type SessionNavigationRailProps = {
   model: SessionNavigationModel;
-  selection: SessionSelection;
   now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
   onRetry: (issue: SessionNavigationSourceIssue) => void;
 };
 
-/** The collapsed session list: one icon per session under the same three groups. */
+/**
+ * The collapsed session list: one icon per session under the same three groups. Its icons read
+ * the selection from `SessionSelectionContext`.
+ */
 export function SessionNavigationRail({
   model,
-  selection,
   now,
   onOpen,
   onRetry,
@@ -62,7 +63,6 @@ export function SessionNavigationRail({
                 key={group.id}
                 group={group}
                 isLoading={model.isLoading}
-                selection={selection}
                 now={now}
                 onOpen={onOpen}
               />
@@ -98,6 +98,27 @@ export function SessionNavigationRail({
         ) : null}
       </div>
     </SessionPreviewProvider>
+  );
+}
+
+function SessionRailEntry({
+  entry,
+  now,
+  onOpen,
+}: {
+  entry: SessionNavigationEntry;
+  now: number;
+  onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
+}): ReactElement {
+  const { isSelected, isVisible } = useSessionEntrySelection(entry.key);
+  return (
+    <SessionRailIcon
+      entry={entry}
+      isSelected={isSelected}
+      isVisible={isVisible}
+      now={now}
+      onOpen={onOpen}
+    />
   );
 }
 
@@ -147,13 +168,11 @@ const SessionRailIcon = memo(function SessionRailIcon({
 function SessionRailGroup({
   group,
   isLoading,
-  selection,
   now,
   onOpen,
 }: {
   group: SessionNavigationGroup;
   isLoading: boolean;
-  selection: SessionSelection;
   now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
@@ -177,13 +196,7 @@ function SessionRailGroup({
             {group.entries.map((entry) => (
               <SessionPresence as="li" key={entry.key}>
                 <div className="flex justify-center px-1 pb-1.5 pt-1">
-                  <SessionRailIcon
-                    entry={entry}
-                    isSelected={entry.key === selection.entryKey}
-                    isVisible={entry.key === selection.visibleKey}
-                    now={now}
-                    onOpen={onOpen}
-                  />
+                  <SessionRailEntry entry={entry} now={now} onOpen={onOpen} />
                 </div>
               </SessionPresence>
             ))}

@@ -16,14 +16,8 @@ const pendingAnimation = () => {
 };
 
 const list = (model: ReturnType<typeof navigationModel>) => (
-  <SessionNavigationTestProvider>
-    <SessionNavigationList
-      model={model}
-      selection={{ entryKey: moving.key, visibleKey: moving.key }}
-      now={NOW}
-      onOpen={() => {}}
-      onRetry={() => {}}
-    />
+  <SessionNavigationTestProvider selection={{ entryKey: moving.key, visibleKey: moving.key }}>
+    <SessionNavigationList model={model} now={NOW} onOpen={() => {}} onRetry={() => {}} />
   </SessionNavigationTestProvider>
 );
 
@@ -35,14 +29,8 @@ describe("Session navigation presence", () => {
     "%s keeps Needs you and Running mounted through loading and empty states",
     async (_mode, Component) => {
       const navigation = (model: ReturnType<typeof navigationModel>) => (
-        <SessionNavigationTestProvider>
-          <Component
-            model={model}
-            selection={{ entryKey: moving.key, visibleKey: moving.key }}
-            now={NOW}
-            onOpen={() => {}}
-            onRetry={() => {}}
-          />
+        <SessionNavigationTestProvider selection={{ entryKey: moving.key, visibleKey: moving.key }}>
+          <Component model={model} now={NOW} onOpen={() => {}} onRetry={() => {}} />
         </SessionNavigationTestProvider>
       );
       const view = render(navigation(navigationModel({}, { isLoading: true })));

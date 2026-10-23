@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { memo, type ReactElement, type ReactNode, useEffect, useMemo, useState } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { AgentsPage } from "@/pages/agents/agents-page";
 import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
@@ -30,10 +30,14 @@ import {
 import {
   VisibleSessionTargetProvider,
   usePublishVisibleSessionTarget,
+  useVisibleSessionTarget,
 } from "@/features/session-navigation/visible-session-target";
 import { SessionsPage } from "./sessions-page";
 import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
-import type { SessionNavigationTarget } from "@/features/session-navigation/session-navigation-target";
+import {
+  type SessionNavigationTarget,
+  sessionNavigationTargetKey,
+} from "@/features/session-navigation/session-navigation-target";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useQueryClient } from "@tanstack/react-query";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
@@ -45,11 +49,18 @@ const workspace = createWorkspaceRecordFixture({ workspaceId: "alpha" });
 function Harness({
   initiallyClosed = false,
   visits = [],
+  beforeSelect = async () => {},
+  probe = null,
 }: {
   initiallyClosed?: boolean;
   visits?: string[];
+  /** Holds a workspace switch, as a slow host does. */
+  beforeSelect?: (workspaceId: string) => Promise<void>;
+  /** Reads app state beside the page. */
+  probe?: ReactNode;
 }): ReactElement {
   const [closed, setClosed] = useState(initiallyClosed);
+  const [, setRefreshes] = useState(0);
   const [active, setActive] = useState<ActiveWorkspace | null>(workspace);
   const [isListed, setIsListed] = useState(true);
   const other = createWorkspaceRecordFixture({ workspaceId: "beta", repoPath: "/beta" });
@@ -62,6 +73,7 @@ function Harness({
     activeWorkspace: active ? { ...workspace, ...active } : null,
     workspaces: isListed ? [workspace, other] : [other],
     selectWorkspace: async (id, onSelected) => {
+      await beforeSelect(id);
       setActive(id === workspace.workspaceId ? workspace : other);
       onSelected?.();
     },
@@ -105,6 +117,9 @@ function Harness({
                   <button type="button" onClick={() => setIsListed(false)}>
                     Unlist active workspace
                   </button>
+                  <button type="button" onClick={() => setRefreshes((count) => count + 1)}>
+                    Refresh workspace state
+                  </button>
                   <button type="button" onClick={() => setActive(workspace)}>
                     Select alpha from the rail
                   </button>
@@ -116,6 +131,7 @@ function Harness({
                     <Route path="/kanban" element={<p>Kanban board</p>} />
                     <Route path="/sessions" element={<SessionsPage />} />
                   </Routes>
+                  {probe}
                 </TaskSnapshotContext.Provider>
               </TasksStateContext.Provider>
             </WorkspaceStateContext.Provider>
@@ -257,6 +273,86 @@ function Address() {
   return <output aria-label="Address">{`${location.pathname}${location.search}`}</output>;
 }
 
+test("a workspace switch shows the kept view of the address while the workspace opens", async () => {
+  const Conversation = memo(function Conversation() {
+    const workspaceId = useActiveWorkspace()!.workspaceId;
+    return <input aria-label={`${workspaceId} draft`} />;
+  });
+  mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
+    default: Conversation,
+  }));
+  const alphaHref = "/sessions?workspace=alpha&kind=workspace&session=chat";
+  const betaHref = "/sessions?workspace=beta&kind=workspace&session=chat";
+  let finishSwitch = () => {};
+  let holdsSwitch = false;
+  const view = render(
+    <MemoryRouter initialEntries={[alphaHref]}>
+      <Harness
+        visits={[betaHref, alphaHref]}
+        beforeSelect={() =>
+          holdsSwitch
+            ? new Promise<void>((resolve) => {
+                finishSwitch = resolve;
+              })
+            : Promise.resolve()
+        }
+      />
+    </MemoryRouter>,
+  );
+  try {
+    const alphaDraft = view.getByLabelText("alpha draft");
+    fireEvent.click(view.getByRole("button", { name: "Open visit 0" }));
+    await view.findByLabelText("beta draft");
+    holdsSwitch = true;
+
+    fireEvent.click(view.getByRole("button", { name: "Open visit 1" }));
+
+    await waitFor(() => expect(alphaDraft.closest("[inert]")).not.toBeNull());
+    expect(alphaDraft.closest('[style*="display: none"]')).toBeNull();
+    // Only screen readers get the status, because the preview shows in its place.
+    expect(view.getByRole("status").textContent).toBe("Opening workspace…");
+    expect(view.getByRole("status").classList.contains("sr-only")).toBe(true);
+
+    await act(async () => finishSwitch());
+    // The preview is on screen already, so its content turns active without a frame wait.
+    expect(alphaDraft.closest("[inert]") === null).toBe(true);
+    expect(view.queryByRole("status")).toBeNull();
+    expect(view.getByLabelText("alpha draft")).toBe(alphaDraft);
+  } finally {
+    view.unmount();
+    mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
+  }
+});
+
+test("view content that reads only its activity does not render again when its scope changes", () => {
+  let renders = 0;
+  const Conversation = memo(function Conversation() {
+    renders += 1;
+    return <output aria-label="Activity">{String(useSessionViewActive())}</output>;
+  });
+  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+  const view = render(
+    <MemoryRouter
+      initialEntries={[
+        "/sessions?workspace=alpha&kind=task&task=current&session=native&agent=planner",
+      ]}
+    >
+      <Harness />
+    </MemoryRouter>,
+  );
+  try {
+    expect(view.getByLabelText("Activity").textContent).toBe("true");
+    const rendersBefore = renders;
+
+    fireEvent.click(view.getByRole("button", { name: "Refresh workspace state" }));
+
+    expect(renders).toBe(rendersBefore);
+  } finally {
+    view.unmount();
+    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+  }
+});
+
 test("task and chat views share six slots and removed tasks release their kept views", async () => {
   function Conversation() {
     const location = useLocation();
@@ -383,7 +479,8 @@ test("task and chat switches keep their inputs and terminal viewports and stop h
     if (!(chat instanceof HTMLInputElement)) throw new Error("Expected a chat draft input");
     expect(task.isConnected).toBe(true);
     expect(terminal?.isConnected).toBe(true);
-    expect([...activeEffects]).toEqual(["beta:workspace"]);
+    // The hidden view turns inactive after the switch paints.
+    await waitFor(() => expect([...activeEffects]).toEqual(["beta:workspace"]));
     fireEvent.change(chat, { target: { value: "Chat draft" } });
     fireEvent.click(view.getByRole("button", { name: "Open task" }));
     await waitFor(() => expect([...activeEffects]).toEqual(["alpha:task"]));
@@ -463,5 +560,52 @@ test("redirects a saved closed-task address before mounting its conversation", a
   } finally {
     view.unmount();
     mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+  }
+});
+
+test("the session list marks a kept view in the paint that shows it", async () => {
+  function Conversation() {
+    const location = useLocation();
+    const workspaceId = useActiveWorkspace()!.workspaceId;
+    const isActive = useSessionViewActive();
+    const sessionId = new URLSearchParams(location.search).get("session");
+    const target = useMemo<SessionNavigationTarget | null>(
+      () => (sessionId ? { kind: "workspace_session", workspaceId, sessionId } : null),
+      [sessionId, workspaceId],
+    );
+    usePublishVisibleSessionTarget(isActive ? target : null);
+    return <input aria-label={`${sessionId} draft`} />;
+  }
+  function VisibleTarget() {
+    const target = useVisibleSessionTarget();
+    return (
+      <output aria-label="Visible target">
+        {target ? sessionNavigationTargetKey(target) : "none"}
+      </output>
+    );
+  }
+  mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
+    default: Conversation,
+  }));
+  const first = "/sessions?workspace=alpha&kind=workspace&session=first";
+  const second = "/sessions?workspace=alpha&kind=workspace&session=second";
+  const visible = () => screen.getByLabelText("Visible target").textContent;
+  const view = render(
+    <MemoryRouter initialEntries={[first]}>
+      <Harness visits={[first, second]} probe={<VisibleTarget />} />
+    </MemoryRouter>,
+  );
+  try {
+    await waitFor(() => expect(visible()).toBe("workspace_session:alpha:first"));
+    fireEvent.click(view.getByRole("button", { name: "Open visit 1" }));
+    await waitFor(() => expect(visible()).toBe("workspace_session:alpha:second"));
+
+    fireEvent.click(view.getByRole("button", { name: "Open visit 0" }));
+    // The content turns active after the paint, so this mark comes from its last target.
+    expect(view.getByLabelText("first draft").closest("[inert]") === null).toBe(false);
+    expect(visible()).toBe("workspace_session:alpha:first");
+  } finally {
+    view.unmount();
+    mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
   }
 });
