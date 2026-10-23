@@ -22,16 +22,26 @@ History shows the commits of the current branch and the target that the other br
 
 | Session context | Initial comparison | Choice owner |
 | --- | --- | --- |
-| Workspace repository root | Current branch upstream | This workspace session |
-| Workspace worktree | Repository default | This workspace session |
+| Workspace repository root | Saved chat target or repository default | The workspace chat |
+| Workspace worktree | Saved chat target or repository default | The workspace chat |
 | Task worktree | Saved task target or repository default | The task |
 | Task repository root | Current branch upstream | No comparison editor |
 
 During a rebase, the current branch upstream is the upstream of the branch that the rebase rewrites. Another detached HEAD has no upstream, so its comparison is unavailable.
 
-## Workspace choice lifetime
+## Workspace chat target
 
-A workspace comparison choice stays in app memory across session changes, workspace changes, page exits, branch changes, and tools-panel closure. It resets on app reload or a confirmed successful archive of that session. A failed archive retains the choice. Selecting Tracked upstream in a repository-root session removes its branch override.
+The New chat dialog has a Target branch field for both work locations. It preselects the repository default target branch and marks it in the list. Only Current checkout offers Tracked upstream. A change to New worktree replaces a Tracked upstream choice with the repository default.
+
+The chat saves its target in its record on the host. Every client of the host shows the same target. The target stays after an app reload, a host restart, an archive, and a restore. A later change of the repository default does not change a saved target.
+
+A New branch worktree starts its branch from the target branch, as a task build does. A remote target also sets the branch upstream. An Existing branch worktree uses the target only for comparison. If the target is unavailable, creation fails and leaves no worktree or branch.
+
+An imported chat saves the repository default target at import time. A chat from before this field has no saved target and follows the current repository default. A worktree chat cannot use a Tracked upstream default. An imported worktree chat then saves no target, and its Git panel asks the user to choose a target branch.
+
+A pick in the Git panel saves the new target to the chat. A failed save keeps the previous target and shows the reason.
+
+A restore of a removed worktree recreates the branch from the chat target. The Archived chats dialog shows that target for each chat with a removed worktree, and the user can choose another branch there. This is the only change that an archived chat accepts. If the target branch is unavailable, or the chat has no usable target, restore fails and the chat stays archived.
 
 Task target choices continue to use the saved task record. Sessions for the same task share its saved target.
 

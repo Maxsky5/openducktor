@@ -56,6 +56,7 @@ test.each([
       selectedModel: null,
       generatedTitle: null,
       manualTitle: null,
+      targetBranch: null,
       createdAt: 1,
       updatedAt: 1,
       archivedAt: null,

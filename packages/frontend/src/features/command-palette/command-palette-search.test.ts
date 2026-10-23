@@ -27,6 +27,7 @@ const paletteChat = (id: string, title: string, lastActivityAt: number): Palette
     selectedModel: null,
     generatedTitle: title,
     manualTitle: null,
+    targetBranch: null,
     createdAt: 0,
     lastActivityAt,
     updatedAt: 0,

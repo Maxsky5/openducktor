@@ -11,6 +11,7 @@ const makeDraft = (): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: null,
   manualTitle: null,
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: null,
@@ -63,6 +64,7 @@ test("creates a draft, starts it, and saves draft models through separate host c
     customAgentRoleId: null,
     location: "local_repo_root" as const,
     manualTitle: null,
+    targetBranch: { remote: "origin", branch: "main" },
   };
   const created = await client.workspaceSessionCreate(createInput);
   expect(created.session.id).toBe("chat");
@@ -114,6 +116,7 @@ test("reads archive impact and forwards explicit worktree removal through the ho
     selectedModel: null,
     generatedTitle: null,
     manualTitle: null,
+    targetBranch: null,
     createdAt: 1,
     updatedAt: 1,
     archivedAt: 2,
@@ -134,4 +137,20 @@ test("reads archive impact and forwards explicit worktree removal through the ho
       args: { ...ref, confirmStop: true, removeWorktree: true },
     },
   ]);
+});
+
+test("saves a chat target branch through its host command", async () => {
+  const calls: Array<{ command: HostCommandName; args: unknown }> = [];
+  const saved = { ...makeDraft(), targetBranch: { branch: "release" } };
+  const client = createHostClient(async (command, args, schema) => {
+    calls.push({ command, args });
+    return schema.parse(saved);
+  });
+  const input = {
+    workspaceId: "workspace",
+    sessionId: "chat",
+    targetBranch: { branch: "release" },
+  };
+  expect(await client.workspaceSessionSetTargetBranch(input)).toEqual(saved);
+  expect(calls).toEqual([{ command: "workspace_session_set_target_branch", args: input }]);
 });

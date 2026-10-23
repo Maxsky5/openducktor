@@ -18,6 +18,7 @@ const chat = (overrides: Partial<WorkspaceSession> = {}): WorkspaceSession => ({
   },
   roleSnapshot: null,
   selectedModel: null,
+  targetBranch: null,
   generatedTitle: null,
   manualTitle: "Chat",
   createdAt: 1000,

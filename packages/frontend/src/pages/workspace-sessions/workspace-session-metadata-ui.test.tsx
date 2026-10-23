@@ -22,6 +22,7 @@ const record = (): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: "Generated title",
   manualTitle: "My session",
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: null,

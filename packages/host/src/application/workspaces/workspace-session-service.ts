@@ -7,6 +7,10 @@ import {
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
   type WorkspaceSessionRefInput,
+  type WorkspaceSessionSetTargetBranchInput,
+  effectiveWorkspaceSessionTargetBranch,
+  WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE,
+  workspaceSessionAllowsTargetBranch,
   workspaceSessionCreateInputSchema,
   workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
@@ -125,6 +129,7 @@ export const createWorkspaceSessionService = (
             worktree: input.worktree,
             repoConfig: { ...config, repoPath },
             location: input.location,
+            targetBranch: input.targetBranch,
           },
           (executionTarget, retainTarget) =>
             Effect.gen(function* () {
@@ -138,6 +143,7 @@ export const createWorkspaceSessionService = (
                 selectedModel: input.selectedModel,
                 generatedTitle: null,
                 manualTitle,
+                targetBranch: input.targetBranch,
                 createdAt: now,
                 updatedAt: now,
                 archivedAt: null,
@@ -190,6 +196,29 @@ export const createWorkspaceSessionService = (
             });
           }
           return yield* store.setSelectedModel({ ...ref, selectedModel: input.selectedModel });
+        }),
+      ),
+    setTargetBranch: (input: WorkspaceSessionSetTargetBranchInput) =>
+      operationGate.run(
+        input,
+        Effect.gen(function* () {
+          const { ref, session } = yield* recordFor(input);
+          // Restore of a removed worktree needs the target, so that chat can change it.
+          if (session.archivedAt !== null && !hasRemovedWorktree(session)) {
+            return yield* new HostValidationError({
+              field: "sessionId",
+              message: "Restore this Workspace Session before changing its target branch.",
+            });
+          }
+          if (
+            !workspaceSessionAllowsTargetBranch(session.executionTarget.kind, input.targetBranch)
+          ) {
+            return yield* new HostValidationError({
+              field: "targetBranch",
+              message: WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE,
+            });
+          }
+          return yield* store.setTargetBranch({ ...ref, targetBranch: input.targetBranch });
         }),
       ),
     rename: (input: WorkspaceSessionRefInput & { manualTitle: string | null }) =>
@@ -418,16 +447,26 @@ export const createWorkspaceSessionService = (
         Effect.gen(function* () {
           const { ref, session } = yield* recordFor(input);
           if (session.archivedAt === null) return session;
-          if (
-            session.executionTarget.kind === "local_worktree" &&
-            session.executionTarget.worktreeState === "removed"
-          ) {
+          if (hasRemovedWorktree(session)) {
             const config = yield* settings.getRepoConfig(input.workspaceId);
+            const targetBranch = effectiveWorkspaceSessionTargetBranch(
+              session.executionTarget.kind,
+              session.targetBranch,
+              config.defaultTargetBranch,
+            );
+            if (!targetBranch) {
+              return yield* new HostValidationError({
+                field: "targetBranch",
+                message:
+                  "The repository default target branch is Tracked upstream, which cannot recreate a branch. Choose a target branch for this chat, then restore it.",
+              });
+            }
             return yield* withRestoredWorkspaceSessionWorktree(
               dependencies,
               input,
               { ...config, repoPath: ref.repoPath },
               session.executionTarget,
+              targetBranch,
               (executionTarget) => store.restore({ ...ref, executionTarget }),
             );
           }
@@ -443,3 +482,11 @@ export const createWorkspaceSessionService = (
 };
 
 export type WorkspaceSessionService = ReturnType<typeof createWorkspaceSessionService>;
+
+const hasRemovedWorktree = (
+  session: WorkspaceSession,
+): session is WorkspaceSession & {
+  executionTarget: Extract<WorkspaceSession["executionTarget"], { kind: "local_worktree" }>;
+} =>
+  session.executionTarget.kind === "local_worktree" &&
+  session.executionTarget.worktreeState === "removed";

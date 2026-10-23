@@ -63,7 +63,7 @@ export function WorkspaceSessionWorktreeFields({
         </TabsContent>
         <TabsContent value="from_name" className="pt-2">
           <p className="text-xs text-muted-foreground">
-            Creates a new branch from the current checkout's committed HEAD.
+            Creates a new branch from the target branch.
           </p>
         </TabsContent>
       </Tabs>

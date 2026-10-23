@@ -514,8 +514,7 @@ test.each(["light", "dark"] as const)(
       createGitInfoHeaderProps({
         contextMode: "repository",
         targetBranchEditable: true,
-        targetBranchHelpText:
-          "This choice applies only to this session. It resets on app reload or successful archive.",
+        targetBranchHelpText: "This choice applies only to this chat. The chat saves it.",
         targetBranchOptions: [
           { value: "refs/remotes/origin/main", label: "origin/main" },
           { value: "refs/heads/release", label: "release", secondaryLabel: "local" },
@@ -549,7 +548,7 @@ test.each(["light", "dark"] as const)(
         "true",
       );
       expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
-      expect(screen.getByText(/This choice applies only to this session/)).toBeTruthy();
+      expect(screen.getByText(/This choice applies only to this chat/)).toBeTruthy();
       fireEvent.click(screen.getByTestId("agent-studio-git-target-branch-cancel"));
       expect(screen.getByTestId("agent-studio-git-target-branch").textContent).toBe("origin/main");
     } finally {

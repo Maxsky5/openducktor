@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  type GitTargetBranch,
   OPENCODE_RUNTIME_DESCRIPTOR,
   repoConfigSchema,
   type WorkspaceRecord,
@@ -44,6 +45,7 @@ const setup = async () => {
     otherOwners: RuntimeSessionOwner[];
     /** Holds the save open until the test releases it. */
     saveGate: Deferred.Deferred<void> | null;
+    defaultTargetBranch: GitTargetBranch;
   };
   const state: ImportTestState = {
     failOpen: false,
@@ -58,6 +60,7 @@ const setup = async () => {
     otherWorkspaces: [],
     otherOwners: [],
     saveGate: null,
+    defaultTargetBranch: { remote: "origin", branch: "develop" },
   };
   const row = (id: string, directory = "/repo"): WorkspaceSessionExternal => ({
     externalSessionId: id,
@@ -139,6 +142,7 @@ const setup = async () => {
             workspaceId: "fairnest",
             workspaceName: "Fairnest",
             repoPath: "/repo",
+            defaultTargetBranch: state.defaultTargetBranch,
           }),
         ),
       getWorkspaceCatalog: () =>
@@ -340,6 +344,7 @@ describe("external workspace session import", () => {
       roleSnapshot: null,
       selectedModel: null,
       manualTitle: "Native title ".repeat(30),
+      targetBranch: { remote: "origin", branch: "develop" },
     });
     expect(h.calls).toEqual(["inspectSession", "save", "attach", "publish"]);
     await Effect.runPromise(
@@ -429,6 +434,17 @@ describe("external workspace session import", () => {
       branchName: null,
       worktreeState: "present",
     });
+  });
+
+  test("a worktree import saves no target when the repository default is Tracked upstream", async () => {
+    const h = await setup();
+    await h.discover([h.row("native", "/alias")]);
+    h.state.defaultTargetBranch = { branch: "@{upstream}" };
+    const result = await Effect.runPromise(
+      h.service.importSession({ ...h.input, workingDirectory: "/alias" }),
+    );
+    expect(result.session.executionTarget.kind).toBe("local_worktree");
+    expect(result.session.targetBranch).toBeNull();
   });
 
   test("release interrupts an in-flight catalog without admitting a session", async () => {

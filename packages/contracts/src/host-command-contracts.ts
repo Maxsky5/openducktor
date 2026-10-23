@@ -195,6 +195,7 @@ export const HOST_COMMAND_NAMES = [
   "workspace_session_rename",
   "workspace_session_restore",
   "workspace_session_set_draft_model",
+  "workspace_session_set_target_branch",
   "workspace_session_start",
   "workspace_stage_local_attachment",
   "workspace_start_azure_devops_sign_in",

@@ -600,14 +600,28 @@ describe("TypeScript web host backend", () => {
     },
   );
 
+  /**
+   * A wildcard bind can get a port that another process holds on ::1, which then takes the ::1
+   * connections. A port that ::1 gave out has no such owner. The dual-stack bind also needs the
+   * IPv4 port, which another process can hold, so a busy port gets a new loopback port.
+   */
+  const startWildcardServerOnLoopbackPort = async (bindHost: string) => {
+    for (let attempt = 1; ; attempt += 1) {
+      const loopback = await createTerminalUpgradeTestServer("/api", "::1");
+      const loopbackPort = loopback.port;
+      await loopback.stop(true);
+      try {
+        return await createTerminalUpgradeTestServer("/api", bindHost, loopbackPort);
+      } catch (cause) {
+        const portInUse = cause instanceof Error && "code" in cause && cause.code === "EADDRINUSE";
+        if (!portInUse || attempt === 5) throw cause;
+      }
+    }
+  };
+
   test("probes a normalized IPv6 wildcard bind through the allowed loopback Host", async () => {
     const bindHost = await Effect.runPromise(parseHostEffect("::", "--host", true));
-    // A wildcard bind can get a port that another process holds on ::1, which then takes the
-    // ::1 connections. A port that ::1 gave out has no such owner.
-    const loopback = await createTerminalUpgradeTestServer("/api", "::1");
-    const loopbackPort = loopback.port;
-    await loopback.stop(true);
-    const server = await createTerminalUpgradeTestServer("/api", bindHost, loopbackPort);
+    const server = await startWildcardServerOnLoopbackPort(bindHost);
     try {
       const port = server.port;
       if (port === undefined) throw new Error("Expected the test server to expose a port.");

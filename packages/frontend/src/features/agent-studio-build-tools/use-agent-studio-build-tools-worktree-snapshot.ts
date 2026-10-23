@@ -1,4 +1,4 @@
-import type { GitTargetBranch } from "@openducktor/contracts";
+import { type GitTargetBranch, UPSTREAM_TARGET_BRANCH } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -8,10 +8,7 @@ import {
 } from "@openducktor/frontend-core/queries/git";
 import { useSessionComparison } from "../agent-studio-git/use-session-comparison";
 import { useComparisonView } from "../agent-studio-git/session-comparison-view";
-import {
-  resolveTaskTargetBranchState,
-  UPSTREAM_TARGET_BRANCH,
-} from "@openducktor/frontend-core/lib/target-branch";
+import { resolveTaskTargetBranchState } from "@openducktor/frontend-core/lib/target-branch";
 import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,

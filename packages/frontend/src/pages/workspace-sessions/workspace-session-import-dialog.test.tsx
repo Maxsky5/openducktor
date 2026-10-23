@@ -46,6 +46,7 @@ const saved: WorkspaceSession = {
   selectedModel: null,
   roleSnapshot: null,
   manualTitle: "Native title",
+  targetBranch: null,
   generatedTitle: null,
   createdAt: 1,
   updatedAt: 1,

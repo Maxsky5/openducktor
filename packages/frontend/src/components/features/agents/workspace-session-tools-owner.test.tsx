@@ -68,7 +68,7 @@ test("returning to a session checks fresh comparison data while its previous rea
     branchReady: true,
     currentBranch: { name: "feature", detached: false },
     target: { branch: "main" },
-    targetChoice: { branch: "main" },
+    savedTarget: { branch: "main" },
     targetError: null,
     applyTarget: async () => {},
     retryTarget: async () => {},
@@ -174,7 +174,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
             branchKey="feature"
             branchReady={true}
             target={{ branch: target }}
-            targetChoice={{ branch: target }}
+            savedTarget={{ branch: target }}
             targetError={null}
             applyTarget={async () => {}}
             retryTarget={async () => {}}
@@ -281,7 +281,7 @@ test.each(["directory", "branch"] as const)(
               branchKey={branchKey}
               branchReady={true}
               target={{ branch: "main", remote: "origin" }}
-              targetChoice={{ branch: "main", remote: "origin" }}
+              savedTarget={{ branch: "main", remote: "origin" }}
               targetError={null}
               retryTarget={async () => {}}
               readBranch={async () => branchKey}

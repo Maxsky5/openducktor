@@ -89,6 +89,7 @@ const sessionRecord = (id: string): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: null,
   manualTitle: id,
+  targetBranch: null,
   createdAt: 1000,
   updatedAt: 1000,
   archivedAt: null,

@@ -2,9 +2,11 @@ import { z } from "zod";
 import { agentSessionControlSummarySchema } from "./agent-session-control-schemas";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import { workspaceIdSchema } from "./workspace-id-schemas";
+import { type GitTargetBranch, gitTargetBranchSchema, UPSTREAM_TARGET_BRANCH } from "./git-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
+  type WorkspaceSessionExecutionTarget,
   workspaceSessionSchema,
 } from "./workspace-session-schemas";
 
@@ -67,6 +69,30 @@ export const workspaceSessionWorktreeInputSchema = z.discriminatedUnion("mode", 
 ]);
 export type WorkspaceSessionWorktreeInput = z.infer<typeof workspaceSessionWorktreeInputSchema>;
 
+export const WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE =
+  "Tracked upstream is available only for the current checkout.";
+
+/** Tracked upstream needs the current checkout. A worktree chat needs an explicit branch. */
+export const workspaceSessionAllowsTargetBranch = (
+  location: WorkspaceSessionExecutionTarget["kind"],
+  targetBranch: GitTargetBranch,
+): boolean => location === "local_repo_root" || targetBranch.branch !== UPSTREAM_TARGET_BRANCH;
+
+/**
+ * The target that a chat uses. A chat without a saved target follows the repository default.
+ * The result is null when the chat location cannot use that default.
+ */
+export const effectiveWorkspaceSessionTargetBranch = (
+  location: WorkspaceSessionExecutionTarget["kind"],
+  savedTarget: GitTargetBranch | null,
+  repoDefault: GitTargetBranch | null,
+): GitTargetBranch | null => {
+  if (savedTarget) return savedTarget;
+  return repoDefault && workspaceSessionAllowsTargetBranch(location, repoDefault)
+    ? repoDefault
+    : null;
+};
+
 export const workspaceSessionCreateInputSchema = z
   .strictObject({
     workspaceId: workspaceIdSchema,
@@ -76,10 +102,15 @@ export const workspaceSessionCreateInputSchema = z
     location: z.enum(["local_repo_root", "local_worktree"]),
     worktree: workspaceSessionWorktreeInputSchema.optional(),
     manualTitle: z.string().nullable(),
+    targetBranch: gitTargetBranchSchema,
   })
   .refine((input) => (input.location === "local_worktree") === (input.worktree !== undefined), {
     path: ["worktree"],
     message: "Worktree options are required only for a new worktree.",
+  })
+  .refine((input) => workspaceSessionAllowsTargetBranch(input.location, input.targetBranch), {
+    path: ["targetBranch"],
+    message: WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE,
   })
   .refine(
     (input) =>
@@ -105,6 +136,13 @@ export type WorkspaceSessionStartResult = z.infer<typeof workspaceSessionStartRe
 export const workspaceSessionSetDraftModelInputSchema = workspaceSessionRefInputSchema.extend({
   selectedModel: agentSessionModelSelectionSchema,
 });
+
+export const workspaceSessionSetTargetBranchInputSchema = workspaceSessionRefInputSchema.extend({
+  targetBranch: gitTargetBranchSchema,
+});
+export type WorkspaceSessionSetTargetBranchInput = z.infer<
+  typeof workspaceSessionSetTargetBranchInputSchema
+>;
 
 export const workspaceSessionRenameInputSchema = workspaceSessionRefInputSchema.extend({
   manualTitle: z

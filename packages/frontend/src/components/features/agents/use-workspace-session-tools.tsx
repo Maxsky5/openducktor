@@ -45,10 +45,10 @@ type WorkspaceSessionToolsProps = {
   branchError?: string | null;
   target: GitTargetBranch | null;
   /**
-   * The target that the user chose for this session, or null for the default. A Refresh belongs
-   * to this choice, so loaded default settings keep it and a new choice starts its own.
+   * The saved target of this session, or null when it follows the repository default. Each saved
+   * target has its own Refresh, so loading the default settings keeps the running Refresh.
    */
-  targetChoice: GitTargetBranch | null;
+  savedTarget: GitTargetBranch | null;
   targetError: string | null;
   applyTarget: (target: GitTargetBranch) => Promise<void>;
   retryTarget: () => Promise<void>;
@@ -78,7 +78,7 @@ export function useWorkspaceSessionTools({
   branchError,
   applyTarget,
   target,
-  targetChoice,
+  savedTarget,
   targetError,
   retryTarget,
   readBranch,
@@ -111,8 +111,7 @@ export function useWorkspaceSessionTools({
     editable: isVisible,
     allowUpstream: contextMode === "repository",
     applyTarget,
-    helpText:
-      "This choice applies only to this session. It resets on app reload or successful archive.",
+    helpText: "This choice applies only to this chat. The chat saves it.",
   });
   const readsRepoPath = workingDirectory ? repoPath : null;
   const reads = useGitPanelReads({
@@ -143,7 +142,7 @@ export function useWorkspaceSessionTools({
     sessionKey,
     repoPath,
     workingDirectory,
-    targetChoice,
+    savedTarget,
     branchKey,
     visible: isVisible,
     ready: branchReady,
@@ -215,7 +214,7 @@ function useWorkspaceGitRefresh({
   sessionKey,
   repoPath,
   workingDirectory,
-  targetChoice,
+  savedTarget,
   branchKey,
   visible,
   ready,
@@ -227,7 +226,7 @@ function useWorkspaceGitRefresh({
   sessionKey: string;
   repoPath: string;
   workingDirectory: string | null;
-  targetChoice: GitTargetBranch | null;
+  savedTarget: GitTargetBranch | null;
   branchKey: string;
   visible: boolean;
   ready: boolean;
@@ -237,7 +236,7 @@ function useWorkspaceGitRefresh({
   reads: GitPanelReads;
 }) {
   const queryClient = useQueryClient();
-  const scopeKey = JSON.stringify([sessionKey, repoPath, workingDirectory, targetChoice ?? null]);
+  const scopeKey = JSON.stringify([sessionKey, repoPath, workingDirectory, savedTarget ?? null]);
   const withFiles = useMemo(
     () =>
       withFileQueries(

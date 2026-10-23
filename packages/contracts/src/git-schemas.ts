@@ -109,6 +109,9 @@ export const gitProviderRepositorySchema = z.union([
 ]);
 export type GitProviderRepository = z.infer<typeof gitProviderRepositorySchema>;
 
+/** Compares with the upstream of the checked-out branch. */
+export const UPSTREAM_TARGET_BRANCH = "@{upstream}";
+
 export const gitTargetBranchSchema = z.object({
   remote: z.preprocess(
     (value) => (value === null ? undefined : value),

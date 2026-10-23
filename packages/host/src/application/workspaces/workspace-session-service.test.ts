@@ -5,6 +5,7 @@ import {
 } from "./workspace-session-worktree-lifecycle";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import path from "node:path";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -66,6 +67,7 @@ const input = (): WorkspaceSessionCreateInput => ({
   customAgentRoleId: "role-1",
   location: "local_repo_root",
   manualTitle: "  My   session  ",
+  targetBranch: { remote: "origin", branch: "main" },
 });
 
 const worktreeInput = (): WorkspaceSessionCreateInput => ({
@@ -139,6 +141,12 @@ describe("host-owned Workspace Session lifecycle", () => {
       createBranch: false,
       // SAFETY: The fake records the optional Git start point after creation.
       startPoint: undefined as string | undefined,
+      // SAFETY: The fake records the upstream remote after upstream setup.
+      upstreamRemote: null as string | null,
+      // SAFETY: The fake reports a created tracking ref only when a test sets it.
+      createdTrackingRef: null as string | null,
+      // SAFETY: The fake records each deleted reference.
+      deletedReferences: [] as string[],
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const pendingTitles = new Set<string>();
@@ -200,7 +208,9 @@ describe("host-owned Workspace Session lifecycle", () => {
             state.changed ? [{ path: "changed.ts", status: "modified", staged: false }] : [],
           ),
         referenceExists: (_repo, reference) =>
-          Effect.succeed(reference === "origin/main" || state.collision || branches.has(reference)),
+          Effect.succeed(
+            reference === "refs/remotes/origin/main" || state.collision || branches.has(reference),
+          ),
         listBranches: () =>
           Effect.succeed(
             [...branches].map((reference) => ({
@@ -222,6 +232,15 @@ describe("host-owned Workspace Session lifecycle", () => {
             paths.add(directory);
             registered.add(directory);
             return state.partialCreate ? failure("git add failed after creation") : Effect.void;
+          }),
+        configureBranchUpstream: (_repo, _directory, _branch, upstreamRemote) =>
+          Effect.sync(() => {
+            state.upstreamRemote = upstreamRemote;
+            return { createdTrackingRef: state.createdTrackingRef };
+          }),
+        deleteReference: (_repo, reference) =>
+          Effect.sync(() => {
+            state.deletedReferences.push(reference);
           }),
         removeWorktree: (_repo, directory) =>
           Effect.suspend(() => {
@@ -493,6 +512,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       selectedModel: null,
       generatedTitle: null,
       manualTitle: "Detached import",
+      targetBranch: null,
       createdAt: 1,
       updatedAt: 1,
       archivedAt: null,
@@ -846,7 +866,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.starts[0]?.systemPrompt).toBe("");
   });
 
-  test("worktree creation uses committed HEAD and Workspace setup before runtime startup", async () => {
+  test("worktree creation starts from the target branch and runs Workspace setup before runtime startup", async () => {
     const h = setup();
     h.state.changed = true;
     const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
@@ -855,9 +875,11 @@ describe("host-owned Workspace Session lifecycle", () => {
       path.join(database.configDir, "worktrees", "workspace-sessions", "my-feature"),
     );
     expect(session.executionTarget.workingDirectory).toBe(h.state.worktree);
+    expect(session.targetBranch).toEqual({ remote: "origin", branch: "main" });
     expect(h.state.branch).toBe("odt/my-feature");
     expect(h.state.createBranch).toBe(true);
-    expect(h.state.startPoint).toBe("HEAD");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
+    expect(h.state.upstreamRemote).toBe("origin");
     expect(h.paths.has(h.state.worktree)).toBe(true);
     expect(h.actionRuns).toEqual([
       {
@@ -954,7 +976,183 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     expect(h.state.branch).toBe("feature/custom-ui");
     expect(h.state.createBranch).toBe(true);
-    expect(h.state.startPoint).toBe("HEAD");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
+  });
+
+  test("a new branch from a local target sets no upstream", async () => {
+    const h = setup();
+    h.branches.add("refs/heads/develop");
+    const { session } = await Effect.runPromise(
+      h.service.create({ ...worktreeInput(), targetBranch: { branch: "develop" } }),
+    );
+    expect(session.targetBranch).toEqual({ branch: "develop" });
+    expect(h.state.startPoint).toBe("refs/heads/develop");
+    expect(h.state.upstreamRemote).toBeNull();
+  });
+
+  test("an unavailable target fails creation before any Git write", async () => {
+    const h = setup();
+    const error = await Effect.runPromise(
+      Effect.flip(
+        h.service.create({
+          ...worktreeInput(),
+          targetBranch: { remote: "origin", branch: "release" },
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      field: "targetBranch",
+      message:
+        "Target branch origin/release is unavailable. Fetch it or select another target branch.",
+    });
+    expect(h.calls).toEqual([]);
+    expect(h.paths.size).toBe(0);
+  });
+
+  test("creation cleanup deletes the tracking ref that the upstream setup created", async () => {
+    const h = setup();
+    h.state.createdTrackingRef = "refs/remotes/origin/odt/my-feature";
+    h.state.failActions = true;
+    await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
+    expect(h.state.deletedReferences).toEqual(["refs/remotes/origin/odt/my-feature"]);
+    expect(h.paths.size).toBe(0);
+  });
+
+  test("an existing branch worktree does not check or use the target", async () => {
+    const h = setup();
+    h.branches.add("refs/heads/feature/existing");
+    const { session } = await Effect.runPromise(
+      h.service.create({
+        ...worktreeInput(),
+        worktree: { mode: "from_branch", name: "existing", branchName: "feature/existing" },
+        targetBranch: { remote: "origin", branch: "release" },
+      }),
+    );
+    expect(session.targetBranch).toEqual({ remote: "origin", branch: "release" });
+    expect(h.state.createBranch).toBe(false);
+    expect(h.state.startPoint).toBeUndefined();
+    expect(h.state.upstreamRemote).toBeNull();
+  });
+
+  test("set target branch saves the target without changing the chat order", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const upstream = await Effect.runPromise(
+      h.service.setTargetBranch({ ...ref, targetBranch: { branch: "@{upstream}" } }),
+    );
+    expect(upstream).toEqual({ ...session, targetBranch: { branch: "@{upstream}" } });
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(upstream);
+  });
+
+  test("set target branch rejects tracked upstream for a worktree chat", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await expect(
+      Effect.runPromise(
+        h.service.setTargetBranch({ ...ref, targetBranch: { branch: "@{upstream}" } }),
+      ),
+    ).rejects.toThrow("Tracked upstream is available only for the current checkout.");
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
+  });
+
+  test("set target branch rejects an archived chat", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(input()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const archived = await Effect.runPromise(
+      h.service.archive({ ...ref, confirmStop: false, removeWorktree: false }),
+    );
+    await expect(
+      Effect.runPromise(h.service.setTargetBranch({ ...ref, targetBranch: { branch: "main" } })),
+    ).rejects.toThrow("Restore this Workspace Session before changing its target branch.");
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
+  });
+
+  test("an archived chat with a removed worktree changes its target, and restore uses it", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    await expect(
+      Effect.runPromise(
+        h.service.setTargetBranch({ ...ref, targetBranch: { branch: "@{upstream}" } }),
+      ),
+    ).rejects.toThrow("Tracked upstream is available only for the current checkout.");
+    h.branches.add("refs/heads/develop");
+    const changed = await Effect.runPromise(
+      h.service.setTargetBranch({ ...ref, targetBranch: { branch: "develop" } }),
+    );
+    expect(changed.archivedAt).not.toBeNull();
+    expect(changed.targetBranch).toEqual({ branch: "develop" });
+    await Effect.runPromise(h.service.restore(ref));
+    expect(h.state.startPoint).toBe("refs/heads/develop");
+  });
+
+  test("restore rejects a Tracked upstream default before any Git write", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    await Effect.runPromise(
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    // A chat saved before targets existed has no saved target.
+    const sqlite = new Database(database.databasePath);
+    try {
+      sqlite.run("UPDATE workspace_sessions SET target_branch_json = NULL");
+    } finally {
+      sqlite.close();
+    }
+    h.config.defaultTargetBranch = { branch: "@{upstream}" };
+    h.calls.length = 0;
+    const error = await Effect.runPromise(Effect.flip(h.service.restore(ref)));
+    expect(error).toMatchObject({ field: "targetBranch" });
+    expect(error.message).toContain("Choose a target branch for this chat");
+    expect(h.calls).toEqual([]);
+    expect((await Effect.runPromise(h.service.get(ref))).archivedAt).not.toBeNull();
+  });
+
+  test("restore of a removed worktree recreates the branch from the saved target", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    h.branches.add("refs/heads/develop");
+    await Effect.runPromise(
+      h.service.setTargetBranch({ ...ref, targetBranch: { branch: "develop" } }),
+    );
+    await Effect.runPromise(
+      h.service.archive({
+        ...ref,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    const restored = await Effect.runPromise(h.service.restore(ref));
+    expect(restored.targetBranch).toEqual({ branch: "develop" });
+    expect(h.state.startPoint).toBe("refs/heads/develop");
   });
 
   test.each(["from_name", "from_branch"] as const)(
@@ -1706,7 +1904,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
   });
 
-  test.each(["directory", "branch", "default branch"] as const)(
+  test.each(["directory", "branch", "target branch"] as const)(
     "restore refuses a conflicting or missing %s without changing the archive",
     async (conflict) => {
       const h = setup();
@@ -1733,7 +1931,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           ? "Cannot restore into an existing worktree or directory"
           : conflict === "branch"
             ? "Cannot restore because branch odt/my-feature already exists"
-            : "Configured default branch origin/main is unavailable",
+            : "Target branch origin/main is unavailable. Fetch it, or choose another target branch for this chat.",
       );
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
       expect(h.calls).toEqual([]);
@@ -1788,7 +1986,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.branches.size).toBe(0);
     const restored = await Effect.runPromise(h.service.restore(ref));
     expect(restored).toEqual(started.session);
-    expect(h.state.startPoint).toBe("origin/main");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
     expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
     expect(h.starts).toHaveLength(1);
     const callsBefore = h.calls.length;

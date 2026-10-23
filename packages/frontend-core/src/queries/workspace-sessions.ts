@@ -1,6 +1,5 @@
 import { WORKSPACE_SESSION_ARCHIVE_LIMIT, type WorkspaceSession } from "@openducktor/contracts";
 import { type QueryClient, queryOptions, replaceEqualDeep } from "@tanstack/react-query";
-import { workspaceComparisonChoices } from "./workspace-comparison-choices";
 import { connectionHost } from "../connection/client-connection";
 
 const pendingReads = new WeakMap<QueryClient, Map<string, Set<Map<string, WorkspaceSession>>>>();
@@ -108,8 +107,6 @@ export const updateWorkspaceSessionQueries = (
   workspaceId: string,
   session: WorkspaceSession,
 ): void => {
-  if (session.archivedAt !== null)
-    workspaceComparisonChoices(queryClient).clear({ workspaceId, sessionId: session.id });
   const idsKey = workspaceSessionQueryKeys.ids(workspaceId);
   for (const queryKey of [
     idsKey,

@@ -101,6 +101,7 @@ test("custom config session ownership and import do not read other installations
     selectedModel: null,
     generatedTitle: "External",
     manualTitle: null,
+    targetBranch: null,
     createdAt: 1,
     updatedAt: 1,
     archivedAt: null,

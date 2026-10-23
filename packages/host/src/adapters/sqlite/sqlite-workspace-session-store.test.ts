@@ -25,6 +25,7 @@ const makeSession = (id = "one", updatedAt = 1): WorkspaceSession => ({
   selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "model", variant: "high" },
   generatedTitle: null,
   manualTitle: null,
+  targetBranch: null,
   createdAt: 1,
   updatedAt,
   archivedAt: null,
@@ -527,6 +528,46 @@ describe("SQLite Workspace Session store", () => {
     expect((await Effect.runPromise(repository.listIds(scope()))).sort()).toEqual(
       [...Array.from({ length: 102 }, (_, index) => String(index)), "draft"].sort(),
     );
+  });
+
+  test("the target branch migration keeps old records with no saved target", async () => {
+    const database = new Database(":memory:");
+    try {
+      for (const migration of [
+        "0002_workspace_sessions.sql",
+        "0003_workspace_session_drafts.sql",
+        "0005_session_activity.sql",
+      ])
+        database.exec(await Bun.file(new URL(`./drizzle/${migration}`, import.meta.url)).text());
+      database.exec(
+        "INSERT INTO workspace_sessions VALUES ('old', 'codex', 'native', '{}', NULL, NULL, 'Title', NULL, 10, 20, NULL, 30)",
+      );
+      const before = database.query("SELECT * FROM workspace_sessions").get();
+      database.exec(
+        await Bun.file(
+          new URL("./drizzle/0006_workspace_session_target_branch.sql", import.meta.url),
+        ).text(),
+      );
+      expect(database.prepare("SELECT * FROM workspace_sessions").get()).toEqual({
+        ...before!,
+        target_branch_json: null,
+      });
+    } finally {
+      database.close();
+    }
+  });
+
+  test("saves a target branch without changing the chat order", async () => {
+    const repository = store();
+    await Effect.runPromise(repository.create({ ...scope(), session: makeSession("one", 5) }));
+    const saved = await Effect.runPromise(
+      repository.setTargetBranch({ ...ref(), targetBranch: { remote: "origin", branch: "dev" } }),
+    );
+    expect(saved).toEqual({
+      ...makeSession("one", 5),
+      targetBranch: { remote: "origin", branch: "dev" },
+    });
+    expect(await Effect.runPromise(repository.get(ref()))).toEqual(saved);
   });
 
   test("surfaces corrupt stored JSON instead of hiding the record", async () => {

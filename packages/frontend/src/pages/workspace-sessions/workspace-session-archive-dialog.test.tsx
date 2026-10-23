@@ -19,6 +19,7 @@ const record = (): WorkspaceSession => ({
   selectedModel: null,
   generatedTitle: null,
   manualTitle: "Worktree chat",
+  targetBranch: null,
   createdAt: 1,
   updatedAt: 1,
   archivedAt: null,

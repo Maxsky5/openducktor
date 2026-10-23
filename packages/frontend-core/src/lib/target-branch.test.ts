@@ -11,8 +11,8 @@ import {
   targetBranchRemote,
   targetBranchSelectionValue,
   taskTargetBranchValidationError,
-  UPSTREAM_TARGET_BRANCH,
 } from "./target-branch";
+import { UPSTREAM_TARGET_BRANCH } from "@openducktor/contracts";
 
 describe("target-branch helpers", () => {
   test("keeps structured refs normalized", () => {

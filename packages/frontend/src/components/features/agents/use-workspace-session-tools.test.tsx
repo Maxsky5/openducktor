@@ -95,7 +95,7 @@ function PanelHarness({
   branchReady = true,
   targetError = null,
   target = { branch: "@{upstream}" },
-  targetChoice = null,
+  savedTarget = null,
   retryTarget = async () => {},
   readBranch = async () => branchKey,
   contextMode = "repository",
@@ -113,7 +113,7 @@ function PanelHarness({
   branchReady?: boolean;
   targetError?: string | null;
   target?: GitTargetBranch | null;
-  targetChoice?: GitTargetBranch | null;
+  savedTarget?: GitTargetBranch | null;
   retryTarget?: () => Promise<void>;
   readBranch?: () => Promise<string>;
   contextMode?: "repository" | "worktree";
@@ -133,7 +133,7 @@ function PanelHarness({
     currentBranch: branchReady ? { name: branchKey, detached: false } : null,
     branchReady: branchReady,
     target: target,
-    targetChoice,
+    savedTarget,
     targetError: targetError,
     retryTarget: retryTarget,
     readBranch: readBranch,
@@ -1043,7 +1043,7 @@ test("a target change in one session starts its own Refresh and hides the old fa
       <PanelHarness
         contextMode="worktree"
         target={target}
-        targetChoice={target}
+        savedTarget={target}
         branchKey="main"
         readBranch={read}
       />

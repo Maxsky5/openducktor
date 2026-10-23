@@ -545,6 +545,7 @@ describe("local host SSE subscriptions", () => {
         selectedModel: null,
         generatedTitle: null,
         manualTitle: "Example",
+        targetBranch: null,
         createdAt: 1000,
         updatedAt: 1000,
         archivedAt: null,

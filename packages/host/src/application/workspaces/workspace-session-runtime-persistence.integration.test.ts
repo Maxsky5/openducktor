@@ -66,6 +66,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
           selectedModel: null,
           generatedTitle: null,
           manualTitle: null,
+          targetBranch: null,
           createdAt: 0,
           updatedAt: 0,
           archivedAt: null,

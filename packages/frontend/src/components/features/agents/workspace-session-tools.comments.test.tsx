@@ -39,7 +39,7 @@ function ToolsOwner({
     currentBranch: { name: "feature", detached: false },
     branchReady: true,
     target: { branch: "main", remote: "origin" },
-    targetChoice: { branch: "main", remote: "origin" },
+    savedTarget: { branch: "main", remote: "origin" },
     targetError: null,
     applyTarget: async () => {},
     retryTarget: async () => {},

@@ -46,6 +46,16 @@ export const buildBranchName = (prefix: string, taskId: string, title: string): 
 
 export const checkoutBranch = (targetBranch: GitTargetBranch): string => targetBranch.branch.trim();
 
+/**
+ * The full ref of a target branch. A short name such as `main` can also match a tag or a local
+ * branch named `origin/main`, so Git operations that must use the selected branch use this ref.
+ */
+export const targetBranchRef = (targetBranch: GitTargetBranch): string => {
+  const branch = checkoutBranch(targetBranch);
+  const remote = targetBranch.remote?.trim();
+  return remote ? `refs/remotes/${remote}/${branch}` : `refs/heads/${branch}`;
+};
+
 export const canonicalTargetBranch = (targetBranch: GitTargetBranch): string => {
   const branch = checkoutBranch(targetBranch);
   const remote = targetBranch.remote?.trim();

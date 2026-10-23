@@ -150,6 +150,23 @@ test("keeps a checked comparison during a same-context check and removes it if t
   }
 });
 
+test("selector marks the repository default option", () => {
+  const options = sessionComparisonOptions(
+    [
+      { name: "main", isCurrent: true, isRemote: false },
+      { name: "origin/main", isCurrent: false, isRemote: true },
+    ],
+    { branch: "main" },
+    { defaultTarget: { remote: "origin", branch: "main" } },
+  );
+  expect(
+    options.map(({ value, description }) => ({ value, description: description ?? null })),
+  ).toEqual([
+    { value: "refs/heads/main", description: "current" },
+    { value: "refs/remotes/origin/main", description: "default" },
+  ]);
+});
+
 test("selector keeps local and remote identities plus a missing selected branch", () => {
   const options = sessionComparisonOptions(
     [
@@ -157,7 +174,7 @@ test("selector keeps local and remote identities plus a missing selected branch"
       { name: "origin/main", isCurrent: false, isRemote: true },
     ],
     { branch: "missing" },
-    true,
+    { allowUpstream: true },
   );
   expect(options.map((option) => option.value)).toEqual(
     expect.arrayContaining([

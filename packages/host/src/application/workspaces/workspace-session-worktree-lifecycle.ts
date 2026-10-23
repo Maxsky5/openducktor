@@ -1,11 +1,16 @@
 import type {
+  GitTargetBranch,
   RepoConfig,
   WorkspaceSessionArchivePreview,
   WorkspaceSessionExecutionTarget,
   WorkspaceSessionRefInput,
 } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
-import { canonicalTargetBranch, checkoutBranch } from "../../domain/task/task-branch-policy";
+import {
+  canonicalTargetBranch,
+  checkoutBranch,
+  targetBranchRef,
+} from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   validateWorkspaceSessionTarget,
@@ -115,6 +120,7 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
   owner: WorkspaceSessionRefInput,
   config: RepoConfig,
   target: WorktreeTarget,
+  targetBranch: GitTargetBranch,
   use: (target: WorktreeTarget) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
   Effect.uninterruptibleMask((restore) =>
@@ -142,11 +148,11 @@ export const withRestoredWorkspaceSessionWorktree = <A, E>(
           message: `Cannot restore because branch ${target.branchName} already exists. Rename it before retrying.`,
         });
       }
-      const startPoint = canonicalTargetBranch(config.defaultTargetBranch);
+      const startPoint = targetBranchRef(targetBranch);
       if (!(yield* git.referenceExists(repoPath, startPoint))) {
         return yield* new HostValidationError({
-          field: "defaultTargetBranch",
-          message: `Configured default branch ${startPoint} is unavailable. Fetch it or update the repository settings before restoring.`,
+          field: "targetBranch",
+          message: `Target branch ${canonicalTargetBranch(targetBranch)} is unavailable. Fetch it, or choose another target branch for this chat.`,
         });
       }
       let acquired = false;

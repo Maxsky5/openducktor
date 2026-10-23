@@ -1,18 +1,17 @@
 import {
+  effectiveWorkspaceSessionTargetBranch,
   workspaceSessionExternalSchema,
   type WorkspaceSessionExternal,
   type WorkspaceSessionExternalListInput,
   type WorkspaceSessionExternalListResult,
   type WorkspaceSessionImportInput,
   type WorkspaceSessionImportResult,
-  type WorkspaceSessionExecutionTarget,
 } from "@openducktor/contracts";
 import { Clock, Deferred, Effect, Exit, Fiber } from "effect";
 import {
   causeMessage,
   type HostError,
   toHostOperationError,
-  HostValidationError,
   HostOperationError,
   hasNestedNodeErrorCode,
 } from "../../effect/host-errors";
@@ -24,15 +23,13 @@ import type { WorkspaceSessionUpdatedPublisher } from "./workspace-session-persi
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import { createOtherWorkspaceOwnersReader, ownerKey } from "./workspace-session-import-owners";
-import { classifyWorkspaceCheckout } from "./workspace-checkout";
+import { invalidImport, readWorkspaceSessionImportTarget } from "./workspace-session-import-target";
 import { createSerialLane, type SerialLane } from "../../effect/serial-gate";
 
 const MAX_CATALOGS = 8;
 const MAX_RECORDS = 100_000;
 const MAX_BYTES = 64 * 1024 * 1024;
 const LIFETIME = 10 * 60_000;
-const invalid = (message: string) =>
-  new HostValidationError({ field: "externalSessionId", message });
 type Catalog = {
   workspaceId: string;
   runtimeKind: string;
@@ -91,14 +88,17 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
   };
   const catalogs = new Map<string, Catalog>();
   const importGate = createSerialLane();
-  const scopeFor = (workspaceId: string) =>
+  const repoFor = (workspaceId: string) =>
     Effect.gen(function* () {
       const config = yield* settings
         .getRepoConfig(workspaceId)
         .pipe(
           Effect.mapError((cause) => toHostOperationError(cause, "workspaceSessionImport.scope")),
         );
-      return { workspaceId, repoPath: yield* git.canonicalizePath(config.repoPath) };
+      return {
+        scope: { workspaceId, repoPath: yield* git.canonicalizePath(config.repoPath) },
+        defaultTargetBranch: config.defaultTargetBranch,
+      };
     });
   const release = (input: { workspaceId: string; catalogRequestId: string }) =>
     Effect.gen(function* () {
@@ -108,48 +108,12 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       entry.controller.abort();
       yield* Deferred.fail(
         entry.result,
-        invalid("Session discovery was closed. Reopen Import session."),
+        invalidImport("Session discovery was closed. Reopen Import session."),
       );
       // Signal the fibers without waiting. The expiry fiber runs this release itself.
       yield* Effect.sync(() => {
         for (const fiber of [entry.fiber, ...entry.readers, entry.expiry]) fiber?.interruptUnsafe();
       });
-    });
-  const targetFor = (repoPath: string, workingDirectory: string) =>
-    Effect.gen(function* () {
-      const canonical = yield* git.canonicalizePath(workingDirectory);
-      const checkout = yield* classifyWorkspaceCheckout(git, {
-        canonicalRepoPath: repoPath,
-        canonicalDirectory: canonical,
-      });
-      switch (checkout) {
-        case "not_git_directory":
-          return yield* invalid(
-            `Directory is unavailable: ${workingDirectory}. Restore it before importing.`,
-          );
-        case "outside_workspace":
-          return yield* invalid(
-            "The source directory is not a registered worktree of this workspace.",
-          );
-        case "local_repo_root":
-          return {
-            kind: "local_repo_root",
-            workingDirectory,
-          } satisfies WorkspaceSessionExecutionTarget;
-        case "local_worktree": {
-          const branch = yield* git.getCurrentBranch(canonical);
-          return {
-            kind: "local_worktree",
-            workingDirectory,
-            branchName: branch.detached ? null : (branch.name ?? null),
-            worktreeState: "present",
-          } satisfies WorkspaceSessionExecutionTarget;
-        }
-        default: {
-          const unhandledCheckout: never = checkout;
-          return yield* invalid(`Unsupported workspace checkout: ${String(unhandledCheckout)}`);
-        }
-      }
     });
   const candidateDirectory = (directory: string) =>
     git.canonicalizePath(directory).pipe(
@@ -228,18 +192,18 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         for (const raw of batch.value) {
           state.bytes += JSON.stringify(raw).length * 2;
           if (++state.scanned > MAX_RECORDS || state.bytes > MAX_BYTES)
-            return yield* invalid(
+            return yield* invalidImport(
               "Session discovery exceeds the metadata capacity. Reduce native history and retry.",
             );
           const row = yield* Effect.try({
             try: () => workspaceSessionExternalSchema.parse(raw),
             catch: () =>
-              invalid(
+              invalidImport(
                 "The runtime returned invalid session metadata. Update the runtime and retry.",
               ),
           });
           if (row.runtimeKind !== entry.runtimeKind)
-            return yield* invalid("The runtime returned a different session kind.");
+            return yield* invalidImport("The runtime returned a different session kind.");
           if (owned.has(row.externalSessionId)) continue;
           let eligible = eligibleDirectories.get(row.workingDirectory);
           if (eligible === undefined) {
@@ -257,7 +221,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         runtimeKind: adapter.binding.runtimeKind,
       });
       if (current.binding !== adapter.binding)
-        return yield* invalid("The selected runtime restarted. Reload sessions.");
+        return yield* invalidImport("The selected runtime restarted. Reload sessions.");
       return [...records.values()];
     });
   const list = (
@@ -266,9 +230,10 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
     Effect.gen(function* () {
       let entry = catalogs.get(input.catalogRequestId);
       if (!entry) {
-        if (input.cursor) return yield* invalid("This session catalog expired. Reload sessions.");
+        if (input.cursor)
+          return yield* invalidImport("This session catalog expired. Reload sessions.");
         if (catalogs.size >= MAX_CATALOGS)
-          return yield* invalid(
+          return yield* invalidImport(
             "Too many session catalogs are open. Close another import dialog and retry.",
           );
         entry = {
@@ -285,7 +250,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         catalogs.set(input.catalogRequestId, entry);
         const selected = entry;
         const discover = Effect.gen(function* () {
-          const scope = yield* scopeFor(input.workspaceId);
+          const { scope } = yield* repoFor(input.workspaceId);
           selected.repoPath = scope.repoPath;
           yield* runtime.requireReady(input.runtimeKind);
           const adapter = yield* registry.resolveForScope({
@@ -307,20 +272,20 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
         );
       }
       if (entry.workspaceId !== input.workspaceId || entry.runtimeKind !== input.runtimeKind)
-        return yield* invalid("Workspace or runtime changed. Reload sessions.");
+        return yield* invalidImport("Workspace or runtime changed. Reload sessions.");
       yield* Deferred.await(entry.result);
       const current = yield* registry.resolveForScope({
         repoPath: entry.repoPath,
         runtimeKind: input.runtimeKind,
       });
       if (current.binding.runtimeId !== entry.runtimeId)
-        return yield* invalid("The runtime restarted. Reload sessions.");
+        return yield* invalidImport("The runtime restarted. Reload sessions.");
       const search = input.search.toLowerCase();
       const page = input.cursor
         ? entry.cursors.get(input.cursor)
         : { search, offset: 0, pageSize: input.pageSize };
       if (!page || page.search !== search || page.pageSize !== input.pageSize)
-        return yield* invalid("The search cursor is invalid. Reload sessions.");
+        return yield* invalidImport("The search cursor is invalid. Reload sessions.");
       const selected = entry;
       const reader = yield* Effect.forkDetach(
         entry.gate.run(
@@ -350,7 +315,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
       const nextCursor =
         end < matches.length || !entry.discovery?.done ? crypto.randomUUID() : null;
       if (entry.cursors.size >= 2000)
-        return yield* invalid("The search catalog reached its page limit. Reload sessions.");
+        return yield* invalidImport("The search catalog reached its page limit. Reload sessions.");
       if (nextCursor)
         entry.cursors.set(nextCursor, { search, offset: end, pageSize: input.pageSize });
       return {
@@ -365,7 +330,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
     Effect.suspend(() => {
       return importGate.run(
         Effect.gen(function* () {
-          const scope = yield* scopeFor(input.workspaceId);
+          const { scope, defaultTargetBranch } = yield* repoFor(input.workspaceId);
           const existing = yield* store.findByRuntimeSession({
             ...scope,
             runtimeKind: input.runtimeKind,
@@ -373,7 +338,7 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
           });
           if (existing) {
             if (existing.archivedAt !== null)
-              return yield* invalid(
+              return yield* invalidImport(
                 "This conversation belongs to an archived chat. Restore it from archived sessions.",
               );
             return { session: existing, created: false, openError: null };
@@ -385,14 +350,14 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
               owner.externalSessionId === input.externalSessionId,
           );
           if (task?.kind === "task")
-            return yield* invalid(
+            return yield* invalidImport(
               `This conversation belongs to task ${task.taskId} (${task.role}).`,
             );
           const foreign = (yield* otherWorkspaceOwners(scope)).get(
             ownerKey(input.runtimeKind, input.externalSessionId),
           );
           if (foreign)
-            return yield* invalid(
+            return yield* invalidImport(
               `This conversation belongs to workspace ${foreign.workspaceName}. Open it from that workspace.`,
             );
           // The import runs as one admitted control. A restart or disable waits for it, then
@@ -408,13 +373,15 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                 catalog.runtimeKind !== input.runtimeKind ||
                 !catalog.discovery?.records.has(input.externalSessionId)
               )
-                return yield* invalid("This session list is no longer current. Reload sessions.");
+                return yield* invalidImport(
+                  "This session list is no longer current. Reload sessions.",
+                );
               const adapter = yield* registry.resolveForScope({
                 repoPath: scope.repoPath,
                 runtimeKind: input.runtimeKind,
               });
               if (adapter.binding.runtimeId !== catalog.runtimeId)
-                return yield* invalid("The runtime restarted. Reload sessions.");
+                return yield* invalidImport("The runtime restarted. Reload sessions.");
               const canonical = yield* git.canonicalizePath(input.workingDirectory);
               const ref = {
                 repoPath: scope.repoPath,
@@ -431,8 +398,14 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                     source.metadata.workingDirectory !== input.workingDirectory ||
                     source.metadata.runtimeKind !== input.runtimeKind
                   )
-                    return yield* invalid("The source conversation changed. Reload sessions.");
-                  const target = yield* targetFor(scope.repoPath, input.workingDirectory);
+                    return yield* invalidImport(
+                      "The source conversation changed. Reload sessions.",
+                    );
+                  const target = yield* readWorkspaceSessionImportTarget(
+                    git,
+                    scope.repoPath,
+                    input.workingDirectory,
+                  );
                   const now = yield* Clock.currentTimeMillis;
                   const saved = yield* store.importSession({
                     ...scope,
@@ -443,6 +416,11 @@ export const createWorkspaceSessionImportService = (dependencies: Dependencies) 
                       executionTarget: target,
                       manualTitle: source.metadata.title || null,
                       generatedTitle: null,
+                      targetBranch: effectiveWorkspaceSessionTargetBranch(
+                        target.kind,
+                        null,
+                        defaultTargetBranch,
+                      ),
                       roleSnapshot: null,
                       selectedModel: source.selectedModel ?? null,
                       createdAt: now,

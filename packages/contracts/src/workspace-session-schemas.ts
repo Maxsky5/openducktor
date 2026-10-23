@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { runtimeKindSchema } from "./agent-runtime-schemas";
+import { gitTargetBranchSchema } from "./git-schemas";
 import { agentSessionModelSelectionSchema } from "./session-schemas";
 import { WORKSPACE_SESSION_GENERATED_TITLE_LIMIT } from "./workspace-session-limits";
 
@@ -64,6 +65,7 @@ export const workspaceSessionSchema = z
     selectedModel: agentSessionModelSelectionSchema.nullable(),
     generatedTitle: workspaceSessionGeneratedTitleSchema.nullable(),
     manualTitle: z.string().min(1).nullable(),
+    targetBranch: gitTargetBranchSchema.nullable(),
     createdAt: z.number().int(),
     lastActivityAt: z.number().int().nonnegative().optional(),
     updatedAt: z.number().int(),
