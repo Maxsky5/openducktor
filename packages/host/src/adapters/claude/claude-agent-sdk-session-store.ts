@@ -47,6 +47,8 @@ export const createClaudeAgentSdkSessionStore = ({
   now = () => new Date().toISOString(),
 }: CreateClaudeAgentSdkSessionStoreInput = {}): ClaudeSessionStore => {
   const sessions = new Map<string, ClaudeSession>();
+  // Keep the latest identity after close without retaining the query.
+  const latest = new Map<string, WeakRef<ClaudeSession>>();
   const closeListeners = new Set<(session: ClaudeSession) => void>();
   const states = new WeakMap<ClaudeSession, SessionState>();
   const activeConsumers = new Set<ClaudeSession>();
@@ -279,11 +281,13 @@ export const createClaudeAgentSdkSessionStore = ({
       fiber.addObserver(() => activeConsumers.delete(session));
     },
     get: (externalSessionId) => sessions.get(externalSessionId),
+    isLatest: (session) => latest.get(session.externalSessionId)?.deref() === session,
     getForCleanup,
     set: (session) => {
       const previous = sessions.get(session.externalSessionId);
       if (previous && previous !== session) stateFor(previous).replaced = true;
       stateFor(session).replaced = false;
+      latest.set(session.externalSessionId, new WeakRef(session));
       sessions.set(session.externalSessionId, session);
     },
     subscribeClose: (listener) => {

@@ -189,6 +189,8 @@ export type ClaudeSessionStore = {
     timestamp?: string,
   ): void;
   get(externalSessionId: string): ClaudeSession | undefined;
+  /** Match the latest execution even after it leaves live state. */
+  isLatest(session: ClaudeSessionContext): boolean;
   /** Include consumers that still run after close removes their session. */
   getForCleanup(externalSessionId: string): ClaudeSession | undefined;
   probeSessionStatus(

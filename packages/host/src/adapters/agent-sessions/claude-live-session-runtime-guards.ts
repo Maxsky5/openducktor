@@ -23,11 +23,19 @@ type OperationValidationDetails = { readonly operation: string };
 
 export const createEventGuard =
   (store: CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"]) =>
-  (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent): boolean => {
+  (
+    session: ClaudeSessionContext,
+    event: ClaudeAgentSdkEvent,
+    phase: "accept" | "deliver",
+  ): boolean => {
     const current = store.get(session.externalSessionId);
     if (current && current !== session) return false;
-    if (event.type === "session_finished")
-      return current === session || isClaudeSessionClosed(session);
+    // Closing can finish before a queued error reaches the adapter.
+    if (
+      event.type === "session_finished" ||
+      (phase === "deliver" && event.type === "session_error")
+    )
+      return store.isLatest(session) && (current === session || isClaudeSessionClosed(session));
     if (event.statusUnavailable) return current === session;
     return current === session && !isClaudeSessionClosing(session);
   };

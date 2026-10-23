@@ -18,6 +18,13 @@ import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-f
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
+import { consumeClaudeSession, sendClaudeUserMessage } from "../claude/claude-agent-sdk-session-io";
+import {
+  createNonAdmittingClaudeSession,
+  ignoreClaudeBackgroundFailure,
+  throwingClaudeQuery,
+} from "../claude/claude-agent-sdk-session-io.test-support";
+import { createClaudeAgentSdkSessionStore } from "../claude/claude-agent-sdk-session-store";
 import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import {
   createClaudeAgentSdkEventHub,
@@ -170,6 +177,10 @@ type MutationBarrier = {
 
 const createHarness = async (
   workingDirectoryDependenciesOverride: RuntimeWorkingDirectoryDependencies = workingDirectoryDependencies,
+  sessionStore: Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0]["sessionStore"] = {
+    get: (externalSessionId) => sessionsById.get(externalSessionId),
+    isLatest: (candidate) => sessionsById.get(candidate.externalSessionId) === candidate,
+  },
 ) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
   const eventHub = createClaudeAgentSdkEventHub();
@@ -303,9 +314,7 @@ const createHarness = async (
     eventHub,
     liveSessionLifecycle,
     service,
-    sessionStore: {
-      get: (externalSessionId) => sessionsById.get(externalSessionId),
-    },
+    sessionStore,
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   };
   const prepare = createClaudeLiveSessionAdapterPreparer(prepareInput);
@@ -384,6 +393,172 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
+  test("delivers the native stream failure before finish while send waits for admission", async () => {
+    const cause = new Error("Claude native stream failed before command admission.");
+    const current = createNonAdmittingClaudeSession({
+      input: { ...session.input },
+      runtimeId: runtime.runtimeId,
+      query: throwingClaudeQuery(cause),
+      summary: { ...summary },
+    });
+    const store = createClaudeAgentSdkSessionStore();
+    store.set(current);
+    const harness = await createHarness(workingDirectoryDependencies, store);
+    harness.setStartSession(() => Effect.succeed(current.summary));
+    harness.setLoadSessionContextUsage(() => Effect.succeed(null));
+    const sent = deferred<void>();
+    harness.setSendUserMessage((messageInput, _runtimeId, options) =>
+      Effect.tryPromise({
+        try: () =>
+          sendClaudeUserMessage({
+            messageInput,
+            session: current,
+            emit: harness.eventHub.emit,
+            now: () => "2026-10-23T00:00:00.000Z",
+            randomId: () => "11111111-1111-4111-8111-111111111111",
+            onSent: () => {
+              sent.resolve();
+              options?.onSent?.();
+            },
+          }),
+        catch: (failure) => toHostOperationError(failure, "claudeRuntime.sendUserMessage"),
+      }),
+    );
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    const sending = Effect.runPromise(
+      Effect.result(
+        harness.adapter.sendUserMessage({
+          ...sessionRef,
+          sessionScope: current.input.sessionScope,
+          delivery: "new_turn",
+          parts: [{ kind: "text", text: "Build" }],
+        }),
+      ),
+    );
+    await sent.promise;
+    expect(current.pendingUserMessageAdmissions.size).toBe(1);
+    await consumeClaudeSession({
+      emit: harness.eventHub.emit,
+      now: () => "2026-10-23T00:00:01.000Z",
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+      session: current,
+      sessionStore: store,
+    });
+    expect((await sending)._tag).toBe("Failure");
+    await Effect.runPromise(harness.adapter.loadContext(sessionRef));
+    const terminalEvents = harness.changes.flatMap((change) =>
+      change.type === "transcript_event" &&
+      (change.event.type === "session_error" || change.event.type === "session_finished")
+        ? [change.event]
+        : [],
+    );
+    expect(terminalEvents).toMatchObject([
+      { type: "session_error", message: cause.message },
+      { type: "session_finished" },
+    ]);
+    expect(store.get(current.externalSessionId)).toBeUndefined();
+  });
+
+  test.each(["latest closed", "after Stop", "replacement live", "replacement closed"] as const)(
+    "delivers queued errors only for the latest execution: %s",
+    async (scenario) => {
+      const store = createClaudeAgentSdkSessionStore();
+      const current = createNonAdmittingClaudeSession({
+        input: { ...session.input },
+        runtimeId: runtime.runtimeId,
+        summary: { ...summary },
+      });
+      store.set(current);
+      const harness = await createHarness(workingDirectoryDependencies, store);
+      harness.setStartSession(() => Effect.succeed(current.summary));
+      await Effect.runPromise(harness.adapter.startSession(startInput));
+      harness.changes.splice(0);
+      const entered = deferred<void>();
+      const release = deferred<void>();
+      harness.setUpdateSessionModel(() =>
+        Effect.promise(async () => {
+          entered.resolve();
+          await release.promise;
+        }),
+      );
+      const updating = Effect.runPromise(
+        harness.adapter.updateSessionModel({
+          ...sessionRef,
+          sessionScope: current.input.sessionScope,
+          model: null,
+        }),
+      );
+      await entered.promise;
+      try {
+        if (scenario === "after Stop") await Effect.runPromise(store.stopSession(sessionRef));
+        harness.eventHub.emit(current, {
+          type: "session_error",
+          externalSessionId: current.externalSessionId,
+          timestamp: "2026-10-23T00:00:00.000Z",
+          message: "Failure from the old execution",
+        });
+        if (scenario !== "after Stop") store.close(current);
+        if (scenario === "replacement live" || scenario === "replacement closed") {
+          const replacement = createNonAdmittingClaudeSession({
+            input: { ...session.input },
+            runtimeId: runtime.runtimeId,
+            summary: { ...summary },
+          });
+          store.set(replacement);
+          if (scenario === "replacement closed") store.close(replacement);
+        }
+      } finally {
+        release.resolve();
+      }
+      await updating;
+      const errorMessages = harness.changes.flatMap((change) =>
+        change.type === "transcript_event" && change.event.type === "session_error"
+          ? [change.event.message]
+          : [],
+      );
+      expect(errorMessages).toEqual(
+        scenario === "latest closed" ? ["Failure from the old execution"] : [],
+      );
+    },
+  );
+
+  test.each(["Stop", "runtime release"] as const)(
+    "delivers an accepted error before finish during %s",
+    async (operation) => {
+      const current = createNonAdmittingClaudeSession({
+        input: { ...session.input },
+        runtimeId: runtime.runtimeId,
+        summary: { ...summary },
+      });
+      const store = createClaudeAgentSdkSessionStore({
+        emit: (source, event) => harness.eventHub.emit(source, event),
+      });
+      store.set(current);
+      const harness = await createHarness(workingDirectoryDependencies, store);
+      harness.setStartSession(() => Effect.succeed(current.summary));
+      await Effect.runPromise(harness.adapter.startSession(startInput));
+      harness.changes.splice(0);
+      const publishFailure = Effect.sync(() =>
+        harness.eventHub.emit(current, {
+          type: "session_error",
+          externalSessionId: current.externalSessionId,
+          timestamp: "2026-10-23T00:00:00.000Z",
+          message: "Native stream failed during cleanup",
+        }),
+      );
+      harness.setStopSession((input) =>
+        publishFailure.pipe(Effect.andThen(store.stopSession(input))),
+      );
+      harness.setStopSessionsForRuntime((runtimeId) =>
+        publishFailure.pipe(Effect.andThen(store.stopSessionsForRuntime(runtimeId))),
+      );
+      if (operation === "Stop") await Effect.runPromise(harness.adapter.stopSession(sessionRef));
+      else await Effect.runPromise(harness.adapter.releaseRuntime());
+      expect(transcriptEventTypes(harness.changes)).toEqual(["session_error", "session_finished"]);
+    },
+  );
+
   test("rejects old query events at acceptance and after a queued projection waits", async () => {
     const harness = await createHarness();
     await Effect.runPromise(harness.adapter.startSession(startInput));

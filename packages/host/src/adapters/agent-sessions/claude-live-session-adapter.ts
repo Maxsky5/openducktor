@@ -111,7 +111,7 @@ export const createClaudeLiveSessionAdapterPreparer =
       ): Effect.Effect<void, HostError> =>
         commit("claude-live-session.process-event", () => ({
           value: undefined,
-          changes: acceptsEvent(session, event) ? state.applyEvent(session, event) : [],
+          changes: acceptsEvent(session, event, "deliver") ? state.applyEvent(session, event) : [],
         })).pipe(
           Effect.catch((cause) => {
             const failure = toHostOperationError(cause, "claude-live-session.process-event", {
