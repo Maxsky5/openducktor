@@ -257,7 +257,12 @@ describe("Workspace Session commands with real Git and SQLite", () => {
   test("forks a worktree at the source committed HEAD with configured setup", async () => {
     await writeFile(path.join(repoPath, ".env"), "ROOT_ENV=1\n");
     const h = setup();
-    const draft = await h.router.invoke("workspace_session_create", h.createInput);
+    gitCommand("branch", "release", "main~1");
+    const targetBranch = { branch: "release" };
+    const draft = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      targetBranch,
+    });
     await h.router.invoke("workspace_session_start", {
       workspaceId: "fairnest",
       sessionId: draft.session.id,
@@ -302,6 +307,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       }),
     );
     const destination = fork.record.executionTarget.workingDirectory;
+    expect(fork.record.targetBranch).toEqual(targetBranch);
     expect(runGit(destination, "rev-parse", "HEAD")).toBe(sourceHead);
     expect(runGit(repoPath, "rev-parse", "HEAD")).toBe(fixtureHead);
     expect(await readFile(path.join(destination, "tracked.txt"), "utf8")).toBe("source commit\n");

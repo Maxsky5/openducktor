@@ -27,6 +27,7 @@ test("fork commands return committed records with synchronization warnings", asy
     selectedModel: null,
     generatedTitle: null,
     manualTitle: "Chat (fork)",
+    targetBranch: null,
     createdAt: 1,
     updatedAt: 1,
     archivedAt: null,

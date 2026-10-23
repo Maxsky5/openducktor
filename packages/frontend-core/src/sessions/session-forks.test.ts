@@ -49,6 +49,7 @@ const workspaceRecord = (id: string): WorkspaceSession => ({
   roleSnapshot: null,
   generatedTitle: null,
   manualTitle: id,
+  targetBranch: null,
   createdAt: 1,
   updatedAt: 1,
   archivedAt: null,

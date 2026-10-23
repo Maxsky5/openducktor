@@ -503,6 +503,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(result.record).toMatchObject({
         externalSessionId: "fork-native",
         executionTarget: source.executionTarget,
+        targetBranch: source.targetBranch,
         roleSnapshot: source.roleSnapshot,
         selectedModel,
         manualTitle:
@@ -514,6 +515,28 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.calls).toEqual(["save"]);
     },
   );
+
+  test("rejects a fork worktree with a tracked-upstream target before creating it", async () => {
+    const h = setup();
+    const draft = await Effect.runPromise(
+      h.service.create({ ...input(), targetBranch: { branch: "@{upstream}" } }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+    await Effect.runPromise(h.service.start(ref));
+    const source = await Effect.runPromise(h.service.get(ref));
+    h.calls.length = 0;
+    await expect(
+      Effect.runPromise(
+        h.service.fork({
+          ...ref,
+          forkPoint: { messageId: "completed-reply" },
+          destination: { kind: "new_worktree", name: "fork-chat", branchName: "odt/fork-chat" },
+        }),
+      ),
+    ).rejects.toThrow("Tracked upstream is available only for the current checkout.");
+    expect(h.calls).toEqual([]);
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(source);
+  });
 
   test.each([false, true])(
     "cleans every acquired fork resource after a save failure, terminal cleanup fails=%s",
@@ -2266,7 +2289,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(restored.archivedAt).toBeNull();
     expect(restored.executionTarget).toMatchObject({ worktreeState: "present" });
     expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
-    expect(h.state.startPoint).toBe("origin/main");
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
     const actionCount = h.actionRuns.length;
     const restoredSibling = await Effect.runPromise(h.service.restore(siblingRef));
     expect(restoredSibling.archivedAt).toBeNull();

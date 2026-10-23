@@ -31,6 +31,7 @@ const source: WorkspaceSession = {
   roleSnapshot: null,
   selectedModel: null,
   manualTitle: "Source",
+  targetBranch: null,
   generatedTitle: null,
   createdAt: 1,
   updatedAt: 1,
