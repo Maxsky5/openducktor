@@ -12,6 +12,7 @@ import {
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import { AgentMessageSendError } from "../../../lib/agent-message-send-error";
 import { isAgentSessionBlockedOnInput } from "../../../lib/agent-session-waiting-input";
+import { isAgentSessionForegroundActive } from "../../../lib/agent-session-activity-state";
 import { errorMessage } from "../../../lib/errors";
 import { getAcceptedMessageAfterSendFailure } from "../../agent-runtime-services";
 import type { AgentMessageSubmitInput } from "@openducktor/contracts";
@@ -243,7 +244,8 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
 
     // The host decides if the message starts a turn or waits in the queue. An idle session shows
     // the send as running until the host answers; a queued answer restores the previous state.
-    const sessionIsRunning = readySession.status === "running";
+    const sessionIsRunning =
+      readySession.status === "running" && isAgentSessionForegroundActive(readySession);
     const sendAttempt = sessionIsRunning
       ? undefined
       : markSessionRunningForSend(readySession, dependencies);

@@ -82,6 +82,8 @@ export const handleClaudeResultMessage = ({
   session,
   timestamp,
 }: ClaudeResultEventInput): void => {
+  session.completedNativeResultIds ??= new Set();
+  if (session.completedNativeResultIds.has(message.uuid)) return;
   const completedUserTurnIndex = userTurnIndex(session);
   const originKind = readClaudeTurnOriginKind(message) ?? session.assistantTurnOriginKind;
   const hasActiveBackgroundWork = hasActiveClaudeBackgroundWork(session);
@@ -106,6 +108,23 @@ export const handleClaudeResultMessage = ({
   if (isClaudeResultStoppedBySteer(message, (session.unreadSteeredUserMessages?.size ?? 0) > 0)) {
     return;
   }
+  session.completedNativeResultIds.add(message.uuid);
+  if (message.result_index !== undefined) session.lastNativeResultIndex = message.result_index;
+  const consumedIds = new Set(session.foregroundMessageIds);
+  for (const messageId of message.user_message_uuids ??
+    (message.user_message_uuid ? [message.user_message_uuid] : [])) {
+    consumedIds.add(messageId);
+  }
+  const acceptedIds = new Set(session.acceptedUserMessages?.map((accepted) => accepted.messageId));
+  const messageIds = [...consumedIds].filter(
+    (messageId) =>
+      session.nativeCommandStates?.get(messageId) !== "result" &&
+      (acceptedIds.has(messageId) || session.nativeSubmittedMessageIds?.has(messageId)),
+  );
+  session.nativeCommandStates ??= new Map();
+  for (const messageId of messageIds) session.nativeCommandStates.set(messageId, "result");
+  session.foregroundMessageIds?.clear();
+  const consumedMessageCount = messageIds.filter((messageId) => acceptedIds.has(messageId)).length;
   if (failed) {
     clearClaudeManualCompaction(session);
     const errors = message.subtype === "success" ? [] : message.errors;
@@ -125,14 +144,30 @@ export const handleClaudeResultMessage = ({
     if (lastError?.usageLimit) turnError.usageLimit = lastError.usageLimit;
     if (lastError) lastError.message = turnError.message;
     emit(turnError);
+    emit({
+      type: "session_turn_finished",
+      externalSessionId: session.externalSessionId,
+      timestamp,
+      completionId: message.uuid,
+      messageIds,
+      turnOutcome: "failed",
+    });
     applyClaudeLifecycleEvent({
       emit,
       session,
       timestamp,
-      event: { kind: "result", outcome: "failed" },
+      event: { kind: "result", outcome: "failed", consumedMessageCount },
     });
     return;
   }
+  emit({
+    type: "session_turn_finished",
+    externalSessionId: session.externalSessionId,
+    timestamp,
+    completionId: message.uuid,
+    messageIds,
+    turnOutcome: "completed",
+  });
   applyClaudeLifecycleEvent({
     emit,
     session,
@@ -140,6 +175,7 @@ export const handleClaudeResultMessage = ({
     event: {
       kind: "result",
       outcome: lifecycleOutcome,
+      consumedMessageCount,
     },
   });
 };

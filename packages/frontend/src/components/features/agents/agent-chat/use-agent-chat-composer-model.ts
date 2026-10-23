@@ -33,6 +33,7 @@ export type AgentChatComposerConfig = {
   selectedSession: AgentChatComposerSelectedSession | null;
   isSessionModelCatalogLoading: boolean;
   isSessionWorking: boolean;
+  foregroundTurnActive?: boolean | undefined;
   isWaitingInput: boolean;
   waitingInputPlaceholder: string | null;
   canStopSession: boolean;
@@ -147,6 +148,7 @@ export function useAgentChatComposerModel({
       isStarting: composer.isStarting,
       isSavingModel: composer.isSavingModel ?? false,
       isSessionWorking: composer.isSessionWorking,
+      foregroundTurnActive: composer.foregroundTurnActive,
       isWaitingInput: composer.isWaitingInput,
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
       isModelSelectionPending: composerState?.isModelSelectionPending ?? false,

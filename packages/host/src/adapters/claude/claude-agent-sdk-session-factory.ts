@@ -12,6 +12,8 @@ import {
   type ClaudeAgentSdkOptionsDependencies,
 } from "./claude-agent-sdk-options";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
+import { createClaudeNativeProcessSpawner } from "./claude-agent-sdk-native-process";
+import { getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
 import { consumeClaudeSession } from "./claude-agent-sdk-session-io";
 import { toSessionError } from "./claude-agent-sdk-session-lifecycle";
 import {
@@ -125,6 +127,10 @@ export const createClaudeAgentSdkSession = async ({
       sessionOptions,
     });
     if (options.permissionMode) sessionContext.requestedPermissionMode = options.permissionMode;
+    options.spawnClaudeCodeProcess = createClaudeNativeProcessSpawner(
+      sessionContext,
+      options.stderr,
+    );
     input.workStartGuard?.assertCurrent();
     sdkQuery = query({ prompt: queue, options });
   } catch (error) {
@@ -136,6 +142,7 @@ export const createClaudeAgentSdkSession = async ({
   sessionStore.set(session);
   const isContinuation = sessionInput.resumeInterruptedTurn === true;
   const admission = isContinuation ? Promise.withResolvers<void>() : null;
+  const startupValidation = Promise.withResolvers<boolean>();
   let admissionReported = false;
   const consumeInput: Parameters<typeof consumeClaudeSession>[0] = {
     session,
@@ -143,6 +150,7 @@ export const createClaudeAgentSdkSession = async ({
     now,
     emit,
     onBackgroundFailure: serviceInput.onBackgroundFailure,
+    startupValidation: startupValidation.promise,
   };
   if (admission) {
     consumeInput.onContinuationAdmission = () => {
@@ -156,11 +164,17 @@ export const createClaudeAgentSdkSession = async ({
   const completion = consumeClaudeSession(consumeInput);
   try {
     input.onWorkIssued?.();
-    await withTimeout(
+    const initialization = await withTimeout(
       sdkQuery.initializationResult(),
       INIT_TIMEOUT_MS,
       "Claude Agent SDK session initialization timed out. Check Claude authentication and network connectivity.",
     );
+    const compatibilityError = getClaudeCodeCompatibilityError(
+      initialization,
+      resolvedDependencies.claudeExecutablePath,
+    );
+    if (compatibilityError) throw compatibilityError;
+    startupValidation.resolve(true);
     if (!isContinuation) input.onWorkAccepted?.();
     await requireClaudeOpenDucktorMcpForScope(input.sessionScope, sdkQuery, {
       externalSessionId: session.externalSessionId,
@@ -241,6 +255,7 @@ export const createClaudeAgentSdkSession = async ({
     }
     return session.summary;
   } catch (error) {
+    startupValidation.resolve(false);
     const settled = await Effect.runPromiseExit(sessionStore.settle(session));
     if (Exit.isFailure(settled)) {
       throw toStartupError(error, toSessionError(settled.cause, "claudeRuntime.settleSession"));

@@ -1,6 +1,7 @@
 import { HostValidationError } from "../../effect/host-errors";
 import type { ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import { claudeChildEventSessions } from "./claude-agent-sdk-event-session";
 import {
   claudeProtocolObjectSchema,
   type ClaudeProtocolObject,
@@ -130,6 +131,7 @@ export const discardClaudeStreamToolInputBlocks = (session: ClaudeToolInputStrea
 
 type ClaudeToolInputStreamTree = ClaudeToolInputStreamSession & {
   subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeToolInputStreamTree>;
+  subagentEventSessionsByTaskId?: ReadonlyMap<string, ClaudeToolInputStreamTree>;
 };
 
 export const clearClaudeStreamToolInputs = (session: ClaudeToolInputStreamSession): void => {
@@ -138,7 +140,7 @@ export const clearClaudeStreamToolInputs = (session: ClaudeToolInputStreamSessio
 
 export const clearClaudeStreamToolInputTree = (session: ClaudeToolInputStreamTree): void => {
   clearClaudeStreamToolInputs(session);
-  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+  for (const child of claudeChildEventSessions(session)) {
     clearClaudeStreamToolInputTree(child);
   }
 };

@@ -53,9 +53,18 @@ export const createLiveChangePublisher =
               ? { type: "session_upsert", session: projectSnapshot(projected.snapshot) }
               : toAgentSessionLiveEnvelope(projected),
           );
+          const pausesQueue =
+            envelope.type === "transcript_event" &&
+            envelope.event.type === "session_turn_finished" &&
+            envelope.event.turnOutcome !== "completed";
+          if (pausesQueue) {
+            // Native failure must pause delivery even when publishing that outcome fails.
+            messageQueues.observeChanges([...published, envelope]);
+            published.length = 0;
+          }
           observeNotificationInput?.(envelope, change.provenance ?? "live");
           const result = yield* publishEnvelopeResult(envelope, change.provenance);
-          published.push(envelope);
+          if (!pausesQueue) published.push(envelope);
           if (faultLogFailure === null && result) faultLogFailure = result;
         }
         if (faultLogFailure) return yield* Effect.fail(faultLogFailure);

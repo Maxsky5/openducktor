@@ -205,6 +205,7 @@ export function useAgentStudioSessionActions({
     modelCatalog: selectedSession.runtimeData.modelCatalog,
     messages: loadedSession?.messages.items,
     isSessionWorking: sessionState.isSessionWorking,
+    foregroundTurnActive: loadedSession?.foregroundTurnActive,
     isWaitingInput: sessionState.isWaitingInput,
     selectedModelDescriptor,
     draftRules: { reusablePrompts, supportsAttachments },

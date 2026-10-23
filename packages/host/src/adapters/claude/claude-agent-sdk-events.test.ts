@@ -272,6 +272,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
           type: "result",
           subtype: "success",
           uuid: claudeSdkMessageUuidFixture(`non-human-result-${index}`),
+          user_message_uuid: "user-message-1",
           session_id: "session-1",
           is_error: false,
           duration_ms: 1_000,
@@ -404,7 +405,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     expect(replies.at(-1)).toHaveProperty("forkPoint");
   });
 
-  test("lets SDK state settle the root while a nested background task is running", () => {
+  test("keeps the root running after foreground completion while a nested background task runs", () => {
     const events: AgentEvent[] = [];
     const childSession = createSession("running");
     childSession.activeBackgroundSubagentTaskIds.add("nested-task-1");
@@ -424,6 +425,23 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
       emit: (event: AgentEvent) => events.push(event),
     };
+
+    handleClaudeSdkMessage({
+      ...input,
+      timestamp: "2026-06-25T19:59:59.000Z",
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "background_tasks_changed",
+        tasks: [
+          {
+            task_id: "nested-task-1",
+            run_id: "nested-1",
+            task_type: "local_agent",
+            description: "Nested work",
+          },
+        ],
+      }),
+    });
 
     handleClaudeSdkMessage({
       ...input,
@@ -460,6 +478,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
         type: "result",
         subtype: "success",
         uuid: "64bb56c2-31df-4cdb-8d84-2cc8a840eed5",
+        user_message_uuid: "user-message-1",
         session_id: "session-1",
         is_error: false,
         result: "The outer agent is complete.",
@@ -471,8 +490,8 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     });
 
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
-    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(1);
-    expect(session.activity).toBe("idle");
+    expect(events.filter((event) => event.type === "session_idle")).toHaveLength(0);
+    expect(session.activity).toBe("running");
     expect(session.activeSdkUserTurnCount).toBe(0);
     expect(session.pendingUserTurnCount).toBe(0);
     expect(childSession.activeBackgroundSubagentTaskIds).toEqual(new Set(["nested-task-1"]));

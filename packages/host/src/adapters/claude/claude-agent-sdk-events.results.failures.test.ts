@@ -12,6 +12,9 @@ describe("handleClaudeSdkMessage failed results", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+    );
     session.unreadSteeredUserMessages.set(
       "steered-1",
       claudeAcceptedUserMessageFixture({ messageId: "steered-1" }),
@@ -19,6 +22,7 @@ describe("handleClaudeSdkMessage failed results", () => {
     const result = (queuedTurnCount: number) =>
       claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "error_during_execution",
         uuid: "679c1167-1413-4191-8740-cc3a6abce872",
         session_id: "session-1",
@@ -49,13 +53,20 @@ describe("handleClaudeSdkMessage failed results", () => {
 
     handle(result(0));
 
-    expect(events.map((event) => event.type)).toEqual(["turn_error", "session_idle"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "turn_error",
+      "session_turn_finished",
+      "session_idle",
+    ]);
   });
 
   test("reports failed Claude results and settles the session idle", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+    );
 
     handleClaudeSdkMessage({
       session,
@@ -68,6 +79,7 @@ describe("handleClaudeSdkMessage failed results", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "error_during_execution",
         uuid: "679c1167-1413-4191-8740-cc3a6abce872",
         session_id: "session-1",
@@ -83,6 +95,12 @@ describe("handleClaudeSdkMessage failed results", () => {
         type: "turn_error",
         messageId: "679c1167-1413-4191-8740-cc3a6abce872",
         message: "API Error: an image in the conversation could not be processed.",
+      }),
+      expect.objectContaining({
+        type: "session_turn_finished",
+        completionId: "679c1167-1413-4191-8740-cc3a6abce872",
+        messageIds: ["user-message-1"],
+        turnOutcome: "failed",
       }),
       expect.objectContaining({
         type: "session_idle",
@@ -122,6 +140,11 @@ describe("handleClaudeSdkMessage failed results", () => {
         message: "API Error: an image in the conversation could not be processed and was removed.",
       }),
       expect.objectContaining({
+        type: "session_turn_finished",
+        messageIds: [],
+        turnOutcome: "failed",
+      }),
+      expect.objectContaining({
         type: "session_idle",
         externalSessionId: "session-1",
       }),
@@ -132,6 +155,9 @@ describe("handleClaudeSdkMessage failed results", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+    );
     const commonInput = {
       session,
       timestamp: "2026-06-25T20:00:00.000Z",
@@ -147,6 +173,7 @@ describe("handleClaudeSdkMessage failed results", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         is_error: false,
         stop_reason: "tool_use",
@@ -156,7 +183,11 @@ describe("handleClaudeSdkMessage failed results", () => {
 
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "assistant_message",
+      "session_turn_finished",
+      "session_idle",
+    ]);
 
     handleClaudeSdkMessage({
       ...commonInput,
@@ -172,6 +203,10 @@ describe("handleClaudeSdkMessage failed results", () => {
 
     expect(session.activity).toBe("idle");
     expect(session.pendingUserTurnCount).toBe(0);
-    expect(events.map((event) => event.type)).toEqual(["assistant_message", "session_idle"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "assistant_message",
+      "session_turn_finished",
+      "session_idle",
+    ]);
   });
 });

@@ -1,16 +1,12 @@
 import type {
   AcceptedAgentUserMessage,
-  AgentSessionActivity,
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
 } from "@openducktor/contracts";
-import {
-  agentSessionRefKey,
-  BLOCKED_ON_INPUT_REASON,
-  isAgentSessionBlockedOnInput,
-} from "@openducktor/core";
+import { agentSessionRefKey, BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import { type QueuePause, SESSION_LEFT_RUNTIME_REASON } from "./agent-message-queue-model";
+import { hasActiveForegroundTurn, hasBlockingSessionInput } from "./session-foreground-readiness";
 
 /** A live change that matters to the queue of its session. */
 export type QueueSignal =
@@ -21,33 +17,43 @@ export type QueueSignal =
       readonly ref: AgentSessionLiveRef;
       readonly acceptedMessage: AcceptedAgentUserMessage;
     }
-  | { readonly kind: "input_answered"; readonly sessionKey: string };
+  | { readonly kind: "delivery_ready"; readonly sessionKey: string };
 
 /**
- * Tracks the live conditions that stop delivery to a session: running work, pending blocking
- * input, and a session that left its runtime. Each live session snapshot replaces all three.
+ * Tracks foreground work, blocking input, unavailable status, and runtime membership.
+ * Background work does not stop a new turn when the runtime reports foreground readiness.
  */
 export const createSessionConditions = () => {
   const working = new Set<string>();
   const blockedOnInput = new Set<string>();
   const leftRuntime = new Set<string>();
+  const unavailable = new Set<string>();
+  const canDeliver = (key: string) =>
+    !working.has(key) && !blockedOnInput.has(key) && !leftRuntime.has(key) && !unavailable.has(key);
   return {
     isWorking: (sessionKey: string) => working.has(sessionKey),
+    canDeliver,
     isBlockedOnInput: (sessionKey: string) => blockedOnInput.has(sessionKey),
     /** Applies one live change and returns what it means for the queue of its session. */
     observe: (envelope: AgentSessionLiveEnvelope): QueueSignal | null => {
       if (envelope.type === "session_upsert") {
         const key = agentSessionRefKey(envelope.session.ref);
+        const wasReady = canDeliver(key);
         leftRuntime.delete(key);
-        if (WORKING_ACTIVITIES.has(envelope.session.activity)) working.add(key);
+        if (envelope.session.statusUnavailableReason) unavailable.add(key);
+        else unavailable.delete(key);
+        if (hasActiveForegroundTurn(envelope.session)) working.add(key);
         else working.delete(key);
-        const wasBlocked = blockedOnInput.has(key);
-        if (isAgentSessionBlockedOnInput(envelope.session)) {
+        if (hasBlockingSessionInput(envelope.session)) {
           blockedOnInput.add(key);
           return null;
         }
         blockedOnInput.delete(key);
-        return wasBlocked ? { kind: "input_answered", sessionKey: key } : null;
+        return !wasReady && canDeliver(key) ? { kind: "delivery_ready", sessionKey: key } : null;
+      }
+      if (envelope.type === "fault" && envelope.statusUnavailable && envelope.ref) {
+        unavailable.add(agentSessionRefKey(envelope.ref));
+        return null;
       }
       const left = sessionLeftRuntime(envelope);
       if (left) {
@@ -76,8 +82,6 @@ export const sessionChanges = (envelope: AgentSessionLiveEnvelope): AgentSession
 export const blockedOnInputError = () =>
   new HostValidationError({ field: "session", message: BLOCKED_ON_INPUT_REASON });
 
-const WORKING_ACTIVITIES = new Set<AgentSessionActivity>(["running", "retrying"]);
-
 const sessionLeftRuntime = (envelope: AgentSessionLiveEnvelope): AgentSessionLiveRef | null => {
   if (envelope.type === "session_removed") return envelope.ref;
   if (envelope.type === "transcript_event" && envelope.event.type === "session_finished") {
@@ -98,6 +102,7 @@ const transcriptSignal = (
     case "user_message":
       return { kind: "user_message", ref, acceptedMessage: event };
     case "session_idle":
+    case "session_turn_finished":
       if (event.turnOutcome === "completed") return { kind: "turn_completed", ref };
       if (event.turnOutcome === "interrupted") {
         return { kind: "pause", ref, pause: { cause: "turn_interrupted" } };

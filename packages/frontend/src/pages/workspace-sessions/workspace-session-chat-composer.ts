@@ -50,6 +50,7 @@ export function buildWorkspaceSessionComposer({
     selectedSession: identity ? { ...identity, selectedModel: state.selectedModel } : null,
     isSessionModelCatalogLoading: picker.isLoading,
     isSessionWorking: state.isWorking,
+    foregroundTurnActive: state.foregroundTurnActive,
     isWaitingInput: isAgentSessionBlockedOnInput(state),
     waitingInputPlaceholder: getAgentSessionWaitingInputPlaceholder(state),
     canStopSession: state.canStopSession,

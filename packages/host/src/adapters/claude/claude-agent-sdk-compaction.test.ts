@@ -4,7 +4,10 @@ import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts"
 import type { AgentEvent, SendAgentUserMessageInput } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession,
+} from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import { sendClaudeUserMessage } from "./claude-agent-sdk-session-io";
@@ -131,6 +134,9 @@ describe("Claude manual compaction", () => {
     const session: ClaudeEventSession = createEventTestSession();
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages = [
+      claudeAcceptedUserMessageFixture({ messageId: COMPACTION_MESSAGE_ID }),
+    ];
     session.activeManualCompaction = {
       messageId: COMPACTION_MESSAGE_ID,
       boundaryReceived: false,
@@ -144,6 +150,7 @@ describe("Claude manual compaction", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
+        user_message_uuid: COMPACTION_MESSAGE_ID,
         uuid: "070fcb17-4482-4bd2-8652-7da83bba5e5c",
         session_id: "session-1",
         is_error: false,

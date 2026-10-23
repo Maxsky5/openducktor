@@ -6,6 +6,7 @@ import { canResumeInterruptedTurn } from "@openducktor/frontend-core/lib/agent-s
 import {
   getAgentSessionActivityStateFromSession,
   isAgentSessionActivityWorking,
+  isAgentSessionForegroundActive,
 } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { OptionalAgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import type {
@@ -79,8 +80,15 @@ export function projectWorkspaceSessionChatState({
 }) {
   const observationReady = readModelLoadState.kind === "ready";
   const targetFault = fault?.source === "workspace-target" ? fault : null;
-  const activityState =
+  const observedActivity =
     session && observationReady ? getAgentSessionActivityStateFromSession(session) : null;
+  const statusUnavailableReason =
+    session?.statusUnavailableReason ?? (fault?.statusUnavailable ? fault.message : null);
+  const activityState =
+    statusUnavailableReason &&
+    (observedActivity === "idle" || isAgentSessionActivityWorking(observedActivity))
+      ? null
+      : observedActivity;
   const isWorking = isAgentSessionActivityWorking(activityState);
   let transcriptState: AgentSessionTranscriptState;
   if (!identity) {
@@ -113,14 +121,23 @@ export function projectWorkspaceSessionChatState({
     canStopSession: isWorking || activityState === "waiting_input",
     observationReady,
     targetFault,
+    statusUnavailableReason,
     activityState,
     isWorking,
+    foregroundTurnActive:
+      session?.foregroundTurnActive === undefined
+        ? undefined
+        : isAgentSessionForegroundActive(session),
     transcriptState,
     pendingApprovals: session?.pendingApprovals ?? [],
     pendingQuestions: session?.pendingQuestions ?? [],
-    isReadOnly: Boolean(targetFault) || transcriptState.kind === "failed",
+    isReadOnly:
+      Boolean(targetFault) ||
+      Boolean(session?.statusUnavailableReason) ||
+      transcriptState.kind === "failed",
     readOnlyReason:
       targetFault?.message ??
+      session?.statusUnavailableReason ??
       session?.runtimeStatusMessage ??
       (transcriptState.kind === "failed" ? "Retry loading this session before sending." : null),
   };

@@ -7,6 +7,8 @@ export type SessionTurnMetadata = {
   hasContextUsageMessageId: (sessionKey: string, messageId: string) => boolean;
   recordSessionContextUsageUpdate: (sessionKey: string) => void;
   hasSessionContextUsageUpdate: (sessionKey: string) => boolean;
+  recordResponseMessageId: (sessionKey: string, messageId: string) => void;
+  consumeResponseMessageIds: (sessionKey: string, messageIds: readonly string[]) => boolean;
   clearContextUsage: (sessionKey: string) => void;
   clearSession: (sessionKey: string) => void;
   clearAll: () => void;
@@ -16,11 +18,13 @@ export const createSessionTurnMetadata = (): SessionTurnMetadata => {
   const modelBySession: Record<string, AgentSessionState["selectedModel"]> = {};
   const contextUsageMessageIdBySession: Record<string, string> = {};
   const contextUsageUpdatedSessionKeys = new Set<string>();
+  const responseMessageIdsBySession = new Map<string, Set<string>>();
 
   const clearSession = (sessionKey: string): void => {
     delete modelBySession[sessionKey];
     delete contextUsageMessageIdBySession[sessionKey];
     contextUsageUpdatedSessionKeys.delete(sessionKey);
+    responseMessageIdsBySession.delete(sessionKey);
   };
   const clearContextUsage = (sessionKey: string): void => {
     delete contextUsageMessageIdBySession[sessionKey];
@@ -41,6 +45,20 @@ export const createSessionTurnMetadata = (): SessionTurnMetadata => {
       contextUsageUpdatedSessionKeys.add(sessionKey);
     },
     hasSessionContextUsageUpdate: (sessionKey) => contextUsageUpdatedSessionKeys.has(sessionKey),
+    recordResponseMessageId: (sessionKey, messageId) => {
+      const ids = responseMessageIdsBySession.get(sessionKey) ?? new Set<string>();
+      ids.add(messageId);
+      responseMessageIdsBySession.set(sessionKey, ids);
+    },
+    consumeResponseMessageIds: (sessionKey, messageIds) => {
+      const ids = responseMessageIdsBySession.get(sessionKey);
+      if (!ids?.size) return messageIds.length === 0;
+      let matched = false;
+      for (const id of messageIds) matched = ids.delete(id) || matched;
+      if (!matched || ids.size > 0) return false;
+      responseMessageIdsBySession.delete(sessionKey);
+      return true;
+    },
     clearContextUsage,
     clearSession,
     clearAll: () => {
@@ -51,6 +69,7 @@ export const createSessionTurnMetadata = (): SessionTurnMetadata => {
         delete contextUsageMessageIdBySession[sessionKey];
       }
       contextUsageUpdatedSessionKeys.clear();
+      responseMessageIdsBySession.clear();
     },
   };
 };

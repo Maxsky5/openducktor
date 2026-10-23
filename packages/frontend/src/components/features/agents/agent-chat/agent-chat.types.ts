@@ -225,6 +225,7 @@ export type AgentChatComposerModel = {
   isStarting: boolean;
   isSavingModel?: boolean;
   isSessionWorking: boolean;
+  foregroundTurnActive?: boolean | undefined;
   isWaitingInput: boolean;
   waitingInputPlaceholder?: string | null;
   /** Why the session cannot steer the running turn now, or null when it can. */

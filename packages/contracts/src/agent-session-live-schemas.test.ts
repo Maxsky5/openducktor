@@ -52,6 +52,8 @@ describe("agent-session live contracts", () => {
       },
     };
     expect(agentSessionLiveSnapshotSchema.parse(populated)).toEqual(populated);
+    const backgroundOnly = { ...snapshot, activity: "running", foregroundTurnActive: false };
+    expect(agentSessionLiveSnapshotSchema.parse(backgroundOnly)).toEqual(backgroundOnly);
   });
 
   test("keeps the reason of a failed status read on a snapshot", () => {

@@ -10,7 +10,9 @@ export const createAgentSessionExecutionEpisodes = () => {
   ): AgentSessionLiveSnapshot => {
     const key = agentSessionRefKey(snapshot.ref);
     let episode = episodes.get(key);
-    const running = snapshot.activity !== "idle";
+    const running = snapshot.statusUnavailableReason
+      ? (episode?.running ?? false)
+      : snapshot.activity !== "idle";
     if (!episode || (liveChange && running && !episode.running)) {
       episode = { id: crypto.randomUUID(), running, repoPath: snapshot.ref.repoPath };
       episodes.set(key, episode);
@@ -41,7 +43,7 @@ export const createAgentSessionExecutionEpisodes = () => {
         const ended =
           event.type === "session_idle" ||
           event.type === "session_finished" ||
-          event.type === "turn_error" ||
+          (event.type === "turn_error" && event.sessionRef.runtimeKind !== "claude") ||
           event.type === "session_error" ||
           (event.type === "session_status" && event.status.type === "idle");
         const episode = episodes.get(agentSessionRefKey(event.sessionRef));

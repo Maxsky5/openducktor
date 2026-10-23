@@ -11,11 +11,23 @@ import { isStopAbortSessionErrorMessage } from "../support/tool-messages";
  */
 export type AgentSessionTranscriptActivityFacts = Pick<
   AgentSessionState,
-  "status" | "runtimeStatusMessage" | "pendingUserMessageStartedAt" | "stopRequestedAt"
+  | "status"
+  | "runtimeStatusMessage"
+  | "pendingUserMessageStartedAt"
+  | "stopRequestedAt"
+  | "foregroundTurnActive"
+  | "statusUnavailableReason"
 > & {
   pendingApprovals: readonly unknown[];
   pendingQuestions: readonly Pick<AgentPendingQuestionRequest, "blocking">[];
 };
+
+export const confirmsSessionActivity = (event: AgentEvent): boolean =>
+  event.type === "session_started" ||
+  event.type === "session_status" ||
+  event.type === "session_idle" ||
+  event.type === "session_error" ||
+  event.type === "session_finished";
 
 /** Apply ordered lifecycle facts before transcript assembly can buffer the event. */
 const projectActivity = (
@@ -54,6 +66,7 @@ const projectActivity = (
         event.type === "session_error"
           ? current.pendingQuestions.filter((request) => request.blocking === false)
           : [],
+      foregroundTurnActive: current.foregroundTurnActive === undefined ? undefined : false,
     };
   }
   if (
@@ -74,6 +87,7 @@ const projectActivity = (
       status,
       runtimeStatusMessage: null,
       pendingUserMessageStartedAt: undefined,
+      foregroundTurnActive: current.foregroundTurnActive === undefined ? undefined : false,
     };
   }
   if (event.type === "assistant_message" || event.type === "turn_error") {
@@ -108,11 +122,15 @@ export const projectSessionTranscriptActivity = <T extends AgentSessionTranscrip
   current: T,
   event: AgentEvent,
 ): T => {
-  const next = projectActivity(current, event);
+  let next = projectActivity(current, event);
+  if (current.statusUnavailableReason && confirmsSessionActivity(event))
+    next = { ...next, statusUnavailableReason: null };
   if (
     next.status === current.status &&
     next.runtimeStatusMessage === current.runtimeStatusMessage &&
     next.pendingUserMessageStartedAt === current.pendingUserMessageStartedAt &&
+    next.foregroundTurnActive === current.foregroundTurnActive &&
+    next.statusUnavailableReason === current.statusUnavailableReason &&
     next.pendingApprovals === current.pendingApprovals &&
     next.pendingQuestions === current.pendingQuestions
   )

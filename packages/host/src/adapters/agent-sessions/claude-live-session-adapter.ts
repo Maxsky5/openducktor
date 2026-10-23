@@ -58,6 +58,7 @@ import {
 } from "./claude-live-session-service-inputs";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 import {
+  createClaudeSessionEventGuard,
   parseClaudeLiveSessionOutput,
   requireClaudeHostServiceRuntime,
   createClaudeRequiredSession,
@@ -102,13 +103,15 @@ export const createClaudeLiveSessionAdapterPreparer =
           }),
         );
 
+      const acceptsEvent = createClaudeSessionEventGuard(sessionStore);
+
       const processEvent = (
         session: ClaudeSessionContext,
         event: ClaudeAgentSdkEvent,
       ): Effect.Effect<void, HostError> =>
         commit("claude-live-session.process-event", () => ({
           value: undefined,
-          changes: state.applyEvent(session, event),
+          changes: acceptsEvent(session, event) ? state.applyEvent(session, event) : [],
         })).pipe(
           Effect.catch((cause) => {
             const failure = toHostOperationError(cause, "claude-live-session.process-event", {
@@ -132,6 +135,7 @@ export const createClaudeLiveSessionAdapterPreparer =
       const eventCoordinator = createClaudeLiveSessionEventCoordinator({
         processEvent,
         runtimeId: runtime.runtimeId,
+        acceptsEvent,
       });
       const unsubscribe = eventHub.subscribe(runtime.runtimeId, eventCoordinator.enqueueEvent);
 
@@ -190,8 +194,10 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         );
 
-      const { runSummary, runTitleUpdate } = createClaudeControlRunner({
+      const { runSummary, runTitleUpdate, runClosure } = createClaudeControlRunner({
         runControlMutation: eventCoordinator.runControlMutation,
+        runSessionClosure: eventCoordinator.runSessionClosure,
+        removeSession: state.removeSession,
         commit,
         applyControlSummary: state.applyControlSummary,
         reportProjectionFailure: createClaudeProjectionFailureReporter({ commit }),
@@ -458,8 +464,9 @@ export const createClaudeLiveSessionAdapterPreparer =
             service.updateSessionTitle(input),
           ),
         stopSession: (input) =>
-          eventCoordinator.runSessionClosure(
-            input.externalSessionId,
+          runClosure(
+            "claude-live-session.remove-stopped-session",
+            input,
             service
               .stopSession(input)
               .pipe(
@@ -467,15 +474,11 @@ export const createClaudeLiveSessionAdapterPreparer =
                   sessionError("claude-live-session.stop-session", input.externalSessionId),
                 ),
               ),
-            () =>
-              commit("claude-live-session.remove-stopped-session", () => ({
-                value: undefined,
-                changes: state.removeSession(input),
-              })),
           ),
         releaseSession: (input) =>
-          eventCoordinator.runSessionClosure(
-            input.externalSessionId,
+          runClosure(
+            "claude-live-session.remove-released-session",
+            input,
             service
               .releaseSession(input)
               .pipe(
@@ -483,11 +486,6 @@ export const createClaudeLiveSessionAdapterPreparer =
                   sessionError("claude-live-session.release-session", input.externalSessionId),
                 ),
               ),
-            () =>
-              commit("claude-live-session.remove-released-session", () => ({
-                value: undefined,
-                changes: state.removeSession(input),
-              })),
           ),
       };
 

@@ -3,6 +3,11 @@ import { HostValidationError, toHostOperationError } from "../../effect/host-err
 import { Effect } from "effect";
 import type { z } from "zod";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
+import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import {
+  isClaudeSessionClosed,
+  isClaudeSessionClosing,
+} from "../claude/claude-agent-sdk-session-lifecycle";
 
 export type ClaudeLiveRuntimeInstance = RuntimeInstanceSummary & {
   readonly kind: "claude";
@@ -14,6 +19,19 @@ type ClaudeRuntimeValidationDetails =
   | { readonly runtimeId: string };
 
 type OperationValidationDetails = { readonly operation: string };
+
+export const createClaudeSessionEventGuard =
+  (
+    store: import("./claude-live-session-adapter-contract").CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"],
+  ) =>
+  (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent): boolean => {
+    const current = store.get(session.externalSessionId);
+    if (current && current !== session) return false;
+    if (event.type === "session_finished")
+      return current === session || isClaudeSessionClosed(session);
+    if (event.statusUnavailable) return current === session;
+    return current === session && !isClaudeSessionClosing(session);
+  };
 
 export const toClaudeLiveSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => ({
   repoPath: ref.repoPath,

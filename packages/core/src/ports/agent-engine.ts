@@ -240,6 +240,7 @@ export type AgentSessionRuntimeSnapshot =
   | {
       availability: "runtime";
       classification: AgentSessionActivity;
+      foregroundTurnActive?: boolean;
       ref: SessionRef;
       parentExternalSessionId?: ExternalSessionId;
       title: string;

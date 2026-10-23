@@ -1,6 +1,8 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { ErrorState } from "./claude-agent-sdk-errors";
 import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
+import type { ClaudeNativeActivityState } from "./claude-agent-sdk-activity";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
 import type {
@@ -12,6 +14,7 @@ import type {
 } from "./claude-agent-sdk-types";
 
 export type ClaudeEventSession = ClaudeBackgroundToolState &
+  ClaudeNativeActivityState &
   ErrorState & {
     appliedPermissionMode?: string;
     disabledTools?: ReadonlySet<string>;
@@ -27,6 +30,7 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     pendingApprovals?: Map<string, PendingApproval>;
     pendingQuestions?: Map<string, PendingQuestion>;
     pendingUserTurnCount?: number;
+    sdkInitiatedTurnActive?: boolean;
     resultAwaitsSdkIdle?: boolean;
     retractedSubagentTaskIds?: Set<string>;
     retractedToolUseIds?: Set<string>;
@@ -57,14 +61,26 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     subagentAgentIdsByToolUseId?: Map<string, string>;
     subagentTaskIdsByToolUseId: Map<string, string>;
     subagentEventSessionsByToolUseId?: Map<string, ClaudeEventSession>;
+    subagentEventSessionsByTaskId?: Map<string, ClaudeEventSession>;
     unreadSteeredUserMessages?: Map<string, ClaudeAcceptedUserMessage>;
   };
 
-export type ClaudeBackgroundWorkSession = {
+export type ClaudeBackgroundWorkSession = ClaudeNativeActivityState & {
   backgroundToolActiveTaskIds?: ReadonlySet<string>;
   activeBackgroundSubagentTaskIds?: ReadonlySet<string>;
   subagentEventSessionsByToolUseId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
+  subagentEventSessionsByTaskId?: ReadonlyMap<string, ClaudeBackgroundWorkSession>;
 };
+
+export const claudeChildEventSessions = <T>(session: {
+  subagentEventSessionsByToolUseId?: ReadonlyMap<string, T>;
+  subagentEventSessionsByTaskId?: ReadonlyMap<string, T>;
+}): T[] => [
+  ...new Set([
+    ...(session.subagentEventSessionsByToolUseId?.values() ?? []),
+    ...(session.subagentEventSessionsByTaskId?.values() ?? []),
+  ]),
+];
 
 export const userTurnIndex = (
   session: Pick<ClaudeEventSession, "acceptedUserMessages" | "pendingUserTurnCount">,
@@ -80,7 +96,7 @@ export const hasActiveClaudeBackgroundTools = (session: ClaudeBackgroundWorkSess
   if ((session.backgroundToolActiveTaskIds?.size ?? 0) > 0) {
     return true;
   }
-  for (const child of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+  for (const child of claudeChildEventSessions(session)) {
     if (hasActiveClaudeBackgroundTools(child)) {
       return true;
     }
@@ -95,7 +111,7 @@ export const hasActiveClaudeBackgroundWork = (session: ClaudeBackgroundWorkSessi
   ) {
     return true;
   }
-  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+  for (const childSession of claudeChildEventSessions(session)) {
     if (hasActiveClaudeBackgroundWork(childSession)) {
       return true;
     }
@@ -122,6 +138,15 @@ export const claudeSubagentEventSession = (
     );
     return existing;
   }
+  const childSession = createClaudeSubagentEventSession(session, agentId);
+  session.subagentEventSessionsByToolUseId.set(parentToolUseId, childSession);
+  return childSession;
+};
+
+const createClaudeSubagentEventSession = (
+  session: ClaudeEventSession,
+  agentId: string,
+): ClaudeEventSession => {
   const childSession: ClaudeEventSession = {
     activity: session.activity,
     externalSessionId: claudeSubagentExternalSessionId(session.externalSessionId, agentId),
@@ -138,7 +163,6 @@ export const claudeSubagentEventSession = (
   if (session.backgroundToolCallIdsSinceSnapshot) {
     childSession.backgroundToolCallIdsSinceSnapshot = new Set();
   }
-  session.subagentEventSessionsByToolUseId.set(parentToolUseId, childSession);
   if (session.disabledTools) childSession.disabledTools = session.disabledTools;
   return childSession;
 };
@@ -162,7 +186,7 @@ export const findClaudeSubagentOwnerByAgentId = (
       return { session, toolUseId };
     }
   }
-  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+  for (const childSession of claudeChildEventSessions(session)) {
     const owner = findClaudeSubagentOwnerByAgentId(childSession, agentId);
     if (owner) {
       return owner;
@@ -175,8 +199,15 @@ export const findClaudeSubagentSessionByAgentId = (
   session: ClaudeEventSession,
   agentId: string,
 ): ClaudeEventSession | null => {
+  const direct = session.subagentEventSessionsByTaskId?.get(agentId);
+  if (direct) return direct;
   const owner = findClaudeSubagentOwnerByAgentId(session, agentId);
-  return owner ? claudeSubagentEventSession(owner.session, owner.toolUseId) : null;
+  if (owner) return claudeSubagentEventSession(owner.session, owner.toolUseId);
+  for (const child of claudeChildEventSessions(session)) {
+    const found = findClaudeSubagentSessionByAgentId(child, agentId);
+    if (found) return found;
+  }
+  return null;
 };
 
 export const findClaudeSubagentTaskSession = (
@@ -184,6 +215,7 @@ export const findClaudeSubagentTaskSession = (
   toolUseId: string | undefined,
   taskId: string,
 ): ClaudeEventSession | null => {
+  if (session.subagentEventSessionsByTaskId?.has(taskId)) return session;
   if (toolUseId) {
     const toolOwner = findClaudeToolOwnerSession(session, toolUseId);
     if (toolOwner) {
@@ -195,7 +227,7 @@ export const findClaudeSubagentTaskSession = (
       return session;
     }
   }
-  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+  for (const childSession of claudeChildEventSessions(session)) {
     const owner = findClaudeSubagentTaskSession(childSession, toolUseId, taskId);
     if (owner) {
       return owner;
@@ -262,11 +294,62 @@ const findClaudeToolOwnerSession = (
   if (session.toolNamesByCallId.has(toolUseId)) {
     return session;
   }
-  for (const childSession of session.subagentEventSessionsByToolUseId?.values() ?? []) {
+  for (const childSession of claudeChildEventSessions(session)) {
     const owner = findClaudeToolOwnerSession(childSession, toolUseId);
     if (owner) {
       return owner;
     }
   }
   return null;
+};
+
+/** Full membership can identify a child even when its launch edge was missed. */
+export const reconcileClaudeSubagentTaskRoutes = (
+  session: ClaudeEventSession,
+  tasks: Extract<SDKMessage, { subtype: "background_tasks_changed" }>["tasks"],
+): void => {
+  let unresolved = tasks.filter(
+    (task) =>
+      task.run_id &&
+      !task.ambient &&
+      (task.task_type === "local_agent" || task.task_type === "remote_agent"),
+  );
+  while (unresolved.length > 0) {
+    const pending: typeof unresolved = [];
+    for (const task of unresolved) {
+      const parent = task.parent_task_id
+        ? findClaudeSubagentSessionByAgentId(session, task.parent_task_id)
+        : session;
+      if (!parent || (task.parent_task_id && !session.nativeTaskRuns?.has(task.parent_task_id))) {
+        pending.push(task);
+        continue;
+      }
+      parent.subagentEventSessionsByTaskId ??= new Map();
+      if (!parent.subagentEventSessionsByTaskId.has(task.task_id)) {
+        const known = findClaudeSubagentSessionByAgentId(session, task.task_id);
+        parent.subagentEventSessionsByTaskId.set(
+          task.task_id,
+          known ?? createClaudeSubagentEventSession(parent, task.task_id),
+        );
+      }
+    }
+    if (pending.length === unresolved.length) break;
+    unresolved = pending;
+  }
+};
+
+export const retireClaudeChildSession = (
+  session: Pick<ClaudeEventSession, "subagentEventSessionsByToolUseId">,
+  toolUseId: string,
+): void => {
+  const child = session.subagentEventSessionsByToolUseId?.get(toolUseId);
+  if (
+    child &&
+    (hasActiveClaudeBackgroundWork(child) ||
+      child.subagentEventSessionsByTaskId?.size ||
+      child.pendingApprovals?.size ||
+      child.pendingQuestions?.size)
+  )
+    return;
+  session.subagentEventSessionsByToolUseId?.delete(toolUseId);
 };

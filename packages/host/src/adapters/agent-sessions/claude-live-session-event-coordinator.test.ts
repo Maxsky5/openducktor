@@ -25,6 +25,7 @@ describe("Claude live-session event coordinator", () => {
   test("runs control mutations in call order when one arrives right after a release", async () => {
     const coordinator = createClaudeLiveSessionEventCoordinator({
       runtimeId: "runtime-1",
+      acceptsEvent: () => true,
       processEvent: () => Effect.void,
     });
     const applied: string[] = [];
@@ -59,6 +60,7 @@ describe("Claude live-session event coordinator", () => {
     });
     const coordinator = createClaudeLiveSessionEventCoordinator({
       runtimeId: "runtime-1",
+      acceptsEvent: () => true,
       processEvent: (_session, event) =>
         Effect.suspend(() => {
           processedTimestamps.push(event.timestamp);
@@ -81,6 +83,7 @@ describe("Claude live-session event coordinator", () => {
     const processedTimestamps: string[] = [];
     const coordinator = createClaudeLiveSessionEventCoordinator({
       runtimeId: "runtime-1",
+      acceptsEvent: () => true,
       processEvent: (_session, event) =>
         Effect.gen(function* () {
           processedTimestamps.push(event.timestamp);
@@ -112,6 +115,7 @@ describe("Claude live-session event coordinator", () => {
     const processedTimestamps: string[] = [];
     const coordinator = createClaudeLiveSessionEventCoordinator({
       runtimeId: "runtime-1",
+      acceptsEvent: () => true,
       processEvent: (_session, event) =>
         Effect.gen(function* () {
           processedTimestamps.push(event.timestamp);
@@ -147,6 +151,7 @@ describe("Claude live-session event coordinator", () => {
     });
     const coordinator = createClaudeLiveSessionEventCoordinator({
       runtimeId: "runtime-1",
+      acceptsEvent: () => true,
       processEvent: () => Effect.void,
     });
     await Effect.runPromise(coordinator.startForwarding());
@@ -165,6 +170,7 @@ describe("Claude live-session event coordinator", () => {
   test("rejects a control that reaches it after the runtime is released", async () => {
     const coordinator = createClaudeLiveSessionEventCoordinator({
       runtimeId: "runtime-1",
+      acceptsEvent: () => true,
       processEvent: () => Effect.void,
     });
     await Effect.runPromise(coordinator.startForwarding());

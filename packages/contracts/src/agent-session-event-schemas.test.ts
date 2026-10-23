@@ -17,6 +17,28 @@ describe("agent session transcript event contract", () => {
   const timestamp = "2026-07-16T10:00:00.000Z";
   const base = { externalSessionId: ref.externalSessionId, timestamp, sessionRef: ref };
 
+  test("transports foreground completion while aggregate activity remains busy", () => {
+    const completion = {
+      ...base,
+      type: "session_turn_finished",
+      completionId: "result-1",
+      messageIds: ["accepted-message-1"],
+      turnOutcome: "completed",
+    } as const;
+    expect(agentSessionTranscriptEventSchema.parse(completion)).toEqual(completion);
+    expect(
+      agentRuntimeEventSchema.parse({
+        ...base,
+        type: "session_status",
+        status: { type: "busy", message: null },
+        foregroundTurnActive: false,
+      }),
+    ).toMatchObject({ foregroundTurnActive: false, status: { type: "busy" } });
+    expect(agentRuntimeEventSchema.safeParse({ ...completion, completionId: "" }).success).toBe(
+      false,
+    );
+  });
+
   test("validates every existing normalized event variant", () => {
     const events = [
       { ...base, type: "session_started", message: "Started" },

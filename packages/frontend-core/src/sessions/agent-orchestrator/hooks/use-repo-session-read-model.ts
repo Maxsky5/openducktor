@@ -39,6 +39,7 @@ import {
 } from "../../../types/agent-session-read-model";
 import type { AgentSessionTransientFault } from "../../../types/agent-session-transient-fault";
 import type { AgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
+import { confirmsSessionActivity } from "../session-read-model/agent-session-live-activity";
 import {
   markSessionHistoriesStale,
   markSessionHistoryStale,
@@ -242,21 +243,27 @@ export const useRepoSessionReadModel = ({
   const clearSessionFaults = useCallback(() => {
     setSessionFaults((current) => (current.size === 0 ? current : new Map()));
   }, []);
-  const recordSessionFault = useCallback((ref: AgentSessionLiveRef, message: string) => {
+  const recordSessionFault = useCallback(
+    (ref: AgentSessionLiveRef, message: string, statusUnavailable = false) => {
+      const key = agentSessionRefKey(ref);
+      setSessionFaults((current) => {
+        if (
+          current.get(key)?.message === message &&
+          Boolean(current.get(key)?.statusUnavailable) === statusUnavailable
+        ) {
+          return current;
+        }
+        const next = new Map(current);
+        next.set(key, statusUnavailable ? { message, statusUnavailable } : { message });
+        return next;
+      });
+    },
+    [],
+  );
+  const clearSessionFault = useCallback((ref: AgentSessionLiveRef, statusConfirmed = true) => {
     const key = agentSessionRefKey(ref);
     setSessionFaults((current) => {
-      if (current.get(key)?.message === message) {
-        return current;
-      }
-      const next = new Map(current);
-      next.set(key, { message });
-      return next;
-    });
-  }, []);
-  const clearSessionFault = useCallback((ref: AgentSessionLiveRef) => {
-    const key = agentSessionRefKey(ref);
-    setSessionFaults((current) => {
-      if (!current.has(key)) {
+      if (!current.has(key) || (!statusConfirmed && current.get(key)?.statusUnavailable)) {
         return current;
       }
       const next = new Map(current);
@@ -838,8 +845,20 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "fault") {
         const message = faultMessage(envelope);
         if (envelope.ref) {
-          markScopedHistoryStale(envelope.ref);
-          recordSessionFault(envelope.ref, message);
+          const ref = envelope.ref;
+          markScopedHistoryStale(ref);
+          recordSessionFault(ref, message, envelope.statusUnavailable === true);
+          if (envelope.statusUnavailable) {
+            commitProjected((current) => {
+              const session = getAgentSession(current, ref);
+              return session
+                ? replaceAgentSession(current, {
+                    ...session,
+                    statusUnavailableReason: session.statusUnavailableReason ?? message,
+                  })
+                : current;
+            });
+          }
         } else {
           failObservation(message);
         }
@@ -884,7 +903,10 @@ export const useRepoSessionReadModel = ({
       if (envelope.type === "session_upsert" || envelope.type === "session_removed") {
         applyLiveEnvelopeToStore(envelope);
         const upsert = envelope.type === "session_upsert";
-        clearSessionFault(upsert ? envelope.session.ref : envelope.ref);
+        clearSessionFault(
+          upsert ? envelope.session.ref : envelope.ref,
+          !upsert || !envelope.session.statusUnavailableReason,
+        );
         if (upsert && isSettlingLiveSessionSnapshot(envelope.session)) {
           // Apply the session's queued transcript events first, so a settled snapshot
           // cannot render an unfinished last turn.
@@ -899,7 +921,10 @@ export const useRepoSessionReadModel = ({
         return;
       }
       if (envelope.type === "transcript_event") {
-        clearSessionFault(envelope.event.sessionRef);
+        clearSessionFault(
+          envelope.event.sessionRef,
+          envelope.provenance !== "baseline" && confirmsSessionActivity(envelope.event),
+        );
         commitTranscriptActivity(envelope);
         handleTranscriptEvent(envelope.event, envelope.provenance);
         // An accepted message leaves its queue after it joins the transcript, in the same step.

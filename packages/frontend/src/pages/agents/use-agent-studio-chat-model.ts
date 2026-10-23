@@ -341,13 +341,20 @@ export function useAgentStudioChatModel({
         : null,
       isSessionModelCatalogLoading: selectedSessionRuntimeData.isLoadingModelCatalog,
       isSessionWorking: sessionActions.isSessionWorking,
+      foregroundTurnActive: selectedSessionState.loadedSession?.foregroundTurnActive,
       isWaitingInput: sessionActions.isWaitingInput,
       waitingInputPlaceholder: selectedSession.pendingInput.waitingInputPlaceholder,
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
       isResumingSession: sessionActions.isResumingSession,
-      isReadOnly: surfaceState.composerReadOnly || selectedSessionState.preparation.error !== null,
-      readOnlyReason: surfaceState.composerReadOnlyReason ?? selectedSessionState.preparation.error,
+      isReadOnly:
+        surfaceState.composerReadOnly ||
+        selectedSessionState.preparation.error !== null ||
+        Boolean(selectedSessionState.loadedSession?.statusUnavailableReason),
+      readOnlyReason:
+        selectedSessionState.loadedSession?.statusUnavailableReason ??
+        surfaceState.composerReadOnlyReason ??
+        selectedSessionState.preparation.error,
       draftScope: composerDraftScope,
       pendingSendItems,
       onSend: pendingSendContext.onSend,
@@ -393,6 +400,8 @@ export function useAgentStudioChatModel({
     chatContextUsage,
     composerDraftScope,
     selectedSessionState.preparation.error,
+    selectedSessionState.loadedSession?.foregroundTurnActive,
+    selectedSessionState.loadedSession?.statusUnavailableReason,
     modelSelection.agentOptions,
     modelSelection.isSelectionCatalogLoading,
     modelSelection.isSlashCommandsLoading,

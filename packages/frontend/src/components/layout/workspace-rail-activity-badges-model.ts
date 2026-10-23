@@ -38,5 +38,11 @@ export const workspaceActivityBadges = (
   if (activity.active) {
     badges.push({ key: "active", label: WORKSPACE_ACTIVITY_LABELS.active });
   }
+  if (activity.statusUnavailableReason) {
+    badges.push({
+      key: "unavailable",
+      label: `${WORKSPACE_ACTIVITY_LABELS.unavailable}: ${activity.statusUnavailableReason}`,
+    });
+  }
   return badges;
 };

@@ -69,3 +69,35 @@ test("a replacement snapshot removes only absent sessions in its repository", ()
   expect(episodes.snapshotWithEpisode(snapshot).executionEpisodeId).not.toBe(first);
   expect(episodes.snapshotWithEpisode(other).executionEpisodeId).toBe(otherId);
 });
+
+test("keeps the Claude execution episode across foreground failure and unavailable background status", () => {
+  const episodes = createAgentSessionExecutionEpisodes();
+  const running: AgentSessionLiveSnapshot = {
+    ...snapshot,
+    ref: { ...snapshot.ref, runtimeKind: "claude" },
+    activity: "running",
+    foregroundTurnActive: true,
+  };
+  const first = episodes.snapshotWithEpisode(running, true).executionEpisodeId;
+  episodes.accept({
+    type: "transcript_event",
+    event: {
+      type: "turn_error",
+      sessionRef: running.ref,
+      externalSessionId: "session",
+      timestamp: "2026-09-01T00:01:00Z",
+      message: "Foreground failed",
+    },
+  });
+  expect(
+    episodes.snapshotWithEpisode({ ...running, foregroundTurnActive: false }, true)
+      .executionEpisodeId,
+  ).toBe(first);
+  episodes.snapshotWithEpisode(
+    { ...running, activity: "idle", statusUnavailableReason: "Reconnect Claude" },
+    true,
+  );
+  expect(episodes.snapshotWithEpisode(running, true).executionEpisodeId).toBe(first);
+  episodes.snapshotWithEpisode({ ...running, activity: "idle", foregroundTurnActive: false }, true);
+  expect(episodes.snapshotWithEpisode(running, true).executionEpisodeId).not.toBe(first);
+});

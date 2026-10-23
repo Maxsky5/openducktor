@@ -126,6 +126,16 @@ Each enabled `RuntimeDescriptor.capabilities` field needs a working adapter path
 
 Expose a transient `forkPoint: { messageId }` in live events and history only after the final assistant reply's turn completes. Fork through that exact reply into a distinct idle child. Preserve the source and copy no pending inputs or queued messages. Honor separate source and destination directories. Fail if the runtime cannot meet this contract.
 
+### Claude background activity
+
+Claude requires Claude Code `2.1.306` or later and Agent SDK `0.3.306`. Validate the native version from query initialization. Live queries enable `CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS=1` so native state changes reach the adapter.
+
+Keep foreground activity separate from aggregate session activity. Authoritative background-task snapshots replace live membership. Registered nonambient task runs and their verified descendants keep the session Running. An ended or missing run can still have a result to deliver. Keep that delivery pending until a later native Idle confirms that delivery has finished, or native process exit confirms closure. Ambient work, empty baselines, and history create no delivery obligation. Future native schedules do not count as activity until a turn starts.
+
+Stop targets the exact query and observes its native child process exit through the SDK's supported `spawnClaudeCodeProcess` hook. SDK `close()` alone does not confirm termination. If exit cannot be confirmed, keep cleanup ownership, invalidate input handles, and report status unavailable with the cause. Late events from a closed or replaced query cannot change its successor.
+
+The later-Idle delivery rule covers OpenDucktor's current controls. The unused SDK `stopTask` and Remote Control APIs can stop a background shell without a later Idle event. Adding those APIs requires a separate cancellation contract.
+
 ### Session speed
 
 Set `speed.support` to `model` when the adapter can apply a speed level. Otherwise set it to `none`.
@@ -401,7 +411,8 @@ The host owns the message queue. A runtime is eligible when its adapter can refu
 - Throw `AgentSessionMessageRefusedError` when the runtime refuses the message.
 - Throw `AgentSessionMessageAcceptanceUnknownError` when the request left the host and no conclusive answer came back. Give it the message ID that the live `user_message` of that message will carry.
 - Copy the `submissionId` of the send input to the accepted message and to its live `user_message` events.
-- Set `turnOutcome` on the `session_idle` event that ends a turn. Leave it empty on an idle status that ends no turn, because only a `completed` outcome sends the next queued message.
+- Report Claude foreground completion through `session_turn_finished`, with the native completion ID and the host message IDs that the turn consumed. Keep `session_idle` for confirmed aggregate Idle. Other runtimes set `turnOutcome` on the `session_idle` event that ends a turn and leave it empty on an idle status that ends no turn.
+- Supply `foregroundTurnActive` on confirmed Claude status and snapshots. Background-only Running permits queued prompts and settings changes between foreground turns. Keep admission, preparation, blocking input, status availability, send ordering, and queue pauses in the existing control path.
 - Map the adapter errors at the runtime boundary with `toAgentSessionSendError`.
 - Never send a slash command as a steer.
 - The host chooses `new_turn` for an idle session or unavailable steering before dispatch. An issued steer cannot become a new-turn retry.

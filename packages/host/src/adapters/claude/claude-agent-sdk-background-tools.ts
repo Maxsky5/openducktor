@@ -32,6 +32,7 @@ type TaskOutcome = "completed" | "failed" | "stopped" | "unknown";
 const MAX_UNMATCHED_RESULTS = 128;
 
 type BackgroundToolTask = {
+  runId?: string;
   ambient: boolean;
   backgrounded: boolean;
   description?: string;
@@ -82,6 +83,9 @@ export const projectClaudeBackgroundTaskEdge = (
   processActiveTaskIds?: ReadonlySet<string>,
 ): ToolPart | null => {
   const taskId = message.task_id;
+  const runId = "run_id" in message ? message.run_id : undefined;
+  const previousRunId = tasks(state).get(taskId)?.runId;
+  if (runId && previousRunId && runId < previousRunId) return null;
   const toolUseId = "tool_use_id" in message ? message.tool_use_id : undefined;
   const knownTask = tasks(state).get(taskId);
   const knownToolUseId = toolUseId ?? knownTask?.toolUseId;
@@ -96,6 +100,7 @@ export const projectClaudeBackgroundTaskEdge = (
     state.backgroundToolAgentTaskIds.add(taskId);
     return null;
   }
+  if (runId) taskFor(state, taskId, runId);
   if (message.subtype === "task_started" && (message.ambient || message.skip_transcript)) {
     const task = taskFor(state, taskId);
     const wasActive = isTaskActive(state, taskId);
@@ -182,6 +187,7 @@ export const projectClaudeBackgroundTaskSnapshot = (
       state.backgroundToolAgentTaskIds ??= new Set();
       state.backgroundToolAgentTaskIds.add(task.task_id);
     } else {
+      if (task.run_id) taskFor(state, task.task_id, task.run_id);
       const knownTask = tasks(state).get(task.task_id);
       if (knownTask || task.ambient) taskFor(state, task.task_id).ambient = task.ambient === true;
     }
@@ -266,10 +272,19 @@ const taskIdsByCall = (state: ClaudeBackgroundToolState): Map<string, string> =>
 const isAgentTask = (taskType: string | undefined, toolName: string | undefined): boolean =>
   taskType === "local_agent" || taskType === "remote_agent" || toolName?.toLowerCase() === "agent";
 
-const taskFor = (state: ClaudeBackgroundToolState, taskId: string): BackgroundToolTask => {
+const taskFor = (
+  state: ClaudeBackgroundToolState,
+  taskId: string,
+  runId?: string,
+): BackgroundToolTask => {
   const existing = tasks(state).get(taskId);
-  if (existing) return existing;
+  if (existing && (!runId || !existing.runId || runId <= existing.runId)) {
+    if (runId && !existing.runId) existing.runId = runId;
+    return existing;
+  }
   const task: BackgroundToolTask = { ambient: false, backgrounded: false };
+  if (runId) task.runId = runId;
+  if (existing?.toolUseId) task.toolUseId = existing.toolUseId;
   tasks(state).set(taskId, task);
   return task;
 };

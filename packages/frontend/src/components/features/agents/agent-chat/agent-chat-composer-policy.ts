@@ -9,7 +9,11 @@ import {
   draftHasSlashCommandSegment,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { hasPendingSendItems, readPendingSendBlockedReason } from "./agent-chat-pending-send";
-import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
+import {
+  composerForegroundTurnActive,
+  draftSteerBlockedReason,
+  steersRunningTurn,
+} from "./agent-chat-steering";
 
 export function useComposerPolicy({
   model,
@@ -30,7 +34,7 @@ export function useComposerPolicy({
       model.selectedModelDescriptor?.attachmentSupport,
     );
   }, [draft.attachments, model.selectedModelDescriptor?.attachmentSupport]);
-  const steersTurn = steersRunningTurn(primaryMode, model.isSessionWorking);
+  const steersTurn = steersRunningTurn(primaryMode, composerForegroundTurnActive(model));
   const attachmentErrors = useMemo(
     () =>
       steersTurn
@@ -90,6 +94,7 @@ type ComposerPolicyModel = Pick<
   | "selectedModelDescriptor"
   | "runningTurnModel"
   | "isSessionWorking"
+  | "foregroundTurnActive"
   | "isSending"
   | "isStarting"
   | "isModelSelectionPending"
@@ -165,15 +170,16 @@ const composerPlaceholderFor = (
 };
 
 const queuePlaceholderParts = (
-  { isSessionWorking, messageQueue, steerBlockedReason }: ComposerPolicyModel,
+  { isSessionWorking, foregroundTurnActive, messageQueue, steerBlockedReason }: ComposerPolicyModel,
   primaryMode: AgentMessageSubmitMode,
 ): string[] => {
   const queueKey = primaryMode === "default" ? "Enter" : steerShortcutLabel();
   const steerKey = primaryMode === "steer" ? "Enter" : steerShortcutLabel();
-  if (isSessionWorking && steerBlockedReason) return [`${queueKey} to queue`];
+  const turnActive = composerForegroundTurnActive({ foregroundTurnActive, isSessionWorking });
+  if (turnActive && steerBlockedReason) return [`${queueKey} to queue`];
   const hasQueuedMessages = (messageQueue?.queue?.entries.length ?? 0) > 0;
-  if (!isSessionWorking && !hasQueuedMessages) return [];
-  const steerAction = isSessionWorking ? "steer" : "send now";
+  if (!turnActive && !hasQueuedMessages) return [];
+  const steerAction = turnActive ? "steer" : "send now";
   if (primaryMode === "steer") {
     return [`${steerKey} to ${steerAction}`, `${queueKey} to queue`];
   }
@@ -225,7 +231,10 @@ const composerInputDisabledFor = ({
 const composerIsSubmitting = ({
   isSending,
   isSessionWorking,
+  foregroundTurnActive,
   isStarting,
   isModelSelectionPending,
 }: ComposerPolicyModel): boolean =>
-  (isSending && !isSessionWorking) || isStarting || isModelSelectionPending;
+  (isSending && !composerForegroundTurnActive({ foregroundTurnActive, isSessionWorking })) ||
+  isStarting ||
+  isModelSelectionPending;

@@ -33,6 +33,16 @@ export const isAgentSessionActivityWorking = (
 ): activityState is WorkingAgentSessionActivityState =>
   activityState === "starting" || activityState === "running";
 
+export const isAgentSessionForegroundActive = (
+  session: Pick<
+    AgentSessionState,
+    "status" | "foregroundTurnActive" | "pendingUserMessageStartedAt"
+  >,
+): boolean =>
+  session.status === "starting" ||
+  session.pendingUserMessageStartedAt !== undefined ||
+  (session.foregroundTurnActive ?? session.status === "running");
+
 export const isAgentSessionActivityActive = (
   activityState: OptionalAgentSessionActivityState,
 ): activityState is ActiveAgentSessionActivityState =>

@@ -384,6 +384,46 @@ const transcriptEventTypes = (changes: readonly AgentSessionLiveAdapterChange[])
   changes.flatMap((change) => (change.type === "transcript_event" ? [change.event.type] : []));
 
 describe("Claude host live-session adapter", () => {
+  test("rejects old query events at acceptance and after a queued projection waits", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    const replacement = { ...session };
+    const barrier = harness.pauseNextMutation();
+    const message = (messageId: string) => ({
+      type: "assistant_message" as const,
+      externalSessionId: session.externalSessionId,
+      timestamp: "2026-10-23T00:00:00.000Z",
+      messageId,
+      message: messageId,
+    });
+    harness.eventHub.emit(session, message("old-before-replacement"));
+    await barrier.entered.promise;
+    try {
+      sessionsById.set(session.externalSessionId, replacement);
+      harness.eventHub.emit(session, message("old-after-replacement"));
+      harness.eventHub.emit(replacement, message("replacement-message"));
+      barrier.release.resolve();
+      await Effect.runPromise(
+        harness.adapter.resumeSession({
+          ...startInput,
+          externalSessionId: session.externalSessionId,
+          resumeMode: "reattach",
+        }),
+      );
+      expect(
+        harness.changes.flatMap((change) =>
+          change.type === "transcript_event" && change.event.type === "assistant_message"
+            ? [change.event.messageId]
+            : [],
+        ),
+      ).toEqual(["replacement-message"]);
+    } finally {
+      barrier.release.resolve();
+      sessionsById.set(session.externalSessionId, session);
+    }
+  });
+
   test("delegates interrupted-turn resume to the Claude service", async () => {
     const harness = await createHarness(workingDirectoryDependencies);
     const calls: Array<{ input: unknown; runtimeId: string }> = [];
@@ -1701,7 +1741,10 @@ describe("Claude host live-session adapter", () => {
         externalSessionId: "session-1",
       },
     ]);
-    expect(transcriptEventTypes(harness.changes)).toEqual(["transcript_retracted"]);
+    expect(transcriptEventTypes(harness.changes)).toEqual([
+      "transcript_retracted",
+      "session_finished",
+    ]);
   });
 
   test("retains runtime state when cleanup fails so release can be retried", async () => {

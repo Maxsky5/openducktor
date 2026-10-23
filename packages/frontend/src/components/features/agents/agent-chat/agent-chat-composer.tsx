@@ -21,7 +21,11 @@ import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
-import { draftSteerBlockedReason, steersRunningTurn } from "./agent-chat-steering";
+import {
+  composerForegroundTurnActive,
+  draftSteerBlockedReason,
+  steersRunningTurn,
+} from "./agent-chat-steering";
 import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
   createComposerAutofocusState,
@@ -172,7 +176,12 @@ export function AgentChatComposer({
     settingsReadyRef.current = settingsReady;
   }, [draft, model, defaultSendDisabled, sendInputBlocked, settingsReady]);
 
-  const modelPickerDisabled = isSendOrModelPending || !isInteractionEnabled || isReadOnly;
+  const modelPickerDisabled =
+    isSendOrModelPending ||
+    !isInteractionEnabled ||
+    isReadOnly ||
+    model.foregroundTurnActive === true ||
+    model.isWaitingInput;
   const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
@@ -185,7 +194,7 @@ export function AgentChatComposer({
   const handleSubmit = useCallback(
     async (mode: AgentMessageSubmitMode): Promise<void> => {
       if (!settingsReadyRef.current) return;
-      const steersTurn = steersRunningTurn(mode, modelRef.current.isSessionWorking);
+      const steersTurn = steersRunningTurn(mode, composerForegroundTurnActive(modelRef.current));
       if (steersTurn ? sendInputBlockedRef.current : defaultSendDisabledRef.current) {
         return;
       }

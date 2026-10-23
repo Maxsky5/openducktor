@@ -7,8 +7,21 @@ import {
 } from "../../effect/host-errors";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
-import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
+import { clearClaudeNativeActivity } from "./claude-agent-sdk-activity";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import {
+  claudeChildEventSessions,
+  hasActiveClaudeBackgroundTools,
+} from "./claude-agent-sdk-event-session";
+import {
+  beginClaudeNativeProcessClose,
+  isClaudeNativeProcessClosed,
+  waitForClaudeNativeProcessExit,
+} from "./claude-agent-sdk-native-process";
+import {
+  beginClaudeSessionClose,
+  confirmClaudeSessionClosed,
+  isClaudeSessionClosed,
   ClaudeSessionError,
   runAllSteps,
   toSessionError,
@@ -39,6 +52,7 @@ export const createClaudeAgentSdkSessionStore = ({
   const closeListeners = new Set<(session: ClaudeSession) => void>();
   const states = new WeakMap<ClaudeSession, SessionState>();
   const activeConsumers = new Set<ClaudeSession>();
+  const cleanupSessions = new Set<ClaudeSession>();
   const stateFor = (session: ClaudeSession): SessionState => {
     let state = states.get(session);
     if (!state) {
@@ -47,13 +61,60 @@ export const createClaudeAgentSdkSessionStore = ({
     }
     return state;
   };
+  const retire = (session: ClaudeSession): void => {
+    const state = stateFor(session);
+    if (state.closed) return;
+    state.closed = true;
+    confirmClaudeSessionClosed(session);
+    session.activity = "stopped";
+    session.activeSdkUserTurnCount = 0;
+    session.pendingUserTurnCount = 0;
+    delete session.statusUnavailableReason;
+    clearClaudeNativeActivity(session);
+    if (sessions.get(session.externalSessionId) === session) {
+      sessions.delete(session.externalSessionId);
+    }
+    cleanupSessions.delete(session);
+    const failures: unknown[] = [];
+    for (const listener of closeListeners) {
+      try {
+        listener(session);
+      } catch (cause) {
+        failures.push(cause);
+      }
+    }
+    if (failures.length > 0) throw new ClaudeSessionError("claudeRuntime.retireSession", failures);
+  };
+  const unavailable = (session: ClaudeSession, failure: ClaudeSessionError): void => {
+    if (stateFor(session).closed) return;
+    const message = failure.message;
+    session.statusUnavailableReason = message;
+    emit?.(session, {
+      type: "session_context_error",
+      externalSessionId: session.externalSessionId,
+      timestamp: now(),
+      message,
+      statusUnavailable: true,
+    });
+  };
   const close = (session: ClaudeSession): void => {
     const state = stateFor(session);
-    if (state.closed) {
-      if (state.closeError) throw state.closeError;
-      return;
+    if (!state.closed && state.closeRequested && isClaudeNativeProcessClosed(session)) {
+      delete state.closeError;
+      retire(session);
     }
-    state.closed = true;
+    if (state.closed || state.closeRequested) {
+      if (state.closed || !state.closeError) {
+        if (state.closeError) throw state.closeError;
+        return;
+      }
+      // Explicit cleanup can retry a close that did not terminate the native process.
+      delete state.closeError;
+    }
+    state.closeRequested = true;
+    cleanupSessions.add(session);
+    beginClaudeSessionClose(session);
+    beginClaudeNativeProcessClose(session);
     const failures: unknown[] = [];
     const attempt = (step: () => void): void => {
       try {
@@ -62,38 +123,60 @@ export const createClaudeAgentSdkSessionStore = ({
         failures.push(cause);
       }
     };
-    session.activity = "stopped";
-    session.activeSdkUserTurnCount = 0;
-    session.pendingUserTurnCount = 0;
     attempt(() => clearClaudeStreamToolInputTree(session));
-    for (const pending of session.pendingApprovals.values()) {
-      attempt(() =>
-        pending.resolve({
-          behavior: "deny",
-          message: "Claude session was stopped.",
-          interrupt: true,
-        }),
-      );
-    }
+    const invalidateInputTree = (target: ClaudeEventSession): void => {
+      for (const pending of target.pendingApprovals?.values() ?? []) {
+        attempt(() =>
+          pending.resolve({
+            behavior: "deny",
+            message: "Claude session was stopped.",
+            interrupt: true,
+          }),
+        );
+      }
+      for (const pending of target.pendingQuestions?.values() ?? [])
+        attempt(() => pending.resolve([]));
+      target.pendingApprovals?.clear();
+      target.pendingQuestions?.clear();
+      for (const child of claudeChildEventSessions(target)) invalidateInputTree(child);
+    };
+    invalidateInputTree(session);
     attempt(() => rejectPendingAdmissions(session, new Error("Claude session was stopped.")));
     session.unreadSteeredUserMessages.clear();
     attempt(() => session.queue.close());
     attempt(() => session.abortController.abort());
     attempt(() => session.query.close());
-    if (sessions.get(session.externalSessionId) === session) {
-      sessions.delete(session.externalSessionId);
-    }
     session.pendingApprovals.clear();
     session.pendingQuestions.clear();
-    for (const listener of closeListeners) {
-      attempt(() => listener(session));
-    }
+    if (isClaudeNativeProcessClosed(session)) attempt(() => retire(session));
     if (failures.length > 0) {
+      if (!state.closed)
+        failures.push(
+          new Error(
+            "Claude session termination is unconfirmed. Inspect the Claude process, then retry Stop or restart the runtime.",
+          ),
+        );
       const failure = new ClaudeSessionError("claudeRuntime.closeSession", failures);
       state.closeError = failure;
+      attempt(() => unavailable(session, failure));
       throw failure;
     }
   };
+  const confirmClosed: ClaudeSessionStore["confirmClosed"] = (session) =>
+    Effect.tryPromise({
+      try: async () => {
+        await waitForClaudeNativeProcessExit(session);
+        retire(session);
+      },
+      catch: (cause) => new ClaudeSessionError("claudeRuntime.confirmTermination", [cause]),
+    }).pipe(
+      Effect.tapError((failure) =>
+        Effect.try({
+          try: () => unavailable(session, failure),
+          catch: (cause) => new ClaudeSessionError("claudeRuntime.publishUnavailable", [cause]),
+        }),
+      ),
+    );
   const finish: ClaudeSessionStore["finish"] = (
     session,
     message,
@@ -102,7 +185,13 @@ export const createClaudeAgentSdkSessionStore = ({
   ): void => {
     const state = stateFor(session);
     const current = sessions.get(session.externalSessionId);
-    if ((current && current !== session) || state.canFinish?.() === false) return;
+    if (
+      !state.closed ||
+      state.replaced ||
+      (current && current !== session) ||
+      state.canFinish?.() === false
+    )
+      return;
     if (state.finishAttempted) return;
     // Publish can throw after delivery, so mark the attempt first.
     state.finishAttempted = true;
@@ -110,31 +199,39 @@ export const createClaudeAgentSdkSessionStore = ({
       type: "session_finished",
       externalSessionId: session.externalSessionId,
       timestamp,
-      message,
+      message: state.finishMessage ?? message,
     });
   };
   const settle: ClaudeSessionStore["settle"] = (session) =>
     Effect.suspend(() => {
       const { consumer } = stateFor(session);
-      return runAllSteps([
-        Effect.try({
-          try: () => close(session),
-          catch: (cause) => new ClaudeSessionError("claudeRuntime.closeSession", [cause]),
-        }),
-        consumer
-          ? Fiber.join(consumer)
-          : runAllSteps([
-              Effect.tryPromise({
-                try: () => session.query.return().then(() => {}),
-                catch: (cause) => new ClaudeSessionError("claudeRuntime.returnQuery", [cause]),
-              }),
-              Effect.tryPromise({
-                try: () => flushClaudeLiveContextUsageRefresh(session),
-                catch: (cause) =>
-                  new ClaudeSessionError("claudeRuntime.flushContextUsage", [cause]),
-              }),
-            ]),
-      ]);
+      return Effect.gen(function* () {
+        const closing = yield* Effect.exit(
+          Effect.try({
+            try: () => close(session),
+            catch: (cause) => new ClaudeSessionError("claudeRuntime.closeSession", [cause]),
+          }),
+        );
+        // A failed close can leave the consumer waiting forever. Keep ownership for cleanup.
+        if (closing._tag === "Failure" && !isClaudeSessionClosed(session)) return yield* closing;
+        yield* confirmClosed(session);
+        yield* runAllSteps([
+          closing,
+          consumer
+            ? Fiber.join(consumer)
+            : runAllSteps([
+                Effect.tryPromise({
+                  try: () => session.query.return().then(() => {}),
+                  catch: (cause) => new ClaudeSessionError("claudeRuntime.returnQuery", [cause]),
+                }),
+                Effect.tryPromise({
+                  try: () => flushClaudeLiveContextUsageRefresh(session),
+                  catch: (cause) =>
+                    new ClaudeSessionError("claudeRuntime.flushContextUsage", [cause]),
+                }),
+              ]),
+        ]);
+      });
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.fail(toSessionError(cause, "claudeRuntime.settleSession")),
@@ -146,26 +243,33 @@ export const createClaudeAgentSdkSessionStore = ({
   const stop = (session: ClaudeSession, message: string) =>
     Effect.suspend(() => {
       const wasAttached = sessions.get(session.externalSessionId) === session;
-      return runAllSteps([
-        settle(session),
-        Effect.try({
-          try: () => {
-            if (wasAttached) finish(session, message);
-          },
-          catch: (cause) => new ClaudeSessionError("claudeRuntime.finishSession", [cause]),
-        }),
-      ]);
+      stateFor(session).finishMessage = message;
+      return Effect.gen(function* () {
+        const settled = yield* Effect.exit(settle(session));
+        yield* runAllSteps([
+          settled,
+          Effect.try({
+            try: () => {
+              if (wasAttached && isClaudeSessionClosed(session)) finish(session, message);
+            },
+            catch: (cause) => new ClaudeSessionError("claudeRuntime.finishSession", [cause]),
+          }),
+        ]);
+      });
     }).pipe(
       Effect.catchCause((cause) => Effect.fail(toSessionError(cause, "claudeRuntime.stopSession"))),
     );
 
   const getForCleanup = (externalSessionId: string): ClaudeSession | undefined =>
     sessions.get(externalSessionId) ??
-    [...activeConsumers].findLast((session) => session.externalSessionId === externalSessionId);
+    [...cleanupSessions, ...activeConsumers].findLast(
+      (session) => session.externalSessionId === externalSessionId,
+    );
 
   return {
     sessions,
     close,
+    confirmClosed,
     finish,
     settle,
     ownConsumer: (session, fiber, canFinish) => {
@@ -178,6 +282,9 @@ export const createClaudeAgentSdkSessionStore = ({
     get: (externalSessionId) => sessions.get(externalSessionId),
     getForCleanup,
     set: (session) => {
+      const previous = sessions.get(session.externalSessionId);
+      if (previous && previous !== session) stateFor(previous).replaced = true;
+      stateFor(session).replaced = false;
       sessions.set(session.externalSessionId, session);
     },
     subscribeClose: (listener) => {
@@ -225,9 +332,9 @@ export const createClaudeAgentSdkSessionStore = ({
       }).pipe(Effect.uninterruptible),
     stopSessionsForRuntime: (runtimeId) =>
       Effect.suspend(() => {
-        const targets = [...new Set([...sessions.values(), ...activeConsumers])].filter(
-          (session) => session.runtimeId === runtimeId,
-        );
+        const targets = [
+          ...new Set([...sessions.values(), ...cleanupSessions, ...activeConsumers]),
+        ].filter((session) => session.runtimeId === runtimeId);
         return Effect.forEach(targets, (session) => Effect.exit(stop(session, "Runtime stopped")), {
           concurrency: "unbounded",
         }).pipe(Effect.flatMap((exits) => runAllSteps(exits)));
@@ -256,6 +363,9 @@ type SessionState = {
   consumer?: Fiber.Fiber<void, HostOperationErrorAggregate>;
   canFinish?: () => boolean;
   closed: boolean;
+  closeRequested?: boolean;
+  replaced?: boolean;
   closeError?: ClaudeSessionError;
   finishAttempted: boolean;
+  finishMessage?: string;
 };

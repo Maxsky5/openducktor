@@ -23,10 +23,11 @@ export const activityForStatus = (
   snapshot: AgentSessionLiveSnapshot,
 ): AgentSessionLiveSnapshot["activity"] => {
   if (status.type === "busy") {
-    return "running";
+    return activityForPending(snapshot);
   }
   if (status.type === "retry") {
-    return "retrying";
+    const pending = activityForPending(snapshot);
+    return pending === "running" ? "retrying" : pending;
   }
   const pendingActivity = activityForPending(snapshot);
   return pendingActivity === "running" ? "idle" : pendingActivity;

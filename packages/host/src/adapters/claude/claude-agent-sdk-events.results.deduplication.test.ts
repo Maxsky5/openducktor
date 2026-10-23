@@ -68,6 +68,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     expect(events.map((event) => event.type)).toEqual([
       "assistant_message",
       "assistant_message",
+      "session_turn_finished",
       "session_idle",
     ]);
   });
@@ -128,6 +129,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
     expect(events.map((event) => event.type)).toEqual([
       "assistant_part",
       "assistant_message",
+      "session_turn_finished",
       "session_idle",
     ]);
     expect(session.activity).toBe("idle");
@@ -180,6 +182,7 @@ describe("handleClaudeSdkMessage result deduplication", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-1",
         subtype: "success",
         uuid: "0e3962b1-c5c6-42b9-840e-47fbc2f792c0",
         session_id: "session-1",
@@ -199,7 +202,12 @@ describe("handleClaudeSdkMessage result deduplication", () => {
         message: "First queued result",
       }),
     );
-    expect(events.map((event) => event.type)).toEqual(["assistant_part", "assistant_message"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "assistant_part",
+      "assistant_message",
+      "session_turn_finished",
+      "session_status",
+    ]);
     expect(session.pendingUserTurnCount).toBe(1);
     expect(session.activity).toBe("running");
   });

@@ -2,6 +2,7 @@ import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { z } from "zod";
 import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-tools";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import { retireClaudeChildSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeHistorySubagentSystemMessageIngress } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeSdkSubagentSystemMessageProjection } from "./claude-agent-sdk-message-projection";
 import { readClaudeBackgroundAgentLaunch } from "./claude-agent-sdk-runtime-messages";
@@ -76,6 +77,7 @@ type ClaudeSubagentSystemMessage =
   | ClaudeSdkSubagentSystemMessageProjection
   | ClaudeHistorySubagentSystemMessageIngress
   | ClaudeHistoryTaskNotificationMessage;
+
 const shouldSuppressSubagentTask = (
   session: ClaudeSubagentSession,
   taskId: string,
@@ -286,7 +288,7 @@ export const emitClaudeAgentToolResultSubagentPart = ({
     if (status === "completed") {
       emitCompletedSubagentAssistantMessage(emit, session, toolUseId, timestamp);
     }
-    session.subagentEventSessionsByToolUseId?.delete(toolUseId);
+    retireClaudeChildSession(session, toolUseId);
   }
 };
 
@@ -328,7 +330,7 @@ export const emitClaudeTaskStopSubagentPart = ({
       sourceToolUseId: toolUseId,
     },
   });
-  session.subagentEventSessionsByToolUseId?.delete(toolUseId);
+  retireClaudeChildSession(session, toolUseId);
 };
 
 export const handleClaudeSubagentSystemMessage = ({
@@ -491,6 +493,6 @@ export const handleClaudeSubagentSystemMessage = ({
     emitCompletedSubagentAssistantMessage(emit, session, resolvedToolUseId, timestamp);
   }
   if (resolvedToolUseId) {
-    session.subagentEventSessionsByToolUseId?.delete(resolvedToolUseId);
+    retireClaudeChildSession(session, resolvedToolUseId);
   }
 };

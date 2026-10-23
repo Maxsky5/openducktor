@@ -1,5 +1,23 @@
 import { Cause, Effect, Exit } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+
+const closingSessions = new WeakSet<ClaudeSessionContext>();
+const closedSessions = new WeakSet<ClaudeSessionContext>();
+
+export const beginClaudeSessionClose = (session: ClaudeSessionContext): void => {
+  closingSessions.add(session);
+};
+
+export const confirmClaudeSessionClosed = (session: ClaudeSessionContext): void => {
+  closedSessions.add(session);
+};
+
+export const isClaudeSessionClosing = (session: ClaudeSessionContext): boolean =>
+  closingSessions.has(session);
+
+export const isClaudeSessionClosed = (session: ClaudeSessionContext): boolean =>
+  closedSessions.has(session);
 
 /** Run each step even if an earlier step fails. Keep failures in step order. */
 export const runAllSteps = <E>(

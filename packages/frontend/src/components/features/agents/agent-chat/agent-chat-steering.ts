@@ -15,7 +15,11 @@ import { isReusablePromptSlashCommand } from "./agent-chat-reusable-prompts";
 /** The session state that decides whether a queued message can steer the running work. */
 export type QueuedMessageSteerContext = Pick<
   AgentChatComposerModel,
-  "steerBlockedReason" | "runningTurnModel" | "isSessionWorking" | "isWaitingInput"
+  | "steerBlockedReason"
+  | "runningTurnModel"
+  | "isSessionWorking"
+  | "foregroundTurnActive"
+  | "isWaitingInput"
 >;
 
 /** An idle session takes a steer as a new turn, so steering limits apply only to a running turn. */
@@ -23,6 +27,10 @@ export const steersRunningTurn = (
   mode: AgentMessageSubmitMode,
   isSessionWorking: boolean,
 ): boolean => mode === "steer" && isSessionWorking;
+
+export const composerForegroundTurnActive = (
+  context: Pick<AgentChatComposerModel, "foregroundTurnActive" | "isSessionWorking">,
+): boolean => context.foregroundTurnActive ?? context.isSessionWorking;
 
 type RunningTurnSteerContext = Pick<
   QueuedMessageSteerContext,
@@ -67,7 +75,7 @@ export const queuedMessageSteerBlockedReason = (
   context: QueuedMessageSteerContext,
 ): string | null => {
   if (context.isWaitingInput) return BLOCKED_ON_INPUT_REASON;
-  if (!context.isSessionWorking) return null;
+  if (!composerForegroundTurnActive(context)) return null;
   return runningTurnSteerBlockedReason(
     {
       parts: entry.parts,

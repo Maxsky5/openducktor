@@ -347,7 +347,16 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
   submissionId: z.string().trim().min(1).optional(),
 });
 
+const agentSessionTurnFinishedEventSchema = transcriptEventSchema({
+  type: z.literal("session_turn_finished"),
+  completionId: z.string().min(1),
+  messageIds: z.array(z.string().min(1)),
+  turnOutcome: agentTurnOutcomeSchema,
+});
+export type AgentSessionTurnFinishedEvent = z.infer<typeof agentSessionTurnFinishedEventSchema>;
+
 const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
+  agentSessionTurnFinishedEventSchema,
   transcriptEventSchema({
     type: z.literal("session_policy_notice"),
     messageId: z.string(),
@@ -443,6 +452,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
     type: z.literal("session_status"),
     status: agentSessionStatusSchema,
+    foregroundTurnActive: z.boolean().optional(),
   }),
   transcriptEventSchema({
     type: z.literal("mcp_reconnect_started"),
@@ -504,6 +514,7 @@ export type AgentSessionTranscriptEventType =
   | "session_status"
   | "turn_error"
   | "session_error"
+  | "session_turn_finished"
   | "session_idle"
   | "session_finished";
 
@@ -524,6 +535,7 @@ const agentSessionTranscriptEventTypes: ReadonlySet<string> = new Set([
   "session_status",
   "turn_error",
   "session_error",
+  "session_turn_finished",
   "session_idle",
   "session_finished",
 ]);

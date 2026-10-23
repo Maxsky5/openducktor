@@ -125,6 +125,7 @@ const defaultInitializationResponse = (): SDKControlInitializeResponse => ({
   agents: [],
   output_style: "default",
   available_output_styles: [],
+  claude_code_version: "2.1.306",
   models: [],
   account: {},
 });

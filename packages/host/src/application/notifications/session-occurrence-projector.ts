@@ -1,6 +1,5 @@
 import type {
   AgentSessionLiveEnvelope,
-  AgentSessionLivePendingQuestionRequest,
   AgentSessionLiveSnapshot,
   AgentSessionTranscriptEvent,
   AgentSessionScope,
@@ -13,33 +12,17 @@ import {
   toNotificationStatus,
 } from "./session-notification-builder";
 import { createLaunchFailureNotices } from "./launch-failure-notices";
+import {
+  clearDeferred,
+  createProjection,
+  executionEpisodeId,
+  type SessionProjection,
+} from "./session-notification-projection";
 
 type CreateSessionOccurrenceProjectorOptions = {
   repositoryLabel: string;
   resolveAssociation(ref: AgentSessionLiveSnapshot["ref"]): AgentSessionScope | null;
   resolveTask(taskId: string): { id: string; title?: string } | null;
-};
-
-type SessionProjection = {
-  association: AgentSessionScope | null;
-  snapshot: AgentSessionLiveSnapshot;
-  executionEpisodeId: string | undefined;
-  errorNotified: boolean;
-  idleNotified: boolean;
-  lastAssistantMessage: { id: string; text: string } | null;
-  pendingApprovals: Set<string>;
-  pendingQuestions: Set<string>;
-  running: boolean;
-  unownedInputs: UnownedPendingInputs | null;
-  unownedTerminals: Map<string, NotificationOccurrence>;
-  childQuestions: Map<string, AgentSessionLivePendingQuestionRequest>;
-};
-
-type UnownedPendingInputs = {
-  approvals: Set<string>;
-  questions: Set<string>;
-  liveApprovals: Set<string>;
-  liveQuestions: Set<string>;
 };
 
 /**
@@ -111,9 +94,19 @@ export const createSessionOccurrenceProjector = ({
   };
 
   const finishIdleCycle = (projection: SessionProjection): NotificationOccurrence[] => {
-    if (!projection.running || projection.errorNotified || projection.idleNotified) {
+    const { snapshot } = projection;
+    if (
+      !projection.running ||
+      projection.errorNotified ||
+      projection.idleNotified ||
+      snapshot.statusUnavailableReason ||
+      (snapshot.ref.runtimeKind === "claude" &&
+        (snapshot.activity !== "idle" ||
+          snapshot.foregroundTurnActive === true ||
+          snapshot.pendingApprovals.length > 0 ||
+          snapshot.pendingQuestions.some((question) => question.blocking !== false)))
+    )
       return [];
-    }
     projection.running = false;
     projection.idleNotified = true;
     return publishTerminal(
@@ -341,26 +334,23 @@ export const createSessionOccurrenceProjector = ({
       projection.lastAssistantMessage = null;
       return [];
     }
-    if (event.type === "session_status") {
-      if (event.status.type === "idle") {
+    switch (event.type) {
+      case "session_status":
+        return event.status.type === "idle" ? finishIdleCycle(projection) : [];
+      case "session_idle":
         return finishIdleCycle(projection);
-      }
-      return [];
-    }
-    if (event.type === "session_idle") {
-      return finishIdleCycle(projection);
-    }
-    if (event.type === "session_finished") {
-      if (isExpectedUserStop(event)) {
-        projection.running = false;
+      case "session_finished":
+        if (isExpectedUserStop(event) || event.sessionRef.runtimeKind === "claude") {
+          projection.running = false;
+          return [];
+        }
+        return finishIdleCycle(projection);
+      case "turn_error":
+      case "session_error":
+        return finishErrorEpisode(projection, event.timestamp, event.message);
+      default:
         return [];
-      }
-      return finishIdleCycle(projection);
     }
-    if (event.type === "turn_error" || event.type === "session_error") {
-      return finishErrorEpisode(projection, event.timestamp, event.message);
-    }
-    return [];
   };
 
   return {
@@ -449,36 +439,21 @@ export const createSessionOccurrenceProjector = ({
         sessions.delete(key);
         return [];
       }
+      if (envelope.type === "fault" && envelope.statusUnavailable && envelope.ref) {
+        const projection = sessions.get(agentSessionRefKey(envelope.ref));
+        if (projection)
+          projection.snapshot = {
+            ...projection.snapshot,
+            statusUnavailableReason: envelope.message,
+          };
+        return [];
+      }
       if (envelope.type === "transcript_event") {
         return provenance === "live" ? applyTranscriptEvent(envelope.event) : [];
       }
       return [];
     },
   };
-};
-
-const createProjection = (
-  snapshot: AgentSessionLiveSnapshot,
-  association: AgentSessionScope | null,
-): SessionProjection => ({
-  association,
-  snapshot,
-  executionEpisodeId: snapshot.executionEpisodeId,
-  errorNotified: false,
-  idleNotified: false,
-  lastAssistantMessage: null,
-  pendingApprovals: new Set(snapshot.pendingApprovals.map(pendingInputIdentity)),
-  pendingQuestions: new Set(snapshot.pendingQuestions.map(pendingInputIdentity)),
-  running: snapshot.activity !== "idle",
-  unownedInputs: null,
-  unownedTerminals: new Map(),
-  childQuestions: new Map(),
-});
-
-const clearDeferred = (projection: SessionProjection): void => {
-  projection.unownedInputs = null;
-  projection.unownedTerminals.clear();
-  projection.childQuestions.clear();
 };
 
 const isExpectedUserStop = (
@@ -490,10 +465,3 @@ const isExpectedUserStop = (
 
 const pendingRequestsByIdentity = <Request extends { requestId: string }>(requests: Request[]) =>
   new Map(requests.map((request) => [pendingInputIdentity(request), request]));
-
-const executionEpisodeId = (projection: SessionProjection): string => {
-  if (!projection.executionEpisodeId) {
-    throw new Error("The live Agent Session has no execution episode ID. Reload to reconnect.");
-  }
-  return projection.executionEpisodeId;
-};

@@ -52,6 +52,61 @@ const createRootOwnedProjector = () =>
   });
 
 describe("session occurrence projector", () => {
+  test("notifies only for confirmed aggregate Claude Idle after a foreground completion", () => {
+    const projector = createProjector();
+    const claudeRef = { ...ref, runtimeKind: "claude" as const };
+    const state = (overrides: Partial<AgentSessionLiveSnapshot> = {}) =>
+      snapshot({
+        ref: claudeRef,
+        activity: "running",
+        foregroundTurnActive: false,
+        ...overrides,
+      });
+    projector.accept({ type: "session_upsert", session: state({ foregroundTurnActive: true }) });
+    expect(
+      projector.accept({
+        type: "transcript_event",
+        event: {
+          type: "session_turn_finished",
+          sessionRef: claudeRef,
+          externalSessionId: claudeRef.externalSessionId,
+          timestamp: "2026-08-31T10:01:00.000Z",
+          completionId: "automatic-result",
+          messageIds: [],
+          turnOutcome: "completed",
+        },
+      }),
+    ).toEqual([]);
+    projector.accept({ type: "session_upsert", session: state() });
+    const idle: AgentSessionLiveEnvelope = {
+      type: "transcript_event",
+      event: {
+        type: "session_idle",
+        sessionRef: claudeRef,
+        externalSessionId: claudeRef.externalSessionId,
+        timestamp: "2026-08-31T10:02:00.000Z",
+      },
+    };
+    expect(projector.accept(idle)).toEqual([]);
+    projector.accept({ type: "session_upsert", session: state({ activity: "idle" }) });
+    projector.accept({
+      type: "fault",
+      repoPath: ref.repoPath,
+      ref: claudeRef,
+      statusUnavailable: true,
+      message: "Reconnect Claude",
+    });
+    expect(projector.accept(idle)).toEqual([]);
+    projector.accept({
+      type: "session_upsert",
+      session: state({ activity: "idle", statusUnavailableReason: "Reconnect Claude" }),
+    });
+    expect(projector.accept(idle)).toEqual([]);
+    projector.accept({ type: "session_upsert", session: state({ activity: "idle" }) });
+    expect(projector.accept(idle)).toMatchObject([{ kind: "agent.session_idle" }]);
+    expect(projector.accept(idle)).toEqual([]);
+  });
+
   test.each([
     ["API request failed", "API request failed"],
     ['{"message":"API request failed"}', "API request failed"],

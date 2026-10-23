@@ -53,19 +53,27 @@ const setup = (
   const order: string[] = [];
   const background: Effect.Effect<void>[] = [];
   let activity: AgentSessionLiveSnapshot["activity"] = "idle";
+  let foregroundTurnActive: boolean | undefined;
+  let statusUnavailableReason: string | undefined;
   const native = { sends: 0, models: 0 };
   let readCount = 0;
   const waiting = Promise.withResolvers<void>();
-  const live = (): AgentSessionLiveSnapshot => ({
-    ref: recipient,
-    title: "Session",
-    startedAt: "2026-10-13T12:00:00Z",
-    activity,
-    model: savedModel,
-    pendingApprovals: [],
-    pendingQuestions: [],
-    contextUsage: null,
-  });
+  const live = (): AgentSessionLiveSnapshot => {
+    const snapshot: AgentSessionLiveSnapshot = {
+      ref: recipient,
+      title: "Session",
+      startedAt: "2026-10-13T12:00:00Z",
+      activity,
+      model: savedModel,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    };
+    if (foregroundTurnActive !== undefined) snapshot.foregroundTurnActive = foregroundTurnActive;
+    if (statusUnavailableReason !== undefined)
+      snapshot.statusUnavailableReason = statusUnavailableReason;
+    return snapshot;
+  };
   const taskReader = {
     getTask: () =>
       Effect.succeed(
@@ -156,7 +164,7 @@ const setup = (
         }),
       sendUserMessage: (input) =>
         Effect.suspend(() => {
-          if (activity === "running" && input.delivery !== "steer")
+          if ((foregroundTurnActive ?? activity === "running") && input.delivery !== "steer")
             return Effect.fail(
               new AgentSessionBusyError({
                 message: "Session is working",
@@ -241,10 +249,35 @@ const setup = (
     setActivity: (value: typeof activity) => {
       activity = value;
     },
+    setForeground: (value: boolean) => {
+      foregroundTurnActive = value;
+    },
+    setUnavailable: (value: string | undefined) => {
+      statusUnavailableReason = value;
+    },
   };
 };
 
 describe("message delivery uses prepared session settings", () => {
+  test("refuses a steer after the foreground ends while background work stays running", async () => {
+    const h = setup("opencode");
+    h.setActivity("running");
+    h.setForeground(false);
+    try {
+      const result = await Effect.runPromiseExit(
+        h.commands.sendUserMessage({
+          ...h.target,
+          delivery: "steer",
+          parts: [{ kind: "text", text: "Join the turn" }],
+        }),
+      );
+      expect(result._tag).toBe("Failure");
+      expect(h.native.sends).toBe(0);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
   test.each(["claude", "codex", "opencode"] as const)(
     "%s sends and steers without catalog or model work",
     async (kind) => {
@@ -336,6 +369,101 @@ const settingsCatalog: AgentRuntimeCatalog = {
 };
 
 describe("explicit settings ordering", () => {
+  test.each(["waiting_for_question", "waiting_for_permission"] as const)(
+    "keeps settings pending for child %s after the foreground turn ends",
+    async (activity) => {
+      const h = setup("opencode", Effect.succeed(settingsCatalog));
+      h.setActivity(activity);
+      h.setForeground(false);
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      );
+      try {
+        await h.waiting;
+        await Effect.runPromise(Effect.yieldNow);
+        expect(h.native.models).toBe(0);
+        h.setActivity("running");
+        await Effect.runPromise(
+          h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+        );
+        await updating;
+        expect(h.order).toEqual(["settings"]);
+      } finally {
+        await Effect.runPromise(h.commands.shutdownOperations());
+      }
+    },
+  );
+
+  test("applies settings before queue delivery between foreground turns with background work", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    h.setForeground(true);
+    h.delivery.observeChanges([{ type: "session_upsert", session: h.live() }]);
+    try {
+      await Effect.runPromise(
+        h.delivery.submit({
+          ...h.target,
+          submissionId: "queued",
+          mode: "default",
+          parts: [{ kind: "text", text: "Next" }],
+        }),
+      );
+      const updating = Effect.runPromise(
+        h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+      );
+      await h.waiting;
+      h.setForeground(false);
+      const free = { type: "session_upsert" as const, session: h.live() };
+      await Effect.runPromise(h.commands.observeOperation(free));
+      h.delivery.observeChanges([
+        {
+          type: "transcript_event",
+          event: {
+            type: "session_turn_finished",
+            sessionRef: h.target,
+            externalSessionId: h.target.externalSessionId,
+            timestamp: "2026-10-13T12:01:00Z",
+            completionId: "automatic-result",
+            messageIds: [],
+            turnOutcome: "completed",
+          },
+        },
+        free,
+      ]);
+      await Promise.all([
+        updating,
+        ...h.background.splice(0).map((effect) => Effect.runPromise(effect)),
+      ]);
+      expect(h.order).toEqual(["settings", "send:next"]);
+      expect(h.live().activity).toBe("running");
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
+  test("fails pending settings with the current status failure", async () => {
+    const h = setup("opencode", Effect.succeed(settingsCatalog));
+    h.setActivity("running");
+    h.setForeground(true);
+    const updating = Effect.runPromise(
+      h.commands.updateSessionModel({ ...h.target, model: selection("next") }),
+    ).catch((cause: Error) => cause);
+    try {
+      await h.waiting;
+      h.setForeground(false);
+      h.setUnavailable("Claude status is unavailable. Reconnect the session.");
+      await Effect.runPromise(
+        h.commands.observeOperation({ type: "session_upsert", session: h.live() }),
+      );
+      expect(await updating).toMatchObject({
+        message: "Claude status is unavailable. Reconnect the session.",
+      });
+      expect(h.native.models).toBe(0);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
   test.each(["waiting_for_question", "waiting_for_permission"] as const)(
     "keeps settings pending when the runtime read changes to %s",
     async (activity) => {

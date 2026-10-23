@@ -1,7 +1,5 @@
 import {
   type AgentSessionContextUsage,
-  type AgentSessionLivePendingApprovalRequest,
-  type AgentSessionLivePendingQuestionRequest,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
   agentSessionLiveSnapshotSchema,
@@ -13,65 +11,22 @@ import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
-import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import { activityForSummary } from "./claude-live-session-activity";
 import {
-  activityForPending,
-  activityForStatus,
-  activityForSummary,
-} from "./claude-live-session-activity";
+  aggregateClaudeInputActivity,
+  claudeSessionTreeSnapshots,
+  readClaudeParentSnapshot,
+  toClaudeLiveApprovalRequest,
+  toClaudeLiveQuestionRequest,
+} from "./claude-live-session-inputs";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 const refKey = (ref: AgentSessionLiveRef): string =>
   [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
 
-const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
-
 const cloneSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
   agentSessionLiveSnapshotSchema.parse(snapshot);
-
-const toApprovalRequest = (
-  event: Extract<AgentEvent, { type: "approval_required" }>,
-): AgentSessionLivePendingApprovalRequest => {
-  const request: AgentSessionLivePendingApprovalRequest = {
-    requestId: event.requestId,
-    requestType: event.requestType,
-    title: event.title,
-  };
-  if (event.summary !== undefined) {
-    request.summary = event.summary;
-  }
-  if (event.details !== undefined) {
-    request.details = event.details;
-  }
-  if (event.affectedPaths !== undefined) {
-    request.affectedPaths = event.affectedPaths;
-  }
-  if (event.command !== undefined) {
-    request.command = event.command;
-  }
-  if (event.action !== undefined) {
-    request.action = event.action;
-  }
-  if (event.tool !== undefined) {
-    request.tool = event.tool;
-  }
-  if (event.mutation !== undefined) {
-    request.mutation = event.mutation;
-  }
-  if (event.supportedReplyOutcomes !== undefined) {
-    request.supportedReplyOutcomes = event.supportedReplyOutcomes;
-  }
-  return request;
-};
-
-const toQuestionRequest = (
-  event: Extract<AgentEvent, { type: "question_required" }>,
-): AgentSessionLivePendingQuestionRequest => ({
-  requestId: event.requestId,
-  questions: event.questions,
-});
 
 const eventRef = (
   session: ClaudeSessionContext,
@@ -101,6 +56,7 @@ const subagentStartedAt = (
 export const createClaudeLiveSessionState = () => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
   const contextRevisionsByRef = new Map<string, number>();
+  const nativeActivityByRef = new Map<string, AgentSessionLiveSnapshot["activity"]>();
   const retiredSessionKeys = new Set<string>();
   const subagentOwnersByRef = new Map<
     string,
@@ -111,13 +67,29 @@ export const createClaudeLiveSessionState = () => {
     snapshotsByRef.get(refKey(ref));
 
   const commitSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveAdapterChange[] => {
-    const parsed = cloneSnapshot(snapshot);
-    const key = refKey(parsed.ref);
-    const previous = snapshotsByRef.get(key);
-    snapshotsByRef.set(key, parsed);
-    return previous && snapshotsEqual(previous, parsed)
-      ? []
-      : [{ type: "session_upsert", snapshot: parsed }];
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    let current: AgentSessionLiveSnapshot | undefined = snapshot;
+    const visited = new Set<string>();
+    while (current) {
+      const key = refKey(current.ref);
+      if (visited.has(key)) break;
+      visited.add(key);
+      const parsed = cloneSnapshot({
+        ...current,
+        activity: aggregateClaudeInputActivity(
+          current,
+          snapshotsByRef.values(),
+          nativeActivityByRef.get(key),
+        ),
+      });
+      const previous = snapshotsByRef.get(key);
+      snapshotsByRef.set(key, parsed);
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(parsed)) {
+        changes.push({ type: "session_upsert", snapshot: parsed });
+      }
+      current = readClaudeParentSnapshot(parsed, readSnapshot);
+    }
+    return changes;
   };
 
   const ensureSnapshot = (
@@ -142,9 +114,13 @@ export const createClaudeLiveSessionState = () => {
     if (session.summary.sessionAssociation.kind === "repository") {
       snapshot.repositoryScope = session.summary.sessionAssociation;
     }
+    if (isRoot && session.foregroundTurnActive !== undefined) {
+      snapshot.foregroundTurnActive = session.foregroundTurnActive;
+    }
     if (!isRoot) {
       snapshot.parentExternalSessionId = session.externalSessionId;
     }
+    nativeActivityByRef.set(refKey(ref), snapshot.activity);
     return snapshot;
   };
 
@@ -152,6 +128,7 @@ export const createClaudeLiveSessionState = () => {
     const key = refKey(ref);
     retiredSessionKeys.add(key);
     contextRevisionsByRef.delete(key);
+    nativeActivityByRef.delete(key);
     subagentOwnersByRef.delete(key);
     if (!snapshotsByRef.delete(key)) {
       return [];
@@ -160,28 +137,14 @@ export const createClaudeLiveSessionState = () => {
   };
 
   const removeSessionTree = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    const refs = [ref];
-    const queuedKeys = new Set([refKey(ref)]);
-    for (let index = 0; index < refs.length; index += 1) {
-      const parent = refs[index];
-      if (!parent) {
-        continue;
-      }
-      for (const snapshot of snapshotsByRef.values()) {
-        const key = refKey(snapshot.ref);
-        if (
-          !queuedKeys.has(key) &&
-          snapshot.ref.repoPath === parent.repoPath &&
-          snapshot.ref.runtimeKind === parent.runtimeKind &&
-          snapshot.parentExternalSessionId === parent.externalSessionId &&
-          isClaudeSubagentTranscriptTarget(snapshot.ref.externalSessionId)
-        ) {
-          queuedKeys.add(key);
-          refs.push(snapshot.ref);
-        }
-      }
-    }
-    return refs.flatMap(removeSnapshot);
+    const snapshot = readSnapshot(ref);
+    if (!snapshot) return removeSnapshot(ref);
+    const parent = readClaudeParentSnapshot(snapshot, readSnapshot);
+    const changes = claudeSessionTreeSnapshots(snapshot, snapshotsByRef.values()).flatMap((child) =>
+      removeSnapshot(child.ref),
+    );
+    if (parent) changes.push(...commitSnapshot(parent));
+    return changes;
   };
 
   const applyPendingEvent = (
@@ -194,12 +157,14 @@ export const createClaudeLiveSessionState = () => {
     >,
   ): AgentSessionLiveAdapterChange[] => {
     const ref = eventRef(session, event);
-    const snapshot = ensureSnapshot(session, ref, event.timestamp);
+    const snapshot = { ...ensureSnapshot(session, ref, event.timestamp) };
+    if (event.parentExternalSessionId)
+      snapshot.parentExternalSessionId = event.parentExternalSessionId;
     if (event.type === "approval_required") {
-      const request = toApprovalRequest(event);
+      nativeActivityByRef.set(refKey(ref), "running");
+      const request = toClaudeLiveApprovalRequest(event);
       return commitSnapshot({
         ...snapshot,
-        activity: "waiting_for_permission",
         pendingApprovals: [
           ...snapshot.pendingApprovals.filter(
             (candidate) => candidate.requestId !== request.requestId,
@@ -209,10 +174,10 @@ export const createClaudeLiveSessionState = () => {
       });
     }
     if (event.type === "question_required") {
-      const request = toQuestionRequest(event);
+      if (event.blocking !== false) nativeActivityByRef.set(refKey(ref), "running");
+      const request = toClaudeLiveQuestionRequest(event);
       return commitSnapshot({
         ...snapshot,
-        activity: "waiting_for_question",
         pendingQuestions: [
           ...snapshot.pendingQuestions.filter(
             (candidate) => candidate.requestId !== request.requestId,
@@ -232,7 +197,7 @@ export const createClaudeLiveSessionState = () => {
           ? snapshot.pendingQuestions.filter((candidate) => candidate.requestId !== event.requestId)
           : snapshot.pendingQuestions,
     };
-    return commitSnapshot({ ...nextSnapshot, activity: activityForPending(nextSnapshot) });
+    return commitSnapshot(nextSnapshot);
   };
 
   const applySubagentPart = (
@@ -245,13 +210,19 @@ export const createClaudeLiveSessionState = () => {
     const ref = eventRef(session, { externalSessionId: event.part.externalSessionId });
     const current = ensureSnapshot(session, ref, event.timestamp);
     const running = event.part.status === "pending" || event.part.status === "running";
+    const previousParent = readClaudeParentSnapshot(current, readSnapshot);
+    nativeActivityByRef.set(refKey(ref), running ? "running" : "idle");
     const changes = commitSnapshot({
       ...current,
-      activity: running ? activityForPending(current) : "idle",
+      pendingApprovals: running ? current.pendingApprovals : [],
+      pendingQuestions: running ? current.pendingQuestions : [],
       title: event.part.agent ?? event.part.description ?? current.title,
       startedAt: subagentStartedAt(event.part, current.startedAt),
       parentExternalSessionId: event.externalSessionId,
     });
+    if (previousParent && previousParent.ref.externalSessionId !== event.externalSessionId) {
+      changes.push(...commitSnapshot(previousParent));
+    }
     subagentOwnersByRef.set(refKey(ref), {
       messageId: event.part.messageId,
       parentRefKey: refKey(eventRef(session, event)),
@@ -280,6 +251,29 @@ export const createClaudeLiveSessionState = () => {
       return [];
     }
     if (event.type === "session_context_error") {
+      if (event.statusUnavailable) {
+        const changes: AgentSessionLiveAdapterChange[] = [];
+        const root = ensureSnapshot(session, rootRef(session), event.timestamp);
+        const affected = claudeSessionTreeSnapshots(root, snapshotsByRef.values());
+        for (const snapshot of affected) {
+          const unavailableSnapshot = {
+            ...snapshot,
+            statusUnavailableReason: event.message,
+            pendingApprovals: [],
+            pendingQuestions: [],
+          };
+          delete unavailableSnapshot.foregroundTurnActive;
+          changes.push(...commitSnapshot(unavailableSnapshot), {
+            type: "fault",
+            repoPath: ref.repoPath,
+            operation: "claude-live-session.termination",
+            message: event.message,
+            ref: snapshot.ref,
+            statusUnavailable: true,
+          });
+        }
+        return changes;
+      }
       return [
         {
           type: "fault",
@@ -327,17 +321,24 @@ export const createClaudeLiveSessionState = () => {
       delete nextSnapshot.policyNotice;
       changes.push(...commitSnapshot(nextSnapshot));
     } else if (event.type === "session_status") {
-      changes.push(
-        ...commitSnapshot({ ...snapshot, activity: activityForStatus(event.status, snapshot) }),
+      nativeActivityByRef.set(
+        key,
+        event.status.type === "busy"
+          ? "running"
+          : event.status.type === "retry"
+            ? "retrying"
+            : "idle",
       );
+      const next = { ...snapshot };
+      delete next.statusUnavailableReason;
+      if (event.foregroundTurnActive !== undefined)
+        next.foregroundTurnActive = event.foregroundTurnActive;
+      changes.push(...commitSnapshot(next));
     } else if (event.type === "session_idle") {
-      const pendingActivity = activityForPending(snapshot);
-      changes.push(
-        ...commitSnapshot({
-          ...snapshot,
-          activity: pendingActivity === "running" ? "idle" : pendingActivity,
-        }),
-      );
+      nativeActivityByRef.set(key, "idle");
+      const next = { ...snapshot };
+      delete next.statusUnavailableReason;
+      changes.push(...commitSnapshot(next));
     } else if (event.type === "assistant_part") {
       changes.push(...applySubagentPart(session, event));
     }
@@ -374,17 +375,21 @@ export const createClaudeLiveSessionState = () => {
       session: ClaudeSessionContext,
       event: Extract<AgentEvent, { type: "approval_resolved" | "question_resolved" }>,
     ) => {
-      const ref = eventRef(session, event);
-      const key = refKey(ref);
-      const previous = readSnapshot(ref);
+      const previous = new Map(snapshotsByRef);
+      const previousActivity = new Map(nativeActivityByRef);
       const changes = applyPendingEvent(session, event);
       return {
         changes,
         rollback: () => {
-          if (previous) {
-            snapshotsByRef.set(key, previous);
-          } else {
-            snapshotsByRef.delete(key);
+          for (const change of changes) {
+            if (change.type !== "session_upsert") continue;
+            const key = refKey(change.snapshot.ref);
+            const snapshot = previous.get(key);
+            if (snapshot) snapshotsByRef.set(key, snapshot);
+            else snapshotsByRef.delete(key);
+            const activity = previousActivity.get(key);
+            if (activity) nativeActivityByRef.set(key, activity);
+            else nativeActivityByRef.delete(key);
           }
         },
       } satisfies {
@@ -398,17 +403,13 @@ export const createClaudeLiveSessionState = () => {
       expectedRevision: number,
     ): LoadedContextResult => {
       const snapshot = readSnapshot(ref);
-      if ((contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision) {
+      if (
+        (contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision ||
+        !contextUsage ||
+        !snapshot ||
+        JSON.stringify(snapshot.contextUsage) === JSON.stringify(contextUsage)
+      ) {
         return { value: snapshot?.contextUsage ?? contextUsage, changes: [] };
-      }
-      if (!contextUsage) {
-        return { value: snapshot?.contextUsage ?? null, changes: [] };
-      }
-      if (!snapshot) {
-        return { value: contextUsage, changes: [] };
-      }
-      if (JSON.stringify(snapshot.contextUsage) === JSON.stringify(contextUsage)) {
-        return { value: snapshot.contextUsage, changes: [] };
       }
       return {
         value: contextUsage,
@@ -429,6 +430,7 @@ export const createClaudeLiveSessionState = () => {
       const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
       snapshotsByRef.clear();
       contextRevisionsByRef.clear();
+      nativeActivityByRef.clear();
       retiredSessionKeys.clear();
       subagentOwnersByRef.clear();
       return refs;
@@ -458,6 +460,8 @@ export const createClaudeLiveSessionState = () => {
       let activity = activityForSummary(summary.status);
       if (options.keepActivity && current) {
         activity = current.activity;
+      } else {
+        nativeActivityByRef.set(key, activity);
       }
       const nextSnapshot: AgentSessionLiveSnapshot = {
         ref,
@@ -468,6 +472,12 @@ export const createClaudeLiveSessionState = () => {
         pendingQuestions: current?.pendingQuestions ?? [],
         contextUsage: current?.contextUsage ?? null,
       };
+      if (options.keepActivity && current) {
+        if (current.foregroundTurnActive !== undefined)
+          nextSnapshot.foregroundTurnActive = current.foregroundTurnActive;
+        if (current.statusUnavailableReason !== undefined)
+          nextSnapshot.statusUnavailableReason = current.statusUnavailableReason;
+      }
       if (summary.sessionAssociation.kind === "repository") {
         nextSnapshot.repositoryScope = summary.sessionAssociation;
       }
