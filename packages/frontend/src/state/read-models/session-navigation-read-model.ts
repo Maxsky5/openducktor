@@ -67,7 +67,7 @@ export type SessionNavigationStatus =
   | { kind: "unavailable"; reason: string };
 
 /**
- * Time used to order and label an entry.
+ * Time shown for an entry and used to order entries outside the Running group.
  *
  * `started` means no later activity time is known, so the UI must not present it as the
  * latest activity.
@@ -93,6 +93,8 @@ export type SessionNavigationEntry = {
   workflowTone: AgentWorkflowStepTone | null;
   attention: SessionNavigationAttentionReason[];
   status: SessionNavigationStatus;
+  /** Saved session start time keeps running rows independent of activity updates. */
+  startedAt: number | null;
   time: SessionNavigationTime;
   fault: string | null;
   /** Cached records for the preview. Opening it does not fetch tasks or session history. */
@@ -310,6 +312,7 @@ const taskEntries = (
               workflowTone: null,
               attention: ["blocked"],
               status: { kind: "settled", failed: false },
+              startedAt: null,
               time: { kind: "none" },
               fault: null,
               context: { kind: "task", task, sessions: read.data },
@@ -358,6 +361,7 @@ const taskEntries = (
           }).tone,
           attention,
           status: sessionStatus(live, liveFacts),
+          startedAt: parseTimestamp(record.startedAt),
           time: taskSessionTime(record),
           fault: liveFacts.fault,
           context: { kind: "task", task, sessions: read.data },
@@ -407,6 +411,7 @@ const workspaceEntries = (sources: SessionNavigationWorkspaceSources): SessionNa
           workflowTone: null,
           attention: liveAttention(facts),
           status: sessionStatus(live, liveFacts),
+          startedAt: record.createdAt,
           time:
             record.lastActivityAt === undefined
               ? { kind: "started", at: record.createdAt }
@@ -425,13 +430,15 @@ const entryGroup = (entry: SessionNavigationEntry): SessionNavigationGroupId => 
   return "recent";
 };
 
-const entryTime = (entry: SessionNavigationEntry): number | null =>
-  entry.time.kind === "none" ? null : entry.time.at;
+const entryOrderTime = (entry: SessionNavigationEntry): number | null => {
+  if (entryGroup(entry) === "running") return entry.startedAt;
+  return entry.time.kind === "none" ? null : entry.time.at;
+};
 
-/** Newest known time first; entries without a time follow; the key breaks ties. */
+/** Running uses start time; other groups use activity. Newest first, then the stable key. */
 const compareEntries = (left: SessionNavigationEntry, right: SessionNavigationEntry): number => {
-  const leftTime = entryTime(left);
-  const rightTime = entryTime(right);
+  const leftTime = entryOrderTime(left);
+  const rightTime = entryOrderTime(right);
   if (leftTime !== rightTime) {
     if (leftTime === null) return 1;
     if (rightTime === null) return -1;
