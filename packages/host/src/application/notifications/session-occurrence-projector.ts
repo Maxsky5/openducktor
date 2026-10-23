@@ -15,8 +15,8 @@ import { createLaunchFailureNotices } from "./launch-failure-notices";
 import {
   clearDeferred,
   createProjection,
-  executionEpisodeId,
-  type SessionProjection,
+  requireEpisodeId,
+  type Projection,
 } from "./session-notification-projection";
 
 type CreateSessionOccurrenceProjectorOptions = {
@@ -37,9 +37,9 @@ export const createSessionOccurrenceProjector = ({
   const builder = createSessionNotificationBuilder({ repositoryLabel, resolveTask });
   const { sessionOccurrence, sessionTarget, projectPendingInput, setRepositoryLabel } = builder;
   const projectLaunchFailure = createLaunchFailureNotices(builder);
-  const sessions = new Map<string, SessionProjection>();
+  const sessions = new Map<string, Projection>();
 
-  const observeUnownedInputs = (projection: SessionProjection, live: boolean): void => {
+  const observeUnownedInputs = (projection: Projection, live: boolean): void => {
     const { snapshot } = projection;
     if (snapshot.parentExternalSessionId !== undefined) {
       projection.unownedInputs = null;
@@ -65,16 +65,16 @@ export const createSessionOccurrenceProjector = ({
   };
 
   const publishTerminal = (
-    projection: SessionProjection,
+    projection: Projection,
     occurrence: NotificationOccurrence,
   ): NotificationOccurrence[] => {
     if (projection.association) return [occurrence];
     // One entry per episode also lets an error replace a deferred idle notice.
-    projection.unownedTerminals.set(executionEpisodeId(projection), occurrence);
+    projection.unownedTerminals.set(requireEpisodeId(projection), occurrence);
     return [];
   };
 
-  const flushOwnedTerminals = (projection: SessionProjection): NotificationOccurrence[] => {
+  const flushOwnedTerminals = (projection: Projection): NotificationOccurrence[] => {
     if (projection.snapshot.parentExternalSessionId !== undefined) {
       projection.unownedInputs = null;
       projection.unownedTerminals.clear();
@@ -93,7 +93,7 @@ export const createSessionOccurrenceProjector = ({
     }));
   };
 
-  const finishIdleCycle = (projection: SessionProjection): NotificationOccurrence[] => {
+  const finishIdleCycle = (projection: Projection): NotificationOccurrence[] => {
     const { snapshot } = projection;
     if (
       !projection.running ||
@@ -113,7 +113,7 @@ export const createSessionOccurrenceProjector = ({
       projection,
       sessionOccurrence(projection, {
         kind: "agent.session_idle",
-        suffix: executionEpisodeId(projection),
+        suffix: requireEpisodeId(projection),
         status: projection.lastAssistantMessage?.text ?? "Ready for your next message.",
         navigationTarget: { type: "agent_session", ...sessionTarget(projection) },
       }),
@@ -121,7 +121,7 @@ export const createSessionOccurrenceProjector = ({
   };
 
   const finishErrorEpisode = (
-    projection: SessionProjection,
+    projection: Projection,
     errorId: string,
     message: string,
   ): NotificationOccurrence[] => {
@@ -134,7 +134,7 @@ export const createSessionOccurrenceProjector = ({
       projection,
       sessionOccurrence(projection, {
         kind: "agent.session_error",
-        suffix: executionEpisodeId(projection),
+        suffix: requireEpisodeId(projection),
         status:
           toNotificationStatus(normalizeSessionErrorMessage(message)) ||
           "The session failed. Open it for details.",
@@ -143,7 +143,7 @@ export const createSessionOccurrenceProjector = ({
     );
   };
 
-  const findOwnedAncestor = (snapshot: AgentSessionLiveSnapshot): SessionProjection | null => {
+  const findOwnedAncestor = (snapshot: AgentSessionLiveSnapshot): Projection | null => {
     let parentExternalSessionId = snapshot.parentExternalSessionId;
     const visited = new Set([snapshot.ref.externalSessionId]);
     while (parentExternalSessionId && !visited.has(parentExternalSessionId)) {
@@ -162,7 +162,7 @@ export const createSessionOccurrenceProjector = ({
   };
 
   const projectChildBackgroundQuestions = (
-    projection: SessionProjection,
+    projection: Projection,
     previousQuestions: ReadonlySet<string>,
   ): NotificationOccurrence[] => {
     const { snapshot } = projection;
@@ -293,7 +293,7 @@ export const createSessionOccurrenceProjector = ({
     return [...flushOwnedTerminals(projection), ...occurrences, ...projectDeferredChildQuestions()];
   };
 
-  const flushOwnedInputs = (projection: SessionProjection): NotificationOccurrence[] => {
+  const flushOwnedInputs = (projection: Projection): NotificationOccurrence[] => {
     const { snapshot } = projection;
     if (!projection.association) return [];
     const pending = projection.unownedInputs;

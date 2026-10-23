@@ -12,7 +12,7 @@ import type {
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import {
-  composerForegroundTurnActive,
+  hasForegroundTurn,
   steersRunningTurn,
 } from "@/components/features/agents/agent-chat/agent-chat-steering";
 import { findRunningTurnModelEntry } from "@/features/agent-chat-composer/model-selection/model-selection-options";
@@ -178,7 +178,7 @@ export function useAgentChatSend({
           // A steer joins the running turn, so the model of that turn checks the content.
           modelDescriptor: steersRunningTurn(
             mode,
-            composerForegroundTurnActive({ foregroundTurnActive, isSessionWorking }),
+            hasForegroundTurn({ foregroundTurnActive, isSessionWorking }),
           )
             ? runningTurnModel
             : selectedModelDescriptor,

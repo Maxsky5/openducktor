@@ -10,7 +10,7 @@ import {
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { hasPendingSendItems, readPendingSendBlockedReason } from "./agent-chat-pending-send";
 import {
-  composerForegroundTurnActive,
+  hasForegroundTurn,
   draftSteerBlockedReason,
   steersRunningTurn,
 } from "./agent-chat-steering";
@@ -34,7 +34,7 @@ export function useComposerPolicy({
       model.selectedModelDescriptor?.attachmentSupport,
     );
   }, [draft.attachments, model.selectedModelDescriptor?.attachmentSupport]);
-  const steersTurn = steersRunningTurn(primaryMode, composerForegroundTurnActive(model));
+  const steersTurn = steersRunningTurn(primaryMode, hasForegroundTurn(model));
   const attachmentErrors = useMemo(
     () =>
       steersTurn
@@ -170,14 +170,14 @@ const composerPlaceholderFor = (
 };
 
 const queuePlaceholderParts = (
-  { isSessionWorking, foregroundTurnActive, messageQueue, steerBlockedReason }: ComposerPolicyModel,
+  model: ComposerPolicyModel,
   primaryMode: AgentMessageSubmitMode,
 ): string[] => {
   const queueKey = primaryMode === "default" ? "Enter" : steerShortcutLabel();
   const steerKey = primaryMode === "steer" ? "Enter" : steerShortcutLabel();
-  const turnActive = composerForegroundTurnActive({ foregroundTurnActive, isSessionWorking });
-  if (turnActive && steerBlockedReason) return [`${queueKey} to queue`];
-  const hasQueuedMessages = (messageQueue?.queue?.entries.length ?? 0) > 0;
+  const turnActive = hasForegroundTurn(model);
+  if (turnActive && model.steerBlockedReason) return [`${queueKey} to queue`];
+  const hasQueuedMessages = (model.messageQueue?.queue?.entries.length ?? 0) > 0;
   if (!turnActive && !hasQueuedMessages) return [];
   const steerAction = turnActive ? "steer" : "send now";
   if (primaryMode === "steer") {
@@ -228,13 +228,7 @@ const composerInputDisabledFor = ({
   );
 };
 
-const composerIsSubmitting = ({
-  isSending,
-  isSessionWorking,
-  foregroundTurnActive,
-  isStarting,
-  isModelSelectionPending,
-}: ComposerPolicyModel): boolean =>
-  (isSending && !composerForegroundTurnActive({ foregroundTurnActive, isSessionWorking })) ||
-  isStarting ||
-  isModelSelectionPending;
+const composerIsSubmitting = (model: ComposerPolicyModel): boolean =>
+  (model.isSending && !hasForegroundTurn(model)) ||
+  model.isStarting ||
+  model.isModelSelectionPending;

@@ -14,11 +14,11 @@ import type {
 import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import { activityForSummary } from "./claude-live-session-activity";
 import {
-  aggregateClaudeInputActivity,
-  claudeSessionTreeSnapshots,
-  readClaudeParentSnapshot,
-  toClaudeLiveApprovalRequest,
-  toClaudeLiveQuestionRequest,
+  inputActivity,
+  sessionTree,
+  readParent,
+  toApproval,
+  toQuestion,
 } from "./claude-live-session-inputs";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
@@ -76,18 +76,14 @@ export const createClaudeLiveSessionState = () => {
       visited.add(key);
       const parsed = cloneSnapshot({
         ...current,
-        activity: aggregateClaudeInputActivity(
-          current,
-          snapshotsByRef.values(),
-          nativeActivityByRef.get(key),
-        ),
+        activity: inputActivity(current, snapshotsByRef.values(), nativeActivityByRef.get(key)),
       });
       const previous = snapshotsByRef.get(key);
       snapshotsByRef.set(key, parsed);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(parsed)) {
         changes.push({ type: "session_upsert", snapshot: parsed });
       }
-      current = readClaudeParentSnapshot(parsed, readSnapshot);
+      current = readParent(parsed, readSnapshot);
     }
     return changes;
   };
@@ -139,8 +135,8 @@ export const createClaudeLiveSessionState = () => {
   const removeSessionTree = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
     const snapshot = readSnapshot(ref);
     if (!snapshot) return removeSnapshot(ref);
-    const parent = readClaudeParentSnapshot(snapshot, readSnapshot);
-    const changes = claudeSessionTreeSnapshots(snapshot, snapshotsByRef.values()).flatMap((child) =>
+    const parent = readParent(snapshot, readSnapshot);
+    const changes = sessionTree(snapshot, snapshotsByRef.values()).flatMap((child) =>
       removeSnapshot(child.ref),
     );
     if (parent) changes.push(...commitSnapshot(parent));
@@ -162,7 +158,7 @@ export const createClaudeLiveSessionState = () => {
       snapshot.parentExternalSessionId = event.parentExternalSessionId;
     if (event.type === "approval_required") {
       nativeActivityByRef.set(refKey(ref), "running");
-      const request = toClaudeLiveApprovalRequest(event);
+      const request = toApproval(event);
       return commitSnapshot({
         ...snapshot,
         pendingApprovals: [
@@ -175,7 +171,7 @@ export const createClaudeLiveSessionState = () => {
     }
     if (event.type === "question_required") {
       if (event.blocking !== false) nativeActivityByRef.set(refKey(ref), "running");
-      const request = toClaudeLiveQuestionRequest(event);
+      const request = toQuestion(event);
       return commitSnapshot({
         ...snapshot,
         pendingQuestions: [
@@ -210,7 +206,7 @@ export const createClaudeLiveSessionState = () => {
     const ref = eventRef(session, { externalSessionId: event.part.externalSessionId });
     const current = ensureSnapshot(session, ref, event.timestamp);
     const running = event.part.status === "pending" || event.part.status === "running";
-    const previousParent = readClaudeParentSnapshot(current, readSnapshot);
+    const previousParent = readParent(current, readSnapshot);
     nativeActivityByRef.set(refKey(ref), running ? "running" : "idle");
     const changes = commitSnapshot({
       ...current,
@@ -254,7 +250,7 @@ export const createClaudeLiveSessionState = () => {
       if (event.statusUnavailable) {
         const changes: AgentSessionLiveAdapterChange[] = [];
         const root = ensureSnapshot(session, rootRef(session), event.timestamp);
-        const affected = claudeSessionTreeSnapshots(root, snapshotsByRef.values());
+        const affected = sessionTree(root, snapshotsByRef.values());
         for (const snapshot of affected) {
           const unavailableSnapshot = {
             ...snapshot,
@@ -321,14 +317,10 @@ export const createClaudeLiveSessionState = () => {
       delete nextSnapshot.policyNotice;
       changes.push(...commitSnapshot(nextSnapshot));
     } else if (event.type === "session_status") {
-      nativeActivityByRef.set(
-        key,
-        event.status.type === "busy"
-          ? "running"
-          : event.status.type === "retry"
-            ? "retrying"
-            : "idle",
-      );
+      let activity: AgentSessionLiveSnapshot["activity"] = "idle";
+      if (event.status.type === "busy") activity = "running";
+      else if (event.status.type === "retry") activity = "retrying";
+      nativeActivityByRef.set(key, activity);
       const next = { ...snapshot };
       delete next.statusUnavailableReason;
       if (event.foregroundTurnActive !== undefined)

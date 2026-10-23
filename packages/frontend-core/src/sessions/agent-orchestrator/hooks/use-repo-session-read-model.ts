@@ -247,10 +247,8 @@ export const useRepoSessionReadModel = ({
     (ref: AgentSessionLiveRef, message: string, statusUnavailable = false) => {
       const key = agentSessionRefKey(ref);
       setSessionFaults((current) => {
-        if (
-          current.get(key)?.message === message &&
-          Boolean(current.get(key)?.statusUnavailable) === statusUnavailable
-        ) {
+        const fault = current.get(key);
+        if (fault?.message === message && Boolean(fault.statusUnavailable) === statusUnavailable) {
           return current;
         }
         const next = new Map(current);
@@ -263,7 +261,8 @@ export const useRepoSessionReadModel = ({
   const clearSessionFault = useCallback((ref: AgentSessionLiveRef, statusConfirmed = true) => {
     const key = agentSessionRefKey(ref);
     setSessionFaults((current) => {
-      if (!current.has(key) || (!statusConfirmed && current.get(key)?.statusUnavailable)) {
+      const fault = current.get(key);
+      if (!fault || (!statusConfirmed && fault.statusUnavailable)) {
         return current;
       }
       const next = new Map(current);

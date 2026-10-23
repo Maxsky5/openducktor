@@ -9,10 +9,8 @@ import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { clearClaudeNativeActivity } from "./claude-agent-sdk-activity";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
-import {
-  claudeChildEventSessions,
-  hasActiveClaudeBackgroundTools,
-} from "./claude-agent-sdk-event-session";
+import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
+import { childSessions } from "./claude-agent-sdk-session-children";
 import {
   beginClaudeNativeProcessClose,
   isClaudeNativeProcessClosed,
@@ -52,7 +50,7 @@ export const createClaudeAgentSdkSessionStore = ({
   const closeListeners = new Set<(session: ClaudeSession) => void>();
   const states = new WeakMap<ClaudeSession, SessionState>();
   const activeConsumers = new Set<ClaudeSession>();
-  const cleanupSessions = new Set<ClaudeSession>();
+  const closingSessions = new Set<ClaudeSession>();
   const stateFor = (session: ClaudeSession): SessionState => {
     let state = states.get(session);
     if (!state) {
@@ -61,7 +59,7 @@ export const createClaudeAgentSdkSessionStore = ({
     }
     return state;
   };
-  const retire = (session: ClaudeSession): void => {
+  const markClosed = (session: ClaudeSession): void => {
     const state = stateFor(session);
     if (state.closed) return;
     state.closed = true;
@@ -74,7 +72,7 @@ export const createClaudeAgentSdkSessionStore = ({
     if (sessions.get(session.externalSessionId) === session) {
       sessions.delete(session.externalSessionId);
     }
-    cleanupSessions.delete(session);
+    closingSessions.delete(session);
     const failures: unknown[] = [];
     for (const listener of closeListeners) {
       try {
@@ -85,7 +83,7 @@ export const createClaudeAgentSdkSessionStore = ({
     }
     if (failures.length > 0) throw new ClaudeSessionError("claudeRuntime.retireSession", failures);
   };
-  const unavailable = (session: ClaudeSession, failure: ClaudeSessionError): void => {
+  const reportUnavailable = (session: ClaudeSession, failure: ClaudeSessionError): void => {
     if (stateFor(session).closed) return;
     const message = failure.message;
     session.statusUnavailableReason = message;
@@ -101,18 +99,19 @@ export const createClaudeAgentSdkSessionStore = ({
     const state = stateFor(session);
     if (!state.closed && state.closeRequested && isClaudeNativeProcessClosed(session)) {
       delete state.closeError;
-      retire(session);
+      markClosed(session);
     }
-    if (state.closed || state.closeRequested) {
-      if (state.closed || !state.closeError) {
-        if (state.closeError) throw state.closeError;
-        return;
-      }
+    if (state.closed) {
+      if (state.closeError) throw state.closeError;
+      return;
+    }
+    if (state.closeRequested) {
+      if (!state.closeError) return;
       // Explicit cleanup can retry a close that did not terminate the native process.
       delete state.closeError;
     }
     state.closeRequested = true;
-    cleanupSessions.add(session);
+    closingSessions.add(session);
     beginClaudeSessionClose(session);
     beginClaudeNativeProcessClose(session);
     const failures: unknown[] = [];
@@ -124,7 +123,7 @@ export const createClaudeAgentSdkSessionStore = ({
       }
     };
     attempt(() => clearClaudeStreamToolInputTree(session));
-    const invalidateInputTree = (target: ClaudeEventSession): void => {
+    const cancelInput = (target: ClaudeEventSession): void => {
       for (const pending of target.pendingApprovals?.values() ?? []) {
         attempt(() =>
           pending.resolve({
@@ -138,9 +137,9 @@ export const createClaudeAgentSdkSessionStore = ({
         attempt(() => pending.resolve([]));
       target.pendingApprovals?.clear();
       target.pendingQuestions?.clear();
-      for (const child of claudeChildEventSessions(target)) invalidateInputTree(child);
+      for (const child of childSessions(target)) cancelInput(child);
     };
-    invalidateInputTree(session);
+    cancelInput(session);
     attempt(() => rejectPendingAdmissions(session, new Error("Claude session was stopped.")));
     session.unreadSteeredUserMessages.clear();
     attempt(() => session.queue.close());
@@ -148,7 +147,7 @@ export const createClaudeAgentSdkSessionStore = ({
     attempt(() => session.query.close());
     session.pendingApprovals.clear();
     session.pendingQuestions.clear();
-    if (isClaudeNativeProcessClosed(session)) attempt(() => retire(session));
+    if (isClaudeNativeProcessClosed(session)) attempt(() => markClosed(session));
     if (failures.length > 0) {
       if (!state.closed)
         failures.push(
@@ -158,7 +157,7 @@ export const createClaudeAgentSdkSessionStore = ({
         );
       const failure = new ClaudeSessionError("claudeRuntime.closeSession", failures);
       state.closeError = failure;
-      attempt(() => unavailable(session, failure));
+      attempt(() => reportUnavailable(session, failure));
       throw failure;
     }
   };
@@ -166,13 +165,13 @@ export const createClaudeAgentSdkSessionStore = ({
     Effect.tryPromise({
       try: async () => {
         await waitForClaudeNativeProcessExit(session);
-        retire(session);
+        markClosed(session);
       },
       catch: (cause) => new ClaudeSessionError("claudeRuntime.confirmTermination", [cause]),
     }).pipe(
       Effect.tapError((failure) =>
         Effect.try({
-          try: () => unavailable(session, failure),
+          try: () => reportUnavailable(session, failure),
           catch: (cause) => new ClaudeSessionError("claudeRuntime.publishUnavailable", [cause]),
         }),
       ),
@@ -262,7 +261,7 @@ export const createClaudeAgentSdkSessionStore = ({
 
   const getForCleanup = (externalSessionId: string): ClaudeSession | undefined =>
     sessions.get(externalSessionId) ??
-    [...cleanupSessions, ...activeConsumers].findLast(
+    [...closingSessions, ...activeConsumers].findLast(
       (session) => session.externalSessionId === externalSessionId,
     );
 
@@ -333,7 +332,7 @@ export const createClaudeAgentSdkSessionStore = ({
     stopSessionsForRuntime: (runtimeId) =>
       Effect.suspend(() => {
         const targets = [
-          ...new Set([...sessions.values(), ...cleanupSessions, ...activeConsumers]),
+          ...new Set([...sessions.values(), ...closingSessions, ...activeConsumers]),
         ].filter((session) => session.runtimeId === runtimeId);
         return Effect.forEach(targets, (session) => Effect.exit(stop(session, "Runtime stopped")), {
           concurrency: "unbounded",

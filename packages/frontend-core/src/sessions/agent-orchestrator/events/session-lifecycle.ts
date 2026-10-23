@@ -228,12 +228,12 @@ export const handleUserMessage = (
   provenance?: SessionTranscriptEventProvenance,
 ): void => {
   context.turn.recordTurnUserMessageTimestamp(context.session.key, event.timestamp);
-  const isLiveClaudeRead =
+  const tracksTurn =
     provenance !== "baseline" &&
     context.session.identity.runtimeKind === "claude" &&
     event.state === "read";
-  if (isLiveClaudeRead) {
-    context.turn.turnMetadata.recordResponseMessageId(context.session.key, event.messageId);
+  if (tracksTurn) {
+    context.turn.turnMetadata.recordTurnMessage(context.session.key, event.messageId);
   }
   context.store.updateSession(context.session.identity, (current) => {
     const next = {
@@ -242,7 +242,7 @@ export const handleUserMessage = (
       messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
     };
     if (
-      isLiveClaudeRead &&
+      tracksTurn &&
       event.submissionId !== undefined &&
       current.pendingSubmissionId === event.submissionId
     ) {
@@ -468,8 +468,7 @@ export const handleSessionTurnFinished = (
   if (provenance === "baseline") return;
   const session = context.store.readSession(context.session.identity);
   if (!session || session.pendingSubmissionId !== undefined) return;
-  if (!context.turn.turnMetadata.consumeResponseMessageIds(context.session.key, event.messageIds))
-    return;
+  if (!context.turn.turnMetadata.consumeTurnMessages(context.session.key, event.messageIds)) return;
   context.turn.clearTurnDuration(context.session.key, event.timestamp);
   clearTurnTracking(context);
 };

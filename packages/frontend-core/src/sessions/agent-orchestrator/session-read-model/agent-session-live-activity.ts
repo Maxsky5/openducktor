@@ -3,12 +3,6 @@ import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import { normalizeSessionErrorMessage } from "../../../lib/session-error-message";
 import { isStopAbortSessionErrorMessage } from "../support/tool-messages";
 
-/**
- * The session fields the transcript lifecycle rule reads and writes.
- *
- * The Agent Studio read model and the workspace rail activity projection keep
- * different session shapes, so the rule is stated over the shared fields only.
- */
 export type AgentSessionTranscriptActivityFacts = Pick<
   AgentSessionState,
   | "status"
@@ -22,6 +16,27 @@ export type AgentSessionTranscriptActivityFacts = Pick<
   pendingQuestions: readonly Pick<AgentPendingQuestionRequest, "blocking">[];
 };
 
+// Transcript assembly can buffer lifecycle events, so update activity first.
+export const projectSessionTranscriptActivity = <T extends AgentSessionTranscriptActivityFacts>(
+  current: T,
+  event: AgentEvent,
+): T => {
+  let next = projectActivity(current, event);
+  if (current.statusUnavailableReason && confirmsSessionActivity(event))
+    next = { ...next, statusUnavailableReason: null };
+  if (
+    next.status === current.status &&
+    next.runtimeStatusMessage === current.runtimeStatusMessage &&
+    next.pendingUserMessageStartedAt === current.pendingUserMessageStartedAt &&
+    next.foregroundTurnActive === current.foregroundTurnActive &&
+    next.statusUnavailableReason === current.statusUnavailableReason &&
+    next.pendingApprovals === current.pendingApprovals &&
+    next.pendingQuestions === current.pendingQuestions
+  )
+    return current;
+  return { ...current, ...next };
+};
+
 export const confirmsSessionActivity = (event: AgentEvent): boolean =>
   event.type === "session_started" ||
   event.type === "session_status" ||
@@ -29,7 +44,6 @@ export const confirmsSessionActivity = (event: AgentEvent): boolean =>
   event.type === "session_error" ||
   event.type === "session_finished";
 
-/** Apply ordered lifecycle facts before transcript assembly can buffer the event. */
 const projectActivity = (
   current: AgentSessionTranscriptActivityFacts,
   event: AgentEvent,
@@ -116,24 +130,4 @@ const projectActivity = (
   }
   if (event.type === "user_message") return { ...current, runtimeStatusMessage: null };
   return current;
-};
-
-export const projectSessionTranscriptActivity = <T extends AgentSessionTranscriptActivityFacts>(
-  current: T,
-  event: AgentEvent,
-): T => {
-  let next = projectActivity(current, event);
-  if (current.statusUnavailableReason && confirmsSessionActivity(event))
-    next = { ...next, statusUnavailableReason: null };
-  if (
-    next.status === current.status &&
-    next.runtimeStatusMessage === current.runtimeStatusMessage &&
-    next.pendingUserMessageStartedAt === current.pendingUserMessageStartedAt &&
-    next.foregroundTurnActive === current.foregroundTurnActive &&
-    next.statusUnavailableReason === current.statusUnavailableReason &&
-    next.pendingApprovals === current.pendingApprovals &&
-    next.pendingQuestions === current.pendingQuestions
-  )
-    return current;
-  return { ...current, ...next };
 };

@@ -22,7 +22,7 @@ import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
 import {
-  composerForegroundTurnActive,
+  hasForegroundTurn,
   draftSteerBlockedReason,
   steersRunningTurn,
 } from "./agent-chat-steering";
@@ -194,7 +194,7 @@ export function AgentChatComposer({
   const handleSubmit = useCallback(
     async (mode: AgentMessageSubmitMode): Promise<void> => {
       if (!settingsReadyRef.current) return;
-      const steersTurn = steersRunningTurn(mode, composerForegroundTurnActive(modelRef.current));
+      const steersTurn = steersRunningTurn(mode, hasForegroundTurn(modelRef.current));
       if (steersTurn ? sendInputBlockedRef.current : defaultSendDisabledRef.current) {
         return;
       }

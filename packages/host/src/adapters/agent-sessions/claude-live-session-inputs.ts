@@ -7,7 +7,7 @@ import type {
 import type { AgentEvent } from "@openducktor/core";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 
-export const toClaudeLiveApprovalRequest = (
+export const toApproval = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
 ): AgentSessionLivePendingApprovalRequest => {
   const request: AgentSessionLivePendingApprovalRequest = {
@@ -28,7 +28,7 @@ export const toClaudeLiveApprovalRequest = (
   return request;
 };
 
-export const toClaudeLiveQuestionRequest = (
+export const toQuestion = (
   event: Extract<AgentEvent, { type: "question_required" }>,
 ): AgentSessionLivePendingQuestionRequest => {
   const request: AgentSessionLivePendingQuestionRequest = {
@@ -41,13 +41,7 @@ export const toClaudeLiveQuestionRequest = (
   return request;
 };
 
-const isLinkedChild = (parent: AgentSessionLiveSnapshot, child: AgentSessionLiveSnapshot) =>
-  child.ref.repoPath === parent.ref.repoPath &&
-  child.ref.workingDirectory === parent.ref.workingDirectory &&
-  child.parentExternalSessionId === parent.ref.externalSessionId &&
-  isClaudeSubagentTranscriptTarget(child.ref.externalSessionId);
-
-export const readClaudeParentSnapshot = (
+export const readParent = (
   snapshot: AgentSessionLiveSnapshot,
   readSnapshot: (ref: AgentSessionLiveRef) => AgentSessionLiveSnapshot | undefined,
 ): AgentSessionLiveSnapshot | undefined =>
@@ -56,7 +50,7 @@ export const readClaudeParentSnapshot = (
     ? readSnapshot({ ...snapshot.ref, externalSessionId: snapshot.parentExternalSessionId })
     : undefined;
 
-export const aggregateClaudeInputActivity = (
+export const inputActivity = (
   snapshot: AgentSessionLiveSnapshot,
   snapshots: Iterable<AgentSessionLiveSnapshot>,
   nativeActivity: AgentSessionLiveSnapshot["activity"] | undefined,
@@ -75,7 +69,7 @@ export const aggregateClaudeInputActivity = (
   return nativeActivity ?? snapshot.activity;
 };
 
-export const claudeSessionTreeSnapshots = (
+export const sessionTree = (
   root: AgentSessionLiveSnapshot,
   snapshots: Iterable<AgentSessionLiveSnapshot>,
 ): AgentSessionLiveSnapshot[] => {
@@ -97,3 +91,12 @@ export const claudeSessionTreeSnapshots = (
   }
   return affected;
 };
+
+const isLinkedChild = (
+  parent: AgentSessionLiveSnapshot,
+  child: AgentSessionLiveSnapshot,
+): boolean =>
+  child.ref.repoPath === parent.ref.repoPath &&
+  child.ref.workingDirectory === parent.ref.workingDirectory &&
+  child.parentExternalSessionId === parent.ref.externalSessionId &&
+  isClaudeSubagentTranscriptTarget(child.ref.externalSessionId);

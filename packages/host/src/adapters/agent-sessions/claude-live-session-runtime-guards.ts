@@ -8,6 +8,7 @@ import {
   isClaudeSessionClosed,
   isClaudeSessionClosing,
 } from "../claude/claude-agent-sdk-session-lifecycle";
+import type { CreateClaudeLiveSessionAdapterPreparerInput } from "./claude-live-session-adapter-contract";
 
 export type ClaudeLiveRuntimeInstance = RuntimeInstanceSummary & {
   readonly kind: "claude";
@@ -20,10 +21,8 @@ type ClaudeRuntimeValidationDetails =
 
 type OperationValidationDetails = { readonly operation: string };
 
-export const createClaudeSessionEventGuard =
-  (
-    store: import("./claude-live-session-adapter-contract").CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"],
-  ) =>
+export const createEventGuard =
+  (store: CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"]) =>
   (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent): boolean => {
     const current = store.get(session.externalSessionId);
     if (current && current !== session) return false;

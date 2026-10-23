@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import {
   getAgentSessionActivityStateFromSession,
-  isAgentSessionActivityWorking,
+  visibleSessionActivity,
 } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { matchesAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
@@ -95,11 +95,7 @@ export const deriveSelectedSessionViewProjection = ({
       session.statusUnavailableReason ??
       (sessionFault?.statusUnavailable ? sessionFault.message : null);
     return {
-      activityState:
-        unavailableReason &&
-        (activityState === "idle" || isAgentSessionActivityWorking(activityState))
-          ? null
-          : activityState,
+      activityState: visibleSessionActivity(activityState, unavailableReason),
       selectedModel: session.selectedModel,
       transcriptState: deriveLoadedAgentSessionTranscriptState({
         session,

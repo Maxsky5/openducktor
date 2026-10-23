@@ -1,9 +1,7 @@
 import type { AgentEvent } from "@openducktor/core";
 import { projectClaudeBackgroundTaskSnapshot } from "./claude-agent-sdk-background-tools";
-import {
-  claudeChildEventSessions,
-  type ClaudeEventSession,
-} from "./claude-agent-sdk-event-session";
+import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
+import { childSessions } from "./claude-agent-sdk-session-children";
 
 export const emitBackgroundTaskSnapshot = ({
   emit,
@@ -25,7 +23,7 @@ export const emitBackgroundTaskSnapshot = ({
   for (const part of parts) {
     emit({ type: "assistant_part", externalSessionId: session.externalSessionId, timestamp, part });
   }
-  for (const child of claudeChildEventSessions(session)) {
+  for (const child of childSessions(session)) {
     emitBackgroundTaskSnapshot({ emit, message, session: child, timestamp, knownOnly: true });
   }
 };

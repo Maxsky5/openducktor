@@ -50,6 +50,14 @@ export const isAgentSessionActivityActive = (
   activityState === "waiting_input" ||
   (!statusUnavailableReason && isAgentSessionActivityWorking(activityState));
 
+export const visibleSessionActivity = (
+  activity: AgentSessionActivityState | null,
+  statusUnavailableReason?: string | null,
+): AgentSessionActivityState | null =>
+  statusUnavailableReason && (activity === "idle" || isAgentSessionActivityWorking(activity))
+    ? null
+    : activity;
+
 export const compareActiveAgentSessionActivityState = (
   left: ActiveAgentSessionActivityState,
   right: ActiveAgentSessionActivityState,

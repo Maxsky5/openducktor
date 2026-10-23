@@ -11,7 +11,7 @@ import {
   findClaudeSubagentTaskSession,
   hasActiveClaudeBackgroundWork,
   rememberAssistantTextForCurrentTurn,
-  reconcileClaudeSubagentTaskRoutes,
+  updateTaskRoutes,
   userTurnIndex,
 } from "./claude-agent-sdk-event-session";
 import {
@@ -19,10 +19,7 @@ import {
   resolveForwardedClaudeSubagentMessage,
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent, publishClaudeActivity } from "./claude-agent-sdk-lifecycle";
-import {
-  reconcileClaudeBackgroundTasks,
-  reconcileClaudeTaskEdge,
-} from "./claude-agent-sdk-activity";
+import { updateBackgroundTasks, applyTaskEvent } from "./claude-agent-sdk-activity";
 import {
   isClaudeMetaStreamMessage,
   isClaudeSyntheticAssistantMessage,
@@ -234,8 +231,8 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "system" && message.subtype === "background_tasks_changed") {
-    reconcileClaudeBackgroundTasks(session, message);
-    reconcileClaudeSubagentTaskRoutes(session, message.tasks);
+    updateBackgroundTasks(session, message);
+    updateTaskRoutes(session, message.tasks);
     emitBackgroundTaskSnapshot({ emit, message, session, timestamp });
     publishClaudeActivity({ emit, session, timestamp });
     return;
@@ -247,7 +244,7 @@ export const handleClaudeSdkMessage = ({
       message.subtype === "task_updated" ||
       message.subtype === "task_notification")
   ) {
-    if (!reconcileClaudeTaskEdge(session, message)) return;
+    if (!applyTaskEvent(session, message)) return;
     const taskSession =
       findClaudeSubagentTaskSession(
         session,

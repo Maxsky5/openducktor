@@ -189,14 +189,16 @@ export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRu
     return toAgentSessionRuntimeSnapshot({ ref, snapshot: null });
   }
   const foregroundTurnActive = isClaudeForegroundTurnActive(session);
-  const runtimeActivity =
+  let runtimeActivity = session.activity;
+  if (
     foregroundTurnActive ||
     hasClaudeNativeBackgroundActivity(session) ||
     session.resultAwaitsSdkIdle
-      ? "running"
-      : session.sdkState === "idle"
-        ? "idle"
-        : session.activity;
+  ) {
+    runtimeActivity = "running";
+  } else if (session.sdkState === "idle") {
+    runtimeActivity = "idle";
+  }
   const snapshot: NonNullable<Parameters<typeof toAgentSessionRuntimeSnapshot>[0]["snapshot"]> = {
     title: session.summary.title ?? "Claude session",
     startedAt: session.startedAt,

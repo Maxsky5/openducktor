@@ -6,7 +6,7 @@ import type {
 import { agentSessionRefKey, BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import { type QueuePause, SESSION_LEFT_RUNTIME_REASON } from "./agent-message-queue-model";
-import { hasActiveForegroundTurn, hasBlockingSessionInput } from "./session-foreground-readiness";
+import { hasForegroundTurn, hasBlockingInput } from "./session-foreground-readiness";
 
 /** A live change that matters to the queue of its session. */
 export type QueueSignal =
@@ -42,9 +42,9 @@ export const createSessionConditions = () => {
         leftRuntime.delete(key);
         if (envelope.session.statusUnavailableReason) unavailable.add(key);
         else unavailable.delete(key);
-        if (hasActiveForegroundTurn(envelope.session)) working.add(key);
+        if (hasForegroundTurn(envelope.session)) working.add(key);
         else working.delete(key);
-        if (hasBlockingSessionInput(envelope.session)) {
+        if (hasBlockingInput(envelope.session)) {
           blockedOnInput.add(key);
           return null;
         }

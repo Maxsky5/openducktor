@@ -16,7 +16,7 @@ import type { ClaudeTranscriptReadOptions } from "./claude-transcript-reader";
 import { hasFinalStopStep, type ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
-import { claudeChildEventSessions } from "./claude-agent-sdk-event-session";
+import { childSessions } from "./claude-agent-sdk-session-children";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
 import { createClaudeTranscriptSubagentReader } from "./claude-transcript-subagents";
@@ -43,7 +43,7 @@ export const claudeLiveHistoryContext = (
       const collect = (work: ClaudeEventSession): void => {
         for (const id of work.backgroundToolActiveTaskIds ?? []) ids.add(id);
         for (const id of work.activeBackgroundSubagentTaskIds ?? []) ids.add(id);
-        for (const child of claudeChildEventSessions(work)) collect(child);
+        for (const child of childSessions(work)) collect(child);
       };
       const work = isSubagent ? findClaudeHistoryWork(session, externalSessionId) : session;
       if (work) collect(work);
@@ -62,18 +62,6 @@ export const claudeLiveHistoryContext = (
       return isSubagent ? [] : [...session.acceptedUserMessages];
     },
   };
-};
-
-const findClaudeHistoryWork = (
-  session: ClaudeEventSession,
-  externalSessionId: string,
-): ClaudeEventSession | null => {
-  if (session.externalSessionId === externalSessionId) return session;
-  for (const child of claudeChildEventSessions(session)) {
-    const match = findClaudeHistoryWork(child, externalSessionId);
-    if (match) return match;
-  }
-  return null;
 };
 
 export const finalizeClaudeHistory = (
@@ -127,6 +115,18 @@ export const loadClaudeHistorySnapshot = (
     );
     return { history, messages: projectionInput.messages };
   });
+
+const findClaudeHistoryWork = (
+  session: ClaudeEventSession,
+  externalSessionId: string,
+): ClaudeEventSession | null => {
+  if (session.externalSessionId === externalSessionId) return session;
+  for (const child of childSessions(session)) {
+    const match = findClaudeHistoryWork(child, externalSessionId);
+    if (match) return match;
+  }
+  return null;
+};
 
 const projectClaudeHistory = (
   input: LoadAgentSessionHistoryInput,

@@ -7,6 +7,7 @@ import {
   getAgentSessionActivityStateFromSession,
   isAgentSessionActivityWorking,
   isAgentSessionForegroundActive,
+  visibleSessionActivity,
 } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { OptionalAgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 import type {
@@ -84,11 +85,7 @@ export function projectWorkspaceSessionChatState({
     session && observationReady ? getAgentSessionActivityStateFromSession(session) : null;
   const statusUnavailableReason =
     session?.statusUnavailableReason ?? (fault?.statusUnavailable ? fault.message : null);
-  const activityState =
-    statusUnavailableReason &&
-    (observedActivity === "idle" || isAgentSessionActivityWorking(observedActivity))
-      ? null
-      : observedActivity;
+  const activityState = visibleSessionActivity(observedActivity, statusUnavailableReason);
   const isWorking = isAgentSessionActivityWorking(activityState);
   let transcriptState: AgentSessionTranscriptState;
   if (!identity) {

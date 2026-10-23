@@ -34,7 +34,6 @@ type ClaudeLifecycleInput = {
 type ClaudeLifecycleEvent =
   | { kind: "sdk_state"; state: "idle" | "requires_action" | "running" }
   | { kind: "sdk_turn_started" }
-  /** The CLI cancelled a local user turn before it ran, so the turn never starts. */
   | { kind: "user_turn_cancelled" }
   | {
       kind: "result";
@@ -46,40 +45,31 @@ export const applyClaudeLifecycleEvent = (
   input: ClaudeLifecycleInput & { event: ClaudeLifecycleEvent },
 ): void => {
   if (input.event.kind === "sdk_state") {
-    applySdkStateLifecycleEvent({ ...input, state: input.event.state });
+    applyState({ ...input, state: input.event.state });
     return;
   }
   if (input.event.kind === "sdk_turn_started") {
-    applySdkTurnStartedLifecycleEvent(input);
+    startTurn(input);
     return;
   }
   if (input.event.kind === "user_turn_cancelled") {
-    applyUserTurnCancelledLifecycleEvent(input);
+    cancelTurn(input);
     return;
   }
-  applyResultLifecycleEvent({
+  finishTurn({
     ...input,
     outcome: input.event.outcome,
     consumedMessageCount: input.event.consumedMessageCount,
   });
 };
 
-const hasPendingInput = (session: ClaudeLifecycleSession): boolean => {
-  return hasClaudeBlockingInput(session);
-};
-
-const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
-  session.pendingUserTurnCount ?? 0;
-
-const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
-  session.activeSdkUserTurnCount ?? 0;
-
+/** Foreground readiness can change while background work keeps the session Running. */
 export const publishClaudeActivity = (input: ClaudeLifecycleInput, force = false): void => {
   const { session, emit, timestamp } = input;
   const foregroundTurnActive = isClaudeForegroundTurnActive(session);
   const running =
     foregroundTurnActive ||
-    hasPendingInput(session) ||
+    hasClaudeBlockingInput(session) ||
     hasClaudeNativeBackgroundActivity(session) ||
     session.resultAwaitsSdkIdle === true ||
     session.sdkState === "requires_action";
@@ -100,10 +90,13 @@ export const publishClaudeActivity = (input: ClaudeLifecycleInput, force = false
   }
 };
 
-const emitSessionIdle = (input: ClaudeLifecycleInput): void => publishClaudeActivity(input);
-const emitSessionBusy = (input: ClaudeLifecycleInput): void => publishClaudeActivity(input, true);
+const pendingUserTurnCount = (session: ClaudeLifecycleSession): number =>
+  session.pendingUserTurnCount ?? 0;
 
-const completePendingUserTurn = (session: ClaudeLifecycleSession): number => {
+const activeSdkUserTurnCount = (session: ClaudeLifecycleSession): number =>
+  session.activeSdkUserTurnCount ?? 0;
+
+const finishPendingTurn = (session: ClaudeLifecycleSession): number => {
   if (pendingUserTurnCount(session) <= 0) {
     return 0;
   }
@@ -111,7 +104,7 @@ const completePendingUserTurn = (session: ClaudeLifecycleSession): number => {
   return session.pendingUserTurnCount;
 };
 
-const completeActiveSdkUserTurn = (session: ClaudeLifecycleSession): number => {
+const finishActiveTurn = (session: ClaudeLifecycleSession): number => {
   if (activeSdkUserTurnCount(session) <= 0) {
     return 0;
   }
@@ -119,7 +112,7 @@ const completeActiveSdkUserTurn = (session: ClaudeLifecycleSession): number => {
   return session.activeSdkUserTurnCount;
 };
 
-const applySdkStateLifecycleEvent = (
+const applyState = (
   input: ClaudeLifecycleInput & {
     state: Extract<ClaudeLifecycleEvent, { kind: "sdk_state" }>["state"];
   },
@@ -141,39 +134,32 @@ const applySdkStateLifecycleEvent = (
   if (input.state === "running") {
     const hasLocalTurn =
       activeSdkUserTurnCount(input.session) > 0 || pendingUserTurnCount(input.session) > 0;
-    // A running state may replay during initialization. Work frames confirm automatic turns.
+    // Startup can replay Running before any work starts. Work events confirm a new turn.
     if (input.session.activity === "idle" && !hasLocalTurn) {
       delete input.session.sdkState;
       return;
     }
     if (hasLocalTurn) input.session.foregroundTurnActive = true;
-    emitSessionBusy(input);
+    publishClaudeActivity(input, true);
     return;
   }
   input.session.activity = "running";
 };
 
-/**
- * A local turn counts as pending and active from its send. When the CLI cancels it before it
- * runs, the CLI stays idle, and the turn ends with no outcome, so it releases no queued message.
- */
-const applyUserTurnCancelledLifecycleEvent = (input: ClaudeLifecycleInput): void => {
-  const remainingPendingUserTurns = completePendingUserTurn(input.session);
-  const remainingActiveSdkUserTurns = completeActiveSdkUserTurn(input.session);
+/** The CLI cancels queued commands without a result. */
+const cancelTurn = (input: ClaudeLifecycleInput): void => {
+  const pendingTurns = finishPendingTurn(input.session);
+  const activeTurns = finishActiveTurn(input.session);
   if (input.session.foregroundTurnActive === true && input.session.sdkInitiatedTurnActive) return;
-  if (
-    remainingPendingUserTurns > 0 ||
-    remainingActiveSdkUserTurns > 0 ||
-    hasPendingInput(input.session)
-  ) {
+  if (pendingTurns > 0 || activeTurns > 0 || hasClaudeBlockingInput(input.session)) {
     return;
   }
   input.session.foregroundTurnActive = false;
   input.session.sdkState = "idle";
-  emitSessionIdle(input);
+  publishClaudeActivity(input);
 };
 
-const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void => {
+const startTurn = (input: ClaudeLifecycleInput): void => {
   if (input.session.foregroundTurnActive === true) return;
   const hasLocalTurn =
     activeSdkUserTurnCount(input.session) > 0 || pendingUserTurnCount(input.session) > 0;
@@ -181,10 +167,10 @@ const applySdkTurnStartedLifecycleEvent = (input: ClaudeLifecycleInput): void =>
   if (!hasLocalTurn) {
     input.session.sdkInitiatedTurnActive = true;
   }
-  emitSessionBusy(input);
+  publishClaudeActivity(input, true);
 };
 
-const applyResultLifecycleEvent = (
+const finishTurn = (
   input: ClaudeLifecycleInput & {
     outcome: ClaudeResultLifecycleOutcome;
     consumedMessageCount?: number | undefined;
@@ -192,14 +178,13 @@ const applyResultLifecycleEvent = (
 ): void => {
   delete input.session.sdkInitiatedTurnActive;
   const consumed = input.consumedMessageCount ?? 0;
-  for (let index = 0; index < consumed; index++) completePendingUserTurn(input.session);
-  for (let index = 0; index < consumed; index++) completeActiveSdkUserTurn(input.session);
+  for (let index = 0; index < consumed; index++) finishPendingTurn(input.session);
+  for (let index = 0; index < consumed; index++) finishActiveTurn(input.session);
   input.session.foregroundTurnActive = false;
   if (input.outcome === "awaiting_sdk_idle" && input.session.sdkState !== "idle") {
     input.session.resultAwaitsSdkIdle = true;
   } else delete input.session.resultAwaitsSdkIdle;
   if (!isClaudeForegroundTurnActive(input.session) && input.outcome !== "awaiting_sdk_idle")
     input.session.sdkState = "idle";
-  // The result ends only this foreground turn. Native tasks and delivery stay active.
   publishClaudeActivity(input, true);
 };

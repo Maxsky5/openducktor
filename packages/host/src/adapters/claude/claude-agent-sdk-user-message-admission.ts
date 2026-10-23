@@ -8,12 +8,7 @@ import { toClaudeUserMessageEvent } from "./claude-agent-sdk-session-shape";
 import type { ClaudeAgentSdkEvent, ClaudeSession } from "./claude-agent-sdk-types";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 
-/**
- * Applies a CLI signal about a user message. It admits a pending send, or refuses it when the
- * CLI cancelled the message before it ran. A replay marks a steered message read. It returns
- * true when the frame is a signal. A signal needs no other handling, because a replay is never
- * new transcript content.
- */
+/** Replay signals are not new transcript content, so a handled signal needs no further work. */
 export const applyClaudeUserMessageSignal = ({
   emit,
   message,
@@ -168,14 +163,17 @@ const readUserMessageSignal = (
   }
   const lifecycle = commandLifecycleFrameSchema.safeParse(message);
   if (!lifecycle.success) return null;
-  return {
-    messageId: lifecycle.data.command_uuid,
-    kind: ["cancelled", "discarded", "refused"].includes(lifecycle.data.state)
-      ? "cancelled"
-      : lifecycle.data.state === "completed"
-        ? "terminal"
-        : lifecycle.data.state === "started"
-          ? "started"
-          : "lifecycle",
-  };
+  const messageId = lifecycle.data.command_uuid;
+  switch (lifecycle.data.state) {
+    case "cancelled":
+    case "discarded":
+    case "refused":
+      return { messageId, kind: "cancelled" };
+    case "completed":
+      return { messageId, kind: "terminal" };
+    case "started":
+      return { messageId, kind: "started" };
+    default:
+      return { messageId, kind: "lifecycle" };
+  }
 };

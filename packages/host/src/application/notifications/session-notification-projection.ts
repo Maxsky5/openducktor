@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 import { pendingInputIdentity } from "./pending-input-identity";
 
-export type SessionProjection = {
+export type Projection = {
   association: AgentSessionScope | null;
   snapshot: AgentSessionLiveSnapshot;
   executionEpisodeId: string | undefined;
@@ -16,12 +16,12 @@ export type SessionProjection = {
   pendingApprovals: Set<string>;
   pendingQuestions: Set<string>;
   running: boolean;
-  unownedInputs: UnownedPendingInputs | null;
+  unownedInputs: UnownedInputs | null;
   unownedTerminals: Map<string, NotificationOccurrence>;
   childQuestions: Map<string, AgentSessionLivePendingQuestionRequest>;
 };
 
-type UnownedPendingInputs = {
+type UnownedInputs = {
   approvals: Set<string>;
   questions: Set<string>;
   liveApprovals: Set<string>;
@@ -31,7 +31,7 @@ type UnownedPendingInputs = {
 export const createProjection = (
   snapshot: AgentSessionLiveSnapshot,
   association: AgentSessionScope | null,
-): SessionProjection => ({
+): Projection => ({
   association,
   snapshot,
   executionEpisodeId: snapshot.executionEpisodeId,
@@ -46,13 +46,13 @@ export const createProjection = (
   childQuestions: new Map(),
 });
 
-export const clearDeferred = (projection: SessionProjection): void => {
+export const clearDeferred = (projection: Projection): void => {
   projection.unownedInputs = null;
   projection.unownedTerminals.clear();
   projection.childQuestions.clear();
 };
 
-export const executionEpisodeId = (projection: SessionProjection): string => {
+export const requireEpisodeId = (projection: Projection): string => {
   if (!projection.executionEpisodeId) {
     throw new Error("The live Agent Session has no execution episode ID. Reload to reconnect.");
   }

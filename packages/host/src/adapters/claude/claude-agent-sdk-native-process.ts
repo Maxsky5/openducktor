@@ -5,7 +5,7 @@ import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import { withTimeout } from "./claude-agent-sdk-utils";
 
-type NativeProcessLifetime = {
+type ProcessState = {
   closing: boolean;
   confirmed: boolean;
   exited: Promise<void>;
@@ -14,7 +14,7 @@ type NativeProcessLifetime = {
   process?: SpawnedProcess;
 };
 
-const lifetimes = new WeakMap<ClaudeSessionContext, NativeProcessLifetime>();
+const states = new WeakMap<ClaudeSessionContext, ProcessState>();
 
 /** Keep actual process exit separate from the SDK's bounded query cleanup. */
 export const createClaudeNativeProcessSpawner = (
@@ -22,16 +22,16 @@ export const createClaudeNativeProcessSpawner = (
   stderr?: Options["stderr"],
 ): NonNullable<Options["spawnClaudeCodeProcess"]> => {
   const exit = Promise.withResolvers<void>();
-  const lifetime: NativeProcessLifetime = {
+  const state: ProcessState = {
     closing: false,
     confirmed: false,
     exited: exit.promise,
     resolveExit: exit.resolve,
     stderrTail: "",
   };
-  lifetimes.set(session, lifetime);
+  states.set(session, state);
   return ({ command, args, cwd, env, signal }) => {
-    if (lifetime.closing) throw new Error("Claude session closed before its process started.");
+    if (state.closing) throw new Error("Claude session closed before its process started.");
     const child = spawn(command, args, {
       cwd,
       env,
@@ -39,10 +39,10 @@ export const createClaudeNativeProcessSpawner = (
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
-    lifetime.process = child;
+    state.process = child;
     const confirmExit = (): void => {
-      lifetime.confirmed = true;
-      lifetime.resolveExit();
+      state.confirmed = true;
+      state.resolveExit();
     };
     child.once("exit", confirmExit);
     child.once("error", () => {
@@ -51,7 +51,7 @@ export const createClaudeNativeProcessSpawner = (
     });
     const decoder = new StringDecoder("utf8");
     const recordStderr = (text: string): void => {
-      lifetime.stderrTail = (lifetime.stderrTail + text).slice(-8_192);
+      state.stderrTail = (state.stderrTail + text).slice(-8_192);
       stderr?.(text);
     };
     child.stderr.on("data", (chunk: Buffer) => recordStderr(decoder.write(chunk)));
@@ -67,38 +67,37 @@ export const withClaudeNativeProcessDiagnostic = (
   session: ClaudeSessionContext,
   cause: unknown,
 ): Error => {
-  const stderr = lifetimes.get(session)?.stderrTail.trim();
-  return stderr
-    ? new HostOperationError({
-        operation: "claudeRuntime.nativeProcess",
-        message: `${errorMessage(cause)}\nstderr: ${stderr}`,
-        cause,
-      })
-    : cause instanceof Error
-      ? cause
-      : new Error(errorMessage(cause));
+  const stderr = states.get(session)?.stderrTail.trim();
+  if (stderr) {
+    return new HostOperationError({
+      operation: "claudeRuntime.nativeProcess",
+      message: `${errorMessage(cause)}\nstderr: ${stderr}`,
+      cause,
+    });
+  }
+  return cause instanceof Error ? cause : new Error(errorMessage(cause));
 };
 
 export const beginClaudeNativeProcessClose = (session: ClaudeSessionContext): void => {
-  const lifetime = lifetimes.get(session);
-  if (!lifetime) return;
-  lifetime.closing = true;
-  if (!lifetime.process) {
-    lifetime.confirmed = true;
-    lifetime.resolveExit();
+  const state = states.get(session);
+  if (!state) return;
+  state.closing = true;
+  if (!state.process) {
+    state.confirmed = true;
+    state.resolveExit();
   }
 };
 
 export const isClaudeNativeProcessClosed = (session: ClaudeSessionContext): boolean =>
-  lifetimes.get(session)?.confirmed ?? true;
+  states.get(session)?.confirmed ?? true;
 
 export const waitForClaudeNativeProcessExit = async (
   session: ClaudeSessionContext,
 ): Promise<void> => {
-  const lifetime = lifetimes.get(session);
-  if (!lifetime) return;
+  const state = states.get(session);
+  if (!state) return;
   await withTimeout(
-    lifetime.exited,
+    state.exited,
     10_000,
     `Claude Code did not confirm termination for session '${session.externalSessionId}'. Inspect the Claude process, then retry Stop or restart the runtime.`,
   );

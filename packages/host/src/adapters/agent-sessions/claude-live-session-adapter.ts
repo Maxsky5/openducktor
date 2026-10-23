@@ -58,7 +58,7 @@ import {
 } from "./claude-live-session-service-inputs";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 import {
-  createClaudeSessionEventGuard,
+  createEventGuard,
   parseClaudeLiveSessionOutput,
   requireClaudeHostServiceRuntime,
   createClaudeRequiredSession,
@@ -103,7 +103,7 @@ export const createClaudeLiveSessionAdapterPreparer =
           }),
         );
 
-      const acceptsEvent = createClaudeSessionEventGuard(sessionStore);
+      const acceptsEvent = createEventGuard(sessionStore);
 
       const processEvent = (
         session: ClaudeSessionContext,

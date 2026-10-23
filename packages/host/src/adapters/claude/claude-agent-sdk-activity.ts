@@ -1,8 +1,9 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { HostValidationError } from "../../effect/host-errors";
+import { childSessions } from "./claude-agent-sdk-session-children";
 
 type TaskSnapshot = Extract<SDKMessage, { subtype: "background_tasks_changed" }>;
-type TaskEdge = Extract<
+type TaskEvent = Extract<
   SDKMessage,
   { subtype: "task_started" | "task_progress" | "task_updated" | "task_notification" }
 >;
@@ -12,8 +13,7 @@ export type ClaudeNativeTaskRun = {
   ambient: boolean;
   background: boolean;
   ended: boolean;
-  membershipObserved: boolean;
-  parentTaskId?: string;
+  listed: boolean;
 };
 
 export type ClaudeNativeActivityState = {
@@ -46,10 +46,7 @@ export const claudeBlockingInputActivity = (
     )
   )
     return "waiting_for_question";
-  for (const child of new Set([
-    ...(session.subagentEventSessionsByToolUseId?.values() ?? []),
-    ...(session.subagentEventSessionsByTaskId?.values() ?? []),
-  ])) {
+  for (const child of childSessions(session)) {
     const activity = claudeBlockingInputActivity(child);
     if (activity === "waiting_for_question") return activity;
     permission ||= activity === "waiting_for_permission";
@@ -95,6 +92,69 @@ export const confirmClaudeNativeIdle = (session: ClaudeNativeActivityState): voi
   session.nativePendingDeliveries?.clear();
 };
 
+export const updateBackgroundTasks = (
+  session: ClaudeNativeActivityState,
+  message: Pick<TaskSnapshot, "tasks">,
+): void => {
+  session.nativeTaskRuns ??= new Map();
+  const next = new Map<string, ClaudeNativeTaskRun>();
+  for (const task of message.tasks) {
+    const known = session.nativeTaskRuns?.get(task.task_id);
+    if (known && task.run_id && task.run_id < known.runId) {
+      const current = session.nativeBackgroundTasks?.get(task.task_id);
+      if (current) next.set(task.task_id, current);
+      continue;
+    }
+    const run = taskRun(session, task.task_id, task.run_id, false);
+    if (!run) continue;
+    run.listed = true;
+    run.ambient = task.ambient === true;
+    if (run.ambient) session.nativePendingDeliveries?.delete(run);
+    if (!run.ended) {
+      run.background = true;
+      next.set(task.task_id, run);
+    }
+  }
+  for (const [taskId, previous] of session.nativeBackgroundTasks ?? []) {
+    if (next.get(taskId) !== previous) endRun(session, previous);
+  }
+  session.nativeBackgroundTasks = next;
+};
+
+/** Reject stale events so they cannot overwrite a later run or restart ended work. */
+export const applyTaskEvent = (session: ClaudeNativeActivityState, message: TaskEvent): boolean => {
+  const run = taskRun(session, message.task_id, message.run_id, message.subtype === "task_started");
+  if (!run) return !message.run_id;
+  if (
+    run.ended &&
+    (message.subtype === "task_started" ||
+      message.subtype === "task_progress" ||
+      (message.subtype === "task_updated" &&
+        message.patch.status !== "completed" &&
+        message.patch.status !== "failed" &&
+        message.patch.status !== "killed"))
+  )
+    return false;
+  if (message.subtype === "task_started") {
+    if (!run.listed) run.ambient = message.ambient === true || message.skip_transcript === true;
+    if (run.ambient) session.nativePendingDeliveries?.delete(run);
+  } else if (message.subtype === "task_updated") {
+    if (
+      message.patch.status === "completed" ||
+      message.patch.status === "failed" ||
+      message.patch.status === "killed"
+    )
+      endRun(session, run);
+  } else if (message.subtype === "task_notification") {
+    if (message.ambient || message.skip_transcript) {
+      run.ambient = true;
+      session.nativePendingDeliveries?.delete(run);
+    }
+    endRun(session, run);
+  }
+  return true;
+};
+
 const taskRun = (
   session: ClaudeNativeActivityState,
   taskId: string,
@@ -117,7 +177,7 @@ const taskRun = (
     ambient: false,
     background: false,
     ended: false,
-    membershipObserved: false,
+    listed: false,
   };
   session.nativeTaskRuns ??= new Map();
   session.nativeTaskRuns.set(taskId, run);
@@ -131,76 +191,4 @@ const endRun = (session: ClaudeNativeActivityState, run: ClaudeNativeTaskRun): v
     session.nativePendingDeliveries.add(run);
   }
   run.ended = true;
-};
-
-export const reconcileClaudeBackgroundTasks = (
-  session: ClaudeNativeActivityState,
-  message: Pick<TaskSnapshot, "tasks">,
-): void => {
-  session.nativeTaskRuns ??= new Map();
-  const next = new Map<string, ClaudeNativeTaskRun>();
-  for (const task of message.tasks) {
-    const known = session.nativeTaskRuns?.get(task.task_id);
-    if (known && task.run_id && task.run_id < known.runId) {
-      const current = session.nativeBackgroundTasks?.get(task.task_id);
-      if (current) next.set(task.task_id, current);
-      continue;
-    }
-    const run = taskRun(session, task.task_id, task.run_id, false);
-    if (!run) continue;
-    run.membershipObserved = true;
-    run.ambient = task.ambient === true;
-    if (run.ambient) session.nativePendingDeliveries?.delete(run);
-    if (task.parent_task_id && session.nativeTaskRuns?.has(task.parent_task_id)) {
-      run.parentTaskId = task.parent_task_id;
-    } else delete run.parentTaskId;
-    if (!run.ended) {
-      run.background = true;
-      next.set(task.task_id, run);
-    }
-  }
-  for (const [taskId, previous] of session.nativeBackgroundTasks ?? []) {
-    if (next.get(taskId) !== previous) endRun(session, previous);
-  }
-  session.nativeBackgroundTasks = next;
-};
-
-/** Return false for an older run so presentation cannot replace its successor's outcome. */
-export const reconcileClaudeTaskEdge = (
-  session: ClaudeNativeActivityState,
-  message: TaskEdge,
-): boolean => {
-  const run = taskRun(session, message.task_id, message.run_id, message.subtype === "task_started");
-  if (!run) return !message.run_id;
-  if (
-    run.ended &&
-    (message.subtype === "task_started" ||
-      message.subtype === "task_progress" ||
-      (message.subtype === "task_updated" &&
-        message.patch.status !== "completed" &&
-        message.patch.status !== "failed" &&
-        message.patch.status !== "killed"))
-  )
-    return false;
-  if (message.subtype === "task_started") {
-    if (!run.membershipObserved)
-      run.ambient = message.ambient === true || message.skip_transcript === true;
-    if (run.ambient) session.nativePendingDeliveries?.delete(run);
-    if (message.parent_task_id && session.nativeTaskRuns?.has(message.parent_task_id))
-      run.parentTaskId = message.parent_task_id;
-  } else if (message.subtype === "task_updated") {
-    if (
-      message.patch.status === "completed" ||
-      message.patch.status === "failed" ||
-      message.patch.status === "killed"
-    )
-      endRun(session, run);
-  } else if (message.subtype === "task_notification") {
-    if (message.ambient || message.skip_transcript) {
-      run.ambient = true;
-      session.nativePendingDeliveries?.delete(run);
-    }
-    endRun(session, run);
-  }
-  return true;
 };

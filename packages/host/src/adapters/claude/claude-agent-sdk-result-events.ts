@@ -144,21 +144,6 @@ export const handleClaudeResultMessage = ({
     if (lastError?.usageLimit) turnError.usageLimit = lastError.usageLimit;
     if (lastError) lastError.message = turnError.message;
     emit(turnError);
-    emit({
-      type: "session_turn_finished",
-      externalSessionId: session.externalSessionId,
-      timestamp,
-      completionId: message.uuid,
-      messageIds,
-      turnOutcome: "failed",
-    });
-    applyClaudeLifecycleEvent({
-      emit,
-      session,
-      timestamp,
-      event: { kind: "result", outcome: "failed", consumedMessageCount },
-    });
-    return;
   }
   emit({
     type: "session_turn_finished",
@@ -166,7 +151,7 @@ export const handleClaudeResultMessage = ({
     timestamp,
     completionId: message.uuid,
     messageIds,
-    turnOutcome: "completed",
+    turnOutcome: failed ? "failed" : "completed",
   });
   applyClaudeLifecycleEvent({
     emit,
@@ -174,7 +159,7 @@ export const handleClaudeResultMessage = ({
     timestamp,
     event: {
       kind: "result",
-      outcome: lifecycleOutcome,
+      outcome: failed ? "failed" : lifecycleOutcome,
       consumedMessageCount,
     },
   });
