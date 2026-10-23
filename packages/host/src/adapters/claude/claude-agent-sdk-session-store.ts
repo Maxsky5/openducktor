@@ -20,6 +20,7 @@ import {
   beginClaudeSessionClose,
   confirmClaudeSessionClosed,
   isClaudeSessionClosed,
+  isClaudeSessionClosing,
   ClaudeSessionError,
   runAllSteps,
   toSessionError,
@@ -56,15 +57,15 @@ export const createClaudeAgentSdkSessionStore = ({
   const stateFor = (session: ClaudeSession): SessionState => {
     let state = states.get(session);
     if (!state) {
-      state = { closed: false, finishAttempted: false };
+      state = { finishAttempted: false };
       states.set(session, state);
     }
     return state;
   };
+  const isLatest = (session: ClaudeSession): boolean =>
+    latest.get(session.externalSessionId)?.deref() === session;
   const markClosed = (session: ClaudeSession): void => {
-    const state = stateFor(session);
-    if (state.closed) return;
-    state.closed = true;
+    if (isClaudeSessionClosed(session)) return;
     confirmClaudeSessionClosed(session);
     session.activity = "stopped";
     session.activeSdkUserTurnCount = 0;
@@ -86,7 +87,7 @@ export const createClaudeAgentSdkSessionStore = ({
     if (failures.length > 0) throw new ClaudeSessionError("claudeRuntime.retireSession", failures);
   };
   const reportUnavailable = (session: ClaudeSession, failure: ClaudeSessionError): void => {
-    if (stateFor(session).closed) return;
+    if (isClaudeSessionClosed(session)) return;
     const message = failure.message;
     session.statusUnavailableReason = message;
     emit?.(session, {
@@ -99,20 +100,23 @@ export const createClaudeAgentSdkSessionStore = ({
   };
   const close = (session: ClaudeSession): void => {
     const state = stateFor(session);
-    if (!state.closed && state.closeRequested && isClaudeNativeProcessClosed(session)) {
+    if (
+      !isClaudeSessionClosed(session) &&
+      isClaudeSessionClosing(session) &&
+      isClaudeNativeProcessClosed(session)
+    ) {
       delete state.closeError;
       markClosed(session);
     }
-    if (state.closed) {
+    if (isClaudeSessionClosed(session)) {
       if (state.closeError) throw state.closeError;
       return;
     }
-    if (state.closeRequested) {
+    if (isClaudeSessionClosing(session)) {
       if (!state.closeError) return;
       // Explicit cleanup can retry a close that did not terminate the native process.
       delete state.closeError;
     }
-    state.closeRequested = true;
     closingSessions.add(session);
     beginClaudeSessionClose(session);
     beginClaudeNativeProcessClose(session);
@@ -151,7 +155,7 @@ export const createClaudeAgentSdkSessionStore = ({
     session.pendingQuestions.clear();
     if (isClaudeNativeProcessClosed(session)) attempt(() => markClosed(session));
     if (failures.length > 0) {
-      if (!state.closed)
+      if (!isClaudeSessionClosed(session))
         failures.push(
           new Error(
             "Claude session termination is unconfirmed. Inspect the Claude process, then retry Stop or restart the runtime.",
@@ -185,13 +189,7 @@ export const createClaudeAgentSdkSessionStore = ({
     timestamp = now(),
   ): void => {
     const state = stateFor(session);
-    const current = sessions.get(session.externalSessionId);
-    if (
-      !state.closed ||
-      state.replaced ||
-      (current && current !== session) ||
-      state.canFinish?.() === false
-    )
+    if (!isClaudeSessionClosed(session) || !isLatest(session) || state.canFinish?.() === false)
       return;
     if (state.finishAttempted) return;
     // Publish can throw after delivery, so mark the attempt first.
@@ -281,12 +279,9 @@ export const createClaudeAgentSdkSessionStore = ({
       fiber.addObserver(() => activeConsumers.delete(session));
     },
     get: (externalSessionId) => sessions.get(externalSessionId),
-    isLatest: (session) => latest.get(session.externalSessionId)?.deref() === session,
+    isLatest,
     getForCleanup,
     set: (session) => {
-      const previous = sessions.get(session.externalSessionId);
-      if (previous && previous !== session) stateFor(previous).replaced = true;
-      stateFor(session).replaced = false;
       latest.set(session.externalSessionId, new WeakRef(session));
       sessions.set(session.externalSessionId, session);
     },
@@ -365,9 +360,6 @@ export const isClaudeSessionStopped = (session: ClaudeSession): boolean =>
 type SessionState = {
   consumer?: Fiber.Fiber<void, HostOperationErrorAggregate>;
   canFinish?: () => boolean;
-  closed: boolean;
-  closeRequested?: boolean;
-  replaced?: boolean;
   closeError?: ClaudeSessionError;
   finishAttempted: boolean;
   finishMessage?: string;
