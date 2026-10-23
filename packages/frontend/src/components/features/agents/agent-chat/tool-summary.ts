@@ -1,4 +1,10 @@
-import { agentToolDataSchema, type AgentToolData } from "@openducktor/contracts";
+import {
+  agentToolDataSchema,
+  type AgentToolData,
+  toClaudeOdtToolAliases,
+  toOpencodeOdtToolAliases,
+} from "@openducktor/contracts";
+import { normalizeOdtToolName } from "@openducktor/core";
 import { z } from "zod";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData } from "./file-edit-tool";
@@ -16,6 +22,14 @@ const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "list",
   "ls",
   "distill",
+]);
+
+const RETIRED_DOCUMENT_READERS = new Set([
+  "read_task_documents",
+  "odt_read_task_documents",
+  "openducktor_odt_read_task_documents",
+  "functions.openducktor_odt_read_task_documents",
+  "mcp__openducktor__odt_read_task_documents",
 ]);
 
 const SEARCH_PATH_DISPLAY_TOOL_NAMES = new Set([
@@ -176,32 +190,46 @@ export const buildToolSummary = (
   const toolType = meta.toolType;
   const isTodoTool = toolType === "todo";
   const lifecyclePhase = getToolLifecyclePhase(meta);
+  const odtTool = normalizeOdtToolName(lowerTool, (canonical) => [
+    ...toOpencodeOdtToolAliases(canonical),
+    ...toClaudeOdtToolAliases(canonical),
+  ]);
+  const isArtifactRead = odtTool === "odt_read_task_artifacts";
+  const isDocumentRead = RETIRED_DOCUMENT_READERS.has(lowerTool);
+  if (isArtifactRead || odtTool === "odt_delete_task_artifact" || isDocumentRead) {
+    if (meta.status === "error") {
+      if (hasNonEmptyText(meta.error)) return compactText(meta.error, 220);
+      return hasNonEmptyText(meta.output) ? compactText(meta.output, 220) : "";
+    }
+    const taskId = extractTaskId(meta.input);
+    if (!taskId) return "";
+    if (isDocumentRead) {
+      const documents = [];
+      if (meta.input?.includeSpec === true) documents.push("Spec");
+      if (meta.input?.includePlan === true) documents.push("Plan");
+      if (meta.input?.includeQaReport === true) documents.push("QA report");
+      return documents.length > 0 ? `${taskId} · ${documents.join(", ")}` : taskId;
+    }
+    const codes = Array.isArray(meta.input?.codes) ? meta.input.codes.filter(hasNonEmptyText) : [];
+    const requestedCodes = isArtifactRead
+      ? codes.join(", ")
+      : readInputString(meta.input, ["code"]);
+    return requestedCodes ? `${taskId} · ${requestedCodes}` : taskId;
+  }
   if (lifecyclePhase === "preparing") return "";
   const fileEditData =
     toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
-  const isTaskDocumentRead =
-    lowerTool === "read_task_documents" ||
-    lowerTool === "odt_read_task_documents" ||
-    lowerTool.endsWith("_odt_read_task_documents");
 
   if (
     lowerTool === "read_task" ||
     lowerTool === "odt_read_task" ||
-    lowerTool.endsWith("_odt_read_task") ||
-    isTaskDocumentRead
+    lowerTool.endsWith("_odt_read_task")
   ) {
     if (meta.status === "error" && hasNonEmptyText(meta.error)) {
       return compactText(meta.error, 220);
     }
     const taskId = extractTaskId(meta.input);
     if (taskId) {
-      if (isTaskDocumentRead) {
-        const documents = [];
-        if (meta.input?.includeSpec === true) documents.push("Spec");
-        if (meta.input?.includePlan === true) documents.push("Plan");
-        if (meta.input?.includeQaReport === true) documents.push("QA report");
-        return documents.length > 0 ? `${taskId} · ${documents.join(", ")}` : taskId;
-      }
       return taskId;
     }
   }

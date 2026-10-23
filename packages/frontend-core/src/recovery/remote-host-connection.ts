@@ -1,5 +1,6 @@
 import {
   REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_PROTOCOL_VERSION,
   type AgentSessionLiveAttachInput,
   type HostEventEnvelope,
 } from "@openducktor/contracts";
@@ -96,7 +97,7 @@ export const createRemoteHostConnection = ({
     endpoint,
     {
       appVersion: version,
-      supportedProtocolVersions: [1],
+      supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
       requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
       optionalCapabilities: [],
     },

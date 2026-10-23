@@ -1,20 +1,21 @@
 import {
-  type OdtPersistedDocument,
+  type FreeTaskArtifact,
+  type McpTaskArtifact,
   type OdtToolName,
   type PublicTask,
   type PublicTaskSummaryTask,
   type TaskCard,
-  type TaskMetadataDocument,
-  type TaskMetadataPayload,
-  type TaskRequestedDocuments,
+  type TaskArtifact,
   type TaskSummary,
   type TaskUpdatePatch,
   type UpdateTaskInput,
+  type WorkflowArtifactKind,
+  workflowArtifactKindSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
 import { normalizeLabels } from "../../domain/task/task-labels";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { HostValidationError } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
 
 type ResponseParser<A> = Pick<z.ZodType<A>, "parse">;
@@ -180,61 +181,37 @@ export const mapPublicTask = (task: TaskCard): PublicTask => {
 export const mapTaskSummary = (task: TaskCard): TaskSummary => ({
   task: {
     ...mapPublicTask(task),
-    qaVerdict: task.documentSummary.qaReport.verdict,
-    documents: taskDocuments(task),
+    qaVerdict: task.artifactSummary.qaReport.verdict,
+    artifacts: taskArtifacts(task),
   },
 });
 
-export const persistedDocument = (
-  document: TaskMetadataDocument,
-  operation: string,
-): OdtPersistedDocument => {
-  if (document.revision === undefined || document.revision < 1) {
-    throw new HostOperationError({
-      operation,
-      message: `Missing persisted document revision for ${operation}.`,
-    });
+export const toMcpTaskArtifact = (artifact: TaskArtifact): McpTaskArtifact => {
+  const { artifactId: _artifactId, ...metadata } = artifact;
+  if (metadata.classification === "workflow") {
+    const { workflowKind, ...workflow } = metadata;
+    return { ...workflow, code: workflowKind };
   }
-  if (!document.updatedAt) {
-    throw new HostOperationError({
-      operation,
-      message: `Missing persisted document updatedAt for ${operation}.`,
-    });
-  }
-  return {
-    markdown: document.markdown,
-    updatedAt: document.updatedAt,
-    revision: document.revision,
-  };
+  return metadata;
 };
 
-export const latestDocument = (
-  document: TaskMetadataDocument,
-): NonNullable<TaskRequestedDocuments["spec"]> => {
-  const latest: NonNullable<TaskRequestedDocuments["spec"]> = {
-    markdown: document.markdown,
-    updatedAt: document.updatedAt ?? null,
-  };
-  if (document.error) {
-    latest.error = document.error;
-  }
-  return latest;
-};
+export const isWorkflowArtifactCode = (code: string): code is WorkflowArtifactKind =>
+  workflowArtifactKindSchema.safeParse(code).success;
 
-export const latestQaReport = (
-  qaReport: TaskMetadataPayload["qaReport"],
-): TaskRequestedDocuments["latestQaReport"] => {
-  if (!qaReport) return undefined;
-  const latest: NonNullable<TaskRequestedDocuments["latestQaReport"]> = {
-    markdown: qaReport.markdown,
-    updatedAt: qaReport.updatedAt ?? null,
-    verdict: qaReport.verdict,
-  };
-  if (qaReport.error) {
-    latest.error = qaReport.error;
-  }
-  return latest;
-};
+export const findFreeTaskArtifact = (
+  artifacts: readonly TaskArtifact[],
+  code: string,
+): FreeTaskArtifact | undefined =>
+  artifacts.find(
+    (artifact): artifact is FreeTaskArtifact =>
+      artifact.classification === "free" && artifact.code === code,
+  );
+
+export const missingFreeTaskArtifact = (code: string): HostValidationError =>
+  new HostValidationError({
+    field: "code",
+    message: `Free artifact "${code}" was not found. Read the task to get its current artifact codes.`,
+  });
 
 export const activeStatuses = new Set([
   "open",
@@ -245,19 +222,6 @@ export const activeStatuses = new Set([
   "ai_review",
   "human_review",
 ]);
-
-export const directSubtaskIds = (tasks: TaskCard[], taskId: string): Set<string> =>
-  new Set(tasks.filter((task) => task.parentId === taskId).map((task) => task.id));
-
-export const createdSubtaskIds = (
-  before: Set<string>,
-  after: TaskCard[],
-  taskId: string,
-): string[] =>
-  after
-    .filter((task) => task.parentId === taskId)
-    .map((task) => task.id)
-    .filter((taskId) => !before.has(taskId));
 
 export const parseToolInput = <Output>(
   toolName: OdtToolName,
@@ -322,8 +286,8 @@ const singleMatch = <Task extends TaskReference>(matches: readonly Task[]): Task
   return matches.length === 1 && match ? match : null;
 };
 
-const taskDocuments = (task: TaskCard): PublicTaskSummaryTask["documents"] => ({
-  hasSpec: Boolean(task.documentSummary.spec.has),
-  hasPlan: Boolean(task.documentSummary.plan.has),
-  hasQaReport: Boolean(task.documentSummary.qaReport.has),
+const taskArtifacts = (task: TaskCard): PublicTaskSummaryTask["artifacts"] => ({
+  hasSpec: Boolean(task.artifactSummary.spec.has),
+  hasPlan: Boolean(task.artifactSummary.plan.has),
+  hasQaReport: Boolean(task.artifactSummary.qaReport.has),
 });

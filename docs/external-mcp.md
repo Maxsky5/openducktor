@@ -2,7 +2,7 @@
 
 `@openducktor/mcp` exposes the `openducktor` MCP server outside the desktop app. It validates MCP calls and sends them to the OpenDucktor host. It never reads SQLite directly.
 
-The host owns task-store readiness, task rules, and document writes. Desktop-managed and external MCP clients use the same host bridge.
+The host owns task-store readiness, task rules, and artifact writes. Desktop-managed and external MCP clients use the same host bridge.
 
 ## Configure a client
 
@@ -86,23 +86,30 @@ Public tools:
 - `odt_search_tasks`
 - `odt_read_task`
 - `odt_read_task_assets`
-- `odt_read_task_documents`
+- `odt_read_task_artifacts`
+- `odt_set_task_artifact`
+- `odt_delete_task_artifact`
 - `odt_update_task`
 
 Workflow tools on the same server:
 
-- `odt_set_spec`
-- `odt_set_plan`
 - `odt_build_blocked`
 - `odt_build_resumed`
 - `odt_build_completed`
 - `odt_set_pull_request`
-- `odt_qa_approved`
-- `odt_qa_rejected`
 
 Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task`, `odt_search_tasks`, and `odt_update_task` in their startup workspace and omit `workspaceId`. `odt_update_task` is the only task-bound tool that may target a task other than the session task.
 
-Builder sessions can call `odt_set_spec` and `odt_set_plan` for their session task. See [document actions](task-workflow-actions.md#document-actions) for revision and approval rules.
+`odt_set_task_artifact` saves both workflow and free artifacts. Managed workflow sessions can write only the workflow codes assigned to their root role:
+
+| Role | Workflow codes |
+|---|---|
+| Spec | `spec` |
+| Planner | `plan` |
+| Builder | `spec`, `plan` |
+| QA | `qaReport` |
+
+Every role can write free artifacts. The host resolves the native caller to its root session before checking workflow codes. Repository sessions and external clients have no workflow role restriction. See [artifact actions](task-workflow-actions.md#artifact-actions) for revision and approval rules.
 
 External clients do not get the `odt_browser_*` tools. [Browser tools](#browser-tools) describes them.
 
@@ -137,7 +144,7 @@ The host finds the task or Workspace Session of a call from the runtime session 
 - The host follows the live parent links of a subagent session to its root session.
 - The root session must belong to a task or to an active Workspace Session of the call workspace, with the same runtime kind. Otherwise the call fails with `browser_unmanaged_caller`.
 
-The bridge request body is the tool input plus `workspaceId` and `caller: { runtime, runtimeSessionId }`. Browser calls wait up to 35 seconds for the host, which ends each call within 30 seconds. Other tools wait up to 10 seconds.
+The bridge request body is the tool input plus `workspaceId` and `caller: { runtime, runtimeSessionId }`. Browser calls wait up to 35 seconds for the host, which ends each call within 30 seconds. Artifact reads wait up to 15 seconds. This gives the host time to stop the worker after its 10-second limit and return the original bytes with any preview error. Other tools wait up to 10 seconds.
 
 Browser tools have no MCP `outputSchema` or `structuredContent`. The result has text blocks and, for `odt_browser_screenshot`, an `image` block. A browser failure returns its message to the agent. `details.browserFailure.code` keeps the browser failure code.
 
@@ -164,7 +171,7 @@ Call `odt_get_workspaces` when the process has no default workspace or when the 
 
 ## Task summary
 
-`odt_create_task`, `odt_search_tasks`, `odt_read_task`, and `odt_update_task` use this task summary:
+`odt_create_task`, `odt_search_tasks`, and `odt_update_task` use this task summary:
 
 ```json
 {
@@ -180,7 +187,7 @@ Call `odt_get_workspaces` when the process has no default workspace or when the 
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
     "qaVerdict": "approved",
-    "documents": {
+    "artifacts": {
       "hasSpec": true,
       "hasPlan": true,
       "hasQaReport": true
@@ -191,7 +198,7 @@ Call `odt_get_workspaces` when the process has no default workspace or when the 
 
 `qaVerdict` is `approved`, `rejected`, or `not_reviewed`. Public summaries omit `parentId`, `availableActions`, and `agentWorkflows`.
 
-Call `odt_read_task` first. It tells the client which documents exist and which images the description refers to. Read only the bodies and images needed for the task.
+`odt_read_task` returns the same task fields and `qaVerdict`, with an `artifacts` metadata array instead of presence flags. Call it first to find current workflow and free artifacts and the images that the description refers to. Read only the content and images needed for the task.
 
 ## Create a task
 
@@ -206,7 +213,7 @@ The result is `{ task }`.
 
 ## Read a task
 
-`odt_read_task` requires `taskId`. It also requires `workspaceId` when the process has no default workspace. The result is `{ task }` with the shared summary shape.
+`odt_read_task` requires `taskId`. It also requires `workspaceId` when the process has no default workspace. The result is `{ task }` with task fields, `qaVerdict`, and an `artifacts` array of all current workflow and free artifact metadata. Each entry has a stable `code`, display `name`, and `classification`. Free metadata also has `fileName`, `mediaType`, and `byteSize`. The result omits content, old workflow revisions, description images, internal artifact IDs, and `workflowKind`.
 
 ## Update a task
 
@@ -219,7 +226,7 @@ The result is `{ task }`.
 - `issueType`
 - `aiReviewEnabled`
 
-The input is a patch. An omitted field keeps its stored value. A null value fails. The tool never changes `status`, `parentId`, `targetBranch`, or documents.
+The input is a patch. An omitted field keeps its stored value. A null value fails. The tool never changes `status`, `parentId`, `targetBranch`, or artifacts.
 
 Clearing uses typed values:
 
@@ -272,39 +279,57 @@ For each ID, the MCP response contains a short text block and an `image` block w
 
 The tool has no MCP `outputSchema` or `structuredContent`. It does not return storage paths, runtime URLs, or registry rows.
 
-## Read task documents
+## Read and manage task artifacts
 
-`odt_read_task_documents` requires `taskId` and at least one `true` flag:
+Use two calls to read task content. First call `odt_read_task` for task fields, `qaVerdict`, and metadata for all current workflow and free artifacts. Then call `odt_read_task_artifacts` with a required `codes` array. The array must be nonempty and contain distinct codes from `task.artifacts`. The reader has no metadata-only mode.
 
-- `includeSpec`
-- `includePlan`
-- `includeQaReport`
+For example, Planner can read the full spec in the second call:
 
-Unknown fields fail. `workspaceId` is optional only when the process has a default workspace.
+```json
+{ "taskId": "repo-123", "codes": ["spec"] }
+```
 
-A requested spec or plan key always appears. A missing spec or plan returns empty Markdown and `updatedAt: null`. The response omits `latestQaReport` when no QA report exists.
+The workflow codes `spec`, `plan`, and `qaReport` are reserved. Builder can request `["spec", "plan"]` in one call, or include a free-artifact code such as `design-preview`. Workflow reads return full content by default; free-artifact reads default to 16 KiB. Each free-artifact code is unique within its task and never changes. Free codes use lowercase letters and digits, with single hyphens between groups. They start with a letter and contain at most 128 characters. Display names can repeat, and a rename keeps the code. A free artifact named "Specification" remains free. Internal artifact IDs stay within the UI and store; the MCP tools do not accept or return them.
 
-The host stores and returns plain Markdown. If it cannot decode the latest stored body, that document gets an optional `error` with a host message. The read does not migrate old metadata.
+`maxBytes` accepts 4 through 1,048,576 bytes per artifact. `byteOffset` and `expectedVersion` require exactly one selected code. Continue at `nextByteOffset` with the returned `version` as `expectedVersion`. A changed version fails the read; start again before combining content. A missing code fails the call.
+
+The result contains an `artifacts` array in request order. Each entry has `artifact` metadata, `version`, `byteOffset`, `nextByteOffset`, and `totalBytes`. Valid UTF-8 text appears in that entry's `content` string, with its code and media type in `artifact`. The response has one JSON text block and the same object in `structuredContent`, without separate raw text bodies. Text reads preserve the BOM and line endings. Binary content uses an embedded blob resource whose URI identifies the artifact, version, and byte range. Invalid UTF-8 returns exact bytes in a blob resource and a decoding error message. One failed artifact read fails the call.
+
+The first image read also requests a preview from the same captured version. A ready preview appears once as a native image block. A failed preview returns a separate error message while keeping original bytes available. SVG previews use the host's isolated renderer; the original SVG remains a blob resource.
+
+All four workflow roles can create, rename, replace, and delete free artifacts. These actions never change task status or QA verdict. Workflow writes use the same setter and follow role and lifecycle rules. Closed tasks permit reads only.
+
+| Tool | Fields after `taskId` | Result |
+|---|---|---|
+| `odt_set_task_artifact` | Required `code`; optional `name`, `fileName`, `mediaType`, `content`, `dataBase64`, `verdict`. | `{ artifact }` with saved metadata. |
+| `odt_delete_task_artifact` | `code` | Deleted code and event cursor. |
+
+For `spec`, `plan`, and `qaReport`, put the complete Markdown text directly in `content`. The format is fixed as `text/markdown`. Set also accepts the Markdown's UTF-8 bytes through `dataBase64`. It rejects `name`, `fileName`, and `mediaType`. A `qaReport` write also requires `verdict: "approved"` or `verdict: "rejected"`. Other codes reject `verdict`. Workflow saves keep the existing domain operations, provenance, and status transitions. Build completion still uses `odt_build_completed`.
 
 ```json
 {
-  "documents": {
-    "spec": {
-      "markdown": "",
-      "updatedAt": "<ISO 8601 timestamp>",
-      "error": "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
-    },
-    "implementationPlan": {
-      "markdown": "## Plan",
-      "updatedAt": "<ISO 8601 timestamp>"
-    }
-  }
+  "taskId": "repo-123",
+  "code": "qaReport",
+  "content": "# QA report\n\nThe change meets the requirements.",
+  "verdict": "approved"
 }
 ```
+
+For a free code that does not exist, Set creates an artifact and requires `name`, `fileName`, `mediaType`, and one content field. The caller chooses its code. If the code exists, Set changes its content, renames it with `name`, or does both. A rename needs no file fields or current bytes. A content update requires `fileName`, `mediaType`, and either `content` or `dataBase64`; omitting `name` keeps the current display name. `mediaType` selects the format, such as `text/markdown`, `text/html`, or `image/png`. A combined rename and content update commits once, with one revision and one event. A request must rename the artifact or supply content. File fields alone fail. Delete requires an existing free-artifact code and rejects workflow codes.
+
+Use a plain string in `content` for text or padded base64 in `dataBase64` for exact file bytes. Send only one content field. Omit both fields for a free-artifact rename. The decoded limit is 10 MiB. Reject invalid Unicode text or base64; no replacement characters or silent truncation are permitted. Replacement keeps the identity and retains the last saved name and content if the request fails.
+
+Set returns `{ artifact }` with the saved artifact's public metadata, including its classification, code, name, media type, revision, and update time. It does not copy the content into the response.
+
+Artifact ownership checks require the requested workspace and task. Managed setter calls also require the native caller's root session and enforce its workflow role. Task agents must still use their locked session task. The removed specialized workflow writers have no aliases.
+
+The MCP bridge and remote protocol use version 2. Update incompatible clients and hosts together. The removed `odt_read_task_documents` tool has no alias. Custom prompt overrides remain user-owned and must use the new tool names.
+
+The MCP stdio input cap is 64 MiB to accept escaped text within the decoded limit. The adapter sends content as base64 to the host. Set bridge requests have a 16 MiB envelope; other requests keep their 1 MiB limit. Each artifact response stays below 10 MiB of serialized JSON-RPC bytes, including all requested artifacts, without truncating original content. If a response exceeds the limit, request fewer artifacts or a smaller `maxBytes` value.
 
 ## Ownership
 
 - `packages/openducktor-mcp` owns MCP transport, request and response checks, image-block conversion, the calling session of browser tools, and packaging.
-- The host owns SQLite readiness, task reads and writes, workflow rules, recovery, document writes, and the owner of each browser tool call.
+- The host owns SQLite readiness, task reads and writes, workflow rules, recovery, artifact writes, and the owner of each browser tool call.
 - The bridge mirrors MCP tool names so all MCP clients use one execution path.
 - The host bridge sends task images as a checked base64 DTO. Only the MCP adapter converts it to image blocks.

@@ -1,10 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { useQueryClient } from "@tanstack/react-query";
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { createElement } from "react";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
-import { QueryProvider } from "@/test-utils/query-provider";
-import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import {
   documentQueryKeys,
   fetchFreshTaskDocumentFromQuery,
@@ -115,56 +110,6 @@ describe("documents query helpers", () => {
     }
   });
 
-  test("a mounted document view applies a newer section update", async () => {
-    const view = renderHook(
-      ({ open }) => ({
-        documents: useTaskDocuments("task-1", open, "/repo"),
-        queryClient: useQueryClient(),
-      }),
-      {
-        initialProps: { open: false },
-        wrapper: ({ children }) => createElement(QueryProvider, null, children),
-      },
-    );
-
-    try {
-      act(() => {
-        const queryClient = view.result.current.queryClient;
-        queryClient.setQueryData(
-          documentQueryKeys.spec("/repo", "task-1"),
-          document("spec V1", "2026-03-28T09:00:00.000Z"),
-        );
-        queryClient.setQueryData(
-          documentQueryKeys.plan("/repo", "task-1"),
-          document("plan V1", "2026-03-28T09:00:00.000Z"),
-        );
-        queryClient.setQueryData(
-          documentQueryKeys.qaReport("/repo", "task-1"),
-          document("qa V1", "2026-03-28T09:00:00.000Z"),
-        );
-      });
-      view.rerender({ open: true });
-      await waitFor(() => {
-        expect(view.result.current.documents.specDoc.markdown).toBe("spec V1");
-        expect(view.result.current.documents.planDoc.markdown).toBe("plan V1");
-        expect(view.result.current.documents.qaDoc.markdown).toBe("qa V1");
-      });
-      act(() => {
-        view.result.current.documents.applyDocumentUpdate(
-          "spec",
-          document("spec V2", "2026-03-28T10:00:00.000Z"),
-        );
-      });
-      await waitFor(() => {
-        expect(view.result.current.documents.specDoc.markdown).toBe("spec V2");
-        expect(view.result.current.documents.planDoc.markdown).toBe("plan V1");
-        expect(view.result.current.documents.qaDoc.markdown).toBe("qa V1");
-      });
-    } finally {
-      view.unmount();
-    }
-  });
-
   test("host failures reach explicit refresh callers", async () => {
     const queryClient = createClientQueryClient();
     const failure = new Error("Task store is unavailable");
@@ -188,7 +133,7 @@ describe("documents query helpers", () => {
     try {
       await expect(
         queryClient.fetchQuery(taskDocumentQueryOptions(queryClient, "", "task-1", "spec", read)),
-      ).rejects.toThrow("Select a repository before loading task documents.");
+      ).rejects.toThrow("Select a repository before loading task artifacts.");
       expect(read).not.toHaveBeenCalled();
     } finally {
       queryClient.clear();

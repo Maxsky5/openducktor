@@ -23,7 +23,7 @@ import type {
   DeleteTaskInput,
   DirectMergeInput,
   ListAgentSessionsForTasksInput,
-  MarkdownDocumentInput,
+  MarkdownArtifactInput,
   OptionalNoteInput,
   PullRequestLinkMergedInput,
   PullRequestUpsertInput,
@@ -249,11 +249,11 @@ export const parseTransitionTaskInput = (input: HostCommandArgs): TransitionTask
   };
 };
 
-export const parseMarkdownDocumentInput = (
+export const parseMarkdownArtifactInput = (
   input: HostCommandArgs,
   commandLabel: string,
   markdownLabel: string,
-): MarkdownDocumentInput => {
+): MarkdownArtifactInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), commandLabel);
   return {
     repoPath: readRequiredString(record, "repoPath"),
@@ -268,7 +268,7 @@ export const parseMarkdownDocumentInput = (
 export const parseQaOutcomeInput = (
   input: HostCommandArgs,
   commandLabel: string,
-): MarkdownDocumentInput => {
+): MarkdownArtifactInput => {
   const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), commandLabel);
   return {
     repoPath: readRequiredString(record, "repoPath"),

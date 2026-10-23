@@ -40,8 +40,8 @@ export type PanelTabKindRule = {
 /** The one place that names a tab kind. A later kind adds its name above, a rule here, and a renderer. */
 export const PANEL_TAB_KIND_RULES = {
   document: {
-    label: "Document",
-    description: "Read the spec, the plan, and the QA report.",
+    label: "Artifacts",
+    description: "Read workflow artifacts and saved files.",
     icon: FileText,
     cardinality: "unique",
     panels: ["right"],

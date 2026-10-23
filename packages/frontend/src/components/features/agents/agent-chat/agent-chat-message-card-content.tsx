@@ -3,7 +3,7 @@ import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
 import { AgentChatAssistantMessage } from "./agent-chat-assistant-message";
 import { AgentChatImageGeneration } from "./agent-chat-image-generation";
 import type { AgentModelCatalog, AgentRole, AgentUserMessageDisplayPart } from "@openducktor/core";
-import { Brain, Cpu, Hammer, LoaderCircle } from "lucide-react";
+import { Brain, Cpu, FileX, Hammer, LoaderCircle } from "lucide-react";
 import { Fragment, type ReactElement, type ReactNode } from "react";
 import { readSentBrowserAnnotations } from "@/features/browser-annotations/browser-annotation-message";
 import { BrowserAnnotationMessageChips } from "@/features/browser-annotations/browser-annotation-message-chips";
@@ -33,10 +33,12 @@ import {
   type UserAttachmentPart,
 } from "./agent-chat-user-message-text";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
+import { ArtifactToolMessage } from "./agent-chat-artifact-tool-message";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
+import { buildToolSummary } from "./tool-summary";
 
 type MessageHeaderProps = {
   message: AgentChatMessage;
@@ -658,6 +660,29 @@ const ToolMessageBody = ({
         action={toolCallPresentation.action}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
+      />
+    );
+  }
+  if (toolCallPresentation.kind === "artifact") {
+    if (toolCallPresentation.operation === "delete") {
+      return (
+        <WorkflowToolMessage
+          meta={meta}
+          messageTimestamp={message.timestamp}
+          timeLabel={timeLabel}
+          sessionWorkingDirectory={sessionWorkingDirectory}
+          displayName={toolCallPresentation.displayName}
+          summary={buildToolSummary(meta, message.content)}
+          icon={<FileX className="size-3.5" />}
+        />
+      );
+    }
+    return (
+      <ArtifactToolMessage
+        meta={meta}
+        messageTimestamp={message.timestamp}
+        timeLabel={timeLabel}
+        sessionWorkingDirectory={sessionWorkingDirectory}
       />
     );
   }

@@ -15,7 +15,7 @@ const summaryPayload = {
     createdAt: "2026-04-09T00:00:00.000Z",
     updatedAt: "2026-04-09T00:00:00.000Z",
     qaVerdict: "not_reviewed",
-    documents: {
+    artifacts: {
       hasSpec: false,
       hasPlan: false,
       hasQaReport: false,
@@ -29,7 +29,7 @@ describe("OdtTaskStore", () => {
   test("delegates workspace-scoped execution using the startup workspace default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -56,7 +56,7 @@ describe("OdtTaskStore", () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const payload = { assets: [] };
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -81,7 +81,7 @@ describe("OdtTaskStore", () => {
   test("tool input workspaceId overrides the startup default", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -110,7 +110,7 @@ describe("OdtTaskStore", () => {
   test("workspace-scoped public tools work with only tool-input workspaceId", async () => {
     const calls: Array<{ toolName: string; workspaceId: string; input: unknown }> = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
       call: async (toolName, workspaceId, input) => {
         calls.push({ toolName, workspaceId, input });
@@ -145,7 +145,7 @@ describe("OdtTaskStore", () => {
 
   test("fails before delegation when no workspace can be resolved", async () => {
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
       call: async () => summaryPayload,
     };
@@ -160,7 +160,7 @@ describe("OdtTaskStore", () => {
   test("getWorkspaces bypasses workspace resolution and delegates directly", async () => {
     let calls = 0;
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => {
         calls += 1;
         return {
@@ -204,36 +204,52 @@ describe("OdtTaskStore", () => {
     expect(calls).toBe(1);
   });
 
-  test("accepts document-level decode errors on odt_read_task_documents", async () => {
+  test("encodes UTF-8 artifact writes once before the bridge and rejects lossy input", async () => {
+    const calls: unknown[] = [];
     const client: OdtHostBridgeClientPort = {
-      ready: async () => ({ bridgeVersion: 1, toolNames: [] }),
+      ready: async () => ({ bridgeVersion: 2, toolNames: [] }),
       getWorkspaces: async () => workspacesPayload,
-      call: async () => ({
-        documents: {
-          spec: {
-            markdown: "",
-            updatedAt: "2026-04-09T00:00:00.000Z",
-            error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
+      call: async (_toolName, _workspaceId, input) => {
+        calls.push(input);
+        return {
+          artifact: {
+            taskId: "task-1",
+            code: "notes",
+            name: "Notes",
+            classification: "free",
+            revision: 1,
+            updatedAt: null,
+            fileName: "notes.txt",
+            mediaType: "text/plain",
+            byteSize: 8,
           },
-        },
-      }),
+        };
+      },
     };
-
     const store = new OdtTaskStore(
       { workspaceId: "repo", hostUrl: "http://127.0.0.1:14327" },
       { client },
     );
-
-    await expect(store.readTaskDocuments({ taskId: "task-1", includeSpec: true })).resolves.toEqual(
-      {
-        documents: {
-          spec: {
-            markdown: "",
-            updatedAt: "2026-04-09T00:00:00.000Z",
-            error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
-          },
-        },
-      },
+    const input = {
+      taskId: "task-1",
+      code: "notes",
+      name: "Notes",
+      fileName: "notes.txt",
+      mediaType: "text/plain",
+    };
+    await store.setTaskArtifact({
+      ...input,
+      content: "\ufeffé\r\n\u0000",
+    });
+    expect(calls).toEqual([{ ...input, dataBase64: "77u/w6kNCgA=" }]);
+    await expect(store.setTaskArtifact({ ...input, content: "\ud800" })).rejects.toThrow(
+      "unpaired Unicode surrogate",
     );
+    await expect(store.setTaskArtifact({ ...input, dataBase64: "AQI" })).rejects.toThrow(
+      "canonical base64",
+    );
+    expect(calls).toHaveLength(1);
+    await store.setTaskArtifact({ taskId: "task-1", code: "notes", name: "Renamed" });
+    expect(calls[1]).toEqual({ taskId: "task-1", code: "notes", name: "Renamed" });
   });
 });

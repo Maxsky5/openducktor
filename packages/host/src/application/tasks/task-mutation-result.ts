@@ -30,7 +30,12 @@ export const withoutTaskMutationProgress = (
       discardTaskMutationProgress(taskService.linkMergedPullRequest(input)),
     resetImplementation: (input) =>
       discardTaskMutationProgress(taskService.resetImplementation(input)),
-    resetTask: (input) => discardTaskMutationProgress(taskService.resetTask(input)),
+    resetTask: (input) =>
+      discardTaskMutationProgress(taskService.resetTask(input)).pipe(
+        Effect.map(({ task }) => task),
+      ),
+    qaApproved: (input) => taskService.qaApproved(input).pipe(Effect.map(({ task }) => task)),
+    qaRejected: (input) => taskService.qaRejected(input).pipe(Effect.map(({ task }) => task)),
     setPlan: (input) => discardTaskMutationProgress(taskService.setPlan(input)),
     setSpec: (input) => discardTaskMutationProgress(taskService.setSpec(input)),
     updateTask: (input) => discardTaskMutationProgress(taskService.updateTask(input)),

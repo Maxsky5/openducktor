@@ -14,6 +14,7 @@ import {
   type AgentSessionViewReadPort,
   createAgentSessionViewSync,
 } from "./agent-session-view-sync";
+import { repoTaskIdsQueryOptions } from "./tasks";
 
 const event = (
   taskIds: string[],
@@ -113,6 +114,17 @@ const createHarness = (
       queryClient.clear();
     },
   };
+};
+
+const holdFirstLiveRefresh = (harness: ReturnType<typeof createHarness>) => {
+  const pending = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  harness.refreshLiveSessions.mockImplementation(async (repoPath: string) => {
+    if (repoPath !== "/repo-a") return;
+    started.resolve();
+    await pending.promise;
+  });
+  return { pending, started: started.promise };
 };
 
 describe("AgentSessionViewSync", () => {
@@ -509,6 +521,158 @@ describe("AgentSessionViewSync", () => {
       harness.dispose();
     }
   });
+
+  test("queues live refreshes across workspaces while foreground reads can complete", async () => {
+    const readPort = createReadPort(recordsFrom({}), ["foreground-task"]);
+    const harness = createHarness(readPort);
+    const { pending: firstRefresh, started: firstStarted } = holdFirstLiveRefresh(harness);
+    try {
+      const snapshot = harness.sync.reconcileStreamSnapshot(
+        new Map([
+          ["/repo-a", []],
+          ["/repo-b", []],
+        ]),
+        () => true,
+      );
+      await firstStarted;
+
+      const taskIds = await harness.queryClient.fetchQuery(
+        repoTaskIdsQueryOptions("/foreground", readPort),
+      );
+
+      expect(taskIds).toEqual(["foreground-task"]);
+      expect(readPort.taskIdsList.mock.calls).toEqual([["/foreground"]]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+
+      firstRefresh.resolve();
+      expect(await snapshot).toEqual(new Map());
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+    } finally {
+      firstRefresh.resolve();
+      harness.dispose();
+    }
+  });
+
+  test("a replacement sync shares the live refresh queue of its query client", async () => {
+    const readPort = createReadPort(recordsFrom({}));
+    const harness = createHarness(readPort);
+    const { pending: firstRefresh, started: firstStarted } = holdFirstLiveRefresh(harness);
+    const replacement = createAgentSessionViewSync({
+      queryClient: harness.queryClient,
+      readPort,
+      listSessionTaskIds: () => [],
+      removeTaskSessions: harness.removeTaskSessions,
+      refreshLiveSessions: harness.refreshLiveSessions,
+      isWorkspaceOpen: () => true,
+      isWorkspaceActive: () => false,
+    });
+    try {
+      const first = harness.sync.reconcileStreamSnapshot(new Map([["/repo-a", []]]), () => true);
+      await firstStarted;
+
+      const second = replacement.reconcileStreamSnapshot(new Map([["/repo-b", []]]), () => true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+
+      firstRefresh.resolve();
+      await Promise.all([first, second]);
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+    } finally {
+      firstRefresh.resolve();
+      harness.dispose();
+    }
+  });
+
+  test("a failed live refresh reaches its caller and lets the next workspace refresh", async () => {
+    const failure = new Error("live refresh failed");
+    const readPort = createReadPort(
+      recordsFrom({ "task-a": [session("a")], "task-b": [session("b")] }),
+    );
+    const harness = createHarness(readPort);
+    const { pending: firstRefresh, started: firstStarted } = holdFirstLiveRefresh(harness);
+    try {
+      harness.observe("task-a", [], "/repo-a");
+      harness.observe("task-b", [], "/repo-b");
+      const first = harness.reconcile([event(["task-a"], [], "/repo-a")]).then(
+        () => null,
+        (error: Error) => error,
+      );
+      await firstStarted;
+      const second = harness.reconcile([event(["task-b"], [], "/repo-b")]);
+      await waitForReads(readPort, 2);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+
+      firstRefresh.reject(failure);
+      expect(await first).toBe(failure);
+      await second;
+      expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+    } finally {
+      firstRefresh.resolve();
+      harness.dispose();
+    }
+  });
+
+  test.each([{ reopened: false }, { reopened: true }])(
+    "a queued live refresh skips a released workspace, reopened: $reopened",
+    async ({ reopened }) => {
+      const readPort = createReadPort(recordsFrom({}));
+      const closedRepoPaths = new Set<string>();
+      const harness = createHarness(readPort, { closedRepoPaths });
+      const { pending: firstRefresh, started: firstStarted } = holdFirstLiveRefresh(harness);
+      try {
+        const snapshot = harness.sync.reconcileStreamSnapshot(
+          new Map([
+            ["/repo-a", []],
+            ["/repo-b", []],
+          ]),
+          () => true,
+        );
+        await firstStarted;
+
+        closedRepoPaths.add("/repo-b");
+        await harness.sync.releaseWorkspace("/repo-b");
+        if (reopened) closedRepoPaths.delete("/repo-b");
+        firstRefresh.resolve();
+        expect(await snapshot).toEqual(new Map());
+
+        expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      } finally {
+        firstRefresh.resolve();
+        harness.dispose();
+      }
+    },
+  );
+
+  test.each([{ supersession: "replacement snapshot" }, { supersession: "stopped stream" }])(
+    "a queued live refresh skips work superseded by a $supersession",
+    async ({ supersession }) => {
+      const readPort = createReadPort(recordsFrom({}));
+      const harness = createHarness(readPort);
+      const { pending: firstRefresh, started: firstStarted } = holdFirstLiveRefresh(harness);
+      let currentOwner = true;
+      try {
+        const snapshot = harness.sync.reconcileStreamSnapshot(
+          new Map([
+            ["/repo-a", []],
+            ["/repo-b", []],
+          ]),
+          () => currentOwner,
+        );
+        await firstStarted;
+
+        if (supersession === "replacement snapshot") harness.sync.cancelReads();
+        else currentOwner = false;
+        firstRefresh.resolve();
+        await snapshot;
+
+        expect(harness.refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      } finally {
+        firstRefresh.resolve();
+        harness.dispose();
+      }
+    },
+  );
 
   test("a stream snapshot does no session work for a workspace that closed", async () => {
     const readPort = createReadPort(recordsFrom({ "task-a": [session("a")] }));

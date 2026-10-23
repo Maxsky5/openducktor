@@ -41,15 +41,21 @@ Autopilot submits its first instruction through the host message queue. If the s
 
 Stop also cancels Autopilot submissions that are still being prepared. A canceled submission cannot send its instruction or add it to the queue.
 
-## Document actions
+## Artifact actions
 
-`set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the document.
+`set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the artifact.
 
-`set_plan` writes or revises the implementation plan. A `feature` or `epic` can use it from `spec_ready` or any later active status. A `task` or `bug` can also use it from `open`. Valid planning before a build moves the task to `ready_for_dev`. A later edit changes only the document.
+`set_plan` writes or revises the implementation plan. A `feature` or `epic` can use it from `spec_ready` or any later active status. A `task` or `bug` can also use it from `open`. Valid planning before a build moves the task to `ready_for_dev`. A later edit changes only the artifact.
 
-Builder can revise the spec with `odt_set_spec` and the plan with `odt_set_plan` when implementation findings require document changes. Builder must get user approval before changing required scope, design contracts, or security posture. Each call saves the complete Markdown document for the session task. Revisions from `in_progress`, `blocked`, `ai_review`, or `human_review` keep the task status unchanged.
+Builder can revise the spec with `odt_set_task_artifact` and code `spec`, and the plan with code `plan` when implementation findings require artifact changes. Builder must get user approval before changing required scope, design contracts, or security posture. Each call saves the complete Markdown artifact for the session task. Revisions from `in_progress`, `blocked`, `ai_review`, or `human_review` keep the task status unchanged.
 
-For an epic, `subtasks` means replace the direct child proposal. Replacement is allowed only when all current direct children are `open`, `spec_ready`, or `ready_for_dev`. If `subtasks` is absent, keep the current children.
+Manual Specification and Implementation Plan saves use `saveSpecArtifact` and `savePlanArtifact`. They keep task status unchanged, including on closed tasks. They remain separate from workflow submissions.
+
+`odt_set_task_artifact` saves workflow artifacts through the existing workflow actions. Code `qaReport` requires a verdict and completes one QA review pass. Build completion remains separate. Managed workflow writes follow the role policy described in [external MCP](external-mcp.md#tool-access).
+
+Users and workflow agents can create, rename, replace, and delete free artifacts on non-closed tasks. These operations cannot change workflow artifacts, task status, QA verdict, or workflow readiness. Closed tasks keep read, preview, and download access. See [task artifacts](task-artifacts.md) for collection behavior and [artifact tools](external-mcp.md) for inputs and transfer limits.
+
+For a native epic planning action, `subtasks` means replace the direct child proposal. Replacement is allowed only when all current direct children are `open`, `spec_ready`, or `ready_for_dev`. If `subtasks` is absent, keep the current children.
 
 ## Direct merge
 
@@ -61,24 +67,26 @@ The host waits for publication consent, then completes publication, cleanup, and
 
 `reset_implementation` discards the current build and QA attempt. It can run from `in_progress`, `blocked`, `ai_review`, or `human_review`.
 
-Choose the target from the documents that remain:
+Choose the target from the artifacts that remain:
 
 - Use `ready_for_dev` when the plan remains.
 - Use `spec_ready` when only the specification remains.
 - Use `open` when neither remains.
+
+The reset removes QA Report history and keeps all free artifacts.
 
 Before the reset:
 
 - Reject the action while a live task role uses the canonical worktree.
 - Check the canonical worktree and task branch.
 - Restore tracked files to the local base. Remove ordinary untracked files and keep ignored files.
-- Keep the canonical worktree, task branch, specification, and plan. Do not rerun copy paths or hooks.
+- Keep the canonical worktree, task branch, specification, plan, and free artifacts. Do not rerun copy paths or hooks.
 
 ## Reset task
 
 `reset_task` moves any non-closed task to `open`. It keeps the task ID and user fields.
 
-It clears workflow documents, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task terminals, then removes task worktrees and related local branches.
+It clears all workflow and free artifacts, linked role sessions, pull request data, direct merge data, and in-memory runs. It stops task terminals, then removes task worktrees and related local branches.
 
 Reject the action while a live role still owns task state. Reject it when branch cleanup is unsafe, such as when another worktree has the branch checked out.
 
@@ -86,7 +94,7 @@ Reject the action while a live role still owns task state. Reject it when branch
 
 `close_task` moves any non-closed task to `closed` from the task detail sheet. It is an administrative override.
 
-The action keeps the task record, user fields, documents, QA reports, session history, pull request data, and direct merge data. It stops task terminals and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
+The action keeps the task record, user fields, all artifacts, session history, pull request data, and direct merge data. It stops task terminals and removes managed worktrees and local branches. If cleanup is unsafe or incomplete, it fails with an error.
 
 Reject it while a live role owns mutable task state. Reject an epic while a direct child is not closed.
 

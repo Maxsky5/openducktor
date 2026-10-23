@@ -390,6 +390,115 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("tool summary builder", () => {
+    test("previews deployed task document history from its input", () => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool: "mcp__openducktor__odt_read_task_documents",
+            toolType: "generic",
+            input: {
+              taskId: "task-1",
+              includeQaReport: true,
+              includePlan: true,
+              includeSpec: true,
+            },
+            preview: '{"spec":"Old preview body"}',
+            output: '{"spec":"Returned document body"}',
+          }),
+          "Returned document body",
+        ),
+      ).toBe("task-1 · Spec, Plan, QA report");
+    });
+
+    test.each([
+      "odt_delete_task_artifact",
+      "openducktor_odt_delete_task_artifact",
+      "functions.openducktor_odt_delete_task_artifact",
+      "mcp__openducktor__odt_delete_task_artifact",
+    ])("previews the deleted artifact code for %s", (tool) => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool,
+            toolType: "workflow",
+            input: { taskId: "task-1", code: "login-preview" },
+            preview: "Old artifact preview",
+            output: '{"message":"Artifact deleted"}',
+          }),
+          "",
+        ),
+      ).toBe("task-1 · login-preview");
+    });
+
+    const partialArtifactReadCases: Array<{
+      input?: NonNullable<ToolMeta["input"]>;
+      expected: string;
+    }> = [
+      { input: { taskId: "task-1" }, expected: "task-1" },
+      { input: { taskId: "task-1", codes: "spec" }, expected: "task-1" },
+      { input: { codes: ["spec"] }, expected: "" },
+      { expected: "" },
+    ];
+
+    test.each(partialArtifactReadCases)(
+      "keeps partial artifact reads compact for $input",
+      ({ input, expected }) => {
+        for (const inputStreaming of [true, false]) {
+          const meta = createToolMeta({
+            tool: "odt_read_task_artifacts",
+            toolType: "generic",
+            status: "pending",
+            inputStreaming,
+            preview: '{"artifacts":[{"body":"Old preview body"}]}',
+            title: "Old preview title",
+            output: '{"artifacts":[{"body":"Returned artifact body"}]}',
+          });
+          if (input) meta.input = input;
+          expect(buildToolSummary(meta, "Returned content body")).toBe(expected);
+        }
+      },
+    );
+
+    test.each([
+      { error: "Artifact not found", output: "", expected: "Artifact not found" },
+      { error: "Tool call cancelled by user", output: "", expected: "Tool call cancelled by user" },
+      {
+        error: undefined,
+        output: "Tool call cancelled by user",
+        expected: "Tool call cancelled by user",
+      },
+      { error: undefined, output: "Artifact not found", expected: "Artifact not found" },
+      { error: undefined, output: "", expected: "" },
+    ])("keeps artifact failure text before input for $expected", ({ error, output, expected }) => {
+      const meta = createToolMeta({
+        tool: "odt_read_task_artifacts",
+        toolType: "generic",
+        status: "error",
+        input: { taskId: "task-1", codes: ["spec"] },
+        preview: "Old preview",
+        output,
+      });
+      if (error !== undefined) meta.error = error;
+      expect(buildToolSummary(meta, "")).toBe(expected);
+    });
+
+    test.each([
+      "mcp__other_server__odt_read_task_artifacts",
+      "other_server_odt_delete_task_artifact",
+    ])("keeps unrelated MCP tool previews for %s", (tool) => {
+      expect(
+        buildToolSummary(
+          createToolMeta({
+            tool,
+            toolType: "generic",
+            input: { taskId: "task-1", codes: ["spec"], code: "login-preview" },
+            preview: "Other server preview",
+          }),
+          "",
+        ),
+      ).toBe("Other server preview");
+    });
+
     test.each(["pending", "running", "completed"] as const)(
       "previews execute input code instead of output while %s",
       (status) => {

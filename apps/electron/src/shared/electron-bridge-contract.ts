@@ -1,6 +1,7 @@
 import type { NotificationCursor, NotificationStreamFrame } from "@openducktor/contracts";
 import type {
   AppPlatform,
+  ArtifactPreviewEnvironment,
   AppUpdateCheckInput,
   AppUpdateCommandResult,
   AppUpdateState,
@@ -31,6 +32,9 @@ import type { HostCommandName, HostCommandResult } from "@openducktor/host";
 import { z } from "zod";
 
 export const ELECTRON_HOST_INVOKE_CHANNEL = "openducktor:host-invoke";
+export const ELECTRON_ARTIFACT_PREVIEW_PROTOCOL = "odt-artifact-preview";
+export const ELECTRON_ARTIFACT_PREVIEW_URL =
+  "odt-artifact-preview://bootstrap/artifact-preview-bootstrap";
 export const ELECTRON_HOST_SELECT_CHANNEL = "openducktor:host-select";
 export const ELECTRON_NATIVE_THEME_CHANNEL = "openducktor:native-theme";
 export const ELECTRON_HOST_EVENT_CHANNEL = "openducktor:host-event";
@@ -246,6 +250,7 @@ export type OpenDucktorElectronNotificationApi = {
 };
 
 export type OpenDucktorElectronApi = {
+  getArtifactPreviewEnvironment(): Promise<ArtifactPreviewEnvironment>;
   platform: AppPlatform;
   selectHost(): Promise<void>;
   setNativeTheme(theme: ThemePreference): Promise<void>;

@@ -439,8 +439,8 @@ const specStateValue: SpecStateContextValue = {
   loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
   loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
   saveSpec: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
-  saveSpecDocument: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
-  savePlanDocument: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
+  saveSpecArtifact: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
+  savePlanArtifact: async () => ({ updatedAt: "2026-01-01T00:00:00.000Z" }),
 };
 
 function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): RepoConfig {
@@ -1922,7 +1922,7 @@ describe("KanbanPage session start modal flow", () => {
         id: "TASK-123",
         status: "in_progress",
       });
-      currentTaskFixture.documentSummary.qaReport = {
+      currentTaskFixture.artifactSummary.qaReport = {
         has: true,
         updatedAt: "2026-03-09T10:00:00.000Z",
         verdict: "rejected",

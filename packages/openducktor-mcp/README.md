@@ -85,7 +85,7 @@ Startup behavior:
 
 OpenDucktor-managed OpenCode and Codex sessions receive explicit host URL and token values. Their routing does not use `OPENDUCKTOR_CHANNEL`.
 
-The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
+The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and artifact persistence. This package owns MCP transport and schema validation only.
 
 ## Public Tools
 
@@ -94,7 +94,9 @@ The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and
 - `odt_search_tasks`
 - `odt_read_task`
 - `odt_read_task_assets`
-- `odt_read_task_documents`
+- `odt_read_task_artifacts`
+- `odt_set_task_artifact`
+- `odt_delete_task_artifact`
 - `odt_update_task`
 
 The remaining `odt_*` mutation tools are intended for OpenDucktor workflow automation and remain available on the same server.
@@ -186,7 +188,7 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
 
 ## Output Model
 
-`odt_create_task` and `odt_read_task` return the same lightweight public task summary model. `odt_search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
+`odt_create_task` and `odt_update_task` return a lightweight public task summary model. `odt_search_tasks` wraps an array of that same summary model in `{ results, limit, totalCount, hasMore }`.
 
 ```json
 {
@@ -206,7 +208,7 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
     "createdAt": "<ISO 8601 timestamp>",
     "updatedAt": "<ISO 8601 timestamp>",
     "qaVerdict": "not_reviewed",
-    "documents": {
+    "artifacts": {
       "hasSpec": false,
       "hasPlan": false,
       "hasQaReport": false
@@ -215,7 +217,7 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
 }
 ```
 
-Use `odt_read_task` first to discover the task summary object, including task state, optional `targetBranch`, `qaVerdict`, and which documents exist. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
+Use `odt_read_task` first to load the task fields, optional `targetBranch`, and `qaVerdict`. Its `task.artifacts` is an array of metadata for all current workflow and free artifacts instead of presence flags. Each entry has a stable `code`, display `name`, and `classification`. It contains no artifact content, internal artifact IDs, or `workflowKind`. When no QA report exists yet, `qaVerdict` is `"not_reviewed"`.
 
 `odt_read_task` input:
 
@@ -234,52 +236,18 @@ Use one call when the requested assets have a raw total of at most 20 MiB. Split
 
 The result contains a short label and a native MCP `image` content block for each asset. It does not expose the private bridge JSON as `structuredContent`, declare an MCP `outputSchema`, or return storage paths and runtime URLs.
 
-`odt_read_task_documents` input:
+### Read and manage task artifacts
 
-- `workspaceId?` optional per-call workspace override
-- `taskId`
-- `includeSpec?`
-- `includePlan?`
-- `includeQaReport?`
+After `odt_read_task`, call `odt_read_task_artifacts` with `taskId` and a nonempty array of distinct `codes` from `task.artifacts`. For example, `{ "taskId": "repo-123", "codes": ["spec"] }` reads the full spec in the second call. The workflow codes `spec`, `plan`, and `qaReport` are reserved; these reads return full content by default. Free-artifact reads, such as `codes: ["design-preview"]`, default to 16 KiB. The reader has no metadata-only mode.
 
-When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` becomes required at call time.
+Continue one artifact at `nextByteOffset` with `expectedVersion`. Use `maxBytes` to set an explicit chunk size. Text appears in each JSON artifact entry's `content` string, alongside its metadata and read offsets. One JSON text block matches `structuredContent`; no separate raw text bodies follow it. Binary content uses blob resources, and image previews use native image blocks. A batch must fit the 10 MiB serialized MCP response limit, including both JSON representations.
 
-Use `odt_read_task_documents` only when you need document bodies:
+Use `odt_set_task_artifact` with required `code` to save any artifact. The result is `{ artifact }` with the saved public metadata and no content copy.
 
-- Requested document keys are returned consistently even when no persisted body exists yet.
-- Missing spec and plan return empty markdown with `updatedAt: null`.
-- Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
-- New or updated SQLite workflow documents are stored as `plain_text` markdown by the OpenDucktor host.
-- Successful MCP reads return plain markdown from the SQLite task store.
+For workflow codes `spec`, `plan`, and `qaReport`, put complete Markdown directly in `content`. The format is fixed as `text/markdown`; Set also accepts UTF-8 Markdown bytes in `dataBase64`. Workflow codes reject `name`, `fileName`, and `mediaType`. Code `qaReport` also requires an approved or rejected `verdict`; other codes reject `verdict`. Workflow writes keep their existing domain operations, provenance, and status transitions. Build completion still uses `odt_build_completed`.
 
-```json
-{
-  "workspaceId": "my-workspace",
-  "taskId": "repo-123",
-  "includeSpec": true,
-  "includePlan": false,
-  "includeQaReport": true
-}
-```
+For free artifacts, `code` selects the saved artifact. If the code does not exist, supply `name`, `fileName`, `mediaType`, and one content field to create it. Use a plain string in `content` for text or padded base64 in `dataBase64` for exact file bytes. Send only one content field. Every content change requires `fileName` and `mediaType`; `mediaType` selects the format. For an existing code, supply `name` to rename it, content fields to replace its content, or both. A rename omits both content fields and needs no current bytes. The decoded limit is 10 MiB. A combined update commits once. Use `odt_delete_task_artifact` with `code` to delete one free artifact. Delete rejects reserved workflow codes.
 
-It returns only the requested sections:
+Free-artifact codes are unique within a task and never change. Display names can repeat, and a rename keeps the code. Display names cannot change workflow roles. Internal artifact IDs stay within the UI and store. Closed tasks permit reads only. Free-artifact writes preserve task status. Managed sessions can save workflow codes only for their root role: Spec writes `spec`, Planner writes `plan`, Builder writes `spec` and `plan`, and QA writes `qaReport`. Every role can write free artifacts. The host checks the native caller; repository sessions and external clients have no workflow role restriction.
 
-```json
-{
-  "documents": {
-    "spec": {
-      "markdown": "",
-      "updatedAt": "<ISO 8601 timestamp>",
-      "error": "Failed to decode openducktor.documents.spec[0]: invalid base64 payload"
-    },
-    "latestQaReport": {
-      "markdown": "",
-      "updatedAt": "<ISO 8601 timestamp>",
-      "verdict": "approved",
-      "error": "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload"
-    }
-  }
-}
-```
-
-`error` is optional. It is omitted for healthy documents and for documents that do not exist yet.
+The [artifact access contract](https://github.com/Maxsky5/openducktor/blob/main/docs/external-mcp.md#read-and-manage-task-artifacts) defines chunking, exact-byte access, image previews, failures, and transport limits. Bridge version 2 requires compatible clients and hosts. `odt_read_task_documents` has no compatibility alias.

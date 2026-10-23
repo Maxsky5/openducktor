@@ -20,12 +20,12 @@
         "value": ["shared_alias"]
       },
       {
-        "path": ["workflowToolAliasesByCanonical", "odt_set_plan"],
-        "value": [" odt_set_spec "]
+        "path": ["workflowToolAliasesByCanonical", "odt_update_task"],
+        "value": [" odt_set_task_artifact "]
       },
       {
-        "path": ["workflowToolAliasesByCanonical", "odt_set_spec"],
-        "value": [" runtime_set_spec ", "runtime_set_spec", "   "]
+        "path": ["workflowToolAliasesByCanonical", "odt_set_task_artifact"],
+        "value": [" runtime_artifact ", "runtime_artifact", "   "]
       }
     ]
   },

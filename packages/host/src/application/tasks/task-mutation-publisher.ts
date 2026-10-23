@@ -1,4 +1,4 @@
-import type { TaskChangeSet, TaskDocumentChange, TaskEventCursor } from "@openducktor/contracts";
+import type { TaskChangeSet, TaskArtifactChange, TaskEventCursor } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import type { TaskMutationOperation } from "./task-mutation-operation";
@@ -19,9 +19,10 @@ export const createMutationPublisher = ({
     changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
     options: {
+      settleOnInterrupt?: boolean;
       changes?: (result: A) => TaskChangeSet;
       previousParentTaskIds?: string[];
-      documentChanges?: TaskDocumentChange[];
+      artifactChanges?: (result: A) => TaskArtifactChange[];
     } = {},
   ): Effect.Effect<{ value: A; cursor: TaskEventCursor }, TaskServiceError> =>
     Effect.suspend(() => {
@@ -55,7 +56,7 @@ export const createMutationPublisher = ({
                   operation,
                   statusChanges,
                   result.failure.failure,
-                  result.failure.documentChanges,
+                  result.failure.artifactChanges,
                 );
                 return yield* Effect.fail(result.failure.failure);
               }
@@ -67,10 +68,11 @@ export const createMutationPublisher = ({
               operation,
               statusChanges,
               undefined,
-              options.documentChanges,
+              options.artifactChanges?.(result.success),
             );
             return { value: result.success, cursor };
           }),
+        options.settleOnInterrupt,
       );
     });
 

@@ -118,7 +118,7 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -179,7 +179,7 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -240,7 +240,7 @@ describe("createMcpHostBridgeServer", () => {
         body: {},
       });
       expect(ready.body).toEqual({
-        bridgeVersion: 1,
+        bridgeVersion: 2,
         toolNames: [...ODT_MCP_TOOL_NAMES],
       });
       expect(ready.status).toBe(200);
@@ -313,7 +313,7 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -355,7 +355,7 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -399,7 +399,7 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -459,7 +459,7 @@ describe("createMcpHostBridgeServer", () => {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
           return Effect.sync(() => {
-            return { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] };
+            return { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] };
           });
         },
         getWorkspaces() {
@@ -531,7 +531,7 @@ describe("createMcpHostBridgeServer", () => {
       bridgeService: {
         invokeBrowserTool: unexpectedBrowserTool,
         ready() {
-          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+          return Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
         },
         getWorkspaces() {
           return Effect.succeed({ workspaces: [] });
@@ -580,7 +580,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
-        ready: () => Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
         invokeBrowserTool(toolName, input) {
@@ -624,7 +624,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
-        ready: () => Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
         invokeBrowserTool: () =>
@@ -683,7 +683,7 @@ describe("createMcpHostBridgeServer", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
       onStatusChanged: () => {},
       bridgeService: {
-        ready: () => Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+        ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
         getWorkspaces: () => Effect.succeed({ workspaces: [] }),
         invoke: unexpectedTaskTool,
         invokeBrowserTool: () =>
@@ -717,3 +717,70 @@ describe("createMcpHostBridgeServer", () => {
     }
   });
 });
+
+test("artifact setters use a bounded 16 MiB envelope while other bridge requests keep 1 MiB", async () => {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-artifact-bridge-"));
+  const calls: string[] = [];
+  const bridge = createMcpHostBridgeServer({
+    discoveryPath: path.join(tempDir, "mcp-bridge.json"),
+    token: "token-1",
+    workspaceSettingsService: createWorkspaceSettingsService(),
+    onStatusChanged: () => {},
+    bridgeService: {
+      ready: () => Effect.succeed({ bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] }),
+      getWorkspaces: () => Effect.succeed({ workspaces: [] }),
+      invokeBrowserTool: unexpectedBrowserTool,
+      invoke: (tool) => {
+        calls.push(tool);
+        return Effect.succeed({
+          artifact: {
+            taskId: "task-1",
+            code: "fixture",
+            name: "Fixture",
+            classification: "free",
+            revision: 1,
+            updatedAt: null,
+            fileName: "fixture.txt",
+            mediaType: "text/plain",
+            byteSize: 0,
+          },
+        });
+      },
+    },
+  });
+  try {
+    const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+    const send = (tool: string, data: string) =>
+      requestJson(`${connection.hostUrl}/invoke/${tool}`, {
+        method: "POST",
+        headers: { "x-openducktor-app-token": "token-1" },
+        body: { taskId: "task-1", dataBase64: data },
+      });
+    expect(
+      (await send("odt_set_task_artifact", Buffer.alloc(10 * 1024 * 1024).toString("base64")))
+        .status,
+    ).toBe(200);
+    const tooLarge = await send("odt_set_task_artifact", "A".repeat(16 * 1024 * 1024));
+    expect(tooLarge.status).toBeGreaterThanOrEqual(400);
+    expect(tooLarge.body).toMatchObject({
+      error: { message: expect.stringContaining("exceeds 16 MiB") },
+    });
+    for (const tool of [
+      "odt_read_task_artifacts",
+      "odt_delete_task_artifact",
+      "odt_set_spec",
+      "odt_create_task_artifact",
+      "odt_replace_task_artifact",
+    ]) {
+      const unrelated = await send(tool, "A".repeat(2 * 1024 * 1024));
+      expect(unrelated.status).toBeGreaterThanOrEqual(400);
+      expect(unrelated.body).toMatchObject({
+        error: { message: expect.stringContaining("exceeds 1 MiB") },
+      });
+    }
+    expect(calls).toEqual(["odt_set_task_artifact"]);
+  } finally {
+    await Effect.runPromise(bridge.close());
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}, 10_000);

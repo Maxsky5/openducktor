@@ -1,5 +1,13 @@
 import { AlertCircle, Expand } from "lucide-react";
-import { createContext, type ReactNode, useContext, useId, useLayoutEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Dialog, DialogTrigger } from "./dialog";
 import { MarkdownMermaidDialog } from "./markdown-mermaid-dialog";
 import { drawMermaidSvg, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
@@ -51,13 +59,24 @@ export function MarkdownMermaid({
     return svg === null ? null : { source, preview: { status: "ready", svg } };
   });
   const [openSvg, setOpenSvg] = useState<string | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const drawnSource = drawn?.source;
 
   useLayoutEffect(() => {
     if (preparedPreview || sourceOpen || drawnSource === source) {
       return;
     }
+    const cachedSvg = peekMermaidSvg(svgCache, source, createRenderId(reactId));
+    if (cachedSvg !== null) {
+      setDrawn({ source, preview: { status: "ready", svg: cachedSvg } });
+      return;
+    }
+    const viewport = viewportRef.current;
+    if (!viewport) return;
     let active = true;
+    let scheduled = false;
+    let renderFrame: number | null = null;
+    let renderTimeout: ReturnType<typeof setTimeout> | null = null;
     const renderDiagram = async (): Promise<void> => {
       let preview: MermaidPreview;
       try {
@@ -70,17 +89,28 @@ export function MarkdownMermaid({
         setDrawn({ source, preview });
       }
     };
-    if (renderDelayMs <= 0) {
-      void renderDiagram();
-      return () => {
-        active = false;
-      };
-    }
-
-    const renderTimeout = setTimeout(() => void renderDiagram(), renderDelayMs);
+    // Mermaid layout blocks the main thread. Draw only near the viewport, after it can paint.
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!active || scheduled || !entry?.isIntersecting) return;
+        scheduled = true;
+        observer.disconnect();
+        if (renderDelayMs > 0) {
+          renderTimeout = setTimeout(() => void renderDiagram(), renderDelayMs);
+          return;
+        }
+        renderFrame = requestAnimationFrame(() => {
+          renderFrame = requestAnimationFrame(() => void renderDiagram());
+        });
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(viewport);
     return () => {
       active = false;
-      clearTimeout(renderTimeout);
+      observer.disconnect();
+      if (renderFrame !== null) cancelAnimationFrame(renderFrame);
+      if (renderTimeout !== null) clearTimeout(renderTimeout);
     };
   }, [drawnSource, preparedPreview, reactId, renderDelayMs, source, sourceOpen, svgCache]);
 
@@ -97,7 +127,9 @@ export function MarkdownMermaid({
 
   return (
     <Dialog open={openSvg !== null} onOpenChange={(open) => !open && setOpenSvg(null)}>
-      <section
+      <div
+        ref={viewportRef}
+        role="group"
         aria-busy={!preview}
         aria-label="Mermaid diagram"
         className="my-3 overflow-hidden rounded-md border border-border bg-white"
@@ -133,7 +165,7 @@ export function MarkdownMermaid({
             </div>
           ) : null}
         </div>
-      </section>
+      </div>
       {openSvg ? <MarkdownMermaidDialog svg={openSvg} /> : null}
     </Dialog>
   );

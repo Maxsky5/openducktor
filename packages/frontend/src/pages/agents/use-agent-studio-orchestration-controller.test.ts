@@ -1,5 +1,5 @@
 import { MemoryRouter } from "react-router";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
@@ -9,6 +9,13 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import {
+  documentQueryKeys,
+  type TaskDocumentSection,
+} from "@openducktor/frontend-core/queries/documents";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
@@ -35,6 +42,7 @@ import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import {
   createChatSettingsFixture,
+  createSettingsSnapshotFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
@@ -65,13 +73,7 @@ const createBaseArgs = (): BuildArgs => {
     sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
   });
   const sessionSummary = toAgentSessionSummary(session);
-  const createTaskDocument = () => ({
-    markdown: "# doc",
-    updatedAt: "2026-02-22T10:00:00.000Z",
-    isLoading: false,
-    error: null,
-    loaded: true,
-  });
+
   const sessionActions = {
     handleWorkflowStepSelect: () => {},
     handleSessionSelectionChange: () => {},
@@ -132,11 +134,7 @@ const createBaseArgs = (): BuildArgs => {
         transcriptState: createSelectedSessionTranscriptStateFixture(),
         sessionAuxiliaryError: null,
       },
-      documents: {
-        specDoc: createTaskDocument(),
-        planDoc: createTaskDocument(),
-        qaDoc: createTaskDocument(),
-      },
+
       sessionActions,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     }),
@@ -228,8 +226,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.selectedSession.transcriptState).toEqual({
       kind: "visible",
     });
-    expect(mapped.selectedSession.documents.taskDocuments?.plan.document.markdown).toBe("# doc");
-    expect(mapped.selectedSession.documents.defaultDocumentKind).toBe("plan");
     expect(mapped.selectedSession.selectedSession.runtimeReadiness.state).toBe("ready");
     expect(mapped.modelSelection.onSelectAgent).toBe(handleSelectAgentProfile);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
@@ -267,6 +263,79 @@ describe("buildAgentStudioPageModelsArgs", () => {
   });
 });
 
+type ControllerArgs = Parameters<typeof useAgentStudioOrchestrationController>[0];
+
+const createControllerArgs = (
+  base: BuildArgs,
+  runtime: RuntimeDescriptor,
+  selectedSession = base.selectedSession.selectedSession,
+): ControllerArgs => {
+  const summary = selectedSession.loadedSession
+    ? toAgentSessionSummary(selectedSession.loadedSession)
+    : base.selectedSession.sessionsForTask[0]!;
+  const operations = createAgentOperationsFixture();
+  return {
+    activeWorkspaceId: "workspace-repo",
+    workspaceRepoPath: "/repo",
+    branches: [],
+    runtimeDefinitions: [runtime],
+    repoSettings: null,
+    gitProviderContext: undefined,
+    gitProviderReadError: null,
+    selection: {
+      routeSessionResolution: { kind: "found", session: summary },
+      selectedSessionFromRoute: summary,
+      taskId: "task-1",
+      selectedTask: base.selectedSession.selectedTask,
+      sessionsForTask: [summary],
+      resolvedRouteSession: summary,
+      queryUpdate: null,
+      view: {
+        taskId: "task-1",
+        selectedTask: base.selectedSession.selectedTask,
+        sessionsForTask: [summary],
+        isTaskReady: true,
+        role: "planner",
+        launchActionId: "planner_initial",
+        selectedSession,
+      },
+    },
+    composer: {
+      ...base.composer,
+      draftScope: {
+        taskId: "task-1",
+        role: "planner",
+        session: selectedSession.identity,
+      },
+    },
+    actions: {
+      ...operations,
+      scheduleQueryUpdate: () => {},
+      selectAgentStudioSelection: () => {},
+      openTaskDetails: () => {},
+      assertCanPrepareSession: () => {},
+      runSessionStartWorkflow: async () => {
+        throw new Error("Unexpected session start");
+      },
+    },
+    taskExecutionFilePreview: {
+      model: {
+        selectedFile: null,
+        previewSessionKey: 0,
+        preservePreviousSnapshot: false,
+        hasPendingDiscard: false,
+        isApplyingTransition: false,
+        onClose: () => {},
+        onLeavePolicyChange: () => {},
+        onKeepEditing: () => {},
+        onDiscard: () => {},
+      },
+      onSelectFile: () => false,
+      requestContextTransition: () => {},
+    },
+  };
+};
+
 describe("task chat speed", () => {
   test.each([
     { runtime: CODEX_RUNTIME_DESCRIPTOR, speed: undefined, label: "Standard" },
@@ -285,9 +354,12 @@ describe("task chat speed", () => {
     const session = createAgentSessionFixture({
       runtimeKind: runtime.kind,
       selectedModel,
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      sessionAssociation: {
+        kind: "workflow",
+        taskId: "task-1",
+        role: "planner",
+      },
     });
-    const summary = toAgentSessionSummary(session);
     const selectedSession = {
       ...base.selectedSession.selectedSession,
       identity: toAgentSessionIdentity(session),
@@ -305,70 +377,19 @@ describe("task chat speed", () => {
               modelId: "model",
               modelName: "Model",
               variants: [],
-              speedLevels: [{ id: runtime.kind === "codex" ? "priority" : "fast", label: "Fast" }],
+              speedLevels: [
+                {
+                  id: runtime.kind === "codex" ? "priority" : "fast",
+                  label: "Fast",
+                },
+              ],
             },
           ],
           defaultModelsByProvider: { [runtime.kind]: "model" },
         },
       },
     };
-    const operations = createAgentOperationsFixture();
-    const args: Parameters<typeof useAgentStudioOrchestrationController>[0] = {
-      activeWorkspaceId: "workspace-repo",
-      workspaceRepoPath: "/repo",
-      branches: [],
-      runtimeDefinitions: [runtime],
-      repoSettings: null,
-      gitProviderContext: undefined,
-      gitProviderReadError: null,
-      selection: {
-        routeSessionResolution: { kind: "found", session: summary },
-        selectedSessionFromRoute: summary,
-        taskId: "task-1",
-        selectedTask: base.selectedSession.selectedTask,
-        sessionsForTask: [summary],
-        resolvedRouteSession: summary,
-        queryUpdate: null,
-        view: {
-          taskId: "task-1",
-          selectedTask: base.selectedSession.selectedTask,
-          sessionsForTask: [summary],
-          isTaskReady: true,
-          role: "planner",
-          launchActionId: "planner_initial",
-          selectedSession,
-        },
-      },
-      composer: {
-        ...base.composer,
-        draftScope: { taskId: "task-1", role: "planner", session: selectedSession.identity },
-      },
-      actions: {
-        ...operations,
-        scheduleQueryUpdate: () => {},
-        selectAgentStudioSelection: () => {},
-        openTaskDetails: () => {},
-        assertCanPrepareSession: () => {},
-        runSessionStartWorkflow: async () => {
-          throw new Error("Unexpected session start");
-        },
-      },
-      taskExecutionFilePreview: {
-        model: {
-          selectedFile: null,
-          previewSessionKey: 0,
-          preservePreviousSnapshot: false,
-          hasPendingDiscard: false,
-          isApplyingTransition: false,
-          onClose: () => {},
-          onLeavePolicyChange: () => {},
-          onKeepEditing: () => {},
-          onDiscard: () => {},
-        },
-        onSelectFile: () => false,
-        requestContextTransition: () => {},
-      },
-    };
+    const args = createControllerArgs(base, runtime, selectedSession);
     const Composer = () => {
       const { agentChatModel } = useAgentStudioOrchestrationController(args);
       if (label === null) expect(agentChatModel.composer.speed).toBeNull();
@@ -391,13 +412,113 @@ describe("task chat speed", () => {
   });
 });
 
+describe("task workflow artifact loading", () => {
+  test.each([
+    { existing: "all workflows", hasPlanAndQa: true },
+    { existing: "only the spec", hasPlanAndQa: false },
+  ])(
+    "loads $existing before session preparation and keeps reads active when the transcript is inactive",
+    async ({ hasPlanAndQa }) => {
+      const base = createBaseArgs();
+      const task = createTaskCardFixture({
+        id: "task-1",
+        artifactSummary: {
+          spec: { has: true },
+          plan: { has: hasPlanAndQa },
+          qaReport: { has: hasPlanAndQa, verdict: "approved" },
+        },
+      });
+      base.selectedSession.selectedTask = task;
+      const pendingSession = {
+        ...base.selectedSession.selectedSession,
+        preparation: { ready: false, error: null },
+        loadedSession: null,
+        transcriptState: createSelectedSessionTranscriptStateFixture({
+          kind: "session_loading",
+          reason: "preparing",
+        }),
+      };
+      const args = createControllerArgs(base, OPENCODE_RUNTIME_DESCRIPTOR, pendingSession);
+      const sections = hasPlanAndQa ? (["spec", "plan", "qa"] as const) : (["spec"] as const);
+      const expectedSections = [...sections].sort();
+      const releaseReads = Promise.withResolvers<void>();
+      let revision = 1;
+      const read = mock(
+        async (_repoPath: string, _taskId: string, section: TaskDocumentSection) => {
+          await releaseReads.promise;
+          return {
+            markdown: `${section} V${revision}`,
+            updatedAt: `2026-10-22T1${revision}:00:00Z`,
+          };
+        },
+      );
+      const connection = createTestClientConnection({
+        client: {
+          taskWorkflowArtifactGet: read,
+          workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
+        },
+        scheduleTask: () => () => {},
+      });
+      const view = renderHook(useAgentStudioOrchestrationController, {
+        initialProps: args,
+        wrapper: ({ children }: PropsWithChildren) =>
+          createElement(
+            TaskChatProviders,
+            { runtime: OPENCODE_RUNTIME_DESCRIPTOR, connection },
+            children,
+          ),
+      });
+      try {
+        await waitFor(
+          () =>
+            expect(read.mock.calls.map(([, , section]) => section).sort()).toEqual(
+              expectedSections,
+            ),
+          { timeout: 250 },
+        );
+        await act(async () => releaseReads.resolve());
+        view.rerender({
+          ...args,
+          selection: {
+            ...args.selection,
+            view: {
+              ...args.selection.view,
+              selectedSession: {
+                ...pendingSession,
+                transcriptState: { kind: "empty", reason: "inactive" },
+              },
+            },
+          },
+        });
+        revision = 2;
+        await act(async () => {
+          await connection.queryClient.invalidateQueries({ queryKey: documentQueryKeys.all });
+        });
+        expect(read.mock.calls.map(([, , section]) => section).sort()).toEqual(
+          [...expectedSections, ...expectedSections].sort(),
+        );
+        for (const section of sections)
+          expect(read).toHaveBeenCalledWith("/repo", "task-1", section);
+      } finally {
+        releaseReads.resolve();
+        view.unmount();
+        connection.queryClient.clear();
+      }
+    },
+  );
+});
+
 function TaskChatProviders({
   runtime,
+  connection,
   children,
-}: PropsWithChildren<{ runtime: RuntimeDescriptor }>) {
+}: PropsWithChildren<{
+  runtime: RuntimeDescriptor;
+  connection?: ClientConnection;
+}>) {
   return createElement(
     QueryProvider,
-    null,
+    connection ? { connection } : null,
     createElement(
       WorkspaceStateContext.Provider,
       { value: createWorkspaceStateFixture() },

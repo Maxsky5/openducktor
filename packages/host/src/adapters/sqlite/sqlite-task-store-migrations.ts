@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import type { SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import { migrate } from "drizzle-orm/sqlite-proxy/migrator";
 import { Effect } from "effect";
+import { HostOperationError } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import { mapSqliteTaskStoreAdapterError } from "./sqlite-task-store-errors";
 import type { TaskStoreSession, taskStoreSchema } from "./sqlite-task-store-schema";
@@ -46,7 +47,20 @@ export const ensureSchema = (
       { databasePath, migrationsFolder },
     )
     .pipe(
-      Effect.mapError((cause) =>
-        mapSqliteTaskStoreAdapterError("sqliteTaskRepository.ensureSchema", databasePath, cause),
-      ),
+      Effect.mapError((cause) => {
+        const failure = mapSqliteTaskStoreAdapterError(
+          "sqliteTaskRepository.ensureSchema",
+          databasePath,
+          cause,
+        );
+        return new HostOperationError({
+          operation:
+            failure instanceof HostOperationError
+              ? failure.operation
+              : "sqliteTaskRepository.ensureSchema",
+          message: `Task-store migration failed. Resolve the database error before retrying: ${failure.message}`,
+          cause: failure,
+          details: { databasePath },
+        });
+      }),
     );

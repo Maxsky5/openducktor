@@ -1,8 +1,4 @@
-import type { TaskDocumentKind } from "@/components/features/agents/task-execution-document-panel";
 import { describe, expect, mock, test } from "bun:test";
-import { agentRoleValues } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
   agentSessionIdentityKey,
@@ -22,14 +18,6 @@ import {
   buildAgentStudioSelectedSessionContext,
 } from "./selected-session-context";
 import type { AgentStudioSelectedSessionState } from "./selected-session-state";
-
-const createDoc = (markdown: string): TaskDocumentState => ({
-  markdown,
-  updatedAt: null,
-  isLoading: false,
-  error: null,
-  loaded: true,
-});
 
 const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessionState =>
   createAgentSessionFixture({
@@ -101,11 +89,7 @@ const createInput = (
         selectedSessionOverrides.transcriptState ?? createSelectedSessionTranscriptStateFixture(),
       sessionAuxiliaryError: selectedSessionOverrides.sessionAuxiliaryError ?? null,
     },
-    documents: {
-      specDoc: createDoc("spec"),
-      planDoc: createDoc("plan"),
-      qaDoc: createDoc("qa"),
-    },
+
     sessionActions: {
       isSessionWorking: false,
       onSubmitQuestionAnswers: async () => {},
@@ -130,39 +114,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.documents.taskDocuments).toBeNull();
     expect(context.selectedSession.runtimeData.contextError).toBeNull();
-  });
-
-  test("gives every role all task documents and the role's first document", () => {
-    const expectedByRole = {
-      spec: "spec",
-      planner: "plan",
-      qa: "qa",
-      build: "plan",
-    } satisfies Record<AgentRole, TaskDocumentKind>;
-    const roleSessionKeys = new Set<string>();
-
-    for (const role of agentRoleValues) {
-      const expectedKind = expectedByRole[role];
-      const session = createSession({
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role: role },
-      });
-      const context = buildAgentStudioSelectedSessionContext(
-        createInput({
-          role,
-          selectedSession: { loadedSession: session },
-          sessionsForTask: [toAgentSessionSummary(session)],
-        }),
-      );
-
-      expect(context.documents.defaultDocumentKind).toBe(expectedKind);
-      expect(
-        Object.values(context.documents.taskDocuments ?? {}).map((document) => document.title),
-      ).toEqual(["Specification", "Implementation Plan", "QA Report"]);
-      roleSessionKeys.add(context.documents.roleSessionKey);
-    }
-    expect(roleSessionKeys.size).toBe(agentRoleValues.length);
   });
 
   test("keeps selected-session identity authoritative when loaded session state is stale", () => {
@@ -190,7 +142,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     expect(context.selectedSession.identity).toEqual(toAgentSessionIdentity(selectedSession));
     expect(context.workflow.sessionSelectorValue).toBe(agentSessionIdentityKey(selectedSession));
     expect(context.role).toBe("planner");
-    expect(context.documents.defaultDocumentKind).toBe("plan");
   });
 
   test("marks unavailable selected role read-only and disables kickoff affordance", () => {

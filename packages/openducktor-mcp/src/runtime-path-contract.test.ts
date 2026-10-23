@@ -8,7 +8,6 @@ describe("runtime path contract", () => {
       .sort();
 
     expect(files).toEqual([
-      "browser-caller.ts",
       "host-bridge-client.ts",
       "index.ts",
       "lib.ts",
@@ -16,6 +15,7 @@ describe("runtime path contract", () => {
       "mcp-server.ts",
       "odt-task-store.ts",
       "path-utils.ts",
+      "runtime-caller.ts",
       "store-context.ts",
       "tool-results.ts",
     ]);

@@ -9,7 +9,7 @@ import {
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { taskRowFixture } from "../../adapters/sqlite/sqlite-task-row-test-fixtures";
-import { taskDocuments, tasks } from "../../adapters/sqlite/sqlite-task-store-schema";
+import { taskArtifacts, tasks } from "../../adapters/sqlite/sqlite-task-store-schema";
 import { createTaskService } from "../tasks/task-service";
 import { resolveTaskReference } from "./odt-mcp-bridge-model";
 import { executeOdtMcpReadTool } from "./odt-mcp-bridge-read-tools";
@@ -41,12 +41,12 @@ describe("focused MCP task reads", () => {
   });
 
   test.each([
-    ["odt_read_task", {}],
-    ["odt_read_task_documents", { includeSpec: true, includeQaReport: true }],
-    ["odt_read_task_assets", { assetIds: [assetId] }],
-  ] satisfies Array<[OdtMcpReadToolName, JSONType]>)(
+    ["odt_read_task", {}, 3, 6],
+    ["odt_read_task_artifacts", { codes: ["spec"] }, 2, 3],
+    ["odt_read_task_assets", { assetIds: [assetId] }, 1, 3],
+  ] satisfies Array<[OdtMcpReadToolName, JSONType, number, number]>)(
     "%s preserves its public response with bounded full rows for every reference form",
-    async (toolName, input) => {
+    async (toolName, input, maxTaskRows, artifactSummaryRows) => {
       const allTasks = await Effect.runPromise(
         context.taskService.listTasks({ repoPath: harness.repoPath }),
       );
@@ -54,6 +54,11 @@ describe("focused MCP task reads", () => {
         ...context,
         taskForWorkspace: (_workspaceId: string, taskId: string) =>
           Effect.sync(() => resolveTaskReference(allTasks, taskId)),
+        taskScopeForWorkspace: (_workspaceId: string, taskId: string) =>
+          Effect.sync(() => ({
+            repoPath: harness.repoPath,
+            task: resolveTaskReference(allTasks, taskId),
+          })),
       };
       const expected = await Effect.runPromise(
         executeOdtMcpReadTool(listContext, toolName, {
@@ -79,12 +84,12 @@ describe("focused MCP task reads", () => {
           reads
             .filter((read) => read.columns.includes("description"))
             .reduce((sum, read) => sum + read.count, 0),
-        ).toBeLessThanOrEqual(toolName === "odt_read_task_documents" ? 2 : 1);
+        ).toBeLessThanOrEqual(maxTaskRows);
         expect(
           reads
             .filter((read) => read.columns.includes("kind") && !read.columns.includes("markdown"))
             .reduce((sum, read) => sum + read.count, 0),
-        ).toBe(3);
+        ).toBe(artifactSummaryRows);
         if (taskId === "repo-0")
           expect(
             reads.some((read) => read.columns.length === 2 && read.columns.includes("title")),
@@ -250,7 +255,7 @@ describe("focused MCP task reads", () => {
 
   test.each([
     ["sqliteTaskStore.getTaskRow.selectTask", "repo-0"],
-    ["sqliteTaskStore.documentSummariesByTaskId.selectLatestDocuments", "repo-0"],
+    ["sqliteTaskStore.artifactSummariesByTaskId.selectLatestArtifacts", "repo-0"],
     ["sqliteTaskStore.taskReferenceCandidates.selectTasks", "REPO-0"],
   ])("propagates a database failure in %s without another read", async (operation, taskId) => {
     failOperation = operation;
@@ -314,10 +319,17 @@ describe("focused MCP task reads", () => {
       browserAgentTools: {
         runAgentTool: () => Effect.die(new Error("Task reads never run browser tools.")),
       },
+      managedCallers: {
+        resolve: () => Effect.die(new Error("This tool does not resolve managed callers.")),
+      },
       browserCallers: {
         resolve: () => Effect.die(new Error("Task reads never resolve a browser caller.")),
       },
-      taskService: createTaskService({ taskStore: store }),
+      taskService: {
+        ...createTaskService({ taskStore: store }),
+        qaApproved: () => Effect.die(new Error("Task reads never approve QA.")),
+        qaRejected: () => Effect.die(new Error("Task reads never reject QA.")),
+      },
       workspaceSettingsService: {
         getRepoConfig: () =>
           Effect.succeed(
@@ -378,10 +390,13 @@ async function seedTasks(harness: SqliteTaskStoreTestHarness): Promise<void> {
           for (const revision of [1, 2, 3]) {
             yield* session.execute(
               (db) =>
-                db.insert(taskDocuments).values(
+                db.insert(taskArtifacts).values(
                   rows.map((row) => ({
                     taskId: row.id,
-                    kind,
+                    artifactId: `workflow:${row.id}:${kind}`,
+                    classification: "workflow" as const,
+                    workflowKind: kind,
+                    name: kind,
                     revision,
                     markdown: `${kind} revision ${revision}`,
                     format: "plain_text" as const,

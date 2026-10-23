@@ -143,9 +143,9 @@ test("shows a closeable skeleton while context tasks load, then shows the task",
     await waitFor(() => expect(h.getByRole("dialog", { name: "Loaded task" })).toBe(dialog), {
       timeout: 700,
     });
-    expect(h.queryClient.getQueryState(taskQueryKeys.repoData("/repo-a"))?.fetchStatus).toBe(
-      "idle",
-    );
+    expect(
+      h.queryClient.getQueryState(taskQueryKeys.unfilteredRepoData("/repo-a"))?.fetchStatus,
+    ).toBe("idle");
   } finally {
     h.dispose();
   }
@@ -169,7 +169,7 @@ test("keeps the skeleton open until the shared task query resolves", async () =>
   const pending = Promise.withResolvers<RepoTaskData>();
   const h = createHarness({ tasks: [], isLoadingTasks: false }, (client) => {
     void client.fetchQuery({
-      queryKey: taskQueryKeys.repoData("/repo-a"),
+      queryKey: taskQueryKeys.unfilteredRepoData("/repo-a"),
       queryFn: () => pending.promise,
     });
   });
@@ -194,7 +194,7 @@ test.each(["failure", "missing"])(
     const h = createHarness({ tasks: [], isLoadingTasks: false }, (client) => {
       void client
         .fetchQuery({
-          queryKey: taskQueryKeys.repoData("/repo-a"),
+          queryKey: taskQueryKeys.unfilteredRepoData("/repo-a"),
           queryFn: () => pending.promise,
         })
         .catch(() => {});
@@ -243,7 +243,7 @@ function renderChatTaskTool(
     createdAt: "2026-09-09T10:00:00.000Z",
     updatedAt: "2026-09-09T10:00:00.000Z",
     qaVerdict: "not_reviewed",
-    documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
+    artifacts: { hasSpec: false, hasPlan: false, hasQaReport: false },
   };
   return render(
     <QueryProvider>

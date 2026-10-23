@@ -78,13 +78,13 @@ export const RegularToolSummary = ({
       <span className={appearance.icon}>{toolIcon(meta)}</span>
       <p className="shrink-0 font-medium text-current">{displayName}</p>
       {summaryText.length > 0 ? (
-        <p className="min-w-0 flex-1 truncate text-muted-foreground">{summaryText}</p>
+        <p className="min-w-0 flex-1 truncate text-foreground/75">{summaryText}</p>
       ) : null}
       <ToolMessageTiming
         activity={isActive ? activity : null}
         durationMs={durationMs}
         timeLabel={timeLabel}
-        className="text-muted-foreground"
+        className="text-foreground/75"
       />
     </div>
   );

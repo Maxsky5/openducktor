@@ -15,6 +15,11 @@ type TodoNormalizerTypeContract = {
 };
 
 describe("core exports contract", () => {
+  test("re-exports workflow code policy and historical tool name support", () => {
+    expect(core.AGENT_ROLE_WORKFLOW_CODES).toBeDefined();
+    expect(core.retiredArtifactToolName).toBeInstanceOf(Function);
+  });
+
   test("re-exports todo normalizers from the barrel", () => {
     expect(core.normalizeAgentSessionTodoItem).toBeInstanceOf(Function);
     expect(core.normalizeAgentSessionTodoList).toBeInstanceOf(Function);

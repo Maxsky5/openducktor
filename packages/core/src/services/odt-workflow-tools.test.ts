@@ -13,13 +13,15 @@ describe("odt workflow tools", () => {
   const workflowToolAliasesByCanonical = OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical;
 
   test("normalizes canonical tool names without assuming runtime aliases", () => {
-    expect(normalizeOdtWorkflowToolName("odt_set_spec")).toBe("odt_set_spec");
-    expect(normalizeOdtWorkflowToolName("  odt_qa_rejected  ")).toBe("odt_qa_rejected");
-    expect(normalizeOdtWorkflowToolName("OpenDucktor_ODT_SET_SPEC")).toBeNull();
-    expect(normalizeOdtWorkflowToolName("functions.openducktor_odt_set_spec")).toBeNull();
-    expect(normalizeOdtWorkflowToolName("customprefix_odt_set_plan")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("odt_set_task_artifact")).toBe("odt_set_task_artifact");
+    expect(normalizeOdtWorkflowToolName("  odt_delete_task_artifact  ")).toBe(
+      "odt_delete_task_artifact",
+    );
+    expect(normalizeOdtWorkflowToolName("OpenDucktor_ODT_SET_TASK_ARTIFACT")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("functions.openducktor_odt_set_task_artifact")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_build_completed")).toBeNull();
     expect(normalizeOdtWorkflowToolName("customprefix_odt_")).toBeNull();
-    expect(normalizeOdtWorkflowToolName("customprefix_odt_set_plan_extra")).toBeNull();
+    expect(normalizeOdtWorkflowToolName("customprefix_odt_build_completed_extra")).toBeNull();
     expect(normalizeOdtWorkflowToolName("ODT_")).toBeNull();
     expect(normalizeOdtWorkflowToolName("read")).toBeNull();
   });
@@ -27,38 +29,44 @@ describe("odt workflow tools", () => {
   test("normalizes trusted runtime aliases only when runtime metadata is provided", () => {
     expect(
       normalizeOdtWorkflowToolName(
-        "  openducktor_odt_qa_rejected  ",
+        "  openducktor_odt_delete_task_artifact  ",
         workflowToolAliasesByCanonical,
       ),
-    ).toBe("odt_qa_rejected");
+    ).toBe("odt_delete_task_artifact");
     expect(
       normalizeOdtWorkflowToolName(
-        "functions.openducktor_odt_set_spec",
+        "functions.openducktor_odt_set_task_artifact",
         workflowToolAliasesByCanonical,
       ),
-    ).toBe("odt_set_spec");
-    expect(normalizeOdtWorkflowToolName("openducktor_odt_set_spec_extra")).toBeNull();
+    ).toBe("odt_set_task_artifact");
+    expect(normalizeOdtWorkflowToolName("openducktor_odt_set_task_artifact_extra")).toBeNull();
     expect(
-      normalizeOdtWorkflowToolName("OpenDucktor_ODT_SET_SPEC", workflowToolAliasesByCanonical),
+      normalizeOdtWorkflowToolName(
+        "OpenDucktor_ODT_SET_TASK_ARTIFACT",
+        workflowToolAliasesByCanonical,
+      ),
     ).toBeNull();
   });
 
   test("detects workflow tool ids", () => {
-    expect(isOdtWorkflowToolName("odt_set_plan")).toBe(true);
-    expect(isOdtWorkflowToolName("openducktor_odt_set_plan")).toBe(false);
-    expect(isOdtWorkflowToolName("functions.openducktor_odt_set_plan")).toBe(false);
-    expect(isOdtWorkflowToolName("openducktor_odt_set_plan", workflowToolAliasesByCanonical)).toBe(
-      true,
-    );
+    expect(isOdtWorkflowToolName("odt_build_completed")).toBe(true);
+    expect(isOdtWorkflowToolName("openducktor_odt_build_completed")).toBe(false);
+    expect(isOdtWorkflowToolName("functions.openducktor_odt_build_completed")).toBe(false);
     expect(
-      isOdtWorkflowToolName("functions.openducktor_odt_set_plan", workflowToolAliasesByCanonical),
+      isOdtWorkflowToolName("openducktor_odt_build_completed", workflowToolAliasesByCanonical),
     ).toBe(true);
-    expect(isOdtWorkflowToolName("customprefix_odt_set_plan")).toBe(false);
+    expect(
+      isOdtWorkflowToolName(
+        "functions.openducktor_odt_build_completed",
+        workflowToolAliasesByCanonical,
+      ),
+    ).toBe(true);
+    expect(isOdtWorkflowToolName("customprefix_odt_build_completed")).toBe(false);
     expect(isOdtWorkflowToolName("glob")).toBe(false);
-    expect(isOdtWorkflowMutationToolName("odt_set_plan")).toBe(true);
+    expect(isOdtWorkflowMutationToolName("odt_build_completed")).toBe(true);
     expect(isOdtWorkflowMutationToolName("odt_read_task")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_assets")).toBe(false);
-    expect(isOdtWorkflowMutationToolName("odt_read_task_documents")).toBe(false);
+    expect(isOdtWorkflowMutationToolName("odt_read_task_artifacts")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_search_tasks")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_create_task")).toBe(true);
     expect(isOdtWorkflowMutationToolName("odt_update_task")).toBe(true);
@@ -68,6 +76,21 @@ describe("odt workflow tools", () => {
     for (const toolName of ODT_BROWSER_TOOL_NAMES) {
       expect(isOdtWorkflowMutationToolName(toolName)).toBe(false);
       expect(isOdtWorkflowToolName(toolName)).toBe(true);
+    }
+  });
+
+  test("grants free artifact access to every role without granting other workflow actions", () => {
+    for (const role of ["spec", "planner", "build", "qa"] as const) {
+      const selection = buildRoleScopedOdtToolSelection(role, { workflowToolAliasesByCanonical });
+      for (const tool of [
+        "odt_read_task_artifacts",
+        "odt_set_task_artifact",
+        "odt_delete_task_artifact",
+      ]) {
+        expect(selection[tool]).toBe(true);
+        expect(selection[`openducktor_${tool}`]).toBe(true);
+      }
+      expect(selection.odt_build_completed).toBe(role === "build");
     }
   });
 
@@ -83,36 +106,46 @@ describe("odt workflow tools", () => {
   });
 
   test("resolves trusted workflow tool ids for authorization with exact case-sensitive matching", () => {
-    expect(resolveOdtWorkflowToolNameForAuthorization("odt_set_spec")).toBe("odt_set_spec");
-    expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec")).toBeNull();
+    expect(resolveOdtWorkflowToolNameForAuthorization("odt_set_task_artifact")).toBe(
+      "odt_set_task_artifact",
+    );
+    expect(
+      resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_task_artifact"),
+    ).toBeNull();
     expect(
       resolveOdtWorkflowToolNameForAuthorization(
-        "openducktor_odt_set_spec",
+        "openducktor_odt_set_task_artifact",
         workflowToolAliasesByCanonical,
       ),
-    ).toBe("odt_set_spec");
+    ).toBe("odt_set_task_artifact");
     expect(
       resolveOdtWorkflowToolNameForAuthorization(
-        "functions.openducktor_odt_set_spec",
+        "functions.openducktor_odt_set_task_artifact",
         workflowToolAliasesByCanonical,
       ),
-    ).toBe("odt_set_spec");
-    expect(resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_spec_extra")).toBeNull();
-    expect(resolveOdtWorkflowToolNameForAuthorization("OpenDucktor_ODT_SET_SPEC")).toBeNull();
-    expect(resolveOdtWorkflowToolNameForAuthorization("odt_SET_SPEC")).toBeNull();
-    expect(resolveOdtWorkflowToolNameForAuthorization("customprefix_odt_set_spec")).toBeNull();
+    ).toBe("odt_set_task_artifact");
+    expect(
+      resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_task_artifact_extra"),
+    ).toBeNull();
+    expect(
+      resolveOdtWorkflowToolNameForAuthorization("OpenDucktor_ODT_SET_TASK_ARTIFACT"),
+    ).toBeNull();
+    expect(resolveOdtWorkflowToolNameForAuthorization("odt_SET_TASK_ARTIFACT")).toBeNull();
+    expect(
+      resolveOdtWorkflowToolNameForAuthorization("customprefix_odt_set_task_artifact"),
+    ).toBeNull();
   });
 
   test("builds role-scoped selection with canonical defaults", () => {
     const selection = buildRoleScopedOdtToolSelection("spec");
     expect(selection.odt_read_task).toBe(true);
     expect(selection.odt_read_task_assets).toBe(true);
-    expect(selection.odt_read_task_documents).toBe(true);
+    expect(selection.odt_read_task_artifacts).toBe(true);
     expect(selection.odt_search_tasks).toBe(true);
     expect(selection.odt_create_task).toBe(true);
-    expect(selection.odt_set_spec).toBe(true);
-    expect(selection.odt_set_plan).toBe(false);
-    expect(selection.openducktor_odt_set_spec).toBeUndefined();
+    expect(selection.odt_set_task_artifact).toBe(true);
+    expect(selection.odt_build_completed).toBe(false);
+    expect(selection.openducktor_odt_set_task_artifact).toBeUndefined();
     expect(selection.openducktor_odt_build_completed).toBeUndefined();
   });
 
@@ -121,20 +154,17 @@ describe("odt workflow tools", () => {
       workflowToolAliasesByCanonical,
     });
 
-    expect(selection.odt_read_task).toBe(true);
-    expect(selection.odt_read_task_assets).toBe(true);
-    expect(selection.odt_search_tasks).toBe(true);
-    expect(selection.odt_create_task).toBe(true);
-    expect(selection.openducktor_odt_read_task_assets).toBe(true);
-    expect(selection["functions.openducktor_odt_read_task_assets"]).toBe(true);
-    expect(selection.openducktor_odt_read_task).toBe(true);
-    expect(selection["functions.openducktor_odt_read_task"]).toBe(true);
-    expect(selection.odt_set_plan).toBe(true);
-    expect(selection.openducktor_odt_set_plan).toBe(true);
-    expect(selection["functions.openducktor_odt_set_plan"]).toBe(true);
-    expect(selection.odt_set_spec).toBe(false);
-    expect(selection.openducktor_odt_set_spec).toBe(false);
-    expect(selection["functions.openducktor_odt_set_spec"]).toBe(false);
+    for (const tool of [
+      "odt_read_task",
+      "odt_read_task_assets",
+      "odt_search_tasks",
+      "odt_create_task",
+      "odt_set_task_artifact",
+    ]) {
+      expect(selection[tool]).toBe(true);
+      expect(selection[`openducktor_${tool}`]).toBe(true);
+      expect(selection[`functions.openducktor_${tool}`]).toBe(true);
+    }
     expect(selection.odt_build_completed).toBe(false);
     expect(selection.openducktor_odt_build_completed).toBe(false);
     expect(selection["functions.openducktor_odt_build_completed"]).toBe(false);
@@ -144,33 +174,36 @@ describe("odt workflow tools", () => {
     const selection = buildRoleScopedOdtToolSelection("qa", {
       includeCanonicalDefaults: false,
       runtimeToolIds: [
-        "openducktor_odt_qa_approved",
-        "openducktor_odt_read_task_documents",
-        "functions.openducktor_odt_qa_rejected",
-        "OpenDucktor_ODT_QA_REJECTED",
-        " customprefix_odt_set_spec ",
+        "openducktor_odt_set_task_artifact",
+        "openducktor_odt_read_task_artifacts",
+        "functions.openducktor_odt_delete_task_artifact",
+        "OpenDucktor_ODT_DELETE_TASK_ARTIFACT",
+        " customprefix_odt_set_task_artifact ",
         " odt_read_task ",
         "glob",
       ],
       workflowToolAliasesByCanonical,
     });
-    expect(selection.openducktor_odt_qa_approved).toBe(true);
-    expect(selection.openducktor_odt_read_task_documents).toBe(true);
-    expect(selection["functions.openducktor_odt_qa_rejected"]).toBe(true);
+    expect(selection.openducktor_odt_set_task_artifact).toBe(true);
+    expect(selection.openducktor_odt_read_task_artifacts).toBe(true);
+    expect(selection["functions.openducktor_odt_delete_task_artifact"]).toBe(true);
     expect(selection.odt_read_task).toBe(true);
-    expect(selection.OpenDucktor_ODT_QA_REJECTED).toBeUndefined();
-    expect(selection.customprefix_odt_set_spec).toBeUndefined();
+    expect(selection.OpenDucktor_ODT_DELETE_TASK_ARTIFACT).toBeUndefined();
+    expect(selection.customprefix_odt_set_task_artifact).toBeUndefined();
     expect(selection.glob).toBeUndefined();
   });
 
   test("formats tool display name from normalized workflow ids", () => {
-    expect(toOdtWorkflowToolDisplayName("odt_set_spec")).toBe("set_spec");
-    expect(toOdtWorkflowToolDisplayName("openducktor_odt_set_spec")).toBe(
-      "openducktor_odt_set_spec",
+    expect(toOdtWorkflowToolDisplayName("odt_set_task_artifact")).toBe("set_task_artifact");
+    expect(toOdtWorkflowToolDisplayName("openducktor_odt_set_task_artifact")).toBe(
+      "openducktor_odt_set_task_artifact",
     );
     expect(
-      toOdtWorkflowToolDisplayName("openducktor_odt_set_spec", workflowToolAliasesByCanonical),
-    ).toBe("set_spec");
+      toOdtWorkflowToolDisplayName(
+        "openducktor_odt_set_task_artifact",
+        workflowToolAliasesByCanonical,
+      ),
+    ).toBe("set_task_artifact");
     expect(toOdtWorkflowToolDisplayName("read")).toBe("read");
   });
 });

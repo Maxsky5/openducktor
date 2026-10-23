@@ -1,5 +1,5 @@
 import { AgentToolResultContentView } from "./agent-tool-result-content";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   getToolDuration,
@@ -68,6 +68,9 @@ type WorkflowToolMessageProps = {
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
   displayName: string;
+  summary?: string;
+  icon?: ReactNode;
+  action?: ReactNode;
 };
 
 export const WorkflowToolMessage = ({
@@ -76,6 +79,9 @@ export const WorkflowToolMessage = ({
   timeLabel,
   sessionWorkingDirectory,
   displayName,
+  summary,
+  icon,
+  action,
 }: WorkflowToolMessageProps): ReactElement => {
   const durationMs = getToolDuration(meta, messageTimestamp);
   const hasInput = hasNonEmptyInput(meta.input);
@@ -91,27 +97,39 @@ export const WorkflowToolMessage = ({
   } = WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className={foregroundClassName}>{toolIcon(meta)}</span>
-        <p className={cn("text-[11px] font-semibold", foregroundClassName)}>{displayName}</p>
-        {statusLabel ? (
-          <span
-            className={cn(
-              "rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              statusClassName,
-            )}
-          >
-            {statusLabel}
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex min-w-0 max-w-full flex-auto items-center gap-2">
+          <span aria-hidden="true" className={cn("shrink-0", foregroundClassName)}>
+            {icon ?? toolIcon(meta)}
           </span>
-        ) : null}
-        <ToolMessageTiming
-          activity={activity}
-          durationMs={durationMs}
-          timeLabel={timeLabel}
-          className="text-current/75 font-normal normal-case"
-        />
+          <p className={cn("min-w-0 break-words text-[11px] font-semibold", foregroundClassName)}>
+            {displayName}
+          </p>
+          {statusLabel ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                statusClassName,
+              )}
+            >
+              {statusLabel}
+            </span>
+          ) : null}
+        </div>
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+          <ToolMessageTiming
+            activity={activity}
+            durationMs={durationMs}
+            timeLabel={timeLabel}
+            className="text-current/75 font-normal normal-case"
+          />
+          {action}
+        </div>
       </div>
+      {summary ? (
+        <p className="min-w-0 break-words text-[11px] text-current/75">{summary}</p>
+      ) : null}
       {(hasInput || hasOutput || hasError) && (
         <div className="space-y-2">
           {hasInput && meta.input ? (

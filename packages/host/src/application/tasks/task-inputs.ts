@@ -78,7 +78,7 @@ export type TransitionTaskInput = TaskIdInput & {
   status: TaskStatus;
 };
 
-export type MarkdownDocumentInput = TaskIdInput & {
+export type MarkdownArtifactInput = TaskIdInput & {
   markdown: string;
 };
 

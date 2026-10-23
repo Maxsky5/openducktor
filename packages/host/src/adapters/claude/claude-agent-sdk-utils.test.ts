@@ -327,7 +327,8 @@ describe("mutationForTool", () => {
 
   test("classifies OpenDucktor task and page reads, workflow writes, and browser actions", () => {
     expect(mutationForTool("mcp__openducktor__odt_read_task")).toBe("read_only");
-    expect(mutationForTool("mcp__openducktor__odt_set_spec")).toBe("mutating");
+    expect(mutationForTool("mcp__openducktor__odt_set_task_artifact")).toBe("mutating");
+    expect(mutationForTool("mcp__openducktor__odt_set_spec")).toBe("unknown");
     expect(mutationForTool("mcp__openducktor__odt_browser_click")).toBe("unknown");
     expect(mutationForTool("mcp__openducktor__odt_browser_snapshot")).toBe("read_only");
   });

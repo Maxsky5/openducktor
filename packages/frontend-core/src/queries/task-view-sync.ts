@@ -1,8 +1,9 @@
-import type {
-  ExternalTaskSyncEvent,
-  TaskCard,
-  TaskDocumentChange,
-  TaskEventCursor,
+import {
+  type ExternalTaskSyncEvent,
+  type TaskCard,
+  type TaskArtifactChange,
+  workflowArtifactId,
+  type TaskEventCursor,
 } from "@openducktor/contracts";
 import { CancelledError, type Query, type QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -16,6 +17,12 @@ import {
   type TaskDocumentReader,
   type TaskDocumentSection,
 } from "./documents";
+import {
+  artifactQueryKeys,
+  refreshArtifactQueries,
+  removeArtifactQueries,
+  resetArtifactSaveOwners,
+} from "./artifacts";
 import { type RepoTaskData, invalidateRepoTaskQueries, taskQueryKeys } from "./tasks";
 import {
   createBoardChanges,
@@ -40,7 +47,7 @@ export type TaskViewSync = {
   reconcileExternalEvent: (event: ExternalTaskSyncEvent, cursor: TaskEventCursor) => Promise<void>;
   /** Read the task list of every open workspace again. One failed workspace does not stop the others. */
   reconcileStreamSnapshot: (openRepoPaths: readonly string[]) => Promise<TaskSnapshotResult>;
-  /** Drop the cached task lists and documents of a workspace that closed. */
+  /** Drop the cached task lists and artifacts of a workspace that closed. */
   releaseWorkspace: (repoPath: string) => Promise<void>;
 };
 
@@ -85,7 +92,7 @@ export const createTaskViewSync = ({
 
   const recordCardVersion = (entry: CachedDocument, card: TaskCard): void => {
     const summary =
-      entry.section === "qa" ? card.documentSummary.qaReport : card.documentSummary[entry.section];
+      entry.section === "qa" ? card.artifactSummary.qaReport : card.artifactSummary[entry.section];
     const committedAt = summary.has ? summary.updatedAt : card.updatedAt;
     if (committedAt) recordDocumentVersion(queryClient, entry.queryKey, committedAt);
   };
@@ -186,7 +193,7 @@ export const createTaskViewSync = ({
     removed = new Set<string>(),
     eventTime = Date.now(),
     previousCards: TaskCard[] = [],
-    commit?: { cursor: TaskEventCursor; documentChanges: TaskDocumentChange[] },
+    commit?: { cursor: TaskEventCursor; artifactChanges: TaskArtifactChange[] },
   ): Promise<void> => {
     const cardById = new Map(cards.map((card) => [card.id, card]));
     await Promise.all(
@@ -196,16 +203,23 @@ export const createTaskViewSync = ({
         const query = queryClient.getQueryCache().find({ queryKey: entry.queryKey, exact: true });
         const summary =
           entry.section === "qa"
-            ? card.documentSummary.qaReport
-            : card.documentSummary[entry.section];
+            ? card.artifactSummary.qaReport
+            : card.artifactSummary[entry.section];
         const previousCard = previousCards.find((card) => card.id === entry.taskId);
         const previousSummary =
           entry.section === "qa"
-            ? previousCard?.documentSummary.qaReport
-            : previousCard?.documentSummary[entry.section];
+            ? previousCard?.artifactSummary.qaReport
+            : previousCard?.artifactSummary[entry.section];
         const written =
-          commit?.documentChanges.some(
-            (change) => change.taskId === entry.taskId && change.sections.includes(entry.section),
+          commit?.artifactChanges.some(
+            (change) =>
+              change.taskId === entry.taskId &&
+              change.artifactIds.includes(
+                workflowArtifactId(
+                  entry.taskId,
+                  entry.section === "qa" ? "qaReport" : entry.section,
+                ),
+              ),
           ) === true;
         const changed =
           written ||
@@ -310,6 +324,7 @@ export const createTaskViewSync = ({
     const filters = { queryKey: taskQueryKeys.repoDataPrefix(repoPath), exact: false };
     for (const query of queryClient.getQueryCache().findAll(filters)) {
       waitingPatches.delete(query);
+      if (query.queryKey[3] === "unfiltered") incompleteLists.add(query);
     }
     return queryClient.cancelQueries(filters, { silent: true });
   };
@@ -329,6 +344,18 @@ export const createTaskViewSync = ({
           refetchType: "none",
         }),
       ),
+    );
+  };
+
+  const refreshUnfilteredTasks = async (repoPath: string): Promise<void> => {
+    const queryKey = taskQueryKeys.unfilteredRepoData(repoPath);
+    const query = queryClient.getQueryCache().find({ queryKey, exact: true });
+    if (!query) return;
+    incompleteLists.add(query);
+    await queryClient.cancelQueries({ queryKey, exact: true }, { silent: true });
+    await queryClient.invalidateQueries(
+      { queryKey, exact: true, refetchType: "active" },
+      { throwOnError: true },
     );
   };
 
@@ -393,13 +420,12 @@ export const createTaskViewSync = ({
       await invalidateDocuments(request.repoPath);
       const tasks = await replaceIncompleteList(request);
       const taskIds = tasks.map((task) => task.id);
-      const visibleTaskIds = new Set(taskIds);
-      // Every observed document reads, also after one fails. The task IDs stay current.
-      const documentReads = await Promise.allSettled(
-        observedDocuments
-          .filter((entry) => visibleTaskIds.has(entry.taskId))
-          .map((entry) => refreshDocuments(request.repoPath, [entry])),
-      );
+      // Read each observed view even if another read fails.
+      const documentReads = await Promise.allSettled([
+        ...observedDocuments.map((entry) => refreshDocuments(request.repoPath, [entry])),
+        refreshUnfilteredTasks(request.repoPath),
+        refreshArtifactQueries(queryClient, request.repoPath),
+      ]);
       const documentFailure = documentReads.find((read) => read.status === "rejected");
       return { taskIds, documentFailure };
     });
@@ -411,6 +437,8 @@ export const createTaskViewSync = ({
       await Promise.all([
         invalidateRepoTaskQueries(queryClient, repoPath),
         invalidateDocuments(repoPath),
+        refreshUnfilteredTasks(repoPath),
+        refreshArtifactQueries(queryClient, repoPath),
       ]);
       await queryClient.refetchQueries({
         queryKey: taskQueryKeys.repoData(repoPath),
@@ -430,6 +458,7 @@ export const createTaskViewSync = ({
     refreshManually: (repoPath) =>
       runListRead(repoPath, async (request) => {
         await refreshTasks(request);
+        await refreshUnfilteredTasks(repoPath);
       }),
     refreshAfterTaskRetentionChange: async (openRepoPaths) => {
       const openRepos = new Set(openRepoPaths);
@@ -445,6 +474,7 @@ export const createTaskViewSync = ({
             ? runListRead(repoPath, async (request) => {
                 try {
                   await replaceIncompleteList(request);
+                  await refreshUnfilteredTasks(request.repoPath);
                 } catch {
                   // TanStack Query keeps the failure for the views of this workspace to report.
                 }
@@ -482,15 +512,27 @@ export const createTaskViewSync = ({
         };
         await patchQuery(taskQueryKeys.repoData(event.repoPath), "board", change);
         await patchQuery(taskQueryKeys.ids(event.repoPath), "ids", change);
+        await patchQuery(taskQueryKeys.unfilteredRepoData(event.repoPath), "board", {
+          ...change,
+          cutoff: -Infinity,
+        });
         await cancelDocuments(event.repoPath, removedTaskIds);
         removeDocuments(event.repoPath, removedTaskIds);
+        await removeArtifactQueries(queryClient, event.repoPath, removedTaskIds);
+        await refreshArtifactQueries(
+          queryClient,
+          event.repoPath,
+          event.boardChanges!.artifactChanges,
+          cards.map((card) => card.id),
+          cursor,
+        );
         await updateDocuments(
           event.repoPath,
           cards,
           removed,
           Date.parse(event.emittedAt),
           previousCards,
-          { cursor, documentChanges: event.boardChanges!.documentChanges },
+          { cursor, artifactChanges: event.boardChanges!.artifactChanges },
         );
       });
     },
@@ -510,11 +552,17 @@ export const createTaskViewSync = ({
       // A gap makes pending saves uncertain even for tasks absent from the board.
       // Reset their owners before recovery yields. Missing cards do not prove deletion.
       resetDocumentSaveOwners(documentQueries);
+      resetArtifactSaveOwners(queryClient);
+      const artifactQueries = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: artifactQueryKeys.all });
       const openRepoPathSet = new Set(openRepoPaths);
       const otherRepos = new Set(
-        [...cachedRepoPaths(taskQueries), ...cachedRepoPaths(documentQueries)].filter(
-          (repoPath) => !openRepoPathSet.has(repoPath),
-        ),
+        [
+          ...cachedRepoPaths(taskQueries),
+          ...cachedRepoPaths(documentQueries),
+          ...cachedRepoPaths(artifactQueries),
+        ].filter((repoPath) => !openRepoPathSet.has(repoPath)),
       );
       const [results] = await Promise.all([
         Promise.allSettled(
@@ -540,8 +588,12 @@ export const createTaskViewSync = ({
     },
     releaseWorkspace: async (repoPath) => {
       workspaceEpochs.set(repoPath, workspaceEpochOf(repoPath) + 1);
-      // Both cancel synchronously, so no read of the workspace runs after the removal below.
-      const cancelled = Promise.all([cancelRepoTaskQueries(repoPath), cancelDocuments(repoPath)]);
+      // Cancel before removal so late reads cannot restore workspace data.
+      const cancelled = Promise.all([
+        cancelRepoTaskQueries(repoPath),
+        cancelDocuments(repoPath),
+        removeArtifactQueries(queryClient, repoPath),
+      ]);
       queryClient.removeQueries({ queryKey: taskQueryKeys.repoDataPrefix(repoPath) });
       removeDocuments(repoPath);
       await cancelled;
@@ -562,7 +614,7 @@ export const getProductionTaskViewSync = (queryClient: QueryClient): TaskViewSyn
     ports: {
       listTasks: (repoPath) => host.tasksList(repoPath),
       loadFreshDocument: (repoPath, taskId, section) =>
-        host.taskDocumentGet(repoPath, taskId, section),
+        host.taskWorkflowArtifactGet(repoPath, taskId, section),
     },
   });
   productionTaskViewSyncs.set(queryClient, taskViewSync);

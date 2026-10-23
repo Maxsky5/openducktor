@@ -119,3 +119,7 @@ export * from "./session-launch-schemas";
 export * from "./workspace-session-launch-schemas";
 
 export * from "./remote-host-schemas";
+
+export * from "./task-artifact-schemas";
+export * from "./artifact-preview-schemas";
+export * from "./odt-artifact-schemas";

@@ -44,6 +44,7 @@ import type {
   RepoRuntimeRef,
   RuntimeCapabilities,
   RuntimeDescriptor,
+  WorkflowArtifactKind,
 } from "@openducktor/contracts";
 import { ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
 
@@ -218,54 +219,37 @@ export type AgentSessionStatus = ContractsAgentTranscriptSessionStatus;
 
 export type AgentRoleToolPolicy = Record<AgentRole, AgentToolName[]>;
 
+const COMMON_TASK_TOOLS = [
+  "odt_read_task",
+  "odt_read_task_assets",
+  "odt_read_task_artifacts",
+  "odt_set_task_artifact",
+  "odt_delete_task_artifact",
+  "odt_search_tasks",
+  "odt_create_task",
+  "odt_update_task",
+] as const satisfies readonly AgentToolName[];
+
 export const AGENT_ROLE_TOOL_POLICY = {
-  spec: [
-    "odt_read_task",
-    "odt_read_task_assets",
-    "odt_read_task_documents",
-    "odt_search_tasks",
-    "odt_create_task",
-    "odt_update_task",
-    "odt_set_spec",
-    ...ODT_BROWSER_TOOL_NAMES,
-  ],
-  planner: [
-    "odt_read_task",
-    "odt_read_task_assets",
-    "odt_read_task_documents",
-    "odt_search_tasks",
-    "odt_create_task",
-    "odt_update_task",
-    "odt_set_plan",
-    ...ODT_BROWSER_TOOL_NAMES,
-  ],
+  spec: [...COMMON_TASK_TOOLS, ...ODT_BROWSER_TOOL_NAMES],
+  planner: [...COMMON_TASK_TOOLS, ...ODT_BROWSER_TOOL_NAMES],
   build: [
-    "odt_read_task",
-    "odt_read_task_assets",
-    "odt_read_task_documents",
-    "odt_search_tasks",
-    "odt_create_task",
-    "odt_update_task",
-    "odt_set_spec",
-    "odt_set_plan",
+    ...COMMON_TASK_TOOLS,
     "odt_build_blocked",
     "odt_build_resumed",
     "odt_build_completed",
     "odt_set_pull_request",
     ...ODT_BROWSER_TOOL_NAMES,
   ],
-  qa: [
-    "odt_read_task",
-    "odt_read_task_assets",
-    "odt_read_task_documents",
-    "odt_search_tasks",
-    "odt_create_task",
-    "odt_update_task",
-    "odt_qa_approved",
-    "odt_qa_rejected",
-    ...ODT_BROWSER_TOOL_NAMES,
-  ],
+  qa: [...COMMON_TASK_TOOLS, ...ODT_BROWSER_TOOL_NAMES],
 } satisfies AgentRoleToolPolicy;
+
+export const AGENT_ROLE_WORKFLOW_CODES = {
+  spec: ["spec"],
+  planner: ["plan"],
+  build: ["spec", "plan"],
+  qa: ["qaReport"],
+} as const satisfies Record<AgentRole, readonly WorkflowArtifactKind[]>;
 
 /**
  * Runtime adapters may emit this contract before a session ref is attached.

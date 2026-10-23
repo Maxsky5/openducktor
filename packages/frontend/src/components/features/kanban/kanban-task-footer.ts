@@ -115,7 +115,7 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
     task.availableActions,
     task.pullRequest,
     task.sourceIssue,
-    task.documentSummary.qaReport,
+    task.artifactSummary.qaReport,
     inputs.hasActiveSession,
     inputs.activeSessionRole,
     inputs.taskActivityState,

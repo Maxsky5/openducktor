@@ -14,7 +14,7 @@ import {
 
 const isQaRejectedRework = (task: TaskCard): boolean =>
   (task.status === "in_progress" || task.status === "blocked") &&
-  task.documentSummary.qaReport.verdict === "rejected";
+  task.artifactSummary.qaReport.verdict === "rejected";
 
 export const deriveAvailableActions = (
   task: TaskCard,

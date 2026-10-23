@@ -1,6 +1,7 @@
-import { describe, expect, spyOn, test } from "bun:test";
-import { act, render } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { act, render, waitFor } from "@testing-library/react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
+import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { MarkdownMermaid } from "./markdown-mermaid";
 import * as renderModule from "./markdown-mermaid-render";
 import { drawMermaidSvg, type MermaidSvgCache, peekMermaidSvg } from "./markdown-mermaid-svg-cache";
@@ -19,6 +20,10 @@ const expectOwnIds = (svg: SVGSVGElement | null | undefined): void => {
 };
 
 describe("MermaidSvgCache", () => {
+  const intersections = createIntersectionObserverTestDriver();
+  beforeEach(() => intersections.install());
+  afterEach(() => intersections.restore());
+
   test("shows a diagram that mounts again from the cache with its own element ids", async () => {
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(async (renderId) =>
       svgFor(renderId),
@@ -31,9 +36,10 @@ describe("MermaidSvgCache", () => {
     const view = render(diagram(true));
 
     try {
-      await act(async () => {});
+      await waitFor(() => expect(view.container.querySelector("svg")?.textContent).toBe("Diagram"));
       const firstId = view.container.querySelector("svg")?.id;
 
+      intersections.setInitiallyVisible(false);
       view.rerender(diagram(false));
       view.rerender(diagram(true));
 
@@ -42,6 +48,36 @@ describe("MermaidSvgCache", () => {
       expect(secondSvg?.id).not.toBe(firstId);
       expectOwnIds(secondSvg);
       expect(renderSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+      renderSpy.mockRestore();
+    }
+  });
+
+  test("shows a cached source at once when an offscreen diagram changes source", async () => {
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
+      async (renderId, source) =>
+        `<svg id="${renderId}"><text>${source === SOURCE ? "Cached" : "Other"}</text></svg>`,
+    );
+    const diagram = (source: string) => (
+      <MermaidSvgCacheProvider>
+        <MarkdownMermaid source={SOURCE} />
+        <MarkdownMermaid source={source} />
+      </MermaidSvgCacheProvider>
+    );
+    const view = render(diagram("graph TD\n  A --> C"));
+
+    try {
+      await waitFor(() => expect(view.getByText("Other")).toBeTruthy());
+      intersections.setInitiallyVisible(false);
+      const observerCount = intersections.observers.length;
+
+      view.rerender(diagram(SOURCE));
+
+      expect(view.getAllByText("Cached")).toHaveLength(2);
+      expect(view.queryByText("Other")).toBeNull();
+      expect(intersections.observers).toHaveLength(observerCount);
+      expect(renderSpy).toHaveBeenCalledTimes(2);
     } finally {
       view.unmount();
       renderSpy.mockRestore();
@@ -64,11 +100,13 @@ describe("MermaidSvgCache", () => {
     );
 
     try {
+      await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
       await act(async () => {
         pending.resolve();
         await pending.promise;
       });
 
+      await waitFor(() => expect(view.container.querySelectorAll("svg")).toHaveLength(2));
       const svgs = [...view.container.querySelectorAll("svg")];
       expect(svgs).toHaveLength(2);
       expect(svgs[0]?.id).not.toBe(svgs[1]?.id);

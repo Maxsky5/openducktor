@@ -52,7 +52,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   labels: [],
   subtaskIds: [],
   availableActions: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: true },
     plan: { has: true },
     qaReport: { has: true, verdict: "approved" },
@@ -210,7 +210,7 @@ describe("TaskService.closeTask", () => {
 
     expect(closed.status).toBe("closed");
     expect(closed.availableActions).not.toContain("close_task");
-    expect(closed.documentSummary.spec.has).toBe(true);
+    expect(closed.artifactSummary.spec.has).toBe(true);
     expect(closed.pullRequest?.number).toBe(12);
     expect(calls).toEqual(["transition:task-1:closed"]);
   });

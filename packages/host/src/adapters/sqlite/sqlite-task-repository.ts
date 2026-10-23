@@ -12,14 +12,21 @@ import {
 } from "./sqlite-task-agent-sessions";
 import { findTaskCard, getTaskCard, listTasksInDatabase } from "./sqlite-task-card-read-model";
 import { insertTaskFromCreateInput } from "./sqlite-task-create";
+import { listArtifactsInDatabase, readArtifactInDatabase } from "./sqlite-task-artifact-queries";
 import {
-  clearQaReportDocuments,
-  clearWorkflowDocuments,
-  insertDocument,
+  createArtifactInDatabase,
+  deleteArtifactInDatabase,
+  renameArtifactInDatabase,
+  replaceArtifactInDatabase,
+} from "./sqlite-task-artifact-writes";
+import {
+  clearQaReportArtifacts,
+  clearTaskArtifacts,
+  insertWorkflowArtifact,
   planSourceTool,
   qaReportSourceTool,
   specSourceTool,
-} from "./sqlite-task-document-writes";
+} from "./sqlite-task-workflow-artifact-writes";
 import { taskMetadata } from "./sqlite-task-metadata-read-model";
 import { listPullRequestSyncCandidatesInDatabase } from "./sqlite-task-pull-request-read-model";
 import {
@@ -63,6 +70,50 @@ export const createSqliteTaskRepository = ({
   now = () => new Date(),
 }: CreateSqliteTaskRepositoryInput): TaskStorePort => {
   return {
+    listArtifacts(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.listArtifacts", ({ session }) =>
+        Effect.gen(function* () {
+          yield* requireTaskRow(session, input.taskId, input.repoPath);
+          return yield* listArtifactsInDatabase(session, input.taskId);
+        }),
+      );
+    },
+    readArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.readArtifact", ({ session }) =>
+        Effect.gen(function* () {
+          yield* requireTaskRow(session, input.taskId, input.repoPath);
+          return yield* readArtifactInDatabase(session, input);
+        }),
+      );
+    },
+    createArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.createArtifact", ({ session }) =>
+        session.transaction("sqliteTaskRepository.createArtifact", (transaction) =>
+          createArtifactInDatabase(transaction, input, now()),
+        ),
+      );
+    },
+    renameArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.renameArtifact", ({ session }) =>
+        session.transaction("sqliteTaskRepository.renameArtifact", (transaction) =>
+          renameArtifactInDatabase(transaction, input, now()),
+        ),
+      );
+    },
+    replaceArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.replaceArtifact", ({ session }) =>
+        session.transaction("sqliteTaskRepository.replaceArtifact", (transaction) =>
+          replaceArtifactInDatabase(transaction, input, now()),
+        ),
+      );
+    },
+    deleteArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.deleteArtifact", ({ session }) =>
+        session.transaction("sqliteTaskRepository.deleteArtifact", (transaction) =>
+          deleteArtifactInDatabase(transaction, input),
+        ),
+      );
+    },
     clearAgentSessionsByRoles(input) {
       return withDatabase(
         input.repoPath,
@@ -86,17 +137,17 @@ export const createSqliteTaskRepository = ({
     clearQaReports(input) {
       return withDatabase(input.repoPath, "sqliteTaskRepository.clearQaReports", ({ session }) =>
         session.transaction("sqliteTaskRepository.clearQaReports", (transaction) =>
-          clearQaReportDocuments(transaction, input.taskId, input.repoPath),
+          clearQaReportArtifacts(transaction, input.taskId, input.repoPath),
         ),
       );
     },
-    clearWorkflowDocuments(input) {
+    clearTaskArtifacts(input) {
       return withDatabase(
         input.repoPath,
-        "sqliteTaskRepository.clearWorkflowDocuments",
+        "sqliteTaskRepository.clearTaskArtifacts",
         ({ session }) =>
-          session.transaction("sqliteTaskRepository.clearWorkflowDocuments", (transaction) =>
-            clearWorkflowDocuments(transaction, input.taskId, input.repoPath),
+          session.transaction("sqliteTaskRepository.clearTaskArtifacts", (transaction) =>
+            clearTaskArtifacts(transaction, input.taskId, input.repoPath),
           ),
       );
     },
@@ -228,7 +279,7 @@ export const createSqliteTaskRepository = ({
                   taskId: input.taskId,
                   updatedAt,
                 });
-                yield* insertDocument(transaction, {
+                const artifact = yield* insertWorkflowArtifact(transaction, {
                   kind: "qa_report",
                   markdown: input.markdown,
                   sourceTool: qaReportSourceTool(input.verdict),
@@ -238,10 +289,16 @@ export const createSqliteTaskRepository = ({
                   verdict: input.verdict,
                 });
                 const task = yield* getTaskCard(transaction, input.taskId, input.repoPath);
-                return { task, previousStatus: previous.status };
+                return { task, artifact, previousStatus: previous.status };
               }),
             )
-            .pipe(Effect.flatMap(recordCommittedTaskStatusChange)),
+            .pipe(
+              Effect.flatMap(({ task, artifact, previousStatus }) =>
+                recordCommittedTaskStatusChange({ task, previousStatus }).pipe(
+                  Effect.as({ task, artifact }),
+                ),
+              ),
+            ),
         ),
       );
     },
@@ -259,12 +316,12 @@ export const createSqliteTaskRepository = ({
         ),
       );
     },
-    setPlanDocument(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.setPlanDocument", ({ session }) =>
-        session.transaction("sqliteTaskRepository.setPlanDocument", (transaction) =>
+    setPlanArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.setPlanArtifact", ({ session }) =>
+        session.transaction("sqliteTaskRepository.setPlanArtifact", (transaction) =>
           Effect.gen(function* () {
             yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            return yield* insertDocument(transaction, {
+            return yield* insertWorkflowArtifact(transaction, {
               kind: "implementation_plan",
               markdown: input.markdown,
               sourceTool: planSourceTool,
@@ -290,12 +347,12 @@ export const createSqliteTaskRepository = ({
         ),
       );
     },
-    setSpecDocument(input) {
-      return withDatabase(input.repoPath, "sqliteTaskRepository.setSpecDocument", ({ session }) =>
-        session.transaction("sqliteTaskRepository.setSpecDocument", (transaction) =>
+    setSpecArtifact(input) {
+      return withDatabase(input.repoPath, "sqliteTaskRepository.setSpecArtifact", ({ session }) =>
+        session.transaction("sqliteTaskRepository.setSpecArtifact", (transaction) =>
           Effect.gen(function* () {
             yield* requireTaskRow(transaction, input.taskId, input.repoPath);
-            return yield* insertDocument(transaction, {
+            return yield* insertWorkflowArtifact(transaction, {
               kind: "spec",
               markdown: input.markdown,
               sourceTool: specSourceTool,

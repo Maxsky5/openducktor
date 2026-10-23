@@ -110,7 +110,7 @@ for (const shell of ["electron", "web"] as const) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             appVersion: "mobile-test",
-            supportedProtocolVersions: [1],
+            supportedProtocolVersions: [2],
             requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
             optionalCapabilities: [],
           }),

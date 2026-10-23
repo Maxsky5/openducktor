@@ -27,10 +27,10 @@ export const buildRoleWorkflowState = ({
   const qaRejected = isQaRejectedTask(task);
   const taskStatus = task?.status;
   const qaApproved =
-    task?.documentSummary.qaReport.verdict === "approved" &&
+    task?.artifactSummary.qaReport.verdict === "approved" &&
     (taskStatus === "ai_review" || taskStatus === "human_review" || taskStatus === "closed");
   const qaReviewRejected =
-    task?.status === "ai_review" && task.documentSummary.qaReport.verdict === "rejected";
+    task?.status === "ai_review" && task.artifactSummary.qaReport.verdict === "rejected";
   let completion: AgentWorkflowStepState["completion"] = "not_started";
 
   if (role === "build" && (qaRejected || qaApproved)) {

@@ -74,16 +74,3 @@ export const requireImplementationResetStoreDependencies = (taskStore: TaskStore
     setDirectMerge: TaskStorePort["setDirectMerge"];
     setPullRequest: TaskStorePort["setPullRequest"];
   };
-
-export const requireTaskResetStoreDependencies = (taskStore: TaskStorePort) =>
-  ({
-    clearAgentSessionsByRoles: taskStore.clearAgentSessionsByRoles.bind(taskStore),
-    clearWorkflowDocuments: taskStore.clearWorkflowDocuments.bind(taskStore),
-    setDirectMerge: taskStore.setDirectMerge.bind(taskStore),
-    setPullRequest: taskStore.setPullRequest.bind(taskStore),
-  }) satisfies {
-    clearAgentSessionsByRoles: TaskStorePort["clearAgentSessionsByRoles"];
-    clearWorkflowDocuments: TaskStorePort["clearWorkflowDocuments"];
-    setDirectMerge: TaskStorePort["setDirectMerge"];
-    setPullRequest: TaskStorePort["setPullRequest"];
-  };

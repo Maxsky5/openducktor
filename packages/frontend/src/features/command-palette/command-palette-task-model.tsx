@@ -234,7 +234,7 @@ const taskActions = (task: TaskCard): PaletteTaskAction[] => [
   {
     key: "details",
     label: "Open task details",
-    keywords: ["view", "show", "documents"],
+    keywords: ["view", "show", "artifacts"],
     icon: <PanelRightOpen />,
     destructive: false,
     disabled: false,

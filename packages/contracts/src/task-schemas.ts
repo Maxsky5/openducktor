@@ -57,11 +57,11 @@ export const planSubtaskInputSchema = z.object({
 });
 export type PlanSubtaskInput = z.infer<typeof planSubtaskInputSchema>;
 
-const taskDocumentPresenceSchema = z.object({
+const taskArtifactPresenceSchema = z.object({
   has: z.boolean().default(false),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
-export type TaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
+export type TaskArtifactPresence = z.infer<typeof taskArtifactPresenceSchema>;
 
 export const qaWorkflowVerdictSchema = z.enum(["approved", "rejected", "not_reviewed"]);
 export type QaWorkflowVerdict = z.infer<typeof qaWorkflowVerdictSchema>;
@@ -69,30 +69,30 @@ export type QaWorkflowVerdict = z.infer<typeof qaWorkflowVerdictSchema>;
 export const qaReportVerdictSchema = z.enum(["approved", "rejected"]);
 export type QaReportVerdict = z.infer<typeof qaReportVerdictSchema>;
 
-const taskQaDocumentPresenceSchema = taskDocumentPresenceSchema.extend({
+const taskQaArtifactPresenceSchema = taskArtifactPresenceSchema.extend({
   verdict: qaWorkflowVerdictSchema.default("not_reviewed"),
 });
-export type TaskQaDocumentPresence = z.infer<typeof taskQaDocumentPresenceSchema>;
+export type TaskQaArtifactPresence = z.infer<typeof taskQaArtifactPresenceSchema>;
 
-const EMPTY_TASK_DOCUMENT_PRESENCE: TaskDocumentPresence = {
+const EMPTY_TASK_ARTIFACT_PRESENCE: TaskArtifactPresence = {
   has: false,
 };
 
-const taskDocumentSummarySchema = z.object({
-  spec: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
-  plan: taskDocumentPresenceSchema.default(EMPTY_TASK_DOCUMENT_PRESENCE),
-  qaReport: taskQaDocumentPresenceSchema.default({
-    ...EMPTY_TASK_DOCUMENT_PRESENCE,
+const taskArtifactSummarySchema = z.object({
+  spec: taskArtifactPresenceSchema.default(EMPTY_TASK_ARTIFACT_PRESENCE),
+  plan: taskArtifactPresenceSchema.default(EMPTY_TASK_ARTIFACT_PRESENCE),
+  qaReport: taskQaArtifactPresenceSchema.default({
+    ...EMPTY_TASK_ARTIFACT_PRESENCE,
     verdict: "not_reviewed",
   }),
 });
-export type TaskDocumentSummary = z.infer<typeof taskDocumentSummarySchema>;
+export type TaskArtifactSummary = z.infer<typeof taskArtifactSummarySchema>;
 
-const EMPTY_TASK_DOCUMENT_SUMMARY: TaskDocumentSummary = {
-  spec: EMPTY_TASK_DOCUMENT_PRESENCE,
-  plan: EMPTY_TASK_DOCUMENT_PRESENCE,
+const EMPTY_TASK_ARTIFACT_SUMMARY: TaskArtifactSummary = {
+  spec: EMPTY_TASK_ARTIFACT_PRESENCE,
+  plan: EMPTY_TASK_ARTIFACT_PRESENCE,
   qaReport: {
-    ...EMPTY_TASK_DOCUMENT_PRESENCE,
+    ...EMPTY_TASK_ARTIFACT_PRESENCE,
     verdict: "not_reviewed",
   },
 };
@@ -188,7 +188,7 @@ export const taskCardSchema = z.object({
     (value) => (value === null ? undefined : value),
     sourceIssueReferenceSchema.optional(),
   ),
-  documentSummary: taskDocumentSummarySchema.optional().default(EMPTY_TASK_DOCUMENT_SUMMARY),
+  artifactSummary: taskArtifactSummarySchema.optional().default(EMPTY_TASK_ARTIFACT_SUMMARY),
   agentWorkflows: agentWorkflowsSchema.optional().default(EMPTY_AGENT_WORKFLOWS),
   updatedAt: z.string(),
   createdAt: z.string(),

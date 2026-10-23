@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { EditTaskSection } from "@/types/task-composer";
 
 const TaskDocumentEditor = lazy(async () => {
   const module = await import("@/components/features/task-composer/task-document-editor");
@@ -34,6 +35,7 @@ type TaskCreateModalProps = {
   task?: TaskCard | null;
   destination?: TaskCreateDestination | null;
   initialTitle?: string;
+  initialEditSection?: EditTaskSection;
 };
 
 type TaskCreateModalController = ReturnType<typeof useTaskCreateModalController>;
@@ -298,6 +300,7 @@ export function TaskCreateModal({
   task = null,
   destination = null,
   initialTitle = "",
+  initialEditSection = "details",
 }: TaskCreateModalProps): ReactElement {
   const openerRef = useRef<HTMLElement | null>(null);
   const controller = useTaskCreateModalController({
@@ -307,6 +310,7 @@ export function TaskCreateModal({
     task,
     destination,
     initialTitle,
+    initialEditSection,
   });
   return (
     <>
@@ -331,7 +335,7 @@ export function TaskCreateModal({
             <DialogDescription>
               {controller.mode === "create"
                 ? createDescription(controller.destination)
-                : `Update ${task?.id ?? "task"} metadata and long-form markdown documents.`}
+                : `Update ${task?.id ?? "task"} task details and workflow artifacts.`}
             </DialogDescription>
           </DialogHeader>
 

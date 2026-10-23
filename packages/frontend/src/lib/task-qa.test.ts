@@ -8,7 +8,7 @@ describe("isQaRejectedTask", () => {
       isQaRejectedTask(
         createTaskCardFixture({
           status: "in_progress",
-          documentSummary: {
+          artifactSummary: {
             spec: { has: false, updatedAt: undefined },
             plan: { has: false, updatedAt: undefined },
             qaReport: { has: true, updatedAt: "2026-03-10T10:00:00.000Z", verdict: "rejected" },
@@ -21,7 +21,7 @@ describe("isQaRejectedTask", () => {
       isQaRejectedTask(
         createTaskCardFixture({
           status: "blocked",
-          documentSummary: {
+          artifactSummary: {
             spec: { has: false, updatedAt: undefined },
             plan: { has: false, updatedAt: undefined },
             qaReport: { has: true, updatedAt: "2026-03-10T10:00:00.000Z", verdict: "rejected" },
@@ -37,7 +37,7 @@ describe("isQaRejectedTask", () => {
       isQaRejectedTask(
         createTaskCardFixture({
           status: "blocked",
-          documentSummary: {
+          artifactSummary: {
             spec: { has: false, updatedAt: undefined },
             plan: { has: false, updatedAt: undefined },
             qaReport: { has: true, updatedAt: "2026-03-10T10:00:00.000Z", verdict: "approved" },

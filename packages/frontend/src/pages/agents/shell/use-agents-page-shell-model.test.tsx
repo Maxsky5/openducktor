@@ -6,6 +6,8 @@ import type { SessionStartModalModel } from "@/components/features/agents/sessio
 import type { TaskExecutionSelectedFilePreviewModel } from "@/components/features/agents/task-execution-file-preview";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat";
+import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
+import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createAgentSessionCollection } from "@openducktor/frontend-core/sessions/agent-session-collection";
@@ -150,7 +152,7 @@ type OrchestrationState = {
   startSessionRequest: ReturnType<typeof useAgentStudioSessionActions>["startSessionRequest"];
   agentStudioHeaderModel: AgentStudioHeaderModel;
   gitConflictQuickAction: AgentStudioQuickActionOption | null;
-  taskExecutionDocumentPanelModel: null;
+  taskExecutionDocumentPanelModel: TaskExecutionDocumentPanelModel | null;
   agentChatModel: AgentChatModel;
   pullRequestReview: {
     canShowPullRequestReview: boolean;
@@ -171,6 +173,7 @@ const agentStudioHeaderModel = createAgentStudioHeaderModelFixture();
 const agentChatModel = createAgentChatModelFixture();
 
 type AgentsPageShellModelState = {
+  chatArtifactLinkOwner: ChatArtifactLinkOwner | null;
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
@@ -828,6 +831,52 @@ const createHookHarness = () =>
   });
 
 describe("useAgentsPageShellModel", () => {
+  for (const panelState of ["another-tab", "hidden", "closed-tab"] as const) {
+    test(`artifact navigation selects the exact artifact when the panel has ${panelState}`, async () => {
+      const onSelectionChange = mock<TaskExecutionDocumentPanelModel["onSelectionChange"]>(
+        () => {},
+      );
+      orchestrationState.taskExecutionDocumentPanelModel = {
+        repoPath: "/repo",
+        taskId: "task-1",
+        selection: { kind: "workflow", workflowKind: "plan" },
+        onSelectionChange,
+      };
+      const harness = createHookHarness();
+      try {
+        await harness.mount();
+        await harness.run((state) => state.panels.right.onPick("files"));
+        if (panelState === "hidden") {
+          await harness.run((state) => state.panels.rightToggle?.onToggle());
+          expect(harness.getLatest().panels.rightToggle?.isOpen).toBe(false);
+        }
+        if (panelState === "closed-tab") {
+          await harness.run((state) => {
+            const document = state.panels.right.tabs.find((tab) => tab.kind === "document");
+            if (!document) throw new Error("Missing document tab in the test.");
+            state.panels.right.onClose(document.id);
+          });
+          expect(harness.getLatest().panels.right.tabs.some((tab) => tab.kind === "document")).toBe(
+            false,
+          );
+        }
+        await harness.run((state) =>
+          state.chatArtifactLinkOwner?.onOpenArtifact("exact-artifact-id"),
+        );
+        expect(onSelectionChange.mock.calls).toEqual([
+          [{ kind: "artifact", artifactId: "exact-artifact-id" }],
+        ]);
+        expect(harness.getLatest().panels.rightToggle?.isOpen).toBe(true);
+        expect(harness.getLatest().panels.right.activeKind).toBe("document");
+        expect(
+          harness.getLatest().panels.right.tabs.filter((tab) => tab.kind === "document"),
+        ).toHaveLength(1);
+      } finally {
+        await harness.unmount();
+      }
+    });
+  }
+
   test("passes provider read errors to the orchestration and right panel models", async () => {
     repoSettingsState = {
       ...repoSettingsState,

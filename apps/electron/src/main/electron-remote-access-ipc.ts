@@ -8,7 +8,7 @@ import {
   ELECTRON_REMOTE_ACCESS_STATE_CHANNEL,
 } from "../shared/electron-bridge-contract";
 export const registerElectronRemoteAccessIpc = (
-  ipcMain: IpcMain,
+  ipcMain: Pick<IpcMain, "handle">,
   controller: RemoteAccessController,
   isShutdown: () => boolean,
 ) => {

@@ -1,6 +1,6 @@
 import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
 import type { ReactNode } from "react";
-import { beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
   act,
   fireEvent,
@@ -9,9 +9,11 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
+import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import TaskDescriptionEditor from "./task-description-editor";
 
 const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedMarkdownWrapper });
+const intersectionObserver = createIntersectionObserverTestDriver();
 
 const EDITOR_WAIT_TIMEOUT_MS = 3_000;
 const waitFor = <Result,>(callback: () => Result): Promise<Result> =>
@@ -85,6 +87,9 @@ const createDeferred = <T,>() => {
 };
 
 describe("TaskDescriptionEditor", () => {
+  beforeEach(() => intersectionObserver.install());
+  afterEach(() => intersectionObserver.restore());
+
   // The first Visual mount imports Tiptap and its extensions. Import them once here, so each
   // editor wait measures the mount, not this cold import, which is slow on a loaded CI runner.
   beforeAll(async () => {
@@ -253,14 +258,14 @@ describe("TaskDescriptionEditor", () => {
 
       await waitFor(() => expect(renderSpy).toHaveBeenCalledTimes(1));
       expect(view.container.querySelector(".tiptap")).not.toBeNull();
-      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+      const viewport = view.getByRole("group", { name: "Mermaid diagram" });
       expect(viewport.getAttribute("aria-busy")).toBe("true");
 
       resolveRender?.(
         '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
       );
       await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy());
-      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+      expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
     } finally {
       renderSpy.mockRestore();
     }

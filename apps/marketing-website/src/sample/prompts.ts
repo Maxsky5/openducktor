@@ -27,7 +27,7 @@ export const QA_BASE_AFTER = [
   "Completion:",
   "- Reject when unmet requirements, correctness or contract defects, material excess complexity, or verification gaps prevent approval. Explain what must change and why; do not prescribe a coding sequence.",
   "- Approve when the required outcomes and contracts hold and verification supports the risk of the change.",
-  "- Call exactly one of odt_qa_approved or odt_qa_rejected per review pass with the QA report markdown.",
+  "- Call odt_set_task_artifact exactly once per review pass with code qaReport, verdict approved or rejected, and the complete QA report in content.",
   "- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
 ].join("\n");
 
@@ -48,4 +48,4 @@ export const unsupported = (key: string): string => `Unsupported placeholder: {{
 
 /** The QA Kickoff prompt (kickoff.qa_review). */
 export const QA_KICKOFF =
-  "Review this task's implementation and submit one QA report with exactly one of odt_qa_approved or odt_qa_rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.";
+  "Review this task's implementation and submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.";

@@ -60,19 +60,3 @@ export const collectSingleTaskCleanupImpactTaskIds = (task: TaskCard | null): st
 
   return [task.id];
 };
-
-/** Which documents the task summary reports, and when each one changed. */
-export const toDocumentSummaryState = (task: TaskCard | null) => {
-  const summary = task?.documentSummary;
-  return {
-    specHasDocument: summary?.spec.has,
-    planHasDocument: summary?.plan.has,
-    qaHasDocument: summary?.qaReport.has,
-    specUpdatedAt: summary?.spec.updatedAt ?? null,
-    planUpdatedAt: summary?.plan.updatedAt ?? null,
-    qaUpdatedAt: summary?.qaReport.updatedAt ?? null,
-  };
-};
-
-export const shouldLoadDocumentSection = (hasDocument: boolean | undefined): boolean =>
-  Boolean(hasDocument);

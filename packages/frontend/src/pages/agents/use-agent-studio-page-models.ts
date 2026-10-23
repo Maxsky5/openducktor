@@ -1,10 +1,13 @@
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { workflowKindForRole } from "@openducktor/frontend-core/queries/artifacts";
 import { useCallback, useMemo, useState } from "react";
+import type { TaskExecutionDocumentPanelModel } from "@/components/features/agents/task-execution-document-panel";
 import type {
-  TaskDocumentKind,
-  TaskExecutionDocumentPanelModel,
-} from "@/components/features/agents/task-execution-document-panel";
+  ArtifactSelection,
+  TaskArtifactsProps,
+} from "@/components/features/task-artifacts/task-artifacts";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
@@ -25,6 +28,7 @@ type AgentStudioSessionActionsContext = AgentStudioChatSessionActionsContext & {
 };
 
 type UseAgentStudioPageModelsArgs = {
+  artifactScope?: TaskArtifactsProps | null;
   selectedSession: AgentStudioSelectedSessionContext;
   sessionActions: AgentStudioSessionActionsContext;
   modelSelection: AgentStudioChatModelSelectionContext;
@@ -34,6 +38,7 @@ type UseAgentStudioPageModelsArgs = {
 };
 
 export function useAgentStudioPageModels({
+  artifactScope = null,
   selectedSession,
   sessionActions,
   modelSelection,
@@ -77,34 +82,37 @@ export function useAgentStudioPageModels({
     },
   });
 
-  // The document choice lasts until the user selects another role session. A return to an earlier
-  // session starts again from its first document.
-  const { taskDocuments, defaultDocumentKind, roleSessionKey } = selectedSession.documents;
-  const [documentChoice, setDocumentChoice] = useState<{
+  const identity = selectedSession.selectedSession.identity;
+  const defaultArtifactSelection = useMemo<ArtifactSelection>(
+    () => ({ kind: "workflow", workflowKind: workflowKindForRole(selectedSession.role) }),
+    [selectedSession.role],
+  );
+  const roleSessionKey = JSON.stringify([
+    artifactScope?.workspaceId ?? null,
+    artifactScope?.repoPath ?? null,
+    artifactScope?.taskId ?? selectedSession.taskId,
+    selectedSession.role,
+    identity ? agentSessionIdentityKey(identity) : null,
+  ]);
+  const [artifactChoice, setArtifactChoice] = useState<{
     roleSessionKey: string;
-    kind: TaskDocumentKind | null;
-  }>({ roleSessionKey, kind: null });
-  if (documentChoice.roleSessionKey !== roleSessionKey) {
-    setDocumentChoice({ roleSessionKey, kind: null });
+    selection: ArtifactSelection | null;
+  }>({ roleSessionKey, selection: null });
+  if (artifactChoice.roleSessionKey !== roleSessionKey) {
+    setArtifactChoice({ roleSessionKey, selection: null });
   }
-  const selectedDocumentKind =
-    documentChoice.roleSessionKey === roleSessionKey && documentChoice.kind !== null
-      ? documentChoice.kind
-      : defaultDocumentKind;
-  const selectDocumentKind = useCallback(
-    (kind: TaskDocumentKind) => setDocumentChoice({ roleSessionKey, kind }),
+  const selection =
+    artifactChoice.roleSessionKey === roleSessionKey && artifactChoice.selection !== null
+      ? artifactChoice.selection
+      : defaultArtifactSelection;
+  const onSelectionChange = useCallback(
+    (nextSelection: ArtifactSelection) =>
+      setArtifactChoice({ roleSessionKey, selection: nextSelection }),
     [roleSessionKey],
   );
   const taskExecutionDocumentPanelModel = useMemo<TaskExecutionDocumentPanelModel | null>(
-    () =>
-      taskDocuments
-        ? {
-            documents: taskDocuments,
-            selectedKind: selectedDocumentKind,
-            onSelectKind: selectDocumentKind,
-          }
-        : null,
-    [selectDocumentKind, selectedDocumentKind, taskDocuments],
+    () => (artifactScope ? { ...artifactScope, selection, onSelectionChange } : null),
+    [artifactScope, onSelectionChange, selection],
   );
 
   const agentChatModel = useAgentStudioChatModel({

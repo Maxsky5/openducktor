@@ -29,10 +29,10 @@ type UseTaskResetFlowArgs = {
 };
 
 const deriveRollbackLabel = (task: TaskCard): string => {
-  if (task.documentSummary.plan.has) {
+  if (task.artifactSummary.plan.has) {
     return "Ready for Dev";
   }
-  if (task.documentSummary.spec.has) {
+  if (task.artifactSummary.spec.has) {
     return "Spec Ready";
   }
   return "Backlog";

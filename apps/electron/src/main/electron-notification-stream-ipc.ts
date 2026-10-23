@@ -15,7 +15,7 @@ import {
 } from "../shared/electron-notification-stream-contract";
 
 export const registerElectronNotificationStreamIpc = (
-  ipcMain: IpcMain,
+  ipcMain: Pick<IpcMain, "handle">,
   stream: EffectNodeHostCommandRouter["notificationStream"],
   reportDeliveryFailure: (failure: { cause: unknown; subscriptionId: string }) => void,
   isHostShutdownStarted: () => boolean,

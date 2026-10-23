@@ -116,7 +116,7 @@ test("the task card opens and closes the real detail sheet without leaving chat"
                       createdAt: "2026-09-08T10:00:00.000Z",
                       updatedAt: "2026-09-08T10:00:00.000Z",
                       qaVerdict: "not_reviewed",
-                      documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
+                      artifacts: { hasSpec: false, hasPlan: false, hasQaReport: false },
                     },
                   }),
                 },

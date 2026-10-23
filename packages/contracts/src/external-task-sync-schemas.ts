@@ -57,19 +57,26 @@ export const taskEventStatusChangeSchema = z.strictObject({
 });
 export type TaskEventStatusChange = z.infer<typeof taskEventStatusChangeSchema>;
 
-export const taskDocumentSectionSchema = z.enum(["spec", "plan", "qa"]);
-export type TaskDocumentSection = z.infer<typeof taskDocumentSectionSchema>;
+export const workflowArtifactSectionSchema = z.enum(["spec", "plan", "qa"]);
+export type WorkflowArtifactSection = z.infer<typeof workflowArtifactSectionSchema>;
 
-export const taskDocumentChangeSchema = z.strictObject({
-  taskId: taskChangeIdSchema,
-  sections: z
-    .array(taskDocumentSectionSchema)
-    .min(1)
-    .refine((sections) => new Set(sections).size === sections.length, {
-      message: "Changed document sections must be unique.",
-    }),
-});
-export type TaskDocumentChange = z.infer<typeof taskDocumentChangeSchema>;
+export const taskArtifactChangeSchema = z
+  .strictObject({
+    taskId: taskChangeIdSchema,
+    artifactIds: uniqueTaskChangeIdsSchema.min(1),
+    removedArtifactIds: uniqueTaskChangeIdsSchema,
+  })
+  .refine(
+    ({ artifactIds, removedArtifactIds }) => {
+      const changedIds = new Set(artifactIds);
+      return removedArtifactIds.every((id) => changedIds.has(id));
+    },
+    {
+      path: ["removedArtifactIds"],
+      message: "Removed artifact IDs must be included in changed artifact IDs.",
+    },
+  );
+export type TaskArtifactChange = z.infer<typeof taskArtifactChangeSchema>;
 
 const taskBoardChangesSchema = z
   .strictObject({
@@ -79,21 +86,21 @@ const taskBoardChangesSchema = z
         message: "Task board cards must have unique IDs.",
       }),
     doneVisibleDays: z.number().int().min(0),
-    documentChanges: z
-      .array(taskDocumentChangeSchema)
+    artifactChanges: z
+      .array(taskArtifactChangeSchema)
       .refine(
         (changes) => new Set(changes.map((change) => change.taskId)).size === changes.length,
-        { message: "Changed document tasks must be unique." },
+        { message: "Changed artifact tasks must be unique." },
       ),
   })
-  .superRefine(({ cards, documentChanges }, context) => {
+  .superRefine(({ cards, artifactChanges }, context) => {
     const taskIds = new Set(cards.map((card) => card.id));
-    for (const change of documentChanges) {
+    for (const change of artifactChanges) {
       if (!taskIds.has(change.taskId))
         context.addIssue({
           code: "custom",
-          message: "A changed document must have a board card.",
-          path: ["documentChanges"],
+          message: "A changed artifact must have a board card.",
+          path: ["artifactChanges"],
         });
     }
   });
@@ -214,12 +221,12 @@ export const taskEventCursorSchema = z
   .strict();
 export type TaskEventCursor = z.infer<typeof taskEventCursorSchema>;
 
-// A save receipt belongs to the live host stream, not the stored document.
-export const taskDocumentSaveResultSchema = z.object({
+// A save receipt belongs to the live host stream, not the stored artifact.
+export const taskArtifactSaveResultSchema = z.object({
   updatedAt: z.iso.datetime(),
   cursor: taskEventCursorSchema,
 });
-export type TaskDocumentSaveResult = z.infer<typeof taskDocumentSaveResultSchema>;
+export type TaskArtifactSaveResult = z.infer<typeof taskArtifactSaveResultSchema>;
 
 export const taskEventChangeFrameSchema = z
   .object({

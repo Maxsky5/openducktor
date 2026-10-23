@@ -82,6 +82,7 @@ const useWorkspaceRestoreWithSelection = (
   });
   const selection = useAgentStudioSelectionState({
     activeWorkspaceId: args.activeWorkspaceId,
+    workspaceRepoPath: "/repo",
     isWorkspaceRestorePending: navigation.isWorkspaceRestorePending,
     taskIdParam: navigation.taskIdParam,
     sessionExternalIdParam: navigation.sessionExternalIdParam,

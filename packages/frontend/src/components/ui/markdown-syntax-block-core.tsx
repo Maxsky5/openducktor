@@ -116,7 +116,7 @@ export const createMarkdownSyntaxBlock = <Theme,>({
         className={cn("overflow-x-auto rounded-xl border border-border bg-muted/30", className)}
         data-syntax-load-failure={loadFailureKind}
       >
-        <pre className="p-3.5 font-mono text-xs leading-relaxed text-foreground">
+        <pre className="p-3.5 font-mono text-xs leading-relaxed text-foreground" tabIndex={0}>
           <code>{code}</code>
         </pre>
         {loadFailure ? (

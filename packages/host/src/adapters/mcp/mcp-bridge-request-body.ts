@@ -4,15 +4,19 @@ import type { JSONType } from "zod";
 import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 
-const MAX_BODY_BYTES = 1024 * 1024;
+const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const ARTIFACT_MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error && cause.message.trim() ? cause.message : String(cause);
 
 export const readMcpBridgeRequestBody = (
   request: IncomingMessage,
+  command: string,
 ): Effect.Effect<JSONType, HostOperationErrorAggregate> =>
   Effect.callback<JSONType, HostOperationErrorAggregate>((resume, signal) => {
+    const maxBodyBytes =
+      command === "odt_set_task_artifact" ? ARTIFACT_MAX_BODY_BYTES : DEFAULT_MAX_BODY_BYTES;
     let body = "";
     let receivedBytes = 0;
     let settled = false;
@@ -40,17 +44,17 @@ export const readMcpBridgeRequestBody = (
     };
     const onData = (chunk: string): void => {
       receivedBytes += Buffer.byteLength(chunk);
-      if (receivedBytes > MAX_BODY_BYTES) {
+      if (receivedBytes > maxBodyBytes) {
         finish(
           Effect.fail(
             new HostOperationError({
               operation: "mcpHostBridge.readRequestBody",
-              message: "MCP host bridge request body exceeds 1 MiB.",
-              details: { maxBodyBytes: MAX_BODY_BYTES },
+              message: `MCP host bridge request body exceeds ${maxBodyBytes / (1024 * 1024)} MiB. Reduce the request content.`,
+              details: { maxBodyBytes },
             }),
           ),
         );
-        request.destroy();
+        request.resume();
         return;
       }
       body += chunk;

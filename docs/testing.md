@@ -69,3 +69,10 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - Use browser mode when it can cover the UI change.
 - Ask the user to start `bun run browser:dev`.
 - Connect to the running app. Do not start the browser runner yourself.
+
+The HTML artifact test needs an installed Chromium 152 or later. Set `ODT_ARTIFACT_PREVIEW_CHROME` to its executable to run the opt-in test. It starts headless Chrome with a temporary profile and tests the real bootstrap response, fragment navigation, and isolation. Without this variable, the normal test suite skips it.
+
+```sh
+ODT_ARTIFACT_PREVIEW_CHROME="/path/to/chrome" \
+  bun run --filter @openducktor/remote-host test src/artifact-preview-bootstrap.live.test.ts
+```

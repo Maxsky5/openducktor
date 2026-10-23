@@ -2,6 +2,7 @@ import { createClientQueryClient } from "@openducktor/frontend-core/connection/c
 import { expect, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_PROTOCOL_VERSION,
   TERMINAL_PROTOCOL_VERSION,
   decodeTerminalProtocolFrame,
   encodeTerminalProtocolFrame,
@@ -27,7 +28,9 @@ test.each(["restored", "lost", "failure"])(
       appVersion: "test-host",
       hostInstanceId: "host-a",
       accessPolicy: "network_reach",
-      protocols: [{ version: 1, capabilities: [...REMOTE_BASELINE_CAPABILITIES] }],
+      protocols: [
+        { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
+      ],
     };
     const json = (
       value: RemoteHostDescriptor | RemoteNegotiationResult | null,
@@ -53,7 +56,7 @@ test.each(["restored", "lost", "failure"])(
             status: "accepted",
             host,
             connectionId: crypto.randomUUID(),
-            protocolVersion: 1,
+            protocolVersion: REMOTE_PROTOCOL_VERSION,
             missingOptionalCapabilities: [],
           });
         if (url.endsWith("/events"))

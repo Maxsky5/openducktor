@@ -1,27 +1,15 @@
 import {
-  type BuildBlockedResult,
-  type BuildCompletedResult,
-  type BuildResumedResult,
-  type CreateTaskResult,
   type GetWorkspacesResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
+  ODT_MCP_BRIDGE_VERSION,
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
   type OdtBrowserToolName,
   type OdtBrowserToolResult,
   type OdtHostBridgeReady,
-  type QaApprovedResult,
-  type QaRejectedResult,
-  type ReadTaskAssetsResult,
-  type SearchTasksResult,
-  type SetPlanResult,
-  type SetPullRequestResult,
-  type SetSpecResult,
-  type TaskDocumentsRead,
-  type TaskSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { JSONType } from "zod";
+import type { JSONType, z } from "zod";
 import {
   executeOdtMcpBrowserTool,
   type OdtMcpBrowserBridgeError,
@@ -41,20 +29,9 @@ import {
 export type { OdtMcpBrowserBridgeError } from "./odt-mcp-bridge-browser-tools";
 export type { OdtMcpBridgeError, OdtMcpTaskToolName } from "./odt-mcp-bridge-tool-context";
 
-export type WorkspaceScopedOdtToolResult =
-  | BuildBlockedResult
-  | BuildCompletedResult
-  | BuildResumedResult
-  | CreateTaskResult
-  | QaApprovedResult
-  | QaRejectedResult
-  | ReadTaskAssetsResult
-  | SearchTasksResult
-  | SetPlanResult
-  | SetPullRequestResult
-  | SetSpecResult
-  | TaskDocumentsRead
-  | TaskSummary;
+export type WorkspaceScopedOdtToolResult = z.output<
+  (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[OdtMcpTaskToolName]
+>;
 
 export type OdtMcpBridgeService = {
   ready(input?: JSONType): Effect.Effect<OdtHostBridgeReady, OdtMcpBridgeError>;
@@ -75,7 +52,10 @@ export const createOdtMcpBridgeService = (
   const context = createOdtMcpToolContext(input);
   return {
     ready() {
-      return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+      return Effect.succeed({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [...ODT_MCP_TOOL_NAMES],
+      });
     },
     getWorkspaces(input) {
       return Effect.gen(function* () {

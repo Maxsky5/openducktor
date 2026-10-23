@@ -86,7 +86,7 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -99,7 +99,7 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -339,7 +339,7 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -352,7 +352,7 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -535,7 +535,7 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -548,7 +548,7 @@ describe("createTaskService approval context", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");

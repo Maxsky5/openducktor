@@ -1,12 +1,10 @@
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { removedArtifactChanges } from "../artifact-changes";
 import { canResetTaskFromStatus } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
-import {
-  requireTaskDeleteDependencies,
-  requireTaskResetStoreDependencies,
-} from "../support/task-cleanup-dependencies";
+import { requireTaskDeleteDependencies } from "../support/task-cleanup-dependencies";
 import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
@@ -43,7 +41,6 @@ export const createTaskFullResetUseCase = ({
       const dependencies = yield* requireDependencies(() =>
         requireTaskDeleteDependencies(gitPort, settingsConfig, workspaceSettingsService),
       );
-      const storeDependencies = requireTaskResetStoreDependencies(taskStore);
       const canonicalInputRepo = yield* dependencies.gitPort.canonicalizePath(repoPath);
       yield* taskSessionLifecycleCoordinator.acquireLifecycle(
         canonicalInputRepo,
@@ -71,8 +68,7 @@ export const createTaskFullResetUseCase = ({
         );
       }
 
-      const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
-      const currentSessions = currentMetadata.agentSessions;
+      const { agentSessions: currentSessions } = yield* taskStore.getTaskMetadata(input);
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
@@ -130,6 +126,9 @@ export const createTaskFullResetUseCase = ({
       }
 
       let taskStoreWriteCompleted = false;
+      const artifactIds = (yield* taskStore.listArtifacts(input)).map(
+        (artifact) => artifact.artifactId,
+      );
 
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
@@ -145,23 +144,23 @@ export const createTaskFullResetUseCase = ({
           worktreeFiles,
           worktreePaths,
         });
-        yield* storeDependencies.clearWorkflowDocuments({ repoPath: effectiveRepoPath, taskId });
+        yield* taskStore.clearTaskArtifacts({ repoPath: effectiveRepoPath, taskId });
         taskStoreWriteCompleted = true;
-        cleanupProgress.completedSteps.push("cleared workflow documents");
-        yield* storeDependencies.clearAgentSessionsByRoles({
+        cleanupProgress.completedSteps.push("cleared task artifacts");
+        yield* taskStore.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
           roles: [...workflowCleanupSessionRoles],
         });
         cleanupProgress.completedSteps.push("cleared linked agent sessions");
-        yield* storeDependencies.setPullRequest({
+        yield* taskStore.setPullRequest({
           repoPath: effectiveRepoPath,
           taskId,
           pullRequest: null,
         });
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* storeDependencies.setDirectMerge({
+            yield* taskStore.setDirectMerge({
               repoPath: effectiveRepoPath,
               taskId,
               directMerge: null,
@@ -175,7 +174,8 @@ export const createTaskFullResetUseCase = ({
           taskId,
           status: "open",
         });
-        return enrichTask(updated, replaceTaskInList(currentTasks, updated));
+        const task = enrichTask(updated, replaceTaskInList(currentTasks, updated));
+        return { task, removedArtifactIds: artifactIds };
       }).pipe(
         Effect.catch((error) => {
           const decoratedFailure = appendTaskCleanupProgress(error, {
@@ -185,9 +185,12 @@ export const createTaskFullResetUseCase = ({
             completedSteps: cleanupProgress.completedSteps,
           });
           const failure = taskStoreWriteCompleted
-            ? createTaskMutationProgressFailure("reset-task", taskId, decoratedFailure, [
-                { taskId, sections: ["spec", "plan", "qa"] },
-              ])
+            ? createTaskMutationProgressFailure(
+                "reset-task",
+                taskId,
+                decoratedFailure,
+                removedArtifactChanges(taskId, artifactIds),
+              )
             : decoratedFailure;
           return Effect.fail(failure);
         }),

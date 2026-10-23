@@ -120,6 +120,7 @@ export const createElectronShellBridge = (): ShellBridge => {
 
   return {
     remoteAccess: electronApi.remoteAccess,
+    getArtifactPreviewEnvironment: () => electronApi.getArtifactPreviewEnvironment(),
     client,
     subscribeWorkspaceSessionUpdates: async (listener) =>
       electronApi.subscribe(

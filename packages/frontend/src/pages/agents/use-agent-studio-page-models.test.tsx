@@ -1,5 +1,4 @@
 import { MemoryRouter } from "react-router";
-import type { AgentRole } from "@openducktor/core";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import { createAgentChatSendFixture } from "@/test-utils/agent-chat-send-fixture";
 import { beforeAll, describe, expect, mock, test } from "bun:test";
@@ -11,7 +10,6 @@ import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent
 import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { getAgentSessionActivityStateFromSession } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import {
   agentSessionIdentityKey,
@@ -80,9 +78,9 @@ type SelectedSessionTestCore = Omit<
 };
 
 type HookArgsOverrides = {
+  artifactScope?: HookArgs["artifactScope"];
   sessions?: AgentSessionSummary[];
   selectedSessionCore?: Partial<SelectedSessionTestCore>;
-  documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
   runtimeReadiness?: Partial<
     AgentStudioSelectedSessionContextInput["selectedSession"]["runtimeReadiness"]
   >;
@@ -102,7 +100,7 @@ beforeAll(async () => {
 
 const createTask = () =>
   createTaskCardFixture({
-    documentSummary: {
+    artifactSummary: {
       spec: { has: true },
       plan: { has: false },
       qaReport: { has: false, verdict: "not_reviewed" },
@@ -160,14 +158,6 @@ const createPendingQuestion = (requestId = "question-1") => ({
   ],
 });
 
-const createDocumentState = (markdown: string): TaskDocumentState => ({
-  markdown,
-  updatedAt: null,
-  isLoading: false,
-  error: null,
-  loaded: true,
-});
-
 const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const defaultSession = createSession();
   const sessionsForTask = overrides.selectedSessionCore?.sessionsForTask ?? [
@@ -208,12 +198,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     loadedSession,
   };
 
-  const documents = {
-    specDoc: createDocumentState("spec"),
-    planDoc: createDocumentState(""),
-    qaDoc: createDocumentState(""),
-    ...overrides.documents,
-  };
   const runtimeReadiness: AgentStudioSelectedSessionContextInput["selectedSession"]["runtimeReadiness"] =
     {
       state: "ready",
@@ -339,13 +323,13 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
         transcriptState: selectedSessionCore.transcriptState,
         sessionAuxiliaryError: null,
       },
-      documents,
       sessionActions: selectedSessionActions,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     }),
   };
 
   return {
+    artifactScope: overrides.artifactScope ?? null,
     sessions: overrides.sessions ?? sessionsForTask,
     selectedSession,
     sessionActions,
@@ -1172,81 +1156,134 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("shows the first document of each role in the Document tab", async () => {
-    const expectedTitleByRole = {
-      spec: "Specification",
-      planner: "Implementation Plan",
-      build: "Implementation Plan",
-      qa: "QA Report",
-    } satisfies Record<AgentRole, string>;
-    for (const role of ["spec", "planner", "build", "qa"] as const) {
-      const session = createSession(`external-${role}`, {
-        sessionAssociation: { kind: "workflow", taskId: "task-1", role },
-      });
-      const harness = createHookHarness(
-        createHookArgs({
-          selectedSessionCore: {
-            role,
-            loadedSession: session,
-            sessionsForTask: summarizeSessions([session]),
-          },
-          documents: {
-            specDoc: createDocumentState("spec"),
-            planDoc: createDocumentState("plan"),
-            qaDoc: createDocumentState("qa"),
-          },
-        }),
-      );
+  test.each([
+    ["spec", "spec"],
+    ["planner", "plan"],
+    ["build", "plan"],
+    ["qa", "qaReport"],
+  ] as const)("opens the %s session workflow artifact", async (role, workflowKind) => {
+    const harness = createHookHarness(
+      createHookArgs({
+        artifactScope: { repoPath: "/repo", taskId: "task-1", workspaceId: "workspace-1" },
+        selectedSessionCore: { role },
+      }),
+    );
+    try {
       await harness.mount();
-      const model = harness.getLatest().taskExecutionDocumentPanelModel;
-      expect(model ? model.documents[model.selectedKind].title : null).toBe(
-        expectedTitleByRole[role],
-      );
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "workflow",
+        workflowKind,
+      });
+    } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps the document choice until the user selects another role session", async () => {
-    const plannerSession = createSession("external-planner", {
+  test("keeps the artifact choice until the user selects another role session", async () => {
+    const artifactScope = { repoPath: "/repo", taskId: "task-1", workspaceId: "workspace-1" };
+    const planner = createSession("planner-1", {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
     });
-    const qaSession = createSession("external-qa", {
-      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "qa" },
-    });
     const plannerArgs = createHookArgs({
-      selectedSessionCore: {
-        role: "planner",
-        loadedSession: plannerSession,
-        sessionsForTask: summarizeSessions([plannerSession, qaSession]),
-      },
+      artifactScope,
+      selectedSessionCore: { role: "planner", loadedSession: planner },
     });
     const harness = createHookHarness(plannerArgs);
-    await harness.mount();
-    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("plan");
-
-    await harness.run((state) => {
-      state.taskExecutionDocumentPanelModel?.onSelectKind("spec");
-    });
-    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("spec");
-
-    await harness.update(plannerArgs);
-    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("spec");
-
-    await harness.update(
-      createHookArgs({
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.taskExecutionDocumentPanelModel?.onSelectionChange({
+          kind: "artifact",
+          artifactId: "free-notes",
+        });
+      });
+      const refreshedArgs = createHookArgs({
+        artifactScope: { ...artifactScope },
         selectedSessionCore: {
-          role: "qa",
-          loadedSession: qaSession,
-          sessionsForTask: summarizeSessions([plannerSession, qaSession]),
+          role: "planner",
+          loadedSession: { ...planner, status: "idle" },
+          selectedTask: createTaskCardFixture({ title: "Updated task title" }),
         },
-      }),
-    );
-    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("qa");
+      });
+      await harness.update(refreshedArgs);
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "artifact",
+        artifactId: "free-notes",
+      });
 
-    // A return to the first session starts again from its first document.
-    await harness.update(plannerArgs);
-    expect(harness.getLatest().taskExecutionDocumentPanelModel?.selectedKind).toBe("plan");
-    await harness.unmount();
+      await harness.run((state) => {
+        state.taskExecutionDocumentPanelModel?.onSelectionChange({ kind: "collection" });
+      });
+      await harness.update(refreshedArgs);
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "collection",
+      });
+
+      await harness.update(
+        createHookArgs({
+          artifactScope: { ...artifactScope },
+          selectedSessionCore: { role: "qa" },
+        }),
+      );
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "workflow",
+        workflowKind: "qaReport",
+      });
+      await harness.update(plannerArgs);
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "workflow",
+        workflowKind: "plan",
+      });
+
+      await harness.run((state) => {
+        state.taskExecutionDocumentPanelModel?.onSelectionChange({ kind: "collection" });
+      });
+      const anotherPlanner = createSession("planner-2", {
+        sessionAssociation: { kind: "workflow", taskId: "task-1", role: "planner" },
+      });
+      await harness.update(
+        createHookArgs({
+          artifactScope: { ...artifactScope },
+          selectedSessionCore: { role: "planner", loadedSession: anotherPlanner },
+        }),
+      );
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "workflow",
+        workflowKind: "plan",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    ["workspaceId", "workspace-2"],
+    ["repoPath", "/other-repo"],
+    ["taskId", "task-2"],
+  ] as const)("resets the artifact choice when %s changes", async (field, value) => {
+    const artifactScope = { repoPath: "/repo", taskId: "task-1", workspaceId: "workspace-1" };
+    const harness = createHookHarness(createHookArgs({ artifactScope }));
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.taskExecutionDocumentPanelModel?.onSelectionChange({
+          kind: "artifact",
+          artifactId: "old-workspace-notes",
+        });
+      });
+      await harness.update(
+        createHookArgs({
+          artifactScope: { ...artifactScope, [field]: value },
+          selectedSessionCore: { taskId: field === "taskId" ? value : "task-1" },
+        }),
+      );
+      expect(harness.getLatest().taskExecutionDocumentPanelModel?.selection).toEqual({
+        kind: "workflow",
+        workflowKind: "spec",
+      });
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("keeps the header model stable across approval-only session changes", async () => {

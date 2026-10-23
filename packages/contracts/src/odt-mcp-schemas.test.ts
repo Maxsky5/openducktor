@@ -11,10 +11,10 @@ import {
   publicTaskSchema,
   ReadTaskAssetsInputSchema,
   readTaskAssetsResultSchema,
-  SetPlanInputSchema,
   taskSummarySchema,
   UpdateTaskInputSchema,
 } from "./odt-mcp-schemas";
+import { SetTaskArtifactInputSchema } from "./odt-artifact-schemas";
 import { ODT_BROWSER_TOOL_NAMES } from "./odt-browser-tool-schemas";
 import {
   ODT_EXTERNAL_MCP_TOOL_NAMES,
@@ -66,7 +66,7 @@ describe("odt mcp public task schemas", () => {
         createdAt: "2026-04-09T00:00:00.000Z",
         updatedAt: "2026-04-09T00:00:00.000Z",
         qaVerdict: "not_reviewed",
-        documents: {
+        artifacts: {
           hasSpec: false,
           hasPlan: false,
           hasQaReport: false,
@@ -87,15 +87,13 @@ describe("odt mcp public task schemas", () => {
         "odt_build_completed",
         "odt_build_resumed",
         "odt_create_task",
-        "odt_qa_approved",
-        "odt_qa_rejected",
         "odt_read_task",
         "odt_read_task_assets",
-        "odt_read_task_documents",
+        "odt_read_task_artifacts",
+        "odt_set_task_artifact",
+        "odt_delete_task_artifact",
         "odt_search_tasks",
-        "odt_set_plan",
         "odt_set_pull_request",
-        "odt_set_spec",
         "odt_update_task",
         ...ODT_BROWSER_TOOL_NAMES,
       ].sort(),
@@ -114,19 +112,17 @@ describe("odt mcp public task schemas", () => {
       "odt_search_tasks",
       "odt_read_task",
       "odt_read_task_assets",
-      "odt_read_task_documents",
+      "odt_read_task_artifacts",
+      "odt_set_task_artifact",
+      "odt_delete_task_artifact",
       "odt_update_task",
-      "odt_set_spec",
-      "odt_set_plan",
       "odt_build_blocked",
       "odt_build_resumed",
       "odt_build_completed",
       "odt_set_pull_request",
-      "odt_qa_approved",
-      "odt_qa_rejected",
       ...ODT_BROWSER_TOOL_NAMES,
     ]);
-    expect(ODT_EXTERNAL_MCP_TOOL_NAMES).toEqual(ODT_MCP_TOOL_NAMES.slice(0, 15));
+    expect(ODT_EXTERNAL_MCP_TOOL_NAMES).toEqual(ODT_MCP_TOOL_NAMES.slice(0, 13));
     expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
     expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
     expect(Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS)).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES]);
@@ -421,20 +417,22 @@ describe("odt mcp public task schemas", () => {
     }).toThrow();
   });
 
-  test("SetPlanInputSchema accepts taskId+markdown and rejects unknown subtasks field", () => {
-    const valid = SetPlanInputSchema.parse({
+  test("the artifact writer accepts plan content and rejects an unknown subtasks field", () => {
+    const valid = SetTaskArtifactInputSchema.parse({
       workspaceId: "repo",
       taskId: "task-1",
-      markdown: "# Plan",
+      code: "plan",
+      content: "# Plan",
     });
 
     expect(valid.taskId).toBe("task-1");
-    expect(valid.markdown).toBe("# Plan");
+    expect(valid.content).toEqual("# Plan");
 
-    const result = SetPlanInputSchema.safeParse({
+    const result = SetTaskArtifactInputSchema.safeParse({
       workspaceId: "repo",
       taskId: "task-1",
-      markdown: "# Plan",
+      code: "plan",
+      content: "# Plan",
       subtasks: [{ title: "Subtask" }],
     });
 

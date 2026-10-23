@@ -135,8 +135,8 @@ describe("app-state-context-values", () => {
       loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
       loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
       saveSpec: async () => ({ updatedAt: "" }),
-      saveSpecDocument: async () => ({ updatedAt: "" }),
-      savePlanDocument: async () => ({ updatedAt: "" }),
+      saveSpecArtifact: async () => ({ updatedAt: "" }),
+      savePlanArtifact: async () => ({ updatedAt: "" }),
     };
     expect(buildChecksStateValue(checksValue)).toBe(checksValue);
     expect(buildTasksStateValue(tasksValue)).toBe(tasksValue);

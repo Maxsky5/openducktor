@@ -5,7 +5,7 @@ import {
   replaceEqualDeep,
 } from "@tanstack/react-query";
 import { z } from "zod";
-import type { TaskDocumentSaveResult, TaskEventCursor } from "@openducktor/contracts";
+import type { TaskArtifactSaveResult, TaskEventCursor } from "@openducktor/contracts";
 import type { TaskDocumentPayload } from "../types/task-documents";
 import { connectionHost } from "../connection/client-connection";
 import { resolveLatestDocumentPayload } from "./document-utils";
@@ -69,21 +69,21 @@ export const taskDocumentQueryOptions = (
   repoPath: string,
   taskId: string,
   section: TaskDocumentSection,
-  readDocument: TaskDocumentReader = connectionHost(queryClient).taskDocumentGet,
+  readDocument: TaskDocumentReader = connectionHost(queryClient).taskWorkflowArtifactGet,
 ) => {
   const queryKey = documentQueryKeyForSection(repoPath, taskId, section);
   return queryOptions({
     queryKey,
     queryFn: async (): Promise<TaskDocumentPayload> => {
       if (!repoPath) {
-        throw new Error("Select a repository before loading task documents.");
+        throw new Error("Select a repository before loading task artifacts.");
       }
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
       const dataUpdateCount = query?.state.dataUpdateCount;
       const incoming = await readDocument(repoPath, taskId, section);
       if (queryClient.getQueryCache().find({ queryKey, exact: true }) !== query) {
         throw new Error(
-          "The task document changed while loading. Open it again to load the current document.",
+          "The task artifact changed while loading. Open it again to load the current artifact.",
         );
       }
       const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
@@ -107,7 +107,7 @@ export const taskDocumentQueryOptions = (
         reads.delete(read.result);
         if (queryClient.getQueryCache().find({ queryKey, exact: true }) !== read.query) {
           throw new Error(
-            "The task document changed while loading. Open it again to load the current document.",
+            "The task artifact changed while loading. Open it again to load the current artifact.",
           );
         }
         const current = queryClient.getQueryData<TaskDocumentPayload>(queryKey);
@@ -167,14 +167,14 @@ export const createDocumentSaveGuard = (
   repoPath: string,
   taskId: string,
   section: "spec" | "plan",
-): ((incoming: TaskDocumentSaveResult & { markdown: string }) => void) => {
+): ((incoming: TaskArtifactSaveResult & { markdown: string }) => void) => {
   const options = taskDocumentQueryOptions(queryClient, repoPath, taskId, section);
   // Query's tagged key needs its plain key type at this cache boundary.
   const queryKey: ReturnType<typeof documentQueryKeyForSection> = options.queryKey;
   // Create the query without fetching so a reset can also block a first save.
   const query: object = queryClient.getQueryCache().build(queryClient, { ...options, queryKey });
   const saveEpoch = saveEpochs.get(query);
-  return (incoming: TaskDocumentSaveResult & { markdown: string }): void => {
+  return (incoming: TaskArtifactSaveResult & { markdown: string }): void => {
     const current = queryClient.getQueryData<TaskDocumentPayload>(options.queryKey);
     const commit = commits.get(query);
     if (
@@ -186,7 +186,7 @@ export const createDocumentSaveGuard = (
       resolveLatestDocumentPayload(current, incoming) !== incoming
     ) {
       throw new Error(
-        "The task document changed after this save. Open it again to review the current document.",
+        "The task artifact changed after this save. Open it again to review the current artifact.",
       );
     }
     commits.set(query, incoming.cursor);

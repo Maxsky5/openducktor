@@ -130,6 +130,7 @@ export function useAgentsPageRouteSessionModel({
     selectAgentStudioSelection: applyAgentStudioSelection,
   } = useAgentStudioSelectionState({
     activeWorkspaceId,
+    workspaceRepoPath,
     routeSessionIdentity,
     keepSessionlessParam,
     isNavigationPending,

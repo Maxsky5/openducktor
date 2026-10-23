@@ -204,7 +204,7 @@ describe("createTaskService list and session reads", () => {
                 id: "epic-1",
                 issueType: "epic",
                 status: "human_review",
-                documentSummary: {
+                artifactSummary: {
                   spec: { has: true, updatedAt: "2026-01-03T00:00:00Z" },
                   plan: { has: true, updatedAt: "2026-01-04T00:00:00Z" },
                   qaReport: { has: false, verdict: "not_reviewed" },
@@ -400,7 +400,7 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -413,7 +413,7 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -539,7 +539,7 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -552,7 +552,7 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -704,7 +704,7 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -717,7 +717,7 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");

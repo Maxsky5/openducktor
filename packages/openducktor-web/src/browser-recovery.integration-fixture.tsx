@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import {
   REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_PROTOCOL_VERSION,
   TERMINAL_PROTOCOL_VERSION,
   encodeTerminalProtocolFrame,
   decodeTerminalProtocolFrame,
@@ -80,7 +81,9 @@ const host: RemoteHostDescriptor = {
   appVersion: "test-host",
   hostInstanceId: "host-a",
   accessPolicy: "network_reach",
-  protocols: [{ version: 1, capabilities: [...REMOTE_BASELINE_CAPABILITIES] }],
+  protocols: [
+    { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
+  ],
 };
 const json = (
   value:
@@ -147,7 +150,7 @@ try {
             status: "accepted",
             host,
             connectionId: crypto.randomUUID(),
-            protocolVersion: 1,
+            protocolVersion: REMOTE_PROTOCOL_VERSION,
             missingOptionalCapabilities: [],
           });
         if (url.endsWith("/events"))

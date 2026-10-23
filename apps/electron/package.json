@@ -12,7 +12,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "build:main": "bun build --target=node --minify --keep-names --external electron --external node-pty --external playwright-core --external @ff-labs/fff-node --external @azure/msal-node-extensions --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts src/main/claude-transcript-worker.ts",
+    "build:main": "bun build --target=node --minify --keep-names --external sharp --external @resvg/resvg-wasm --external electron --external node-pty --external playwright-core --external @ff-labs/fff-node --external @azure/msal-node-extensions --splitting --outdir dist --entry-naming '[name].[ext]' --chunk-naming 'chunks/[name]-[hash].[ext]' src/main/main.ts src/main/generated-image-worker.ts src/main/artifact-image-preview-worker.ts src/main/claude-transcript-worker.ts",
     "build:preload": "bun build --target=node --minify --keep-names --format=cjs --external electron --outfile dist/preload.cjs src/preload/preload.ts",
     "build:renderer": "vite build --outDir dist/renderer --emptyOutDir",
     "builder": "electron-builder",
@@ -30,8 +30,10 @@
   "dependencies": {
     "@azure/msal-node-extensions": "^5.5.2",
     "@ff-labs/fff-node": "0.11.0",
+    "@resvg/resvg-wasm": "2.6.2",
     "node-pty": "1.2.0-beta.15",
-    "playwright-core": "1.64.1"
+    "playwright-core": "1.64.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@electron/osx-sign": "2.7.1",
@@ -51,7 +53,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "bun-types": "^1.4.2",
     "effect": "4.0.5",
-    "electron": "^44.9.0",
+    "electron": "^44.9.1",
     "electron-builder": "^26.15.3",
     "electron-builder-squirrel-windows": "26.15.3",
     "electron-updater": "^6.8.9",

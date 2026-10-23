@@ -1,9 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
-import { AGENT_ROLE_TOOL_POLICY } from "./agent-orchestrator";
+import { AGENT_ROLE_TOOL_POLICY, AGENT_ROLE_WORKFLOW_CODES } from "./agent-orchestrator";
 import { loadWorkflowContractFixture } from "./workflow-contract-fixture.test-support";
 
 describe("agent orchestrator role policy contract", () => {
+  test("keeps workflow code writes within each role's responsibility", () => {
+    expect(AGENT_ROLE_WORKFLOW_CODES).toEqual({
+      spec: ["spec"],
+      planner: ["plan"],
+      build: ["spec", "plan"],
+      qa: ["qaReport"],
+    });
+  });
   test("matches canonical workflow fixture", () => {
     const fixture = loadWorkflowContractFixture();
     expect(AGENT_ROLE_TOOL_POLICY).toEqual(fixture.roles);
@@ -27,7 +35,7 @@ describe("agent orchestrator role policy contract", () => {
     for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
       expect(tools).toContain("odt_read_task");
       expect(tools).toContain("odt_read_task_assets");
-      expect(tools).toContain("odt_read_task_documents");
+      expect(tools).toContain("odt_read_task_artifacts");
     }
   });
 

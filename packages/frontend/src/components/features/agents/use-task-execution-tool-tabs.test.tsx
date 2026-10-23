@@ -9,6 +9,7 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { createElement, type PropsWithChildren, useEffect, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import type { TaskArtifactsViewProps } from "@/components/features/task-artifacts/task-artifacts";
 import type { DiffScopeState } from "@/features/agent-studio-git/contracts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -122,14 +123,6 @@ afterEach(() => {
   moduleSpies = [];
 });
 
-const emptyDoc = {
-  markdown: "",
-  updatedAt: null,
-  isLoading: false,
-  error: null,
-  loaded: true,
-};
-
 const emptyDiffScopeState: DiffScopeState = {
   branch: "feature/task-12",
   localChanges: null,
@@ -227,26 +220,11 @@ const basePanelModel = {
   tabs: ["document", "diffs", "files", "ci_checks"],
   activeTabId: "document",
   documentModel: {
-    documents: {
-      spec: {
-        title: "Specification",
-        emptyState: "No spec document yet.",
-        document: { ...emptyDoc, markdown: "# Spec" },
-      },
-      plan: {
-        title: "Implementation Plan",
-        emptyState: "No implementation plan yet.",
-        document: { ...emptyDoc },
-      },
-      qa: {
-        title: "QA Report",
-        emptyState: "No QA report yet.",
-        document: { ...emptyDoc },
-      },
-    },
-    selectedKind: "spec",
-    onSelectKind: () => {},
-  },
+    repoPath: "/repo",
+    taskId: "task-1",
+    selection: { kind: "collection" },
+    onSelectionChange: () => {},
+  } satisfies TaskArtifactsViewProps,
   gitModel: diffModel,
   fileExplorerModel: {
     rootPath: null,
@@ -331,13 +309,11 @@ describe("useTaskExecutionToolTabs", () => {
   test("renders the task tool tabs and document content", () => {
     const html = renderPanel(basePanelModel);
 
-    for (const label of ["Document", "Diffs", "Files", "CI Checks"]) {
+    for (const label of ["Artifacts", "Diffs", "Files", "CI Checks"]) {
       expect(html).toContain(`aria-label="${label}"`);
     }
     expect(html.match(/data-selected="true"/g)?.length).toBe(1);
-    expect(html).toContain("Specification");
-    expect(html).toContain("Specification, change document");
-    expect(html).toContain("Spec");
+    expect(html).toContain("Task artifacts");
   });
 
   test("leaves the pull request link to the session top bar", () => {

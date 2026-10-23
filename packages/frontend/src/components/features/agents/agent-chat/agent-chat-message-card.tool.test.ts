@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentToolData } from "@openducktor/contracts";
+import type { AgentToolData, RuntimeKind } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -7,6 +7,7 @@ import {
   createMessageCardElement,
   LONG_TRANSCRIPT_SAMPLE,
 } from "./agent-chat-message-card-test-harness";
+import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
 import { formatTime } from "./message-formatting";
 
 const TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
@@ -330,77 +331,87 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("fairnest-97f");
   });
 
-  const documentReadCases: Array<{
+  const artifactPreviewCases: Array<{
     tool: string;
+    runtimeKind: RuntimeKind;
     status: "pending" | "running" | "completed";
     flags: AgentToolData;
+    hints: Pick<ToolMeta, "preview" | "title">;
     expected: string;
   }> = [
     {
-      tool: "read_task_documents",
+      tool: "odt_read_task_artifacts",
+      runtimeKind: "codex",
       status: "pending",
-      flags: { includeSpec: true },
-      expected: "task-1 · Spec",
+      flags: { codes: ["spec", "plan", "qaReport", "login-preview"] },
+      hints: { preview: "Old artifact preview", title: "Old artifact title" },
+      expected: "task-1 · spec, plan, qaReport, login-preview",
     },
     {
-      tool: "odt_read_task_documents",
+      tool: "openducktor_odt_read_task_artifacts",
+      runtimeKind: "opencode",
       status: "running",
-      flags: { includePlan: true },
-      expected: "task-1 · Plan",
+      flags: { codes: ["spec", "plan"] },
+      hints: { title: "Old artifact title" },
+      expected: "task-1 · spec, plan",
     },
     {
-      tool: "openducktor_odt_read_task_documents",
+      tool: "functions.openducktor_odt_read_task_artifacts",
+      runtimeKind: "opencode",
       status: "completed",
-      flags: { includeQaReport: true },
-      expected: "task-1 · QA report",
+      flags: { codes: ["login-preview", "spec"] },
+      hints: {},
+      expected: "task-1 · login-preview, spec",
     },
     {
-      tool: "mcp__openducktor__odt_read_task_documents",
+      tool: "mcp__openducktor__odt_read_task_artifacts",
+      runtimeKind: "claude",
       status: "completed",
-      flags: { includeSpec: true, includePlan: true, includeQaReport: true },
-      expected: "task-1 · Spec, Plan, QA report",
-    },
-    {
-      tool: "read_task_documents",
-      status: "running",
-      flags: { includeSpec: true, includePlan: false, includeQaReport: true },
-      expected: "task-1 · Spec, QA report",
+      flags: { codes: ["qaReport"] },
+      hints: { preview: "Old artifact preview" },
+      expected: "task-1 · qaReport",
     },
   ];
 
-  test.each(documentReadCases)(
-    "previews requested task documents for $tool while $status",
-    ({ tool, status, flags, expected }) => {
+  test.each(artifactPreviewCases)(
+    "previews requested task artifacts for $tool while $status",
+    ({ tool, runtimeKind, status, flags, hints, expected }) => {
       const html = renderToStaticMarkup(
         createMessageCardElement({
           message: {
-            id: "tool-read-documents",
+            id: "tool-read-artifact",
             role: "tool",
             content: `Tool ${tool} ${status}`,
             timestamp: "2026-02-22T10:20:30.000Z",
             meta: {
               kind: "tool",
-              partId: "part-read-documents",
-              callId: "call-read-documents",
+              partId: "part-read-artifact",
+              callId: "call-read-artifact",
               tool,
+              displayLabel: tool,
               toolType: "generic",
               status,
               inputStreaming: false,
               input: { taskId: "task-1", ...flags },
-              preview: "Old document preview",
-              title: "Old document title",
-              output: '{"documents":{"spec":{"markdown":"Returned document body"}}}',
+              ...hints,
+              output: '{"artifacts":[{"code":"login-preview","body":"Returned artifact body"}]}',
             },
           },
+          sessionIdentity: null,
+          runtimePresentation: resolveAgentChatRuntimePresentation({
+            runtimeDefinitions: [],
+            runtimeKind,
+          }),
         }),
       );
       const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
+      expect(summary?.querySelector("p")?.textContent).toBe("read_task_artifacts");
       expect(summary?.textContent).toContain(expected);
-      expect(summary?.textContent).not.toContain("Old document");
-      expect(summary?.textContent).not.toContain("Returned document body");
+      expect(summary?.textContent).not.toContain("Old artifact");
+      expect(summary?.textContent).not.toContain("Returned artifact body");
       expect(html.includes('aria-label="Running tool"')).toBe(status === "running");
       expect(html).toContain("Output");
-      expect(html).toContain("Returned document body");
+      expect(html).toContain("Returned artifact body");
     },
   );
 

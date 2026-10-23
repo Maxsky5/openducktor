@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { taskDocumentsReadSchema, taskMetadataPayloadSchema } from "./index";
+import { taskMetadataPayloadSchema } from "./index";
 
-describe("document contracts", () => {
-  test("task metadata documents accept optional document-level decode errors", () => {
+describe("workflow artifact metadata contracts", () => {
+  test("task metadata artifacts accept optional decode errors", () => {
     const parsed = taskMetadataPayloadSchema.parse({
       spec: {
         markdown: "",
@@ -149,26 +149,5 @@ describe("document contracts", () => {
     expect(nullDelivery.directMerge).toBeUndefined();
     expect(nullDeliveryFields.pullRequest).toBeUndefined();
     expect(nullDeliveryFields.directMerge).toBeUndefined();
-  });
-
-  test("mcp document reads accept optional document-level decode errors", () => {
-    const parsed = taskDocumentsReadSchema.parse({
-      documents: {
-        spec: {
-          markdown: "",
-          updatedAt: "2026-02-20T09:00:00Z",
-          error: "Failed to decode openducktor.documents.spec[0]: invalid base64 payload",
-        },
-        latestQaReport: {
-          markdown: "",
-          updatedAt: null,
-          verdict: "not_reviewed",
-          error: "Failed to decode openducktor.documents.qaReports[0]: invalid gzip payload",
-        },
-      },
-    });
-
-    expect(parsed.documents.spec?.error).toContain("invalid base64 payload");
-    expect(parsed.documents.latestQaReport?.error).toContain("invalid gzip payload");
   });
 });

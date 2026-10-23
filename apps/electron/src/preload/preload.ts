@@ -1,3 +1,4 @@
+import { chromiumArtifactPreviewSupport } from "@openducktor/frontend/lib/artifact-preview-environment";
 import {
   remoteAccessStateSchema,
   remoteAccessEnableInputSchema,
@@ -6,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import {
   ELECTRON_REMOTE_ACCESS_CHANNEL,
+  ELECTRON_ARTIFACT_PREVIEW_URL,
   ELECTRON_REMOTE_ACCESS_STATE_CHANNEL,
   ELECTRON_HOST_SELECT_CHANNEL,
   ELECTRON_NATIVE_THEME_CHANNEL,
@@ -210,6 +212,10 @@ const notifications: OpenDucktorElectronNotificationApi = {
 };
 
 const electronApi: OpenDucktorElectronApi = {
+  getArtifactPreviewEnvironment: async () => ({
+    bootstrapUrl: ELECTRON_ARTIFACT_PREVIEW_URL,
+    scriptedHtml: chromiumArtifactPreviewSupport(process.versions.chrome),
+  }),
   platform: appPlatformSchema.parse(process.platform),
   selectHost: () => ipcRenderer.invoke(ELECTRON_HOST_SELECT_CHANNEL),
   setNativeTheme: (theme) =>
@@ -272,4 +278,6 @@ const electronApi: OpenDucktorElectronApi = {
   },
 };
 
-contextBridge.exposeInMainWorld("openducktorElectron", electronApi);
+if (process.isMainFrame) {
+  contextBridge.exposeInMainWorld("openducktorElectron", electronApi);
+}

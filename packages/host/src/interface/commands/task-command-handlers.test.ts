@@ -5,7 +5,7 @@ import type {
   TaskApprovalContextLoadResult,
   TaskCard,
   TaskDirectMergeResult,
-  TaskMetadataDocument,
+  TaskMetadataArtifact,
   TaskMetadataPayload,
   TaskPullRequestDetectResult,
 } from "@openducktor/contracts";
@@ -13,6 +13,14 @@ import { createTaskServiceTestDouble } from "../../test-support/task-service-tes
 import { HostOperationError } from "../../effect/host-errors";
 import { createTaskCommandHandlers } from "./task-command-handlers";
 import type { HostCommandHandlerError } from "../router/host-command-router";
+
+type TaskCommandService = Parameters<typeof createTaskCommandHandlers>[0];
+const createTaskCommandService = (overrides: Partial<TaskCommandService>): TaskCommandService => ({
+  ...createTaskServiceTestDouble({}),
+  qaApproved: () => Effect.die(new Error("Unexpected qaApproved call")),
+  qaRejected: () => Effect.die(new Error("Unexpected qaRejected call")),
+  ...overrides,
+});
 
 const taskFixture: TaskCard = {
   id: "task-1",
@@ -27,7 +35,7 @@ const taskFixture: TaskCard = {
   parentId: undefined,
   subtaskIds: [],
   pullRequest: undefined,
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -42,7 +50,7 @@ const taskFixture: TaskCard = {
   createdAt: "2026-05-10T10:00:00.000Z",
 };
 
-const documentFixture: TaskMetadataDocument = { markdown: "# Fixture" };
+const artifactFixture: TaskMetadataArtifact = { markdown: "# Fixture" };
 const pullRequestFixture: PullRequest = {
   providerId: "github",
   number: 1,
@@ -66,8 +74,8 @@ const directMergeFixture: TaskDirectMergeResult = {
   task: taskFixture,
 };
 const metadataFixture: TaskMetadataPayload = {
-  spec: documentFixture,
-  plan: documentFixture,
+  spec: artifactFixture,
+  plan: artifactFixture,
   agentSessions: [],
 };
 const buildSessionFixture: BuildSessionBootstrap = {
@@ -85,6 +93,23 @@ const runHandler = <T>(
 };
 
 describe("createTaskCommandHandlers", () => {
+  test("keeps the complete task read separate from Kanban retention", async () => {
+    const closed = { ...taskFixture, status: "closed" as const };
+    const calls: unknown[] = [];
+    const handlers = createTaskCommandHandlers(
+      createTaskCommandService({
+        listKanbanTasks: () => Effect.succeed([]),
+        listTasks: (input) => {
+          calls.push(input);
+          return Effect.succeed([closed]);
+        },
+      }),
+    );
+    expect(await runHandler(handlers.tasks_list({ repoPath: "/repo" }))).toEqual([]);
+    expect(await runHandler(handlers.tasks_list_all({ repoPath: "/repo" }))).toEqual([closed]);
+    expect(calls).toEqual([{ repoPath: "/repo" }]);
+    expect(() => handlers.tasks_list_all({})).toThrow("repoPath is required.");
+  });
   test.each([
     { repoPath: " " },
     { repoPath: "/repo", expectedWorkspaceId: " " },
@@ -92,7 +117,7 @@ describe("createTaskCommandHandlers", () => {
   ])("rejects invalid manual sync input before dispatch: %j", (input) => {
     let dispatched = false;
     const handlers = createTaskCommandHandlers(
-      createTaskServiceTestDouble({
+      createTaskCommandService({
         repoPullRequestSync: () => {
           dispatched = true;
           return Effect.succeed({ ok: true });
@@ -107,7 +132,7 @@ describe("createTaskCommandHandlers", () => {
   test("registers task_ids_list for the IDs of all tasks of a repository", async () => {
     const inputs: unknown[] = [];
     const handlers = createTaskCommandHandlers(
-      createTaskServiceTestDouble({
+      createTaskCommandService({
         listTaskIds(input) {
           return Effect.sync(() => {
             inputs.push(input);
@@ -127,7 +152,7 @@ describe("createTaskCommandHandlers", () => {
 
   test("registers tasks_list", async () => {
     const calls: unknown[] = [];
-    const service = createTaskServiceTestDouble({
+    const service = createTaskCommandService({
       agentSessionDelete(input) {
         return Effect.sync(() => {
           calls.push({ command: "agent_session_delete", input });
@@ -434,11 +459,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      savePlanDocument(input) {
+      savePlanArtifact(input) {
         return Effect.tryPromise({
           try: async () => {
-            calls.push({ command: "plan_save_document", input });
-            return documentFixture;
+            calls.push({ command: "plan_save_artifact", input });
+            return artifactFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -452,7 +477,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "plan_get", input });
-            return documentFixture;
+            return artifactFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -462,11 +487,11 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      saveSpecDocument(input) {
+      saveSpecArtifact(input) {
         return Effect.tryPromise({
           try: async () => {
-            calls.push({ command: "spec_save_document", input });
-            return documentFixture;
+            calls.push({ command: "spec_save_artifact", input });
+            return artifactFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -480,7 +505,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "spec_get", input });
-            return documentFixture;
+            return artifactFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -495,7 +520,7 @@ describe("createTaskCommandHandlers", () => {
           try: async () => {
             calls.push({ command: "set_plan", input });
             return {
-              document: { markdown: "# Plan" },
+              artifact: { markdown: "# Plan" },
               changes: { taskIds: ["task-1"], removedTaskIds: [] },
             };
           },
@@ -511,7 +536,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "set_spec", input });
-            return documentFixture;
+            return artifactFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -525,7 +550,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_approved", input });
-            return taskFixture;
+            return { task: taskFixture, artifact: artifactFixture };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -539,7 +564,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_get_report", input });
-            return documentFixture;
+            return artifactFixture;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -553,7 +578,7 @@ describe("createTaskCommandHandlers", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ command: "qa_rejected", input });
-            return taskFixture;
+            return { task: taskFixture, artifact: artifactFixture };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -799,7 +824,7 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toBeDefined();
     await expect(
       runHandler(
-        handlers.spec_save_document?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
+        handlers.spec_save_artifact?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
       ),
     ).resolves.toBeDefined();
     await expect(
@@ -812,7 +837,7 @@ describe("createTaskCommandHandlers", () => {
     ).resolves.toEqual({ markdown: "# Plan" });
     await expect(
       runHandler(
-        handlers.plan_save_document?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Plan" }),
+        handlers.plan_save_artifact?.({ repoPath: "/repo", taskId: "task-1", markdown: "# Plan" }),
       ),
     ).resolves.toBeDefined();
     await expect(
@@ -970,7 +995,7 @@ describe("createTaskCommandHandlers", () => {
         input: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
       },
       {
-        command: "spec_save_document",
+        command: "spec_save_artifact",
         input: { repoPath: "/repo", taskId: "task-1", markdown: "# Spec" },
       },
       {
@@ -988,7 +1013,7 @@ describe("createTaskCommandHandlers", () => {
         },
       },
       {
-        command: "plan_save_document",
+        command: "plan_save_artifact",
         input: { repoPath: "/repo", taskId: "task-1", markdown: "# Plan" },
       },
       {
@@ -1020,7 +1045,7 @@ test("passes reviewed publication consent through the completion command boundar
   };
   const calls: unknown[] = [];
   const handlers = createTaskCommandHandlers(
-    createTaskServiceTestDouble({
+    createTaskCommandService({
       completeDirectMerge: (input) =>
         Effect.sync(() => {
           calls.push(input);

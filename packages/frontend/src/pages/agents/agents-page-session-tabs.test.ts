@@ -476,7 +476,7 @@ describe("agents-page-session-tabs", () => {
     const task = buildTask({
       issueType: "feature",
       status: "in_progress",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
         plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
         qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
@@ -536,7 +536,7 @@ describe("agents-page-session-tabs", () => {
     const task = buildTask({
       issueType: "feature",
       status: "ai_review",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
         plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
         qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
@@ -617,7 +617,7 @@ describe("agents-page-session-tabs", () => {
       const task = buildTask({
         issueType: "feature",
         status: "ai_review",
-        documentSummary: {
+        artifactSummary: {
           spec: { has: true, updatedAt: "2026-02-22T08:00:00.000Z" },
           plan: { has: true, updatedAt: "2026-02-22T08:10:00.000Z" },
           qaReport: { has: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
@@ -659,7 +659,7 @@ describe("agents-page-session-tabs", () => {
   test("does not mark builder done from stale approved qa report after build reopens", () => {
     const task = buildTask({
       status: "in_progress",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-02-22T09:00:00.000Z" },
         plan: { has: true, updatedAt: "2026-02-22T09:30:00.000Z" },
         qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
@@ -733,7 +733,7 @@ describe("agents-page-session-tabs", () => {
   test("marks builder done for approved qa in build-complete task statuses", () => {
     const task = buildTask({
       status: "human_review",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-02-22T09:00:00.000Z" },
         plan: { has: true, updatedAt: "2026-02-22T09:30:00.000Z" },
         qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },

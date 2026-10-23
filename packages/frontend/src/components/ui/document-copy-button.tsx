@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactElement, useCallback } from "react";
+import { type ComponentProps, type MouseEvent, type ReactElement, useCallback } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
@@ -8,6 +8,7 @@ type DocumentCopyButtonProps = {
   dataTestId: string;
   errorLogContext: string;
   className?: string;
+  tooltipSide?: ComponentProps<typeof CopyIconButton>["tooltipSide"];
 };
 
 export function DocumentCopyButton({
@@ -15,6 +16,7 @@ export function DocumentCopyButton({
   dataTestId,
   errorLogContext,
   className,
+  tooltipSide,
 }: DocumentCopyButtonProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: buildCopyPreview,
@@ -33,9 +35,10 @@ export function DocumentCopyButton({
   return (
     <CopyIconButton
       copied={copied}
-      ariaLabel="Copy document content"
+      ariaLabel="Copy artifact content"
       dataTestId={dataTestId}
       onClick={handleCopy}
+      tooltipSide={tooltipSide}
       {...(className && { className })}
     />
   );

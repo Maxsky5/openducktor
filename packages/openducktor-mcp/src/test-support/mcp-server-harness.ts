@@ -11,6 +11,8 @@ import { createMcpServer } from "../mcp-server";
 import {
   ODT_MCP_TOOL_NAMES,
   type OdtToolErrorPayload,
+  type ReadTaskArtifactsResult,
+  type McpTaskArtifact,
   odtToolErrorPayloadSchema,
 } from "@openducktor/contracts";
 import { mcpToolPayloadSchema, type McpToolPayload } from "../tool-results";
@@ -84,7 +86,7 @@ export const taskSummaryPayload = {
     createdAt: "2026-04-18T00:00:00Z",
     updatedAt: "2026-04-18T00:00:00Z",
     qaVerdict: "not_reviewed",
-    documents: {
+    artifacts: {
       hasSpec: false,
       hasPlan: false,
       hasQaReport: false,
@@ -92,12 +94,40 @@ export const taskSummaryPayload = {
   },
 };
 
+const workflowArtifact = {
+  taskId: "task-1",
+  name: "Spec",
+  classification: "workflow" as const,
+  code: "spec" as const,
+  revision: 1,
+  updatedAt: "2026-10-22T10:00:00Z",
+  mediaType: "text/markdown" as const,
+};
+
+const freeArtifact = {
+  code: "notes",
+  taskId: "task-1",
+  name: "Notes",
+  classification: "free" as const,
+  revision: 1,
+  updatedAt: "2026-10-22T10:00:00Z",
+  fileName: "notes.txt",
+  mediaType: "text/plain",
+  byteSize: 3,
+};
+
+export const taskReadPayload = {
+  task: { ...taskSummaryPayload.task, artifacts: [workflowArtifact, freeArtifact] },
+};
+
 export const TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 export const MANAGED_TOOLS = ODT_MCP_TOOL_NAMES.join(",");
 export const BROWSER_CLOSE_FAILURE =
   "The user shares this tab. You can close only your agent tabs.";
 
-export const startMockBridge = async (): Promise<{ url: string; requests: RecordedRequest[] }> => {
+export const startMockBridge = async (
+  options: { artifactReadResult?: ReadTaskArtifactsResult } = {},
+): Promise<{ url: string; requests: RecordedRequest[] }> => {
   const requests: RecordedRequest[] = [];
   const server = createServer(async (request, response) => {
     const url = request.url ?? "/";
@@ -120,7 +150,7 @@ export const startMockBridge = async (): Promise<{ url: string; requests: Record
 
     if (url === "/invoke/odt_mcp_ready") {
       requests.push({ url, body: await readJsonBody(request) });
-      writeJson(response, { bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+      writeJson(response, { bridgeVersion: 2, toolNames: [...ODT_MCP_TOOL_NAMES] });
       return;
     }
 
@@ -166,7 +196,7 @@ export const startMockBridge = async (): Promise<{ url: string; requests: Record
         writeJson(response, { task: { id: "bad-response" } });
         return;
       }
-      writeJson(response, taskSummaryPayload);
+      writeJson(response, taskReadPayload);
       return;
     }
 
@@ -179,6 +209,85 @@ export const startMockBridge = async (): Promise<{ url: string; requests: Record
     if (url === "/invoke/odt_update_task") {
       requests.push({ url, body: await readJsonBody(request) });
       writeJson(response, taskSummaryPayload);
+      return;
+    }
+
+    if (url === "/invoke/odt_set_task_artifact") {
+      const body = await readJsonBody(request);
+      requests.push({ url, body });
+      const input = z
+        .object({
+          code: z.string(),
+          name: z.string().optional(),
+          fileName: z.string().optional(),
+          mediaType: z.string().optional(),
+          dataBase64: z.string().optional(),
+          verdict: z.enum(["approved", "rejected"]).optional(),
+        })
+        .parse(body);
+      let artifact: McpTaskArtifact;
+      if (input.code === "spec" || input.code === "plan" || input.code === "qaReport") {
+        artifact = {
+          ...workflowArtifact,
+          code: input.code,
+          name: { spec: "Spec", plan: "Plan", qaReport: "QA report" }[input.code],
+        };
+        if (input.code === "qaReport" && input.verdict) artifact.verdict = input.verdict;
+      } else {
+        artifact = {
+          ...freeArtifact,
+          code: input.code,
+          name: input.name ?? freeArtifact.name,
+          fileName: input.fileName ?? freeArtifact.fileName,
+          mediaType: input.mediaType ?? freeArtifact.mediaType,
+          byteSize:
+            input.dataBase64 === undefined
+              ? freeArtifact.byteSize
+              : Buffer.from(input.dataBase64, "base64").byteLength,
+        };
+      }
+      writeJson(response, { artifact });
+      return;
+    }
+    if (url === "/invoke/odt_delete_task_artifact") {
+      const body = await readJsonBody(request);
+      requests.push({ url, body });
+      const input = z.object({ code: z.string() }).parse(body);
+      writeJson(response, {
+        code: input.code,
+        cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 2 },
+      });
+      return;
+    }
+    if (url === "/invoke/odt_read_task_artifacts") {
+      const body = await readJsonBody(request);
+      requests.push({ url, body });
+      const entry = {
+        artifact: freeArtifact,
+        version: "version-1",
+        dataBase64: "77u/",
+        byteOffset: 0,
+        nextByteOffset: null,
+        totalBytes: 3,
+      };
+      const { codes } = z.object({ codes: z.array(z.string()) }).parse(body);
+      writeJson(
+        response,
+        options.artifactReadResult ?? {
+          artifacts: codes.map((code) =>
+            code === "spec"
+              ? {
+                  artifact: workflowArtifact,
+                  version: "spec-version-1",
+                  dataBase64: "IyBTcGVjCg==",
+                  byteOffset: 0,
+                  nextByteOffset: null,
+                  totalBytes: 7,
+                }
+              : entry,
+          ),
+        },
+      );
       return;
     }
 

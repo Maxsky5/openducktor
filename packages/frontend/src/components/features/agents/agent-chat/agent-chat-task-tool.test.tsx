@@ -16,7 +16,7 @@ const task = (id = "task-1"): PublicTaskSummaryTask => ({
   createdAt: "2026-09-08T10:00:00.000Z",
   updatedAt: "2026-09-08T10:00:00.000Z",
   qaVerdict: "not_reviewed",
-  documents: { hasSpec: false, hasPlan: false, hasQaReport: false },
+  artifacts: { hasSpec: false, hasPlan: false, hasQaReport: false },
 });
 
 const createToolElement = (tool: string, fields: Partial<ToolMeta>) =>
@@ -261,7 +261,7 @@ test("strips front matter and renders a diagram fence as code in the description
   expect(preview?.textContent).not.toContain("priority: high");
   expect(preview?.textContent).toContain("graph TD");
   expect(preview?.querySelector(".language-mermaid")).not.toBeNull();
-  expect(preview?.querySelector("section[aria-label='Mermaid diagram']")).toBeNull();
+  expect(preview?.querySelector("[aria-label='Mermaid diagram']")).toBeNull();
   expect(preview?.querySelector("svg")).toBeNull();
 });
 

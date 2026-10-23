@@ -83,6 +83,7 @@ const MarkdownSyntaxBlock = createMarkdownSyntaxBlock({
       customStyle={MARKDOWN_SYNTAX_PRE_STYLE}
       codeTagProps={{ style: MARKDOWN_SYNTAX_CODE_TAG_STYLE }}
       PreTag="div"
+      tabIndex={0}
       wrapLongLines={false}
     >
       {code}

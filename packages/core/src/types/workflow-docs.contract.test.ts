@@ -21,24 +21,23 @@ describe("workflow docs contract", () => {
     }
 
     expect(transitionDoc).toContain(
-      "Call `odt_read_task` first for the returned `task` summary object, including task state, `qaVerdict`, and document presence booleans.",
+      "an `artifacts` metadata array of all current workflow and free artifacts",
     );
-    expect(transitionDoc).toContain(
-      "Call `odt_read_task_documents` only when spec, implementation plan, or latest QA markdown bodies are needed.",
-    );
+    expect(transitionDoc).toContain("| `odt_read_task_artifacts` | `taskId`, `codes`,");
+    expect(transitionDoc).toContain('"codes": ["spec"]');
     expect(transitionDoc).toContain(
       "collect the relevant IDs and call `odt_read_task_assets` once when their raw total is at most 20 MiB. Split only larger sets.",
     );
 
     expect(transitionDoc).toMatch(
-      /\| `odt_set_plan` \(feature\/epic\) \| `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,
+      /\| `odt_set_task_artifact`, code `plan` \(feature\/epic\) \| `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,
     );
     expect(transitionDoc).toMatch(
-      /\| `odt_set_plan` \(task\/bug\) \| `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,
+      /\| `odt_set_task_artifact`, code `plan` \(task\/bug\) \| `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` \|/,
     );
   });
 
-  test("status model examples use canonical odt sourceTool names", () => {
+  test("status model examples retain stored sourceTool provenance names", () => {
     const statusModelPath = join(import.meta.dir, "../../../../docs/task-workflow-status-model.md");
     const statusModelDoc = readFileSync(statusModelPath, "utf8");
 

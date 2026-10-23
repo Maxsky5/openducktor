@@ -49,7 +49,7 @@ const taskWithQaReport = (input: {
   task({
     id: "task-1",
     status: input.status,
-    documentSummary: {
+    artifactSummary: {
       spec: { has: false },
       plan: { has: false },
       qaReport: { has: true, verdict: input.verdict },
@@ -70,7 +70,7 @@ const createQaOutcomeTaskStore = (fixture: {
   recordQaOutcome(input) {
     return taskStoreEffect(async () => {
       fixture.calls.push({ type: "qa", input });
-      return fixture.resultTask;
+      return { task: fixture.resultTask, artifact: { markdown: input.markdown } };
     });
   },
 });
@@ -82,7 +82,7 @@ describe("createTaskService build and review", () => {
       const current = task({
         id: "task-1",
         status,
-        documentSummary: {
+        artifactSummary: {
           spec: { has: true },
           plan: { has: true },
           qaReport: { has: true, verdict: "approved" },
@@ -107,7 +107,7 @@ describe("createTaskService build and review", () => {
         }),
       );
       expect(result.status).toBe("blocked");
-      expect(result.documentSummary).toEqual(current.documentSummary);
+      expect(result.artifactSummary).toEqual(current.artifactSummary);
       expect(transitions).toEqual(
         status === "blocked" ? [] : [{ repoPath: "/repo", taskId: current.id, status: "blocked" }],
       );
@@ -614,7 +614,7 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -627,7 +627,7 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -813,7 +813,7 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -826,7 +826,7 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -1071,7 +1071,7 @@ describe("createTaskService build and review", () => {
                 id: "task-1",
                 status: "blocked",
                 aiReviewEnabled: true,
-                documentSummary: {
+                artifactSummary: {
                   spec: { has: false },
                   plan: { has: false },
                   qaReport: { has: true, verdict: "approved" },

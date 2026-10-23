@@ -23,7 +23,7 @@ describe("ODT tool metadata", () => {
       "odt_search_tasks",
       "odt_read_task",
       "odt_read_task_assets",
-      "odt_read_task_documents",
+      "odt_read_task_artifacts",
     ]);
     expect(classifyOdtToolMutation("odt_create_task")).toBe("mutating");
     expect(classifyOdtToolMutation("odt_search_tasks")).toBe("read_only");

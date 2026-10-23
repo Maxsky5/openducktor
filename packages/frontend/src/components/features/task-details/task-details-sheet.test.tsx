@@ -88,16 +88,6 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
   </QueryProvider>
 );
 
-const createTaskDocumentsHookMock = () =>
-  mock((_taskId: string | null, _open: boolean, _cacheScope = "") => ({
-    specDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-    planDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-    qaDoc: { markdown: "", updatedAt: null, isLoading: false, error: null, loaded: true },
-    ensureDocumentLoaded: () => false,
-    reloadDocument: () => false,
-    applyDocumentUpdate: () => {},
-  }));
-
 const createTaskCleanupImpactHookMock = () =>
   mock((_taskIds: string[], _enabled: boolean) => ({
     hasCanonicalWorktree: false,
@@ -208,7 +198,7 @@ describe("TaskDetailsSheet", () => {
     const childTask = createTaskCardFixture({
       id: "TASK-2",
       title: "Task 2",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
@@ -219,14 +209,13 @@ describe("TaskDetailsSheet", () => {
       title: "Task 1",
       issueType: "epic",
       subtaskIds: ["TASK-2"],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
       },
     });
 
-    const taskDocumentsHookMock = createTaskDocumentsHookMock();
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
@@ -251,14 +240,12 @@ describe("TaskDetailsSheet", () => {
       onResetTask: undefined,
       onCloseTask: undefined,
       onDelete: undefined,
-      taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
 
     try {
       await harness.mount();
-      expect(taskDocumentsHookMock).toHaveBeenCalledWith("TASK-1", true, "/repo-a");
       expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(1, ["TASK-1", "TASK-2"], false);
       expect(taskCleanupImpactHookMock).toHaveBeenNthCalledWith(2, ["TASK-1"], false);
     } finally {
@@ -299,7 +286,6 @@ describe("TaskDetailsSheet", () => {
       onResetTask: undefined,
       onCloseTask: undefined,
       onDelete: mock(async () => {}),
-      taskDocumentsHook: createTaskDocumentsHookMock(),
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
       taskStopImpactHook: taskStopImpactHookMock,
     };
@@ -352,7 +338,6 @@ describe("TaskDetailsSheet", () => {
       onResetTask: undefined,
       onCloseTask: undefined,
       onDelete: mock(async () => {}),
-      taskDocumentsHook: createTaskDocumentsHookMock(),
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
       taskStopImpactHook: () => ({
         stoppableSessionCount: null,
@@ -406,7 +391,6 @@ describe("TaskDetailsSheet", () => {
       onResetTask: mock(async () => {}),
       onCloseTask: mock(async () => {}),
       onDelete: mock(async () => {}),
-      taskDocumentsHook: createTaskDocumentsHookMock(),
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
@@ -448,58 +432,6 @@ describe("TaskDetailsSheet", () => {
     }
   });
 
-  test("stops task document reads while deletion is pending", async () => {
-    const { useTaskDetailsSheetViewModel } = await import("./use-task-details-sheet-view-model");
-    const task = createTaskCardFixture({ id: "TASK-1", title: "Task 1" });
-    const taskDocumentsHookMock = createTaskDocumentsHookMock();
-    let finishDelete: () => void = () => {};
-    const deletePending = new Promise<void>((resolve) => {
-      finishDelete = resolve;
-    });
-    const onDelete = mock(() => deletePending);
-    const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
-      activeWorkspace: {
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      },
-      task,
-      allTasks: [task],
-      open: true,
-      onOpenChange: () => {},
-      onPlan: undefined,
-      onQaStart: undefined,
-      onQaOpen: undefined,
-      onBuild: undefined,
-      onOpenSession: undefined,
-      onDelegate: undefined,
-      onHumanApprove: undefined,
-      onHumanRequestChanges: undefined,
-      onResetImplementation: undefined,
-      onResetTask: undefined,
-      onCloseTask: undefined,
-      onDelete,
-      taskDocumentsHook: taskDocumentsHookMock,
-      taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
-      taskStopImpactHook: createTaskStopImpactHookMock(),
-    });
-
-    try {
-      await harness.mount();
-      await harness.run((viewModel) => viewModel.deleteConfirm.openDialog());
-      const callsBeforeDelete = taskDocumentsHookMock.mock.calls.length;
-
-      await harness.run((viewModel) => viewModel.deleteConfirm.dialog.onConfirm());
-
-      expect(onDelete).toHaveBeenCalledWith("TASK-1", { deleteSubtasks: true });
-      expect(harness.getLatest().deleteConfirm.dialog.operation.isPending).toBe(true);
-      expect(taskDocumentsHookMock.mock.calls.slice(callsBeforeDelete).at(-1)?.[1]).toBe(false);
-    } finally {
-      finishDelete();
-      await harness.unmount();
-    }
-  });
-
   test.each([
     ["open_builder", [false]],
     ["human_approve", []],
@@ -514,7 +446,6 @@ describe("TaskDetailsSheet", () => {
       onOpenChange,
       onOpenSession: mock(() => {}),
       onHumanApprove: mock(() => {}),
-      taskDocumentsHook: createTaskDocumentsHookMock(),
       taskCleanupImpactHook: createTaskCleanupImpactHookMock(),
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
@@ -538,7 +469,6 @@ describe("TaskDetailsSheet", () => {
     });
     const onCloseTask = mock(async () => {});
     const onOpenChange = mock(() => {});
-    const taskDocumentsHookMock = createTaskDocumentsHookMock();
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
@@ -563,7 +493,6 @@ describe("TaskDetailsSheet", () => {
       onResetTask: undefined,
       onCloseTask,
       onDelete: undefined,
-      taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
@@ -590,7 +519,6 @@ describe("TaskDetailsSheet", () => {
     const onCloseTask = mock(async () => {
       throw new Error("close failed");
     });
-    const taskDocumentsHookMock = createTaskDocumentsHookMock();
     const taskCleanupImpactHookMock = createTaskCleanupImpactHookMock();
 
     const harness = createSharedHookHarness(useTaskDetailsSheetViewModel, {
@@ -615,7 +543,6 @@ describe("TaskDetailsSheet", () => {
       onResetTask: undefined,
       onCloseTask,
       onDelete: undefined,
-      taskDocumentsHook: taskDocumentsHookMock,
       taskCleanupImpactHook: taskCleanupImpactHookMock,
       taskStopImpactHook: createTaskStopImpactHookMock(),
     });
@@ -638,7 +565,7 @@ describe("TaskDetailsSheet", () => {
     const task = createTaskCardFixture({
       id: "TASK-1",
       title: "Task 1",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
@@ -832,7 +759,7 @@ describe("TaskDetailsSheet", () => {
       title: "Task 1",
       status: "ready_for_dev",
       availableActions: ["build_start"],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },

@@ -88,7 +88,10 @@ export function TaskResetImplementationModal({
                 be terminated before the implementation resets.
               </p>
             ) : null}
-            <p>QA reports and linked pull request metadata will be cleared.</p>
+            <p>
+              QA report artifacts and linked pull request metadata will be cleared. Specification,
+              Implementation Plan, and free artifacts are kept.
+            </p>
             <p>
               Specs and implementation plans are kept. The task status will move back to{" "}
               {model.targetStatusLabel}.

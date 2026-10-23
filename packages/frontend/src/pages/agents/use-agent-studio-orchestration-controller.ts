@@ -24,7 +24,7 @@ import type { AgentStudioSelectedSessionContext } from "./selected-session/selec
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
-import { useAgentStudioDocuments } from "./use-agent-studio-documents";
+import { useAgentStudioArtifacts } from "./use-agent-studio-artifacts";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
@@ -214,6 +214,7 @@ export function useAgentStudioOrchestrationController({
   const { saveAgentModelFavorites } = useWorkspaceStateContext();
   const agentModelFavoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const { view } = selection;
+  useAgentStudioArtifacts(workspaceRepoPath, view.selectedTask);
   const selectedSession = view.selectedSession;
   const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
   const {
@@ -229,13 +230,6 @@ export function useAgentStudioOrchestrationController({
   } = actions;
   const { chatSettings, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
     useAgentStudioChatSettings({ workspaceRepoPath });
-
-  const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
-    workspaceRepoPath,
-    taskId: view.taskId,
-    selectedSessionIdentity: selectedSession.identity,
-    loadedSession: selectedSession.loadedSession,
-  });
 
   const {
     selectionForNewSession,
@@ -348,11 +342,6 @@ export function useAgentStudioOrchestrationController({
         selectedTask: view.selectedTask,
         sessionsForTask: view.sessionsForTask,
         selectedSession,
-        documents: {
-          specDoc,
-          planDoc,
-          qaDoc,
-        },
         sessionActions: {
           isSessionWorking,
           onSubmitQuestionAnswers,
@@ -374,11 +363,8 @@ export function useAgentStudioOrchestrationController({
       isSubmittingQuestionByRequestId,
       onReplyApproval,
       onSubmitQuestionAnswers,
-      planDoc,
-      qaDoc,
       roleLabelByRole,
       selectedSession,
-      specDoc,
       view,
     ],
   );
@@ -450,8 +436,13 @@ export function useAgentStudioOrchestrationController({
     composer,
   });
 
+  const artifactScope: Parameters<typeof useAgentStudioPageModels>[0]["artifactScope"] =
+    workspaceRepoPath && view.taskId ? { repoPath: workspaceRepoPath, taskId: view.taskId } : null;
+  if (artifactScope && activeWorkspaceId) artifactScope.workspaceId = activeWorkspaceId;
+  if (artifactScope && view.selectedTask)
+    artifactScope.artifactSummary = view.selectedTask.artifactSummary;
   const { agentStudioHeaderModel, taskExecutionDocumentPanelModel, agentChatModel } =
-    useAgentStudioPageModels(pageModelsArgs);
+    useAgentStudioPageModels({ ...pageModelsArgs, artifactScope });
 
   const pullRequestReview = resolvePullRequestReviewAvailability({
     gitProviderContext,

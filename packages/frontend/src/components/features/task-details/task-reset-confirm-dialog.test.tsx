@@ -27,7 +27,7 @@ describe("TaskResetConfirmDialog", () => {
 
     expect(screen.getByText("Reset Task")).toBeDefined();
     expect(screen.getByText(/moves the task back to Backlog/i)).toBeDefined();
-    expect(screen.getByText(/spec, plan, and QA documents/i)).toBeDefined();
+    expect(screen.getByText(/All workflow and free artifacts/i)).toBeDefined();
     expect(screen.getByText(/spec, planner, builder, and QA sessions/i)).toBeDefined();
     expect(screen.getByText(/pull request and direct-merge metadata/i)).toBeDefined();
     expect(screen.getByText(/2 linked task worktrees/i)).toBeDefined();

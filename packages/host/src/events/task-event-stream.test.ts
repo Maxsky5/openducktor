@@ -278,7 +278,7 @@ describe("createTaskEventStream", () => {
     stream.publish({
       ...large,
       boardChanges: {
-        documentChanges: [],
+        artifactChanges: [],
         cards: [
           task({ id: large.taskId, title: "Task", description: "x".repeat(8 * 1024 * 1024) }),
         ],

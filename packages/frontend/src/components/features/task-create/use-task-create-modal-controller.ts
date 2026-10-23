@@ -52,6 +52,7 @@ type UseTaskCreateModalControllerOptions = {
   destination?: TaskCreateDestination | null;
   /** The title of a new task when the modal opens. Edit mode ignores it. */
   initialTitle?: string;
+  initialEditSection?: EditTaskSection;
 };
 
 type TaskCreateModalState = {
@@ -69,7 +70,12 @@ type TaskCreateModalState = {
 };
 
 type TaskCreateModalAction =
-  | { type: "resetForOpenTask"; task: TaskCard | null; initialTitle: string }
+  | {
+      type: "resetForOpenTask";
+      task: TaskCard | null;
+      initialTitle: string;
+      initialEditSection: EditTaskSection;
+    }
   | { type: "externalTaskApplied"; composer: ComposerState }
   | { type: "externalTaskConflictDetected" }
   | { type: "composerPatched"; patch: Partial<ComposerState> }
@@ -90,9 +96,10 @@ type TaskCreateModalAction =
 const initialTaskCreateModalState = (
   task: TaskCard | null,
   initialTitle = "",
+  initialEditSection: EditTaskSection = "details",
 ): TaskCreateModalState => ({
   step: task ? "details" : "type",
-  editSection: "details",
+  editSection: task ? initialEditSection : "details",
   composer: task ? toComposerState(task) : { ...toComposerState(null), title: initialTitle },
   selectedCreateIssueType: task?.issueType ?? null,
   error: null,
@@ -122,7 +129,11 @@ const taskCreateModalReducer = (
 ): TaskCreateModalState => {
   switch (action.type) {
     case "resetForOpenTask":
-      return initialTaskCreateModalState(action.task, action.initialTitle);
+      return initialTaskCreateModalState(
+        action.task,
+        action.initialTitle,
+        action.initialEditSection,
+      );
     case "externalTaskApplied":
       return {
         ...state,
@@ -194,6 +205,7 @@ function useExternalTaskSync({
   task,
   taskId,
   initialTitle,
+  initialEditSection,
   composer,
   dispatch,
 }: {
@@ -201,6 +213,7 @@ function useExternalTaskSync({
   task: TaskCard | null;
   taskId: string | null;
   initialTitle: string;
+  initialEditSection: EditTaskSection;
   composer: ComposerState;
   dispatch: Dispatch<TaskCreateModalAction>;
 }): void {
@@ -215,7 +228,7 @@ function useExternalTaskSync({
     if (contextChanged) {
       previousModalContext.current = { open, taskId };
       serverComposer.current = nextServerComposer;
-      if (open) dispatch({ type: "resetForOpenTask", task, initialTitle });
+      if (open) dispatch({ type: "resetForOpenTask", task, initialTitle, initialEditSection });
       return;
     }
     if (!open) return;
@@ -235,7 +248,7 @@ function useExternalTaskSync({
         ? { type: "externalTaskApplied", composer: nextServerComposer }
         : { type: "externalTaskConflictDetected" },
     );
-  }, [composer, dispatch, initialTitle, open, task, taskId]);
+  }, [composer, dispatch, initialTitle, initialEditSection, open, task, taskId]);
 }
 
 function createTaskSubmit({
@@ -450,6 +463,7 @@ export function useTaskCreateModalController({
   task,
   destination = null,
   initialTitle = "",
+  initialEditSection = "details",
 }: UseTaskCreateModalControllerOptions) {
   const { activeWorkspace } = useWorkspaceState();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -461,7 +475,7 @@ export function useTaskCreateModalController({
       ? `This task is for ${destination.workspaceName}. Open ${destination.workspaceName} again to create it.`
       : null;
   const { createTask, updateTask } = useTasksState();
-  const { loadSpecDocument, loadPlanDocument, saveSpecDocument, savePlanDocument } = useSpecState();
+  const { loadSpecDocument, loadPlanDocument, saveSpecArtifact, savePlanArtifact } = useSpecState();
   const descriptionAssetOperations = useTaskDescriptionAssetOperations(workspaceId);
 
   const mode: ComposerMode = task ? "edit" : "create";
@@ -469,8 +483,9 @@ export function useTaskCreateModalController({
 
   const [modalState, dispatch] = useReducer(
     taskCreateModalReducer,
-    task,
-    initialTaskCreateModalState,
+    { task, initialTitle, initialEditSection },
+    (initial) =>
+      initialTaskCreateModalState(initial.task, initial.initialTitle, initial.initialEditSection),
   );
   const {
     step,
@@ -502,7 +517,7 @@ export function useTaskCreateModalController({
     loadPlanDocument,
   });
 
-  useExternalTaskSync({ open, task, taskId, initialTitle, composer, dispatch });
+  useExternalTaskSync({ open, task, taskId, initialTitle, initialEditSection, composer, dispatch });
 
   const reportDescriptionAssetDiscardError = useCallback((cause: unknown): void => {
     toast.error("Temporary image cleanup failed", {
@@ -616,8 +631,8 @@ export function useTaskCreateModalController({
     try {
       const saved =
         activeDocumentSection === "spec"
-          ? await saveSpecDocument(taskId, markdown)
-          : await savePlanDocument(taskId, markdown);
+          ? await saveSpecArtifact(taskId, markdown)
+          : await savePlanArtifact(taskId, markdown);
       applySavedDocument(activeDocumentSection, markdown, saved.updatedAt);
     } catch (reason) {
       dispatch({ type: "documentSaveFailed", error: errorMessage(reason) });

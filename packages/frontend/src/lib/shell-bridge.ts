@@ -2,6 +2,7 @@ import type { ResourceData } from "@/types/resource-source";
 import type {
   AppUpdateCommandResult,
   AppUpdateState,
+  ArtifactPreviewEnvironment,
   TaskAssetRenderContext,
   TerminalFailure,
   BrowserFailure,
@@ -92,6 +93,7 @@ export type ShellBridge = HostConnection & {
     "readState" | "subscribeState" | "retry"
   >;
   appUpdates: AppUpdateBridge;
+  getArtifactPreviewEnvironment(): Promise<ArtifactPreviewEnvironment>;
   capabilities: ShellCapabilities;
   notifications: NotificationBridge;
   openExternalUrl: (url: string) => Promise<void>;
@@ -177,6 +179,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
     disabledCode: "updater_unavailable",
     disabledReason: "Updates are available only in the packaged OpenDucktor desktop app.",
   }),
+  getArtifactPreviewEnvironment: failUnavailable,
   capabilities: {
     canOpenExternalUrls: false,
     canPreviewLocalAttachments: false,

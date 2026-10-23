@@ -40,7 +40,9 @@ const parseCliArgs = (argv: string[]): OdtStoreContext => {
 
 const startMcp = async (context: OdtStoreContext = {}): Promise<void> => {
   const server = await createMcpServer(context);
-  const transport = new StdioServerTransport();
+  const transport = new StdioServerTransport(process.stdin, process.stdout, {
+    maxBufferSize: 64 * 1024 * 1024,
+  });
   await server.connect(transport);
 };
 

@@ -17,11 +17,7 @@ export {
 } from "./catalog-select-options";
 export type { SessionStartModalModel } from "./session-start-modal";
 export { SessionStartModal } from "./session-start-modal";
-export type {
-  TaskDocumentKind,
-  TaskExecutionDocument,
-  TaskExecutionDocumentPanelModel,
-} from "./task-execution-document-panel";
+export type { TaskExecutionDocumentPanelModel } from "./task-execution-document-panel";
 export type {
   TaskExecutionFileExplorerPanelModel,
   TaskExecutionFileSelectionResult,

@@ -75,7 +75,7 @@ describe("TaskDetailsSheetHeader", () => {
       id: "TASK-1",
       title: "Fix OAuth flow",
       status: "in_progress",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },

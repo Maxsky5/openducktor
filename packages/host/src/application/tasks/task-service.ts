@@ -1,20 +1,27 @@
-import { withoutTaskMutationProgress } from "./task-mutation-result";
-import type {
-  RepoPullRequestSyncRequest,
-  RepoPullRequestSyncResponse,
-  RepoPullRequestSyncSkipReason,
-  TaskChangeSet,
-} from "@openducktor/contracts";
 import {
   type AgentSessionRecord,
+  type ArtifactContentChunk,
+  type ArtifactCreateRequest,
+  type ArtifactDeleteRequest,
+  type ArtifactDeleteResult,
+  type ArtifactReadRequest,
+  type ArtifactRenameRequest,
+  type ArtifactReplaceRequest,
+  type ArtifactSaveResult,
+  type ArtifactScope,
   type BuildSessionBootstrap,
   buildSessionBootstrapSchema,
   type PullRequest,
+  type RepoPullRequestSyncRequest,
+  type RepoPullRequestSyncResponse,
+  type RepoPullRequestSyncSkipReason,
   type TaskAgentSessions,
   type TaskApprovalContextLoadResult,
+  type TaskArtifactCollection,
   type TaskCard,
+  type TaskChangeSet,
   type TaskDirectMergeResult,
-  type TaskMetadataDocument,
+  type TaskMetadataArtifact,
   type TaskMetadataPayload,
   type TaskPullRequestDetectResult,
   type TaskStopImpact,
@@ -22,20 +29,17 @@ import {
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskPolicyError } from "../../domain/task/task-policy-error";
-import type {
-  HostCommandErrorAggregate,
-  HostDependencyErrorAggregate,
-  HostInvariantErrorAggregate,
-  HostOperationErrorAggregate,
-  HostResourceErrorAggregate,
-  HostValidationErrorAggregate,
-} from "../../effect/host-errors";
 import {
-  errorMessage,
-  HostOperationError as HostOperationErrorValue,
-  isHostError,
+  HostOperationError,
+  type HostCommandErrorAggregate,
+  type HostDependencyErrorAggregate,
+  type HostInvariantErrorAggregate,
+  type HostOperationErrorAggregate,
+  type HostResourceErrorAggregate,
+  type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
+import type { ArtifactImagePreviewPort } from "../../ports/artifact-image-preview-port";
 import {
   GitProviderCapabilityError,
   GitProviderRepositoryError,
@@ -48,6 +52,7 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type {
   TaskReference,
+  TaskQaOutcomeResult,
   TaskStoreError,
   TaskStorePort,
 } from "../../ports/task-repository-ports";
@@ -63,6 +68,11 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 import { failOperationAfterRollback } from "./support/task-worktree-rollback";
+import {
+  mapTaskServiceErrors,
+  mapTaskCreationProgressErrors,
+  mapTaskMutationProgressErrors,
+} from "./task-error-mapping";
 import { createTaskStopImpactUseCase } from "./use-cases/get-task-stop-impact";
 import type {
   AgentSessionDeleteInput,
@@ -76,7 +86,7 @@ import type {
   DirectMergeInput,
   ListAgentSessionsForTasksInput,
   ListTasksInput,
-  MarkdownDocumentInput,
+  MarkdownArtifactInput,
   OptionalNoteInput,
   PullRequestLinkMergedInput,
   PullRequestNumberInput,
@@ -91,6 +101,7 @@ import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
 } from "./task-mutation-progress-failure";
+import { withoutTaskMutationProgress } from "./task-mutation-result";
 import { createTaskCloseUseCase } from "./use-cases/close-task";
 import { createTaskCompleteDirectMergeUseCase } from "./use-cases/complete-direct-merge";
 import { createTaskCompletionState } from "./task-completion-state";
@@ -99,7 +110,8 @@ import { createTaskPullRequestDetectionUseCase } from "./use-cases/detect-pull-r
 import { createTaskDirectMergeUseCase } from "./use-cases/direct-merge";
 import { createTaskLinkMergedPullRequestUseCase } from "./use-cases/link-merged-pull-request";
 import { createTaskApprovalContextUseCase } from "./use-cases/load-approval-context";
-import { createTaskDocumentUseCases } from "./use-cases/manage-documents";
+import { createArtifactUseCases } from "./use-cases/manage-artifacts";
+import { createWorkflowArtifactUseCases } from "./use-cases/manage-workflow-artifacts";
 import { createTaskPullRequestManagementUseCases } from "./use-cases/manage-pull-requests";
 import { createTaskCrudUseCases } from "./use-cases/manage-tasks";
 import { createTaskQueryUseCases } from "./use-cases/query-tasks";
@@ -140,6 +152,22 @@ export type TaskServiceError =
   | WorkspaceSettingsError;
 
 export type TaskService = {
+  listTaskArtifacts(input: ArtifactScope): Effect.Effect<TaskArtifactCollection, TaskServiceError>;
+  readTaskArtifact(
+    input: ArtifactReadRequest,
+  ): Effect.Effect<ArtifactContentChunk, TaskServiceError>;
+  createTaskArtifact(
+    input: ArtifactCreateRequest,
+  ): Effect.Effect<Omit<ArtifactSaveResult, "cursor">, TaskServiceError>;
+  renameTaskArtifact(
+    input: ArtifactRenameRequest,
+  ): Effect.Effect<Omit<ArtifactSaveResult, "cursor">, TaskServiceError>;
+  replaceTaskArtifact(
+    input: ArtifactReplaceRequest,
+  ): Effect.Effect<Omit<ArtifactSaveResult, "cursor">, TaskServiceError>;
+  deleteTaskArtifact(
+    input: ArtifactDeleteRequest,
+  ): Effect.Effect<Omit<ArtifactDeleteResult, "cursor">, TaskServiceError>;
   findTask(input: TaskIdInput): Effect.Effect<TaskCard | null, TaskServiceError>;
   listTaskReferences(input: RepoPathInput): Effect.Effect<TaskReference[], TaskServiceError>;
   listTasks(input: ListTasksInput): Effect.Effect<TaskCard[], TaskServiceError>;
@@ -180,23 +208,23 @@ export type TaskService = {
   resetTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   updateTask(input: UpdateTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
   transitionTask(input: TransitionTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
-  specGet(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
-  setSpec(input: MarkdownDocumentInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
-  saveSpecDocument(
-    input: MarkdownDocumentInput,
-  ): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
-  planGet(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
+  specGet(input: TaskIdInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
+  setSpec(input: MarkdownArtifactInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
+  saveSpecArtifact(
+    input: MarkdownArtifactInput,
+  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
+  planGet(input: TaskIdInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
   setPlan(input: SetPlanInput): Effect.Effect<TaskSetPlanResult, TaskServiceError>;
-  savePlanDocument(
-    input: MarkdownDocumentInput,
-  ): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
-  qaGetReport(input: TaskIdInput): Effect.Effect<TaskMetadataDocument, TaskServiceError>;
+  savePlanArtifact(
+    input: MarkdownArtifactInput,
+  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
+  qaGetReport(input: TaskIdInput): Effect.Effect<TaskMetadataArtifact, TaskServiceError>;
   buildBlocked(input: BuildBlockedInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildStart(input: BuildStartInput): Effect.Effect<BuildSessionBootstrap, TaskServiceError>;
   buildResumed(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   buildCompleted(input: BuildCompletedInput): Effect.Effect<TaskCard, TaskServiceError>;
-  qaApproved(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
-  qaRejected(input: MarkdownDocumentInput): Effect.Effect<TaskCard, TaskServiceError>;
+  qaApproved(input: MarkdownArtifactInput): Effect.Effect<TaskCard, TaskServiceError>;
+  qaRejected(input: MarkdownArtifactInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanRequestChanges(input: OptionalNoteInput): Effect.Effect<TaskCard, TaskServiceError>;
   humanApprove(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   repoPullRequestSync(
@@ -211,8 +239,12 @@ export type TaskDeleteResult = {
   changes: TaskChangeSet;
 };
 export type TaskSetPlanResult = {
-  document: TaskMetadataDocument;
+  artifact: TaskMetadataArtifact;
   changes: TaskChangeSet;
+};
+export type TaskResetResult = {
+  task: TaskCard;
+  removedArtifactIds: string[];
 };
 export type TaskServiceWithMutationProgress = Omit<
   TaskService,
@@ -222,6 +254,8 @@ export type TaskServiceWithMutationProgress = Omit<
   | "directMerge"
   | "completeDirectMerge"
   | "linkMergedPullRequest"
+  | "qaApproved"
+  | "qaRejected"
   | "resetImplementation"
   | "resetTask"
   | "setPlan"
@@ -251,10 +285,12 @@ export type TaskServiceWithMutationProgress = Omit<
   ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
   resetTask(
     input: TaskIdInput,
-  ): Effect.Effect<TaskCard, TaskServiceError | TaskMutationProgressFailure>;
+  ): Effect.Effect<TaskResetResult, TaskServiceError | TaskMutationProgressFailure>;
+  qaApproved(input: MarkdownArtifactInput): Effect.Effect<TaskQaOutcomeResult, TaskServiceError>;
+  qaRejected(input: MarkdownArtifactInput): Effect.Effect<TaskQaOutcomeResult, TaskServiceError>;
   setSpec(
-    input: MarkdownDocumentInput,
-  ): Effect.Effect<TaskMetadataDocument, TaskServiceError | TaskMutationProgressFailure>;
+    input: MarkdownArtifactInput,
+  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError | TaskMutationProgressFailure>;
   setPlan(
     input: SetPlanInput,
   ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
@@ -268,6 +304,7 @@ export type RepoPullRequestSyncResult =
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
+  artifactImagePreview?: ArtifactImagePreviewPort;
   publishCompletion?:
     | ((
         observation: import("@openducktor/contracts").TaskCompletionObservation,
@@ -297,50 +334,12 @@ export type TaskServiceUseCaseInput = Omit<
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
   completionState: ReturnType<typeof createTaskCompletionState>;
 };
-const isTaskServiceError = (cause: unknown): cause is TaskServiceError =>
-  cause instanceof GitProviderCapabilityError ||
-  cause instanceof GitProviderRepositoryError ||
-  cause instanceof GitProviderResolutionError ||
-  cause instanceof TaskAssetError ||
-  cause instanceof TaskPolicyError ||
-  isHostError(cause);
-
-const toTaskServiceError = (cause: unknown): TaskServiceError => {
-  if (isTaskServiceError(cause)) {
-    return cause;
-  }
-  return new HostOperationErrorValue({
-    operation: "task.service",
-    message: errorMessage(cause),
-    cause,
-  });
-};
-
-const mapTaskServiceErrors = <A, E>(
-  effect: Effect.Effect<A, E>,
-): Effect.Effect<A, TaskServiceError> => effect.pipe(Effect.mapError(toTaskServiceError));
-
-const mapRepoPullRequestSyncDetailedErrors = <A, E>(
-  effect: Effect.Effect<A, E>,
-): Effect.Effect<A, RepoPullRequestSyncDetailedError> =>
-  effect.pipe(
-    Effect.mapError((cause) =>
-      cause instanceof TaskMutationProgressFailure ? cause : toTaskServiceError(cause),
-    ),
-  );
-
-const mapTaskMutationProgressErrors = <A, E>(
-  effect: Effect.Effect<A, E>,
-): Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure> =>
-  effect.pipe(
-    Effect.mapError((cause) =>
-      cause instanceof TaskMutationProgressFailure ? cause : toTaskServiceError(cause),
-    ),
-  );
-
 export const createTaskServiceWithMutationProgress = (
   input: CreateTaskServiceInput,
 ): TaskServiceWithMutationProgress => createTaskServiceImplementation(input);
+
+export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
+  withoutTaskMutationProgress(createTaskServiceWithMutationProgress(input));
 
 const createTaskServiceImplementation = (
   input: CreateTaskServiceInput,
@@ -355,6 +354,7 @@ const createTaskServiceImplementation = (
   };
   const taskSessionStart = createTaskSessionStartPreparationService(useCaseInput);
   const service = {
+    ...createArtifactUseCases(useCaseInput),
     ...createTaskQueryUseCases(useCaseInput),
     ...createTaskStopImpactUseCase(useCaseInput),
     ...createTaskApprovalContextUseCase(useCaseInput),
@@ -368,13 +368,13 @@ const createTaskServiceImplementation = (
     ...createTaskCloseUseCase(useCaseInput),
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
-    ...createTaskDocumentUseCases(useCaseInput),
+    ...createWorkflowArtifactUseCases(useCaseInput),
     buildStart: (startInput: BuildStartInput) =>
       Effect.scoped(
         Effect.gen(function* () {
           if (!gitPort) {
             return yield* Effect.fail(
-              new HostOperationErrorValue({
+              new HostOperationError({
                 operation: "task.build_start",
                 message: "Git port is required for build_start.",
               }),
@@ -423,6 +423,12 @@ const createTaskServiceImplementation = (
     ...createTaskPullRequestSyncUseCases(useCaseInput),
   };
   return {
+    listTaskArtifacts: (input) => mapTaskServiceErrors(service.listTaskArtifacts(input)),
+    readTaskArtifact: (input) => mapTaskServiceErrors(service.readTaskArtifact(input)),
+    createTaskArtifact: (input) => mapTaskServiceErrors(service.createTaskArtifact(input)),
+    renameTaskArtifact: (input) => mapTaskServiceErrors(service.renameTaskArtifact(input)),
+    replaceTaskArtifact: (input) => mapTaskServiceErrors(service.replaceTaskArtifact(input)),
+    deleteTaskArtifact: (input) => mapTaskServiceErrors(service.deleteTaskArtifact(input)),
     agentSessionDelete: (input) => mapTaskServiceErrors(service.agentSessionDelete(input)),
     agentSessionUpdateModel: (input) =>
       mapTaskServiceErrors(service.agentSessionUpdateModel(input)),
@@ -436,14 +442,7 @@ const createTaskServiceImplementation = (
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
     completeDirectMerge: (input) =>
       mapTaskMutationProgressErrors(service.completeDirectMerge(input)),
-    createTask: (input) =>
-      service
-        .createTask(input)
-        .pipe(
-          Effect.mapError((cause) =>
-            cause instanceof TaskCreationProgressFailure ? cause : toTaskServiceError(cause),
-          ),
-        ),
+    createTask: (input) => mapTaskCreationProgressErrors(service.createTask(input)),
     closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),
     deleteTask: (input) => mapTaskMutationProgressErrors(service.deleteTask(input)),
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),
@@ -467,12 +466,12 @@ const createTaskServiceImplementation = (
     qaRejected: (input) => mapTaskServiceErrors(service.qaRejected(input)),
     repoPullRequestSync: (input) => mapTaskServiceErrors(service.repoPullRequestSync(input)),
     repoPullRequestSyncDetailed: (input) =>
-      mapRepoPullRequestSyncDetailedErrors(service.repoPullRequestSyncDetailed(input)),
+      mapTaskMutationProgressErrors(service.repoPullRequestSyncDetailed(input)),
     resetImplementation: (input) =>
       mapTaskMutationProgressErrors(service.resetImplementation(input)),
     resetTask: (input) => mapTaskMutationProgressErrors(service.resetTask(input)),
-    savePlanDocument: (input) => mapTaskServiceErrors(service.savePlanDocument(input)),
-    saveSpecDocument: (input) => mapTaskServiceErrors(service.saveSpecDocument(input)),
+    savePlanArtifact: (input) => mapTaskServiceErrors(service.savePlanArtifact(input)),
+    saveSpecArtifact: (input) => mapTaskServiceErrors(service.saveSpecArtifact(input)),
     setPlan: (input) => mapTaskMutationProgressErrors(service.setPlan(input)),
     setSpec: (input) => mapTaskMutationProgressErrors(service.setSpec(input)),
     specGet: (input) => mapTaskServiceErrors(service.specGet(input)),
@@ -481,8 +480,4 @@ const createTaskServiceImplementation = (
     updateTask: (input) => mapTaskMutationProgressErrors(service.updateTask(input)),
     upsertPullRequest: (input) => mapTaskServiceErrors(service.upsertPullRequest(input)),
   };
-};
-
-export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
-  return withoutTaskMutationProgress(createTaskServiceWithMutationProgress(input));
 };

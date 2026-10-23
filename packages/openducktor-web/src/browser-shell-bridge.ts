@@ -1,4 +1,5 @@
 import { createBrowserRemoteAccessBridge } from "./browser-remote-access-bridge";
+import { browserArtifactPreviewEnvironment } from "@openducktor/frontend/lib/artifact-preview-environment";
 import { getAppVersion } from "@openducktor/frontend/lib/app-version";
 import {
   createDisabledAppUpdateBridge,
@@ -83,6 +84,8 @@ export const createBrowserShellBridge = (): ShellBridge => {
   const client = createLocalHostClient();
 
   return {
+    getArtifactPreviewEnvironment: () =>
+      runWebBoundary(Effect.map(getBrowserBackendUrlEffect(), browserArtifactPreviewEnvironment)),
     remoteAccess: createBrowserRemoteAccessBridge(),
     client,
     subscribeWorkspaceSessionUpdates: subscribeLocalHostWorkspaceSessionUpdates,

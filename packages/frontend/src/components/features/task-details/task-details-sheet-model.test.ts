@@ -3,7 +3,6 @@ import type { TaskCard } from "@openducktor/contracts";
 import {
   collectDeleteImpactTaskIds,
   collectSingleTaskCleanupImpactTaskIds,
-  shouldLoadDocumentSection,
   toSubtasks,
 } from "./task-details-sheet-model";
 
@@ -21,7 +20,7 @@ const makeTask = (id: string, overrides: Partial<TaskCard> = {}): TaskCard => ({
   subtaskIds: [],
   updatedAt: "2026-01-01T00:00:00.000Z",
   createdAt: "2026-01-01T00:00:00.000Z",
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false, updatedAt: undefined },
     plan: { has: false, updatedAt: undefined },
     qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
@@ -63,11 +62,5 @@ describe("task-details-sheet-model", () => {
       ["T-1"],
     );
     expect(collectSingleTaskCleanupImpactTaskIds(null)).toEqual([]);
-  });
-
-  test("loads document sections only when summary reports content", () => {
-    expect(shouldLoadDocumentSection(true)).toBe(true);
-    expect(shouldLoadDocumentSection(false)).toBe(false);
-    expect(shouldLoadDocumentSection(undefined)).toBe(false);
   });
 });

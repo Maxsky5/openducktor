@@ -1,10 +1,7 @@
+import { workflowArtifactId } from "@openducktor/contracts";
 import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { CancelledError, QueryClient, QueryObserver, useQueryClient } from "@tanstack/react-query";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
-import { QueryProvider } from "@/test-utils/query-provider";
+import { CancelledError, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import {
   documentQueryKeys,
@@ -49,24 +46,6 @@ const deferred = <Value>() => {
   return { promise, resolve, reject };
 };
 
-type DocumentActionCapture = {
-  current?: { queryClient: QueryClient; actions: ReturnType<typeof useTaskDocuments> };
-};
-
-const documentActions = (open = false) => {
-  const result: DocumentActionCapture = {};
-  const Harness = () => {
-    result.current = {
-      queryClient: useQueryClient(),
-      actions: useTaskDocuments("task-1", open, "/repo"),
-    };
-    return null;
-  };
-  renderToStaticMarkup(createElement(QueryProvider, null, createElement(Harness)));
-  if (!result.current) throw new Error("Document actions did not render");
-  return result.current;
-};
-
 const recordQueryOperations = (queryClient: QueryClient): string[] => {
   const calls: string[] = [];
   const cancelQueries = queryClient.cancelQueries.bind(queryClient);
@@ -102,8 +81,8 @@ describe("TaskViewSync", () => {
       const timestamp = "2026-04-10T13:10:00.000Z";
       const card = createTaskCardFixture({ id: "task-1" });
       if (section === "qa")
-        card.documentSummary.qaReport = { has: true, updatedAt: timestamp, verdict: "approved" };
-      else card.documentSummary[section] = { has: true, updatedAt: timestamp };
+        card.artifactSummary.qaReport = { has: true, updatedAt: timestamp, verdict: "approved" };
+      else card.artifactSummary[section] = { has: true, updatedAt: timestamp };
       const payload = { markdown: "# Later commit", updatedAt: timestamp };
       const loadFreshDocument = mock(async () => payload);
       const listTasks = mock(async () => [card]);
@@ -123,7 +102,13 @@ describe("TaskViewSync", () => {
       const unsubscribe = new QueryObserver(queryClient, options).subscribe(() => {});
       try {
         const event = boardEvent("/repo", [card]);
-        event.boardChanges!.documentChanges = [{ taskId: card.id, sections: [section] }];
+        event.boardChanges!.artifactChanges = [
+          {
+            taskId: card.id,
+            artifactIds: [workflowArtifactId(card.id, section === "qa" ? "qaReport" : section)],
+            removedArtifactIds: [],
+          },
+        ];
         await sync.reconcileExternalEvent(event, eventCursor(1));
         await sync.reconcileExternalEvent(event, eventCursor(1));
         expect(queryClient.getQueryData<typeof payload>(options.queryKey)).toEqual(payload);
@@ -179,7 +164,7 @@ describe("TaskViewSync", () => {
     const updatedAt = "2026-04-10T13:10:00.000Z";
     const card = createTaskCardFixture({
       id: "task-1",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt },
         plan: { has: true, updatedAt },
         qaReport: { has: false, verdict: "not_reviewed" },
@@ -340,7 +325,7 @@ describe("TaskViewSync", () => {
         eventCursor(),
       );
       const card = createTaskCardFixture({
-        documentSummary: {
+        artifactSummary: {
           spec: { has: true, updatedAt: restored.updatedAt },
           plan: { has: false },
           qaReport: { has: false, verdict: "not_reviewed" },
@@ -388,7 +373,7 @@ describe("TaskViewSync", () => {
         const updatedAt = "2026-04-10T13:09:00.000Z";
         const card = createTaskCardFixture({
           updatedAt,
-          documentSummary: {
+          artifactSummary: {
             spec: { has: true, updatedAt },
             plan: { has: true, updatedAt },
             qaReport: { has: true, updatedAt, verdict: "approved" },
@@ -457,20 +442,8 @@ describe("TaskViewSync", () => {
       "cache-write",
       "replacement",
       "failure",
-      "updated-matching",
-      "updated-newer",
-      "updated-older",
       "cancelled",
       "failure-with-data",
-      "reload-matching",
-      "reload-newer",
-      "reload-older",
-      "reload-failure",
-      "reload-removed",
-      "reload-replaced",
-      "reload-cancelled",
-      "reload-twice",
-      "reload-updated-failure",
     ] as const)(
       `an unknown board baseline preserves first ${section} read ownership across %s`,
       async (change) => {
@@ -483,9 +456,6 @@ describe("TaskViewSync", () => {
           },
         );
         const boardResult = deferred<TaskCard[]>();
-        const reloading = change.startsWith("reload-");
-        const replacementRead = deferred<{ markdown: string; updatedAt: string | null }>();
-        const finalRead = deferred<{ markdown: string; updatedAt: string | null }>();
         const committedAt = "2026-04-10T13:10:00.000Z";
         const committed = { markdown: "# Committed", updatedAt: committedAt };
         const later = { markdown: "# Later", updatedAt: "2026-04-10T13:11:00.000Z" };
@@ -493,15 +463,8 @@ describe("TaskViewSync", () => {
         const loadFreshDocument = mock<TaskViewSyncPorts["loadFreshDocument"]>(() =>
           Promise.resolve(committed),
         ).mockImplementationOnce(() => firstRead);
-        if (reloading) loadFreshDocument.mockImplementationOnce(() => replacementRead.promise);
-        if (change === "reload-twice")
-          loadFreshDocument.mockImplementationOnce(() => finalRead.promise);
         const listTasks = mock(() => boardResult.promise);
-        const { queryClient, actions } = documentActions(reloading);
-        const sync = createTaskViewSync({
-          queryClient,
-          ports: createPorts({ listTasks, loadFreshDocument }),
-        });
+        const { queryClient, sync } = createSync(createPorts({ listTasks, loadFreshDocument }));
         const boardKey = taskQueryKeys.repoData("/repo");
         const boardRead = queryClient.fetchQuery({
           queryKey: boardKey,
@@ -514,21 +477,6 @@ describe("TaskViewSync", () => {
           section,
           loadFreshDocument,
         );
-        if (reloading) {
-          const readQuery = options.queryFn;
-          if (!readQuery) throw new Error("Expected a document query function");
-          // Inject only this isolated query's reader; keep the real reload and fetch lifecycle.
-          queryClient.setQueryDefaults(options.queryKey, {
-            behavior: {
-              onFetch: (_context, query) => {
-                query.setOptions({
-                  ...query.options,
-                  queryFn: (context) => readQuery({ ...context, queryKey: options.queryKey }),
-                });
-              },
-            },
-          });
-        }
         const read = queryClient.fetchQuery(options).then(
           (value) => ({ value }),
           (error: Error) => ({ error }),
@@ -536,60 +484,21 @@ describe("TaskViewSync", () => {
         const observer = new QueryObserver(queryClient, options);
         const unsubscribe = observer.subscribe(() => {});
         const card = createTaskCardFixture({
-          documentSummary: {
+          artifactSummary: {
             spec: { has: true, updatedAt: committedAt },
             plan: { has: true, updatedAt: committedAt },
             qaReport: { has: true, updatedAt: committedAt, verdict: "approved" },
           },
         });
         const error = new Error("document read unavailable");
-        let settlement: Error | null | undefined;
         const completion = sync
           .reconcileExternalEvent(boardEvent("/repo", [card]), eventCursor())
           .then(
-            () => {
-              settlement = null;
-              return null;
-            },
-            (error: Error) => {
-              settlement = error;
-              return error;
-            },
+            () => null,
+            (error: Error) => error,
           );
         try {
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
-          if (reloading) {
-            if (change === "reload-updated-failure") actions.applyDocumentUpdate(section, later);
-            const owner = queryClient
-              .getQueryCache()
-              .find({ queryKey: options.queryKey, exact: true })!;
-            const firstPromise = owner.promise;
-            expect(actions.reloadDocument(section)).toBe(true);
-            expect(
-              queryClient.getQueryCache().find({ queryKey: options.queryKey, exact: true }),
-            ).toBe(owner);
-            expect(owner.promise).not.toBe(firstPromise);
-            await new Promise<void>((resolve) => setTimeout(resolve, 0));
-            expect(settlement).toBeUndefined();
-            if (change === "reload-twice") {
-              expect(actions.reloadDocument(section)).toBe(true);
-              await new Promise<void>((resolve) => setTimeout(resolve, 0));
-              expect(settlement).toBeUndefined();
-              finalRead.resolve(committed);
-            } else if (change === "reload-failure" || change === "reload-updated-failure") {
-              replacementRead.reject(error);
-            } else {
-              if (change === "reload-removed" || change === "reload-replaced")
-                queryClient.removeQueries({ queryKey: options.queryKey, exact: true });
-              if (change === "reload-replaced") queryClient.setQueryData(options.queryKey, later);
-              if (change === "reload-cancelled")
-                await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
-              let incoming = committed;
-              if (change === "reload-newer") incoming = later;
-              else if (change === "reload-older") incoming = initial;
-              replacementRead.resolve(incoming);
-            }
-          }
           if (change === "replacement")
             queryClient.removeQueries({ queryKey: options.queryKey, exact: true });
           if (
@@ -598,47 +507,16 @@ describe("TaskViewSync", () => {
             change === "failure-with-data"
           )
             queryClient.setQueryData(options.queryKey, later);
-          if (change === "updated-matching") actions.applyDocumentUpdate(section, committed);
-          if (change === "updated-newer") actions.applyDocumentUpdate(section, later);
-          if (change === "updated-older") actions.applyDocumentUpdate(section, initial);
           if (change === "cancelled")
             await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
           if (change === "failure" || change === "failure-with-data") failRead(error);
           else finishRead(change === "newer" ? later : initial);
           const completed = await completion;
-          const failed =
-            change === "failure" ||
-            change === "failure-with-data" ||
-            change === "reload-failure" ||
-            change === "reload-updated-failure";
-          if (change === "cancelled" || change === "reload-cancelled")
-            expect(completed).toBeInstanceOf(CancelledError);
+          const failed = change === "failure" || change === "failure-with-data";
+          if (change === "cancelled") expect(completed).toBeInstanceOf(CancelledError);
           else expect(completed).toEqual(failed ? error : null);
           const outcome = await read;
-          if (reloading) {
-            if (change === "reload-updated-failure") expect(outcome).toEqual({ value: later });
-            else expect(outcome).toHaveProperty("error", expect.any(CancelledError));
-            if (
-              change === "reload-removed" ||
-              change === "reload-cancelled" ||
-              change === "reload-failure"
-            )
-              expect(queryClient.getQueryData(options.queryKey)).toBeUndefined();
-            else {
-              const expected =
-                change === "reload-newer" ||
-                change === "reload-replaced" ||
-                change === "reload-updated-failure"
-                  ? later
-                  : committed;
-              expect(queryClient.getQueryData<typeof committed>(options.queryKey)).toEqual(
-                expected,
-              );
-              if (change !== "reload-replaced")
-                expect(observer.getCurrentResult().data).toEqual(expected);
-            }
-            if (failed) expect(observer.getCurrentResult().error).toEqual(error);
-          } else if (change === "failure" || change === "failure-with-data") {
+          if (change === "failure" || change === "failure-with-data") {
             expect(outcome).toEqual({ error });
             expect(observer.getCurrentResult().error).toEqual(error);
             const cached = queryClient.getQueryData<typeof later>(options.queryKey);
@@ -651,28 +529,18 @@ describe("TaskViewSync", () => {
             expect(outcome).toHaveProperty("error");
             expect(queryClient.getQueryData<typeof later>(options.queryKey)).toEqual(later);
           } else {
-            const older = change === "older" || change === "updated-older";
-            const expectedCache = older || change === "updated-matching" ? committed : later;
+            const older = change === "older";
+            const expectedCache = older ? committed : later;
             expect(outcome).toEqual({ value: older ? initial : expectedCache });
             expect(queryClient.getQueryData<typeof committed>(options.queryKey)).toEqual(
               expectedCache,
             );
             expect(observer.getCurrentResult().data).toEqual(expectedCache);
           }
-          let expectedReads = reloading ? 2 : 1;
-          if (
-            change === "older" ||
-            change === "updated-older" ||
-            change === "reload-older" ||
-            change === "reload-twice"
-          )
-            expectedReads++;
-          expect(loadFreshDocument).toHaveBeenCalledTimes(expectedReads);
+          expect(loadFreshDocument).toHaveBeenCalledTimes(change === "older" ? 2 : 1);
           expect(listTasks).toHaveBeenCalledTimes(1);
         } finally {
           finishRead(initial);
-          replacementRead.resolve(committed);
-          finalRead.resolve(committed);
           boardResult.resolve([card]);
           await Promise.all([read, completion, boardRead]);
           unsubscribe();
@@ -747,7 +615,7 @@ describe("TaskViewSync", () => {
     ).toBe(true);
   });
 
-  test("does not refresh active snapshot documents absent from the kanban list", async () => {
+  test("refreshes active snapshot artifacts absent from the kanban list", async () => {
     const listTasks = mock(async (): Promise<TaskCard[]> => []);
     const loadFreshDocument = mock(async () => ({
       markdown: "# Updated hidden task",
@@ -766,8 +634,11 @@ describe("TaskViewSync", () => {
 
       expect(listTasks).toHaveBeenCalledWith("/repo");
       expect(listTasks).toHaveBeenCalledTimes(1);
-      expect(loadFreshDocument).not.toHaveBeenCalled();
-      expect(queryClient.getQueryState(documentKey)?.isInvalidated).toBe(true);
+      expect(loadFreshDocument).toHaveBeenCalledTimes(1);
+      expect(queryClient.getQueryData(documentKey)).toEqual({
+        markdown: "# Updated hidden task",
+        updatedAt: "2026-04-10T13:10:00.000Z",
+      });
     } finally {
       unsubscribe();
     }

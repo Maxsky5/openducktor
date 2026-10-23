@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_CONNECTION_HEADER,
+  REMOTE_PROTOCOL_VERSION,
   type HostEventEnvelope,
   type NotificationStreamFrame,
   type RemoteHostDescriptor,
@@ -19,7 +20,7 @@ import {
 const encoder = new TextEncoder();
 const hello: RemoteClientHello = {
   appVersion: "mobile-7",
-  supportedProtocolVersions: [1],
+  supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
   requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
   optionalCapabilities: [],
 };
@@ -28,7 +29,9 @@ const descriptor: RemoteHostDescriptor = {
   appVersion: "host-2",
   hostInstanceId: "instance-1",
   accessPolicy: "network_reach",
-  protocols: [{ version: 1, capabilities: [...REMOTE_BASELINE_CAPABILITIES] }],
+  protocols: [
+    { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
+  ],
 };
 const latch = <T>() => {
   let resolve!: (value: T) => void;
@@ -69,7 +72,7 @@ const fixture = () => {
           status: "accepted",
           host: descriptor,
           connectionId: crypto.randomUUID(),
-          protocolVersion: 1,
+          protocolVersion: REMOTE_PROTOCOL_VERSION,
           missingOptionalCapabilities: [],
         });
       if (url.endsWith("/events"))
@@ -154,7 +157,7 @@ test.each(["recovery read", "host restart"])(
             status: "accepted",
             host: { ...descriptor, hostInstanceId: "restarted-host" },
             connectionId: crypto.randomUUID(),
-            protocolVersion: 1,
+            protocolVersion: REMOTE_PROTOCOL_VERSION,
             missingOptionalCapabilities: [],
           });
         return response;

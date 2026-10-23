@@ -9,6 +9,7 @@ import {
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
+import { workflowArtifactChange } from "../artifact-changes";
 import { replaceEpicPlanSubtasks } from "../support/planning-rules";
 import type { SetPlanInput } from "../task-inputs";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
@@ -72,9 +73,9 @@ export const createSetPlanUseCase =
         });
       }
 
-      const document = yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
+      const artifact = yield* taskStore.setPlanArtifact({ repoPath, taskId, markdown });
       let changes: TaskChangeSet = { taskIds: [taskId], removedTaskIds: [] };
-      const postDocument = yield* Effect.result(
+      const afterSave = yield* Effect.result(
         Effect.gen(function* () {
           if (shouldReplaceEpicSubtasks) {
             changes = yield* replaceEpicPlanSubtasks(
@@ -91,14 +92,14 @@ export const createSetPlanUseCase =
           }
         }),
       );
-      if (postDocument._tag === "Failure") {
-        if (postDocument.failure instanceof TaskMutationProgressFailure) {
+      if (afterSave._tag === "Failure") {
+        if (afterSave.failure instanceof TaskMutationProgressFailure) {
           return yield* Effect.fail(
             new TaskMutationProgressFailure({
-              operation: postDocument.failure.operation,
-              changes: postDocument.failure.changes,
-              failure: postDocument.failure.failure,
-              documentChanges: [{ taskId, sections: ["plan"] }],
+              operation: afterSave.failure.operation,
+              changes: afterSave.failure.changes,
+              failure: afterSave.failure.failure,
+              artifactChanges: [workflowArtifactChange(taskId, "plan")],
             }),
           );
         }
@@ -106,11 +107,11 @@ export const createSetPlanUseCase =
           new TaskMutationProgressFailure({
             operation: "set-plan",
             changes,
-            documentChanges: [{ taskId, sections: ["plan"] }],
-            failure: postDocument.failure,
+            artifactChanges: [workflowArtifactChange(taskId, "plan")],
+            failure: afterSave.failure,
           }),
         );
       }
 
-      return { document, changes };
+      return { artifact, changes };
     });

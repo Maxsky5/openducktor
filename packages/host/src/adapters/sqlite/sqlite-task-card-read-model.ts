@@ -3,7 +3,7 @@ import {
   pullRequestSchema,
   sourceIssueReferenceSchema,
   type TaskCard,
-  type TaskDocumentSummary,
+  type TaskArtifactSummary,
   taskCardSchema,
 } from "@openducktor/contracts";
 import { type SQL, inArray, gte, ne, or } from "drizzle-orm";
@@ -16,7 +16,10 @@ import {
   optionalJsonFromRow,
   validateWithSchema,
 } from "./sqlite-json-codecs";
-import { documentSummariesByTaskId, documentSummary } from "./sqlite-task-document-queries";
+import {
+  artifactSummariesByTaskId,
+  artifactSummary,
+} from "./sqlite-task-workflow-artifact-queries";
 import { getTaskRow, requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
@@ -58,7 +61,7 @@ export const listTasksInDatabase = (
           : ne(tasks.status, "closed");
     }
     const rows = yield* taskRows(session, where);
-    const summaries = yield* documentSummariesByTaskId(
+    const summaries = yield* artifactSummariesByTaskId(
       session,
       rows.map((row) => row.id),
     );
@@ -98,7 +101,7 @@ const readChangedCards = (
           .where(inArray(tasks.parentId, cardIds)),
       "sqliteTaskStore.listChangedCards.selectChildren",
     );
-    const summaries = yield* documentSummariesByTaskId(session, cardIds);
+    const summaries = yield* artifactSummariesByTaskId(session, cardIds);
     const cards = yield* Effect.forEach(rows, (row) =>
       rowToTaskCard(session, row, summaries.get(row.id)),
     );
@@ -143,7 +146,7 @@ const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
 const rowToTaskCard = (
   session: TaskStoreSession,
   row: TaskRow,
-  savedSummary?: TaskDocumentSummary,
+  savedSummary?: TaskArtifactSummary,
 ): Effect.Effect<TaskCard, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const targetBranch = yield* optionalJsonFromRow(row, "targetBranchJson", (value) =>
@@ -168,7 +171,7 @@ const rowToTaskCard = (
             { taskId: row.id },
           );
     const labels = yield* labelsFromRow(row);
-    const summary = savedSummary ?? (yield* documentSummary(session, row.id));
+    const summary = savedSummary ?? (yield* artifactSummary(session, row.id));
     const taskCard: TaskCard = {
       aiReviewEnabled: row.qaRequired === 1,
       agentWorkflows: {
@@ -180,7 +183,7 @@ const rowToTaskCard = (
       availableActions: [],
       createdAt: row.createdAt.toISOString(),
       description: row.description ?? "",
-      documentSummary: summary,
+      artifactSummary: summary,
       id: row.id,
       issueType: row.issueType,
       labels,

@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; script-src-attr 'unsafe-hashes' 'sha256-C6b/4Iv4ZcrPnfjsnUI/tt1KLtFSZRbC4PywNhjbLfw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src blob:; connect-src 'self' https: wss:; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; script-src-attr 'unsafe-hashes' 'sha256-C6b/4Iv4ZcrPnfjsnUI/tt1KLtFSZRbC4PywNhjbLfw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src blob:; connect-src 'self' https: wss:; worker-src 'self'; frame-src https:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer

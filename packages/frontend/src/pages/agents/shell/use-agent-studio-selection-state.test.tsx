@@ -1,5 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
-import { render } from "@testing-library/react";
+import type { TaskArtifactCollection } from "@openducktor/contracts";
+import { artifactQueryKeys } from "@openducktor/frontend-core/queries/artifacts";
+import {
+  documentQueryKeyForSection,
+  type TaskDocumentSection,
+} from "@openducktor/frontend-core/queries/documents";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { render, waitFor } from "@testing-library/react";
 import { createElement, type ReactElement, useLayoutEffect } from "react";
 import {
   createHookHarness as createSharedHookHarness,
@@ -13,6 +20,7 @@ import {
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { SessionViewContext } from "@/features/session-navigation/session-view-context";
+import { QueryProvider } from "@/test-utils/query-provider";
 
 enableReactActEnvironment();
 
@@ -28,6 +36,7 @@ const session = {
 
 const baseProps = (overrides: Partial<HookProps> = {}): HookProps => ({
   activeWorkspaceId: "workspace-1",
+  workspaceRepoPath: "/repo",
   isWorkspaceRestorePending: false,
   taskIdParam: "task-1",
   sessionExternalIdParam: null,
@@ -62,6 +71,102 @@ function SelectionProbe({
 }
 
 describe("useAgentStudioSelectionState", () => {
+  test("loads the current workflow before the artifact view mounts", async () => {
+    const list = mock(async () => ({ artifacts: [], canManageFree: true }));
+    const read = mock(async () => ({
+      markdown: "hello",
+      updatedAt: null,
+    }));
+    const connection = createTestClientConnection({
+      client: { taskArtifactsList: list, taskWorkflowArtifactGet: read },
+    });
+    const h = createSharedHookHarness(
+      useAgentStudioSelectionState,
+      baseProps({ hasExplicitRoleParam: true, roleFromQuery: "spec" }),
+      { connection },
+    );
+    try {
+      await h.mount();
+      await waitFor(() =>
+        expect(
+          connection.queryClient.getQueryData(
+            documentQueryKeyForSection("/repo", "task-1", "spec"),
+          ),
+        ).toEqual({ markdown: "hello", updatedAt: null }),
+      );
+      expect(list).toHaveBeenCalledTimes(1);
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      await h.unmount();
+      connection.queryClient.clear();
+    }
+  });
+
+  test.each([
+    ["spec", "spec"],
+    ["planner", "plan"],
+    ["build", "plan"],
+    ["qa", "qa"],
+  ] as const)(
+    "loads the selected %s workflow before its session route and artifact collection render",
+    async (role, section) => {
+      const pendingList = Promise.withResolvers<TaskArtifactCollection>();
+      const list = mock(() => pendingList.promise);
+      const read = mock(
+        async (_repoPath: string, _taskId: string, _section: TaskDocumentSection) => ({
+          markdown: "hello",
+          updatedAt: null,
+        }),
+      );
+      const connection = createTestClientConnection({
+        client: { taskArtifactsList: list, taskWorkflowArtifactGet: read },
+      });
+      let apply: (() => void) | undefined;
+      let readStartedBeforeRoute = false;
+      const h = createSharedHookHarness(
+        useAgentStudioSelectionState,
+        baseProps({
+          requestContextTransition: (transition) => {
+            apply = transition;
+          },
+          scheduleQueryUpdate: () => {
+            readStartedBeforeRoute =
+              read.mock.calls.length === 1 &&
+              connection.queryClient.getQueryState(artifactQueryKeys.collection("/repo", "task-2"))
+                ?.fetchStatus === "fetching";
+          },
+        }),
+        { connection },
+      );
+      try {
+        await h.mount();
+        await h.run((state) =>
+          state.selectAgentStudioSelection(
+            toAgentStudioSessionSelection({ ...session, taskId: "task-2", role }),
+          ),
+        );
+        expect(list).not.toHaveBeenCalled();
+        expect(read).not.toHaveBeenCalled();
+        await h.run(() => apply?.());
+        expect(readStartedBeforeRoute).toBe(true);
+        await waitFor(() =>
+          expect(
+            connection.queryClient.getQueryData(
+              documentQueryKeyForSection("/repo", "task-2", section),
+            ),
+          ).toEqual({ markdown: "hello", updatedAt: null }),
+        );
+        expect(read).toHaveBeenCalledTimes(1);
+        expect(read).toHaveBeenCalledWith("/repo", "task-2", section);
+        expect(h.getLatest().selection.taskId).toBe("task-1");
+      } finally {
+        pendingList.resolve({ artifacts: [], canManageFree: true });
+        await h.unmount();
+        connection.queryClient.clear();
+      }
+    },
+  );
+
   test("a kept task waits for its own address before changing selection", async () => {
     const writes: URLSearchParams[] = [];
     const useSelection = ({ search }: { search: string }) => {
@@ -449,6 +554,7 @@ describe("useAgentStudioSelectionState", () => {
 
     const view = render(
       createElement(SelectionProbe, { ...firstWorkspaceProps, observedWorkingDirectories }),
+      { wrapper: QueryProvider },
     );
     view.rerender(
       createElement(SelectionProbe, { ...secondWorkspaceProps, observedWorkingDirectories }),

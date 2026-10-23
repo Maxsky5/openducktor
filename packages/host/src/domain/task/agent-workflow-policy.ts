@@ -7,20 +7,20 @@ export const deriveAgentWorkflows = (task: TaskCard): AgentWorkflows => {
   const isClosed = task.status === "closed";
   const readyForDevOrLater = isReadyForDevOrLater(task.status);
   const plannerFeatureEpicStatus = task.status === "spec_ready" || readyForDevOrLater;
-  const qaVerdict: QaWorkflowVerdict = task.documentSummary.qaReport.verdict;
+  const qaVerdict: QaWorkflowVerdict = task.artifactSummary.qaReport.verdict;
 
   return {
     spec: {
       required: isFeatureEpic,
       canSkip: !isFeatureEpic,
       available: !isClosed,
-      completed: task.documentSummary.spec.has,
+      completed: task.artifactSummary.spec.has,
     },
     planner: {
       required: isFeatureEpic,
       canSkip: !isFeatureEpic,
       available: !isClosed && (isTaskBug || (isFeatureEpic && plannerFeatureEpicStatus)),
-      completed: task.documentSummary.plan.has,
+      completed: task.artifactSummary.plan.has,
     },
     builder: {
       required: true,

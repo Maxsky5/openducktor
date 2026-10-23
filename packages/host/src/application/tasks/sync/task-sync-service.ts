@@ -1,6 +1,6 @@
 import {
   type ExternalTaskSyncEvent,
-  type TaskDocumentChange,
+  type TaskArtifactChange,
   type TaskEventCursor,
   externalTaskSyncEventSchema,
   type TaskCard,
@@ -51,6 +51,7 @@ export type TaskSyncService = {
       result: Result.Result<A, E>;
       statusChanges: TaskEventStatusChange[];
     }) => Effect.Effect<B, E2, R2>,
+    settleOnInterrupt?: boolean,
   ): Effect.Effect<B, E2, R | R2>;
   publishExternalTaskCreated(
     repoPath: string,
@@ -62,7 +63,7 @@ export type TaskSyncService = {
     operation: TaskMutationOperation,
     statusChanges: readonly TaskEventStatusChange[],
     mutationFailure?: TaskServiceError,
-    documentChanges?: TaskDocumentChange[],
+    artifactChanges?: TaskArtifactChange[],
   ): Effect.Effect<TaskEventCursor, HostOperationErrorAggregate>;
   syncRepoPullRequests(
     repoPath: string,
@@ -183,13 +184,16 @@ export const createTaskSyncService = ({
     operation,
     mutation,
     afterCommit,
-  ) =>
-    runMutation(
+    settleOnInterrupt = false,
+  ) => {
+    const commitAndPublish = collectTaskStatusChanges(mutation, (statusChange) =>
+      observeStatusChanges?.({ repoPath, operation, statusChange }),
+    ).pipe(Effect.flatMap(afterCommit));
+    return runMutation(
       repoPath,
-      collectTaskStatusChanges(mutation, (statusChange) =>
-        observeStatusChanges?.({ repoPath, operation, statusChange }),
-      ).pipe(Effect.flatMap(afterCommit)),
+      settleOnInterrupt ? Effect.uninterruptible(commitAndPublish) : commitAndPublish,
     );
+  };
   const publish = (
     event: ExternalTaskSyncEvent,
     operation: string,
@@ -232,8 +236,8 @@ export const createTaskSyncService = ({
     Effect.gen(function* () {
       const settings = yield* workspaceSettingsService.getSettingsSnapshot();
       const doneVisibleDays = settings.kanban.doneVisibleDays;
-      const cards = yield* taskService.listTasks({ repoPath, taskIds, doneVisibleDays });
-      return { cards, doneVisibleDays, documentChanges: [] };
+      const cards = yield* taskService.listTasks({ repoPath, taskIds });
+      return { cards, doneVisibleDays, artifactChanges: [] };
     });
   const publishExternalTaskCreated = (repoPath: string, taskSnapshot: TaskEventTaskSnapshot) =>
     Effect.gen(function* () {
@@ -265,7 +269,7 @@ export const createTaskSyncService = ({
     operation: TaskMutationOperation,
     statusChanges: readonly TaskEventStatusChange[],
     mutationFailure?: TaskServiceError,
-    documentChanges: TaskDocumentChange[] = [],
+    artifactChanges: TaskArtifactChange[] = [],
   ): Effect.Effect<TaskEventCursor, HostOperationErrorAggregate> =>
     Effect.gen(function* () {
       const event = buildTasksUpdatedEvent(
@@ -310,7 +314,7 @@ export const createTaskSyncService = ({
       const taskSnapshots = taskSnapshotsForChanges(tasks.success.cards, changes);
       acceptNotificationInput?.({ ...event, taskSnapshots });
       return yield* publish(
-        { ...event, taskSnapshots, boardChanges: { ...tasks.success, documentChanges } },
+        { ...event, taskSnapshots, boardChanges: { ...tasks.success, artifactChanges } },
         operation,
         repoPath,
         changes,
@@ -353,7 +357,7 @@ export const createTaskSyncService = ({
               syncResult.failure.operation,
               statusChanges,
               syncResult.failure.failure,
-              syncResult.failure.documentChanges,
+              syncResult.failure.artifactChanges,
             );
             return yield* Effect.fail(syncResult.failure.failure);
           }

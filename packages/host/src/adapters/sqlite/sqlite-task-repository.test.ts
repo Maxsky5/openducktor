@@ -16,7 +16,7 @@ import {
 import {
   createSqliteTaskStoreHarness,
   insertRawTask,
-  readDocumentCount,
+  readWorkflowArtifactCount,
   readDrizzleMigrationRows,
   readTableNames,
   readTaskColumnNullability,
@@ -148,12 +148,13 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       expect.arrayContaining([
         "__drizzle_migrations",
         "task_assets",
-        "task_documents",
+        "tasks_artifacts",
         "tasks",
         "workspace_sessions",
       ]),
     );
     expect(tableNames).not.toContain("task_store_schema_migrations");
+    expect(tableNames).not.toContain("task_documents");
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
@@ -162,8 +163,10 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(7);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(9);
     const database = new Database(databasePath);
     try {
       const journalMode = database
@@ -186,7 +189,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(7);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(9);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {
@@ -454,7 +457,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     }
   });
 
-  test("stores document history in SQLite while task metadata reads the latest revision", async () => {
+  test("stores workflow artifact history in SQLite while task metadata reads the latest revision", async () => {
     const { databasePath, repoPath, store } = await createRepositoryHarness();
     const task = await Effect.runPromise(
       store.createTask({
@@ -464,14 +467,14 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     await Effect.runPromise(
-      store.setSpecDocument({
+      store.setSpecArtifact({
         repoPath,
         taskId: task.id,
         markdown: " # First spec ",
       }),
     );
     const latestSpec = await Effect.runPromise(
-      store.setSpecDocument({
+      store.setSpecArtifact({
         repoPath,
         taskId: task.id,
         markdown: "# Second spec",
@@ -481,7 +484,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
 
     expect(latestSpec).toMatchObject({ markdown: "# Second spec", revision: 2 });
     expect(metadata.spec).toMatchObject({ markdown: "# Second spec", revision: 2 });
-    expect(readDocumentCount(databasePath, task.id, "spec")).toBe(2);
+    expect(readWorkflowArtifactCount(databasePath, task.id, "spec")).toBe(2);
   });
 
   test("persists pull-request JSON as valid task metadata", async () => {

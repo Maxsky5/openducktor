@@ -403,7 +403,7 @@ describe("agent-studio-quick-actions", () => {
       id: "task-1",
       status: "in_progress",
       availableActions: [],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true },
         plan: { has: true },
         qaReport: { has: true, verdict: "rejected" },

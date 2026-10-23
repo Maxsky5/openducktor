@@ -133,7 +133,30 @@ const createHarness = (
           if (directMerge) metadata.directMerge = directMerge;
           return metadata;
         }),
-      clearWorkflowDocuments: () => Effect.succeed(true),
+      listArtifacts: () =>
+        Effect.succeed([
+          {
+            artifactId: "workflow:task-1:spec",
+            taskId: "task-1",
+            name: "Specification",
+            classification: "workflow",
+            workflowKind: "spec",
+            mediaType: "text/markdown",
+            revision: 1,
+            updatedAt: null,
+          },
+          {
+            artifactId: "workflow:task-1:implementation_plan",
+            taskId: "task-1",
+            name: "Implementation Plan",
+            classification: "workflow",
+            workflowKind: "plan",
+            mediaType: "text/markdown",
+            revision: 1,
+            updatedAt: null,
+          },
+        ]),
+      clearTaskArtifacts: () => Effect.succeed(true),
       clearAgentSessionsByRoles: () => Effect.succeed(true),
       clearQaReports: () => Effect.succeed(true),
       setPullRequest: () => Effect.succeed(true),
@@ -374,6 +397,10 @@ describe("task completion recovery and reset", () => {
   });
 
   for (const reset of ["resetTask", "resetImplementation"] as const) {
+    const resetTask = (service: ReturnType<typeof createHarness>["service"]) =>
+      reset === "resetTask"
+        ? service.resetTask(input).pipe(Effect.asVoid)
+        : service.resetImplementation(input).pipe(Effect.asVoid);
     test.each(["none", "clear merge", "transition", "publish"] as const)(
       `${reset} invalidates completion at the committed merge clear: %s`,
       async (failure) => {
@@ -393,7 +420,7 @@ describe("task completion recovery and reset", () => {
 
         harness.allowCleanup();
         harness.failReset(failure);
-        const result = await Effect.runPromise(Effect.result(harness.service[reset](input)));
+        const result = await Effect.runPromise(resetTask(harness.service).pipe(Effect.result));
         if (failure === "none") expect(result._tag).toBe("Success");
         else
           expect(result).toMatchObject({
@@ -405,7 +432,7 @@ describe("task completion recovery and reset", () => {
           expect(harness.observations).toEqual(priorObservations);
           expect(harness.live.snapshot(input.repoPath).taskCompletions).toEqual(priorLive);
           harness.failReset("none");
-          await Effect.runPromise(harness.service[reset](input));
+          await Effect.runPromise(resetTask(harness.service));
         }
         expect(harness.directMerge()).toBeUndefined();
         const resetObservations = harness.live.snapshot(input.repoPath).taskCompletions;
@@ -426,7 +453,7 @@ describe("task completion recovery and reset", () => {
       );
       await Effect.runPromise(harness.service.directMerge(mergeInput).pipe(Effect.flip));
       harness.allowCleanup();
-      const worker = Effect.runFork(harness.service[reset](input));
+      const worker = Effect.runFork(resetTask(harness.service));
       await Effect.runPromise(Deferred.await(entered));
       expect(harness.directMerge()).toBeUndefined();
       const conflicting = await Effect.runPromise(

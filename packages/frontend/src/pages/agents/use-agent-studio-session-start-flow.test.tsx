@@ -1050,7 +1050,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       }),
       selectedTask: createTask({
         status: "in_progress",
-        documentSummary: {
+        artifactSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
           qaReport: {
@@ -1162,7 +1162,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       }),
       selectedTask: createTask({
         status: "in_progress",
-        documentSummary: {
+        artifactSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
           qaReport: {
@@ -1248,7 +1248,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       }),
       selectedTask: createTask({
         status: "in_progress",
-        documentSummary: {
+        artifactSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
           qaReport: {

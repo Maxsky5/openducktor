@@ -19,7 +19,7 @@ import { NotificationNavigationRegistrar } from "./notification-navigation";
 
 test("notification workspace selection keeps the draft on cancel and failure", async () => {
   const connection = createTestClientConnection({
-    client: { tasksList: async () => [createTaskCardFixture({ id: "task-1" })] },
+    client: { tasksListAll: async () => [createTaskCardFixture({ id: "task-1" })] },
   });
   const selectWorkspace = mock(async () => {});
   let navigateToNotification: ((target: NotificationNavigationTarget) => Promise<void>) | undefined;

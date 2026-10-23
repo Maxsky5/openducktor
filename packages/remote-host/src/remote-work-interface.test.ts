@@ -30,7 +30,7 @@ import { createHostCommandLifetime } from "./host-command-lifetime";
 afterAll(removeFakeShell);
 const hello: RemoteClientHello = {
   appVersion: "mobile-8",
-  supportedProtocolVersions: [1],
+  supportedProtocolVersions: [2],
   requiredCapabilities: [...REMOTE_BASELINE_CAPABILITIES],
   optionalCapabilities: ["future.optional"],
 };
@@ -128,9 +128,9 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
         })
       ).status,
     ).toBe(409);
-    const mismatch = await f.negotiate({ ...hello, supportedProtocolVersions: [2] });
+    const mismatch = await f.negotiate({ ...hello, supportedProtocolVersions: [1] });
     expect(mismatch.response.status).toBe(426);
-    expect(mismatch.result.failure.updateSide).toBe("host");
+    expect(mismatch.result.failure.updateSide).toBe("client");
     const missing = await f.negotiate({ ...hello, requiredCapabilities: ["future.required"] });
     expect(missing.result.failure.missingCapabilities[0].name).toBe("future.required");
     const accepted = await f.negotiate();
@@ -862,3 +862,31 @@ test.each(["pending", "transferring"])(
     }
   },
 );
+
+test("serves only the constant preview bootstrap before connection admission and retains origin checks", async () => {
+  const f = await fixture();
+  const invoke = spyOn(f.services, "invoke");
+  try {
+    const response = await fetch(`${f.base}/artifact-preview-bootstrap`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("connection-allowlist")).toBe("()");
+    expect(response.headers.get("content-security-policy")).toContain("sandbox allow-scripts");
+    expect(response.headers.get("content-security-policy")).toContain("frame-src 'none'");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("permissions-policy")).toContain("clipboard-read=()");
+    expect((await fetch(`${f.base}/artifact-preview-bootstrap?artifactId=private`)).status).toBe(
+      409,
+    );
+    expect(
+      (
+        await fetch(`${f.base}/artifact-preview-bootstrap`, {
+          headers: { origin: "https://unrelated.test" },
+        })
+      ).status,
+    ).toBe(403);
+    expect(invoke).not.toHaveBeenCalled();
+  } finally {
+    invoke.mockRestore();
+    await f.close();
+  }
+});

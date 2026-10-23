@@ -2,7 +2,11 @@ import { liveSessionStreamEventName } from "@openducktor/remote-host/host-event-
 import { get, type IncomingMessage } from "node:http";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as host from "@openducktor/host";
-import { TERMINAL_PROTOCOL_SUBPROTOCOL, type HostEventEnvelope } from "@openducktor/contracts";
+import {
+  REMOTE_PROTOCOL_VERSION,
+  TERMINAL_PROTOCOL_SUBPROTOCOL,
+  type HostEventEnvelope,
+} from "@openducktor/contracts";
 import {
   RuntimeQueryError,
   createLocalAttachmentAdapter,
@@ -388,7 +392,7 @@ describe("TypeScript web host backend", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           appVersion: "test",
-          supportedProtocolVersions: [1],
+          supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
           requiredCapabilities: [],
           optionalCapabilities: [],
         }),

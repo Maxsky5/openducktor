@@ -40,11 +40,11 @@ describe("shared test fixtures", () => {
     const first = createTaskCardFixture();
     const second = createTaskCardFixture();
 
-    first.documentSummary.qaReport.verdict = "rejected";
+    first.artifactSummary.qaReport.verdict = "rejected";
     first.agentWorkflows.builder.completed = true;
     first.availableActions.push("build_start");
 
-    expect(second.documentSummary.qaReport.verdict).toBe("not_reviewed");
+    expect(second.artifactSummary.qaReport.verdict).toBe("not_reviewed");
     expect(second.agentWorkflows.builder.completed).toBe(false);
     expect(second.availableActions).toEqual([]);
   });

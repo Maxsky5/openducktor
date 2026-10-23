@@ -1,3 +1,12 @@
+import {
+  ReadTaskArtifactsInputSchema,
+  readTaskArtifactsResultSchema,
+  SetTaskArtifactInputSchema,
+  DeleteTaskArtifactInputSchema,
+  mcpTaskArtifactSchema,
+  mcpArtifactSaveResultSchema,
+  mcpArtifactDeleteResultSchema,
+} from "./odt-artifact-schemas";
 import { z } from "zod";
 import { gitTargetBranchSchema, pullRequestSchema, workspaceRecordSchema } from "./git-schemas";
 import { odtToolWorkspaceIdSchema } from "./odt-tool-workspace-id-schema";
@@ -26,6 +35,8 @@ import {
 } from "./task-schemas";
 
 const odtToolErrorDetailsSchema = z.record(z.string(), z.json());
+
+export const ODT_MCP_BRIDGE_VERSION = 2;
 
 export const ODT_READ_TASK_ASSETS_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -91,19 +102,19 @@ export const publicTaskSchema = z
   .strict();
 export type PublicTask = z.infer<typeof publicTaskSchema>;
 
-export const taskDocumentPresenceSchema = z
+export const taskArtifactPresenceSchema = z
   .object({
     hasSpec: z.boolean(),
     hasPlan: z.boolean(),
     hasQaReport: z.boolean(),
   })
   .strict();
-export type PublicTaskDocumentPresence = z.infer<typeof taskDocumentPresenceSchema>;
+export type PublicTaskArtifactPresence = z.infer<typeof taskArtifactPresenceSchema>;
 
 export const publicTaskSummaryTaskSchema = publicTaskSchema
   .extend({
     qaVerdict: qaWorkflowVerdictSchema,
-    documents: taskDocumentPresenceSchema,
+    artifacts: taskArtifactPresenceSchema,
   })
   .strict();
 export type PublicTaskSummaryTask = z.infer<typeof publicTaskSummaryTaskSchema>;
@@ -115,38 +126,13 @@ export const taskSummarySchema = z
   .strict();
 export type TaskSummary = z.infer<typeof taskSummarySchema>;
 
-const markdownTaskDocumentSchema = z
-  .object({
-    markdown: z.string(),
-    updatedAt: z.string().nullable(),
-    error: z.string().optional(),
-  })
-  .strict();
-
-const latestQaReportSchema = z
-  .object({
-    markdown: z.string(),
-    updatedAt: z.string().nullable(),
-    verdict: qaWorkflowVerdictSchema,
-    error: z.string().optional(),
-  })
-  .strict();
-
-export const taskRequestedDocumentsSchema = z
-  .object({
-    spec: markdownTaskDocumentSchema.optional(),
-    implementationPlan: markdownTaskDocumentSchema.optional(),
-    latestQaReport: latestQaReportSchema.optional(),
-  })
-  .strict();
-export type TaskRequestedDocuments = z.infer<typeof taskRequestedDocumentsSchema>;
-
-export const taskDocumentsReadSchema = z
-  .object({
-    documents: taskRequestedDocumentsSchema,
-  })
-  .strict();
-export type TaskDocumentsRead = z.infer<typeof taskDocumentsReadSchema>;
+export const readTaskResultSchema = z.strictObject({
+  task: publicTaskSchema.extend({
+    qaVerdict: qaWorkflowVerdictSchema,
+    artifacts: z.array(mcpTaskArtifactSchema),
+  }),
+});
+export type ReadTaskResult = z.infer<typeof readTaskResultSchema>;
 
 export const ReadTaskInputSchema = z
   .object({
@@ -169,29 +155,6 @@ export const ReadTaskAssetsInputSchema = z
   .strict();
 export type ReadTaskAssetsInput = z.infer<typeof ReadTaskAssetsInputSchema>;
 
-export const ReadTaskDocumentsInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-    includeSpec: z.boolean().optional(),
-    includePlan: z.boolean().optional(),
-    includeQaReport: z.boolean().optional(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.includeSpec || value.includePlan || value.includeQaReport) {
-      return;
-    }
-
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "At least one document include flag must be true. Set includeSpec, includePlan, or includeQaReport.",
-      path: [],
-    });
-  });
-export type ReadTaskDocumentsInput = z.infer<typeof ReadTaskDocumentsInputSchema>;
-
 const publicEpicRejectionReason = "Epic creation is not supported by the public MCP create tool.";
 const publicEpicUpdateRejectionReason =
   "Epic updates are not supported by the public MCP update tool.";
@@ -210,24 +173,6 @@ const activeTaskStatusSchema = z.enum([
   "human_review",
 ]);
 const labelStringSchema = z.string().trim().min(1);
-
-export const SetSpecInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-    markdown: z.string().trim().min(1),
-  })
-  .strict();
-export type SetSpecInput = z.infer<typeof SetSpecInputSchema>;
-
-export const SetPlanInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-    markdown: z.string().trim().min(1),
-  })
-  .strict();
-export type SetPlanInput = z.infer<typeof SetPlanInputSchema>;
 
 export const BuildBlockedInputSchema = z
   .object({
@@ -263,24 +208,6 @@ export const SetPullRequestInputSchema = z
   })
   .strict();
 export type SetPullRequestInput = z.infer<typeof SetPullRequestInputSchema>;
-
-export const QaApprovedInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-    reportMarkdown: z.string().trim().min(1),
-  })
-  .strict();
-export type QaApprovedInput = z.infer<typeof QaApprovedInputSchema>;
-
-export const QaRejectedInputSchema = z
-  .object({
-    workspaceId: odtToolWorkspaceIdSchema,
-    taskId: z.string().trim().min(1),
-    reportMarkdown: z.string().trim().min(1),
-  })
-  .strict();
-export type QaRejectedInput = z.infer<typeof QaRejectedInputSchema>;
 
 export const CreateTaskInputSchema = z
   .object({
@@ -334,16 +261,14 @@ export const ODT_TOOL_SCHEMAS = {
   odt_search_tasks: SearchTasksInputSchema,
   odt_read_task: ReadTaskInputSchema,
   odt_read_task_assets: ReadTaskAssetsInputSchema,
-  odt_read_task_documents: ReadTaskDocumentsInputSchema,
+  odt_read_task_artifacts: ReadTaskArtifactsInputSchema,
+  odt_set_task_artifact: SetTaskArtifactInputSchema,
+  odt_delete_task_artifact: DeleteTaskArtifactInputSchema,
   odt_update_task: UpdateTaskInputSchema,
-  odt_set_spec: SetSpecInputSchema,
-  odt_set_plan: SetPlanInputSchema,
   odt_build_blocked: BuildBlockedInputSchema,
   odt_build_resumed: BuildResumedInputSchema,
   odt_build_completed: BuildCompletedInputSchema,
   odt_set_pull_request: SetPullRequestInputSchema,
-  odt_qa_approved: QaApprovedInputSchema,
-  odt_qa_rejected: QaRejectedInputSchema,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const satisfies Record<OdtToolName, z.ZodTypeAny>;
 
@@ -352,16 +277,14 @@ export const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_search_tasks: ODT_TOOL_SCHEMAS.odt_search_tasks,
   odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
   odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
-  odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
+  odt_read_task_artifacts: ODT_TOOL_SCHEMAS.odt_read_task_artifacts,
+  odt_set_task_artifact: ODT_TOOL_SCHEMAS.odt_set_task_artifact,
+  odt_delete_task_artifact: ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
   odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
-  odt_set_spec: ODT_TOOL_SCHEMAS.odt_set_spec,
-  odt_set_plan: ODT_TOOL_SCHEMAS.odt_set_plan,
   odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
   odt_build_resumed: ODT_TOOL_SCHEMAS.odt_build_resumed,
   odt_build_completed: ODT_TOOL_SCHEMAS.odt_build_completed,
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
-  odt_qa_approved: ODT_TOOL_SCHEMAS.odt_qa_approved,
-  odt_qa_rejected: ODT_TOOL_SCHEMAS.odt_qa_rejected,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
 
@@ -389,27 +312,16 @@ export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   odt_search_tasks: ODT_TOOL_SCHEMAS.odt_search_tasks,
   odt_read_task: ODT_TOOL_SCHEMAS.odt_read_task,
   odt_read_task_assets: ODT_TOOL_SCHEMAS.odt_read_task_assets,
-  odt_read_task_documents: ODT_TOOL_SCHEMAS.odt_read_task_documents,
+  odt_read_task_artifacts: ODT_TOOL_SCHEMAS.odt_read_task_artifacts,
+  odt_set_task_artifact: ODT_TOOL_SCHEMAS.odt_set_task_artifact,
+  odt_delete_task_artifact: ODT_TOOL_SCHEMAS.odt_delete_task_artifact,
   odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
-  odt_set_spec: ODT_TOOL_SCHEMAS.odt_set_spec,
-  odt_set_plan: ODT_TOOL_SCHEMAS.odt_set_plan,
   odt_build_blocked: ODT_TOOL_SCHEMAS.odt_build_blocked,
   odt_build_resumed: ODT_TOOL_SCHEMAS.odt_build_resumed,
   odt_build_completed: ODT_TOOL_SCHEMAS.odt_build_completed,
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
-  odt_qa_approved: ODT_TOOL_SCHEMAS.odt_qa_approved,
-  odt_qa_rejected: ODT_TOOL_SCHEMAS.odt_qa_rejected,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
-
-export const odtPersistedDocumentSchema = z
-  .object({
-    markdown: z.string(),
-    updatedAt: z.string(),
-    revision: z.number().int().positive(),
-  })
-  .strict();
-export type OdtPersistedDocument = z.infer<typeof odtPersistedDocumentSchema>;
 
 export const createTaskResultSchema = taskSummarySchema;
 export type CreateTaskResult = z.infer<typeof createTaskResultSchema>;
@@ -483,23 +395,6 @@ export const getWorkspacesResultSchema = z
   .strict();
 export type GetWorkspacesResult = z.infer<typeof getWorkspacesResultSchema>;
 
-export const setSpecResultSchema = z
-  .object({
-    task: publicTaskSchema,
-    document: odtPersistedDocumentSchema,
-  })
-  .strict();
-export type SetSpecResult = z.infer<typeof setSpecResultSchema>;
-
-export const setPlanResultSchema = z
-  .object({
-    task: publicTaskSchema,
-    document: odtPersistedDocumentSchema,
-    createdSubtaskIds: z.array(z.string().trim().min(1)),
-  })
-  .strict();
-export type SetPlanResult = z.infer<typeof setPlanResultSchema>;
-
 export const buildBlockedResultSchema = z
   .object({
     task: publicTaskSchema,
@@ -531,23 +426,9 @@ export const setPullRequestResultSchema = z
   .strict();
 export type SetPullRequestResult = z.infer<typeof setPullRequestResultSchema>;
 
-export const qaApprovedResultSchema = z
-  .object({
-    task: publicTaskSchema,
-  })
-  .strict();
-export type QaApprovedResult = z.infer<typeof qaApprovedResultSchema>;
-
-export const qaRejectedResultSchema = z
-  .object({
-    task: publicTaskSchema,
-  })
-  .strict();
-export type QaRejectedResult = z.infer<typeof qaRejectedResultSchema>;
-
 export const odtHostBridgeReadySchema = z
   .object({
-    bridgeVersion: z.literal(1),
+    bridgeVersion: z.literal(ODT_MCP_BRIDGE_VERSION),
     toolNames: z.array(z.string().trim().min(1)).min(1),
   })
   .strict();
@@ -562,17 +443,15 @@ export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_get_workspaces: getWorkspacesResultSchema,
   odt_create_task: createTaskResultSchema,
   odt_search_tasks: searchTasksResultSchema,
-  odt_read_task: taskSummarySchema,
+  odt_read_task: readTaskResultSchema,
   odt_read_task_assets: readTaskAssetsResultSchema,
-  odt_read_task_documents: taskDocumentsReadSchema,
+  odt_read_task_artifacts: readTaskArtifactsResultSchema,
+  odt_set_task_artifact: mcpArtifactSaveResultSchema,
+  odt_delete_task_artifact: mcpArtifactDeleteResultSchema,
   odt_update_task: taskSummarySchema,
-  odt_set_spec: setSpecResultSchema,
-  odt_set_plan: setPlanResultSchema,
   odt_build_blocked: buildBlockedResultSchema,
   odt_build_resumed: buildResumedResultSchema,
   odt_build_completed: buildCompletedResultSchema,
   odt_set_pull_request: setPullRequestResultSchema,
-  odt_qa_approved: qaApprovedResultSchema,
-  odt_qa_rejected: qaRejectedResultSchema,
   ...ODT_BROWSER_TOOL_RESPONSE_SCHEMAS,
 } as const;

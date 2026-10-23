@@ -1,17 +1,23 @@
 import { describe, expect, mock, test } from "bun:test";
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   type TaskWorkflowTaskComposerModel,
   useTaskWorkflowComposer,
 } from "@/features/task-workflow/use-task-workflow-composer";
+import { TaskWorkflowActionsContext } from "@/features/task-workflow/task-workflow-actions-context";
+import { WorkflowArtifactControls } from "@/components/features/task-artifacts/artifact-controls";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   SpecStateContext,
   TasksStateContext,
   WorkspaceStateContext,
 } from "@/state/app-state-contexts";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createTaskCardFixture,
+  createTaskWorkflowActionsFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type {
   SpecStateContextValue,
   TasksStateContextValue,
@@ -88,8 +94,8 @@ const specState = {
   loadPlanDocument: async () => ({ markdown: "", updatedAt: null }),
   loadQaReportDocument: async () => ({ markdown: "", updatedAt: null }),
   saveSpec: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  saveSpecDocument: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  savePlanDocument: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
+  saveSpecArtifact: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
+  savePlanArtifact: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
 } satisfies SpecStateContextValue;
 
 const createTasksState = (
@@ -314,6 +320,80 @@ describe("useTaskCreateModalController", () => {
     expect(updateCalls).toEqual([]);
     harness.unmount();
   });
+});
+
+describe("workflow artifact editor shortcuts", () => {
+  test.each([
+    { section: "spec", label: "Spec", markdown: "# Saved specification" },
+    { section: "plan", label: "Plan", markdown: "# Saved implementation plan" },
+  ] as const)(
+    "opens $label directly and returns ordinary Edit to Details",
+    async ({ section, label, markdown }) => {
+      const task = createTaskCardFixture({ id: "task-edit-shortcut" });
+      const tasks = [task];
+      let controller: Controller;
+      const getController = () => controller;
+      const spec = {
+        ...specState,
+        loadSpecDocument: async () => ({ markdown: "# Saved specification", updatedAt: null }),
+        loadPlanDocument: async () => ({
+          markdown: "# Saved implementation plan",
+          updatedAt: null,
+        }),
+      };
+      const ControllerProbe = ({ editor }: { editor: TaskWorkflowTaskComposerModel }): null => {
+        controller = useTaskCreateModalController(editor);
+        return null;
+      };
+      const EditorFlow = (): ReactElement => {
+        const workflow = useTaskWorkflowComposer({
+          activeWorkspace: workspaceState.activeWorkspace,
+          tasks,
+        });
+        return (
+          <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture(workflow)}>
+            <TooltipProvider>
+              <WorkflowArtifactControls
+                taskId={task.id}
+                workflowKind={section}
+                name={label}
+                markdown={undefined}
+                taskAssetContext={undefined}
+              />
+            </TooltipProvider>
+            <button type="button" onClick={() => workflow.onEdit(task.id)}>
+              Edit task
+            </button>
+            <ControllerProbe editor={workflow.composer} />
+          </TaskWorkflowActionsContext.Provider>
+        );
+      };
+      const view = render(
+        <QueryProvider>
+          <WorkspaceStateContext.Provider value={workspaceState}>
+            <TasksStateContext.Provider value={createTasksState(async () => {})}>
+              <SpecStateContext.Provider value={spec}>
+                <EditorFlow />
+              </SpecStateContext.Provider>
+            </TasksStateContext.Provider>
+          </WorkspaceStateContext.Provider>
+        </QueryProvider>,
+      );
+      try {
+        await act(async () => fireEvent.click(view.getByRole("button", { name: "Edit" })));
+        expect(getController().editSection).toBe(section);
+        expect(getController().activeDocumentSection).toBe(section);
+        expect(getController().activeDraft).toBe(markdown);
+
+        await act(async () => getController().close());
+        await act(async () => fireEvent.click(view.getByRole("button", { name: "Edit task" })));
+        expect(getController().editSection).toBe("details");
+        expect(getController().activeDocumentSection).toBeNull();
+      } finally {
+        view.unmount();
+      }
+    },
+  );
 });
 
 describe("task workflow editor save ownership", () => {

@@ -163,7 +163,7 @@ describe("OpenCode tool strategy catalog", () => {
         expectedPreview: "task-42",
       },
       {
-        canonicalName: "odt_read_task_documents",
+        canonicalName: "odt_read_task_artifacts",
         rawInput: { taskId: "task-42" },
         expectedPreview: "task-42",
       },
