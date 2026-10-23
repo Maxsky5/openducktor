@@ -78,6 +78,7 @@ const pathFailure = (
 ): NonNullable<ElectronHostCommandRouterInput["processEnvironmentInput"]> => ({
   baseEnv: {
     HOME: "/home/dev",
+    OPENDUCKTOR_CONFIG_DIR: process.env.OPENDUCKTOR_CONFIG_DIR,
     OPENDUCKTOR_DEV_INSTANCE: "electron-0123456789ab",
     PATH: "/usr/bin:/bin",
     ...baseEnv,
@@ -343,6 +344,7 @@ const createRuntimeHealth = (): RuntimeHealthPort => ({
 });
 
 const createTaskStore = (): TaskStorePort => ({
+  listArtifacts: () => Effect.succeed([]),
   listAgentSessionsForTasks: ({ taskIds }) =>
     Effect.succeed(taskIds.map((taskId) => ({ taskId, agentSessions: [] }))),
   getTask: () =>
@@ -357,7 +359,7 @@ const createTaskStore = (): TaskStorePort => ({
       availableActions: [],
       labels: [],
       subtaskIds: [],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false },
         plan: { has: false },
         qaReport: { has: false, verdict: "not_reviewed" },
@@ -417,7 +419,7 @@ const createTaskStore = (): TaskStorePort => ({
       availableActions: [],
       labels: [],
       subtaskIds: [],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false },
         plan: { has: false },
         qaReport: { has: false, verdict: "not_reviewed" },
@@ -465,7 +467,7 @@ const createTaskStore = (): TaskStorePort => ({
           availableActions: [],
           labels: [],
           subtaskIds: [],
-          documentSummary: {
+          artifactSummary: {
             spec: { has: false },
             plan: { has: false },
             qaReport: { has: false, verdict: "not_reviewed" },
@@ -521,7 +523,7 @@ const createTaskStore = (): TaskStorePort => ({
       availableActions: [],
       labels: [],
       subtaskIds: [],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false },
         plan: { has: false },
         qaReport: { has: false, verdict: "not_reviewed" },
@@ -555,13 +557,13 @@ const createTaskStore = (): TaskStorePort => ({
       updatedAt: "2026-01-02T00:00:00Z",
       createdAt: "2026-01-01T00:00:00Z",
     }),
-  setSpecDocument: (input) =>
+  setSpecArtifact: (input) =>
     Effect.succeed({
       markdown: input.markdown,
       updatedAt: "2026-01-02T00:00:00Z",
       revision: 1,
     }),
-  setPlanDocument: (input) =>
+  setPlanArtifact: (input) =>
     Effect.succeed({
       markdown: input.markdown,
       updatedAt: "2026-01-02T00:00:00Z",
@@ -569,55 +571,62 @@ const createTaskStore = (): TaskStorePort => ({
     }),
   recordQaOutcome: (input) =>
     Effect.succeed({
-      id: input.taskId,
-      title: "Task 1",
-      description: "",
-      status: input.status,
-      priority: 2,
-      issueType: "task",
-      aiReviewEnabled: true,
-      availableActions: [],
-      labels: [],
-      subtaskIds: [],
-      documentSummary: {
-        spec: { has: false },
-        plan: { has: false },
-        qaReport: { has: true, verdict: input.verdict },
+      task: {
+        id: input.taskId,
+        title: "Task 1",
+        description: "",
+        status: input.status,
+        priority: 2,
+        issueType: "task",
+        aiReviewEnabled: true,
+        availableActions: [],
+        labels: [],
+        subtaskIds: [],
+        artifactSummary: {
+          spec: { has: false },
+          plan: { has: false },
+          qaReport: { has: true, verdict: input.verdict },
+        },
+        agentWorkflows: {
+          spec: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          planner: {
+            required: false,
+            canSkip: true,
+            available: false,
+            completed: false,
+          },
+          builder: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: false,
+          },
+          qa: {
+            required: true,
+            canSkip: false,
+            available: false,
+            completed: input.verdict === "approved",
+          },
+        },
+        updatedAt: "2026-01-02T00:00:00Z",
+        createdAt: "2026-01-01T00:00:00Z",
       },
-      agentWorkflows: {
-        spec: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        planner: {
-          required: false,
-          canSkip: true,
-          available: false,
-          completed: false,
-        },
-        builder: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: false,
-        },
-        qa: {
-          required: true,
-          canSkip: false,
-          available: false,
-          completed: input.verdict === "approved",
-        },
+      artifact: {
+        markdown: input.markdown,
+        revision: 1,
+        updatedAt: "2026-01-02T00:00:00Z",
       },
-      updatedAt: "2026-01-02T00:00:00Z",
-      createdAt: "2026-01-01T00:00:00Z",
     }),
   upsertAgentSession: () => Effect.succeed(true),
   setPullRequest: () => Effect.succeed(true),
   setDirectMerge: () => Effect.succeed(true),
   clearAgentSessionsByRoles: () => Effect.succeed(true),
-  clearWorkflowDocuments: () => Effect.succeed(true),
+  clearTaskArtifacts: () => Effect.succeed(true),
   clearQaReports: () => Effect.succeed(true),
   transitionTask: (input) =>
     Effect.succeed({
@@ -631,7 +640,7 @@ const createTaskStore = (): TaskStorePort => ({
       availableActions: [],
       labels: [],
       subtaskIds: [],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false },
         plan: { has: false },
         qaReport: { has: false, verdict: "not_reviewed" },
@@ -1606,7 +1615,7 @@ describe("createElectronHostCommandRouter", () => {
       cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
     });
     expect(
-      await router.invoke("spec_save_document", {
+      await router.invoke("spec_save_artifact", {
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Spec v2",
@@ -1630,7 +1639,7 @@ describe("createElectronHostCommandRouter", () => {
       cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
     });
     expect(
-      await router.invoke("plan_save_document", {
+      await router.invoke("plan_save_artifact", {
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Plan v2",
@@ -1690,8 +1699,8 @@ describe("createElectronHostCommandRouter", () => {
               entries.map((entry): TaskCard => ({
                 ...entry,
                 status: "ai_review",
-                documentSummary: {
-                  ...entry.documentSummary,
+                artifactSummary: {
+                  ...entry.artifactSummary,
                   plan: { has: true, updatedAt: "2026-01-02T00:00:00Z" },
                 },
               })),
@@ -2022,7 +2031,7 @@ describe("createElectronHostCommandRouter", () => {
                 createdAt: "2026-05-01T00:00:00.000Z",
                 updatedAt: "2026-05-02T00:00:00.000Z",
               },
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -2095,7 +2104,7 @@ describe("createElectronHostCommandRouter", () => {
             availableActions: [],
             labels: [],
             subtaskIds: [],
-            documentSummary: {
+            artifactSummary: {
               spec: { has: false },
               plan: { has: false },
               qaReport: { has: false, verdict: "not_reviewed" },
@@ -2142,7 +2151,7 @@ describe("createElectronHostCommandRouter", () => {
               availableActions: [],
               labels: [],
               subtaskIds: [],
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -2261,7 +2270,7 @@ describe("createElectronHostCommandRouter", () => {
               availableActions: [],
               labels: [],
               subtaskIds: [],
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -2357,7 +2366,7 @@ describe("createElectronHostCommandRouter", () => {
               availableActions: [],
               labels: [],
               subtaskIds: [],
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -2433,7 +2442,7 @@ describe("createElectronHostCommandRouter", () => {
               availableActions: [],
               labels: [],
               subtaskIds: [],
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -2551,7 +2560,7 @@ describe("createElectronHostCommandRouter", () => {
               availableActions: [],
               labels: [],
               subtaskIds: [],
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -2628,7 +2637,7 @@ describe("createElectronHostCommandRouter", () => {
               availableActions: [],
               labels: [],
               subtaskIds: [],
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: false },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },

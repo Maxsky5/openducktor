@@ -837,11 +837,12 @@ describe("buildClaudeAgentSdkOptions", () => {
       [
         "odt_read_task",
         "odt_read_task_assets",
-        "odt_read_task_documents",
+        "odt_read_task_artifacts",
+        "odt_set_task_artifact",
+        "odt_delete_task_artifact",
         "odt_search_tasks",
         "odt_create_task",
         "odt_update_task",
-        "odt_set_spec",
         ...ODT_BROWSER_TOOL_NAMES,
       ].join(","),
     );
@@ -976,14 +977,14 @@ describe("buildClaudeAgentSdkOptions", () => {
       expect(
         await preToolUseHook(options, {
           permissionMode: "bypassPermissions",
-          toolName: "mcp__openducktor__odt_set_plan",
+          toolName: "mcp__openducktor__odt_build_completed",
           toolInput: {},
         }),
       ).toMatchObject({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
-          permissionDecisionReason: "Tool odt_set_plan is not allowed for spec sessions.",
+          permissionDecisionReason: "Tool odt_build_completed is not allowed for spec sessions.",
         },
       });
       for (const tool of [

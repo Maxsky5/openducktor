@@ -5,6 +5,7 @@ import {
   expectToolError,
   readToolInputProperties,
   startMockBridge,
+  taskReadPayload,
   taskSummaryPayload,
   useMcpServerTestLifecycle,
 } from "./test-support/mcp-server-harness";
@@ -28,7 +29,9 @@ describe("MCP server tool results", () => {
         taskId: expect.any(Object),
       });
       expect(readToolInputProperties(tools, "odt_read_task")).not.toHaveProperty("workspaceId");
-      expect(readToolInputProperties(tools, "odt_set_plan")).not.toHaveProperty("workspaceId");
+      expect(readToolInputProperties(tools, "odt_set_task_artifact")).not.toHaveProperty(
+        "workspaceId",
+      );
       expect(readToolInputProperties(tools, "odt_get_workspaces")).not.toHaveProperty(
         "workspaceId",
       );
@@ -94,7 +97,7 @@ describe("MCP server tool results", () => {
       });
 
       expect(result.isError).not.toBe(true);
-      expect(result.structuredContent).toEqual(taskSummaryPayload);
+      expect(result.structuredContent).toEqual(taskReadPayload);
       expect(bridge.requests).toContainEqual({
         url: "/invoke/odt_read_task",
         body: { workspaceId: "repo", taskId: "task-1" },
@@ -112,17 +115,17 @@ describe("MCP server tool results", () => {
     try {
       await client.connect(transport);
       const result = await client.callTool({
-        name: "odt_set_plan",
+        name: "odt_set_pull_request",
         arguments: {
           taskId: "task-1",
-          markdown: "# Plan",
+          number: 42,
         },
       });
       const contentResult = result;
       const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
-      expect(error.message).toContain("Unexpected URL: /invoke/odt_set_plan");
+      expect(error.message).toContain("Unexpected URL: /invoke/odt_set_pull_request");
     } finally {
       await client.close();
     }
@@ -391,7 +394,7 @@ describe("MCP server tool results", () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
-      allowedTools: "odt_read_task,odt_read_task_documents,odt_build_completed",
+      allowedTools: "odt_read_task,odt_read_task_artifacts,odt_build_completed",
     });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
@@ -402,7 +405,7 @@ describe("MCP server tool results", () => {
 
       expect(toolNames).toEqual([
         "odt_read_task",
-        "odt_read_task_documents",
+        "odt_read_task_artifacts",
         "odt_build_completed",
       ]);
     } finally {
@@ -414,7 +417,7 @@ describe("MCP server tool results", () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, {
       workspaceId: "repo",
-      allowedTools: "odt_read_task,odt_set_plan,odt_build_completed",
+      allowedTools: "odt_read_task,odt_set_task_artifact,odt_build_completed",
     });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
 
@@ -424,7 +427,7 @@ describe("MCP server tool results", () => {
 
       expect(tools.tools.map(({ name, title }) => ({ name, title }))).toEqual([
         { name: "odt_read_task", title: "odt_read_task" },
-        { name: "odt_set_plan", title: "odt_set_plan" },
+        { name: "odt_set_task_artifact", title: "odt_set_task_artifact" },
         { name: "odt_build_completed", title: "odt_build_completed" },
       ]);
     } finally {
@@ -499,8 +502,8 @@ describe("MCP server tool results", () => {
       });
       const contentResult = result;
 
-      expect(contentResult.structuredContent).toEqual(taskSummaryPayload);
-      expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual(taskSummaryPayload);
+      expect(contentResult.structuredContent).toEqual(taskReadPayload);
+      expect(JSON.parse(contentResult.content[0]?.text ?? "null")).toEqual(taskReadPayload);
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
         {
@@ -580,7 +583,7 @@ describe("MCP server tool results", () => {
       });
       const contentResult = result;
 
-      expect(contentResult.structuredContent).toEqual(taskSummaryPayload);
+      expect(contentResult.structuredContent).toEqual(taskReadPayload);
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
         { url: "/invoke/odt_get_workspaces", body: {} },
@@ -592,27 +595,6 @@ describe("MCP server tool results", () => {
           },
         },
       ]);
-    } finally {
-      await client.close();
-    }
-  });
-
-  test("odt_set_plan registered tool excludes subtasks from input schema and description", async () => {
-    const bridge = await startMockBridge();
-    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
-    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
-
-    try {
-      await client.connect(transport);
-      const tools = await client.listTools();
-
-      const setPlanTool = tools.tools.find((entry) => entry.name === "odt_set_plan");
-      expect(setPlanTool).toBeTruthy();
-
-      expect(setPlanTool?.description).not.toContain("subtask");
-      expect(setPlanTool?.description).not.toContain("priority");
-
-      expect(readToolInputProperties(tools, "odt_set_plan")).not.toHaveProperty("subtasks");
     } finally {
       await client.close();
     }

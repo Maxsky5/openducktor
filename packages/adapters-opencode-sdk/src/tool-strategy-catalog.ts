@@ -1,5 +1,5 @@
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentToolType } from "@openducktor/core";
+import { retiredArtifactToolName, type AgentToolType } from "@openducktor/core";
 
 export type OpenCodeToolPreviewStrategy =
   | "shell"
@@ -152,7 +152,9 @@ const OPENCODE_TOOL_STRATEGY_CATALOG: readonly OpenCodeToolStrategyDefinition[] 
     toolType: "workflow",
     previewStrategy: "workflow",
     resolveCanonicalName: (normalizedName) =>
-      WORKFLOW_CANONICAL_NAME_BY_ALIAS.get(normalizedName) ?? null,
+      WORKFLOW_CANONICAL_NAME_BY_ALIAS.get(normalizedName) ??
+      retiredArtifactToolName(normalizedName) ??
+      null,
   },
   {
     toolType: "web",

@@ -281,7 +281,7 @@ describe("resolveBuildContinuationLaunchAction", () => {
 
   test("uses QA rejection follow-up for QA-rejected tasks", () => {
     const task = createTaskCardFixture({ id: "TASK-1", status: "in_progress" });
-    task.documentSummary.qaReport = {
+    task.artifactSummary.qaReport = {
       has: true,
       updatedAt: "2026-03-09T10:00:00.000Z",
       verdict: "rejected",

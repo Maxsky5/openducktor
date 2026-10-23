@@ -74,6 +74,8 @@ Runtime catalog reads follow these rules:
 | Host runtime and MCP bridge status | Infinite, updated by events |
 | Saved Autopilot rules | Infinite, invalidated by events |
 
+Task details and editing use `unfilteredRepoTaskDataQueryOptions` and `tasksListAll`, with a separate cache key from the retained Kanban list. Task events carry changed cards, including closed tasks outside Done retention. Both lists apply these cards and removals without another host read; only the Kanban list applies the event cutoff. A stream gap marks the complete list incomplete before the board read starts. Later events cannot make that baseline fresh. Observed complete lists read again during recovery; inactive lists wait for their next view. A successful full read clears the incomplete state.
+
 Agent session lists stay fresh until a task event invalidates them or an explicit refresh requests current records. Session-list queries do not retry on mount after a failure. A failed list stays active in its view, so a later task event reads it again.
 
 Agent history uses an infinite stale time while the workspace live stream proves its coverage version is current. History with no proven coverage uses a zero stale time.
@@ -84,7 +86,9 @@ The host fails a whole request when one requested task is missing. If a deletion
 
 The batch keeps a revision for each task list. A task event advances the revisions of its tasks when the stream receives the event. A read that was sent before that point reads again before it completes. Query stores a read result some microtasks after the host response. A read that is pending when an event arrives reads again until it reflects the latest revision. The event completes after the observed lists and the pending reads of its tasks reflect it, also when those reads have no view. A pending read keeps this need until the read operation settles. A confirmed deletion completes the pending reads of its task with an empty list.
 
-The task stream starts the session-list work of each consecutive event when it receives the event. Events that arrive before a request starts share that request. The stream completes and acknowledges events in cursor order. A live refresh records the session ownership of the cached lists when it starts. A later event shares that live refresh when its changed tasks still have that ownership, and starts a new one only for newer ownership.
+The task stream starts the session-list work of each consecutive event when it receives the event. Events that arrive before a request starts share that request. The stream completes and acknowledges events in cursor order. A live refresh records the session ownership of the cached lists when it enters the client queue. A later event shares that live refresh when its changed tasks still have that ownership, and starts a new one only for newer ownership.
+
+Each query client sends one live refresh at a time, including across replacement stream owners. This matches the host's single refresh lane without holding browser connections for waiting work. Before a queued refresh starts, it checks the stream owner, stream epoch, workspace epoch, and whether the workspace remains open. A failed refresh reaches its caller and does not stop the queue.
 
 When a replacement snapshot arrives, the stream cancels all session-list reads and advances the batch epoch. Work that started before the snapshot does not store records, start a live refresh, or report success. A read whose response returned before the snapshot cannot be cancelled. If it has no older list to keep, its query goes back to its first state. A stopped stream starts no live refresh for the events or the snapshot that it started.
 

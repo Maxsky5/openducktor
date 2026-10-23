@@ -42,7 +42,7 @@ const baseTask: TaskCard = {
   labels: [],
   parentId: undefined,
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },

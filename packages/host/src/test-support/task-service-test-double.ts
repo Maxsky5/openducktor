@@ -9,6 +9,12 @@ const unexpectedTaskServiceCall = (methodName: keyof TaskService) => () =>
 
 const createTaskServiceDefaults = () =>
   ({
+    listTaskArtifacts: unexpectedTaskServiceCall("listTaskArtifacts"),
+    readTaskArtifact: unexpectedTaskServiceCall("readTaskArtifact"),
+    createTaskArtifact: unexpectedTaskServiceCall("createTaskArtifact"),
+    renameTaskArtifact: unexpectedTaskServiceCall("renameTaskArtifact"),
+    replaceTaskArtifact: unexpectedTaskServiceCall("replaceTaskArtifact"),
+    deleteTaskArtifact: unexpectedTaskServiceCall("deleteTaskArtifact"),
     agentSessionDelete: unexpectedTaskServiceCall("agentSessionDelete"),
     agentSessionUpdateModel: unexpectedTaskServiceCall("agentSessionUpdateModel"),
     agentSessionUpsert: unexpectedTaskServiceCall("agentSessionUpsert"),
@@ -44,8 +50,8 @@ const createTaskServiceDefaults = () =>
     repoPullRequestSyncDetailed: unexpectedTaskServiceCall("repoPullRequestSyncDetailed"),
     resetImplementation: unexpectedTaskServiceCall("resetImplementation"),
     resetTask: unexpectedTaskServiceCall("resetTask"),
-    savePlanDocument: unexpectedTaskServiceCall("savePlanDocument"),
-    saveSpecDocument: unexpectedTaskServiceCall("saveSpecDocument"),
+    savePlanArtifact: unexpectedTaskServiceCall("savePlanArtifact"),
+    saveSpecArtifact: unexpectedTaskServiceCall("saveSpecArtifact"),
     setPlan: unexpectedTaskServiceCall("setPlan"),
     setSpec: unexpectedTaskServiceCall("setSpec"),
     specGet: unexpectedTaskServiceCall("specGet"),

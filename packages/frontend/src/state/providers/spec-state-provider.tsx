@@ -11,8 +11,8 @@ export function SpecStateProvider({ children }: PropsWithChildren): ReactElement
     loadPlanDocument,
     loadQaReportDocument,
     saveSpec,
-    saveSpecDocument,
-    savePlanDocument,
+    saveSpecArtifact,
+    savePlanArtifact,
   } = useSpecOperations({
     activeWorkspace,
   });
@@ -25,8 +25,8 @@ export function SpecStateProvider({ children }: PropsWithChildren): ReactElement
         loadPlanDocument,
         loadQaReportDocument,
         saveSpec,
-        saveSpecDocument,
-        savePlanDocument,
+        saveSpecArtifact,
+        savePlanArtifact,
       }),
     [
       loadPlanDocument,
@@ -34,8 +34,8 @@ export function SpecStateProvider({ children }: PropsWithChildren): ReactElement
       loadSpec,
       loadSpecDocument,
       saveSpec,
-      saveSpecDocument,
-      savePlanDocument,
+      saveSpecArtifact,
+      savePlanArtifact,
     ],
   );
 

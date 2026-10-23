@@ -156,20 +156,6 @@ export function TaskDetailsSheetContent(
           {...(activeWorkspace ? { workspaceId: activeWorkspace.workspaceId } : {})}
           shouldRenderSubtasks={viewModel.shouldRenderSubtasks}
           subtasks={viewModel.subtasks}
-          specDoc={viewModel.specDoc}
-          planDoc={viewModel.planDoc}
-          qaDoc={viewModel.qaDoc}
-          documentSummaries={{
-            hasSpec: viewModel.hasSpecDocument,
-            hasPlan: viewModel.hasPlanDocument,
-            hasQa: viewModel.hasQaDocument,
-            specUpdatedAt: viewModel.specSummaryUpdatedAt,
-            planUpdatedAt: viewModel.planSummaryUpdatedAt,
-            qaUpdatedAt: viewModel.qaSummaryUpdatedAt,
-          }}
-          loadSpecDocumentSection={viewModel.loadSpecDocumentSection}
-          loadPlanDocumentSection={viewModel.loadPlanDocumentSection}
-          loadQaDocumentSection={viewModel.loadQaDocumentSection}
         />
       </div>
 

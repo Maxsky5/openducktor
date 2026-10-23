@@ -4,7 +4,11 @@ import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { HostOperationError } from "../../../effect/host-errors";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import { createTaskSyncServiceForTest, createEventBus } from "./task-sync-service.test-support";
+import {
+  createTaskSyncServiceForTest,
+  createEventBus,
+  task,
+} from "./task-sync-service.test-support";
 
 const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
   workspaceId: repoPath.slice(1),
@@ -20,6 +24,27 @@ const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
 });
 
 describe("task mutation gate and pull request sync", () => {
+  test("publishes changed closed cards outside Kanban retention", async () => {
+    const closed = task({ status: "closed", title: "Edited closed task" });
+    const { eventBus, events } = createEventBus();
+    const service = createTaskSyncServiceForTest({
+      eventBus,
+      taskService: {
+        repoPullRequestSyncDetailed: () => Effect.succeed({ ran: true, changedTaskIds: [] }),
+        listTasks: (input) => Effect.succeed(input.doneVisibleDays === undefined ? [closed] : []),
+      },
+      workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+    });
+    await Effect.runPromise(
+      service.publishTasksUpdated(
+        "/repo",
+        { taskIds: [closed.id], removedTaskIds: [] },
+        "update-task",
+        [],
+      ),
+    );
+    expect(events[0]?.boardChanges?.cards).toEqual([closed]);
+  });
   test.each(["closed", "missing", "moved", "replaced", "removing"] as const)(
     "skips a captured workspace that is %s without starting provider work",
     async (state) => {

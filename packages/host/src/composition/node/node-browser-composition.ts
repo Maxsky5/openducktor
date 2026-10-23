@@ -7,8 +7,12 @@ import {
 } from "../../adapters/browser/files/browser-file-stores";
 import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import {
+  type ManagedCallerResolver,
+  type CreateManagedCallerResolverInput,
+  createManagedCallerResolver,
+} from "../../application/agent-sessions/managed-caller-resolver";
+import {
   type BrowserCallerResolver,
-  type CreateBrowserCallerResolverInput,
   createBrowserCallerResolver,
 } from "../../application/browser/browser-caller-resolver";
 import { BrowserServiceError } from "../../application/browser/browser-service-error";
@@ -31,23 +35,31 @@ type NodeBrowserServiceInput = {
   git: Pick<GitPort, "canonicalizePath">;
   tasks: Pick<TaskReader, "getTask">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "get" | "listRuntimeOwners">;
-  liveSessions: CreateBrowserCallerResolverInput["liveSessions"];
+  liveSessions: CreateManagedCallerResolverInput["liveSessions"];
   localAttachments: Pick<LocalAttachmentService, "stage">;
   eventBus: HostEventBusPort | undefined;
   lifecycleLogger: HostLifecycleLogger;
 };
 
 /** The browser feature of the host, and the resolver that finds the owner of agent tool calls. */
-export type NodeBrowser = { service: BrowserService; callers: BrowserCallerResolver };
+export type NodeBrowser = {
+  browserService: BrowserService;
+  browserCallers: BrowserCallerResolver;
+  managedCallers: ManagedCallerResolver;
+};
 
-export const createNodeBrowser = (input: NodeBrowserServiceInput): NodeBrowser => ({
-  service: createNodeBrowserService(input),
-  callers: createBrowserCallerResolver({
+export const createNodeBrowser = (input: NodeBrowserServiceInput): NodeBrowser => {
+  const managedCallers = createManagedCallerResolver({
     workspaceSettings: input.settings,
     workspaceSessions: input.workspaceSessions,
     liveSessions: input.liveSessions,
-  }),
-});
+  });
+  return {
+    browserService: createNodeBrowserService(input),
+    browserCallers: createBrowserCallerResolver(managedCallers),
+    managedCallers,
+  };
+};
 
 const createNodeBrowserService = (input: NodeBrowserServiceInput): BrowserService =>
   createBrowserService({

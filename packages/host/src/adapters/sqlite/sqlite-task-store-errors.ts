@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import {
   errorMessage,
   HostDependencyError,
@@ -11,7 +12,7 @@ import {
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
-import type { TaskDocumentKind } from "./sqlite-task-store-schema";
+import type { WorkflowArtifactKind } from "./sqlite-task-store-schema";
 
 export type SqliteTaskStorePersistenceError = SqliteTaskStoreDataError | TaskStoreError;
 export type SqliteTaskStoreReadError = SqliteTaskStoreDataError | TaskStoreError;
@@ -25,7 +26,7 @@ type SqliteTaskStoreAdapterErrorDetails = {
 export type SqliteTaskStoreDataErrorDetails =
   | { readonly taskId: string }
   | {
-      readonly kind: TaskDocumentKind;
+      readonly kind: WorkflowArtifactKind;
       readonly taskId: string;
       readonly value: number;
     };
@@ -52,6 +53,17 @@ export const mapSqliteTaskStoreAdapterError = (
   databasePath: string,
   cause: unknown,
 ): TaskStoreError => {
+  if (cause instanceof HostOperationError && cause.cause instanceof DrizzleQueryError) {
+    const queryCause = cause.cause.cause;
+    return new HostOperationError({
+      operation: cause.operation,
+      message: queryCause
+        ? errorMessage(queryCause)
+        : "The task-store query failed. Check the task-store database and retry.",
+      cause: queryCause,
+      details: { databasePath },
+    });
+  }
   if (cause instanceof SqliteTaskStoreDataError) {
     const details: SqliteTaskStoreAdapterErrorDetails = {
       databasePath,

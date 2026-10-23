@@ -149,7 +149,7 @@ const createAutopilotHarness = async ({
     setPlan: (input) =>
       move("ready_for_dev")(input).pipe(
         Effect.as({
-          document: { markdown: input.markdown },
+          artifact: { markdown: input.markdown },
           changes: { taskIds: [input.taskId], removedTaskIds: [] },
         }),
       ),
@@ -157,8 +157,14 @@ const createAutopilotHarness = async ({
       move(buildCompletedStatus)(input).pipe(Effect.tap(() => afterCommitGate)),
     buildBlocked: move("blocked"),
     buildResumed: move("in_progress"),
-    qaRejected: move("in_progress"),
-    qaApproved: move("human_review"),
+    qaRejected: (input) =>
+      move("in_progress")(input).pipe(
+        Effect.map((task) => ({ task, artifact: { markdown: input.markdown } })),
+      ),
+    qaApproved: (input) =>
+      move("human_review")(input).pipe(
+        Effect.map((task) => ({ task, artifact: { markdown: input.markdown } })),
+      ),
     humanRequestChanges: move("in_progress"),
     resetImplementation: move("ready_for_dev"),
     transitionTask: (input) => move(input.status)(input),

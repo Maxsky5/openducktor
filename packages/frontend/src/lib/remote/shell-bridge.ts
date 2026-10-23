@@ -6,6 +6,7 @@ import {
 } from "@openducktor/host-client/remote";
 import type { QueryClient } from "@tanstack/react-query";
 import { createDisabledAppUpdateBridge, type ShellBridge } from "../shell-bridge";
+import { browserArtifactPreviewEnvironment } from "../artifact-preview-environment";
 
 /** Creates the browser shell of a remote host. The frontend core owns the connection recovery. */
 export const createRemoteShellBridge = ({
@@ -29,6 +30,7 @@ export const createRemoteShellBridge = ({
   });
   return {
     ...host,
+    getArtifactPreviewEnvironment: async () => browserArtifactPreviewEnvironment(endpoint),
     remoteConnection: remote,
     dispose: () => remote.disconnect(),
     setActive: (active) => remote.setActive(active),

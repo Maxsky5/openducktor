@@ -3,7 +3,7 @@ import { directMergeRecordSchema, gitTargetBranchSchema, pullRequestSchema } fro
 import { agentSessionRecordSchema } from "./session-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
-export const taskMetadataDocumentSchema = z.object({
+export const taskMetadataArtifactSchema = z.object({
   markdown: z.string().default(""),
   updatedAt: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   revision: z.preprocess(
@@ -12,7 +12,7 @@ export const taskMetadataDocumentSchema = z.object({
   ),
   error: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
 });
-export type TaskMetadataDocument = z.infer<typeof taskMetadataDocumentSchema>;
+export type TaskMetadataArtifact = z.infer<typeof taskMetadataArtifactSchema>;
 
 export const taskMetadataQaReportSchema = z.object({
   markdown: z.string(),
@@ -27,8 +27,8 @@ export const taskMetadataQaReportSchema = z.object({
 export type TaskMetadataQaReport = z.infer<typeof taskMetadataQaReportSchema>;
 
 const taskMetadataPayloadFields = {
-  spec: taskMetadataDocumentSchema,
-  plan: taskMetadataDocumentSchema,
+  spec: taskMetadataArtifactSchema,
+  plan: taskMetadataArtifactSchema,
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),
     gitTargetBranchSchema.optional(),

@@ -114,6 +114,7 @@ export type AgentChatToolCallPresentation =
       kind: "regular" | "workflow";
       displayName: string;
     }
+  | { kind: "artifact"; displayName: string; operation: "set" | "delete" }
   | { kind: "task"; displayName: string; taskTool: AgentChatTaskToolName }
   /** An `odt_browser_*` call. `action` is the browser action, such as `click`. */
   | { kind: "browser"; displayName: string; action: string };

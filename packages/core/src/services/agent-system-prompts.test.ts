@@ -37,6 +37,25 @@ const expectHeadingsInOrder = (prompt: string, headings: string[]) => {
 };
 
 describe("buildAgentSystemPrompt", () => {
+  test.each([
+    ["spec", "spec"],
+    ["planner", "plan"],
+    ["build", "spec, plan"],
+    ["qa", "qaReport"],
+  ] as const)("shows %s workflow code access beside the shared artifact setter", (role, codes) => {
+    const prompt = buildAgentSystemPrompt({ role, task: taskContext });
+
+    expect(prompt).toContain("- odt_set_task_artifact(");
+    expect(prompt).toContain(
+      `Allowed workflow codes for odt_set_task_artifact: ${codes}. Free-artifact writes are also allowed.`,
+    );
+    expect(prompt).toContain("Put complete workflow Markdown directly in content.");
+    expect(prompt).toContain(
+      "For free artifacts, use content for text or dataBase64 for base64 bytes, with fileName and mediaType.",
+    );
+    expect(prompt).toContain("Omit name, fileName, and mediaType for workflow codes.");
+  });
+
   test("includes structured workflow guards, tool protocol, and task lock", () => {
     const prompt = buildAgentSystemPrompt({
       role: "planner",
@@ -60,37 +79,44 @@ describe("buildAgentSystemPrompt", () => {
       "odt_update_task is the only exception: it may update any task in the resolved workspace, including a task other than task-42.",
       "odt_search_tasks and odt_create_task act on the startup workspace, take no taskId, and do not change the session task.",
       "Omit workspaceId from workflow tool calls; workflow sessions use the startup workspace.",
-      "Start each session by calling odt_read_task with taskId task-42 to load the canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
-      "Call odt_read_task_documents only when you need specific document bodies, and request only the sections you need.",
+      "Start each session by calling odt_read_task with taskId task-42 to load task fields, qaVerdict, and metadata for all current workflow and free artifacts.",
+      "Free-artifact writes do not change task status or satisfy workflow requirements.",
+      "Use odt_set_task_artifact with code spec, plan, or qaReport for workflow artifacts.",
+      "Reopen a closed task before changing a free artifact.",
+      "Read saved artifact content; never infer it from summaries or combine chunks from different versions.",
       "When task markdown contains odt-asset image references you need to inspect, collect their assetIds and call odt_read_task_assets once for the batch.",
       "Task context:",
       "Artifact access:",
       "description: Rebuild agent workflows",
-      "Persisted spec, implementation plan, and latest QA report are intentionally not inlined in this system prompt.",
-      "Use odt_read_task with taskId task-42 to load the current canonical task summary object, including task fields, qaVerdict, and document presence booleans.",
-      "Use odt_read_task_documents with taskId task-42 and explicit include flags when you need document markdown bodies.",
+      "The saved spec, plan, and QA report are not in this prompt.",
+      'After odt_read_task, read needed content with odt_read_task_artifacts, for example odt_read_task_artifacts({"taskId":"task-42","codes":["spec"]}).',
+      "Select artifacts with codes from task.artifacts.",
+      "Workflow codes are spec, plan, and qaReport.",
+      "Free-artifact codes stay the same when display names change.",
+      "Workflow reads return full content by default.",
+      "Free-artifact reads default to 16 KiB",
       "governing constitution for the current task",
       "higher-trust inputs than conversational summaries",
       "Treat the odt_read_task response as the latest persisted workflow summary",
-      "odt_set_spec allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review",
-      "odt_set_plan for feature/epic allowed from spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
-      "odt_set_plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
-      "document-only revisions",
+      "odt_set_task_artifact with code spec allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review",
+      "odt_set_task_artifact with code plan for feature/epic allowed from spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
+      "odt_set_task_artifact with code plan for task/bug allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review.",
+      "artifact-only revisions",
     ]);
     // The MCP definitions describe browser tool input, so the prompt names the tools only.
     expect(prompt).toContain(`- Browser tools: ${ODT_BROWSER_TOOL_NAMES.join(", ")}`);
     expect(prompt).not.toContain("odt_browser_click({");
-    expect(prompt).not.toContain("Existing documents:");
+    expect(prompt).not.toContain("Existing artifacts:");
     expect(prompt).not.toContain("- spec: # Purpose");
     expect(prompt).not.toContain("- implementationPlan: ## Plan");
     expect(prompt).not.toContain("- latestQaReport: ## QA");
-    expect(prompt).toContain("odt_set_plan");
+    expect(prompt).toContain("odt_set_task_artifact");
     expect(prompt).not.toContain("priority must be an integer 0..4");
     expect(prompt).not.toContain('"priority"?: 0|1|2|3|4');
     expect(prompt).not.toContain("- odt_set_spec(");
     expect(prompt).not.toContain("- odt_build_completed(");
     expect(prompt).not.toContain("- odt_qa_rejected(");
-    expect(prompt).toContain("odt_read_task_documents");
+    expect(prompt).toContain("odt_read_task_artifacts");
     expect(prompt).toContain("Feature/epic flow");
     expect(prompt).toContain("read-only mode");
   });
@@ -101,7 +127,7 @@ describe("buildAgentSystemPrompt", () => {
     expectPromptToContainAll(prompt, [
       "Planner owns the technical design",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the spec",
-      "saving the canonical spec with odt_set_spec",
+      "saving the canonical spec with odt_set_task_artifact and code spec",
       "read-only mode",
     ]);
     expect(prompt).not.toContain("[NEEDS CLARIFICATION]");
@@ -127,12 +153,12 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test.each(["spec", "planner"] as const)(
-    "%s saves ready documents without an extra approval round",
+    "%s saves ready artifacts without an extra approval round",
     (role) => {
       const prompt = buildAgentSystemPrompt({ role, task: taskContext });
 
       expectPromptToContainAll(prompt, [
-        "Saving the document is part of your assignment",
+        "Saving the artifact is part of your assignment",
         "in the same turn",
         "After the tool succeeds",
         "If saving fails, report the failure",
@@ -223,7 +249,7 @@ describe("buildAgentSystemPrompt", () => {
       "required design decisions separate from suggestions",
       "Builder owns implementation details, work order, and verification methods",
       "Keep test cases, test commands, evidence checklists, live verification, and smoke-test procedures out of the plan",
-      "odt_set_plan",
+      "odt_set_task_artifact and code plan",
       "read-only mode",
       "Make technical decisions within the agreed scope",
       "no required design decision remains open",
@@ -272,7 +298,7 @@ describe("buildAgentSystemPrompt", () => {
         "Connect each required outcome to the design that provides it",
         "Otherwise, use the task requirement wording as references",
         "description: If an export fails, retain the selection and show the reason.",
-        "odt_set_plan for task/bug allowed from open/",
+        "odt_set_task_artifact with code plan for task/bug allowed from open/",
       ]);
       expect(prompt).not.toContain("Reference the spec for the problem and scope");
       expect(prompt).not.toContain("Use the spec's requirement names as references");
@@ -297,13 +323,13 @@ describe("buildAgentSystemPrompt", () => {
       "meaningful Conventional Commit before calling odt_build_completed",
       "odt_build_blocked with a specific reason",
       "odt_build_resumed",
-      "revise the spec with odt_set_spec and the plan with odt_set_plan",
-      "Save each changed document as complete Markdown",
+      "use odt_set_task_artifact with code spec to revise the spec and code plan to revise the plan",
+      "Save each changed artifact as complete Markdown",
       "Get user approval before changing required scope, design contracts, or security posture",
     ]);
     expect(prompt).not.toContain("Execute the plan in dependency order");
-    expect(prompt).toContain("- odt_set_spec(");
-    expect(prompt).toContain("- odt_set_plan(");
+    expect(prompt).toContain("- odt_set_task_artifact(");
+    expect(prompt).toContain("Allowed workflow codes for odt_set_task_artifact: spec, plan.");
   });
 
   test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
@@ -318,7 +344,7 @@ describe("buildAgentSystemPrompt", () => {
       "Do not reject valid work for a different implementation order or method",
       "material excess complexity",
       "Give its impact, the concrete correction",
-      "Call exactly one of odt_qa_approved or odt_qa_rejected per review pass",
+      "Call odt_set_task_artifact exactly once per review pass with code qaReport, verdict approved or rejected",
       "read-only mode",
     ]);
     expectHeadingsInOrder(prompt, ["## Verdict", "## Findings", "## Verification"]);
@@ -343,27 +369,27 @@ describe("buildAgentSystemPrompt", () => {
       {
         type: "override_base_version_mismatch",
         templateId: "system.role.spec.base",
-        builtinVersion: 7,
+        builtinVersion: 8,
         overrideBaseVersion: 999,
       },
     ]);
   });
 
   test.each([
-    ["system.shared.workflow_guards", 7, 8, "build"],
-    ["system.shared.tool_protocol", 9, 10, "build"],
-    ["system.shared.task_context", 3, 4, "build"],
-    ["system.role.spec.base", 6, 7, "spec"],
-    ["system.role.planner.base", 7, 8, "planner"],
-    ["system.role.build.base", 5, 6, "build"],
-    ["system.role.qa.base", 5, 6, "qa"],
-    ["kickoff.spec_initial", 4, 5, "spec"],
-    ["kickoff.planner_initial", 4, 5, "planner"],
+    ["system.shared.workflow_guards", 8, 9, "build"],
+    ["system.shared.tool_protocol", 10, 11, "build"],
+    ["system.shared.task_context", 4, 5, "build"],
+    ["system.role.spec.base", 7, 8, "spec"],
+    ["system.role.planner.base", 8, 9, "planner"],
+    ["system.role.build.base", 6, 7, "build"],
+    ["system.role.qa.base", 6, 7, "qa"],
+    ["kickoff.spec_initial", 5, 6, "spec"],
+    ["kickoff.planner_initial", 5, 6, "planner"],
     ["kickoff.build_implementation_start", 4, 5, "build"],
     ["kickoff.build_after_qa_rejected", 4, 5, "build"],
     ["kickoff.build_after_human_request_changes", 5, 6, "build"],
     ["kickoff.build_pull_request_generation", 8, 9, "build"],
-    ["kickoff.qa_review", 3, 4, "qa"],
+    ["kickoff.qa_review", 4, 5, "qa"],
   ] as const)(
     "keeps prior overrides and reports the new version for %s",
     (id, previous, current, role) => {
@@ -494,16 +520,16 @@ describe("kickoff and permission prompts", () => {
   });
 
   test.each([
-    ["spec", "kickoff.spec_initial", "specification", "odt_set_spec"],
-    ["planner", "kickoff.planner_initial", "implementation plan", "odt_set_plan"],
+    ["spec", "kickoff.spec_initial", "specification", "spec"],
+    ["planner", "kickoff.planner_initial", "implementation plan", "plan"],
   ] as const)(
     "%s kickoff requests the artifact and leaves policy to the system prompt",
-    (role, templateId, artifact, tool) => {
+    (role, templateId, artifact, code) => {
       const prompt = buildAgentKickoffPrompt({ role, templateId, task: { taskId: "task-1" } });
 
       expectPromptToContainAll(prompt, [
         `Write the ${artifact}`,
-        `save it with ${tool}`,
+        `save it with odt_set_task_artifact and code ${code}`,
         "taskId task-1",
       ]);
       expect(prompt).not.toMatch(
@@ -524,7 +550,7 @@ describe("kickoff and permission prompts", () => {
 
     expectPromptToContainAll(qaPrompt, [
       "Review this task's implementation",
-      "submit one QA report with exactly one of odt_qa_approved or odt_qa_rejected",
+      "submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected",
       "taskId task-1",
     ]);
   });

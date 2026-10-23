@@ -124,7 +124,7 @@ function DeferredTaskDetailsMarkdown({
       {copyableMarkdown ? (
         <CopyIconButton
           copied={copied}
-          ariaLabel="Copy document content"
+          ariaLabel="Copy description content"
           dataTestId="copy-document-content"
           className="absolute top-2 right-2 z-10"
           onClick={onCopy}
@@ -202,7 +202,7 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
       {copyableMarkdown ? (
         <CopyIconButton
           copied={copied}
-          ariaLabel="Copy document content"
+          ariaLabel="Copy description content"
           dataTestId="copy-document-content"
           className="absolute top-2 right-2 z-10"
           onClick={handleCopy}

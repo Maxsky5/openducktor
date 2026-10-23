@@ -1,13 +1,11 @@
 import {
   type GetWorkspacesResult,
-  isOdtBrowserToolName,
   ODT_BROWSER_BRIDGE_TIMEOUT_MS,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   type OdtBrowserCaller,
   type OdtBrowserToolName,
   type OdtBrowserToolResult,
-  odtBrowserToolResultSchema,
   type OdtHostBridgeReady,
   type OdtToolName,
   odtHostBridgeReadySchema,
@@ -22,9 +20,9 @@ type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Nam
 type ToolOutput<Name extends OdtToolName> = z.infer<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
-/** Workspace tools without a calling session. Browser tools also send their caller. */
+/** Workspace task tools. Managed artifact writes also send their native caller. */
 export type WorkspaceTaskToolName = Exclude<WorkspaceScopedOdtToolName, OdtBrowserToolName>;
-type OdtToolInput = ToolInput<OdtToolName>;
+type OdtToolInput = ToolInput<OdtToolName> & { caller?: OdtBrowserCaller };
 type BrowserBridgeBody = ToolInput<OdtBrowserToolName> & {
   workspaceId: string;
   caller: OdtBrowserCaller;
@@ -42,6 +40,7 @@ export type OdtHostBridgeClientPort = {
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
+    caller?: OdtBrowserCaller,
   ): Promise<ToolOutput<Name>>;
   /** The host resolves the task or Workspace Session of the call from `caller`. */
   callBrowserTool<Name extends OdtBrowserToolName>(
@@ -62,6 +61,8 @@ export type OdtHostBridgeClientDeps = {
 };
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+// Allow the preview worker's ten-second limit plus cleanup and response delivery.
+const ARTIFACT_READ_TIMEOUT_MS = 15_000;
 const READY_TOOL_NAME = "odt_mcp_ready";
 const causeTextSchema = z.string();
 const causePrimitiveSchema = z.union([
@@ -128,69 +129,11 @@ function parseToolResponse<Name extends OdtToolName>(
   payload: McpToolPayload,
 ): ToolOutput<Name>;
 function parseToolResponse(command: OdtToolName, payload: McpToolPayload) {
-  if (isOdtBrowserToolName(command)) {
-    return parseHostResponse(odtBrowserToolResultSchema, payload, command);
-  }
-  switch (command) {
-    case "odt_get_workspaces":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_get_workspaces,
-        payload,
-        command,
-      );
-    case "odt_create_task":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_create_task, payload, command);
-    case "odt_search_tasks":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_search_tasks, payload, command);
-    case "odt_read_task":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_read_task, payload, command);
-    case "odt_read_task_assets":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_read_task_assets,
-        payload,
-        command,
-      );
-    case "odt_read_task_documents":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_read_task_documents,
-        payload,
-        command,
-      );
-    case "odt_update_task":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_update_task, payload, command);
-    case "odt_set_spec":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_spec, payload, command);
-    case "odt_set_plan":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_plan, payload, command);
-    case "odt_build_blocked":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_build_blocked,
-        payload,
-        command,
-      );
-    case "odt_build_resumed":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_build_resumed,
-        payload,
-        command,
-      );
-    case "odt_build_completed":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_build_completed,
-        payload,
-        command,
-      );
-    case "odt_set_pull_request":
-      return parseHostResponse(
-        ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_pull_request,
-        payload,
-        command,
-      );
-    case "odt_qa_approved":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_qa_approved, payload, command);
-    case "odt_qa_rejected":
-      return parseHostResponse(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_qa_rejected, payload, command);
-  }
+  return parseHostResponse<ToolOutput<OdtToolName>>(
+    ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[command],
+    payload,
+    command,
+  );
 }
 
 const createBridgeHttpError = async (response: Response, action: string): Promise<OdtToolError> => {
@@ -276,11 +219,16 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
+    caller?: OdtBrowserCaller,
   ): Promise<ToolOutput<Name>> {
-    return this.invokeJson(toolName, {
+    const body: OdtToolInput = {
       ...input,
       workspaceId,
-    });
+    };
+    if (caller) {
+      body.caller = caller;
+    }
+    return this.invokeJson(toolName, body);
   }
 
   async callBrowserTool<Name extends OdtBrowserToolName>(
@@ -309,7 +257,9 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   private async invokeJson(
     command: typeof READY_TOOL_NAME | OdtToolName,
     input: Record<string, never> | OdtToolInput | BrowserBridgeBody,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
+    timeoutMs = command === "odt_read_task_artifacts"
+      ? ARTIFACT_READ_TIMEOUT_MS
+      : DEFAULT_TIMEOUT_MS,
   ): Promise<OdtHostBridgeReady | ToolOutput<OdtToolName>> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;
@@ -359,7 +309,17 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
 
   private async readReadyResponse(response: Response, action: string): Promise<OdtHostBridgeReady> {
     const payload = await this.readResponsePayload(response, action);
-    return parseHostResponse(odtHostBridgeReadySchema, payload, READY_TOOL_NAME);
+    const ready = odtHostBridgeReadySchema.safeParse(payload);
+    if (!ready.success) {
+      throw new OdtToolError({
+        code: "ODT_HOST_RESPONSE_INVALID",
+        message:
+          "The OpenDucktor host bridge is incompatible. Update the host and MCP client together to bridge version 2.",
+        details: { command: READY_TOOL_NAME },
+        issues: toIssueDetails(ready.error),
+      });
+    }
+    return ready.data;
   }
 
   private async readToolResponse<Name extends OdtToolName>(

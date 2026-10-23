@@ -82,7 +82,7 @@ describe("TaskDetailsSheetController", () => {
     const task = createTaskCardFixture({ id: "task-1" });
     const connection = createTestClientConnection();
     const client = connection.queryClient;
-    const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
+    const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
     let finishDelete = (): void => {};
@@ -164,7 +164,7 @@ describe("TaskDetailsSheetController", () => {
     const task = createTaskCardFixture({ id: "task-1" });
     const connection = createTestClientConnection();
     const client = connection.queryClient;
-    const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
+    const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace.repoPath);
     client.setQueryData(queryKey, { tasks: [task] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
     let failDelete = (_error: Error): void => {};
@@ -222,7 +222,7 @@ describe("TaskDetailsSheetController", () => {
       const task = createTaskCardFixture({ id: "task-1", status: "closed" });
       const connection = createTestClientConnection();
       const client = connection.queryClient;
-      const queryKey = taskQueryKeys.repoData(activeWorkspace.repoPath);
+      const queryKey = taskQueryKeys.unfilteredRepoData(activeWorkspace.repoPath);
       client.setQueryData(queryKey, { tasks: [task] });
       const ref = createRef<TaskDetailsSheetControllerHandle>();
       const rendered = renderUi(
@@ -294,10 +294,11 @@ describe("TaskDetailsSheetController", () => {
       issueType: "epic",
       subtaskIds: [child.id],
     });
-    const connection = createTestClientConnection();
+    const connection = createTestClientConnection({
+      client: { tasksList: async () => [], tasksListAll: async () => [task, child] },
+    });
     const client = connection.queryClient;
-    client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [task, child] });
-    client.setQueryData(taskQueryKeys.repoData("/repo-b"), { tasks: [task] });
+    client.setQueryData(taskQueryKeys.repoData(activeWorkspace.repoPath), { tasks: [] });
     const ref = createRef<TaskDetailsSheetControllerHandle>();
     const controller = (repoPath: string) =>
       createElement(TaskDetailsSheetController, {
@@ -309,9 +310,11 @@ describe("TaskDetailsSheetController", () => {
       wrapper: ({ children }) => createElement(ClientConnectionProvider, { connection }, children),
     });
     await act(async () => ref.current?.openTask(task.id));
-    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({ task, open: true, allTasks: [task, child] }),
-    );
+    await waitFor(() => {
+      expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ task, open: true, allTasks: [task, child] }),
+      );
+    });
     const sheet = taskDetailsSheetRenderMock.mock.calls.at(-1)?.[0];
     if (!sheet) throw new Error("Expected task sheet props.");
     const taskById = new Map(sheet.allTasks.map((entry) => [entry.id, entry]));

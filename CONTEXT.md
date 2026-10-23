@@ -7,7 +7,7 @@ OpenDucktor is an agentic development environment built around repository tasks,
 ### Product Shape
 
 **OpenDucktor**:
-An agentic development environment that coordinates task work inside a local repository. It keeps the task, agent-authored documents, review state, implementation work, **Pull Request** data, and **Direct Merge** state connected around the same unit of work.
+An agentic development environment that coordinates task work inside a local repository. It keeps the task, saved artifacts, review state, implementation work, **Pull Request** data, and **Direct Merge** state connected around the same unit of work.
 _Avoid_: generic chat app, IDE, task tracker
 
 **Repository**:
@@ -37,7 +37,7 @@ _Avoid_: task list, lifecycle engine
 ### Task Workflow
 
 **Task**:
-The unit of work OpenDucktor coordinates through specification, planning, building, QA, and **Human Review**. A **Task** has one **Task Status**, one **Issue Type**, optional **Task Documents**, and may have linked **Agent Sessions**, a **Build Worktree**, **Pull Request** data, and **Direct Merge** state.
+The unit of work OpenDucktor coordinates through specification, planning, building, QA, and **Human Review**. A **Task** has one **Task Status**, one **Issue Type**, optional **Task Artifacts**, and may have linked **Agent Sessions**, a **Build Worktree**, **Pull Request** data, and **Direct Merge** state.
 _Avoid_: ticket, card, issue
 
 **Issue Type**:
@@ -57,7 +57,7 @@ The SQLite-backed lifecycle status of a **Task**. OpenDucktor **Task Statuses** 
 _Avoid_: phase, lane, label
 
 **Task Workflow**:
-The path OpenDucktor uses to bring a **Task** from `open` to `closed`. The **Task Workflow** is expressed through **Task Statuses**, **Workflow Actions**, **Workflow Roles**, **Task Documents**, reviews, and the selected **Task Completion Path**.
+The path OpenDucktor uses to bring a **Task** from `open` to `closed`. The **Task Workflow** is expressed through **Task Statuses**, **Workflow Actions**, **Workflow Roles**, **Task Artifacts**, reviews, and the selected **Task Completion Path**.
 _Avoid_: workflow engine, kanban flow, agent run
 
 **Build Worktree**:
@@ -65,11 +65,11 @@ A task-owned Git worktree used for implementation work. A **Build Worktree** kee
 _Avoid_: builder worktree, workspace, clone, branch
 
 **Task Metadata**:
-Supporting data stored with a **Task** that is not the primary user-authored task fields. Today, **Task Metadata** includes **Task Documents** such as **Spec Document**, **Implementation Plan**, and **QA Report**, plus linked **Agent Sessions**, **Pull Request** data, and **Direct Merge** state. Do not generalize future stored information beyond named concepts when the storage shape is not yet known.
+Supporting data stored with a **Task** that is not the primary user-authored task fields. Today, **Task Metadata** includes **Task Artifacts** such as **Specification**, **Implementation Plan**, and **QA Report**, plus linked **Agent Sessions**, **Pull Request** data, and **Direct Merge** state. Do not generalize future stored information beyond named concepts when the storage shape is not yet known.
 _Avoid_: task field, user-authored field, transcript
 
 **Workflow Action**:
-An operation currently allowed for a **Task**, such as setting a **Spec Document**, starting Builder work, generating a **Pull Request**, requesting QA, approving, deferring, or resetting. A **Workflow Action** may change the **Task Status**, update **Task Documents**, or only open an existing work context.
+An operation currently allowed for a **Task**, such as setting a **Specification**, starting Builder work, generating a **Pull Request**, requesting QA, approving, deferring, or resetting. A **Workflow Action** may change the **Task Status**, update **Task Artifacts**, or only open an existing work context.
 _Avoid_: task action, button, command, transition
 
 **Autopilot**:
@@ -93,11 +93,11 @@ The immutable copy of the **Custom Agent Role** identity, name, and **System Pro
 _Avoid_: live Role reference, Runtime Profile, composed runtime prompt
 
 **Spec Agent**:
-The **Workflow Role** that clarifies what a **Task** means and produces or revises the **Spec Document**.
+The **Workflow Role** that clarifies what a **Task** means and produces or revises the **Specification**.
 _Avoid_: specification role, spec role, requirements agent
 
 **Planner Agent**:
-The **Workflow Role** that turns an understood **Task** and **Spec Document** into an **Implementation Plan**.
+The **Workflow Role** that turns an understood **Task** and **Specification** into an **Implementation Plan**.
 _Avoid_: planning role, planner
 
 **Builder Agent**:
@@ -108,25 +108,33 @@ _Avoid_: build role, developer agent, builder
 The **Workflow Role** that performs **QA Review** and produces a **QA Report**.
 _Avoid_: QA role, reviewer agent, tester agent
 
-**Spec Document**:
-One of the **Task Documents** that states what should be true for the **Task** to be considered understood and ready for planning. A **Spec Document** belongs to one **Task**.
-_Avoid_: Specification, requirements doc, spec chat
+**Specification**:
+A **Workflow Artifact** that states what should be true for the **Task** to be considered understood and ready for planning. A **Specification** belongs to one **Task**.
+_Avoid_: Spec Document, requirements doc, spec chat
 
 **Implementation Plan**:
-One of the **Task Documents** that describes how a **Task** should be built. An **Implementation Plan** belongs to one **Task** and moves eligible work toward `ready_for_dev`.
+A **Workflow Artifact** that describes how a **Task** should be built. An **Implementation Plan** belongs to one **Task** and moves eligible work toward `ready_for_dev`.
 _Avoid_: plan chat, build notes
 
 **QA Report**:
-One of the **Task Documents** that records the **QA Verdict** and evidence for the current implementation state. A **QA Report** belongs to one **Task** and carries either an approved or rejected verdict.
+A **Workflow Artifact** that records the **QA Verdict** and evidence for the current implementation state. A **QA Report** belongs to one **Task** and carries either an approved or rejected verdict.
 _Avoid_: test summary, review note
 
 **QA Review**:
 The review activity performed by the **QA Agent** against the current implementation state. A **QA Review** produces a **QA Report** and **QA Verdict**.
 _Avoid_: AI Review when the activity is meant, test run
 
-**Task Documents**:
-Agent-authored documents attached to a **Task** as workflow evidence. Current **Task Documents** are **Spec Document**, **Implementation Plan**, and **QA Report**.
+**Task Artifact**:
+A saved output attached to one **Task**. A **Task Artifact** is either a **Workflow Artifact** or a **Free Artifact**. It keeps its identity when renamed or replaced.
 _Avoid_: comment, description, transcript
+
+**Workflow Artifact**:
+A **Task Artifact** with a fixed workflow role. **Specification**, **Implementation Plan**, and **QA Report** are Markdown workflow artifacts. Workflow submissions follow the task transition rules. Manual Specification and Implementation Plan edits keep task status unchanged.
+_Avoid_: free artifact, attachment, chat output
+
+**Free Artifact**:
+A **Task Artifact** that holds a saved file, such as HTML, an image, or text. Creating, renaming, replacing, or deleting it never changes task status, QA outcome, or workflow readiness. Its name does not give it a workflow role.
+_Avoid_: workflow artifact, description image, worktree file
 
 **QA Verdict**:
 The current QA outcome for a **Task** based on the latest **QA Report**. A **QA Verdict** can approve the implementation for **Human Review** or reject it back into rework.
@@ -141,7 +149,7 @@ The rejected **QA Verdict** recorded by a **QA Report**. **QA Rejection** means 
 _Avoid_: Change Request, Human Approval, plain rejection
 
 **Blocked**:
-The **Task Status** for a **Task** whose **Builder Agent** is stuck because implementation cannot proceed without a changed condition, clarification, or external action. The **Builder Agent** marks the **Task** **Blocked** when it cannot continue implementation. Examples include impossible requirements in the **Spec Document** or a **QA Review** request that depends on an unavailable platform.
+The **Task Status** for a **Task** whose **Builder Agent** is stuck because implementation cannot proceed without a changed condition, clarification, or external action. The **Builder Agent** marks the **Task** **Blocked** when it cannot continue implementation. Examples include impossible requirements in the **Specification** or a **QA Review** request that depends on an unavailable platform.
 _Avoid_: **Waiting for Input**, paused agent, **Permission Prompt**
 
 **Human Review**:
@@ -207,7 +215,7 @@ The feature contract exposed by a **Runtime Descriptor**. **Runtime Capabilities
 _Avoid_: UI feature flags, permissions, model capabilities only
 
 **Runtime Route**:
-The live route OpenDucktor uses to reach a **Runtime Instance**, such as local HTTP or stdio identity. A **Runtime Route** is live routing data and must not be persisted into task/session documents as durable task or session state.
+The live route OpenDucktor uses to reach a **Runtime Instance**, such as local HTTP or stdio identity. A **Runtime Route** is live routing data and must not be persisted into task or session artifacts as durable task or session state.
 _Avoid_: Runtime Instance, endpoint as durable metadata, Repository path
 
 **Runtime Health**:
@@ -247,7 +255,7 @@ A runtime request asking whether a proposed operation may proceed. A pending **P
 _Avoid_: confirmation, modal
 
 **Structured Question**:
-A runtime-originated request for user input during an **Agent Session**. A pending **Structured Question** means the **Agent Session** is **Waiting for Input**; it pauses session progress until answered, but it does not make the **Task** **Blocked** and it is not a task document.
+A runtime-originated request for user input during an **Agent Session**. A pending **Structured Question** means the **Agent Session** is **Waiting for Input**; it pauses session progress until answered, but it does not make the **Task** **Blocked** and it is not a task artifact.
 _Avoid_: comment, feedback, prompt
 
 **Waiting for Input**:
@@ -326,15 +334,15 @@ _Avoid_: Transcript Session, Primary Session, read-only Agent Session
 
 **Chat Composer**:
 The input surface used to send a user message to an **Agent Session**. The **Chat Composer** can include text, **Slash Commands**, **File References**, **Skill References**, and **Attachments**, depending on **Runtime** capabilities.
-_Avoid_: Transcript, prompt template, task document editor
+_Avoid_: Transcript, prompt template, task artifact editor
 
 **User Message Draft**:
 The unsent state of a **User Message** in the **Chat Composer**, including text, structured references, and staged **Attachments**.
-_Avoid_: Composer Draft, Prompt Template, Task Document
+_Avoid_: Composer Draft, Prompt Template, Task Artifact
 
 **User Message**:
 A message sent by the human through the **Chat Composer**. A **User Message** may be queued or read by the **Runtime**, and may include structured message parts.
-_Avoid_: Structured Question, Task Document, comment
+_Avoid_: Structured Question, Task Artifact, comment
 
 **Message Queue**:
 The host-owned list of **User Messages** that wait for the current turn of one **Agent Session** to end. The **Message Queue** shows above the **Chat Composer**. It sends one message after each turn that completes normally. It stops at a pause until the user resumes it. It keeps a message with an unknown delivery result until the **Runtime** shows it. Nobody can send or remove that message meanwhile.
@@ -346,23 +354,23 @@ _Avoid_: interrupt, restart, queue jump
 
 **Assistant Message**:
 A message produced by the **Runtime** during an **Agent Session**. An **Assistant Message** may include text, reasoning, **Tool Calls**, **Subagent** activity, or session notices in the **Transcript**.
-_Avoid_: QA Report, Task Document, Tool Call
+_Avoid_: QA Report, Task Artifact, Tool Call
 
 **Reasoning Message**:
 A **Transcript** message or message part that displays model reasoning or thinking content when the **Runtime** exposes it. Users can choose whether **Reasoning Messages** are shown or hidden on the **Sessions Page**.
 _Avoid_: Assistant Message, Tool Call, QA Report
 
 **System Prompt**:
-The system-level instruction content used to start or guide an **Agent Session**. A **System Prompt** is not a **Spec Document**, **Implementation Plan**, or **QA Report**.
-_Avoid_: Task Document, reusable prompt, chat message
+The system-level instruction content used to start or guide an **Agent Session**. A **System Prompt** is not a **Specification**, **Implementation Plan**, or **QA Report**.
+_Avoid_: Task Artifact, reusable prompt, chat message
 
 **Prompt Template**:
 A configurable template for system, kickoff, message, or permission prompts used by OpenDucktor when starting or guiding **Agent Sessions**. **Prompt Templates** may have placeholders such as task and git context.
-_Avoid_: User Message Draft, User Message, Spec Document
+_Avoid_: User Message Draft, User Message, Specification
 
 **Prompt Override**:
 A repository-level replacement or customization for a **Prompt Template**. **Prompt Overrides** change how OpenDucktor prompts agents; they are not user chat messages.
-_Avoid_: User Message, Reusable Prompt, Task Document
+_Avoid_: User Message, Reusable Prompt, Task Artifact
 
 **Kickoff Prompt**:
 The initial prompt generated for a **Workflow Action** when OpenDucktor starts an **Agent Session**, such as initial implementation, QA Review, or **Pull Request Generation**.
@@ -398,7 +406,7 @@ _Avoid_: Attachment, file diff, affected path
 
 **Attachment**:
 A file sent with a **User Message**, currently classified as image, audio, video, or PDF. **Attachments** depend on selected **Model** support and may be staged locally before sending to the **Runtime**.
-_Avoid_: File Reference, Task Document, Pull Request file
+_Avoid_: File Reference, Task Artifact, Pull Request file
 
 **Attachment Support**:
 The **Model** or **Runtime** capability that determines which **Attachment** kinds can be sent in the current **Agent Session**.
@@ -549,7 +557,7 @@ The **Git Panel** action that creates a Git commit from local changes with a com
 _Avoid_: Commit Composer, Pull Request description, QA Report
 
 **Inline Diff Comment**:
-A user comment attached directly to a **File Diff** in the **Git Panel**. **Inline Diff Comments** are automatically included in the next **User Message** to the **Builder Agent** as implementation feedback; they are not **Task Documents**.
+A user comment attached directly to a **File Diff** in the **Git Panel**. **Inline Diff Comments** are automatically included in the next **User Message** to the **Builder Agent** as implementation feedback; they are not **Task Artifacts**.
 _Avoid_: Change Request, QA Report, Chat Composer message
 
 **Open In**:
@@ -567,7 +575,7 @@ A tool exposed by the OpenDucktor MCP server as part of its `odt_`-prefixed tool
 _Avoid_: runtime tool, native tool, shell command
 
 **Workflow MCP Tool**:
-An **OpenDucktor MCP Tool** that reads or mutates **Task Workflow** state for an existing **Task**, such as setting a **Spec Document**, recording **Build Completion**, or writing a **QA Report**. **Workflow MCP Tools** are the tools used by task-bound workflow agents.
+An **OpenDucktor MCP Tool** that reads or mutates **Task Workflow** state for an existing **Task**, such as setting a **Specification**, recording **Build Completion**, or writing a **QA Report**. **Workflow MCP Tools** are the tools used by task-bound workflow agents.
 _Avoid_: Public Task MCP Tool, **Native Runtime Tool**
 
 **Public Task MCP Tool**:
@@ -636,7 +644,7 @@ Use **Task** for the unit of work. Use **Issue Type** only for the task classifi
 Use **Task Status** for persisted lifecycle values such as `open`, `spec_ready`, or `closed`. UI labels such as Backlog or Done are not glossary terms.
 
 **Task Metadata vs Task Field**:
-Use **Task Metadata** for OpenDucktor-owned supporting data stored with a task, such as **Task Documents**, linked **Agent Sessions**, **Pull Request** data, and **Direct Merge** state. Use **Task Field** only when discussing primary user-authored task data such as title or description.
+Use **Task Metadata** for OpenDucktor-owned supporting data stored with a task, such as **Task Artifacts**, linked **Agent Sessions**, **Pull Request** data, and **Direct Merge** state. Use **Task Field** only when discussing primary user-authored task data such as title or description.
 
 **Workflow Action vs OpenDucktor MCP Tool**:
 Use **Workflow Action** for the product-level operation currently available for a **Task**. Use **Workflow MCP Tool** for the MCP mechanism a task-bound workflow agent calls to read or mutate **Task Workflow** state.
@@ -674,14 +682,14 @@ Use **Subagent** for runtime-supported child activity inside a parent **Agent Se
 **Subagent Message vs Read-only Session View**:
 Use **Subagent Message** for the parent **Transcript** entry summarizing child activity. Use **Read-only Session View** when the display surface for inspecting a child session transcript is meant.
 
-**Workflow Role vs Task Documents**:
-Use **Spec Agent**, **Planner Agent**, **Builder Agent**, and **QA Agent** for **Workflow Roles**. Use **Spec Document**, **Implementation Plan**, and **QA Report** for **Task Documents**.
+**Workflow Role vs Task Artifacts**:
+Use **Spec Agent**, **Planner Agent**, **Builder Agent**, and **QA Agent** for **Workflow Roles**. Use **Specification**, **Implementation Plan**, and **QA Report** for **Task Artifacts**.
 
 **Implementation Plan vs Plan Document**:
 Use **Implementation Plan** for the Builder-ready plan. Do not shorten it to **Plan Document**; the longer term is clearer and already familiar in coding-agent workflows.
 
 **QA Report vs QA Verdict**:
-Use **QA Report** for the document produced by a **QA Review**. Use **QA Verdict** for whether that report approves or rejects the current implementation state.
+Use **QA Report** for the workflow artifact produced by a **QA Review**. Use **QA Verdict** for whether that report approves or rejects the current implementation state.
 
 **Human Approval vs QA Approval**:
 Use **Human Approval** for the human action that accepts the current task outcome for completion. Use **QA Approval** for the approved **QA Verdict** produced by **QA Review**.

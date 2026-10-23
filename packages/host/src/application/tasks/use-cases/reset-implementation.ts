@@ -1,5 +1,6 @@
-import { DEFAULT_BRANCH_PREFIX, type TaskDocumentChange } from "@openducktor/contracts";
+import { DEFAULT_BRANCH_PREFIX, type TaskArtifactChange } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { workflowArtifactChange } from "../artifact-changes";
 import { canResetImplementationFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
@@ -122,7 +123,7 @@ export const createTaskImplementationResetUseCase = ({
       const cleanupProgress = createTaskCleanupProgressState();
       yield* cleanupActivity(activity, cleanupProgress);
       let taskStoreWriteCompleted = false;
-      const documentChanges: TaskDocumentChange[] = [];
+      const artifactChanges: TaskArtifactChange[] = [];
       return yield* Effect.gen(function* () {
         yield* runTaskLocalCleanup({
           branchNames: cleanupTargets.branchNames,
@@ -154,7 +155,7 @@ export const createTaskImplementationResetUseCase = ({
         taskStoreWriteCompleted = true;
         cleanupProgress.completedSteps.push("Cleared Builder and QA session records.");
         yield* storeDependencies.clearQaReports({ repoPath: effectiveRepoPath, taskId });
-        documentChanges.push({ taskId, sections: ["qa"] });
+        artifactChanges.push(workflowArtifactChange(taskId, "qaReport", true));
         cleanupProgress.completedSteps.push("Cleared QA reports.");
         yield* storeDependencies.setPullRequest({
           repoPath: effectiveRepoPath,
@@ -187,7 +188,7 @@ export const createTaskImplementationResetUseCase = ({
                 "reset-implementation",
                 taskId,
                 decoratedFailure,
-                documentChanges,
+                artifactChanges,
               )
             : decoratedFailure;
           return Effect.fail(failure);

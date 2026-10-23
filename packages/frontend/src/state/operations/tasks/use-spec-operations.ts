@@ -8,6 +8,7 @@ import {
   loadQaReportDocumentFromQuery,
   loadSpecDocumentFromQuery,
 } from "@openducktor/frontend-core/queries/documents";
+import { refreshArtifactQueries } from "@openducktor/frontend-core/queries/artifacts";
 import { requireActiveRepo } from "./task-operations-model";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { HostClient } from "@openducktor/host-client";
@@ -22,15 +23,15 @@ type UseSpecOperationsResult = {
   loadPlanDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   loadQaReportDocument: (taskId: string) => Promise<{ markdown: string; updatedAt: string | null }>;
   saveSpec: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
-  saveSpecDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
-  savePlanDocument: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+  saveSpecArtifact: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
+  savePlanArtifact: (taskId: string, markdown: string) => Promise<{ updatedAt: string }>;
 };
 
 type SpecDocument = { markdown: string; updatedAt: string | null };
 
 export type SpecOperationsHost = Pick<
   HostClient,
-  "setSpec" | "saveSpecDocument" | "savePlanDocument"
+  "setSpec" | "saveSpecArtifact" | "savePlanArtifact"
 >;
 
 export type SpecDocumentLoaders = {
@@ -62,9 +63,16 @@ export const createSpecOperations = ({
     const acceptSave = createDocumentSaveGuard(queryClient, repo, taskId, section);
     const saved =
       section === "spec"
-        ? await host.saveSpecDocument({ repoPath: repo, taskId, markdown })
-        : await host.savePlanDocument({ repoPath: repo, taskId, markdown });
+        ? await host.saveSpecArtifact({ repoPath: repo, taskId, markdown })
+        : await host.savePlanArtifact({ repoPath: repo, taskId, markdown });
     acceptSave({ markdown, ...saved });
+    await refreshArtifactQueries(
+      queryClient,
+      repo,
+      [{ taskId, artifactIds: [], removedArtifactIds: [] }],
+      [],
+      saved.cursor,
+    );
     return { updatedAt: saved.updatedAt };
   };
 
@@ -87,10 +95,17 @@ export const createSpecOperations = ({
       const acceptSave = createDocumentSaveGuard(queryClient, repo, taskId, "spec");
       const saved = await host.setSpec({ repoPath: repo, taskId, markdown });
       acceptSave({ markdown, ...saved });
+      await refreshArtifactQueries(
+        queryClient,
+        repo,
+        [{ taskId, artifactIds: [], removedArtifactIds: [] }],
+        [],
+        saved.cursor,
+      );
       return { updatedAt: saved.updatedAt };
     },
-    saveSpecDocument: (taskId, markdown) => saveDocument(taskId, markdown, "spec"),
-    savePlanDocument: (taskId, markdown) => saveDocument(taskId, markdown, "plan"),
+    saveSpecArtifact: (taskId, markdown) => saveDocument(taskId, markdown, "spec"),
+    savePlanArtifact: (taskId, markdown) => saveDocument(taskId, markdown, "plan"),
   };
 };
 

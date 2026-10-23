@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import {
   agentSessionIdentityKey,
   toAgentSessionIdentity,
@@ -8,19 +7,7 @@ import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/ag
 import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
-import {
-  buildTaskExecutionDocuments,
-  buildWorkflowModelContext,
-  DEFAULT_TASK_DOCUMENT_BY_ROLE,
-} from "./use-agent-studio-page-model-builders";
-
-const createDoc = (markdown: string): TaskDocumentState => ({
-  markdown,
-  updatedAt: null,
-  isLoading: false,
-  error: null,
-  loaded: true,
-});
+import { buildWorkflowModelContext } from "./use-agent-studio-page-model-builders";
 
 const createSession = (
   overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
@@ -36,33 +23,6 @@ const selectedIdentityFromSession = (session: AgentSessionSummary | null = null)
   session ? toAgentSessionIdentity(session) : null;
 
 describe("use-agent-studio-page-model-builders", () => {
-  test("buildTaskExecutionDocuments keeps each task document in its own slot", () => {
-    const documents = buildTaskExecutionDocuments({
-      specDoc: createDoc("spec"),
-      planDoc: createDoc("plan"),
-      qaDoc: createDoc("qa"),
-    });
-
-    expect(documents.spec).toMatchObject({
-      title: "Specification",
-      document: { markdown: "spec" },
-    });
-    expect(documents.plan).toMatchObject({
-      title: "Implementation Plan",
-      document: { markdown: "plan" },
-    });
-    expect(documents.qa).toMatchObject({ title: "QA Report", document: { markdown: "qa" } });
-  });
-
-  test("shows the plan first for Planner and Builder sessions", () => {
-    expect(DEFAULT_TASK_DOCUMENT_BY_ROLE).toEqual({
-      spec: "spec",
-      planner: "plan",
-      build: "plan",
-      qa: "qa",
-    });
-  });
-
   test("buildWorkflowModelContext derives role availability and fallback session selector", () => {
     const plannerSession = createSession({
       runtimeKind: "opencode",
@@ -140,7 +100,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const taskWithFeedback = createTaskCardFixture({
       status: "human_review",
       availableActions: ["human_request_changes", "human_approve"],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
@@ -179,7 +139,7 @@ describe("use-agent-studio-page-model-builders", () => {
     const taskInAiReview = createTaskCardFixture({
       status: "ai_review",
       availableActions: ["qa_start", "human_request_changes", "human_approve"],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },
@@ -209,7 +169,7 @@ describe("use-agent-studio-page-model-builders", () => {
   test("does not expose qa-rejected follow-up build launch action when latest qa verdict is approved", () => {
     const taskWithApprovedQa = createTaskCardFixture({
       status: "human_review",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "approved" },

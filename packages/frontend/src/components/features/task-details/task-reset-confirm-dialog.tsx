@@ -39,7 +39,7 @@ export function TaskResetConfirmDialog({
         <DialogHeader>
           <DialogTitle>Reset Task</DialogTitle>
           <DialogDescription>
-            Reset {taskId} back to Backlog? This permanently clears linked workflow artifacts.
+            Reset {taskId} back to Backlog? This permanently clears all task artifacts.
           </DialogDescription>
         </DialogHeader>
 
@@ -48,7 +48,7 @@ export function TaskResetConfirmDialog({
             <p className="font-medium">
               This action moves the task back to Backlog and keeps the task record itself.
             </p>
-            <p>Linked spec, plan, and QA documents will be removed.</p>
+            <p>All workflow and free artifacts will be removed.</p>
             <p>Linked spec, planner, builder, and QA sessions will be removed.</p>
             <p>Linked pull request and direct-merge metadata will be cleared.</p>
             {impact.terminalCount === 0 ? null : (

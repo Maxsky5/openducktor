@@ -86,7 +86,7 @@ export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserR
     attachMainWindow: (window: BrowserWindow): void =>
       attachBrowserMainWindow(engine, window, reportFailure),
     /** Starts the DevTools endpoint and the browser IPC for the host browser service. */
-    start: (ipcMain: IpcMain, browserService: BrowserService) =>
+    start: (ipcMain: Pick<IpcMain, "handle">, browserService: BrowserService) =>
       devTools.start(browserService).pipe(
         Effect.tap(() =>
           Effect.sync(() => {

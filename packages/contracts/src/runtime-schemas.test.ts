@@ -261,10 +261,10 @@ describe("runtime schemas", () => {
     expect(parsed.availableActions).toEqual([]);
     expect(parsed.targetBranch).toBeUndefined();
     expect(parsed.targetBranchError).toBeUndefined();
-    expect(parsed.documentSummary.spec.has).toBe(false);
-    expect(parsed.documentSummary.plan.has).toBe(false);
-    expect(parsed.documentSummary.qaReport.has).toBe(false);
-    expect(parsed.documentSummary.qaReport.verdict).toBe("not_reviewed");
+    expect(parsed.artifactSummary.spec.has).toBe(false);
+    expect(parsed.artifactSummary.plan.has).toBe(false);
+    expect(parsed.artifactSummary.qaReport.has).toBe(false);
+    expect(parsed.artifactSummary.qaReport.verdict).toBe("not_reviewed");
     expect(parsed.agentWorkflows).toEqual({
       spec: {
         required: false,
@@ -317,7 +317,7 @@ describe("runtime schemas", () => {
       priority: 2,
       issueType: "task",
       labels: [],
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-02-20T12:00:00.000Z" },
         plan: { has: false, updatedAt: null },
         qaReport: {
@@ -356,11 +356,11 @@ describe("runtime schemas", () => {
       createdAt: "2026-02-20T12:00:00.000Z",
     });
 
-    expect(parsed.documentSummary.spec.has).toBe(true);
-    expect(parsed.documentSummary.spec.updatedAt).toBe("2026-02-20T12:00:00.000Z");
-    expect(parsed.documentSummary.plan.updatedAt).toBeUndefined();
-    expect(parsed.documentSummary.qaReport.has).toBe(true);
-    expect(parsed.documentSummary.qaReport.verdict).toBe("approved");
+    expect(parsed.artifactSummary.spec.has).toBe(true);
+    expect(parsed.artifactSummary.spec.updatedAt).toBe("2026-02-20T12:00:00.000Z");
+    expect(parsed.artifactSummary.plan.updatedAt).toBeUndefined();
+    expect(parsed.artifactSummary.qaReport.has).toBe(true);
+    expect(parsed.artifactSummary.qaReport.verdict).toBe("approved");
     expect(parsed.agentWorkflows.spec.completed).toBe(true);
   });
 
@@ -928,27 +928,27 @@ describe("runtime schemas", () => {
     );
     expect(parsed.descriptor.readOnlyRoleBlockedTools).toContain("apply_patch");
     expect(parsed.descriptor.readOnlyRoleBlockedTools).not.toContain("bash");
-    expect(parsed.descriptor.workflowToolAliasesByCanonical.odt_set_spec).toEqual([
-      "openducktor_odt_set_spec",
-      "functions.openducktor_odt_set_spec",
+    expect(parsed.descriptor.workflowToolAliasesByCanonical.odt_set_task_artifact).toEqual([
+      "openducktor_odt_set_task_artifact",
+      "functions.openducktor_odt_set_task_artifact",
     ]);
   });
 
   test("OpenCode ODT tool alias helpers expose the runtime descriptor aliases", () => {
     expect(OPENCODE_ODT_TOOL_ID_PREFIXES).toEqual(["openducktor_", "functions.openducktor_"]);
-    expect(toOpencodeOdtToolAliases("odt_set_plan")).toEqual([
-      "openducktor_odt_set_plan",
-      "functions.openducktor_odt_set_plan",
+    expect(toOpencodeOdtToolAliases("odt_read_task")).toEqual([
+      "openducktor_odt_read_task",
+      "functions.openducktor_odt_read_task",
     ]);
-    expect(toOpencodeExposedOdtToolIds("odt_set_plan")).toEqual([
-      "odt_set_plan",
-      "openducktor_odt_set_plan",
-      "functions.openducktor_odt_set_plan",
+    expect(toOpencodeExposedOdtToolIds("odt_read_task")).toEqual([
+      "odt_read_task",
+      "openducktor_odt_read_task",
+      "functions.openducktor_odt_read_task",
     ]);
-    expect(isOpencodeExposedOdtToolAlias("openducktor_odt_set_plan")).toBe(true);
-    expect(isOpencodeExposedOdtToolAlias("functions.openducktor_odt_set_plan")).toBe(true);
-    expect(isOpencodeExposedOdtToolAlias("customprefix_odt_set_plan")).toBe(false);
-    expect(isOpencodeExposedOdtToolAlias("odt_set_plan")).toBe(false);
+    expect(isOpencodeExposedOdtToolAlias("openducktor_odt_read_task")).toBe(true);
+    expect(isOpencodeExposedOdtToolAlias("functions.openducktor_odt_read_task")).toBe(true);
+    expect(isOpencodeExposedOdtToolAlias("customprefix_odt_read_task")).toBe(false);
+    expect(isOpencodeExposedOdtToolAlias("odt_read_task")).toBe(false);
   });
 
   test("OpenCode runtime descriptor aliases stay generated from canonical ODT tool names", () => {
@@ -995,11 +995,11 @@ describe("runtime schemas", () => {
         ...OPENCODE_RUNTIME_DESCRIPTOR,
         workflowToolAliasesByCanonical: {
           ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-          odt_set_spec: ["openducktor_odt_set_spec"],
-          odt_set_plan: ["openducktor_odt_set_spec"],
+          odt_set_task_artifact: ["openducktor_odt_set_task_artifact"],
+          odt_read_task: ["openducktor_odt_set_task_artifact"],
         },
       }),
-    ).toThrow('assigned to canonical tool \\"odt_set_spec\\"');
+    ).toThrow('assigned to canonical tool \\"odt_read_task\\"');
   });
 
   test("runtime descriptor rejects canonical odt tool ids inside workflow alias metadata", () => {
@@ -1008,7 +1008,7 @@ describe("runtime schemas", () => {
         ...OPENCODE_RUNTIME_DESCRIPTOR,
         workflowToolAliasesByCanonical: {
           ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-          odt_set_spec: ["odt_set_spec"],
+          odt_set_task_artifact: ["odt_set_task_artifact"],
         },
       }),
     ).toThrow("Runtime workflow aliases must not repeat canonical odt_* tool IDs.");
@@ -1019,8 +1019,8 @@ describe("runtime schemas", () => {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       workflowToolAliasesByCanonical: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-        odt_set_spec: ["odt_set_spec"],
-        odt_set_plan: ["odt_set_spec"],
+        odt_set_task_artifact: ["odt_set_task_artifact"],
+        odt_read_task: ["odt_set_task_artifact"],
       },
     });
 
@@ -1033,11 +1033,11 @@ describe("runtime schemas", () => {
     expect(result.error.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: ["workflowToolAliasesByCanonical", "odt_set_spec", 0],
+          path: ["workflowToolAliasesByCanonical", "odt_set_task_artifact", 0],
           message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
         }),
         expect.objectContaining({
-          path: ["workflowToolAliasesByCanonical", "odt_set_plan", 0],
+          path: ["workflowToolAliasesByCanonical", "odt_read_task", 0],
           message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
         }),
       ]),
@@ -1049,7 +1049,7 @@ describe("runtime schemas", () => {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       workflowToolAliasesByCanonical: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-        odt_set_specc: ["openducktor_odt_set_spec"],
+        odt_set_task_artifactc: ["openducktor_odt_set_task_artifact"],
       },
     });
 
@@ -1063,7 +1063,7 @@ describe("runtime schemas", () => {
         expect.objectContaining({
           code: "unrecognized_keys",
           path: ["workflowToolAliasesByCanonical"],
-          keys: ["odt_set_specc"],
+          keys: ["odt_set_task_artifactc"],
         }),
       ]),
     );
@@ -1101,8 +1101,8 @@ describe("runtime schemas", () => {
         ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
         odt_build_blocked: [" shared_alias "],
         odt_build_completed: ["shared_alias"],
-        odt_set_plan: [" odt_set_spec "],
-        odt_set_spec: [" runtime_set_spec ", "runtime_set_spec", "   "],
+        odt_read_task: [" odt_set_task_artifact "],
+        odt_set_task_artifact: [" runtime_artifact ", "runtime_artifact", "   "],
       },
     });
 
@@ -1120,15 +1120,15 @@ describe("runtime schemas", () => {
         }),
         expect.objectContaining({
           message: "Runtime workflow aliases must not repeat canonical odt_* tool IDs.",
-          path: ["workflowToolAliasesByCanonical", "odt_set_plan", 0],
+          path: ["workflowToolAliasesByCanonical", "odt_read_task", 0],
         }),
         expect.objectContaining({
           message: "Workflow tool aliases for a canonical tool must be unique.",
-          path: ["workflowToolAliasesByCanonical", "odt_set_spec"],
+          path: ["workflowToolAliasesByCanonical", "odt_set_task_artifact"],
         }),
         expect.objectContaining({
           code: "too_small",
-          path: ["workflowToolAliasesByCanonical", "odt_set_spec", 2],
+          path: ["workflowToolAliasesByCanonical", "odt_set_task_artifact", 2],
         }),
       ]),
     );

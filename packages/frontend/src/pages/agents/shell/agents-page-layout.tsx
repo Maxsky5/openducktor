@@ -1,6 +1,8 @@
 import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import { ChatFileLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-file-link-provider";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
+import { ChatArtifactLinkProvider } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-provider";
+import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
 import {
   Activity,
   type ComponentProps,
@@ -207,6 +209,7 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
 
 export type AgentsPageLayoutModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
+  chatArtifactLinkOwner: ChatArtifactLinkOwner | null;
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
   navigationPersistenceOperation: SessionNavigationRecovery["navigationPersistenceOperation"];
@@ -237,6 +240,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   const isActive = useSessionViewActive();
   const {
     chatFileLinkOwner,
+    chatArtifactLinkOwner,
     activeWorkspace,
     navigationPersistenceError,
     navigationPersistenceOperation,
@@ -350,10 +354,12 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   const chatContent = useMemo(
     () => (
       <ChatFileLinkProvider owner={fileLinkOwner}>
-        <MemoizedAgentChatPane chatModel={chatModel} />
+        <ChatArtifactLinkProvider owner={chatArtifactLinkOwner}>
+          <MemoizedAgentChatPane chatModel={chatModel} />
+        </ChatArtifactLinkProvider>
       </ChatFileLinkProvider>
     ),
-    [chatModel, fileLinkOwner],
+    [chatModel, chatArtifactLinkOwner, fileLinkOwner],
   );
   const rightPanelContent = useMemo(
     () => (

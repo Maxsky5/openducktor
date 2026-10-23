@@ -60,7 +60,10 @@ export function TaskCloseConfirmDialog({
               {formatCleanupImpactMessage(impact, "close") ??
                 "Linked task worktrees and related local branches will be deleted when present. Any uncommitted changes in those worktrees will be lost."}
             </p>
-            <p>The task record, documents, QA reports, and linked history are retained.</p>
+            <p>
+              The task record, all artifacts, and linked history are retained. Free artifacts become
+              read-only.
+            </p>
           </div>
           {impact.error ? <p className="mt-2 text-destructive-muted">{impact.error}</p> : null}
           {operation.error ? (

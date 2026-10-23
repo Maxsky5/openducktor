@@ -1,4 +1,5 @@
-import type { TaskDocumentSaveResult } from "@openducktor/contracts";
+import { workflowArtifactId } from "@openducktor/contracts";
+import type { TaskArtifactSaveResult, WorkflowTaskArtifact } from "@openducktor/contracts";
 import {
   boardEvent,
   eventCursor,
@@ -10,6 +11,7 @@ import {
   documentQueryKeys,
   taskDocumentQueryOptions,
 } from "@openducktor/frontend-core/queries/documents";
+import { taskArtifactsQueryOptions } from "@openducktor/frontend-core/queries/artifacts";
 import type { TaskDocumentPayload } from "@openducktor/frontend-core/types/task-documents";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -21,7 +23,7 @@ import {
   type SpecOperationsHost,
 } from "./use-spec-operations";
 
-const saveResult = (updatedAt: string): TaskDocumentSaveResult => ({
+const saveResult = (updatedAt: string): TaskArtifactSaveResult => ({
   updatedAt,
   cursor: eventCursor(Date.parse(updatedAt)),
 });
@@ -46,8 +48,8 @@ const createOperations = ({
 } = {}) => {
   const host: SpecOperationsHost = {
     setSpec: mock(async () => saveResult("2026-02-22T10:06:00.000Z")),
-    saveSpecDocument: mock(async () => saveResult("2026-02-22T10:03:00.000Z")),
-    savePlanDocument: mock(async () => saveResult("2026-02-22T10:04:00.000Z")),
+    saveSpecArtifact: mock(async () => saveResult("2026-02-22T10:03:00.000Z")),
+    savePlanArtifact: mock(async () => saveResult("2026-02-22T10:04:00.000Z")),
     ...hostOverrides,
   };
   const loaders: SpecDocumentLoaders = {
@@ -72,10 +74,68 @@ const createOperations = ({
 
 describe("createSpecOperations", () => {
   for (const { method, section } of [
-    { method: "saveSpecDocument", section: "spec" },
-    { method: "savePlanDocument", section: "plan" },
+    { method: "saveSpecArtifact", section: "spec" },
+    { method: "savePlanArtifact", section: "plan" },
     { method: "saveSpec", section: "spec" },
   ] as const) {
+    test(`${method} updates the shared workflow body and refreshes metadata before its event`, async () => {
+      let revision = 1;
+      const updatedAt = "2026-04-10T13:10:00.000Z";
+      const artifact = (): WorkflowTaskArtifact => ({
+        artifactId: workflowArtifactId("task-1", section),
+        taskId: "task-1",
+        name: section === "spec" ? "Specification" : "Implementation Plan",
+        classification: "workflow",
+        workflowKind: section,
+        mediaType: "text/markdown",
+        revision,
+        updatedAt,
+      });
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const readWorkflow = mock(async () => ({ markdown: "# Before", updatedAt }));
+      createTestClientConnection({
+        queryClient,
+        client: {
+          taskArtifactsList: async () => ({ artifacts: [artifact()], canManageFree: false }),
+          taskWorkflowArtifactGet: readWorkflow,
+        },
+      });
+      const listOptions = {
+        ...taskArtifactsQueryOptions(queryClient, "/repo-a", "task-1"),
+        staleTime: Infinity,
+      };
+      const contentOptions = {
+        ...taskDocumentQueryOptions(queryClient, "/repo-a", "task-1", section),
+        staleTime: Infinity,
+      };
+      await queryClient.fetchQuery(listOptions);
+      await queryClient.fetchQuery(contentOptions);
+      const stopList = new QueryObserver(queryClient, listOptions).subscribe(() => {});
+      const stopContent = new QueryObserver(queryClient, contentOptions).subscribe(() => {});
+      const save = async () => {
+        revision = 2;
+        return { updatedAt, cursor: eventCursor(10) };
+      };
+      const { operations } = createOperations({
+        queryClient,
+        host: { setSpec: save, saveSpecArtifact: save, savePlanArtifact: save },
+      });
+      try {
+        await operations[method]("task-1", defaultSpecTemplateMarkdown);
+        expect(queryClient.getQueryData(listOptions.queryKey)).toEqual({
+          artifacts: [artifact()],
+          canManageFree: false,
+        });
+        const content = queryClient.getQueryData(contentOptions.queryKey);
+        expect(content).toEqual({ markdown: defaultSpecTemplateMarkdown, updatedAt });
+        expect(readWorkflow).toHaveBeenCalledTimes(1);
+      } finally {
+        stopContent();
+        stopList();
+        queryClient.clear();
+      }
+    });
+
     test.each([
       "older reset before reply",
       "older reset after reply",
@@ -87,20 +147,20 @@ describe("createSpecOperations", () => {
     ] as const)(`${method} orders equal-timestamp commits across %s`, async (change) => {
       const timestamp = "2026-04-10T13:10:00.000Z";
       const receipt = { updatedAt: timestamp, cursor: eventCursor(10) };
-      let finish!: (result: TaskDocumentSaveResult) => void;
-      const pending = new Promise<TaskDocumentSaveResult>((resolve) => {
+      let finish!: (result: TaskArtifactSaveResult) => void;
+      const pending = new Promise<TaskArtifactSaveResult>((resolve) => {
         finish = resolve;
       });
       const { operations, queryClient } = createOperations({
         host: {
           setSpec: () => pending,
-          saveSpecDocument: () => pending,
-          savePlanDocument: () => pending,
+          saveSpecArtifact: () => pending,
+          savePlanArtifact: () => pending,
         },
       });
       const key = documentQueryKeys[section]("/repo-a", "task-1");
       const initial = createTaskCardFixture({ id: "task-1" });
-      initial.documentSummary[section] = { has: true, updatedAt: "2026-04-10T13:09:00.000Z" };
+      initial.artifactSummary[section] = { has: true, updatedAt: "2026-04-10T13:09:00.000Z" };
       queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [initial] });
       queryClient.setQueryData(key, {
         markdown: "# Before",
@@ -118,12 +178,18 @@ describe("createSpecOperations", () => {
       );
       const apply = async (sequence: number, reset: boolean, written = true) => {
         const card = createTaskCardFixture({ id: initial.id, updatedAt: timestamp });
-        card.documentSummary[section] = reset
+        card.artifactSummary[section] = reset
           ? { has: false }
           : { has: true, updatedAt: timestamp };
         const event = boardEvent("/repo-a", [card]);
-        event.boardChanges!.documentChanges = written
-          ? [{ taskId: card.id, sections: [section] }]
+        event.boardChanges!.artifactChanges = written
+          ? [
+              {
+                taskId: card.id,
+                artifactIds: [workflowArtifactId(card.id, section)],
+                removedArtifactIds: [],
+              },
+            ]
           : [];
         await sync.reconcileExternalEvent(event, eventCursor(sequence));
       };
@@ -143,8 +209,8 @@ describe("createSpecOperations", () => {
             queryClient,
             host: {
               setSpec: async () => result,
-              saveSpecDocument: async () => result,
-              savePlanDocument: async () => result,
+              saveSpecArtifact: async () => result,
+              savePlanArtifact: async () => result,
             },
           });
           await next.operations[method]("task-1", newer);
@@ -192,8 +258,8 @@ describe("createSpecOperations", () => {
       const { operations, queryClient } = createOperations({
         host: {
           setSpec: async () => saveResult(saved.updatedAt),
-          saveSpecDocument: async () => saveResult(saved.updatedAt),
-          savePlanDocument: async () => saveResult(saved.updatedAt),
+          saveSpecArtifact: async () => saveResult(saved.updatedAt),
+          savePlanArtifact: async () => saveResult(saved.updatedAt),
         },
       });
       const old = { markdown: "# Before the gap", updatedAt: "2026-04-10T13:09:00.000Z" };
@@ -219,7 +285,7 @@ describe("createSpecOperations", () => {
       const loadFreshDocument = mock(async () => saved);
       const sync = createTaskViewSync({ queryClient, ports: { listTasks, loadFreshDocument } });
       const card = createTaskCardFixture({ id: "task-1", updatedAt: saved.updatedAt });
-      card.documentSummary[section] = { has: true, updatedAt: saved.updatedAt };
+      card.artifactSummary[section] = { has: true, updatedAt: saved.updatedAt };
       const load = sync.loadWorkspace("/repo-a", { forceFresh: true });
       let recovery: Promise<unknown> | undefined;
       try {
@@ -249,15 +315,15 @@ describe("createSpecOperations", () => {
       "inactive task omitted from the board",
       "workspace without observers",
     ] as const)(`${method} rejects pre-snapshot saves across %s`, async (change) => {
-      let finishSave!: (value: TaskDocumentSaveResult) => void;
-      let saveResponse = new Promise<TaskDocumentSaveResult>((resolve) => {
+      let finishSave!: (value: TaskArtifactSaveResult) => void;
+      let saveResponse = new Promise<TaskArtifactSaveResult>((resolve) => {
         finishSave = resolve;
       });
       const { operations, queryClient } = createOperations({
         host: {
           setSpec: () => saveResponse,
-          saveSpecDocument: () => saveResponse,
-          savePlanDocument: () => saveResponse,
+          saveSpecArtifact: () => saveResponse,
+          savePlanArtifact: () => saveResponse,
         },
       });
       const omitted = change.includes("omitted");
@@ -269,13 +335,13 @@ describe("createSpecOperations", () => {
         status: omitted ? "closed" : "open",
         updatedAt: "2026-04-10T13:09:00.000Z",
       });
-      initial.documentSummary[section] = { has: true, updatedAt: initial.updatedAt };
+      initial.artifactSummary[section] = { has: true, updatedAt: initial.updatedAt };
       const old = { markdown: "# Before the gap", updatedAt: initial.updatedAt };
       const queryKey = documentQueryKeys[section]("/repo-a", "task-1");
       queryClient.setQueryData(queryKey, old);
       queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [initial] });
       const reset = createTaskCardFixture({ ...initial, updatedAt: "2026-04-10T13:11:00.000Z" });
-      reset.documentSummary[section] = { has: false };
+      reset.artifactSummary[section] = { has: false };
       const snapshotCards = omitted || unobserved ? [] : [reset];
       const listTasks = mock(async (repoPath: string) =>
         repoPath === "/repo-a" ? snapshotCards : [],
@@ -312,9 +378,12 @@ describe("createSpecOperations", () => {
         const outcome = await completion;
         expect(outcome).toBeInstanceOf(Error);
         expect(outcome?.message).toContain("Open it again");
-        expect(queryClient.getQueryData<TaskDocumentPayload>(queryKey)).toEqual(old);
-        expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
-        if (documentObserver) expect(documentObserver.getCurrentResult().data).toEqual(old);
+        const recovered = activeRepoPath === "/repo-a" ? { markdown: "", updatedAt: null } : old;
+        expect(queryClient.getQueryData<TaskDocumentPayload>(queryKey)).toEqual(recovered);
+        expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(
+          activeRepoPath !== "/repo-a",
+        );
+        if (documentObserver) expect(documentObserver.getCurrentResult().data).toEqual(recovered);
         expect(
           queryClient.getQueryData<RepoTaskData>(taskQueryKeys.repoData("/repo-a"))?.tasks,
         ).toEqual(unobserved ? [initial] : snapshotCards);
@@ -332,7 +401,7 @@ describe("createSpecOperations", () => {
         expect(listTasks).toHaveBeenCalledTimes(
           unobserved ? 0 : activeRepoPath === "/repo-a" ? 1 : 2,
         );
-        expect(loadDocument).not.toHaveBeenCalled();
+        expect(loadDocument).toHaveBeenCalledTimes(activeRepoPath === "/repo-a" ? 1 : 0);
       } finally {
         finishSave(saveResult("2026-04-10T13:10:00.000Z"));
         await completion;
@@ -352,15 +421,15 @@ describe("createSpecOperations", () => {
       "snapshot-start",
       "earlier-reset",
     ] as const)(`${method} preserves committed document state across %s`, async (change) => {
-      let finishSave!: (value: TaskDocumentSaveResult) => void;
-      const pendingSave = new Promise<TaskDocumentSaveResult>((resolve) => {
+      let finishSave!: (value: TaskArtifactSaveResult) => void;
+      const pendingSave = new Promise<TaskArtifactSaveResult>((resolve) => {
         finishSave = resolve;
       });
       const { operations, queryClient } = createOperations({
         host: {
           setSpec: () => pendingSave,
-          saveSpecDocument: () => pendingSave,
-          savePlanDocument: () => pendingSave,
+          saveSpecArtifact: () => pendingSave,
+          savePlanArtifact: () => pendingSave,
         },
       });
       const queryKey = documentQueryKeys[section]("/repo-a", "task-1");
@@ -368,8 +437,8 @@ describe("createSpecOperations", () => {
       const old = { markdown: "# Initial", updatedAt: "2026-04-10T13:09:00.000Z" };
       const startsEmpty = change === "empty" || change === "cold";
       const initial = createTaskCardFixture({ id: "task-1", updatedAt: old.updatedAt });
-      initial.documentSummary[section] = { has: !startsEmpty };
-      if (!startsEmpty) initial.documentSummary[section].updatedAt = old.updatedAt;
+      initial.artifactSummary[section] = { has: !startsEmpty };
+      if (!startsEmpty) initial.artifactSummary[section].updatedAt = old.updatedAt;
       queryClient.setQueryData(taskQueryKeys.repoData("/repo-a"), { tasks: [initial] });
       if (change !== "cold") queryClient.setQueryData(queryKey, startsEmpty ? empty : old);
       const readDocument = mock(async () => old);
@@ -403,8 +472,8 @@ describe("createSpecOperations", () => {
         const committedAt =
           change === "earlier-reset" ? "2026-04-10T13:09:30.000Z" : "2026-04-10T13:11:00.000Z";
         const card = createTaskCardFixture({ ...initial, updatedAt: committedAt });
-        card.documentSummary[section] = { has: change === "newer" };
-        if (change === "newer") card.documentSummary[section].updatedAt = committedAt;
+        card.artifactSummary[section] = { has: change === "newer" };
+        if (change === "newer") card.artifactSummary[section].updatedAt = committedAt;
         snapshotCards = [card];
         snapshotDocument = empty;
         if (change === "snapshot" || change === "snapshot-start") {
@@ -425,7 +494,7 @@ describe("createSpecOperations", () => {
                   : [{ id: card.id, title: card.title, status: card.status }],
               statusChanges: [],
               boardChanges: {
-                documentChanges: [],
+                artifactChanges: [],
                 cards: change === "removed" ? [] : [card],
                 doneVisibleDays: 1,
               },
@@ -469,15 +538,15 @@ describe("createSpecOperations", () => {
     "a completed %s save owns cache acceptance and joined imperative reads",
     async (section) => {
       let finishRead!: (value: { markdown: string; updatedAt: string }) => void;
-      let finishSave!: (value: TaskDocumentSaveResult) => void;
+      let finishSave!: (value: TaskArtifactSaveResult) => void;
       const pendingRead = new Promise<{ markdown: string; updatedAt: string }>((resolve) => {
         finishRead = resolve;
       });
-      const pendingSave = new Promise<TaskDocumentSaveResult>((resolve) => {
+      const pendingSave = new Promise<TaskArtifactSaveResult>((resolve) => {
         finishSave = resolve;
       });
       const { operations, queryClient } = createOperations({
-        host: { saveSpecDocument: () => pendingSave, savePlanDocument: () => pendingSave },
+        host: { saveSpecArtifact: () => pendingSave, savePlanArtifact: () => pendingSave },
       });
       const options = () =>
         taskDocumentQueryOptions(queryClient, "/repo-a", "task-1", section, () => pendingRead);
@@ -489,8 +558,8 @@ describe("createSpecOperations", () => {
         const saved = { markdown: "# Saved", updatedAt: "2026-04-10T13:11:00.000Z" };
         const save =
           section === "spec"
-            ? operations.saveSpecDocument("task-1", saved.markdown)
-            : operations.savePlanDocument("task-1", saved.markdown);
+            ? operations.saveSpecArtifact("task-1", saved.markdown)
+            : operations.savePlanArtifact("task-1", saved.markdown);
         // The query function finishes before the save, but Query accepts it afterward.
         finishRead(Object.freeze({ markdown: "# Older", updatedAt: "2026-04-10T13:09:00.000Z" }));
         finishSave(saveResult(saved.updatedAt));
@@ -521,10 +590,10 @@ describe("createSpecOperations", () => {
     await expect(operations.saveSpec("task-1", defaultSpecTemplateMarkdown)).rejects.toThrow(
       "Select a workspace first.",
     );
-    await expect(operations.saveSpecDocument("task-1", "# doc")).rejects.toThrow(
+    await expect(operations.saveSpecArtifact("task-1", "# doc")).rejects.toThrow(
       "Select a workspace first.",
     );
-    await expect(operations.savePlanDocument("task-1", "# plan")).rejects.toThrow(
+    await expect(operations.savePlanArtifact("task-1", "# plan")).rejects.toThrow(
       "Select a workspace first.",
     );
   });
@@ -578,10 +647,10 @@ describe("createSpecOperations", () => {
   });
 
   test("saves spec and plan documents, updates their cache entries, and refreshes document views", async () => {
-    const saveSpecDocument = mock(async () => saveResult("2026-02-22T10:03:00.000Z"));
-    const savePlanDocument = mock(async () => saveResult("2026-02-22T10:04:00.000Z"));
+    const saveSpecArtifact = mock(async () => saveResult("2026-02-22T10:03:00.000Z"));
+    const savePlanArtifact = mock(async () => saveResult("2026-02-22T10:04:00.000Z"));
     const { operations, queryClient } = createOperations({
-      host: { saveSpecDocument, savePlanDocument },
+      host: { saveSpecArtifact, savePlanArtifact },
     });
 
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
@@ -593,19 +662,19 @@ describe("createSpecOperations", () => {
       updatedAt: "2026-02-22T10:00:00.000Z",
     });
 
-    await expect(operations.saveSpecDocument("task-1", "# New spec")).resolves.toEqual({
+    await expect(operations.saveSpecArtifact("task-1", "# New spec")).resolves.toEqual({
       updatedAt: "2026-02-22T10:03:00.000Z",
     });
-    await expect(operations.savePlanDocument("task-1", "# New plan")).resolves.toEqual({
+    await expect(operations.savePlanArtifact("task-1", "# New plan")).resolves.toEqual({
       updatedAt: "2026-02-22T10:04:00.000Z",
     });
 
-    expect(saveSpecDocument).toHaveBeenCalledWith({
+    expect(saveSpecArtifact).toHaveBeenCalledWith({
       repoPath: "/repo-a",
       taskId: "task-1",
       markdown: "# New spec",
     });
-    expect(savePlanDocument).toHaveBeenCalledWith({
+    expect(savePlanArtifact).toHaveBeenCalledWith({
       repoPath: "/repo-a",
       taskId: "task-1",
       markdown: "# New plan",
@@ -639,7 +708,7 @@ describe("createSpecOperations", () => {
       updatedAt: "2026-02-22T10:00:00.000Z",
     });
 
-    await operations.saveSpecDocument("task-1", "# New spec");
+    await operations.saveSpecArtifact("task-1", "# New spec");
 
     expect(queryClient.getQueryState(["task-documents", "spec", "", "task-1"])?.isInvalidated).toBe(
       false,
@@ -649,8 +718,8 @@ describe("createSpecOperations", () => {
   test("preserves a newer cached document when a save response arrives out of order", async () => {
     const { operations, queryClient } = createOperations({
       host: {
-        saveSpecDocument: mock(async () => saveResult("2026-02-22T10:01:00.000Z")),
-        savePlanDocument: mock(async () => saveResult("2026-02-22T10:01:00.000Z")),
+        saveSpecArtifact: mock(async () => saveResult("2026-02-22T10:01:00.000Z")),
+        savePlanArtifact: mock(async () => saveResult("2026-02-22T10:01:00.000Z")),
       },
     });
     queryClient.setQueryData(documentQueryKeys.spec("/repo-a", "task-1"), {
@@ -662,10 +731,10 @@ describe("createSpecOperations", () => {
       updatedAt: "2026-02-22T10:05:00.000Z",
     });
 
-    await expect(operations.saveSpecDocument("task-1", "# Older spec response")).rejects.toThrow(
+    await expect(operations.saveSpecArtifact("task-1", "# Older spec response")).rejects.toThrow(
       "Open it again",
     );
-    await expect(operations.savePlanDocument("task-1", "# Older plan response")).rejects.toThrow(
+    await expect(operations.savePlanArtifact("task-1", "# Older plan response")).rejects.toThrow(
       "Open it again",
     );
 

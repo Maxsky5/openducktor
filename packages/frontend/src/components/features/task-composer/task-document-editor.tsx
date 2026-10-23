@@ -80,7 +80,7 @@ function TaskDocumentPreviewCopyButton({ markdown }: { markdown: string }): Reac
             variant="outline"
             size="icon"
             className="absolute top-2 right-2 z-10 size-7 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Copy document preview content"
+            aria-label="Copy artifact preview content"
             data-testid="copy-task-document-preview-content"
             onClick={handleCopy}
           >
@@ -131,6 +131,61 @@ function LoadingPaneSkeleton({ kind }: { kind: "editor" | "preview" }): ReactEle
   );
 }
 
+function TaskDocumentEditorHeader({
+  title,
+  subtitle,
+  markdown,
+  view,
+  onViewChange,
+  updatedAt,
+  hasUnsavedChanges,
+}: Pick<
+  TaskDocumentEditorProps,
+  "title" | "subtitle" | "markdown" | "view" | "onViewChange" | "updatedAt" | "hasUnsavedChanges"
+>): ReactElement {
+  const lineCount = markdown.trim().length === 0 ? 0 : markdown.split(/\r?\n/).length;
+  return (
+    <div className="rounded-xl border border-border bg-muted/70 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <SegmentedControlRoot size="sm" className="h-auto rounded-lg border border-border bg-card">
+          {VIEW_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            const isActive = option.id === view;
+            return (
+              <SegmentedControlItem
+                key={option.id}
+                active={isActive}
+                grow="hug"
+                size="sm"
+                className="gap-1 px-2 py-1"
+                inactiveClassName="hover:bg-muted"
+                onClick={() => onViewChange(option.id)}
+              >
+                <Icon className="size-3.5" />
+                {option.label}
+              </SegmentedControlItem>
+            );
+          })}
+        </SegmentedControlRoot>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span>{lineCount.toLocaleString()} lines</span>
+        <span>Last saved: {updatedAt ? humanDate(updatedAt) : "Not saved yet"}</span>
+        {hasUnsavedChanges ? (
+          <span className="font-medium text-warning-muted">Unsaved changes</span>
+        ) : (
+          <span>All changes saved</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TaskDocumentEditor({
   title,
   subtitle,
@@ -147,7 +202,6 @@ export function TaskDocumentEditor({
   onRetryLoad,
 }: TaskDocumentEditorProps): ReactElement {
   const deferredMarkdown = useDeferredValue(markdown);
-  const lineCount = markdown.trim().length === 0 ? 0 : markdown.split(/\r?\n/).length;
   const showEditor = view !== "preview";
   const showPreview = view !== "write";
   const showMobileSplitHint = view === "split";
@@ -155,47 +209,15 @@ export function TaskDocumentEditor({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-muted/70 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="space-y-0.5">
-            <p className="text-sm font-semibold text-foreground">{title}</p>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-          </div>
-          <SegmentedControlRoot
-            size="sm"
-            className="h-auto rounded-lg border border-border bg-card"
-          >
-            {VIEW_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const isActive = option.id === view;
-              return (
-                <SegmentedControlItem
-                  key={option.id}
-                  active={isActive}
-                  grow="hug"
-                  size="sm"
-                  className="gap-1 px-2 py-1"
-                  inactiveClassName="hover:bg-muted"
-                  onClick={() => onViewChange(option.id)}
-                >
-                  <Icon className="size-3.5" />
-                  {option.label}
-                </SegmentedControlItem>
-              );
-            })}
-          </SegmentedControlRoot>
-        </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <span>{lineCount.toLocaleString()} lines</span>
-          <span>Last saved: {updatedAt ? humanDate(updatedAt) : "Not saved yet"}</span>
-          {hasUnsavedChanges ? (
-            <span className="font-medium text-warning-muted">Unsaved changes</span>
-          ) : (
-            <span>All changes saved</span>
-          )}
-        </div>
-      </div>
+      <TaskDocumentEditorHeader
+        title={title}
+        subtitle={subtitle}
+        markdown={markdown}
+        view={view}
+        onViewChange={onViewChange}
+        updatedAt={updatedAt}
+        hasUnsavedChanges={hasUnsavedChanges}
+      />
 
       {error ? (
         <div className="rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2">
@@ -206,24 +228,12 @@ export function TaskDocumentEditor({
         </div>
       ) : null}
 
-      {shouldShowLoadingSkeleton ? (
-        <div className={cn("grid gap-3", view === "split" ? "md:grid-cols-2" : "grid-cols-1")}>
-          {showEditor ? (
-            <Pane label="Markdown">
+      <div className={cn("grid gap-3", view === "split" ? "md:grid-cols-2" : "grid-cols-1")}>
+        {showEditor ? (
+          <Pane label="Markdown">
+            {shouldShowLoadingSkeleton ? (
               <LoadingPaneSkeleton kind="editor" />
-            </Pane>
-          ) : null}
-
-          {showPreview ? (
-            <Pane label="Preview" hiddenOnMobile={view === "split"}>
-              <LoadingPaneSkeleton kind="preview" />
-            </Pane>
-          ) : null}
-        </div>
-      ) : (
-        <div className={cn("grid gap-3", view === "split" ? "md:grid-cols-2" : "grid-cols-1")}>
-          {showEditor ? (
-            <Pane label="Markdown">
+            ) : (
               <Textarea
                 value={markdown}
                 onChange={(event) => onMarkdownChange(event.currentTarget.value)}
@@ -231,11 +241,15 @@ export function TaskDocumentEditor({
                 className={cn(PANEL_MIN_HEIGHT_CLASS, "resize-y font-mono text-[13px] leading-6")}
                 disabled={isSaving || isLoading}
               />
-            </Pane>
-          ) : null}
+            )}
+          </Pane>
+        ) : null}
 
-          {showPreview ? (
-            <Pane label="Preview" hiddenOnMobile={view === "split"}>
+        {showPreview ? (
+          <Pane label="Preview" hiddenOnMobile={view === "split"}>
+            {shouldShowLoadingSkeleton ? (
+              <LoadingPaneSkeleton kind="preview" />
+            ) : (
               <div
                 className={cn(
                   "relative",
@@ -257,10 +271,10 @@ export function TaskDocumentEditor({
                   <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
                 )}
               </div>
-            </Pane>
-          ) : null}
-        </div>
-      )}
+            )}
+          </Pane>
+        ) : null}
+      </div>
 
       {showMobileSplitHint ? (
         <p className="text-xs text-muted-foreground md:hidden">

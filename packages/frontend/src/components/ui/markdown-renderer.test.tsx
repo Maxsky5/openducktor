@@ -1,11 +1,13 @@
 import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
-import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import * as externalUrl from "@/lib/open-external-url";
+import { withAnimationFrameTestDriver } from "@/test-utils/animation-frame-test-driver";
+import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
@@ -118,12 +120,16 @@ test("shows an actionable error without falling back when the shell rejects a li
 });
 
 describe("rich task description rendering", () => {
+  const intersections = createIntersectionObserverTestDriver();
+  beforeEach(() => intersections.install());
+
   beforeAll(async () => {
     // Load the real parsers before the tests wait for rendered output.
     await Promise.all([import("./markdown-renderer-math"), import("./markdown-syntax-block")]);
   }, 12_000);
 
   afterEach(() => {
+    intersections.restore();
     configureShellBridge(createUnavailableShellBridge());
   });
 
@@ -684,7 +690,7 @@ describe("rich task description rendering", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(renderSpy).not.toHaveBeenCalled();
-      expect(view.queryByRole("region", { name: "Mermaid diagram" })).toBeNull();
+      expect(view.queryByRole("group", { name: "Mermaid diagram" })).toBeNull();
       expect(view.container.querySelector(".language-mermaid")).not.toBeNull();
     } finally {
       renderSpy.mockRestore();
@@ -698,7 +704,7 @@ describe("rich task description rendering", () => {
     });
   });
 
-  test("mounts a stable Mermaid viewport before the first preview is ready", async () => {
+  test("paints a stable Mermaid viewport before drawing the first preview", async () => {
     const renderModule = await import("./markdown-mermaid-render");
     let resolveRender: ((svg: string) => void) | undefined;
     const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockImplementation(
@@ -709,24 +715,122 @@ describe("rich task description rendering", () => {
     );
 
     try {
-      const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
 
-      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
-      expect(view.queryByText(/graph TD/)).toBeNull();
-      expect(viewport.getAttribute("aria-busy")).toBe("true");
+        try {
+          const viewport = view.getByRole("group", { name: "Mermaid diagram" });
+          expect(view.queryByText(/graph TD/)).toBeNull();
+          expect(viewport.getAttribute("aria-busy")).toBe("true");
+          expect(renderSpy).not.toHaveBeenCalled();
 
-      resolveRender?.(
-        '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
-      );
-      await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
-        timeout: 3000,
+          await frames.flushFrame();
+          expect(renderSpy).not.toHaveBeenCalled();
+
+          await frames.flushFrame();
+          expect(renderSpy).toHaveBeenCalledTimes(1);
+          expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
+
+          resolveRender?.(
+            '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>',
+          );
+          await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
+            timeout: 3000,
+          });
+          expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
+          expect(viewport.getAttribute("aria-busy")).toBe("false");
+        } finally {
+          view.unmount();
+        }
       });
-      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
-      expect(viewport.getAttribute("aria-busy")).toBe("false");
     } finally {
       renderSpy.mockRestore();
     }
   }, 4000);
+
+  test("cancels pending Mermaid layout when its source changes or its viewport unmounts", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue("<svg></svg>");
+
+    try {
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+
+        try {
+          await frames.flushFrame();
+          view.rerender(<MarkdownMermaid source={"graph TD\n  A --> C"} />);
+          await frames.flushFrame();
+          expect(renderSpy).not.toHaveBeenCalled();
+
+          view.unmount();
+          await frames.flushFrame();
+          expect(renderSpy).not.toHaveBeenCalled();
+        } finally {
+          view.unmount();
+        }
+      });
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
+
+  test("draws an offscreen Mermaid diagram only when it approaches the viewport", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>Visible diagram</text></svg>',
+    );
+    intersections.setInitiallyVisible(false);
+
+    try {
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+
+        try {
+          await frames.flushFrames();
+          expect(view.getByRole("group", { name: "Mermaid diagram" })).toBeTruthy();
+          expect(renderSpy).not.toHaveBeenCalled();
+
+          intersections.observers[0]?.notify(true);
+          await frames.flushFrames();
+          expect(renderSpy).toHaveBeenCalledTimes(1);
+          expect(view.getByText("Visible diagram")).toBeTruthy();
+        } finally {
+          view.unmount();
+        }
+      });
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
+
+  test("ignores late visibility updates for replaced or unmounted Mermaid sources", async () => {
+    const renderModule = await import("./markdown-mermaid-render");
+    const renderSpy = spyOn(renderModule, "renderMermaidSvg").mockResolvedValue("<svg></svg>");
+    intersections.setInitiallyVisible(false);
+
+    try {
+      await withAnimationFrameTestDriver(async (frames) => {
+        const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
+        const firstObserver = intersections.observers[0];
+
+        try {
+          view.rerender(<MarkdownMermaid source={"graph TD\n  A --> C"} />);
+          firstObserver?.notify(true);
+          await frames.flushFrames();
+          expect(renderSpy).not.toHaveBeenCalled();
+
+          view.unmount();
+          intersections.observers[1]?.notify(true);
+          await frames.flushFrames();
+          expect(renderSpy).not.toHaveBeenCalled();
+        } finally {
+          view.unmount();
+        }
+      });
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
 
   test("keeps surrounding Markdown mounted while its Mermaid preview renders", async () => {
     const renderModule = await import("./markdown-mermaid-render");
@@ -748,7 +852,7 @@ describe("rich task description rendering", () => {
       });
       expect(view.getByText("Before")).toBeTruthy();
       expect(view.getByText("After")).toBeTruthy();
-      const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+      const viewport = view.getByRole("group", { name: "Mermaid diagram" });
       expect(view.container.querySelector("svg")).toBeNull();
 
       resolveRender?.(
@@ -757,7 +861,7 @@ describe("rich task description rendering", () => {
       await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
         timeout: 3000,
       });
-      expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+      expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
     } finally {
       renderSpy.mockRestore();
     }
@@ -781,12 +885,12 @@ describe("rich task description rendering", () => {
         await waitFor(() => expect(view.getByText("Rendered diagram")).toBeTruthy(), {
           timeout: 3000,
         });
-        const viewport = view.getByRole("region", { name: "Mermaid diagram" });
+        const viewport = view.getByRole("group", { name: "Mermaid diagram" });
 
         view.rerender(<MarkdownRenderer markdown={`${intro}\n\n${diagram}\n\nAfter more text`} />);
 
         expect(view.getByText("After more text")).toBeTruthy();
-        expect(view.getByRole("region", { name: "Mermaid diagram" })).toBe(viewport);
+        expect(view.getByRole("group", { name: "Mermaid diagram" })).toBe(viewport);
         expect(renderSpy).toHaveBeenCalledTimes(1);
       } finally {
         renderSpy.mockRestore();
@@ -817,7 +921,7 @@ describe("rich task description rendering", () => {
     try {
       const view = render(<MarkdownMermaid source={"graph TD\n  A --> B"} />);
 
-      await waitFor(() => expect(view.queryByText("Rendering diagram…")).toBeNull(), {
+      await waitFor(() => expect(view.getByText("B")).toBeTruthy(), {
         timeout: 3000,
       });
       const currentPreview = view.container.innerHTML;
@@ -826,7 +930,7 @@ describe("rich task description rendering", () => {
 
       expect(view.queryByText("Rendering diagram…")).toBeNull();
       expect(view.container.innerHTML).toBe(currentPreview);
-      await waitFor(() => expect(view.container.innerHTML).not.toBe(currentPreview), {
+      await waitFor(() => expect(view.getByText("C")).toBeTruthy(), {
         timeout: 3000,
       });
     } finally {

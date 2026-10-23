@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import type { MouseEventHandler, ReactElement } from "react";
+import type { ComponentProps, MouseEventHandler, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ type CopyIconButtonProps = {
   className?: string;
   dataTestId?: string;
   tooltipLabel?: string;
+  tooltipSide?: ComponentProps<typeof TooltipContent>["side"];
 };
 
 export function CopyIconButton({
@@ -20,6 +21,7 @@ export function CopyIconButton({
   className,
   dataTestId,
   tooltipLabel = "Copy",
+  tooltipSide = "left",
 }: CopyIconButtonProps): ReactElement {
   return (
     <TooltipProvider>
@@ -44,7 +46,7 @@ export function CopyIconButton({
             )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="left">
+        <TooltipContent side={tooltipSide}>
           <p>{tooltipLabel}</p>
         </TooltipContent>
       </Tooltip>

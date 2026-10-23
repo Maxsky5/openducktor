@@ -205,7 +205,7 @@ describe("OpenCode approval classifier", () => {
     expect(
       classifyOpenCodeApprovalMutation({
         permission: "tool",
-        toolName: "functions.openducktor_odt_set_plan",
+        toolName: "functions.openducktor_odt_set_task_artifact",
         patterns: [],
       }),
     ).toBe("mutating");

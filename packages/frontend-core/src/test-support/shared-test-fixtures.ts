@@ -117,7 +117,7 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   parentId: undefined,
   subtaskIds: [],
   pullRequest: undefined,
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -332,24 +332,24 @@ export const createTaskCardFixture = (
     ...BASE_TASK_CARD_FIXTURE,
     ...defaults,
     ...overrides,
-    documentSummary: {
-      ...BASE_TASK_CARD_FIXTURE.documentSummary,
-      ...defaults.documentSummary,
-      ...overrides.documentSummary,
+    artifactSummary: {
+      ...BASE_TASK_CARD_FIXTURE.artifactSummary,
+      ...defaults.artifactSummary,
+      ...overrides.artifactSummary,
       spec: {
-        ...BASE_TASK_CARD_FIXTURE.documentSummary.spec,
-        ...defaults.documentSummary?.spec,
-        ...overrides.documentSummary?.spec,
+        ...BASE_TASK_CARD_FIXTURE.artifactSummary.spec,
+        ...defaults.artifactSummary?.spec,
+        ...overrides.artifactSummary?.spec,
       },
       plan: {
-        ...BASE_TASK_CARD_FIXTURE.documentSummary.plan,
-        ...defaults.documentSummary?.plan,
-        ...overrides.documentSummary?.plan,
+        ...BASE_TASK_CARD_FIXTURE.artifactSummary.plan,
+        ...defaults.artifactSummary?.plan,
+        ...overrides.artifactSummary?.plan,
       },
       qaReport: {
-        ...BASE_TASK_CARD_FIXTURE.documentSummary.qaReport,
-        ...defaults.documentSummary?.qaReport,
-        ...overrides.documentSummary?.qaReport,
+        ...BASE_TASK_CARD_FIXTURE.artifactSummary.qaReport,
+        ...defaults.artifactSummary?.qaReport,
+        ...overrides.artifactSummary?.qaReport,
       },
     },
     agentWorkflows: {

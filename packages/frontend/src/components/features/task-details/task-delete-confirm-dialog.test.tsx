@@ -42,8 +42,9 @@ describe("TaskDeleteConfirmDialog", () => {
     const rendered = renderDialog(0);
 
     expect(screen.queryByText(/running task terminals|associated terminal/i)).toBeNull();
-    const body = screen.getByText("This action permanently removes the task.").parentElement
-      ?.parentElement;
+    const body = screen.getByText(
+      "This action permanently removes the task and all its workflow and free artifacts.",
+    ).parentElement?.parentElement;
     expect(body?.className).toContain("py-4");
     const cancelButton = screen.getByRole("button", { name: "Cancel" });
     expect(cancelButton.parentElement?.className).toContain("justify-between");

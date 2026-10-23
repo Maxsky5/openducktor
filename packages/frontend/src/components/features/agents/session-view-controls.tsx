@@ -42,7 +42,7 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
         ? {
             id: "right-panel",
             ...panelToggleView("right", rightIsOpen),
-            keywords: ["documents", "files", "git", "toggle panel"],
+            keywords: ["artifacts", "files", "git", "toggle panel"],
             run: rightOnToggle,
           }
         : null,

@@ -1,4 +1,4 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { act, render as renderView, waitFor, within } from "@testing-library/react";
 import type { Nodes } from "mdast";
 import { createElement, type ReactElement } from "react";
@@ -7,11 +7,13 @@ import * as markdownStreamTree from "@/components/ui/markdown-stream-tree";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 
 const DIAGRAM_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><text>Rendered diagram</text></svg>';
 const DIAGRAM_FENCE = "```mermaid\ngraph TD\n  A --> B\n```";
 const DIAGRAM_MARKDOWN = `Intro\n\n${DIAGRAM_FENCE}`;
+const intersectionObserver = createIntersectionObserverTestDriver();
 
 // A block that keeps its content object does not render again, so only changed blocks render.
 const spyOnBlockRenders = () => spyOn(markdownStreamTree, "renderMarkdownBlock");
@@ -47,6 +49,9 @@ const chatMarkdown = (markdown: string, streaming = false): ReactElement =>
   createElement(AgentChatMarkdownRenderer, { markdown, streaming });
 
 describe("AgentChatMarkdownRenderer", () => {
+  beforeEach(() => intersectionObserver.install());
+  afterEach(() => intersectionObserver.restore());
+
   test("renders completed markdown without a plain-text first frame", () => {
     const rendered = render(
       chatMarkdown(
@@ -183,13 +188,13 @@ describe("AgentChatMarkdownRenderer", () => {
 
     try {
       await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
 
       rendered.rerender(chatMarkdown(`${DIAGRAM_MARKDOWN}\n\nAfter the diagram.`, true));
       rendered.rerender(chatMarkdown(`${DIAGRAM_MARKDOWN}\n\nAfter the diagram.`));
 
       expect(rendered.getByText("After the diagram.")).toBeTruthy();
-      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
       expect(diagramSpy).toHaveBeenCalledTimes(1);
     } finally {
       rendered.unmount();
@@ -214,7 +219,7 @@ describe("AgentChatMarkdownRenderer", () => {
 
       try {
         const diagram = await rendered.findByRole(
-          "region",
+          "group",
           { name: "Mermaid diagram" },
           { timeout: 500 },
         );
@@ -224,7 +229,7 @@ describe("AgentChatMarkdownRenderer", () => {
         rendered.rerender(chatMarkdown(completeMarkdown, true));
 
         await waitForDiagram(rendered.container);
-        expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+        expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
         expect(diagramSpy).toHaveBeenCalledTimes(1);
         expect(diagramSpy.mock.calls[0]?.[1]).toBe(`graph TD\n${sourceIndent}A --> B`);
       } finally {
@@ -282,13 +287,13 @@ describe("AgentChatMarkdownRenderer", () => {
           timeout: 3000,
         },
       );
-      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
       blockSpy.mockClear();
 
       rendered.rerender(chatMarkdown(`${equationAndDiagram}\n\nAfter the diagram.`, true));
 
       expect(renderedTexts(blockSpy)).toEqual(["After the diagram."]);
-      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
       expect(diagramSpy).toHaveBeenCalledTimes(1);
     } finally {
       rendered.unmount();
@@ -325,14 +330,14 @@ describe("AgentChatMarkdownRenderer", () => {
 
     try {
       await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
 
       rendered.rerender(chatMarkdown(`${list} $x$`, true));
 
       await waitFor(() => expect(rendered.container.querySelector(".katex")).not.toBeNull(), {
         timeout: 3000,
       });
-      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
       expect(diagramSpy).toHaveBeenCalledTimes(1);
     } finally {
       rendered.unmount();
@@ -347,14 +352,14 @@ describe("AgentChatMarkdownRenderer", () => {
 
     try {
       await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
       const replyWithDefinition = `${reply}\n\n[docs]: https://example.com`;
 
       rendered.rerender(chatMarkdown(replyWithDefinition, true));
       rendered.rerender(chatMarkdown(replyWithDefinition));
 
       expect(rendered.container.querySelector("a")?.textContent).toBe("the docs");
-      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
       expect(diagramSpy).toHaveBeenCalledTimes(1);
     } finally {
       rendered.unmount();
@@ -370,7 +375,7 @@ describe("AgentChatMarkdownRenderer", () => {
 
     try {
       await waitForDiagram(rendered.container);
-      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
       blockSpy.mockClear();
 
       rendered.rerender(chatMarkdown(`${reply} the diagram.`, true));
@@ -380,7 +385,7 @@ describe("AgentChatMarkdownRenderer", () => {
       expect(rendered.container.querySelector("section[data-footnotes]")?.textContent).toContain(
         "A note.",
       );
-      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
       expect(diagramSpy).toHaveBeenCalledTimes(1);
     } finally {
       rendered.unmount();
@@ -423,7 +428,7 @@ describe("AgentChatMarkdownRenderer", () => {
 
     try {
       await waitFor(() => expect(diagramSpy).toHaveBeenCalledTimes(1), { timeout: 500 });
-      const diagram = rendered.getByRole("region", { name: "Mermaid diagram" });
+      const diagram = rendered.getByRole("group", { name: "Mermaid diagram" });
       if (drawFirst) {
         pendingSvg.resolve(DIAGRAM_SVG);
         await waitForDiagram(rendered.container);
@@ -438,7 +443,7 @@ describe("AgentChatMarkdownRenderer", () => {
       });
 
       expect(rendered.getByText("Rendered diagram")).toBeTruthy();
-      expect(rendered.getByRole("region", { name: "Mermaid diagram" })).toBe(diagram);
+      expect(rendered.getByRole("group", { name: "Mermaid diagram" })).toBe(diagram);
       expect(diagramSpy).toHaveBeenCalledTimes(1);
     } finally {
       pendingSvg.resolve(DIAGRAM_SVG);
@@ -462,7 +467,7 @@ describe("AgentChatMarkdownRenderer", () => {
         },
       );
       expect(
-        within(streamed.container).getByRole("region", { name: "Mermaid diagram" }),
+        within(streamed.container).getByRole("group", { name: "Mermaid diagram" }),
       ).toBeTruthy();
 
       streamed.rerender(chatMarkdown(reply));

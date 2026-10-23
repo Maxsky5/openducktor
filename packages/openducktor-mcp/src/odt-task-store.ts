@@ -1,12 +1,13 @@
 import type { RequestMeta } from "@modelcontextprotocol/sdk/types.js";
 import {
   ODT_TOOL_SCHEMAS,
+  TASK_ARTIFACT_MAX_FILE_BYTES,
   type OdtBrowserToolName,
   type OdtToolName,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
-import { type BrowserCallerSource, resolveBrowserCaller } from "./browser-caller";
+import { type RuntimeCallerSource, resolveNativeCaller } from "./runtime-caller";
 import {
   OdtHostBridgeClient,
   type OdtHostBridgeClientPort,
@@ -24,12 +25,12 @@ type WorkspaceScopedToolName = WorkspaceScopedOdtToolName;
 
 export class OdtTaskStore {
   readonly workspaceId: string | undefined;
-  private readonly browserCallerSource: BrowserCallerSource | undefined;
+  private readonly callerSource: RuntimeCallerSource | undefined;
   private readonly client: OdtHostBridgeClientPort;
 
   constructor(options: OdtStoreOptions, deps: OdtTaskStoreDeps = {}) {
     this.workspaceId = options.workspaceId;
-    this.browserCallerSource = options.browserCallerSource;
+    this.callerSource = options.callerSource;
     this.client =
       deps.client ??
       new OdtHostBridgeClient({ baseUrl: options.hostUrl, appToken: options.hostToken });
@@ -65,7 +66,7 @@ export class OdtTaskStore {
     input: ToolInput<Name>,
     meta: RequestMeta | undefined,
   ) {
-    const caller = resolveBrowserCaller(this.browserCallerSource, meta);
+    const caller = resolveNativeCaller(this.callerSource, meta);
     const workspaceId = this.resolveWorkspaceId(toolName, input);
     return this.client.callBrowserTool(toolName, workspaceId, input, caller);
   }
@@ -82,8 +83,25 @@ export class OdtTaskStore {
     return this.executeWorkspaceScoped("odt_read_task_assets", input);
   }
 
-  async readTaskDocuments(input: ToolInput<"odt_read_task_documents">) {
-    return this.executeWorkspaceScoped("odt_read_task_documents", input);
+  async readTaskArtifacts(input: ToolInput<"odt_read_task_artifacts">) {
+    return this.executeWorkspaceScoped("odt_read_task_artifacts", input);
+  }
+
+  async setTaskArtifact(input: ToolInput<"odt_set_task_artifact">, meta?: RequestMeta) {
+    const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
+    const { content, ...bridgeInput } = input;
+    const dataBase64 = toBridgeArtifactBase64(content, input.dataBase64);
+    if (dataBase64 !== undefined) {
+      bridgeInput.dataBase64 = dataBase64;
+    }
+    const workspaceId = this.resolveWorkspaceId("odt_set_task_artifact", input);
+    return this.client.call("odt_set_task_artifact", workspaceId, bridgeInput, caller);
+  }
+
+  async deleteTaskArtifact(input: ToolInput<"odt_delete_task_artifact">, meta?: RequestMeta) {
+    const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
+    const workspaceId = this.resolveWorkspaceId("odt_delete_task_artifact", input);
+    return this.client.call("odt_delete_task_artifact", workspaceId, input, caller);
   }
 
   async updateTask(input: ToolInput<"odt_update_task">) {
@@ -96,14 +114,6 @@ export class OdtTaskStore {
 
   async searchTasks(input: ToolInput<"odt_search_tasks">) {
     return this.executeWorkspaceScoped("odt_search_tasks", input);
-  }
-
-  async setSpec(input: ToolInput<"odt_set_spec">) {
-    return this.executeWorkspaceScoped("odt_set_spec", input);
-  }
-
-  async setPlan(input: ToolInput<"odt_set_plan">) {
-    return this.executeWorkspaceScoped("odt_set_plan", input);
   }
 
   async buildBlocked(input: ToolInput<"odt_build_blocked">) {
@@ -121,12 +131,36 @@ export class OdtTaskStore {
   async setPullRequest(input: ToolInput<"odt_set_pull_request">) {
     return this.executeWorkspaceScoped("odt_set_pull_request", input);
   }
-
-  async qaApproved(input: ToolInput<"odt_qa_approved">) {
-    return this.executeWorkspaceScoped("odt_qa_approved", input);
-  }
-
-  async qaRejected(input: ToolInput<"odt_qa_rejected">) {
-    return this.executeWorkspaceScoped("odt_qa_rejected", input);
-  }
 }
+
+const toBridgeArtifactBase64 = (content: string | undefined, dataBase64: string | undefined) => {
+  let bytes: Buffer;
+  if (content !== undefined) {
+    bytes = Buffer.from(content, "utf8");
+    if (bytes.toString("utf8") !== content) {
+      throw new OdtToolError({
+        code: "ODT_TOOL_INPUT_INVALID",
+        message:
+          "Artifact text contains an unpaired Unicode surrogate. Supply valid UTF-8 text or exact base64 bytes.",
+      });
+    }
+  } else if (dataBase64 !== undefined) {
+    bytes = Buffer.from(dataBase64, "base64");
+    if (bytes.toString("base64") !== dataBase64) {
+      throw new OdtToolError({
+        code: "ODT_TOOL_INPUT_INVALID",
+        message:
+          "Artifact content is not canonical base64. Encode the original bytes as padded base64.",
+      });
+    }
+  } else {
+    return undefined;
+  }
+  if (bytes.byteLength > TASK_ARTIFACT_MAX_FILE_BYTES) {
+    throw new OdtToolError({
+      code: "ODT_TOOL_INPUT_INVALID",
+      message: "Artifact content exceeds 10 MiB. Choose a smaller file.",
+    });
+  }
+  return bytes.toString("base64");
+};

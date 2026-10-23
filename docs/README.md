@@ -17,7 +17,8 @@ Use this index to find the document for your task.
 
 ## Task workflow
 
-- [Task status model](task-workflow-status-model.md) defines task statuses, issue types, and document ownership.
+- [Task status model](task-workflow-status-model.md) defines task statuses, issue types, and workflow artifact ownership.
+- [Task artifacts](task-artifacts.md) defines saved outputs, file management, previews, isolation, lifecycle rules, and upgrade requirements.
 - [Task actions](task-workflow-actions.md) defines action IDs and their effects.
 - [Task transition matrix](task-workflow-transition-matrix.md) defines allowed transitions and guards.
 - [Task description Markdown](task-description-markdown.md) defines task Markdown, image assets, and agent access.

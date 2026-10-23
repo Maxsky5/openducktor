@@ -12,6 +12,9 @@ export default {
     "node-pty",
     // The Node bundle externalizes playwright-core, which the agent browser tools load at runtime.
     "playwright-core",
+    // The artifact preview worker loads these external codecs at runtime.
+    "sharp",
+    "@resvg/resvg-wasm",
   ],
   project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
 };

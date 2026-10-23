@@ -170,7 +170,7 @@ export const recordQaOutcome = (
       );
     }
     yield* validateTaskTransitionEffect(current, currentTasks, current.status, targetStatus);
-    const updated = yield* taskStore.recordQaOutcome({
+    const { task: updated, artifact } = yield* taskStore.recordQaOutcome({
       repoPath,
       taskId,
       status: targetStatus,
@@ -178,7 +178,7 @@ export const recordQaOutcome = (
       verdict,
     });
     const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-    return enrichTask(updated, nextTasks);
+    return { task: enrichTask(updated, nextTasks), artifact };
   });
 export const buildCompletionWorktreePath = (
   settingsConfig: SettingsConfigPort,

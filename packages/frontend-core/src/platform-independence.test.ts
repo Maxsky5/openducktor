@@ -1,6 +1,7 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   REMOTE_BASELINE_CAPABILITIES,
+  REMOTE_PROTOCOL_VERSION,
   type RemoteHostDescriptor,
   type TaskCard,
 } from "@openducktor/contracts";
@@ -259,7 +260,9 @@ const createRemoteFixture = () => {
     appVersion: "host-release",
     hostInstanceId: "host-instance-1",
     accessPolicy: "network_reach",
-    protocols: [{ version: 1, capabilities: [...REMOTE_BASELINE_CAPABILITIES] }],
+    protocols: [
+      { version: REMOTE_PROTOCOL_VERSION, capabilities: [...REMOTE_BASELINE_CAPABILITIES] },
+    ],
   };
   const json = <T>(value: T, status = 200): RemoteHttpResponse => ({
     status,
@@ -291,7 +294,7 @@ const createRemoteFixture = () => {
           status: "accepted",
           host: descriptor,
           connectionId: crypto.randomUUID(),
-          protocolVersion: 1,
+          protocolVersion: REMOTE_PROTOCOL_VERSION,
           missingOptionalCapabilities: [],
         });
       if (url.endsWith("/events"))

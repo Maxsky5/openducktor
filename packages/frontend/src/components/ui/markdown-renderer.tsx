@@ -2,6 +2,7 @@ import { markdownLinkComponents, type MarkdownLinkPolicy } from "./markdown-link
 import { TASK_ASSET_URI_PREFIX, type TaskAssetRenderContext } from "@openducktor/contracts";
 import {
   type ComponentProps,
+  createElement,
   lazy,
   memo,
   type ReactElement,
@@ -111,11 +112,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const needsRichRenderer =
     taskAssetContext !== undefined || (!lightweight && content.includes(TASK_ASSET_URI_PREFIX));
   const taskAssetProps = resolveTaskAssetProps(taskAssetContext);
+  const loadingFallback =
+    fallback === undefined
+      ? createElement(renderMarkdownElement, { markdown: content, components, linkPolicy })
+      : fallback;
 
   let renderedContent: ReactElement;
   if (needsRichRenderer) {
     renderedContent = (
-      <Suspense fallback={fallback ?? null}>
+      <Suspense fallback={loadingFallback}>
         <MarkdownRendererRich
           markdown={content}
           components={components}
@@ -128,7 +133,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     );
   } else if (premiumCodeBlocks) {
     renderedContent = (
-      <Suspense fallback={fallback ?? null}>
+      <Suspense fallback={loadingFallback}>
         <PremiumMarkdownRenderer
           markdown={content}
           components={components}

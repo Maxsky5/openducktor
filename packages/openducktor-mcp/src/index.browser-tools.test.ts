@@ -74,7 +74,7 @@ describe("browser tools", () => {
       "odt_search_tasks",
       "odt_read_task",
       "odt_read_task_assets",
-      "odt_read_task_documents",
+      "odt_read_task_artifacts",
       "odt_browser_list",
       "odt_browser_snapshot",
       "odt_browser_screenshot",
@@ -163,7 +163,7 @@ describe("browser tools", () => {
     });
 
     const { message } = expectToolError(result);
-    expect(message).toContain("Browser tools need a managed OpenDucktor session");
+    expect(message).toContain("This tool needs a managed OpenDucktor session");
     expect(message).toContain(testCase.reason);
     expect(browserRequests(bridge.requests)).toEqual([]);
   });

@@ -162,7 +162,7 @@ describe("handleCodexServerRequest", () => {
     const request = mcpToolApprovalRequest({
       id: 27,
       serverName: "openducktor",
-      toolName: "odt_set_plan",
+      toolName: "odt_build_completed",
       threadId: session.threadId,
     });
 
@@ -348,7 +348,7 @@ describe("handleCodexServerRequest", () => {
       handleCodexServerRequest(
         createRequestContext({ events, pendingInput, respondServerRequest }),
         createSession("spec"),
-        mcpToolApprovalRequest({ id: 33, serverName: "external", toolName: "odt_set_plan" }),
+        mcpToolApprovalRequest({ id: 33, serverName: "external", toolName: "odt_build_completed" }),
         new Set(),
       ),
     ).resolves.toBe(true);
@@ -356,7 +356,7 @@ describe("handleCodexServerRequest", () => {
     expect(respondServerRequest).not.toHaveBeenCalled();
     expect(
       pendingInput.nativeRequest("runtime-live", "thread-spec", 33)?.entry.request.tool?.name,
-    ).toBe("odt_set_plan");
+    ).toBe("odt_build_completed");
   });
 
   test("rejects request owners that are neither the current session nor a known child route", async () => {
@@ -391,7 +391,11 @@ describe("handleCodexServerRequest", () => {
       handleCodexServerRequest(
         createRequestContext({ events, pendingInput, respondServerRequest }),
         createSession("spec"),
-        mcpToolApprovalRequest({ id: 32, serverName: "openducktor", toolName: "odt_set_plan" }),
+        mcpToolApprovalRequest({
+          id: 32,
+          serverName: "openducktor",
+          toolName: "odt_build_completed",
+        }),
         new Set(),
       ),
     ).resolves.toBe(false);
@@ -406,7 +410,7 @@ describe("handleCodexServerRequest", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "session_error",
-        message: expect.stringContaining("role 'spec' is not allowed to use odt_set_plan"),
+        message: expect.stringContaining("role 'spec' is not allowed to use odt_build_completed"),
       }),
     );
   });

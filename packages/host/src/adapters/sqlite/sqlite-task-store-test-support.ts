@@ -20,7 +20,7 @@ import { ensureSchema } from "./sqlite-task-store-migrations";
 import { taskStoreSchema } from "./sqlite-task-store-schema";
 
 type BunSqliteStatement = ReturnType<Database["prepare"]>;
-const documentCountRowSchema = z.object({ count: z.number() });
+const artifactCountRowSchema = z.object({ count: z.number() });
 const tableNameRowSchema = z.object({ name: z.string() });
 const migrationRowSchema = z.object({ hash: z.string() });
 const taskColumnRowSchema = z.object({ name: z.string(), notnull: z.number() });
@@ -137,15 +137,19 @@ export const createSqliteTaskStoreHarness = async ({
   };
 };
 
-export const readDocumentCount = (databasePath: string, taskId: string, kind: string): number => {
+export const readWorkflowArtifactCount = (
+  databasePath: string,
+  taskId: string,
+  kind: string,
+): number => {
   const database = new Database(databasePath, { readonly: true });
   try {
     const row = useStatement(
       database,
-      "select count(*) as count from task_documents where task_id = ? and kind = ?",
+      "select count(*) as count from tasks_artifacts where task_id = ? and workflow_kind = ?",
       (statement) => statement.get(taskId, kind),
     );
-    const parsed = documentCountRowSchema.safeParse(row);
+    const parsed = artifactCountRowSchema.safeParse(row);
     return parsed.success ? parsed.data.count : 0;
   } finally {
     database.close();

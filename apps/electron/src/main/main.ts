@@ -99,6 +99,9 @@ import {
 } from "./electron-notification-permission";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { registerElectronTaskAssetProtocol } from "./electron-task-asset-protocol";
+import { registerElectronArtifactPreviewProtocol } from "./electron-artifact-preview-protocol";
+import { createMainWindowIpcRegistrar } from "./electron-ipc-admission";
+import { ELECTRON_ARTIFACT_PREVIEW_PROTOCOL } from "../shared/electron-bridge-contract";
 import { registerElectronTaskStreamIpc } from "./electron-task-stream-ipc";
 import { resolveElectronWindowChromeOptions } from "./electron-window-chrome";
 import { installApplicationMenu } from "./main-menu";
@@ -110,7 +113,7 @@ const {
   app,
   BrowserWindow,
   clipboard,
-  ipcMain,
+  ipcMain: nativeIpcMain,
   nativeImage,
   nativeTheme,
   net,
@@ -121,6 +124,10 @@ const {
 } = electron;
 // Electron requires privileged schemes before app.ready, before any startup awaits.
 protocol.registerSchemesAsPrivileged([
+  {
+    scheme: ELECTRON_ARTIFACT_PREVIEW_PROTOCOL,
+    privileges: { standard: true, secure: true, bypassCSP: false, allowServiceWorkers: false },
+  },
   {
     scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
     privileges: {
@@ -193,6 +200,9 @@ const browserRuntime = createElectronBrowserRuntime({
 /** OpenDucktor windows only. Browser popup windows show untrusted pages and get no app data. */
 const getMainWindows = (): ElectronBrowserWindow[] =>
   BrowserWindow.getAllWindows().filter((window) => browserRuntime.isMainWindow(window));
+const ipcMain = createMainWindowIpcRegistrar(nativeIpcMain, (sender) =>
+  getMainWindows().some((window) => !window.isDestroyed() && window.webContents === sender),
+);
 let activeHostCommandRouter: EffectHostCommandRouter | null = null;
 let activeAppUpdateService: ElectronAppUpdateService | null = null;
 let activeNotificationRuntime: ReturnType<typeof createElectronNotificationRuntime> | null = null;
@@ -504,6 +514,7 @@ const createMainWindowEffect = (
             contextIsolation: true,
             devTools: isDevelopment,
             nodeIntegration: false,
+            nodeIntegrationInSubFrames: false,
             preload: getPreloadPath(),
             sandbox: true,
             session: rendererSession,
@@ -1014,6 +1025,7 @@ const configureElectronReadyRuntimeEffect = ({
         readService: hostCommandRouter.taskAssetReadService,
         session: rendererSession,
       });
+      registerElectronArtifactPreviewProtocol(rendererSession);
       installApplicationMenu({
         isDevelopment,
         appName: app.name || APPLICATION_NAME,

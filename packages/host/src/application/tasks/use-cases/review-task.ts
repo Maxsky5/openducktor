@@ -5,7 +5,7 @@ import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, recordQaOutcome, taskListWithCurrent } from "../support/task-workflow-helpers";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { CreateTaskServiceInput, TaskServiceWithMutationProgress } from "../task-service";
 
 export const createTaskReviewUseCases = ({
   gitPort,
@@ -13,7 +13,7 @@ export const createTaskReviewUseCases = ({
   taskSessionLifecycleCoordinator,
   terminalService,
 }: CreateTaskServiceInput): Pick<
-  TaskService,
+  TaskServiceWithMutationProgress,
   "qaApproved" | "qaRejected" | "humanRequestChanges" | "humanApprove"
 > => ({
   qaApproved(input) {

@@ -6,7 +6,12 @@ import {
   createTaskServiceTestDouble,
   createTaskServiceWithMutationProgressTestDouble,
 } from "../../test-support/task-service-test-double";
-import { ODT_MCP_TOOL_NAMES, type RepoConfig, type TaskCard } from "@openducktor/contracts";
+import {
+  ODT_MCP_TOOL_NAMES,
+  type RepoConfig,
+  type TaskCard,
+  type WorkflowTaskArtifact,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { HostOperationError } from "../../effect/host-errors";
@@ -42,7 +47,7 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   availableActions: [],
   labels: ["mcp"],
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -56,6 +61,20 @@ const taskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   createdAt: "2026-05-10T10:00:00.000Z",
   updatedAt: "2026-05-10T10:00:00.000Z",
   ...overrides,
+});
+const workflowArtifact = (
+  taskId: string,
+  workflowKind: WorkflowTaskArtifact["workflowKind"],
+  revision = 1,
+): WorkflowTaskArtifact => ({
+  artifactId: `workflow:${taskId}:${workflowKind}`,
+  taskId,
+  workflowKind,
+  classification: "workflow",
+  name: { spec: "Specification", plan: "Implementation Plan", qaReport: "QA Report" }[workflowKind],
+  mediaType: "text/markdown",
+  revision,
+  updatedAt: "2026-05-10T10:01:00.000Z",
 });
 type OdtWorkspaceSettingsService = Parameters<
   typeof createOdtMcpBridgeService
@@ -106,8 +125,9 @@ const createWorkspaceSettingsService = (): OdtWorkspaceSettingsService =>
   }) satisfies OdtWorkspaceSettingsService;
 type TestOdtMcpBridgeServiceInput = Omit<
   Parameters<typeof createOdtMcpBridgeService>[0],
-  "taskAssetReadService" | "browserAgentTools" | "browserCallers"
+  "taskService" | "taskAssetReadService" | "browserAgentTools" | "browserCallers" | "managedCallers"
 > & {
+  taskService: Omit<OdtTaskService, "qaApproved" | "qaRejected">;
   taskAssetReadService?: TaskAssetReadService;
 };
 const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =>
@@ -119,10 +139,18 @@ const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =
     browserAgentTools: {
       runAgentTool: () => Effect.die(new Error("Task tools never run browser tools.")),
     },
+    managedCallers: {
+      resolve: () => Effect.die(new Error("This tool does not resolve managed callers.")),
+    },
     browserCallers: {
       resolve: () => Effect.die(new Error("Task tools never resolve a browser caller.")),
     },
     ...input,
+    taskService: {
+      ...input.taskService,
+      qaApproved: () => Effect.die(new Error("These bridge tests never approve QA.")),
+      qaRejected: () => Effect.die(new Error("These bridge tests never reject QA.")),
+    },
   });
 describe("createOdtMcpBridgeService", () => {
   test.each(["in_progress", "ai_review", "human_review"] as const)(
@@ -168,7 +196,7 @@ describe("createOdtMcpBridgeService", () => {
       workspaceSettingsService: createWorkspaceSettingsService(),
     });
     await expect(Effect.runPromise(service.ready())).resolves.toEqual({
-      bridgeVersion: 1,
+      bridgeVersion: 2,
       toolNames: [...ODT_MCP_TOOL_NAMES],
     });
     await expect(Effect.runPromise(service.getWorkspaces({}))).resolves.toMatchObject({
@@ -388,13 +416,18 @@ describe("createOdtMcpBridgeService", () => {
     const taskService = createTaskServiceTestDouble({
       findTask: ({ taskId }) => Effect.succeed(taskId === currentTask.id ? currentTask : null),
       listTaskReferences: () => Effect.succeed([{ id: currentTask.id, title: currentTask.title }]),
+      listTaskArtifacts: () =>
+        Effect.succeed({
+          artifacts: [workflowArtifact(currentTask.id, "spec")],
+          canManageFree: true,
+        }),
       setSpec(input: Parameters<OdtTaskService["setSpec"]>[0]) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setSpec", input });
             currentTask = taskCard({
               status: "spec_ready",
-              documentSummary: {
+              artifactSummary: {
                 spec: { has: true },
                 plan: { has: false },
                 qaReport: { has: false, verdict: "not_reviewed" },
@@ -422,29 +455,22 @@ describe("createOdtMcpBridgeService", () => {
     });
     await expect(
       Effect.runPromise(
-        service.invoke("odt_set_spec", {
+        service.invoke("odt_set_task_artifact", {
           workspaceId: "repo",
           taskId: "Add bridge",
-          markdown: "## Spec",
+          code: "spec",
+          content: "## Spec",
         }),
       ),
     ).resolves.toEqual({
-      task: {
-        id: "task-1",
-        title: "Add bridge",
-        description: "Wire the bridge",
-        status: "spec_ready",
-        priority: 2,
-        issueType: "feature",
-        aiReviewEnabled: true,
-        labels: ["mcp"],
-        createdAt: "2026-05-10T10:00:00.000Z",
-        updatedAt: "2026-05-10T10:01:00.000Z",
-      },
-      document: {
-        markdown: "## Spec",
-        updatedAt: "2026-05-10T10:01:00.000Z",
+      artifact: {
+        taskId: "task-1",
+        code: "spec",
+        classification: "workflow",
+        name: "Specification",
+        mediaType: "text/markdown",
         revision: 1,
+        updatedAt: "2026-05-10T10:01:00.000Z",
       },
     });
     expect(calls).toEqual([
@@ -502,7 +528,12 @@ describe("createOdtMcpBridgeService", () => {
     });
     const failure = await Effect.runPromise(
       service
-        .invoke("odt_set_spec", { workspaceId: "repo", taskId: "task-1", markdown: "Spec" })
+        .invoke("odt_set_task_artifact", {
+          workspaceId: "repo",
+          taskId: "task-1",
+          code: "spec",
+          content: "Spec",
+        })
         .pipe(Effect.flip),
     );
     expect(failure.message).toContain("Task changes were saved");
@@ -514,10 +545,12 @@ describe("createOdtMcpBridgeService", () => {
     expect(snapshotReads).toBe(1);
   });
 
-  test("uses the task facade to publish one event for MCP document and create mutations", async () => {
+  test("uses the task facade to publish one event for MCP artifact and create mutations", async () => {
     const events: Array<{ kind: "created" | "updated"; taskIds: string[] }> = [];
     const baseTaskService = createTaskServiceWithMutationProgressTestDouble({
       findTask: () => Effect.succeed(taskCard()),
+      listTaskArtifacts: () =>
+        Effect.succeed({ artifacts: [workflowArtifact("task-1", "spec")], canManageFree: true }),
       createTask: () => Effect.succeed(taskCard({ id: "task-new", title: "New task" })),
       listTasks: () => Effect.succeed([taskCard()]),
       setSpec: () =>
@@ -562,10 +595,11 @@ describe("createOdtMcpBridgeService", () => {
     });
 
     await Effect.runPromise(
-      service.invoke("odt_set_spec", {
+      service.invoke("odt_set_task_artifact", {
         workspaceId: "repo",
         taskId: "task-1",
-        markdown: "## Spec",
+        code: "spec",
+        content: "## Spec",
       }),
     );
     await Effect.runPromise(
@@ -585,12 +619,18 @@ describe("createOdtMcpBridgeService", () => {
       { kind: "created", taskIds: ["task-new"] },
     ]);
   });
-  test("keeps internal plan affected ids out of the MCP response", async () => {
+  test("returns current workflow metadata after a plan submission", async () => {
+    const current = taskCard({ id: "epic-1", issueType: "epic", status: "ready_for_dev" });
     const taskService = createTaskServiceTestDouble({
-      listTasks: () => Effect.succeed([taskCard({ id: "epic-1", issueType: "epic" })]),
+      findTask: () => Effect.succeed(current),
+      listTaskArtifacts: () =>
+        Effect.succeed({
+          artifacts: [workflowArtifact(current.id, "plan", 2)],
+          canManageFree: true,
+        }),
       setPlan: () =>
         Effect.succeed({
-          document: {
+          artifact: {
             markdown: "# Plan",
             revision: 2,
             updatedAt: "2026-07-22T00:00:00.000Z",
@@ -604,23 +644,25 @@ describe("createOdtMcpBridgeService", () => {
     });
 
     const result = await Effect.runPromise(
-      service.invoke("odt_set_plan", {
+      service.invoke("odt_set_task_artifact", {
         workspaceId: "repo",
         taskId: "epic-1",
-        markdown: "# Plan",
+        code: "plan",
+        content: "# Plan",
       }),
     );
 
-    expect(result).toMatchObject({
-      task: { id: "epic-1" },
-      document: { markdown: "# Plan", revision: 2 },
-      createdSubtaskIds: [],
+    expect(result).toEqual({
+      artifact: {
+        taskId: "epic-1",
+        code: "plan",
+        classification: "workflow",
+        name: "Implementation Plan",
+        mediaType: "text/markdown",
+        revision: 2,
+        updatedAt: "2026-07-22T00:00:00.000Z",
+      },
     });
-    expect(result).not.toHaveProperty("affectedTaskIds");
-    if (!("document" in result)) {
-      throw new Error("expected odt_set_plan document response");
-    }
-    expect(result.document).not.toHaveProperty("affectedTaskIds");
   });
   test("creates through the host-owned task service facade", async () => {
     const taskService = createTaskServiceTestDouble({

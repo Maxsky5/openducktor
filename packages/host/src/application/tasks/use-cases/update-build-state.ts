@@ -115,7 +115,7 @@ export const createTaskBuildStateUseCases = ({
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const nextStatus =
-        current.aiReviewEnabled && current.documentSummary.qaReport.verdict !== "approved"
+        current.aiReviewEnabled && current.artifactSummary.qaReport.verdict !== "approved"
           ? "ai_review"
           : "human_review";
       yield* validateTaskTransitionEffect(current, currentTasks, current.status, nextStatus);

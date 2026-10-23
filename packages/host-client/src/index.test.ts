@@ -29,7 +29,7 @@ const makeTaskCardPayload = () => ({
   labels: [],
   parentId: null,
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -200,6 +200,15 @@ describe("HostClient", () => {
 
     await expect(client.tasksList("/repo")).resolves.toEqual([]);
     expect(calls).toEqual([{ command: "tasks_list", args: { repoPath: "/repo" } }]);
+  });
+
+  test("reads all task cards through the command without Kanban retention", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "tasks_list_all") return [];
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    expect(await client.tasksListAll("/repo")).toEqual([]);
+    expect(calls).toEqual([{ command: "tasks_list_all", args: { repoPath: "/repo" } }]);
   });
 
   test("lists the IDs of all tasks of a repository", async () => {
@@ -592,15 +601,15 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("saveSpecDocument uses dedicated non-transition IPC route", async () => {
+  test("saveSpecArtifact uses dedicated non-transition IPC route", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "spec_save_document") {
+      if (command === "spec_save_artifact") {
         return { updatedAt: "2026-02-20T09:30:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const output = await client.saveSpecDocument({
+    const output = await client.saveSpecArtifact({
       repoPath: "/repo",
       taskId: "task-77",
       markdown: "# Updated Spec",
@@ -610,7 +619,7 @@ describe("HostClient", () => {
     expect(output.cursor).toEqual(saveCursor);
     expect(calls).toEqual([
       {
-        command: "spec_save_document",
+        command: "spec_save_artifact",
         args: {
           repoPath: "/repo",
           taskId: "task-77",
@@ -697,15 +706,15 @@ describe("HostClient", () => {
     ]);
   });
 
-  test("savePlanDocument uses dedicated non-transition IPC route", async () => {
+  test("savePlanArtifact uses dedicated non-transition IPC route", async () => {
     const { client, calls } = createClient((command) => {
-      if (command === "plan_save_document") {
+      if (command === "plan_save_artifact") {
         return { updatedAt: "2026-02-20T09:45:00Z", cursor: saveCursor };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const output = await client.savePlanDocument({
+    const output = await client.savePlanArtifact({
       repoPath: "/repo",
       taskId: "task-88",
       markdown: "## Plan",
@@ -715,7 +724,7 @@ describe("HostClient", () => {
     expect(output.cursor).toEqual(saveCursor);
     expect(calls).toEqual([
       {
-        command: "plan_save_document",
+        command: "plan_save_artifact",
         args: {
           repoPath: "/repo",
           taskId: "task-88",
@@ -899,11 +908,11 @@ describe("HostClient", () => {
       switch (command) {
         case "set_spec":
           return { updatedAt: 123, cursor: saveCursor };
-        case "spec_save_document":
+        case "spec_save_artifact":
           return { cursor: saveCursor };
         case "set_plan":
           return { updatedAt: null, cursor: saveCursor };
-        case "plan_save_document":
+        case "plan_save_artifact":
           return { updatedAt: "", cursor: saveCursor };
         default:
           throw new Error(`Unexpected command: ${command}`);
@@ -914,7 +923,7 @@ describe("HostClient", () => {
       client.setSpec({ repoPath: "/repo", taskId: "task-1", markdown: "# Spec" }),
     ).rejects.toThrow();
     await expect(
-      client.saveSpecDocument({
+      client.saveSpecArtifact({
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "# Spec",
@@ -924,7 +933,7 @@ describe("HostClient", () => {
       client.setPlan({ repoPath: "/repo", taskId: "task-1", markdown: "## Plan" }),
     ).rejects.toThrow();
     await expect(
-      client.savePlanDocument({
+      client.savePlanArtifact({
         repoPath: "/repo",
         taskId: "task-1",
         markdown: "## Plan",
@@ -2217,8 +2226,8 @@ describe("HostClient", () => {
     };
     const latestSession = { ...batchSession, externalSessionId: "session-opencode-3" };
     const { client, calls } = createClient((command) => {
-      if (command === "task_metadata_get") {
-        return makeTaskMetadataPayload();
+      if (command === "spec_get") {
+        return makeTaskMetadataPayload().spec;
       }
       if (command === "agent_sessions_list_for_tasks") {
         return [{ taskId: "task-1", agentSessions: [batchSession] }];
@@ -2235,7 +2244,7 @@ describe("HostClient", () => {
 
     expect(sessions.map((session) => session.externalSessionId)).toEqual(["session-opencode-3"]);
     expect(calls.map((call) => call.command)).toEqual([
-      "task_metadata_get",
+      "spec_get",
       "agent_sessions_list_for_tasks",
       "agent_sessions_list",
     ]);

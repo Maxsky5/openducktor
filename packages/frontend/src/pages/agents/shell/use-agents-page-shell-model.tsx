@@ -2,6 +2,7 @@ import type { BrowserTabOwner } from "@openducktor/contracts";
 import { useBrowserPanelModel } from "@/features/browser";
 import type { SessionNavigationRecovery } from "@/features/session-navigation/use-session-navigation-recovery";
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
+import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
 import { useMemo } from "react";
 import {
@@ -37,6 +38,7 @@ import { useSessionViewActive } from "@/features/session-navigation/session-view
 
 type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
+  chatArtifactLinkOwner: ChatArtifactLinkOwner | null;
   activeWorkspace: ReturnType<typeof useWorkspaceBranchState>["activeWorkspace"];
   navigationPersistenceError: Error | null;
   navigationPersistenceOperation: SessionNavigationRecovery["navigationPersistenceOperation"];
@@ -238,6 +240,26 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     ],
   );
 
+  const documentsModel = orchestration.taskExecutionDocumentPanelModel;
+  const chatArtifactLinkOwner = useMemo<ChatArtifactLinkOwner | null>(
+    () =>
+      documentsModel
+        ? {
+            repoPath: documentsModel.repoPath,
+            taskId: documentsModel.taskId,
+            ownerKey: orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? "",
+            onOpenArtifact: (artifactId) => {
+              documentsModel.onSelectionChange({ kind: "artifact", artifactId });
+              panels.right.onPick("document");
+              if (panels.rightToggle && !panels.rightToggle.isOpen) {
+                panels.rightToggle.onToggle();
+              }
+            },
+          }
+        : null,
+    [documentsModel, orchestration.agentChatModel.thread.transcript.displayedSessionKey, panels],
+  );
+
   return {
     activeWorkspace,
     navigationPersistenceError,
@@ -256,6 +278,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     chatFileLinkOwner,
+    chatArtifactLinkOwner,
     taskExecutionSelectedFilePreviewModel: orchestration.taskExecutionSelectedFilePreviewModel,
     rightPanelBridge,
     selectedFileRefresh,

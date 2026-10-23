@@ -54,6 +54,7 @@ function MainChatPreview() {
       ownerKey: taskId,
       onSelectFile: preview.onSelectFile,
     },
+    chatArtifactLinkOwner: null,
     taskExecutionSelectedFilePreviewModel: preview.model,
     rightPanelBridge: null,
     selectedFileRefresh: null,

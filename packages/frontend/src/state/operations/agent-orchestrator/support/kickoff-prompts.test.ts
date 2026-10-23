@@ -17,7 +17,7 @@ const taskFixture: TaskCard = {
   availableActions: [],
   labels: [],
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },

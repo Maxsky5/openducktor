@@ -1,3 +1,7 @@
+import {
+  ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+  artifactPreviewBootstrapResponse,
+} from "@openducktor/remote-host/artifact-preview-bootstrap";
 import { createHostCommandLifetime } from "@openducktor/remote-host/host-command-lifetime";
 import {
   createRemoteAccessController,
@@ -519,6 +523,13 @@ const routeCorsRequest = ({
 }): Effect.Effect<Response, WebHostRequestError> =>
   Effect.gen(function* () {
     const requestUrl = new URL(request.url);
+    if (
+      requestUrl.pathname === ARTIFACT_PREVIEW_BOOTSTRAP_PATH &&
+      request.method === "GET" &&
+      !requestUrl.search
+    ) {
+      return artifactPreviewBootstrapResponse();
+    }
     if (requestUrl.pathname === "/health" && request.method === "GET") {
       return jsonResponse({ ok: true }, undefined, corsHeaders);
     }

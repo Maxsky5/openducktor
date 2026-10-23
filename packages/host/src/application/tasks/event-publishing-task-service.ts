@@ -1,23 +1,22 @@
-import { createMutationPublisher } from "./task-mutation-publisher";
-import type {
-  TaskChangeSet,
-  TaskDocumentSection,
-  TaskEventCursor,
-  TaskMetadataDocument,
-} from "@openducktor/contracts";
+import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
+import { removedArtifactChanges, workflowArtifactChange } from "./artifact-changes";
+import {
+  createArtifactPublishingMethods,
+  type ArtifactPublishingMethods,
+} from "./artifact-publication";
 import type { TaskSyncService } from "./sync/task-sync-service";
 import type { TaskMutationOperation } from "./task-mutation-operation";
 import {
   TaskMutationProgressFailure,
   TaskCreationProgressFailure,
 } from "./task-mutation-progress-failure";
+import { createMutationPublisher } from "./task-mutation-publisher";
 import type {
   TaskService,
   TaskServiceError,
   TaskServiceWithMutationProgress,
-  TaskSetPlanResult,
 } from "./task-service";
 
 export type CreateEventPublishingTaskServiceInput = {
@@ -32,48 +31,31 @@ export type CreateEventPublishingTaskServiceInput = {
   >;
 };
 
-type PublishedDocument = TaskMetadataDocument & { cursor: TaskEventCursor };
-
 export type EventPublishingTaskService = Omit<
   TaskService,
-  "setSpec" | "saveSpecDocument" | "savePlanDocument" | "setPlan"
-> & {
-  setPlan(
-    input: Parameters<TaskService["setPlan"]>[0],
-  ): Effect.Effect<TaskSetPlanResult & { document: PublishedDocument }, TaskServiceError>;
-  setSpec(
-    input: Parameters<TaskService["setSpec"]>[0],
-  ): Effect.Effect<PublishedDocument, TaskServiceError>;
-  saveSpecDocument(
-    input: Parameters<TaskService["saveSpecDocument"]>[0],
-  ): Effect.Effect<PublishedDocument, TaskServiceError>;
-  savePlanDocument(
-    input: Parameters<TaskService["savePlanDocument"]>[0],
-  ): Effect.Effect<PublishedDocument, TaskServiceError>;
-  transitionTaskDeferredPublication: (
-    input: Parameters<TaskService["transitionTask"]>[0],
-  ) => Effect.Effect<
-    {
-      task: import("@openducktor/contracts").TaskCard;
-      publish: Effect.Effect<void, TaskServiceError>;
-    },
-    TaskServiceError
-  >;
-  agentSessionUpsertDeferredPublication: (
-    input: Parameters<TaskService["agentSessionUpsert"]>[0],
-  ) => Effect.Effect<{ publish: Effect.Effect<void, TaskServiceError> }, TaskServiceError>;
-  agentSessionUpdateModelDeferredPublication: (
-    input: Parameters<TaskService["agentSessionUpdateModel"]>[0],
-  ) => Effect.Effect<
-    { updated: boolean; publish: Effect.Effect<void, TaskServiceError> },
-    TaskServiceError
-  >;
-};
-
-const changeForTask = (taskId: string): TaskChangeSet => ({
-  taskIds: [taskId],
-  removedTaskIds: [],
-});
+  keyof ArtifactPublishingMethods | "qaApproved" | "qaRejected"
+> &
+  Pick<TaskServiceWithMutationProgress, "qaApproved" | "qaRejected"> &
+  ArtifactPublishingMethods & {
+    transitionTaskDeferredPublication: (
+      input: Parameters<TaskService["transitionTask"]>[0],
+    ) => Effect.Effect<
+      {
+        task: import("@openducktor/contracts").TaskCard;
+        publish: Effect.Effect<void, TaskServiceError>;
+      },
+      TaskServiceError
+    >;
+    agentSessionUpsertDeferredPublication: (
+      input: Parameters<TaskService["agentSessionUpsert"]>[0],
+    ) => Effect.Effect<{ publish: Effect.Effect<void, TaskServiceError> }, TaskServiceError>;
+    agentSessionUpdateModelDeferredPublication: (
+      input: Parameters<TaskService["agentSessionUpdateModel"]>[0],
+    ) => Effect.Effect<
+      { updated: boolean; publish: Effect.Effect<void, TaskServiceError> },
+      TaskServiceError
+    >;
+  };
 
 export const createEventPublishingTaskService = ({
   taskService,
@@ -113,16 +95,6 @@ export const createEventPublishingTaskService = ({
   ): Effect.Effect<A, TaskServiceError> =>
     publishMutation(...args).pipe(Effect.map(({ value }) => value));
 
-  const publishDocument = <A extends TaskMetadataDocument>(
-    operation: TaskMutationOperation,
-    input: { repoPath: string; taskId: string },
-    section: TaskDocumentSection,
-    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
-  ): Effect.Effect<A & { cursor: TaskEventCursor }, TaskServiceError> =>
-    publishMutation(operation, input.repoPath, changeForTask(input.taskId), mutation, {
-      documentChanges: [{ taskId: input.taskId, sections: [section] }],
-    }).pipe(Effect.map(({ value, cursor }) => ({ ...value, cursor })));
-
   const publishAfterConditionalMutation = <A>(
     operation: TaskMutationOperation,
     repoPath: string,
@@ -140,7 +112,7 @@ export const createEventPublishingTaskService = ({
               operation,
               statusChanges,
               result.failure.failure,
-              result.failure.documentChanges,
+              result.failure.artifactChanges,
             );
             return yield* Effect.fail(result.failure.failure);
           }
@@ -155,6 +127,7 @@ export const createEventPublishingTaskService = ({
     );
 
   return {
+    ...createArtifactPublishingMethods(taskService, publishMutation),
     findTask: (input) => taskService.findTask(input),
     listTaskReferences: (input) => taskService.listTaskReferences(input),
     listTasks: (input) => taskService.listTasks(input),
@@ -332,7 +305,9 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.resetImplementation(input),
-        { documentChanges: [{ taskId: input.taskId, sections: ["qa"] }] },
+        {
+          artifactChanges: () => [workflowArtifactChange(input.taskId, "qaReport", true)],
+        },
       ),
     resetTask: (input) =>
       publishAfterMutation(
@@ -340,8 +315,11 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.resetTask(input),
-        { documentChanges: [{ taskId: input.taskId, sections: ["spec", "plan", "qa"] }] },
-      ),
+        {
+          artifactChanges: (result) =>
+            removedArtifactChanges(input.taskId, result.removedArtifactIds),
+        },
+      ).pipe(Effect.map(({ task }) => task)),
     updateTask: (input) =>
       publishAfterMutation(
         "update-task",
@@ -357,33 +335,6 @@ export const createEventPublishingTaskService = ({
         changeForTask(input.taskId),
         taskService.transitionTask(input),
       ),
-    specGet: (input) => taskService.specGet(input),
-    setSpec: (input) =>
-      publishDocument(
-        "set-spec",
-        input,
-        "spec",
-        Effect.suspend(() => taskService.setSpec(input)),
-      ),
-    saveSpecDocument: (input) =>
-      publishDocument("save-spec-document", input, "spec", taskService.saveSpecDocument(input)),
-    planGet: (input) => taskService.planGet(input),
-    setPlan: (input) =>
-      publishMutation(
-        "set-plan",
-        input.repoPath,
-        changeForTask(input.taskId),
-        Effect.suspend(() => taskService.setPlan(input)),
-        {
-          changes: (result) => result.changes,
-          documentChanges: [{ taskId: input.taskId, sections: ["plan"] }],
-        },
-      ).pipe(
-        Effect.map(({ value, cursor }) => ({ ...value, document: { ...value.document, cursor } })),
-      ),
-    savePlanDocument: (input) =>
-      publishDocument("save-plan-document", input, "plan", taskService.savePlanDocument(input)),
-    qaGetReport: (input) => taskService.qaGetReport(input),
     buildBlocked: (input) =>
       publishAfterMutation(
         "build-blocked",
@@ -418,7 +369,9 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.qaApproved(input),
-        { documentChanges: [{ taskId: input.taskId, sections: ["qa"] }] },
+        {
+          artifactChanges: () => [workflowArtifactChange(input.taskId, "qaReport")],
+        },
       ),
     qaRejected: (input) =>
       publishAfterMutation(
@@ -426,7 +379,9 @@ export const createEventPublishingTaskService = ({
         input.repoPath,
         changeForTask(input.taskId),
         taskService.qaRejected(input),
-        { documentChanges: [{ taskId: input.taskId, sections: ["qa"] }] },
+        {
+          artifactChanges: () => [workflowArtifactChange(input.taskId, "qaReport")],
+        },
       ),
     humanRequestChanges: (input) =>
       publishAfterMutation(
@@ -455,3 +410,8 @@ export const createEventPublishingTaskService = ({
     repoPullRequestSyncDetailed: (input) => taskService.repoPullRequestSyncDetailed(input),
   };
 };
+
+const changeForTask = (taskId: string): TaskChangeSet => ({
+  taskIds: [taskId],
+  removedTaskIds: [],
+});

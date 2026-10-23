@@ -19,12 +19,12 @@ const codexCallMetaSchema = z.object({ threadId: runtimeSessionIdSchema });
  * process between sessions, so each call names its session. Claude starts one MCP process
  * for each session, so the process environment names it.
  */
-export type BrowserCallerSource =
+export type RuntimeCallerSource =
   | { runtime: Exclude<OdtBrowserCaller["runtime"], "claude"> }
   | { runtime: "claude"; runtimeSessionId: string };
 
 /** Reads the managed runtime of this process. External MCP clients set no runtime. */
-export const readBrowserCallerSource = (): BrowserCallerSource | undefined => {
+export const readRuntimeCallerSource = (): RuntimeCallerSource | undefined => {
   const rawRuntime = normalizeOptionalInput(process.env[RUNTIME_KIND_ENV]);
   if (rawRuntime === undefined) {
     return undefined;
@@ -50,12 +50,12 @@ export const readBrowserCallerSource = (): BrowserCallerSource | undefined => {
 const unmanagedCallerError = (reason: string): OdtToolError =>
   new OdtToolError({
     code: "ODT_TOOL_EXECUTION_ERROR",
-    message: `Browser tools need a managed OpenDucktor session: ${reason}. Use browser tools only from an agent session that OpenDucktor started.`,
+    message: `This tool needs a managed OpenDucktor session: ${reason}. Run the tool from an agent session that OpenDucktor started.`,
   });
 
-/** Finds the runtime session that made a browser tool call. Tool input never selects it. */
-export const resolveBrowserCaller = (
-  source: BrowserCallerSource | undefined,
+/** Finds the runtime session that made a tool call. Tool input never selects it. */
+export const resolveNativeCaller = (
+  source: RuntimeCallerSource | undefined,
   meta: RequestMeta | undefined,
 ): OdtBrowserCaller => {
   if (source === undefined) {

@@ -2,6 +2,10 @@ import type { TaskEventStatusChange } from "@openducktor/contracts";
 
 /** Names the task mutation that published a task event or committed a status change. */
 export type TaskMutationOperation =
+  | "create-artifact"
+  | "rename-artifact"
+  | "replace-artifact"
+  | "delete-artifact"
   | "agent-session-create"
   | "agent-session-delete"
   | "agent-session-update-model"
@@ -24,8 +28,8 @@ export type TaskMutationOperation =
   | "repo-pull-request-sync"
   | "reset-implementation"
   | "reset-task"
-  | "save-plan-document"
-  | "save-spec-document"
+  | "save-plan-artifact"
+  | "save-spec-artifact"
   | "set-plan"
   | "set-spec"
   | "transition-task"

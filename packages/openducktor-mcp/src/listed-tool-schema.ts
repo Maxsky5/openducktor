@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
-  ODT_TOOL_SCHEMAS,
-  ODT_WORKSPACE_SCOPED_TOOL_NAMES,
-} from "./lib";
+import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
 
 const listedToolObjectSchema = z.record(z.string(), z.json());
 
@@ -93,11 +89,11 @@ export const getListedToolInputSchema = (
   return jsonSchema;
 };
 
-export const getListedToolOutputSchema = (toolName: RegisteredToolName): ListedToolSchema =>
+export const getListedToolOutputSchema = (outputSchema: z.ZodType): ListedToolSchema =>
   listedToolSchemaSchema.parse(
     compactListedSchema(
       jsonObjectSchema.parse(
-        z.toJSONSchema(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS[toolName], {
+        z.toJSONSchema(outputSchema, {
           io: "output",
         }),
       ),

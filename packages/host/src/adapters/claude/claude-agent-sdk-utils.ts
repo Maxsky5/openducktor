@@ -8,7 +8,11 @@ import type {
   AgentStreamPart,
   SessionRef,
 } from "@openducktor/core";
-import { classifyOdtToolMutation, normalizeOdtToolName } from "@openducktor/core";
+import {
+  classifyOdtToolMutation,
+  normalizeOdtToolName,
+  retiredArtifactToolName,
+} from "@openducktor/core";
 import { Effect } from "effect";
 import { z } from "zod";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
@@ -196,7 +200,7 @@ export const previewInput = (
 export const toolPartType = (
   toolName: string,
 ): Extract<AgentStreamPart, { kind: "tool" }>["toolType"] => {
-  if (canonicalOdtToolName(toolName)) {
+  if (canonicalOdtToolName(toolName) || retiredArtifactToolName(toolName)) {
     return "workflow";
   }
   if (/^Task(?:Create|Update|Get|List)$/u.test(toolName)) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from "react";
 import type { DocumentEditorView } from "@/types/task-composer";
 
 export type TaskDocumentSection = "spec" | "plan";
@@ -231,7 +231,7 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
       promise,
       new Promise<T>((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error("Timed out while loading the document."));
+          reject(new Error("Timed out while loading the artifact."));
         }, timeoutMs);
       }),
     ]);
@@ -243,7 +243,7 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T
 };
 
 const toErrorMessage = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : "Unable to load document.";
+  cause instanceof Error ? cause.message : "Unable to load artifact.";
 
 export function useTaskDocumentEditorState({
   open,
@@ -276,8 +276,10 @@ export function useTaskDocumentEditorState({
     >();
   }
 
-  contextRef.current = editorContext;
-  documentsRef.current = currentState.documents;
+  useLayoutEffect(() => {
+    contextRef.current = editorContext;
+    documentsRef.current = currentState.documents;
+  }, [editorContext, currentState.documents]);
 
   const getInFlightSectionsForContext = useCallback((context: TaskDocumentEditorContext) => {
     const sectionsByContext = inFlightSectionsByContextRef.current;

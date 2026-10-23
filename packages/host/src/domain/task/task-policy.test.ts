@@ -20,7 +20,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   issueType: "feature",
   labels: [],
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -127,7 +127,7 @@ describe("task domain policy", () => {
     const workflows = deriveAgentWorkflows(
       task({
         status: "ready_for_dev",
-        documentSummary: {
+        artifactSummary: {
           spec: { has: true },
           plan: { has: true },
           qaReport: { has: false, verdict: "not_reviewed" },
@@ -156,7 +156,7 @@ describe("task domain policy", () => {
     const blockedTask = task({
       status: "blocked",
       aiReviewEnabled: true,
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false },
         plan: { has: false },
         qaReport: { has: true, verdict: "rejected" },

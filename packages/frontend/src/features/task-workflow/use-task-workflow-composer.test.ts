@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
+import { createElement, type PropsWithChildren } from "react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { installReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
@@ -22,8 +26,15 @@ let harness: ReturnType<
   typeof createHookHarness<Props, ReturnType<typeof useTaskWorkflowComposer>>
 > | null = null;
 
-const mount = async (props: Props) => {
-  harness = createHookHarness(useTaskWorkflowComposer, props);
+let connection: ReturnType<typeof createTestClientConnection>;
+const mount = async (props: Props, storedTasks: TaskCard[] = []) => {
+  connection = createTestClientConnection({
+    client: { tasksList: async () => [], tasksListAll: async () => storedTasks },
+  });
+  harness = createHookHarness(useTaskWorkflowComposer, props, {
+    wrapper: ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: connection.queryClient }, children),
+  });
   await harness.mount();
   return harness;
 };
@@ -35,6 +46,7 @@ beforeEach(() => {
 afterEach(async () => {
   await harness?.unmount();
   harness = null;
+  connection?.queryClient.clear();
   restoreReactActEnvironment?.();
   restoreReactActEnvironment = null;
 });
@@ -53,10 +65,25 @@ describe("useTaskWorkflowComposer", () => {
     expect(hook.getLatest().composer.open).toBe(false);
   });
 
-  test("closes an edit when its task leaves the task list", async () => {
+  test("edits a closed task outside the board list", async () => {
+    const closedTask = { ...task, status: "closed" as const };
+    const hook = await mount({ ...inA, tasks: [] }, [closedTask]);
+    await hook.run((state) => state.onEdit(task.id));
+    await hook.waitFor((state) => state.composer.open);
+    expect(hook.getLatest().composer).toMatchObject({
+      open: true,
+      task: closedTask,
+      tasks: [closedTask],
+    });
+  });
+
+  test("closes an edit when its task is removed from the workspace", async () => {
     const hook = await mount(inA);
     await hook.run((state) => state.onEdit(task.id));
 
+    connection.queryClient.setQueryData(taskQueryKeys.unfilteredRepoData(workspaceA.repoPath), {
+      tasks: [],
+    });
     await hook.update({ ...inA, tasks: [] });
     await hook.update(inA);
 

@@ -1,3 +1,4 @@
+import { createArtifactImagePreviewAdapter } from "../../adapters/artifacts/artifact-image-preview-adapter";
 import { agentSessionRefKey } from "@openducktor/core";
 import { createTaskWorkflowSessionFork } from "../../application/agent-sessions/task-workflow-session-fork";
 import { createTaskSessionOperations } from "../../application/agent-sessions/task-session-operations";
@@ -83,6 +84,7 @@ export const createNodeTaskSessionServices = ({
     );
   const baseTaskService = createTaskServiceWithMutationProgress({
     ...taskServiceInput,
+    artifactImagePreview: createArtifactImagePreviewAdapter(),
     publishCompletion: (observation) =>
       agentSessionLiveStateService.publishOperation({
         type: "task_completion_updated",

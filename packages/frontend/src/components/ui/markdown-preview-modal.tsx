@@ -17,7 +17,7 @@ export type MarkdownPreviewModalProps = {
   markdown: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Display title shown in the modal header. Enrichted with task context by callers. */
+  onCloseAutoFocus?: (event: Event) => void;
   title?: string;
   stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
@@ -28,6 +28,7 @@ export function MarkdownPreviewModal({
   markdown,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   title,
   stripTaskDescriptionFrontMatter = false,
   taskAssetContext,
@@ -35,13 +36,16 @@ export function MarkdownPreviewModal({
 }: MarkdownPreviewModalProps): ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-w-5xl flex-col overflow-hidden p-0">
+      <DialogContent
+        className="flex max-w-5xl flex-col overflow-hidden p-0"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
           <DialogTitle className={title ? "text-xl font-semibold" : "sr-only"}>
-            {title ?? "Document Preview"}
+            {title ?? "Artifact preview"}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Fullscreen markdown document preview.
+            Fullscreen Markdown artifact preview.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="min-h-0 flex-1 overflow-hidden">

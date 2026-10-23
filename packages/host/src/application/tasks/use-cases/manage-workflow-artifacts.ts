@@ -1,7 +1,8 @@
-import type { TaskMetadataDocument } from "@openducktor/contracts";
+import type { TaskMetadataArtifact } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { canSetSpecFromStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+import { workflowArtifactChange } from "../artifact-changes";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
   CreateTaskServiceInput,
@@ -11,24 +12,21 @@ import type {
 } from "../task-service";
 import { createSetPlanUseCase } from "./set-plan";
 
-type TaskDocumentUseCases = Omit<
-  Pick<
-    TaskService,
-    "specGet" | "setSpec" | "saveSpecDocument" | "planGet" | "savePlanDocument" | "qaGetReport"
-  >,
-  "setPlan" | "setSpec"
+type WorkflowArtifactUseCases = Pick<
+  TaskService,
+  "specGet" | "saveSpecArtifact" | "planGet" | "savePlanArtifact" | "qaGetReport"
 > & {
   setSpec(
     input: Parameters<TaskService["setSpec"]>[0],
-  ): Effect.Effect<TaskMetadataDocument, TaskServiceError | TaskMutationProgressFailure>;
+  ): Effect.Effect<TaskMetadataArtifact, TaskServiceError | TaskMutationProgressFailure>;
   setPlan(
     input: Parameters<TaskService["setPlan"]>[0],
   ): Effect.Effect<TaskSetPlanResult, TaskServiceError | TaskMutationProgressFailure>;
 };
 
-export const createTaskDocumentUseCases = ({
+export const createWorkflowArtifactUseCases = ({
   taskStore,
-}: CreateTaskServiceInput): TaskDocumentUseCases => ({
+}: CreateTaskServiceInput): WorkflowArtifactUseCases => ({
   specGet(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -62,7 +60,7 @@ export const createTaskDocumentUseCases = ({
         );
       }
 
-      const document = yield* taskStore.setSpecDocument({ repoPath, taskId, markdown });
+      const artifact = yield* taskStore.setSpecArtifact({ repoPath, taskId, markdown });
       if (current.status === "open") {
         const transition = yield* Effect.result(
           taskStore.transitionTask({ repoPath, taskId, status: "spec_ready" }),
@@ -71,7 +69,7 @@ export const createTaskDocumentUseCases = ({
           return yield* Effect.fail(
             new TaskMutationProgressFailure({
               operation: "set-spec",
-              documentChanges: [{ taskId, sections: ["spec"] }],
+              artifactChanges: [workflowArtifactChange(taskId, "spec")],
               changes: { taskIds: [taskId], removedTaskIds: [] },
               failure: transition.failure,
             }),
@@ -79,16 +77,16 @@ export const createTaskDocumentUseCases = ({
         }
       }
 
-      return document;
+      return artifact;
     });
   },
 
-  saveSpecDocument(input) {
+  saveSpecArtifact(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, markdown } = input;
       yield* taskStore.getTask({ repoPath, taskId });
 
-      return yield* taskStore.setSpecDocument({ repoPath, taskId, markdown });
+      return yield* taskStore.setSpecArtifact({ repoPath, taskId, markdown });
     });
   },
 
@@ -103,12 +101,12 @@ export const createTaskDocumentUseCases = ({
 
   setPlan: createSetPlanUseCase(taskStore),
 
-  savePlanDocument(input) {
+  savePlanArtifact(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, markdown } = input;
       yield* taskStore.getTask({ repoPath, taskId });
 
-      return yield* taskStore.setPlanDocument({ repoPath, taskId, markdown });
+      return yield* taskStore.setPlanArtifact({ repoPath, taskId, markdown });
     });
   },
 
@@ -121,7 +119,7 @@ export const createTaskDocumentUseCases = ({
         return { markdown: "" };
       }
 
-      const result: TaskMetadataDocument = {
+      const result: TaskMetadataArtifact = {
         markdown: metadata.qaReport.markdown,
       };
       if (metadata.qaReport.updatedAt !== undefined) {

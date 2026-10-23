@@ -1,30 +1,19 @@
 import {
-  type BuildBlockedResult,
   type BuildCompletedResult,
-  type BuildResumedResult,
-  type CreateTaskResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
-  type QaApprovedResult,
-  type QaRejectedResult,
-  type SetPlanResult,
-  type SetPullRequestResult,
-  type SetSpecResult,
-  type TaskSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { JSONType } from "zod";
+import type { JSONType, z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import type { TaskService } from "../tasks/task-service";
+import { executeSetTaskArtifact, executeDeleteTaskArtifact } from "./odt-mcp-artifact-tools";
 import {
   buildTaskUpdatePatch,
-  createdSubtaskIds,
-  directSubtaskIds,
   mapPublicTask,
   mapTaskSummary,
   parseResponse,
   parseToolInput,
-  persistedDocument,
 } from "./odt-mcp-bridge-model";
 import type {
   OdtMcpBridgeError,
@@ -34,17 +23,9 @@ import type {
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-type OdtMcpMutationToolResult =
-  | BuildBlockedResult
-  | BuildCompletedResult
-  | BuildResumedResult
-  | CreateTaskResult
-  | QaApprovedResult
-  | QaRejectedResult
-  | SetPlanResult
-  | SetPullRequestResult
-  | SetSpecResult
-  | TaskSummary;
+type OdtMcpMutationToolResult = z.output<
+  (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[OdtMcpMutationToolName]
+>;
 
 type OdtMcpMutationHandler = (
   context: OdtMcpToolContext,
@@ -120,49 +101,6 @@ const executeUpdateTask: OdtMcpMutationHandler = (context, input) =>
       RESPONSE_SCHEMAS.odt_update_task,
       mapTaskSummary(updated),
     );
-  });
-
-const executeSetSpec: OdtMcpMutationHandler = (context, input) =>
-  Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput("odt_set_spec", ODT_TOOL_SCHEMAS.odt_set_spec, input);
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    const document = yield* taskService.setSpec({
-      repoPath,
-      taskId: task.id,
-      markdown: parsed.markdown,
-    });
-    const updated = yield* taskForWorkspace(parsed.workspaceId ?? "", task.id);
-    return yield* parseResponse("odt_set_spec", RESPONSE_SCHEMAS.odt_set_spec, {
-      task: mapPublicTask(updated),
-      document: persistedDocument(document, "odt_set_spec"),
-    });
-  });
-
-const executeSetPlan: OdtMcpMutationHandler = (context, input) =>
-  Effect.gen(function* () {
-    const { repoPathForWorkspace, resolveTask, tasksForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput("odt_set_plan", ODT_TOOL_SCHEMAS.odt_set_plan, input);
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const beforeTasks = yield* tasksForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* resolveTask(beforeTasks, parsed.taskId);
-    const previousSubtaskIds = directSubtaskIds(beforeTasks, task.id);
-    const plan = yield* taskService.setPlan({
-      repoPath,
-      taskId: task.id,
-      markdown: parsed.markdown,
-      subtasks: [],
-      hasExplicitSubtasks: false,
-    });
-    const document = plan.document;
-    const afterTasks = yield* tasksForWorkspace(parsed.workspaceId ?? "");
-    const updated = yield* resolveTask(afterTasks, task.id);
-    return yield* parseResponse("odt_set_plan", RESPONSE_SCHEMAS.odt_set_plan, {
-      task: mapPublicTask(updated),
-      document: persistedDocument(document, "odt_set_plan"),
-      createdSubtaskIds: createdSubtaskIds(previousSubtaskIds, afterTasks, task.id),
-    });
   });
 
 const executeBuildBlocked: OdtMcpMutationHandler = (context, input) =>
@@ -255,55 +193,14 @@ const executeSetPullRequest: OdtMcpMutationHandler = (context, input) =>
     });
   });
 
-const executeQaApproved: OdtMcpMutationHandler = (context, input) =>
-  Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput(
-      "odt_qa_approved",
-      ODT_TOOL_SCHEMAS.odt_qa_approved,
-      input,
-    );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    const updated = yield* taskService.qaApproved({
-      repoPath,
-      taskId: task.id,
-      markdown: parsed.reportMarkdown,
-    });
-    return yield* parseResponse("odt_qa_approved", RESPONSE_SCHEMAS.odt_qa_approved, {
-      task: mapPublicTask(updated),
-    });
-  });
-
-const executeQaRejected: OdtMcpMutationHandler = (context, input) =>
-  Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
-    const parsed = yield* parseToolInput(
-      "odt_qa_rejected",
-      ODT_TOOL_SCHEMAS.odt_qa_rejected,
-      input,
-    );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    const updated = yield* taskService.qaRejected({
-      repoPath,
-      taskId: task.id,
-      markdown: parsed.reportMarkdown,
-    });
-    return yield* parseResponse("odt_qa_rejected", RESPONSE_SCHEMAS.odt_qa_rejected, {
-      task: mapPublicTask(updated),
-    });
-  });
-
 const MUTATION_HANDLERS = {
+  odt_set_task_artifact: executeSetTaskArtifact,
+  odt_delete_task_artifact: executeDeleteTaskArtifact,
+
   odt_create_task: executeCreateTask,
   odt_update_task: executeUpdateTask,
-  odt_set_spec: executeSetSpec,
-  odt_set_plan: executeSetPlan,
   odt_build_blocked: executeBuildBlocked,
   odt_build_resumed: executeBuildResumed,
   odt_build_completed: executeBuildCompleted,
   odt_set_pull_request: executeSetPullRequest,
-  odt_qa_approved: executeQaApproved,
-  odt_qa_rejected: executeQaRejected,
 } satisfies Record<OdtMcpMutationToolName, OdtMcpMutationHandler>;

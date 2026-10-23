@@ -64,7 +64,7 @@ const createHarness = () => {
       statusChanges: [],
       emittedAt: "2026-10-11T17:00:00.000Z",
       boardChanges: {
-        documentChanges: [],
+        artifactChanges: [],
         cards: [task({ description: "x".repeat(descriptionBytes), title: `Task ${sequence}` })],
         doneVisibleDays: 1,
       },

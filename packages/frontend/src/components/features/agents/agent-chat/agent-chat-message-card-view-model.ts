@@ -110,7 +110,9 @@ export const buildAgentChatMessageCardViewModel = ({
   const isAssistantMessage = message.role === "assistant" && !isImageGenerationMessage;
   const isUserMessage = message.role === "user";
   const isToolMessage = meta?.kind === "tool";
-  const isWorkflowToolMessage = isToolMessage && toolCallPresentation?.kind === "workflow";
+  const isWorkflowToolMessage =
+    isToolMessage &&
+    (toolCallPresentation?.kind === "workflow" || toolCallPresentation?.kind === "artifact");
   const isRegularToolMessage = isToolMessage && !isWorkflowToolMessage;
   const isSubagentMessage = meta?.kind === "subagent";
   const isSessionNoticeMessage = meta?.kind === "session_notice";

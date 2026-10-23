@@ -1,4 +1,24 @@
 import {
+  artifactScopeSchema,
+  artifactReadRequestSchema,
+  artifactCreateRequestSchema,
+  artifactRenameRequestSchema,
+  artifactReplaceRequestSchema,
+  artifactDeleteRequestSchema,
+  taskArtifactCollectionSchema,
+  artifactContentChunkSchema,
+  artifactSaveResultSchema,
+  artifactDeleteResultSchema,
+  type ArtifactScope,
+  type ArtifactReadRequest,
+  type ArtifactCreateRequest,
+  type ArtifactRenameRequest,
+  type ArtifactReplaceRequest,
+  type ArtifactDeleteRequest,
+  type TaskArtifactCollection,
+  type ArtifactContentChunk,
+  type ArtifactSaveResult,
+  type ArtifactDeleteResult,
   type AgentSessionIdentity,
   type AgentSessionRecord,
   agentSessionRecordSchema,
@@ -15,6 +35,7 @@ import {
   type TaskStopImpact,
   type TaskStopImpactOperation,
   type TaskUpdatePatch,
+  type WorkflowArtifactSection,
   taskAgentSessionsSchema,
   taskAssetDescriptionMutationSchema,
   taskAssetDiscardStagedInputSchema,
@@ -39,8 +60,9 @@ import {
   issueItemsListResultSchema,
   azureAreaPathsResultSchema,
   taskCreateInputSchema,
-  type TaskDocumentSaveResult,
-  taskDocumentSaveResultSchema,
+  type TaskArtifactSaveResult,
+  taskArtifactSaveResultSchema,
+  taskMetadataArtifactSchema,
   taskMetadataPayloadSchema,
   taskStatusSchema,
   taskStopImpactSchema,
@@ -61,7 +83,7 @@ export type SetSpecInput = {
   repoPath?: string;
 };
 
-export type SaveSpecDocumentInput = {
+export type SaveSpecArtifactInput = {
   repoPath: string;
   taskId: string;
   markdown: string;
@@ -74,14 +96,14 @@ export type SetPlanInput = {
   repoPath?: string;
 };
 
-export type SavePlanDocumentInput = {
+export type SavePlanArtifactInput = {
   repoPath: string;
   taskId: string;
   markdown: string;
 };
 
-export type TaskDocumentSection = "spec" | "plan" | "qa";
-export type TaskDocumentReadResult = {
+export type { WorkflowArtifactSection } from "@openducktor/contracts";
+export type WorkflowArtifactReadResult = {
   markdown: string;
   updatedAt: string | null;
   error?: string | null;
@@ -107,53 +129,76 @@ type TaskTransitionArgs = {
 };
 type SetPlanPayloadInput = { markdown: string; subtasks?: SetPlanInput["subtasks"] };
 
+const workflowArtifactReadCommands = {
+  spec: "spec_get",
+  plan: "plan_get",
+  qa: "qa_get_report",
+} as const;
+
 export class HostTaskClient {
   constructor(private readonly invokeFn: InvokeFn) {}
 
-  private readTaskMetadata(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
-    return this.invokeFn("task_metadata_get", { repoPath, taskId }, taskMetadataPayloadSchema);
+  taskArtifactsList(input: ArtifactScope): Promise<TaskArtifactCollection> {
+    return this.invokeFn(
+      "task_artifacts_list",
+      artifactScopeSchema.parse(input),
+      taskArtifactCollectionSchema,
+    );
   }
 
-  private async readTaskDocument(
-    repoPath: string,
-    taskId: string,
-    section: TaskDocumentSection,
-  ): Promise<TaskDocumentReadResult> {
-    const payload = await this.readTaskMetadata(repoPath, taskId);
-
-    if (section === "spec") {
-      return {
-        markdown: payload.spec.markdown,
-        updatedAt: payload.spec.updatedAt ?? null,
-        error: payload.spec.error ?? null,
-      };
-    }
-
-    if (section === "plan") {
-      return {
-        markdown: payload.plan.markdown,
-        updatedAt: payload.plan.updatedAt ?? null,
-        error: payload.plan.error ?? null,
-      };
-    }
-
-    return {
-      markdown: payload.qaReport?.markdown ?? "",
-      updatedAt: payload.qaReport?.updatedAt ?? null,
-      error: payload.qaReport?.error ?? null,
-    };
+  taskArtifactRead(input: ArtifactReadRequest): Promise<ArtifactContentChunk> {
+    return this.invokeFn(
+      "task_artifact_read",
+      artifactReadRequestSchema.parse(input),
+      artifactContentChunkSchema,
+    );
   }
 
-  private requireRepoPath(repoPath: string | undefined, documentType: "spec" | "plan"): string {
-    if (!repoPath) {
-      throw new Error(`repoPath is required to set ${documentType}`);
-    }
-    return repoPath;
+  taskArtifactCreate(input: ArtifactCreateRequest): Promise<ArtifactSaveResult> {
+    return this.invokeFn(
+      "task_artifact_create",
+      artifactCreateRequestSchema.parse(input),
+      artifactSaveResultSchema,
+    );
+  }
+
+  taskArtifactRename(input: ArtifactRenameRequest): Promise<ArtifactSaveResult> {
+    return this.invokeFn(
+      "task_artifact_rename",
+      artifactRenameRequestSchema.parse(input),
+      artifactSaveResultSchema,
+    );
+  }
+
+  taskArtifactReplace(input: ArtifactReplaceRequest): Promise<ArtifactSaveResult> {
+    return this.invokeFn(
+      "task_artifact_replace",
+      artifactReplaceRequestSchema.parse(input),
+      artifactSaveResultSchema,
+    );
+  }
+
+  taskArtifactDelete(input: ArtifactDeleteRequest): Promise<ArtifactDeleteResult> {
+    return this.invokeFn(
+      "task_artifact_delete",
+      artifactDeleteRequestSchema.parse(input),
+      artifactDeleteResultSchema,
+    );
   }
 
   async tasksList(repoPath: string): Promise<TaskCard[]> {
     const args: TasksListArgs = { repoPath };
     return this.invokeFn("tasks_list", args, arrayResultSchema(taskCardSchema, "tasks_list"));
+  }
+
+  /** Read every task card, including closed tasks outside Kanban retention. */
+  async tasksListAll(repoPath: string): Promise<TaskCard[]> {
+    const args: TasksListArgs = { repoPath };
+    return this.invokeFn(
+      "tasks_list_all",
+      args,
+      arrayResultSchema(taskCardSchema, "tasks_list_all"),
+    );
   }
 
   /** The IDs of all tasks of a repository, also closed tasks that the Kanban board hides. */
@@ -295,29 +340,29 @@ export class HostTaskClient {
     return this.invokeFn("task_transition", args, taskCardSchema);
   }
 
-  async specGet(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
-    return this.readTaskDocument(repoPath, taskId, "spec");
+  async specGet(repoPath: string, taskId: string): Promise<WorkflowArtifactReadResult> {
+    return this.readWorkflowArtifact(repoPath, taskId, "spec");
   }
 
-  async setSpec(input: SetSpecInput): Promise<TaskDocumentSaveResult> {
+  async setSpec(input: SetSpecInput): Promise<TaskArtifactSaveResult> {
     const repoPath = this.requireRepoPath(input.repoPath, "spec");
 
     return this.invokeFn(
       "set_spec",
       { repoPath, taskId: input.taskId, markdown: input.markdown },
-      taskDocumentSaveResultSchema,
+      taskArtifactSaveResultSchema,
     );
   }
 
-  async saveSpecDocument(input: SaveSpecDocumentInput): Promise<TaskDocumentSaveResult> {
+  async saveSpecArtifact(input: SaveSpecArtifactInput): Promise<TaskArtifactSaveResult> {
     return this.invokeFn(
-      "spec_save_document",
+      "spec_save_artifact",
       { repoPath: input.repoPath, taskId: input.taskId, markdown: input.markdown },
-      taskDocumentSaveResultSchema,
+      taskArtifactSaveResultSchema,
     );
   }
 
-  async setPlan(input: SetPlanInput): Promise<TaskDocumentSaveResult> {
+  async setPlan(input: SetPlanInput): Promise<TaskArtifactSaveResult> {
     const repoPath = this.requireRepoPath(input.repoPath, "plan");
 
     const planInput: SetPlanPayloadInput = {
@@ -329,36 +374,36 @@ export class HostTaskClient {
     return this.invokeFn(
       "set_plan",
       { repoPath, taskId: input.taskId, input: planInput },
-      taskDocumentSaveResultSchema,
+      taskArtifactSaveResultSchema,
     );
   }
 
-  async savePlanDocument(input: SavePlanDocumentInput): Promise<TaskDocumentSaveResult> {
+  async savePlanArtifact(input: SavePlanArtifactInput): Promise<TaskArtifactSaveResult> {
     return this.invokeFn(
-      "plan_save_document",
+      "plan_save_artifact",
       { repoPath: input.repoPath, taskId: input.taskId, markdown: input.markdown },
-      taskDocumentSaveResultSchema,
+      taskArtifactSaveResultSchema,
     );
   }
 
-  async planGet(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
-    return this.readTaskDocument(repoPath, taskId, "plan");
+  async planGet(repoPath: string, taskId: string): Promise<WorkflowArtifactReadResult> {
+    return this.readWorkflowArtifact(repoPath, taskId, "plan");
   }
 
   async taskMetadataGet(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
     return this.readTaskMetadata(repoPath, taskId);
   }
 
-  async taskDocumentGet(
+  async taskWorkflowArtifactGet(
     repoPath: string,
     taskId: string,
-    section: TaskDocumentSection,
-  ): Promise<TaskDocumentReadResult> {
-    return this.readTaskDocument(repoPath, taskId, section);
+    section: WorkflowArtifactSection,
+  ): Promise<WorkflowArtifactReadResult> {
+    return this.readWorkflowArtifact(repoPath, taskId, section);
   }
 
-  async qaGetReport(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
-    return this.readTaskDocument(repoPath, taskId, "qa");
+  async qaGetReport(repoPath: string, taskId: string): Promise<WorkflowArtifactReadResult> {
+    return this.readWorkflowArtifact(repoPath, taskId, "qa");
   }
 
   async qaApproved(repoPath: string, taskId: string, markdown: string): Promise<TaskCard> {
@@ -414,5 +459,34 @@ export class HostTaskClient {
       },
       booleanResultSchema,
     );
+  }
+
+  private readTaskMetadata(repoPath: string, taskId: string): Promise<TaskMetadataPayload> {
+    return this.invokeFn("task_metadata_get", { repoPath, taskId }, taskMetadataPayloadSchema);
+  }
+
+  private async readWorkflowArtifact(
+    repoPath: string,
+    taskId: string,
+    section: WorkflowArtifactSection,
+  ): Promise<WorkflowArtifactReadResult> {
+    const artifact = await this.invokeFn(
+      workflowArtifactReadCommands[section],
+      { repoPath, taskId },
+      taskMetadataArtifactSchema,
+    );
+
+    return {
+      markdown: artifact.markdown,
+      updatedAt: artifact.updatedAt ?? null,
+      error: artifact.error ?? null,
+    };
+  }
+
+  private requireRepoPath(repoPath: string | undefined, documentType: "spec" | "plan"): string {
+    if (!repoPath) {
+      throw new Error(`repoPath is required to set ${documentType}`);
+    }
+    return repoPath;
   }
 }

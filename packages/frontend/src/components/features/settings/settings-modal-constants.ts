@@ -98,10 +98,10 @@ export const PROMPT_TEMPLATE_LABELS = {
 
 export const PROMPT_TEMPLATE_DESCRIPTIONS = {
   "system.shared.workflow_guards":
-    "Shared lifecycle rules, canonical task documents, and repo guidance.",
+    "Shared lifecycle rules, canonical task artifacts, and repo guidance.",
   "system.shared.tool_protocol":
     "Shared ODT tool permissions, task lock, artifact reads, and clarification rules.",
-  "system.shared.task_context": "Task snapshot and access rules for current workflow documents.",
+  "system.shared.task_context": "Task snapshot and access rules for current workflow artifacts.",
   "system.role.spec.base":
     "Resolves product decisions with the user and defines scope, required behavior, and constraints.",
   "system.role.planner.base":

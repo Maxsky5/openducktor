@@ -218,7 +218,7 @@ export const describeTaskStorePortContract = (
       SQLITE_ORDERING_CONTRACT_TEST_TIMEOUT_MS,
     );
 
-    test("stores workflow documents and exposes the current metadata/read-model state", async () => {
+    test("stores workflow artifacts and exposes the current metadata/read-model state", async () => {
       const { repoPath, store } = await createTrackedHarness();
       const task = await createTask(store, repoPath, {
         title: "Workflow task",
@@ -227,12 +227,12 @@ export const describeTaskStorePortContract = (
         aiReviewEnabled: true,
       });
 
-      await run(store.setSpecDocument({ repoPath, taskId: task.id, markdown: " # First spec " }));
+      await run(store.setSpecArtifact({ repoPath, taskId: task.id, markdown: " # First spec " }));
       const latestSpec = await run(
-        store.setSpecDocument({ repoPath, taskId: task.id, markdown: "# Second spec" }),
+        store.setSpecArtifact({ repoPath, taskId: task.id, markdown: "# Second spec" }),
       );
       const plan = await run(
-        store.setPlanDocument({ repoPath, taskId: task.id, markdown: "# Plan" }),
+        store.setPlanArtifact({ repoPath, taskId: task.id, markdown: "# Plan" }),
       );
       const reviewed = await run(
         store.recordQaOutcome({
@@ -248,12 +248,15 @@ export const describeTaskStorePortContract = (
       expect(latestSpec).toMatchObject({ markdown: "# Second spec", revision: 2 });
       expect(plan).toMatchObject({ markdown: "# Plan", revision: 1 });
       expect(reviewed).toMatchObject({
-        documentSummary: {
-          plan: { has: true },
-          qaReport: { has: true, verdict: "approved" },
-          spec: { has: true },
+        task: {
+          artifactSummary: {
+            plan: { has: true },
+            qaReport: { has: true, verdict: "approved" },
+            spec: { has: true },
+          },
+          status: "closed",
         },
-        status: "closed",
+        artifact: { markdown: "# Approved", revision: 1, updatedAt: expect.any(String) },
       });
       expect(metadata).toMatchObject({
         plan: { markdown: "# Plan", revision: 1 },
@@ -262,17 +265,17 @@ export const describeTaskStorePortContract = (
       });
     });
 
-    test("clears QA reports and workflow documents through the port", async () => {
+    test("clears QA reports and workflow artifacts through the port", async () => {
       const { repoPath, store } = await createTrackedHarness();
       const task = await createTask(store, repoPath, {
-        title: "Documents",
+        title: "Artifacts",
         issueType: "task",
         priority: 2,
         aiReviewEnabled: true,
       });
 
-      await run(store.setSpecDocument({ repoPath, taskId: task.id, markdown: "# Spec" }));
-      await run(store.setPlanDocument({ repoPath, taskId: task.id, markdown: "# Plan" }));
+      await run(store.setSpecArtifact({ repoPath, taskId: task.id, markdown: "# Spec" }));
+      await run(store.setPlanArtifact({ repoPath, taskId: task.id, markdown: "# Plan" }));
       await run(
         store.recordQaOutcome({
           repoPath,
@@ -291,7 +294,7 @@ export const describeTaskStorePortContract = (
         spec: { markdown: "# Spec" },
       });
 
-      await run(store.clearWorkflowDocuments({ repoPath, taskId: task.id }));
+      await run(store.clearTaskArtifacts({ repoPath, taskId: task.id }));
       await expect(
         run(store.getTaskMetadata({ repoPath, taskId: task.id })),
       ).resolves.toMatchObject({

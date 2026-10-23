@@ -28,13 +28,15 @@ const summaryPayload = {
     createdAt: "2026-04-09T00:00:00.000Z",
     updatedAt: "2026-04-09T00:00:00.000Z",
     qaVerdict: "not_reviewed",
-    documents: {
+    artifacts: {
       hasSpec: false,
       hasPlan: false,
       hasQaReport: false,
     },
   },
 };
+
+const readTaskPayload = { task: { ...summaryPayload.task, artifacts: [] } };
 
 describe("OdtHostBridgeClient", () => {
   test("ready sends one authenticated readiness request and validates tool coverage", async () => {
@@ -53,7 +55,7 @@ describe("OdtHostBridgeClient", () => {
         body: body.success ? body.data : undefined,
       });
       return jsonResponse({
-        bridgeVersion: 1,
+        bridgeVersion: 2,
         toolNames: Object.keys(ODT_TOOL_SCHEMAS),
       });
     };
@@ -67,7 +69,7 @@ describe("OdtHostBridgeClient", () => {
     );
 
     await expect(client.ready()).resolves.toEqual({
-      bridgeVersion: 1,
+      bridgeVersion: 2,
       toolNames: Object.keys(ODT_TOOL_SCHEMAS),
     });
     expect(requests).toEqual([
@@ -104,7 +106,7 @@ describe("OdtHostBridgeClient", () => {
   });
 
   test("ready rejects malformed readiness responses", async () => {
-    const fetchImpl: typeof fetch = async () => jsonResponse({ bridgeVersion: 1 });
+    const fetchImpl: typeof fetch = async () => jsonResponse({ bridgeVersion: 2 });
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
 
     await expect(client.ready()).rejects.toMatchObject({
@@ -116,7 +118,7 @@ describe("OdtHostBridgeClient", () => {
   test("ready rejects readiness responses that omit required tools", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse({
-        bridgeVersion: 1,
+        bridgeVersion: 2,
         toolNames: ["odt_read_task"],
       });
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
@@ -374,7 +376,7 @@ describe("OdtHostBridgeClient", () => {
         url,
         body: mcpToolPayloadSchema.parse(JSON.parse(String(init?.body ?? "{}"))),
       });
-      return jsonResponse(summaryPayload);
+      return jsonResponse(readTaskPayload);
     };
 
     const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
@@ -390,6 +392,59 @@ describe("OdtHostBridgeClient", () => {
         },
       },
     ]);
+  });
+
+  test("returns original artifact bytes when preview failure arrives after ten seconds", async () => {
+    const payload = {
+      artifact: {
+        code: "diagram",
+        taskId: "task-1",
+        name: "Diagram",
+        revision: 1,
+        updatedAt: null,
+        classification: "free",
+        fileName: "diagram.svg",
+        mediaType: "image/svg+xml",
+        byteSize: 62_145,
+      },
+      version: "v1",
+      dataBase64: "PHN2Zw==",
+      byteOffset: 0,
+      nextByteOffset: 4,
+      totalBytes: 62_145,
+      imagePreview: {
+        state: "failed",
+        message: "The image preview exceeded its time limit.",
+        nextAction: "Download the original artifact.",
+      },
+    };
+    const deadlines: Array<{ after: number; controller: AbortController }> = [];
+    const timeout = spyOn(AbortSignal, "timeout").mockImplementation((after) => {
+      const controller = new AbortController();
+      deadlines.push({ after, controller });
+      return controller.signal;
+    });
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      // Advance past the worker deadline and cleanup before the host responds.
+      for (const deadline of deadlines) {
+        if (deadline.after <= 10_050)
+          deadline.controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+      }
+      init?.signal?.throwIfAborted();
+      return jsonResponse({ artifacts: [payload] });
+    };
+    try {
+      const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+      const result = await client.call("odt_read_task_artifacts", "repo", {
+        taskId: "task-1",
+        codes: ["diagram"],
+        maxBytes: 4,
+      });
+
+      expect(result).toEqual({ artifacts: [payload] });
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   test("callBrowserTool sends the caller and waits longer than other tools", async () => {

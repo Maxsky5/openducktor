@@ -225,7 +225,7 @@ describe("TaskViewSync races", () => {
         removedTaskIds: [],
         taskSnapshots: [{ id: queued.id, title: queued.title, status: queued.status }],
         statusChanges: [],
-        boardChanges: { documentChanges: [], cards: [queued], doneVisibleDays: 1 },
+        boardChanges: { artifactChanges: [], cards: [queued], doneVisibleDays: 1 },
         emittedAt: "2026-04-10T13:10:00.000Z",
       },
       eventCursor(),

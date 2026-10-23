@@ -21,7 +21,7 @@ const card = (id: string): TaskCard => ({
   availableActions: [],
   labels: [],
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -200,7 +200,7 @@ describe("external-task-sync-schemas", () => {
       taskIds: ["task-7", "task-8"],
       removedTaskIds: ["task-7"],
       statusChanges: [],
-      boardChanges: { documentChanges: [], cards: [card("task-8")], doneVisibleDays: 1 },
+      boardChanges: { artifactChanges: [], cards: [card("task-8")], doneVisibleDays: 1 },
       emittedAt: "2026-04-10T13:15:00.000Z",
     };
 
@@ -239,7 +239,7 @@ describe("external-task-sync-schemas", () => {
       removedTaskIds: [],
       statusChanges: [],
       taskSnapshots: [{ id: changed.id, title: changed.title, status: changed.status }],
-      boardChanges: { documentChanges: [], cards: [changed, card("parent")], doneVisibleDays: 1 },
+      boardChanges: { artifactChanges: [], cards: [changed, card("parent")], doneVisibleDays: 1 },
       emittedAt: "2026-04-10T13:15:00.000Z",
     };
     expect(tasksUpdatedEventSchema.parse(event).boardChanges).toEqual(event.boardChanges);
@@ -269,27 +269,30 @@ describe("external-task-sync-schemas", () => {
     expect(tasksUpdatedEventSchema.safeParse({ ...event, emittedAt: "invalid" }).success).toBe(
       false,
     );
-    for (const documentChanges of [
-      [{ taskId: changed.id, sections: [] }],
-      [{ taskId: changed.id, sections: ["spec", "spec"] }],
-      [{ taskId: "missing", sections: ["spec"] }],
+    for (const artifactChanges of [
+      [{ taskId: changed.id, artifactIds: [], removedArtifactIds: [] }],
+      [{ taskId: changed.id, artifactIds: ["spec", "spec"], removedArtifactIds: [] }],
+      [{ taskId: changed.id, artifactIds: ["spec"], removedArtifactIds: ["plan"] }],
+      [{ taskId: "missing", artifactIds: ["spec"], removedArtifactIds: [] }],
       [
-        { taskId: changed.id, sections: ["spec"] },
-        { taskId: changed.id, sections: ["plan"] },
+        { taskId: changed.id, artifactIds: ["spec"], removedArtifactIds: [] },
+        { taskId: changed.id, artifactIds: ["plan"], removedArtifactIds: [] },
       ],
     ]) {
       expect(
         tasksUpdatedEventSchema.safeParse({
           ...event,
-          boardChanges: { ...event.boardChanges, documentChanges },
+          boardChanges: { ...event.boardChanges, artifactChanges },
         }).success,
       ).toBe(false);
     }
-    const documentChanges = [{ taskId: changed.id, sections: ["spec", "plan"] }];
+    const artifactChanges = [
+      { taskId: changed.id, artifactIds: ["spec", "plan"], removedArtifactIds: ["spec"] },
+    ];
     expect(
       tasksUpdatedEventSchema.safeParse({
         ...event,
-        boardChanges: { ...event.boardChanges, documentChanges },
+        boardChanges: { ...event.boardChanges, artifactChanges },
       }).success,
     ).toBe(true);
   });

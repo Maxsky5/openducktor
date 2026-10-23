@@ -1,13 +1,13 @@
 # Task workflow status model
 
-This document defines persisted task status, UI labels, issue type rules, and task document ownership.
+This document defines persisted task status, UI labels, issue type rules, and task artifact ownership.
 
 ## Source of truth
 
 - The persisted `status` is the task lifecycle state.
 - The backend validates each transition.
 - The frontend renders the actions in `TaskCard.availableActions`. It does not infer actions from status.
-- User fields and agent documents have separate owners.
+- User fields and task artifacts have separate owners.
 
 ## Statuses
 
@@ -57,9 +57,9 @@ When `qaRequired` is `true`, build completion moves to `ai_review` until the lat
 - A child cannot have children.
 - An epic cannot close while a direct child is not `closed`.
 
-## Task documents
+## Task artifacts
 
-Store agent-written output as task documents, not user task fields. SQLite stores plain Markdown and an explicit `format`.
+Store saved outputs as task artifacts. Workflow artifacts contain the Specification, Implementation Plan, and QA Report. Free artifacts contain other files and do not affect workflow readiness or task status. Description images remain separate. See [task artifacts](task-artifacts.md) for collection, preview, and download rules.
 
 ### Role handoffs
 
@@ -70,26 +70,31 @@ Store agent-written output as task documents, not user task fields. SQLite store
 | Builder | Implementation details, work order, tests, and verification within the required outcomes and design contracts. |
 | QA | Independent review of outcomes, contracts, correctness, and maintainability, with checks based on risk. |
 
-Spec and Planner save complete documents with `odt_set_spec` and `odt_set_plan` once required decisions are resolved. Builder and QA work from the saved requirements and design contracts. Later document revisions follow the [transition matrix](task-workflow-transition-matrix.md).
+Spec and Planner save complete artifacts with `odt_set_task_artifact` and codes `spec` and `plan` once required decisions are resolved. Builder and QA work from the saved requirements and design contracts. Later workflow artifact revisions follow the [transition matrix](task-workflow-transition-matrix.md).
 
 See [workflow prompts](runtime-integration-guide.md#workflow-prompts) for template ownership, versions, and overrides.
 
 ### Storage
 
-| Kind | Current UI read |
-|---|---|
-| `spec` | Latest entry. |
-| `implementationPlan` | Latest entry. |
-| `qaReports` | Latest entry. |
+The `tasks_artifacts` table stores workflow history and the current version of each free artifact. Artifact discovery returns metadata for the latest existing workflow revision and every free artifact. Task cards expose workflow presence in `artifactSummary` without file bodies.
 
-The store can keep history. Each row has a task ID, kind, revision, Markdown body, format, optional QA result, source tool, updater, and update time. Frontend and MCP reads return plain Markdown.
+| Classification | Identity | Content | Revisions |
+|---|---|---|---|
+| Workflow | Task ID and fixed workflow kind. | Markdown text with `plain_text` format. | Append a row for each revision. |
+| Free | Generated artifact ID. | Exact file bytes, filename, media type, and byte size. | Keep one row and increment revision on change. |
+
+Workflow rows keep their source tool, updater, update time, and optional QA result. The stored workflow kinds are `spec`, `implementation_plan`, and `qa_report`. Stored `sourceTool` values retain the existing domain operation names for provenance; they are not public MCP writer names.
 
 ```json
 [
   { "kind": "spec", "sourceTool": "odt_set_spec" },
-  { "kind": "implementationPlan", "sourceTool": "odt_set_plan" },
-  { "kind": "qaReports", "sourceTool": "odt_qa_approved" }
+  { "kind": "implementation_plan", "sourceTool": "odt_set_plan" },
+  { "kind": "qa_report", "sourceTool": "odt_qa_approved" }
 ]
 ```
+
+A free artifact can contain up to 10 MiB. Its display name never selects a workflow role. Replacement keeps its identity and display name. Closed tasks retain all artifacts but reject free-artifact changes.
+
+The forward migration copies every workflow revision from `task_documents` into `tasks_artifacts` and then drops `task_documents` in the same transaction. All hosts that share an upgraded workspace must use the new schema. Downgrade requires a compatible database backup.
 
 Each write must keep unrelated durable task fields. Workflow rules use stored status, not UI labels.

@@ -240,7 +240,7 @@ const createBridgeRequestHandler =
       }
 
       const command = decodeURIComponent(request.url.slice("/invoke/".length));
-      const body = yield* readMcpBridgeRequestBody(request);
+      const body = yield* readMcpBridgeRequestBody(request, command);
       if (command === "odt_mcp_ready") {
         return bridgeHttpResponse(200, yield* bridgeService.ready(body));
       }

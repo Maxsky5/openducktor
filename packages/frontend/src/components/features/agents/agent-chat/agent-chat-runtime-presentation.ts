@@ -7,6 +7,7 @@ import {
 import {
   isOdtWorkflowMutationToolName,
   normalizeOdtToolName,
+  retiredArtifactToolName,
   toOdtWorkflowToolDisplayName,
 } from "@openducktor/core";
 import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
@@ -50,17 +51,29 @@ export const resolveAgentChatRuntimePresentation = ({
       if (taskTool) {
         return { kind: "task", displayName: taskTool, taskTool };
       }
+      if (odtTool === "odt_set_task_artifact") {
+        return { kind: "artifact", operation: "set", displayName: "Set Artifact" };
+      }
+      if (odtTool === "odt_delete_task_artifact") {
+        return { kind: "artifact", operation: "delete", displayName: "Delete Artifact" };
+      }
+      if (odtTool === "odt_read_task_artifacts") {
+        return { kind: "regular", displayName: "read_task_artifacts" };
+      }
       // Browser tools act on web pages, so they show as browser actions, not workflow steps.
       const browserAction = odtTool === null ? null : readBrowserToolAction(odtTool);
       if (browserAction !== null) {
         return { kind: "browser", displayName: `Browser ${browserAction}`, action: browserAction };
       }
+      const retiredTool = retiredArtifactToolName(toolName);
       return {
-        kind: isOdtWorkflowMutationToolName(toolName, workflowToolAliasesByCanonical)
-          ? "workflow"
-          : "regular",
+        kind:
+          retiredTool || isOdtWorkflowMutationToolName(toolName, workflowToolAliasesByCanonical)
+            ? "workflow"
+            : "regular",
         displayName:
           displayLabel?.trim() ||
+          retiredTool?.slice(4) ||
           toOdtWorkflowToolDisplayName(toolName, workflowToolAliasesByCanonical),
       };
     },

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
+import { REMOTE_PROTOCOL_VERSION, type ExternalTaskSyncEvent } from "@openducktor/contracts";
 import {
   createRemoteHostClient,
   type RemoteTransport,
@@ -32,7 +32,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
     appVersion: "1",
     hostInstanceId: "host",
     accessPolicy: "network_reach",
-    protocols: [{ version: 1, capabilities: [] }],
+    protocols: [{ version: REMOTE_PROTOCOL_VERSION, capabilities: [] }],
   };
   const cursor = { epoch: crypto.randomUUID(), sequence: 0 };
   const ackSeen = latch<void>();
@@ -72,7 +72,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
           status: "accepted",
           host,
           connectionId: crypto.randomUUID(),
-          protocolVersion: 1,
+          protocolVersion: REMOTE_PROTOCOL_VERSION,
           missingOptionalCapabilities: [],
         });
       if (url.endsWith("/task-events/subscriptions")) {
@@ -108,7 +108,7 @@ test("restores task delivery after disconnect during acknowledgement and after i
     "https://host.example/remote",
     {
       appVersion: "mobile",
-      supportedProtocolVersions: [1],
+      supportedProtocolVersions: [REMOTE_PROTOCOL_VERSION],
       requiredCapabilities: [],
       optionalCapabilities: [],
     },

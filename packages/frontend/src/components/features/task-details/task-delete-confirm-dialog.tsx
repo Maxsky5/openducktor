@@ -52,7 +52,9 @@ export function TaskDeleteConfirmDialog({
 
         <DialogBody className="py-4">
           <div className="space-y-2 rounded-lg border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
-            <p className="font-medium">This action permanently removes the task.</p>
+            <p className="font-medium">
+              This action permanently removes the task and all its workflow and free artifacts.
+            </p>
             {hasSubtasks ? (
               <p>
                 Direct subtasks will also be deleted to avoid orphaned children in the workflow.

@@ -12,7 +12,7 @@ export const boardEvent = (
   removedTaskIds: options.removedTaskIds ?? [],
   statusChanges: [],
   taskSnapshots: cards.map(({ id, title, status }) => ({ id, title, status })),
-  boardChanges: { documentChanges: [], cards, doneVisibleDays: options.doneVisibleDays ?? 1 },
+  boardChanges: { artifactChanges: [], cards, doneVisibleDays: options.doneVisibleDays ?? 1 },
   emittedAt: "2026-04-10T13:10:00.000Z",
 });
 

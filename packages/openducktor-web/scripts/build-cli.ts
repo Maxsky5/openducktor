@@ -73,12 +73,17 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       "node-pty",
       "--external",
       "playwright-core",
+      "--external",
+      "sharp",
+      "--external",
+      "@resvg/resvg-wasm",
       "--outdir",
       dirname(outputPath),
       "--entry-naming",
       "[name].[ext]",
       "src/cli.ts",
       "src/generated-image-worker.ts",
+      "src/artifact-image-preview-worker.ts",
       "src/claude-transcript-worker.ts",
     ] as const;
     yield* Effect.tryPromise({

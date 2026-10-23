@@ -455,10 +455,10 @@ export const selectWorkflowCleanupSessionRecords = (
 ): AgentSessionRecord[] =>
   sessions.filter((session) => workflowCleanupSessionRoles.has(session.role.trim()));
 export const resetImplementationRollbackStatus = (task: TaskCard): TaskStatus => {
-  if (task.documentSummary.plan.has) {
+  if (task.artifactSummary.plan.has) {
     return "ready_for_dev";
   }
-  if (task.documentSummary.spec.has) {
+  if (task.artifactSummary.spec.has) {
     return "spec_ready";
   }
   return "open";

@@ -1,23 +1,25 @@
 import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
-  type ReadTaskAssetsResult,
-  type SearchTasksResult,
+  TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES,
+  workflowArtifactId,
   type TaskCard,
-  type TaskDocumentsRead,
-  type TaskSummary,
+  type ArtifactReadRequest,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { JSONType } from "zod";
+import type { JSONType, z } from "zod";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import {
   activeStatuses,
-  latestDocument,
-  latestQaReport,
+  findFreeTaskArtifact,
+  isWorkflowArtifactCode,
+  mapPublicTask,
   mapTaskSummary,
+  missingFreeTaskArtifact,
   normalizeKey,
   parseResponse,
   parseToolInput,
+  toMcpTaskArtifact,
 } from "./odt-mcp-bridge-model";
 import type {
   OdtMcpBridgeError,
@@ -27,11 +29,7 @@ import type {
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-type OdtMcpReadToolResult =
-  | ReadTaskAssetsResult
-  | SearchTasksResult
-  | TaskDocumentsRead
-  | TaskSummary;
+type OdtMcpReadToolResult = z.output<(typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[OdtMcpReadToolName]>;
 
 type OdtMcpReadToolHandler = (
   context: OdtMcpToolContext,
@@ -154,42 +152,72 @@ const executeReadTaskAssets: OdtMcpReadToolHandler = (context, input) =>
 
 const executeReadTask: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const { taskForWorkspace } = context;
     const parsed = yield* parseToolInput("odt_read_task", ODT_TOOL_SCHEMAS.odt_read_task, input);
-    return yield* parseResponse(
-      "odt_read_task",
-      RESPONSE_SCHEMAS.odt_read_task,
-      mapTaskSummary(yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId)),
+    const { repoPath, task } = yield* context.taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
     );
+    const collection = yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id });
+    return yield* parseResponse("odt_read_task", RESPONSE_SCHEMAS.odt_read_task, {
+      task: {
+        ...mapPublicTask(task),
+        qaVerdict: task.artifactSummary.qaReport.verdict,
+        artifacts: collection.artifacts.map(toMcpTaskArtifact),
+      },
+    });
   });
 
-const executeReadTaskDocuments: OdtMcpReadToolHandler = (context, input) =>
+const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const { repoPathForWorkspace, taskForWorkspace, taskService } = context;
     const parsed = yield* parseToolInput(
-      "odt_read_task_documents",
-      ODT_TOOL_SCHEMAS.odt_read_task_documents,
+      "odt_read_task_artifacts",
+      ODT_TOOL_SCHEMAS.odt_read_task_artifacts,
       input,
     );
-    const repoPath = yield* repoPathForWorkspace(parsed.workspaceId ?? "");
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    const metadata = yield* taskService.getTaskMetadata({ repoPath, taskId: task.id });
-    const documents: TaskDocumentsRead["documents"] = {};
-    if (parsed.includeSpec) {
-      documents.spec = latestDocument(metadata.spec);
+    const { repoPath, task } = yield* context.taskScopeForWorkspace(
+      parsed.workspaceId ?? "",
+      parsed.taskId,
+    );
+    const listedArtifacts = parsed.codes.some((code) => !isWorkflowArtifactCode(code))
+      ? (yield* context.taskService.listTaskArtifacts({ repoPath, taskId: task.id })).artifacts
+      : [];
+    const selections = [];
+    for (const code of parsed.codes) {
+      if (isWorkflowArtifactCode(code)) {
+        selections.push({ artifactId: workflowArtifactId(task.id, code), workflow: true });
+        continue;
+      }
+      const artifact = findFreeTaskArtifact(listedArtifacts, code);
+      if (artifact === undefined) return yield* missingFreeTaskArtifact(code);
+      selections.push({ artifactId: artifact.artifactId, workflow: false });
     }
-    if (parsed.includePlan) {
-      documents.implementationPlan = latestDocument(metadata.plan);
-    }
-    if (parsed.includeQaReport) {
-      documents.latestQaReport = latestQaReport(metadata.qaReport);
-    }
-    return yield* parseResponse(
-      "odt_read_task_documents",
-      RESPONSE_SCHEMAS.odt_read_task_documents,
-      {
-        documents,
+    // Overlap reads so independent image preview deadlines do not add up across a batch.
+    const artifacts = yield* Effect.forEach(
+      selections,
+      ({ artifactId, workflow }) => {
+        const request: ArtifactReadRequest = {
+          repoPath,
+          taskId: task.id,
+          artifactId,
+          includeImagePreview: (parsed.byteOffset ?? 0) === 0,
+        };
+        if (parsed.maxBytes !== undefined) request.maxBytes = parsed.maxBytes;
+        else if (!workflow) request.maxBytes = TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES;
+        if (parsed.byteOffset !== undefined) request.byteOffset = parsed.byteOffset;
+        if (parsed.expectedVersion !== undefined) request.expectedVersion = parsed.expectedVersion;
+        return context.taskService.readTaskArtifact(request).pipe(
+          Effect.map(({ artifact, ...chunk }) => ({
+            ...chunk,
+            artifact: toMcpTaskArtifact(artifact),
+          })),
+        );
       },
+      { concurrency: 4 },
+    );
+    return yield* parseResponse(
+      "odt_read_task_artifacts",
+      RESPONSE_SCHEMAS.odt_read_task_artifacts,
+      { artifacts },
     );
   });
 
@@ -197,7 +225,7 @@ const READ_TOOL_HANDLERS = {
   odt_search_tasks: executeSearchTasks,
   odt_read_task_assets: executeReadTaskAssets,
   odt_read_task: executeReadTask,
-  odt_read_task_documents: executeReadTaskDocuments,
+  odt_read_task_artifacts: executeReadTaskArtifacts,
 } satisfies Record<OdtMcpReadToolName, OdtMcpReadToolHandler>;
 
 const compareTaskSearchResults = (

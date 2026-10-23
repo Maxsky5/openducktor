@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchTaskArtifacts } from "@openducktor/frontend-core/queries/artifacts";
 import { DiagnosticsTrigger } from "@/components/features/diagnostics";
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
@@ -130,6 +132,7 @@ export function WorkspaceSidebar({
   onShow,
   onOpenRepositoryModal,
 }: WorkspaceSidebarProps): ReactElement {
+  const queryClient = useQueryClient();
   const { run: guardTransition } = useWorkspacePreviewTransitionGuard();
   const { workspaces, activeWorkspace, isSwitchingWorkspace, selectWorkspace } =
     useWorkspaceState();
@@ -166,6 +169,7 @@ export function WorkspaceSidebar({
     scope === "all" ? scope : `${scope}:${activeWorkspace?.workspaceId ?? "none"}`;
 
   const navigation = useRef({
+    queryClient,
     activeWorkspace,
     visibleTarget,
     isSwitchingWorkspace,
@@ -175,6 +179,7 @@ export function WorkspaceSidebar({
   });
   useLayoutEffect(() => {
     navigation.current = {
+      queryClient,
       activeWorkspace,
       visibleTarget,
       isSwitchingWorkspace,
@@ -183,6 +188,7 @@ export function WorkspaceSidebar({
       selectWorkspace,
     };
   }, [
+    queryClient,
     activeWorkspace,
     visibleTarget,
     isSwitchingWorkspace,
@@ -193,6 +199,7 @@ export function WorkspaceSidebar({
   const openEntry = useCallback(
     (entry: SessionNavigationEntry, target: SessionNavigationTarget = entry.target): void => {
       const {
+        queryClient,
         activeWorkspace,
         visibleTarget,
         isSwitchingWorkspace,
@@ -208,15 +215,24 @@ export function WorkspaceSidebar({
       )
         return;
       const href = buildSessionNavigationHref(target);
+      const open = () => {
+        if (target.kind !== "workspace_session") {
+          void prefetchTaskArtifacts(
+            queryClient,
+            entry.workspace.repoPath,
+            target.taskId,
+            target.role,
+          );
+        }
+        void navigate(href);
+      };
       guardTransition(() => {
         if (target.workspaceId === activeWorkspace?.workspaceId && !isSwitchingWorkspace) {
-          void navigate(href);
+          open();
           return;
         }
         // Selection reports host failures; leave the current conversation open on failure.
-        void selectWorkspace(target.workspaceId, () => {
-          void navigate(href);
-        }).catch(() => {});
+        void selectWorkspace(target.workspaceId, open).catch(() => {});
       });
     },
     [],

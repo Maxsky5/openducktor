@@ -155,8 +155,8 @@ const sameTask = (left: TaskCard, right: TaskCard): boolean =>
   left.title === right.title &&
   left.status === right.status &&
   left.issueType === right.issueType &&
-  left.documentSummary.qaReport.has === right.documentSummary.qaReport.has &&
-  left.documentSummary.qaReport.verdict === right.documentSummary.qaReport.verdict &&
+  left.artifactSummary.qaReport.has === right.artifactSummary.qaReport.has &&
+  left.artifactSummary.qaReport.verdict === right.artifactSummary.qaReport.verdict &&
   left.sourceIssue === right.sourceIssue &&
   left.priority === right.priority &&
   sameStrings(left.labels, right.labels) &&

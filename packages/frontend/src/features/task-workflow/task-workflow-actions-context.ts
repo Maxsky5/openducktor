@@ -8,6 +8,7 @@ import type {
 import type { WorkflowPendingState } from "@/components/features/kanban/kanban-task-footer";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import type { TaskConfirmRequestAction } from "@/components/features/task-details/task-confirm-dialog-types";
+import type { EditTaskSection } from "@/types/task-composer";
 
 export type TaskWorkflowActions = {
   kanbanPendingState?: WorkflowPendingState;
@@ -19,7 +20,7 @@ export type TaskWorkflowActions = {
   onBuild: (taskId: string) => void;
   onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onDelegate: (taskId: string) => void;
-  onEdit: (taskId: string) => void;
+  onEdit: (taskId: string, section?: EditTaskSection) => void;
   /** Open the details sheet of a task of the active workspace, on any page. */
   onOpenTaskDetails: (taskId: string) => void;
   onHumanApprove: (taskId: string) => void;

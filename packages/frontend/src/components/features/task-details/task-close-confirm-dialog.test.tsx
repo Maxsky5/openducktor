@@ -33,9 +33,7 @@ describe("TaskCloseConfirmDialog", () => {
     expect(screen.getByText(/No code is merged/i)).toBeDefined();
     expect(screen.getByText(/pull request is created, updated, or merged/i)).toBeDefined();
     expect(screen.getByText("No running task terminals will be stopped.")).toBeDefined();
-    expect(
-      screen.getByText(/task record, documents, QA reports, and linked history/i),
-    ).toBeDefined();
+    expect(screen.getByText(/task record, all artifacts, and linked history/i)).toBeDefined();
     expect(document.body.innerHTML).toContain("border-warning-border");
     expect(document.body.innerHTML).toContain("bg-warning-surface");
     expect(document.body.innerHTML).not.toContain("border-destructive-border");

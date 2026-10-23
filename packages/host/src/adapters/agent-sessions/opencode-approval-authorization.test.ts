@@ -12,10 +12,10 @@ import {
 
 const roles: AgentRole[] = ["spec", "planner", "build", "qa"];
 const permittedWrite = {
-  spec: "odt_set_spec",
-  planner: "odt_set_plan",
+  spec: "odt_set_task_artifact",
+  planner: "odt_set_task_artifact",
   build: "odt_build_completed",
-  qa: "odt_qa_approved",
+  qa: "odt_set_task_artifact",
 };
 
 describe("OpenCode approval authorization at the host reply boundary", () => {
@@ -45,11 +45,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
           allowed: true,
         },
         { permission: "odt_create_task", mutation: "mutating" as const, allowed: true },
-        ...["odt_set_spec", "odt_set_plan"].map((permission) => ({
-          permission,
-          mutation: "mutating" as const,
-          allowed: role === "build" || permittedWrite[role] === permission,
-        })),
+        { permission: "odt_set_task_artifact", mutation: "mutating" as const, allowed: true },
         {
           permission: "functions.openducktor_odt_browser_click",
           mutation: "unknown" as const,
@@ -57,7 +53,7 @@ describe("OpenCode approval authorization at the host reply boundary", () => {
         },
         { permission: "odt_browser_snapshot", mutation: "unknown" as const, allowed: true },
         {
-          permission: role === "build" ? "odt_qa_approved" : "odt_build_completed",
+          permission: role === "build" ? "odt_get_workspaces" : "odt_build_completed",
           mutation: "mutating" as const,
           allowed: false,
         },

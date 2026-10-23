@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ODT_HOST_BRIDGE_RESPONSE_SCHEMAS } from "./lib";
 import { getListedToolInputSchema, getListedToolOutputSchema } from "./listed-tool-schema";
 
 type ListedToolSchema = ReturnType<typeof getListedToolInputSchema>;
@@ -56,6 +57,8 @@ describe("listed MCP tool input schema", () => {
       type: "array",
       items: { type: "string", format: "uuid" },
     });
-    expect(getListedToolOutputSchema("odt_read_task")).not.toHaveProperty("$schema");
+    expect(
+      getListedToolOutputSchema(ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_read_task),
+    ).not.toHaveProperty("$schema");
   });
 });

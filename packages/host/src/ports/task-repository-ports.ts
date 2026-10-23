@@ -6,10 +6,11 @@ import type {
   QaReportVerdict,
   RepoStoreHealth,
   TaskAgentSessions,
+  TaskArtifact,
   TaskAssetDescriptionMutation,
   TaskCard,
   TaskCreateInput,
-  TaskMetadataDocument,
+  TaskMetadataArtifact,
   TaskMetadataPayload,
   TaskStatus,
   TaskUpdatePatch,
@@ -48,6 +49,7 @@ export type PullRequestSyncCandidate = {
   status: TaskStatus;
 };
 export type TaskReference = Pick<TaskCard, "id" | "title">;
+export type TaskQaOutcomeResult = { task: TaskCard; artifact: TaskMetadataArtifact };
 export type TaskReader = {
   findTask(input: {
     repoPath: string;
@@ -88,12 +90,12 @@ export type TaskWriter = {
     descriptionAssets?: TaskAssetDescriptionMutation;
   }): Effect.Effect<TaskCard, TaskStoreError>;
 };
-export type WorkflowDocumentRepository = {
+export type WorkflowArtifactRepository = {
   clearQaReports(input: {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<boolean, TaskStoreError>;
-  clearWorkflowDocuments(input: {
+  clearTaskArtifacts(input: {
     repoPath: string;
     taskId: string;
   }): Effect.Effect<boolean, TaskStoreError>;
@@ -103,17 +105,45 @@ export type WorkflowDocumentRepository = {
     status: TaskStatus;
     markdown: string;
     verdict: QaReportVerdict;
-  }): Effect.Effect<TaskCard, TaskStoreError>;
-  setPlanDocument(input: {
+  }): Effect.Effect<TaskQaOutcomeResult, TaskStoreError>;
+  setPlanArtifact(input: {
     repoPath: string;
     taskId: string;
     markdown: string;
-  }): Effect.Effect<TaskMetadataDocument, TaskStoreError>;
-  setSpecDocument(input: {
+  }): Effect.Effect<TaskMetadataArtifact, TaskStoreError>;
+  setSpecArtifact(input: {
     repoPath: string;
     taskId: string;
     markdown: string;
-  }): Effect.Effect<TaskMetadataDocument, TaskStoreError>;
+  }): Effect.Effect<TaskMetadataArtifact, TaskStoreError>;
+};
+export type ArtifactStoreScope = { repoPath: string; taskId: string };
+export type ArtifactStoreReference = ArtifactStoreScope & { artifactId: string };
+export type ArtifactStoreContent = {
+  content: Uint8Array;
+  fileName: string;
+  mediaType: string;
+};
+export type StoredArtifactContent = {
+  artifact: TaskArtifact;
+  content: Uint8Array;
+  version: string;
+};
+export type TaskArtifactRepository = {
+  listArtifacts(input: ArtifactStoreScope): Effect.Effect<TaskArtifact[], TaskStoreError>;
+  readArtifact(
+    input: ArtifactStoreReference,
+  ): Effect.Effect<StoredArtifactContent | null, TaskStoreError>;
+  createArtifact(
+    input: ArtifactStoreScope & ArtifactStoreContent & { name: string; code?: string | undefined },
+  ): Effect.Effect<TaskArtifact, TaskStoreError>;
+  renameArtifact(
+    input: ArtifactStoreReference & { name: string },
+  ): Effect.Effect<TaskArtifact, TaskStoreError>;
+  replaceArtifact(
+    input: ArtifactStoreReference & ArtifactStoreContent & { name?: string | undefined },
+  ): Effect.Effect<TaskArtifact, TaskStoreError>;
+  deleteArtifact(input: ArtifactStoreReference): Effect.Effect<boolean, TaskStoreError>;
 };
 export type AgentSessionRepository = {
   recordAgentSessionActivity(input: {
@@ -171,9 +201,10 @@ export type RepoStoreDiagnostics = {
   }): Effect.Effect<RepoStoreHealth, TaskStoreError>;
 };
 export type TaskStorePort = AgentSessionRepository &
+  TaskArtifactRepository &
   DirectMergeRepository &
   PullRequestRepository &
   RepoStoreDiagnostics &
   TaskReader &
   TaskWriter &
-  WorkflowDocumentRepository;
+  WorkflowArtifactRepository;

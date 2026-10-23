@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { ExternalTaskSyncEvent } from "@openducktor/contracts";
 import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import { TaskAssetError, TaskCreatedAssetError } from "../../effect/task-asset-error";
@@ -8,6 +9,8 @@ import { createTaskDeleteUseCase } from "./use-cases/delete-task";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
+import { createEventPublishingTaskService } from "./event-publishing-task-service";
+import { createTaskSyncServiceForTest } from "./sync/task-sync-service.test-support";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
@@ -93,9 +96,10 @@ const createResetTaskStore = (
   sessions: ReturnType<typeof createAgentSessionRecord>[],
   overrides: Partial<TaskStorePort> = {},
 ): TaskStorePort => ({
+  listArtifacts: () => Effect.succeed([]),
   listTasks: () => Effect.succeed([task({ id: "task-1", status: "human_review" })]),
   getTaskMetadata: () => Effect.succeed(metadataWithSessions(sessions)),
-  clearWorkflowDocuments: () => Effect.succeed(true),
+  clearTaskArtifacts: () => Effect.succeed(true),
   clearAgentSessionsByRoles: () => Effect.succeed(true),
   setPullRequest: () => Effect.succeed(true),
   setDirectMerge: () => Effect.succeed(true),
@@ -113,6 +117,79 @@ const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
   }),
 });
 describe("createTaskService task mutations and reset", () => {
+  test.each([false, true])(
+    "publishes one captured artifact removal list for task reset, partial failure=%s",
+    async (partialFailure) => {
+      let artifactReads = 0;
+      const failure = new HostOperationError({
+        operation: "task-store.clear-agent-sessions",
+        message: "clear sessions failed",
+      });
+      const events: ExternalTaskSyncEvent[] = [];
+      const taskStore = createResetTaskStore([], {
+        getTask: () => Effect.succeed(task({ status: "human_review" })),
+        listArtifacts: () =>
+          Effect.suspend(() => {
+            artifactReads++;
+            if (artifactReads > 1) {
+              return Effect.fail(
+                new HostOperationError({
+                  operation: "task-store.list-artifacts",
+                  message: "The removal list was already captured.",
+                }),
+              );
+            }
+            return Effect.succeed([
+              {
+                artifactId: "workflow:task-1:spec",
+                taskId: "task-1",
+                name: "Specification",
+                revision: 2,
+                updatedAt: null,
+                classification: "workflow",
+                workflowKind: "spec",
+                mediaType: "text/markdown",
+              },
+            ]);
+          }),
+        clearAgentSessionsByRoles: () =>
+          partialFailure ? Effect.fail(failure) : Effect.succeed(true),
+      });
+      const base = createTaskServiceWithMutationProgress(createCleanupTaskServiceInput(taskStore));
+      const service = createEventPublishingTaskService({
+        taskService: base,
+        taskSyncService: createTaskSyncServiceForTest({
+          taskService: base,
+          workspaceSettingsService: { listWorkspaces: () => Effect.succeed([]) },
+          eventBus: { publish: (event) => events.push(event) },
+        }),
+      });
+      const result = await Effect.runPromise(
+        Effect.result(service.resetTask({ repoPath: "/repo", taskId: "task-1" })),
+      );
+      expect(artifactReads).toBe(1);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.boardChanges?.artifactChanges).toEqual([
+        {
+          taskId: "task-1",
+          artifactIds: ["workflow:task-1:spec"],
+          removedArtifactIds: ["workflow:task-1:spec"],
+        },
+      ]);
+      if (partialFailure) {
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { cause: failure },
+        });
+      } else {
+        expect(result).toMatchObject({
+          _tag: "Success",
+          success: { id: "task-1", status: "open" },
+        });
+      }
+    },
+  );
+
   test.each(["success", "before commit", "asset cleanup", "publication"] as const)(
     "clears deleted task completion state after durable deletion: %s",
     async (failure) => {
@@ -1410,7 +1487,7 @@ describe("createTaskService task mutations and reset", () => {
     const currentTask = task({
       title: "Renamed Task",
       status: "ai_review",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-05-01T00:00:00.000Z" },
         plan: { has: true, updatedAt: "2026-05-02T00:00:00.000Z" },
         qaReport: {
@@ -1560,7 +1637,7 @@ describe("createTaskService task mutations and reset", () => {
       getTaskMetadata() {
         return Effect.succeed(metadataWithSessions(currentSessions));
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -1573,7 +1650,7 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -1729,10 +1806,11 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      clearWorkflowDocuments(input) {
+      listArtifacts: () => Effect.succeed([]),
+      clearTaskArtifacts(input) {
         return Effect.tryPromise({
           try: async () => {
-            calls.push({ type: "clearWorkflowDocuments", input });
+            calls.push({ type: "clearTaskArtifacts", input });
             return true;
           },
           catch: (cause) =>
@@ -1854,7 +1932,7 @@ describe("createTaskService task mutations and reset", () => {
       getTaskMetadata() {
         return Effect.succeed(metadataWithSessions(currentSessions));
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -1867,7 +1945,7 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -1959,7 +2037,7 @@ describe("createTaskService task mutations and reset", () => {
       { type: "removePathIfPresent", path: "/worktrees/repo/task-1" },
       { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
       {
-        type: "clearWorkflowDocuments",
+        type: "clearTaskArtifacts",
         input: { repoPath: "/repo", taskId: "task-1" },
       },
       {
@@ -1995,11 +2073,11 @@ describe("createTaskService task mutations and reset", () => {
     );
   });
   test("aborts task reset before destructive work when stopping live sessions fails", async () => {
-    let workflowDocumentsCleared = false;
+    let workflowArtifactsCleared = false;
     const taskStore = createResetTaskStore([createAgentSessionRecord()], {
-      clearWorkflowDocuments: () =>
+      clearTaskArtifacts: () =>
         Effect.sync(() => {
-          workflowDocumentsCleared = true;
+          workflowArtifactsCleared = true;
           return true;
         }),
     });
@@ -2019,13 +2097,13 @@ describe("createTaskService task mutations and reset", () => {
         }).resetTask({ repoPath: "/repo", taskId: "task-1" }),
       ),
     ).rejects.toThrow("runtime stop failed");
-    expect(workflowDocumentsCleared).toBe(false);
+    expect(workflowArtifactsCleared).toBe(false);
   });
   test("reports stopped sessions when task reset fails after the stop step", async () => {
     const taskStore = createResetTaskStore([createAgentSessionRecord()], {
-      clearWorkflowDocuments: () =>
+      clearTaskArtifacts: () =>
         Effect.fail(
-          new HostOperationError({ operation: "test.clear", message: "document clear failed" }),
+          new HostOperationError({ operation: "test.clear", message: "artifact clear failed" }),
         ),
     });
     const taskActivityGuard: TaskActivityGuardPort = {
@@ -2082,7 +2160,7 @@ describe("createTaskService task mutations and reset", () => {
     }
     expect(sessionsCleared).toBe(true);
     expect(result.operation).toBe("reset-implementation");
-    expect(result.documentChanges).toEqual([]);
+    expect(result.artifactChanges).toEqual([]);
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear QA reports failed");
     expect(result.failure.message).toContain("Stopped 2 live agent sessions,");
@@ -2179,18 +2257,43 @@ describe("createTaskService task mutations and reset", () => {
       expect(calls).toEqual([{ type: "listBranches", workingDir: "/repo" }]);
     },
   );
-  test("reports task reset failures after workflow document clearing as partial progress", async () => {
+  test("reports task reset failures after workflow artifact clearing as partial progress", async () => {
     const failure = new HostOperationError({
       operation: "task-store.clear-agent-sessions",
       message: "clear sessions failed",
     });
-    let documentsCleared = false;
+    let artifactsCleared = false;
     const taskStore: TaskStorePort = {
       listTasks: () => Effect.succeed([task({ status: "human_review" })]),
       getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
-      clearWorkflowDocuments: () =>
+      listArtifacts: () =>
+        Effect.succeed([
+          {
+            artifactId: "workflow:task-1:spec",
+            taskId: "task-1",
+            name: "Specification",
+            revision: 2,
+            updatedAt: null,
+            classification: "workflow",
+            workflowKind: "spec",
+            mediaType: "text/markdown",
+          },
+          {
+            artifactId: "free-1",
+            taskId: "task-1",
+            name: "Notes",
+            revision: 1,
+            updatedAt: "2026-10-22T12:00:00.000Z",
+            classification: "free",
+            code: "notes",
+            fileName: "notes.txt",
+            mediaType: "text/plain",
+            byteSize: 4,
+          },
+        ]),
+      clearTaskArtifacts: () =>
         Effect.sync(() => {
-          documentsCleared = true;
+          artifactsCleared = true;
           return true;
         }),
       clearAgentSessionsByRoles: () => Effect.fail(failure),
@@ -2213,14 +2316,18 @@ describe("createTaskService task mutations and reset", () => {
     if (!(result instanceof TaskMutationProgressFailure)) {
       throw new Error("Expected a TaskMutationProgressFailure");
     }
-    expect(documentsCleared).toBe(true);
+    expect(artifactsCleared).toBe(true);
     expect(result.operation).toBe("reset-task");
-    expect(result.documentChanges).toEqual([
-      { taskId: "task-1", sections: ["spec", "plan", "qa"] },
+    expect(result.artifactChanges).toEqual([
+      {
+        taskId: "task-1",
+        artifactIds: ["workflow:task-1:spec", "free-1"],
+        removedArtifactIds: ["workflow:task-1:spec", "free-1"],
+      },
     ]);
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure.message).toContain("clear sessions failed");
-    expect(result.failure.message).toContain("cleared workflow documents");
+    expect(result.failure.message).toContain("cleared task artifacts");
     expect(result.failure).toMatchObject({ cause: failure });
   });
   test("fails fast when implementation reset needs live activity checks but no guard is configured", async () => {

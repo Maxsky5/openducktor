@@ -1,4 +1,8 @@
 import { WebHostRequestError } from "./effect/web-errors";
+import {
+  ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+  artifactPreviewBootstrapResponse,
+} from "./artifact-preview-bootstrap";
 import { z } from "zod";
 import {
   HOST_COMMAND_NAMES,
@@ -269,6 +273,9 @@ export const createRemoteWorkInterface = (
       return await bodyRequest.json();
     };
     try {
+      if (route === ARTIFACT_PREVIEW_BOOTSTRAP_PATH && request.method === "GET" && !url.search) {
+        return artifactPreviewBootstrapResponse();
+      }
       if (route === "/" && request.method === "GET") return remoteJson(descriptor, 200, cors);
       if (route === "/connections" && request.method === "POST") {
         const result = negotiate(remoteClientHelloSchema.parse(await jsonBody(routed)));

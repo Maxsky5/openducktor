@@ -3,6 +3,9 @@ productName: OpenDucktor
 asar: true
 npmRebuild: false
 asarUnpack:
+  - node_modules/sharp/**/*
+  - node_modules/@img/**/*
+  - node_modules/@resvg/resvg-wasm/**/*
   - node_modules/keytar/**/*
   - node_modules/node-pty/**/*
   - node_modules/node-mac-permissions/**/*
@@ -24,6 +27,9 @@ afterAllArtifactBuild: scripts/print-package-artifacts.cjs
 
 files:
   - dist/**/*
+  - node_modules/sharp/**/*
+  - node_modules/@img/**/*
+  - node_modules/@resvg/resvg-wasm/**/*
   - node_modules/keytar/**/*
   - node_modules/bindings/**/*
   - node_modules/file-uri-to-path/**/*

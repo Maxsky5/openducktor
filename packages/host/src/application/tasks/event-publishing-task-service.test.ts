@@ -24,7 +24,7 @@ const taskCard = (): TaskCard => ({
   availableActions: [],
   labels: [],
   subtaskIds: [],
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },
@@ -95,12 +95,12 @@ describe("createEventPublishingTaskService", () => {
     expect(calls).toEqual([input]);
   });
 
-  test("publishes a successful set-spec once and returns its document", async () => {
-    const document = { markdown: "# Spec" };
+  test("publishes a successful set-spec once and returns its artifact", async () => {
+    const artifact = { markdown: "# Spec" };
     const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
       [];
     const service = createEventPublishingTaskService({
-      taskService: fakeTaskService({ setSpec: () => Effect.succeed(document) }),
+      taskService: fakeTaskService({ setSpec: () => Effect.succeed(artifact) }),
       taskSyncService: {
         ...sync([]),
         publishTasksUpdated: (_repoPath, changes, operation) =>
@@ -116,7 +116,7 @@ describe("createEventPublishingTaskService", () => {
     );
 
     expect(result).toEqual({
-      ...document,
+      ...artifact,
       cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 },
     });
     expect(publications).toEqual([
@@ -126,7 +126,7 @@ describe("createEventPublishingTaskService", () => {
 
   test("publishes a successful set-plan once with its result changes", async () => {
     const plan = {
-      document: { markdown: "# Plan" },
+      artifact: { markdown: "# Plan" },
       changes: { taskIds: ["epic-1", "child-1"], removedTaskIds: ["old-child"] },
     };
     const publications: Array<{ operation: string; taskIds: string[]; removedTaskIds: string[] }> =
@@ -155,8 +155,8 @@ describe("createEventPublishingTaskService", () => {
 
     expect(result).toEqual({
       ...plan,
-      document: {
-        ...plan.document,
+      artifact: {
+        ...plan.artifact,
         cursor: { epoch: "11111111-1111-4111-8111-111111111111", sequence: 1 },
       },
     });
@@ -206,7 +206,7 @@ describe("createEventPublishingTaskService", () => {
         setPlan: () => {
           calls.push(gateActive);
           return Effect.succeed({
-            document: { markdown: "# Plan" },
+            artifact: { markdown: "# Plan" },
             changes: { taskIds: ["task-1"], removedTaskIds: [] },
           });
         },
@@ -704,7 +704,7 @@ describe("createEventPublishingTaskService", () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({
       operation: "set-spec",
-      message: "Document write failed",
+      message: "Artifact write failed",
     });
     const service = createEventPublishingTaskService({
       taskService: fakeTaskService({

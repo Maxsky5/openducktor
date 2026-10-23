@@ -1,10 +1,16 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type {
+  ReadTaskArtifactsResult,
+  ReadTaskArtifactsOutput,
   OdtToolErrorCode,
   OdtToolErrorIssue,
   OdtToolErrorPayload,
 } from "@openducktor/contracts";
-import { odtBrowserToolResultSchema, readTaskAssetsResultSchema } from "@openducktor/contracts";
+import {
+  odtBrowserToolResultSchema,
+  readTaskAssetsResultSchema,
+  readTaskArtifactsResultSchema,
+} from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 
 export type ToolResult = CallToolResult;
@@ -138,6 +144,70 @@ export const toTaskAssetsToolResult = (
       },
     ]),
   };
+};
+
+const MAX_ARTIFACT_RESPONSE_BYTES = 10 * 1024 * 1024;
+
+export const toTaskArtifactsToolResult = (
+  payload: ReadTaskArtifactsResult,
+  requestId: string | number = 0,
+): ToolResult => {
+  const parsed = readTaskArtifactsResultSchema.parse(payload);
+  const artifacts = parsed.artifacts.map(toTaskArtifactResult);
+  const result = toToolResult(
+    mcpToolPayloadSchema.parse({ artifacts: artifacts.map(({ entry }) => entry) }),
+  );
+  result.content.push(...artifacts.flatMap(({ blocks }) => blocks));
+  const serializedBytes =
+    Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", id: requestId, result }), "utf8") + 1;
+  if (serializedBytes >= MAX_ARTIFACT_RESPONSE_BYTES) {
+    throw new OdtToolError({
+      code: "ODT_TOOL_EXECUTION_ERROR",
+      message:
+        "The artifact response reaches the 10 MiB MCP response limit. Select fewer artifacts or reduce maxBytes.",
+    });
+  }
+  return result;
+};
+
+const toTaskArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][number]) => {
+  const { dataBase64, imagePreview, ...metadata } = payload;
+  const entry: ReadTaskArtifactsOutput["artifacts"][number] = metadata;
+  const bytes = Buffer.from(dataBase64, "base64");
+  const { artifact } = metadata;
+  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?version=${encodeURIComponent(metadata.version)}&offset=${metadata.byteOffset}&length=${bytes.byteLength}`;
+  const blocks: ToolResult["content"] = [];
+  const originalResource = () => ({
+    type: "resource" as const,
+    resource: { uri, mimeType: artifact.mediaType, blob: dataBase64 },
+  });
+  const mediaType = artifact.mediaType.toLowerCase();
+  if (mediaType.startsWith("text/") || mediaType === "application/json") {
+    try {
+      entry.content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    } catch {
+      blocks.push({
+        type: "text",
+        text: `Cannot decode artifact ${artifact.code} as UTF-8. The blob resource has the original bytes. Download the artifact or decode it with the correct encoding.`,
+      });
+      blocks.push(originalResource());
+    }
+  } else {
+    blocks.push(originalResource());
+  }
+  if (imagePreview?.state === "ready") {
+    blocks.push({
+      type: "image",
+      mimeType: imagePreview.mediaType,
+      data: imagePreview.dataBase64,
+    });
+  } else if (imagePreview?.state === "failed") {
+    blocks.push({
+      type: "text",
+      text: `Image preview failed for artifact ${artifact.code}: ${imagePreview.message} ${imagePreview.nextAction} The blob resource has the original bytes.`,
+    });
+  }
+  return { entry, blocks };
 };
 
 export const toBrowserToolResult = (

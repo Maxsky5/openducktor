@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-  ExternalTaskSyncEvent,
-  TaskCard,
-  TaskCreateInput,
-  TaskEventStreamFrame,
+import {
+  workflowArtifactId,
+  type ExternalTaskSyncEvent,
+  type TaskCard,
+  type TaskCreateInput,
+  type TaskEventStreamFrame,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
@@ -40,8 +41,12 @@ describe("committed task cards", () => {
         ...createTaskServiceWithMutationProgress({ taskStore: store }),
         resetTask: (input: { repoPath: string; taskId: string }) =>
           Effect.gen(function* () {
-            yield* store.clearWorkflowDocuments(input);
-            return yield* store.getTask(input);
+            const artifacts = yield* store.listArtifacts(input);
+            yield* store.clearTaskArtifacts(input);
+            return {
+              task: yield* store.getTask(input),
+              removedArtifactIds: artifacts.map((artifact) => artifact.artifactId),
+            };
           }),
       };
       const sync = createTaskSyncService({
@@ -61,11 +66,12 @@ describe("committed task cards", () => {
         taskSyncService: sync,
       });
       const before = await Effect.runPromise(
-        service.saveSpecDocument({ repoPath, taskId: task.id, markdown: "# Before" }),
+        service.saveSpecArtifact({ repoPath, taskId: task.id, markdown: "# Before" }),
       );
       await Effect.runPromise(service.resetTask({ repoPath, taskId: task.id }));
+      await Effect.runPromise(service.resetTask({ repoPath, taskId: task.id }));
       const after = await Effect.runPromise(
-        service.saveSpecDocument({ repoPath, taskId: task.id, markdown: "# After" }),
+        service.saveSpecArtifact({ repoPath, taskId: task.id, markdown: "# After" }),
       );
       await Effect.runPromise(
         service.updateTask({ repoPath, taskId: task.id, patch: { title: "Renamed" } }),
@@ -73,18 +79,37 @@ describe("committed task cards", () => {
       await Promise.resolve();
       expect(before.updatedAt).toBe(timestamp);
       expect(after.updatedAt).toBe(timestamp);
-      expect(frames).toHaveLength(4);
+      expect(frames).toHaveLength(5);
       expect(before.cursor).toEqual(frames[0]!.cursor);
-      expect(after.cursor).toEqual(frames[2]!.cursor);
-      expect(frames.map((frame) => frame.cursor.sequence)).toEqual([1, 2, 3, 4]);
+      expect(after.cursor).toEqual(frames[3]!.cursor);
+      expect(frames.map((frame) => frame.cursor.sequence)).toEqual([1, 2, 3, 4, 5]);
       expect(
         frames.map((frame) =>
-          frame.type === "change" ? frame.event.boardChanges?.documentChanges : null,
+          frame.type === "change" ? frame.event.boardChanges?.artifactChanges : null,
         ),
       ).toEqual([
-        [{ taskId: task.id, sections: ["spec"] }],
-        [{ taskId: task.id, sections: ["spec", "plan", "qa"] }],
-        [{ taskId: task.id, sections: ["spec"] }],
+        [
+          {
+            taskId: task.id,
+            artifactIds: [workflowArtifactId(task.id, "spec")],
+            removedArtifactIds: [],
+          },
+        ],
+        [
+          {
+            taskId: task.id,
+            artifactIds: [workflowArtifactId(task.id, "spec")],
+            removedArtifactIds: [workflowArtifactId(task.id, "spec")],
+          },
+        ],
+        [],
+        [
+          {
+            taskId: task.id,
+            artifactIds: [workflowArtifactId(task.id, "spec")],
+            removedArtifactIds: [],
+          },
+        ],
         [],
       ]);
       expect(

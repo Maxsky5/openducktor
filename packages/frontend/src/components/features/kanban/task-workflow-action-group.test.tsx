@@ -10,7 +10,7 @@ function renderWorkflowActionGroup(compactMenuTrigger = false) {
         status: "in_progress",
         issueType: "task",
         availableActions: ["open_builder", "open_qa", "build_start"],
-        documentSummary: {
+        artifactSummary: {
           spec: { has: false, updatedAt: undefined },
           plan: { has: false, updatedAt: undefined },
           qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "rejected" },

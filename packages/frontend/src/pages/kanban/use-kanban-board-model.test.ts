@@ -28,7 +28,7 @@ const createTaskCard = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   parentId: undefined,
   subtaskIds: [],
   pullRequest: undefined,
-  documentSummary: {
+  artifactSummary: {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },

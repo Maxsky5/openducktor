@@ -13,6 +13,7 @@ import {
 } from "./shell-bridge";
 
 const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
+  getArtifactPreviewEnvironment: createUnavailableShellBridge().getArtifactPreviewEnvironment,
   client: createHostClientFixture({}),
   subscribeWorkspaceSessionUpdates: async () => () => {},
   subscribeRuntimeChanges: async () => () => {},

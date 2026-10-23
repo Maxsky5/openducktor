@@ -14,7 +14,7 @@ const makeTask = (partial: Partial<TaskCard> & Pick<TaskCard, "id" | "title">): 
   labels: partial.labels ?? [],
   parentId: partial.parentId,
   subtaskIds: partial.subtaskIds ?? [],
-  documentSummary: partial.documentSummary ?? {
+  artifactSummary: partial.artifactSummary ?? {
     spec: { has: false },
     plan: { has: false },
     qaReport: { has: false, verdict: "not_reviewed" },

@@ -1,7 +1,9 @@
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { prefetchTaskArtifacts } from "@openducktor/frontend-core/queries/artifacts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSessionViewActive } from "@/features/session-navigation/session-view-context";
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectionState,
@@ -14,6 +16,7 @@ import {
 
 type UseAgentStudioSelectionStateArgs = {
   activeWorkspaceId: string | null;
+  workspaceRepoPath: string | null;
   isWorkspaceRestorePending: boolean;
   taskIdParam: string;
   sessionExternalIdParam: string | null;
@@ -44,6 +47,7 @@ export type AgentStudioSelectionStateModel = {
 
 export function useAgentStudioSelectionState({
   activeWorkspaceId,
+  workspaceRepoPath,
   isWorkspaceRestorePending,
   taskIdParam,
   sessionExternalIdParam,
@@ -55,6 +59,7 @@ export function useAgentStudioSelectionState({
   scheduleQueryUpdate,
   requestContextTransition,
 }: UseAgentStudioSelectionStateArgs): AgentStudioSelectionStateModel {
+  const queryClient = useQueryClient();
   const isActive = useSessionViewActive();
   const routeSelection = useMemo(
     () =>
@@ -107,6 +112,32 @@ export function useAgentStudioSelectionState({
   const lastWorkspaceIdRef = useRef(activeWorkspaceId);
 
   const selection = currentSnapshot.selection;
+  const workflowRole =
+    selection.hasExplicitRoleSelection || selection.sessionIdentity ? selection.role : null;
+
+  useEffect(() => {
+    if (
+      !isActive ||
+      isWorkspaceRestorePending ||
+      isNavigationPending ||
+      currentSnapshot.routeQueryKey !== routeSelectionQueryKey ||
+      !workspaceRepoPath ||
+      !selection.taskId ||
+      !workflowRole
+    )
+      return;
+    void prefetchTaskArtifacts(queryClient, workspaceRepoPath, selection.taskId, workflowRole);
+  }, [
+    isActive,
+    isWorkspaceRestorePending,
+    isNavigationPending,
+    currentSnapshot.routeQueryKey,
+    routeSelectionQueryKey,
+    workspaceRepoPath,
+    selection.taskId,
+    workflowRole,
+    queryClient,
+  ]);
 
   useLayoutEffect(() => {
     latestTransitionStateRef.current = {
@@ -182,10 +213,23 @@ export function useAgentStudioSelectionState({
         ) {
           return;
         }
+        if (workspaceRepoPath && nextSelection.taskId) {
+          const role =
+            nextSelection.hasExplicitRoleSelection || nextSelection.sessionIdentity
+              ? nextSelection.role
+              : null;
+          void prefetchTaskArtifacts(queryClient, workspaceRepoPath, nextSelection.taskId, role);
+        }
         scheduleQueryUpdate(buildAgentStudioSelectionQueryUpdateFromState(nextSelection));
       });
     },
-    [activeWorkspaceId, requestContextTransition, scheduleQueryUpdate],
+    [
+      activeWorkspaceId,
+      workspaceRepoPath,
+      queryClient,
+      requestContextTransition,
+      scheduleQueryUpdate,
+    ],
   );
 
   return {

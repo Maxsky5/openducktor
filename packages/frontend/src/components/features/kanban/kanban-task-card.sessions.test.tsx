@@ -283,8 +283,8 @@ describe("Kanban card session shortcuts", () => {
         status: "in_progress" as const,
         labels: ["hidden-label"],
         availableActions: ["build_start" as const],
-        documentSummary: {
-          ...props.task.documentSummary,
+        artifactSummary: {
+          ...props.task.artifactSummary,
           qaReport: { has: true, updatedAt: undefined, verdict: "rejected" as const },
         },
       };

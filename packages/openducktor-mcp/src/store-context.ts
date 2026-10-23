@@ -1,6 +1,6 @@
 import { mcpBridgeDiscoveryFileSchema } from "@openducktor/contracts";
 import { readFile } from "node:fs/promises";
-import { type BrowserCallerSource, readBrowserCallerSource } from "./browser-caller";
+import { type RuntimeCallerSource, readRuntimeCallerSource } from "./runtime-caller";
 import { OdtHostBridgeClient } from "./host-bridge-client";
 import { normalizeOptionalInput, resolveMcpBridgeDiscoveryPath } from "./path-utils";
 import { z } from "zod";
@@ -18,7 +18,7 @@ export type OdtStoreOptions = {
   hostToken?: string;
   forbidWorkspaceIdInput?: boolean;
   /** Set only when an OpenDucktor runtime started this process. */
-  browserCallerSource?: BrowserCallerSource;
+  callerSource?: RuntimeCallerSource;
 };
 
 export type OdtStoreContext = {
@@ -199,7 +199,7 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     normalizeOptionalInput(process.env.ODT_WORKSPACE_ID);
   const forbidWorkspaceIdInput =
     context.forbidWorkspaceIdInput ?? readBooleanEnv(FORBID_WORKSPACE_ID_INPUT_ENV);
-  const browserCallerSource = readBrowserCallerSource();
+  const callerSource = readRuntimeCallerSource();
 
   const explicitHostUrl =
     normalizeOptionalInput(context.hostUrl) ?? normalizeOptionalInput(process.env.ODT_HOST_URL);
@@ -227,8 +227,8 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
     if (resolvedHostToken) {
       options.hostToken = resolvedHostToken;
     }
-    if (browserCallerSource) {
-      options.browserCallerSource = browserCallerSource;
+    if (callerSource) {
+      options.callerSource = callerSource;
     }
     return options;
   }
@@ -241,8 +241,8 @@ export const resolveStoreContext = async (context: OdtStoreContext): Promise<Odt
   if (resolvedHostToken) {
     options.hostToken = resolvedHostToken;
   }
-  if (browserCallerSource) {
-    options.browserCallerSource = browserCallerSource;
+  if (callerSource) {
+    options.callerSource = callerSource;
   }
   return options;
 };

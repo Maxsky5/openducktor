@@ -43,6 +43,9 @@ const createBridge = ({
   };
   const bridge = createOdtMcpBridgeService({
     browserAgentTools,
+    managedCallers: {
+      resolve: () => Effect.die(new Error("This tool does not resolve managed callers.")),
+    },
     browserCallers: {
       resolve: (input) => {
         resolved.push(input);
@@ -52,7 +55,11 @@ const createBridge = ({
     taskAssetReadService: {
       readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),
     },
-    taskService: createTaskServiceTestDouble({}),
+    taskService: {
+      ...createTaskServiceTestDouble({}),
+      qaApproved: () => Effect.die(new Error("Browser tools never approve QA.")),
+      qaRejected: () => Effect.die(new Error("Browser tools never reject QA.")),
+    },
     workspaceSettingsService: {
       getRepoConfig: () => Effect.die(new Error("Browser tools resolve the workspace themselves.")),
       listWorkspaces: () => Effect.succeed([]),

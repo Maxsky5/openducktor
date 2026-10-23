@@ -91,12 +91,25 @@ test.each([
       await Effect.runPromise(
         store.transitionTask({ repoPath, taskId: task.id, status: previousStatus }),
       );
-      const { service, events } = createServices(store, {
-        [operation]: () =>
-          store.transitionTask({ repoPath, taskId: task.id, status: "human_review" }),
-      });
+      const transition = () =>
+        store.transitionTask({ repoPath, taskId: task.id, status: "human_review" });
+      const { service, events } = createServices(
+        store,
+        operation === "qaApproved"
+          ? {
+              qaApproved: () =>
+                transition().pipe(
+                  Effect.map((task) => ({ task, artifact: { markdown: "Approved" } })),
+                ),
+            }
+          : { buildCompleted: transition },
+      );
       await Effect.runPromise(
-        service[operation]({ repoPath, taskId: task.id, markdown: "Approved" }),
+        operation === "qaApproved"
+          ? service
+              .qaApproved({ repoPath, taskId: task.id, markdown: "Approved" })
+              .pipe(Effect.asVoid)
+          : service.buildCompleted({ repoPath, taskId: task.id }).pipe(Effect.asVoid),
       );
       expect(events).toMatchObject([
         {
@@ -279,7 +292,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
     );
     const database = new Database(databasePath);
     database.run(
-      "CREATE TRIGGER reject_qa BEFORE INSERT ON task_documents BEGIN SELECT RAISE(ABORT, 'QA insert rejected'); END",
+      "CREATE TRIGGER reject_qa BEFORE INSERT ON tasks_artifacts BEGIN SELECT RAISE(ABORT, 'QA insert rejected'); END",
     );
     database.close();
     const input = {

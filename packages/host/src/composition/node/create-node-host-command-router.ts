@@ -246,7 +246,7 @@ export const assembleNodeEffectHostCommandRouter = (
       launchEnvironment: createTerminalLaunchEnvironment({ readEnv }),
     }),
   );
-  const { service: browserService, callers: browserCallers } = createNodeBrowser({
+  const { browserService, ...callers } = createNodeBrowser({
     engine: browserEngine,
     automation: browserAutomation,
     configRoot: configDir.root,
@@ -349,7 +349,7 @@ export const assembleNodeEffectHostCommandRouter = (
   autopilot = autopilotService;
   const odtMcpBridgeService = createOdtMcpBridgeService({
     browserAgentTools: browserService,
-    browserCallers,
+    ...callers,
     taskAssetReadService,
     taskService,
     workspaceSettingsService,

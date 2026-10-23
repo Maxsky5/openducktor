@@ -53,11 +53,11 @@ describe("workflow-tool-permissions", () => {
       ...OPENCODE_RUNTIME_DESCRIPTOR,
       workflowToolAliasesByCanonical: {
         ...OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
-        odt_set_plan: ["runtime_plan_alias"],
+        odt_set_task_artifact: ["runtime_artifact_alias"],
       },
     });
 
-    expect(findFinalExactAction(rules, "runtime_plan_alias")).toBe("allow");
+    expect(findFinalExactAction(rules, "runtime_artifact_alias")).toBe("allow");
   });
 
   test("keeps approval prompts out of every workflow role policy", () => {
@@ -154,21 +154,31 @@ describe("workflow-tool-permissions", () => {
     });
     expect(rules).toContainEqual({ permission: "odt_read_task", pattern: "*", action: "allow" });
     expect(rules).toContainEqual({
-      permission: "odt_read_task_documents",
+      permission: "odt_read_task_artifacts",
       pattern: "*",
       action: "allow",
     });
-    expect(rules).toContainEqual({ permission: "odt_set_spec", pattern: "*", action: "allow" });
-    expect(rules).toContainEqual({ permission: "odt_set_plan", pattern: "*", action: "deny" });
-    expect(findFinalExactAction(rules, "functions.openducktor_odt_set_spec")).toBe("allow");
-    expect(findFinalExactAction(rules, "functions.openducktor_odt_set_plan")).toBe("deny");
+    expect(rules).toContainEqual({
+      permission: "odt_set_task_artifact",
+      pattern: "*",
+      action: "allow",
+    });
+    expect(rules).toContainEqual({
+      permission: "odt_build_completed",
+      pattern: "*",
+      action: "deny",
+    });
+    expect(findFinalExactAction(rules, "functions.openducktor_odt_set_task_artifact")).toBe(
+      "allow",
+    );
+    expect(findFinalExactAction(rules, "functions.openducktor_odt_build_completed")).toBe("deny");
     expect(rules).toContainEqual({
       permission: "openducktor_odt_read_task",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "openducktor_odt_read_task_documents",
+      permission: "openducktor_odt_read_task_artifacts",
       pattern: "*",
       action: "allow",
     });
@@ -178,32 +188,32 @@ describe("workflow-tool-permissions", () => {
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_read_task_documents",
+      permission: "functions.openducktor_odt_read_task_artifacts",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "openducktor_odt_set_spec",
+      permission: "openducktor_odt_set_task_artifact",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_set_spec",
+      permission: "functions.openducktor_odt_set_task_artifact",
       pattern: "*",
       action: "allow",
     });
     expect(rules).not.toContainEqual({
-      permission: "openducktor_odt_set_plan",
+      permission: "openducktor_odt_build_completed",
       pattern: "*",
       action: "allow",
     });
     expect(rules).toContainEqual({
-      permission: "openducktor_odt_set_plan",
+      permission: "openducktor_odt_build_completed",
       pattern: "*",
       action: "deny",
     });
     expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_set_plan",
+      permission: "functions.openducktor_odt_build_completed",
       pattern: "*",
       action: "deny",
     });
@@ -233,28 +243,10 @@ describe("workflow-tool-permissions", () => {
       pattern: "*",
       action: "allow",
     });
-    expect(rules).toContainEqual({
-      permission: "odt_qa_approved",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "openducktor_odt_qa_approved",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).toContainEqual({
-      permission: "functions.openducktor_odt_qa_approved",
-      pattern: "*",
-      action: "deny",
-    });
-    expect(rules).not.toContainEqual({
-      permission: "openducktor_odt_qa_approved",
-      pattern: "*",
-      action: "allow",
-    });
     expect(findFinalExactAction(rules, "functions.openducktor_odt_build_completed")).toBe("allow");
-    expect(findFinalExactAction(rules, "functions.openducktor_odt_qa_approved")).toBe("deny");
+    expect(findFinalExactAction(rules, "functions.openducktor_odt_set_task_artifact")).toBe(
+      "allow",
+    );
   });
 });
 
@@ -271,10 +263,10 @@ const effectiveAction = (rules: PermissionRule[], permission: string): string =>
     ?.action ?? "ask";
 
 test.each([
-  ["spec", "odt_set_spec"],
-  ["planner", "odt_set_plan"],
+  ["spec", "odt_set_task_artifact"],
+  ["planner", "odt_set_task_artifact"],
   ["build", "odt_build_completed"],
-  ["qa", "odt_qa_approved"],
+  ["qa", "odt_set_task_artifact"],
 ] as const)(
   "%s rules deny unknown tools despite native grants and keep eligible writes allowed",
   (role, eligible) => {

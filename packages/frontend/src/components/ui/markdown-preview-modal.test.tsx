@@ -58,7 +58,7 @@ describe("MarkdownPreviewModal", () => {
   test("renders sr-only default title when no title prop is provided", () => {
     render(<MarkdownPreviewModal open onOpenChange={() => {}} markdown="# Content" />);
 
-    const title = screen.getByText("Document Preview");
+    const title = screen.getByText("Artifact preview");
     expect(title).toBeDefined();
     expect(title.className).toContain("sr-only");
   });

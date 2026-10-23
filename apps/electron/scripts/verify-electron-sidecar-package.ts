@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
+import { ODT_MCP_BRIDGE_VERSION, ODT_MCP_TOOL_NAMES } from "@openducktor/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Effect } from "effect";
@@ -149,7 +149,9 @@ const probePackagedMcpInitialization = async (path: string): Promise<void> => {
     }
     request.resume();
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ bridgeVersion: 1, toolNames: ODT_MCP_TOOL_NAMES }));
+    response.end(
+      JSON.stringify({ bridgeVersion: ODT_MCP_BRIDGE_VERSION, toolNames: ODT_MCP_TOOL_NAMES }),
+    );
   });
   await new Promise<void>((resolve, reject) => {
     bridge.once("error", reject);

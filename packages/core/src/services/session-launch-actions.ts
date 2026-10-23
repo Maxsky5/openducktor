@@ -115,7 +115,7 @@ export const resolveBuildContinuationLaunchAction = (
   }
   return task &&
     (task.status === "in_progress" || task.status === "blocked") &&
-    task.documentSummary.qaReport.verdict === "rejected"
+    task.artifactSummary.qaReport.verdict === "rejected"
     ? "build_after_qa_rejected"
     : "build_implementation_start";
 };

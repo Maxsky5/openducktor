@@ -14,7 +14,7 @@ describe("taskActionLabel", () => {
   test("uses builder naming consistently for standard workflow actions", () => {
     const task = createTaskCardFixture({
       status: "ready_for_dev",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
@@ -35,7 +35,7 @@ describe("taskActionLabel", () => {
   test("uses open wording for spec-ready follow-up actions", () => {
     const task = createTaskCardFixture({
       status: "spec_ready",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: true, updatedAt: "2026-03-09T10:00:00.000Z" },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },
@@ -48,7 +48,7 @@ describe("taskActionLabel", () => {
   test("uses qa rework label for rejected tasks", () => {
     const task = createTaskCardFixture({
       status: "in_progress",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "rejected" },
@@ -62,7 +62,7 @@ describe("taskActionLabel", () => {
   test("uses request wording for qa action during human review", () => {
     const task = createTaskCardFixture({
       status: "human_review",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: true, updatedAt: "2026-03-09T10:00:00.000Z", verdict: "approved" },
@@ -75,7 +75,7 @@ describe("taskActionLabel", () => {
   test("uses request wording for qa action during ai review", () => {
     const task = createTaskCardFixture({
       status: "ai_review",
-      documentSummary: {
+      artifactSummary: {
         spec: { has: false, updatedAt: undefined },
         plan: { has: false, updatedAt: undefined },
         qaReport: { has: false, updatedAt: undefined, verdict: "not_reviewed" },

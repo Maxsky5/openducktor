@@ -34,7 +34,7 @@ describe("createTaskService planning", () => {
       let creates = 0;
       const taskStore: TaskStorePort = {
         listTasks: () => Effect.succeed(tasks),
-        setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+        setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
         deleteTask: ({ taskId }) =>
           Effect.sync(() => {
             tasks = tasks.filter((entry) => entry.id !== taskId);
@@ -143,7 +143,7 @@ describe("createTaskService planning", () => {
             }),
         });
       },
-      setSpecDocument(input) {
+      setSpecArtifact(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setSpec", input });
@@ -210,7 +210,7 @@ describe("createTaskService planning", () => {
             }),
         });
       },
-      setPlanDocument() {
+      setPlanArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set plan");
@@ -259,7 +259,7 @@ describe("createTaskService planning", () => {
       },
     ]);
   });
-  test("reports spec transition failures after writing a document as partial progress", async () => {
+  test("reports spec transition failures after writing a artifact as partial progress", async () => {
     const failure = new HostOperationError({
       operation: "task-store.transition-task",
       message: "transition failed",
@@ -267,7 +267,7 @@ describe("createTaskService planning", () => {
     const taskStore: TaskStorePort = {
       listTasks: () =>
         Effect.succeed([task({ id: "task-1", issueType: "feature", status: "open" })]),
-      setSpecDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      setSpecArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
       transitionTask: () => Effect.fail(failure),
     };
 
@@ -304,7 +304,7 @@ describe("createTaskService planning", () => {
             }),
         });
       },
-      setPlanDocument(input) {
+      setPlanArtifact(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setPlan", input });
@@ -386,7 +386,7 @@ describe("createTaskService planning", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -415,7 +415,7 @@ describe("createTaskService planning", () => {
         }),
       ),
     ).resolves.toEqual({
-      document: {
+      artifact: {
         markdown: "# Plan",
         updatedAt: "2026-05-10T10:00:00.000Z",
         revision: 2,
@@ -466,7 +466,7 @@ describe("createTaskService planning", () => {
       },
     ]);
   });
-  test("saves plan documents without applying workflow transitions", async () => {
+  test("saves plan artifacts without applying workflow transitions", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       getTask(input) {
@@ -483,7 +483,7 @@ describe("createTaskService planning", () => {
             }),
         });
       },
-      setPlanDocument(input) {
+      setPlanArtifact(input) {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "setPlan", input });
@@ -536,7 +536,7 @@ describe("createTaskService planning", () => {
             }),
         });
       },
-      setSpecDocument() {
+      setSpecArtifact() {
         return Effect.tryPromise({
           try: async () => {
             throw new Error("unexpected set spec");
@@ -578,7 +578,7 @@ describe("createTaskService planning", () => {
     };
     await expect(
       Effect.runPromise(
-        createTaskService({ taskStore }).savePlanDocument({
+        createTaskService({ taskStore }).savePlanArtifact({
           repoPath: "/repo",
           taskId: "task-1",
           markdown: "# Plan",
@@ -602,7 +602,7 @@ describe("createTaskService planning", () => {
     const taskStore: TaskStorePort = {
       listTasks: () =>
         Effect.succeed([task({ id: "task-1", issueType: "feature", status: "spec_ready" })]),
-      setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
       transitionTask: () => Effect.fail(failure),
     };
 
@@ -635,7 +635,7 @@ describe("createTaskService planning", () => {
           task({ id: "epic-1", issueType: "epic", status: "spec_ready" }),
           task({ id: "child-1", parentId: "epic-1" }),
         ]),
-      setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
       deleteTask: () => Effect.fail(failure),
     };
 
@@ -670,7 +670,7 @@ describe("createTaskService planning", () => {
           task({ id: "child-1", parentId: "epic-1" }),
           task({ id: "child-2", parentId: "epic-1" }),
         ]),
-      setPlanDocument: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
+      setPlanArtifact: (input) => Effect.succeed({ markdown: input.markdown, revision: 1 }),
       deleteTask: () => {
         deletionCount += 1;
         return deletionCount === 1 ? Effect.succeed(true) : Effect.fail(mutationFailure);

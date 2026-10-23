@@ -9,6 +9,7 @@ import { QueryProvider } from "@/test-utils/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { withCapturedConsole } from "@/test-utils/console-capture";
+import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -37,16 +38,19 @@ const StaticThemeProvider = ({ children }: { children: ReactNode }): ReactElemen
 };
 
 const writeClipboardMock = mock(async (_value: string) => {});
+const intersectionObserver = createIntersectionObserverTestDriver();
 let restoreClipboard: (() => void) | null = null;
 
 describe("TaskDetailsMarkdownContent", () => {
   beforeEach(() => {
+    intersectionObserver.install();
     writeClipboardMock.mockClear();
     writeClipboardMock.mockImplementation(async () => {});
     restoreClipboard = replaceNavigatorClipboard(writeClipboardMock);
   });
 
   afterEach(() => {
+    intersectionObserver.restore();
     restoreClipboard?.();
     restoreClipboard = null;
   });
