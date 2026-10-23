@@ -45,7 +45,7 @@
     "sharp": "0.35.5"
   },
   "devDependencies": {
-    "@happy-dom/global-registrator": "^20.14.6",
+    "@happy-dom/global-registrator": "^21.0.4",
     "@openducktor/build-tools": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/frontend": "workspace:*",

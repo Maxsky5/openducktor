@@ -47,6 +47,11 @@ const renderFrame = async (
   );
   const frame = screen.getByTestId("browser-frame");
   if (!(frame instanceof HTMLIFrameElement)) throw new Error("The page is not an iframe.");
+  // Test iframes load no page, so the frame gets a window that only takes messages.
+  Object.defineProperty(frame, "contentWindow", {
+    configurable: true,
+    value: { postMessage: () => {} },
+  });
   await waitFor(() => expect(source).toHaveBeenCalled());
   const fromFrame = (data: FrameMessageData, origin = PREVIEW) =>
     act(() => {
