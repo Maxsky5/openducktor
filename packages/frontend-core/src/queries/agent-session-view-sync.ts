@@ -20,8 +20,11 @@ export type AgentSessionViewReadPort = AgentSessionReadPort & Pick<HostClient, "
 /** The session-list result of one admitted task event. */
 export type AdmittedSessionChange = Promise<{ repoPath: string; changedTaskIds: string[] }>;
 
-/** A live refresh and the session ownership of the cached lists when it started. */
+/** A live refresh and the session ownership of the cached lists when it was queued. */
 type LiveRefresh = { done: Promise<void>; ownership: Map<string, string> };
+
+/** Replacement stream owners share the refresh lane of their host connection. */
+const liveRefreshTails = new WeakMap<QueryClient, Promise<void>>();
 
 export type AgentSessionViewSync = {
   /** Start the session-list work of a received event, so its reads join pending requests. */
@@ -72,30 +75,51 @@ export const createAgentSessionViewSync = ({
   const batch = getAgentSessionListBatch(queryClient);
   const liveRefreshes = new Map<string, LiveRefresh>();
 
-  const startLiveRefresh = (repoPath: string): Promise<void> => {
+  const startLiveRefresh = (repoPath: string, isCurrentOwner: () => boolean): Promise<void> => {
+    const epoch = batch.epoch();
+    const workspaceEpoch = batch.workspaceEpoch(repoPath);
     const ownership = new Map(
       cachedAgentSessionTaskIds(queryClient, repoPath).map((taskId) => [
         taskId,
         readAgentSessionOwnership(queryClient, repoPath, taskId),
       ]),
     );
-    const refresh: LiveRefresh = { done: refreshLiveSessions(repoPath), ownership };
-    liveRefreshes.set(repoPath, refresh);
-    // A failed refresh does not cover later changes.
-    refresh.done.catch(() => {
-      if (liveRefreshes.get(repoPath) === refresh) liveRefreshes.delete(repoPath);
+    // The host serializes refreshes. Wait here instead of occupying HTTP connections in its queue.
+    const done = (liveRefreshTails.get(queryClient) ?? Promise.resolve()).then(async () => {
+      if (
+        batch.epoch() !== epoch ||
+        batch.workspaceEpoch(repoPath) !== workspaceEpoch ||
+        !isWorkspaceOpen(repoPath) ||
+        !isCurrentOwner()
+      ) {
+        return;
+      }
+      await refreshLiveSessions(repoPath);
     });
+    const refresh: LiveRefresh = { done, ownership };
+    liveRefreshes.set(repoPath, refresh);
+    liveRefreshTails.set(
+      queryClient,
+      done.catch(() => {
+        // A failed refresh does not cover later changes or stop the queue.
+        if (liveRefreshes.get(repoPath) === refresh) liveRefreshes.delete(repoPath);
+      }),
+    );
     return refresh.done;
   };
 
-  /** Share the last live refresh when its start already saw the ownership of these tasks. */
-  const refreshLiveFor = (repoPath: string, taskIds: string[]): Promise<void> => {
+  /** Share the last live refresh when it already covers the ownership of these tasks. */
+  const refreshLiveFor = (
+    repoPath: string,
+    taskIds: string[],
+    isCurrentOwner: () => boolean,
+  ): Promise<void> => {
     const last = liveRefreshes.get(repoPath);
     const covered = taskIds.every(
       (taskId) =>
         last?.ownership.get(taskId) === readAgentSessionOwnership(queryClient, repoPath, taskId),
     );
-    return last && covered ? last.done : startLiveRefresh(repoPath);
+    return last && covered ? last.done : startLiveRefresh(repoPath, isCurrentOwner);
   };
 
   return {
@@ -144,11 +168,12 @@ export const createAgentSessionViewSync = ({
       }
       await Promise.all(
         [...changedTaskIdsByRepo].map(([repoPath, taskIds]) =>
-          refreshLiveFor(repoPath, [...taskIds]),
+          refreshLiveFor(repoPath, [...taskIds], isCurrentOwner),
         ),
       );
     },
     cancelReads: () => {
+      liveRefreshes.clear();
       void cancelAgentSessionListReads(queryClient);
     },
     reconcileStreamSnapshot: async (taskIdsByRepo, isCurrentOwner) => {
@@ -184,6 +209,7 @@ export const createAgentSessionViewSync = ({
         ].filter((taskId) => !taskIdSet.has(taskId));
         return { repoPath, taskIds, unlistedTaskIds };
       });
+      liveRefreshes.clear();
       await cancelAgentSessionListReads(queryClient);
       const epoch = batch.epoch();
       // Confirm deletions before the lists read again, so a view cannot read a deleted task.
@@ -236,7 +262,7 @@ export const createAgentSessionViewSync = ({
         }),
       ]);
       if (batch.epoch() === epoch && isCurrentOwner()) {
-        await runForOpenRepos(loaded, ({ repoPath }) => startLiveRefresh(repoPath));
+        await runForOpenRepos(loaded, ({ repoPath }) => startLiveRefresh(repoPath, isCurrentOwner));
       }
       return failures;
     },
