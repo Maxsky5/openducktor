@@ -143,10 +143,10 @@ describe("host-owned Workspace Session lifecycle", () => {
       startPoint: undefined as string | undefined,
       // SAFETY: The fake records the upstream remote after upstream setup.
       upstreamRemote: null as string | null,
+      // SAFETY: The fake reports a created tracking ref only when a test sets it.
+      createdTrackingRef: null as string | null,
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
-      // SAFETY: A test can set another upstream for the worktree branch.
-      trackedUpstream: null as string | null,
     };
     const store = createSqliteWorkspaceSessionStore(database.contextProvider);
     const pendingTitles = new Set<string>();
@@ -233,26 +233,14 @@ describe("host-owned Workspace Session lifecycle", () => {
             registered.add(directory);
             return state.partialCreate ? failure("git add failed after creation") : Effect.void;
           }),
-        configureBranchUpstream: (_repo, _directory, branch, upstreamRemote) =>
+        configureBranchUpstream: (_repo, _directory, _branch, upstreamRemote) =>
           Effect.sync(() => {
             state.upstreamRemote = upstreamRemote;
-            // Git creates the tracking ref when the remote branch does not exist yet.
-            const trackingRef = `refs/remotes/${upstreamRemote}/${branch}`;
-            const created = !branches.has(trackingRef);
-            branches.add(trackingRef);
-            return { createdTrackingRef: created ? trackingRef : null };
+            return { createdTrackingRef: state.createdTrackingRef };
           }),
-        getTrackedUpstreamReference: () =>
-          Effect.succeed(
-            state.trackedUpstream ??
-              (state.upstreamRemote
-                ? `refs/remotes/${state.upstreamRemote}/${state.branch}`
-                : null),
-          ),
         deleteReference: (_repo, reference) =>
           Effect.sync(() => {
             state.deletedReferences.push(reference);
-            branches.delete(reference);
           }),
         removeWorktree: (_repo, directory) =>
           Effect.suspend(() => {
@@ -961,9 +949,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     expect(h.calls).toEqual(["worktree", "copy", "actions", "save", "close-action-terminals"]);
     expect(h.paths.size).toBe(1);
-    expect(h.branches).toEqual(
-      new Set(["refs/heads/odt/my-feature", "refs/remotes/origin/odt/my-feature"]),
-    );
+    expect(h.branches.size).toBe(1);
   });
 
   test("accepts drive-qualified paths from a Windows worktree port", async () => {
@@ -1023,61 +1009,9 @@ describe("host-owned Workspace Session lifecycle", () => {
     expect(h.paths.size).toBe(0);
   });
 
-  test("a new branch name that exists on the target remote fails before any Git write", async () => {
-    const h = setup();
-    h.branches.add("refs/remotes/origin/odt/my-feature");
-    const error = await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
-    expect(error).toMatchObject({
-      field: "worktree.branchName",
-      message: "Branch odt/my-feature already exists on origin. Choose another name.",
-    });
-    expect(h.calls).toEqual([]);
-    expect(h.paths.size).toBe(0);
-  });
-
-  test("archive with worktree removal deletes the branch tracking ref, so the name is free again", async () => {
-    const h = setup();
-    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-    await Effect.runPromise(
-      h.service.archive({
-        workspaceId: "fairnest",
-        sessionId: session.id,
-        confirmStop: true,
-        removeWorktree: true,
-        worktreeConfirmation: {
-          workingDirectory: session.executionTarget.workingDirectory,
-          branchName: "odt/my-feature",
-        },
-      }),
-    );
-    expect(h.state.deletedReferences).toEqual(["refs/remotes/origin/odt/my-feature"]);
-    const { session: again } = await Effect.runPromise(h.service.create(worktreeInput()));
-    expect(again.executionTarget).toMatchObject({ branchName: "odt/my-feature" });
-  });
-
-  test("archive keeps the tracking ref of a remote branch with another name", async () => {
-    const h = setup();
-    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
-    h.state.trackedUpstream = "refs/remotes/origin/team/odt/my-feature";
-    h.branches.add("refs/remotes/origin/team/odt/my-feature");
-    await Effect.runPromise(
-      h.service.archive({
-        workspaceId: "fairnest",
-        sessionId: session.id,
-        confirmStop: true,
-        removeWorktree: true,
-        worktreeConfirmation: {
-          workingDirectory: session.executionTarget.workingDirectory,
-          branchName: "odt/my-feature",
-        },
-      }),
-    );
-    expect(h.state.deletedReferences).toEqual([]);
-    expect(h.branches.has("refs/remotes/origin/team/odt/my-feature")).toBe(true);
-  });
-
   test("creation cleanup deletes the tracking ref that the upstream setup created", async () => {
     const h = setup();
+    h.state.createdTrackingRef = "refs/remotes/origin/odt/my-feature";
     h.state.failActions = true;
     await Effect.runPromise(Effect.flip(h.service.create(worktreeInput())));
     expect(h.state.deletedReferences).toEqual(["refs/remotes/origin/odt/my-feature"]);
@@ -2099,7 +2033,7 @@ describe("host-owned Workspace Session lifecycle", () => {
         worktreeState: "removed",
       });
       expect(h.paths.size).toBe(0);
-      expect([...h.branches].filter((ref) => ref.startsWith("refs/heads/"))).toEqual([]);
+      expect(h.branches.size).toBe(0);
     },
   );
 

@@ -146,7 +146,7 @@ export const withWorkspaceSessionTarget = <A, E>(
         }
       }
       const newBranch = createBranch
-        ? yield* planNewBranch(git, repoPath, branch, input.targetBranch)
+        ? yield* planNewBranch(git, repoPath, input.targetBranch)
         : null;
       const base =
         repoConfig.worktreeBasePath === undefined
@@ -278,13 +278,12 @@ export const withWorkspaceSessionTarget = <A, E>(
   );
 
 /**
- * A new branch starts from the target branch. A remote target also gives the branch its upstream,
- * which Git names `<remote>/<branch>`. Both checks run before any Git write.
+ * A new branch starts from the target branch, which must exist before any Git write. A remote
+ * target also gives the branch its upstream, as a builder worktree gets.
  */
 const planNewBranch = (
   git: Pick<GitPort, "referenceExists">,
   repoPath: string,
-  branch: string,
   targetBranch: GitTargetBranch,
 ) =>
   Effect.gen(function* () {
@@ -295,16 +294,5 @@ const planNewBranch = (
         field: "targetBranch",
       });
     }
-    const upstreamRemote = targetBranch.remote?.trim() || null;
-    // An existing remote branch with this name would become the upstream of an unrelated branch.
-    if (
-      upstreamRemote &&
-      (yield* git.referenceExists(repoPath, `refs/remotes/${upstreamRemote}/${branch}`))
-    ) {
-      return yield* new HostValidationError({
-        message: `Branch ${branch} already exists on ${upstreamRemote}. Choose another name.`,
-        field: "worktree.branchName",
-      });
-    }
-    return { startPoint, upstreamRemote };
+    return { startPoint, upstreamRemote: targetBranch.remote?.trim() || null };
   });
