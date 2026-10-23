@@ -229,19 +229,17 @@ export const foldWorkspaceActivityBadges = (
   archivedSessionKeys: ReadonlySet<string>,
 ): WorkspaceActivityBadges & { statusUnavailableReason: string | null } => {
   const counted = new Map<string, WorkspaceActivitySession>();
+  let statusUnavailableReason: string | null = null;
   for (const [key, session] of sessions) {
     if (!isArchivedBranch(sessions, archivedSessionKeys, key)) {
       counted.set(key, session);
+      statusUnavailableReason ??= session.statusUnavailableReason;
     }
   }
 
   let inputRequired = false;
   let error = false;
   let active = false;
-  let statusUnavailableReason: string | null = null;
-  for (const session of counted.values()) {
-    statusUnavailableReason ??= session.statusUnavailableReason;
-  }
   for (const facts of foldWorkspaceSessionLiveFacts(counted, new Map()).values()) {
     const { activityState } = facts;
     if (activityState === "waiting_input") {

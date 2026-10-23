@@ -154,7 +154,7 @@ const toActivitySession = (
     stopRequestedAt: null,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
-    // Only a snapshot sets or clears it, so transcript events keep a failed status read.
+    // Apply the snapshot reason last because a starting session can keep its old state.
     statusUnavailableReason: snapshot.statusUnavailableReason ?? null,
     preview,
   };

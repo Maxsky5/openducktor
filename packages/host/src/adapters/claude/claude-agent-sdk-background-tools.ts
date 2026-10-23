@@ -84,10 +84,10 @@ export const projectClaudeBackgroundTaskEdge = (
 ): ToolPart | null => {
   const taskId = message.task_id;
   const runId = "run_id" in message ? message.run_id : undefined;
-  const previousRunId = tasks(state).get(taskId)?.runId;
+  const knownTask = tasks(state).get(taskId);
+  const previousRunId = knownTask?.runId;
   if (runId && previousRunId && runId < previousRunId) return null;
   const toolUseId = "tool_use_id" in message ? message.tool_use_id : undefined;
-  const knownTask = tasks(state).get(taskId);
   const knownToolUseId = toolUseId ?? knownTask?.toolUseId;
   const toolName = knownToolUseId ? state.toolNamesByCallId.get(knownToolUseId) : undefined;
   if (state.backgroundToolAgentTaskIds?.has(taskId)) return null;
