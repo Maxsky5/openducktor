@@ -57,22 +57,20 @@ export function WorkspaceSessionWorkLocationField<Value extends string>({
                 type="button"
                 variant="outline"
                 className={cn(
-                  "h-auto min-w-0 items-start justify-start gap-3 whitespace-normal p-3 text-left text-foreground dark:border-muted-foreground/60",
+                  "grid h-auto min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] content-start gap-x-3 gap-y-1 whitespace-normal p-3 text-left text-foreground dark:border-muted-foreground/60",
                   selected &&
                     "border-primary bg-accent dark:border-selected-accent dark:bg-selected-surface",
                 )}
               >
                 <option.icon aria-hidden="true" />
-                <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span id={labelId}>{option.label}</span>
-                  <span
-                    id={descriptionId}
-                    className="text-xs font-normal text-foreground/70 dark:text-foreground/80"
-                  >
-                    {option.description}
-                  </span>
-                </span>
+                <span id={labelId}>{option.label}</span>
                 {selected && <Check aria-hidden="true" />}
+                <span
+                  id={descriptionId}
+                  className="col-start-2 col-end-4 row-start-2 text-xs font-normal text-foreground/70 dark:text-foreground/80"
+                >
+                  {option.description}
+                </span>
               </Button>
             </RadioGroupPrimitiveItem>
           );
