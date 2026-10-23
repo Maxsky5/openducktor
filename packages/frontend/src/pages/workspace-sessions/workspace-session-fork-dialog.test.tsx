@@ -108,6 +108,7 @@ test("fork dialog defaults to the source folder and blocks duplicate submit and 
       "checked",
     );
     expect(view.getByText("/worktrees/source-feature")).toBeDefined();
+    expect(view.getByText("source-feature")).toBeDefined();
     expect(view.getByText("odt/source-feature")).toBeDefined();
     await act(async () => {
       fireEvent.click(view.getByRole("button", { name: "Fork chat" }));

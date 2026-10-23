@@ -7,10 +7,12 @@ import {
   workspaceSessionForkInputSchema,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { basenameForPath } from "@openducktor/path-support";
 import { Folder, GitBranch, LoaderCircle } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogBody,
@@ -56,14 +58,13 @@ export function WorkspaceSessionForkDialog({
   const queryClient = useQueryClient();
   const store = useAgentSessionsContext();
   const config = useQuery(repoConfigQueryOptions(workspace.workspaceId));
+  const directory = record.executionTarget.workingDirectory;
+  const folderName = basenameForPath(directory) || directory;
   const [destination, setDestination] =
     useState<WorkspaceSessionForkInput["destination"]["kind"]>("same_folder");
   const [worktree, setWorktree] = useState<WorkspaceSessionWorktreeInput>(() => ({
     mode: "from_name",
-    name:
-      record.executionTarget.kind === "local_worktree"
-        ? `${record.executionTarget.workingDirectory.split(/[/\\]/).at(-1) ?? ""}-fork`
-        : "",
+    name: record.executionTarget.kind === "local_worktree" ? `${folderName}-fork` : "",
     branchName: null,
   }));
   const [failure, setFailure] = useState<Error | null>(null);
@@ -146,18 +147,30 @@ export function WorkspaceSessionForkDialog({
                   },
                 ]}
               />
-              <div className="grid gap-1">
-                <p className="text-sm font-medium">Source folder</p>
-                <p className="break-all font-mono text-xs text-muted-foreground dark:text-foreground/80">
-                  {record.executionTarget.workingDirectory}
-                </p>
-                {record.executionTarget.kind === "local_worktree" &&
-                record.executionTarget.branchName ? (
-                  <p className="flex items-start gap-1.5 text-xs text-muted-foreground dark:text-foreground/80">
-                    <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
-                    <span className="break-all">{record.executionTarget.branchName}</span>
+              <div className="min-w-0 rounded-md border border-border bg-muted/30 p-3">
+                <p className="text-xs font-medium text-muted-foreground">Source folder</p>
+                <div className="mt-1.5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                    <Folder aria-hidden="true" className="size-4 shrink-0" />
+                    <span className="min-w-0 break-words">{folderName}</span>
                   </p>
-                ) : null}
+                  {record.executionTarget.kind === "local_worktree" &&
+                  record.executionTarget.branchName ? (
+                    <Badge
+                      variant="outline"
+                      className="max-w-full gap-1.5 self-start font-mono font-normal"
+                    >
+                      <GitBranch aria-hidden="true" className="size-3.5 shrink-0" />
+                      <span className="sr-only">Source branch: </span>
+                      <span className="min-w-0 break-words">
+                        {record.executionTarget.branchName}
+                      </span>
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="mt-2 break-words font-mono text-xs leading-relaxed text-muted-foreground dark:text-foreground/80">
+                  {directory}
+                </p>
               </div>
               {destination === "new_worktree" ? (
                 <div className="flex flex-col gap-3">
