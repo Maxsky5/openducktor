@@ -70,6 +70,42 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
+  test.each([
+    ["baseline", "read", "active-submission"],
+    ["live", "queued", "active-submission"],
+    ["live", "read", "other-submission"],
+  ] as const)(
+    "keeps a pending submission for a %s %s message from %s",
+    (provenance, state, submissionId) => {
+      const session = buildSession({
+        runtimeKind: "claude",
+        status: "running",
+        foregroundTurnActive: false,
+        pendingSubmissionId: "active-submission",
+      });
+      const { consumer, sessionsRef } = createConsumerHarness(0, session);
+      try {
+        consumer.handle(
+          {
+            type: "user_message",
+            sessionRef: { ...sessionRef, runtimeKind: "claude" },
+            externalSessionId: sessionRef.externalSessionId,
+            timestamp: "2026-10-23T18:10:00.000Z",
+            messageId: "prompt",
+            submissionId,
+            state,
+            message: "Continue the review",
+            parts: [{ kind: "text", text: "Continue the review" }],
+          },
+          provenance,
+        );
+        expect(getSession(sessionsRef).pendingSubmissionId).toBe("active-submission");
+      } finally {
+        consumer.close();
+      }
+    },
+  );
+
   test("settles only the matching Claude response while background work and input remain", () => {
     const liveRef = { ...sessionRef, runtimeKind: "claude" as const };
     const session = buildSession({

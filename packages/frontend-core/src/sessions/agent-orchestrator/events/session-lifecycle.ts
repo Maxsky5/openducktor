@@ -228,18 +228,29 @@ export const handleUserMessage = (
   provenance?: SessionTranscriptEventProvenance,
 ): void => {
   context.turn.recordTurnUserMessageTimestamp(context.session.key, event.timestamp);
-  if (
+  const isLiveClaudeRead =
     provenance !== "baseline" &&
     context.session.identity.runtimeKind === "claude" &&
-    event.state === "read"
-  ) {
+    event.state === "read";
+  if (isLiveClaudeRead) {
     context.turn.turnMetadata.recordResponseMessageId(context.session.key, event.messageId);
   }
-  context.store.updateSession(context.session.identity, (current) => ({
-    ...current,
-    ...closeBackgroundQuestions(current, event.resolvedQuestionRequestIds ?? []),
-    messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
-  }));
+  context.store.updateSession(context.session.identity, (current) => {
+    const next = {
+      ...current,
+      ...closeBackgroundQuestions(current, event.resolvedQuestionRequestIds ?? []),
+      messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
+    };
+    if (
+      isLiveClaudeRead &&
+      event.submissionId !== undefined &&
+      current.pendingSubmissionId === event.submissionId
+    ) {
+      next.pendingSubmissionId = undefined;
+      next.pendingUserMessageStartedAt = undefined;
+    }
+    return next;
+  });
 };
 
 export const handleSessionStatus = (

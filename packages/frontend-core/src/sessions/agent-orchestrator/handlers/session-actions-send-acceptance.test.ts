@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
 import { HostInvokeError } from "@openducktor/host-client";
 import { replaceAgentSession } from "../../agent-session-collection";
+import { createAgentSessionsStore } from "../../agent-sessions-store";
+import {
+  agentSessionIdentityKey,
+  toAgentSessionIdentity,
+} from "../../../lib/agent-session-identity";
+import { createFeedbackFake } from "../../../test-support/feedback-fake";
 import { sessionMessagesToArray } from "../../../test-support/session-message-test-helpers";
+import { createAgentSessionTranscriptEventConsumer } from "../events/session-transcript-events";
+import { createSessionTurnState } from "../support/session-turn-state";
 import {
   createSessionUpdater as createEventSessionUpdater,
   listenToAgentSessionEvents,
@@ -17,6 +25,103 @@ import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.te
 import { acceptedUserMessage } from "./session-actions-send.test-support";
 
 describe("agent-orchestrator/handlers/session-actions send acceptance", () => {
+  test("settles a Claude reply before the submission acknowledgement and send receipt arrive", async () => {
+    const session = buildSession({
+      runtimeKind: "claude",
+      foregroundTurnActive: false,
+    });
+    const ref = { ...toAgentSessionIdentity(session), repoPath: "/tmp/repo" };
+    const sessionKey = agentSessionIdentityKey(session);
+    const sessions = createAgentSessionsStore(ref.repoPath);
+    sessions.replaceSession(session);
+    const sessionTurnState = createSessionTurnState();
+    const consumer = createAgentSessionTranscriptEventConsumer(
+      {
+        feedback: createFeedbackFake(),
+        readSession: sessions.getSessionSnapshot,
+        ensureSession: (identity, create) => sessions.getSessionSnapshot(identity) ?? create(),
+        updateSession: sessions.updateSession,
+        updateSessionTodos: () => {},
+        sessionTurnState,
+      },
+      { batchWindowMs: 0 },
+    );
+    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+    let pendingAfterUnrelatedResults: string | undefined;
+    let timingAfterUnrelatedResults: number | undefined;
+    let timingAfterCompletion: number | undefined;
+    let timingAfterAcknowledgement: number | undefined;
+    adapter.submitUserMessage = async (input) => {
+      const finish = (messageIds: string[]) =>
+        consumer.handle({
+          type: "session_turn_finished",
+          sessionRef: ref,
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-10-23T18:10:02.000Z",
+          completionId: `result:${messageIds.join()}`,
+          messageIds,
+          turnOutcome: "completed",
+        });
+      finish([]);
+      finish(["previous-prompt"]);
+      pendingAfterUnrelatedResults = sessions.getSessionSnapshot(session)?.pendingSubmissionId;
+      timingAfterUnrelatedResults =
+        sessionTurnState.timing.readTurnUserMessageStartedAtMs(sessionKey);
+      consumer.handle({
+        type: "user_message",
+        sessionRef: ref,
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-10-23T18:10:00.000Z",
+        messageId: "active-prompt",
+        submissionId: input.submissionId,
+        state: "read",
+        message: "Continue the review",
+        parts: [{ kind: "text", text: "Continue the review" }],
+      });
+      finish(["active-prompt"]);
+      timingAfterCompletion = sessionTurnState.timing.readTurnUserMessageStartedAtMs(sessionKey);
+      sessions.applyLiveSessionEnvelope({
+        type: "submission_acknowledged",
+        acknowledgement: {
+          ref,
+          kind: "message",
+          submissionId: input.submissionId,
+          messageId: "active-prompt",
+        },
+      });
+      timingAfterAcknowledgement =
+        sessionTurnState.timing.readTurnUserMessageStartedAtMs(sessionKey);
+      return { kind: "acknowledged", outcome: "accepted", submissionId: input.submissionId };
+    };
+    const actions = createSessionActions({
+      adapter,
+      readSessionSnapshot: sessions.getSessionSnapshot,
+      updateSession: sessions.updateSession,
+      sessionTurnState,
+    });
+    try {
+      const receipt = await actions.sendAgentMessage(session, [
+        { kind: "text", text: "Continue the review" },
+      ]);
+      expect(timingAfterCompletion).toBeUndefined();
+      expect(timingAfterAcknowledgement).toBeUndefined();
+      expect(pendingAfterUnrelatedResults).toBeDefined();
+      expect(timingAfterUnrelatedResults).toBeDefined();
+      expect(receipt).toMatchObject({
+        outcome: "acknowledged",
+        submissionId: pendingAfterUnrelatedResults,
+      });
+      expect(sessionTurnState.timing.readTurnUserMessageStartedAtMs(sessionKey)).toBeUndefined();
+      expect(sessions.getSessionSnapshot(session)).toMatchObject({
+        status: "running",
+        foregroundTurnActive: false,
+        pendingSubmissionId: undefined,
+      });
+    } finally {
+      consumer.close();
+    }
+  });
+
   test.each(["event-first", "response-first"] as const)(
     "keeps confirmed delivery after a queued send response in %s order",
     async (order) => {
