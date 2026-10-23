@@ -9,6 +9,7 @@ import {
   type RefObject,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -45,11 +46,11 @@ import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
 import type { SessionPanelModel } from "./use-session-panels";
 import { SessionTerminalSurface } from "./session-terminal-host";
-import { useSessionViewActive } from "../session-navigation/session-view-context";
 import {
-  SessionViewShownActivity,
+  useSessionViewActive,
   useSessionViewVisit,
-} from "../session-navigation/session-view-visibility";
+} from "../session-navigation/session-view-context";
+import { SessionViewShownActivity } from "../session-navigation/session-view-visibility";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";
 
@@ -125,6 +126,11 @@ function SessionPanelBody({
   // A panel that slides out after its last tab closed keeps its empty area blank.
   const isEmpty = model.tabs.length === 0 && model.presence !== "closing";
   const isLoadingEmptyBottom = isEmpty && model.panel === "bottom" && model.terminals.isLoading;
+  // The terminal host keeps a surface only while its model stays the same object.
+  const surfaceModel = useMemo(
+    () => (isActive || !model.isVisible ? model : { ...model, isVisible: false }),
+    [isActive, model],
+  );
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
       <SessionViewShownActivity key={visit}>
@@ -150,7 +156,7 @@ function SessionPanelBody({
           </p>
         ) : null}
       </SessionViewShownActivity>
-      <SessionTerminalSurface model={{ ...model, isVisible: isActive && model.isVisible }} />
+      <SessionTerminalSurface model={surfaceModel} />
     </div>
   );
 }

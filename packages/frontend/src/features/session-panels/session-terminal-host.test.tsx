@@ -11,6 +11,7 @@ import { terminalQueryKeys } from "@openducktor/frontend-core/queries/terminals"
 import { QueryProvider } from "@/test-utils/query-provider";
 import { useTerminals, type TerminalTab } from "@/features/terminals";
 import * as transport from "@/features/terminals/use-terminal-transport";
+import * as terminalLayer from "@/features/terminals/terminal-layer";
 import { SessionPanel, sessionPanelOwnerKey, useSessionPanels } from ".";
 import { SessionTerminalHost, SessionTerminalSurface } from "./session-terminal-host";
 import {
@@ -107,6 +108,44 @@ test("a surface update that keeps its terminals does not render the host again",
     expect(commits - before).toBe(1);
   } finally {
     view.unmount();
+  }
+});
+
+test("a panel render with the same terminals does not render its terminals again", () => {
+  const model = createSessionPanelFixture({
+    panel: "bottom",
+    tabs: [{ id: tab.tabId, kind: "terminal", terminal: tab }],
+    selectedTabId: tab.tabId,
+    terminals: createTerminalSessionsFixture({ scopeKey }),
+    terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
+    activeTerminalKey: "terminal",
+  });
+  let renderAgain = () => {};
+  function View() {
+    const [renders, setRenders] = useState(0);
+    renderAgain = () => setRenders((count) => count + 1);
+    // Pages give new tool tabs on each render.
+    return (
+      <SessionViewContext value={{ id: "planner", isActive: true }}>
+        <SessionPanel model={model} toolTabs={{ diffs: { content: renders } }} />
+      </SessionViewContext>
+    );
+  }
+  const layer = spyOn(terminalLayer, "TerminalLayer");
+  const view = render(
+    <QueryProvider>
+      <SessionTerminalHost viewIds={["planner"]}>
+        <View />
+      </SessionTerminalHost>
+    </QueryProvider>,
+  );
+  try {
+    const before = layer.mock.calls.length;
+    act(() => renderAgain());
+    expect(layer.mock.calls.length - before).toBe(0);
+  } finally {
+    view.unmount();
+    layer.mockRestore();
   }
 });
 

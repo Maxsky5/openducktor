@@ -117,8 +117,9 @@ export function SessionViews({
   useLayoutEffect(() => {
     if (shownId === null) return;
     const last = lastPublished.current.get(shownId);
+    // Only active content marks its session as read, so the mark carries no read key.
     if (last && sameSessionSelection(buildSessionNavigationSearch(last.target), readShownSearch()))
-      publish(last);
+      publish({ ...last, readKey: null });
     return () => hideView(shownId);
   }, [hideView, publish, shownId]);
   return (

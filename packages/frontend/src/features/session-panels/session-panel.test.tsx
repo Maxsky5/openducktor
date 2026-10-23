@@ -96,6 +96,34 @@ test("an inactive panel root closes its terminal confirmation and keeps its cont
   view.unmount();
 });
 
+test("a hidden panel root closes its terminal confirmation before its content turns inactive", () => {
+  const cancel = mock(() => {});
+  const root = (isShown: boolean) => (
+    <SessionViewContext value={{ id: "view", isActive: true }}>
+      <SessionViewShownContext value={isShown}>
+        <SessionPanelsRoot
+          panels={createSessionPanelsFixture({
+            terminalClose: {
+              candidate: terminal,
+              isConfirming: false,
+              onCancel: cancel,
+              onConfirm: () => {},
+            },
+          })}
+        >
+          <input data-testid="kept-content" />
+        </SessionPanelsRoot>
+      </SessionViewShownContext>
+    </SessionViewContext>
+  );
+  const view = renderWithConnection(root(true));
+  expect(view.getByRole("dialog", { name: "Terminate and close bun run dev?" })).toBeDefined();
+  view.rerender(root(false));
+  expect(view.queryAllByRole("dialog")).toHaveLength(0);
+  expect(cancel).toHaveBeenCalled();
+  view.unmount();
+});
+
 describe("SessionPanel", () => {
   test("a view that shows again paints its panel before its content turns active", () => {
     const model = createSessionPanelFixture();

@@ -30,6 +30,7 @@ import {
 import {
   VisibleSessionTargetProvider,
   usePublishVisibleSessionTarget,
+  useVisibleSessionReadKey,
   useVisibleSessionTarget,
 } from "@/features/session-navigation/visible-session-target";
 import { SessionsPage } from "./sessions-page";
@@ -578,10 +579,14 @@ test("the session list marks a kept view in the paint that shows it", async () =
   }
   function VisibleTarget() {
     const target = useVisibleSessionTarget();
+    const readKey = useVisibleSessionReadKey();
     return (
-      <output aria-label="Visible target">
-        {target ? sessionNavigationTargetKey(target) : "none"}
-      </output>
+      <>
+        <output aria-label="Visible target">
+          {target ? sessionNavigationTargetKey(target) : "none"}
+        </output>
+        <output aria-label="Read key">{readKey ?? "none"}</output>
+      </>
     );
   }
   mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
@@ -604,6 +609,9 @@ test("the session list marks a kept view in the paint that shows it", async () =
     // The content turns active after the paint, so this mark comes from its last target.
     expect(view.getByLabelText("first draft").closest("[inert]") === null).toBe(false);
     expect(visible()).toBe("workspace_session:alpha:first");
+    // Only active content marks its session as read.
+    expect(screen.getByLabelText("Read key").textContent).toBe("none");
+    await waitFor(() => expect(screen.getByLabelText("Read key").textContent).not.toBe("none"));
   } finally {
     view.unmount();
     mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
