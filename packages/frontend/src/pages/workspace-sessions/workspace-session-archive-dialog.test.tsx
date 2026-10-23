@@ -57,7 +57,12 @@ test.each([false, true])(
       const submit = view.getByRole("button", { name: "Archive chat" });
       expect(submit.hasAttribute("disabled")).toBe(true);
       await waitFor(() => expect(finish).toBeDefined(), { timeout: 800 });
-      finish({ branchName: "feature/chat", worktreeExists: true, hasUncommittedChanges: dirty });
+      finish({
+        branchName: "feature/chat",
+        worktreeExists: true,
+        hasUncommittedChanges: dirty,
+        sharedWith: [],
+      });
       await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false), { timeout: 800 });
       expect(toggle.getAttribute("aria-checked")).toBe("true");
       expect(view.queryByText(/This worktree has local changes/) !== null).toBe(dirty);
@@ -77,6 +82,51 @@ test.each([false, true])(
   },
 );
 
+test("saved chat history disables worktree removal and still allows archive", async () => {
+  const requests: boolean[] = [];
+  const connection = createTestClientConnection({
+    client: {
+      workspaceSessionArchivePreview: async () => ({
+        branchName: "feature/chat",
+        worktreeExists: true,
+        hasUncommittedChanges: false,
+        sharedWith: [
+          { workspaceId: "test", sessionId: "archived-child", title: "Archived child chat" },
+        ],
+      }),
+    },
+  });
+  const view = render(
+    <QueryProvider connection={connection}>
+      <WorkspaceSessionArchiveDialog
+        open
+        workspaceId="test"
+        record={record()}
+        isArchiving={false}
+        error={null}
+        onArchive={(remove) => requests.push(remove)}
+        onClose={() => {}}
+      />
+    </QueryProvider>,
+  );
+  try {
+    await view.findByText(
+      "This worktree stays because these saved chats need it for files or history: Archived child chat.",
+      {},
+      { timeout: 800 },
+    );
+    const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
+    expect(toggle.hasAttribute("disabled")).toBe(true);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    const submit = view.getByRole("button", { name: "Archive chat" });
+    expect(submit.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(submit);
+    expect(requests).toEqual([false]);
+  } finally {
+    view.unmount();
+  }
+});
+
 test("turning removal off keeps Git resources and Cancel sends no archive request", async () => {
   const requests: boolean[] = [];
   let closed = 0;
@@ -86,6 +136,7 @@ test("turning removal off keeps Git resources and Cancel sends no archive reques
         branchName: "feature/chat",
         worktreeExists: true,
         hasUncommittedChanges: true,
+        sharedWith: [],
       }),
     },
   });
@@ -132,6 +183,7 @@ test("a missing detached worktree can be archived without removal", async () => 
         branchName: null,
         worktreeExists: false,
         hasUncommittedChanges: false,
+        sharedWith: [],
       }),
     },
   });
@@ -168,12 +220,12 @@ test("a missing detached worktree can be archived without removal", async () => 
   }
 });
 
-test("a failed check blocks removal but allows keeping the worktree", async () => {
+test("a failed saved history check blocks removal but allows keeping the worktree", async () => {
   const requests: boolean[] = [];
   const connection = createTestClientConnection({
     client: {
       workspaceSessionArchivePreview: async () => {
-        throw new Error("Cannot delete protected branch main.");
+        throw new Error("Cannot check saved chat history.");
       },
     },
   });
@@ -191,11 +243,15 @@ test("a failed check blocks removal but allows keeping the worktree", async () =
     </QueryProvider>,
   );
   try {
-    await view.findByText("Cannot delete protected branch main.", {}, { timeout: 800 });
-    expect(view.getByRole("switch").getAttribute("aria-checked")).toBe("true");
+    await view.findByText("Cannot check saved chat history.", {}, { timeout: 800 });
+    const toggle = view.getByRole("switch", { name: "Remove worktree and branch" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.hasAttribute("disabled")).toBe(false);
     const submit = view.getByRole("button", { name: "Archive chat" });
     expect(submit.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(view.getByRole("switch"));
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(view.getByRole("alert").textContent).toContain("Cannot check saved chat history.");
     expect(submit.hasAttribute("disabled")).toBe(false);
     fireEvent.click(submit);
     expect(requests).toEqual([false]);
@@ -213,6 +269,7 @@ test("archive locks the full form and keeps its error and removal choice visible
         branchName: "feature/chat",
         worktreeExists: false,
         hasUncommittedChanges: false,
+        sharedWith: [],
       }),
     },
   });

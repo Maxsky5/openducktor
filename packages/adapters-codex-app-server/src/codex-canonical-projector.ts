@@ -61,6 +61,9 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
     if (event.questionRequest) {
       assistantMessage.questionRequest = event.questionRequest;
     }
+    if (event.forkPoint) {
+      assistantMessage.forkPoint = event.forkPoint;
+    }
     return assistantMessage;
   }
 

@@ -1,8 +1,8 @@
+import { newWorktreeBranchState } from "./workspace-session-new-worktree-branch";
 import {
   type WorkspaceSessionWorktreeInput,
   type HostInvokeFailure,
   type GitBranch,
-  workspaceSessionBranchNameSchema,
   workspaceSessionWorktreeNameSchema,
 } from "@openducktor/contracts";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
@@ -145,27 +145,14 @@ export function WorktreeNameField({ value, onChange, disabled, error }: Worktree
   );
 }
 
-function newWorktreeBranchState(
-  value: WorkspaceSessionWorktreeInput,
-  branchPrefix: string | undefined,
-) {
-  const parsedName = workspaceSessionWorktreeNameSchema.safeParse(value.name);
-  const branchError =
-    value.branchName !== null &&
-    value.branchName.length > 0 &&
-    !workspaceSessionBranchNameSchema.safeParse(value.branchName).success;
-  const defaultBranch =
-    branchPrefix !== undefined && parsedName.success ? `${branchPrefix}/${parsedName.data}` : "";
-  return { branchError, defaultBranch };
-}
-
 export function NewWorktreeBranchFields({
   workspace,
   value,
   onChange,
   disabled,
   error,
-}: WorktreeInputProps & { workspace: ActiveWorkspace }) {
+  alwaysExpanded = false,
+}: WorktreeInputProps & { workspace: ActiveWorkspace; alwaysExpanded?: boolean }) {
   const [advanced, setAdvanced] = useState(false);
   const config = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const { branchError, defaultBranch } = newWorktreeBranchState(value, config.data?.branchPrefix);
@@ -173,16 +160,24 @@ export function NewWorktreeBranchFields({
   const branchFailure = error?.field === "worktree.branchName" ? error.message : null;
   if (value.mode !== "from_name") return null;
   return (
-    <Collapsible open={advanced} onOpenChange={setAdvanced} disabled={disabled}>
-      <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" disabled={disabled} className="group -ml-2">
-          <ChevronRight
-            data-icon="inline-start"
-            className="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-          />
-          Advanced
-        </Button>
-      </CollapsibleTrigger>
+    <Collapsible open={alwaysExpanded || advanced} onOpenChange={setAdvanced} disabled={disabled}>
+      {!alwaysExpanded ? (
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            className="group -ml-2"
+          >
+            <ChevronRight
+              data-icon="inline-start"
+              className="transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
+            />
+            Advanced
+          </Button>
+        </CollapsibleTrigger>
+      ) : null}
       <CollapsibleContent className="pt-2">
         <div className="grid gap-1.5" data-invalid={branchError || undefined}>
           <Label htmlFor="workspace-session-branch-name">

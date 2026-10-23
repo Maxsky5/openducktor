@@ -8,6 +8,7 @@ import type {
   AgentGeneratedImageBatchInput,
   AgentSessionAssociation,
   AgentSessionControlForkInput,
+  AgentSessionForkPoint,
   AgentSessionResumeIntent,
   AgentMessageQueueManageInput,
   AgentMessageQueueManageResult,
@@ -158,6 +159,8 @@ export type ContinueInterruptedAgentTurnInput = PolicyBoundSessionControlRef;
 
 export type ForkAgentSessionInput = StartAgentSessionInput & {
   parentExternalSessionId: ExternalSessionId;
+  sourceWorkingDirectory?: string;
+  forkPoint?: AgentSessionForkPoint;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 

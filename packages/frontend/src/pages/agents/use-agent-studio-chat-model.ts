@@ -1,3 +1,5 @@
+import { sessionForkDisabledReason } from "@/components/features/agents/agent-chat/session-fork-availability";
+import { useTaskSessionFork } from "./use-task-session-fork";
 import type { AgentChatSend } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
@@ -27,7 +29,10 @@ import {
   agentStudioChatDraftScopeKey,
   createAgentStudioChatDraftPersistence,
 } from "./agent-studio-chat-draft";
-import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
+import {
+  deriveAgentStudioChatSurfaceState,
+  resolveAgentStudioChatAuxiliaryError,
+} from "./agent-studio-chat-surface-state";
 import {
   toAgentStudioTranscriptSession,
   toAgentStudioTranscriptTarget,
@@ -131,7 +136,8 @@ export function useAgentStudioChatModel({
   runtimeDefinitions,
   composer,
 }: UseAgentStudioChatModelArgs): AgentChatModel {
-  const repoPath = useActiveWorkspace()?.repoPath ?? null;
+  const activeWorkspace = useActiveWorkspace();
+  const repoPath = activeWorkspace?.repoPath ?? null;
   const { loadAgentSessionHistory } = sessionActions;
   const selectedSessionState = selectedSession.selectedSession;
   const { sessionReadModelLoadState, reloadSessionReadModel } = useAgentSessionReadModelState();
@@ -439,18 +445,31 @@ export function useAgentStudioChatModel({
     sessionActions.stopAgentSession,
   ]);
 
+  const fork = useTaskSessionFork({
+    repoPath,
+    workspaceId: activeWorkspace?.workspaceId ?? null,
+    identity: selectedSessionIdentity,
+    scope: { kind: "workflow", taskId: selectedSession.taskId, role: selectedSession.role },
+    disabledReason: sessionForkDisabledReason({
+      runtimeReadiness,
+      interactionEnabled: chatReadiness.interactionEnabled,
+      readOnly: surfaceState.composerReadOnly,
+      readOnlyReason: surfaceState.composerReadOnlyReason,
+      error: selectedSessionState.preparation.error,
+    }),
+  });
+
   const surfaceModel = useAgentChatSurfaceModel({
     modelCatalog: selectedSessionRuntimeData.modelCatalog,
     transcript,
     chatSettings,
-    sessionAuxiliaryError:
-      transcriptRecovery.error ??
-      selectedSessionAuxiliaryError ??
-      selectedSessionRuntimeData.contextError ??
-      selectedSessionRuntimeData.runtimePolicyError ??
-      selectedSessionRuntimeData.todosError ??
-      selectedSessionRuntimeData.catalogError ??
-      (sessionActions.canResumeSession ? null : sessionActions.persistentResumeError),
+    sessionAuxiliaryError: resolveAgentStudioChatAuxiliaryError({
+      forkError: fork.error,
+      transcriptRecoveryError: transcriptRecovery.error,
+      session: selectedSessionState,
+      canResumeSession: sessionActions.canResumeSession,
+      persistentResumeError: sessionActions.persistentResumeError,
+    }),
     interactionEnabled: chatReadiness.interactionEnabled,
     runtimePresentation,
     emptyState: surfaceState.emptyState,
@@ -465,6 +484,10 @@ export function useAgentStudioChatModel({
     subagentPendingApprovalCountBySessionKey,
     subagentPendingQuestionCountBySessionKey,
   });
+  const forkThread = useMemo(
+    () => ({ ...surfaceModel.thread, forkActions: fork.actions }),
+    [surfaceModel.thread, fork.actions],
+  );
   const composerModel = surfaceModel.composer;
 
   if (!composerModel) {
@@ -475,8 +498,9 @@ export function useAgentStudioChatModel({
     () =>
       ({
         ...surfaceModel,
+        thread: forkThread,
         composer: composerModel,
       }) satisfies AgentChatModel,
-    [composerModel, surfaceModel],
+    [composerModel, surfaceModel, forkThread],
   );
 }

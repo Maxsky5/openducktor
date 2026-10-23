@@ -140,6 +140,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const assets = createNodeTaskAssetServices({
     configDir,
     assertWorkspaceAdmitted: workspaceAdmissionService.assertTaskStoreAccess,
+    assertOwnershipReadAdmitted: workspaceAdmissionService.assertTaskStoreOwnershipReadAccess,
     configuredTaskStore,
     isWorkspaceBlocked: workspaceAdmissionService.isWorkspaceBlocked,
     onBackgroundFailure,
@@ -283,6 +284,7 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
   });
   const taskSessions = createNodeTaskSessionServices({
+    runtimeAdmission,
     taskServiceInput: {
       terminalService,
       browserTabs: browserService,

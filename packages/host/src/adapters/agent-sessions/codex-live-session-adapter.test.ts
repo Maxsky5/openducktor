@@ -1102,6 +1102,8 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
         sessionScope,
         systemPrompt: "Build",
         parentExternalSessionId: "parent-1",
+        sourceWorkingDirectory: "/repo/source-worktree",
+        forkPoint: { messageId: "completed-reply" },
       }),
     );
     await Effect.runPromise(
@@ -1130,6 +1132,10 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       ]);
     }
     expect(harness.controlInputs.sends[0]?.resolvedQuestionRequestIds).toEqual(["question-1"]);
+    expect(harness.controlInputs.forks[0]).toMatchObject({
+      sourceWorkingDirectory: "/repo/source-worktree",
+      forkPoint: { messageId: "completed-reply" },
+    });
   });
 
   test("forwards send options to the Codex controller", async () => {

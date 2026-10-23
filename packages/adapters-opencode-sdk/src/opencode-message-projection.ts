@@ -244,13 +244,34 @@ const nativeTurnDurations = (messages: Iterable<SessionMessageInfo>): Map<string
 export type OpenCodeMessageProjectionContext = {
   readonly completions: ReadonlyMap<string, SubagentCompletion>;
   readonly durations: ReadonlyMap<string, number>;
+  readonly completedReplies: ReadonlySet<string>;
+};
+
+export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>): Set<string> => {
+  const completed = new Set<string>();
+  let finalReply: string | undefined;
+  for (const message of messages) {
+    if (message.type === "assistant")
+      finalReply =
+        message.finish === "stop" && !message.error && message.time.completed !== undefined
+          ? message.id
+          : undefined;
+    if (message.type !== "idle") continue;
+    if (message.outcome === "succeeded" && finalReply) completed.add(finalReply);
+    finalReply = undefined;
+  }
+  return completed;
 };
 
 export const messageProjectionContext = (
   messages: Iterable<SessionMessageInfo>,
 ): OpenCodeMessageProjectionContext => {
   const retained = [...messages];
-  return { completions: subagentCompletions(retained), durations: nativeTurnDurations(retained) };
+  return {
+    completions: subagentCompletions(retained),
+    durations: nativeTurnDurations(retained),
+    completedReplies: completedOpenCodeReplies(retained),
+  };
 };
 
 const isVisibleNativeMessage = (message: SessionMessageInfo): boolean =>
@@ -260,7 +281,7 @@ const isVisibleNativeMessage = (message: SessionMessageInfo): boolean =>
 
 export const projectMessages = (
   messages: SessionMessageInfo[],
-  { completions, durations } = messageProjectionContext(messages),
+  { completions, durations, completedReplies } = messageProjectionContext(messages),
   settledToolInputs?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage[] => {
   let latestUserId: string | undefined;
@@ -278,6 +299,7 @@ export const projectMessages = (
       completions,
       durations.get(message.id),
       settledToolInputs,
+      completedReplies,
     );
     return projected.role === "user" && projected.messageId === latestUserId && runningModel
       ? { ...projected, model: runningModel }
@@ -422,6 +444,7 @@ export const projectMessage = (
   completions?: ReadonlyMap<string, SubagentCompletion>,
   durationMs?: number,
   settledToolInputs?: ReadonlySet<string>,
+  completedReplies?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage => {
   const base = { messageId: message.id, timestamp: iso(message.time.created) };
   if (message.type === "user")
@@ -468,6 +491,7 @@ export const projectMessage = (
         history.durationMs = durationMs;
     }
     if (message.tokens) history.totalTokens = tokenTotal(message.tokens);
+    if (completedReplies?.has(message.id)) history.forkPoint = { messageId: message.id };
     return agentSessionHistoryMessageSchema.parse(history);
   }
   let text: string;
@@ -571,6 +595,7 @@ export const messageEvents = (
     context?.completions,
     context?.durations.get(message.id),
     settledToolInputs,
+    context?.completedReplies,
   );
   const base = { externalSessionId, timestamp: projected.timestamp };
   if (message.type === "idle" && message.outcome === "interrupted")
@@ -635,6 +660,7 @@ export const messageEvents = (
     };
     if (projected.durationMs !== undefined) completed.durationMs = projected.durationMs;
     if (projected.totalTokens !== undefined) completed.totalTokens = projected.totalTokens;
+    if (projected.forkPoint !== undefined) completed.forkPoint = projected.forkPoint;
     events.push(completed);
   }
   if (message.type === "assistant" && projected.error)

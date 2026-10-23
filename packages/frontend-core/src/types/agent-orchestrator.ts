@@ -2,6 +2,7 @@ import type {
   AgentComputerUse,
   AgentImageGenerationPart,
   AgentSessionAssociation,
+  AgentSessionForkPoint,
   AgentSessionLiveLoadContextInput,
   AgentSessionWorkflowScope,
   AgentSessionUsageLimit,
@@ -67,6 +68,7 @@ export type AgentChatMessageMeta =
       variant?: string;
       profileId?: string;
       isFinal?: boolean;
+      forkPoint?: AgentSessionForkPoint;
       durationMs?: number;
       totalTokens?: number;
       contextWindow?: number;

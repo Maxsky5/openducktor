@@ -54,6 +54,64 @@ export function WorkspaceSessionArchiveDialog({ record, ...props }: Props): Reac
   );
 }
 
+function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactElement {
+  const [wantsWorktreeRemoval, setWantsWorktreeRemoval] = useState(true);
+  const switchId = useId();
+  const preview = useQuery({
+    ...workspaceSessionArchivePreviewQueryOptions(workspaceId, record.id),
+    enabled: props.open,
+  });
+  const sharedWith = preview.data?.sharedWith ?? [];
+  const isShared = sharedWith.length > 0;
+  const removeWorktree = wantsWorktreeRemoval && !isShared;
+  const canArchive =
+    !props.isArchiving &&
+    (!removeWorktree ||
+      (preview.isSuccess && !preview.isFetching && preview.data.branchName !== null));
+  return (
+    <ArchiveDialog
+      {...props}
+      record={record}
+      canArchive={canArchive}
+      removeWorktree={removeWorktree}
+      onConfirm={() =>
+        props.onArchive(
+          removeWorktree,
+          removeWorktree && preview.data?.branchName
+            ? {
+                workingDirectory: record.executionTarget.workingDirectory,
+                branchName: preview.data.branchName,
+              }
+            : undefined,
+        )
+      }
+    >
+      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
+        <div className="flex items-center gap-3">
+          <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <Label htmlFor={switchId} className="flex-1 cursor-pointer leading-5">
+            Remove worktree and branch
+          </Label>
+          <Switch
+            id={switchId}
+            checked={removeWorktree}
+            onCheckedChange={setWantsWorktreeRemoval}
+            disabled={props.isArchiving || isShared}
+          />
+        </div>
+        {isShared && (
+          <p className="text-sm text-muted-foreground">
+            This worktree stays because these saved chats need it for files or history:{" "}
+            {sharedWith.map((owner) => owner.title).join(", ")}.
+          </p>
+        )}
+        <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
+        <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
+      </div>
+    </ArchiveDialog>
+  );
+}
+
 function ArchiveDialog({
   open,
   record,
@@ -151,55 +209,6 @@ function ArchiveDialog({
   );
 }
 
-function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactElement {
-  const [removeWorktree, setRemoveWorktree] = useState(true);
-  const switchId = useId();
-  const preview = useQuery({
-    ...workspaceSessionArchivePreviewQueryOptions(workspaceId, record.id),
-    enabled: props.open,
-  });
-  const canArchive =
-    !props.isArchiving &&
-    (!removeWorktree ||
-      (preview.isSuccess && !preview.isFetching && preview.data.branchName !== null));
-  return (
-    <ArchiveDialog
-      {...props}
-      record={record}
-      canArchive={canArchive}
-      removeWorktree={removeWorktree}
-      onConfirm={() =>
-        props.onArchive(
-          removeWorktree,
-          removeWorktree && preview.data?.branchName
-            ? {
-                workingDirectory: record.executionTarget.workingDirectory,
-                branchName: preview.data.branchName,
-              }
-            : undefined,
-        )
-      }
-    >
-      <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
-        <div className="flex items-center gap-3">
-          <FolderGit2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <Label htmlFor={switchId} className="flex-1 cursor-pointer leading-5">
-            Remove worktree and branch
-          </Label>
-          <Switch
-            id={switchId}
-            checked={removeWorktree}
-            onCheckedChange={setRemoveWorktree}
-            disabled={props.isArchiving}
-          />
-        </div>
-        <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />
-        <WorktreeArchivePreview preview={preview} removeWorktree={removeWorktree} />
-      </div>
-    </ArchiveDialog>
-  );
-}
-
 function ArchiveWorktreeNotice({
   removeWorktree,
   preview,
@@ -207,14 +216,16 @@ function ArchiveWorktreeNotice({
   removeWorktree: boolean;
   preview: UseQueryResult<WorkspaceSessionArchivePreview>;
 }): ReactElement {
-  if (!removeWorktree)
-    return (
-      <p className="text-sm text-muted-foreground">
-        {preview.data?.worktreeExists === false
+  if (!removeWorktree) {
+    let notice = "The worktree and its branch will stay on disk.";
+    if (preview.data?.worktreeExists === false) {
+      notice =
+        preview.data.branchName === null
           ? "The worktree is missing. Restore the worktree at this path before restoring the chat."
-          : "The worktree and its branch will stay on disk."}
-      </p>
-    );
+          : "The worktree is missing. Restoring this chat creates a fresh worktree from the default branch.";
+    }
+    return <p className="text-sm text-muted-foreground">{notice}</p>;
+  }
   if (preview.isSuccess && preview.data.branchName === null)
     return (
       <p className="text-sm text-muted-foreground">

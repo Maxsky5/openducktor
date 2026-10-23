@@ -6,6 +6,7 @@ import type {
   AgentSessionControlUpdateModelInput,
   AgentSessionLiveRef,
   AgentSessionModelSettings,
+  AgentSessionModelSelection,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type { HostError } from "../../effect/host-errors";
@@ -40,6 +41,14 @@ export type AgentSessionOperationPolicy = {
   prepareResume(
     input: AgentSessionControlResumeInput,
   ): Effect.Effect<PreparedSessionResume, HostError>;
+  /** Reads accepted settings and prompt context without preparing a send. */
+  prepareForkSource(ref: AgentSessionLiveRef): Effect.Effect<
+    {
+      model: AgentSessionModelSelection | null;
+      systemPrompt?: string;
+    },
+    HostError
+  >;
   /** Checks the destination and supplies the owned prompt context. */
   prepareSend(input: AgentSessionSendContent): Effect.Effect<AgentSessionSendContent, HostError>;
   recordAcceptedMessage(

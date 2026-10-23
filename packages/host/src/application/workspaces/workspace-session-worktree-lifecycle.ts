@@ -45,6 +45,7 @@ export const readWorkspaceSessionArchivePreview = (
   dependencies: WorkspaceSessionTargetDependencies,
   config: RepoConfig,
   target: WorktreeTarget,
+  sharedWith: WorkspaceSessionArchivePreview["sharedWith"] = [],
 ): Effect.Effect<WorkspaceSessionArchivePreview, HostError> =>
   Effect.gen(function* () {
     const { git, settingsConfig } = dependencies;
@@ -57,7 +58,12 @@ export const readWorkspaceSessionArchivePreview = (
     const worktreeExists = yield* settingsConfig.pathExists(target.workingDirectory);
     if (!worktreeExists) {
       yield* validateRemovableBranch(dependencies, config, target.branchName);
-      return { branchName: target.branchName, worktreeExists: false, hasUncommittedChanges: false };
+      return {
+        branchName: target.branchName,
+        worktreeExists: false,
+        hasUncommittedChanges: false,
+        sharedWith,
+      };
     }
     yield* validateWorkspaceSessionTarget(dependencies, config.repoPath, target);
     const current = yield* git.getCurrentBranch(target.workingDirectory);
@@ -73,6 +79,7 @@ export const readWorkspaceSessionArchivePreview = (
       branchName: current.name,
       worktreeExists: true,
       hasUncommittedChanges: changes.length > 0,
+      sharedWith,
     };
   });
 

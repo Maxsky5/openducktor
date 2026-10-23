@@ -205,28 +205,6 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).not.toContain("background-color:#f97316");
   });
 
-  test("renders a hover-only copy button for completed assistant rows", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "assistant-copyable",
-          role: "assistant",
-          content: "# Summary\n\nImplemented the requested changes.",
-          timestamp: "2026-02-22T10:24:45.000Z",
-          meta: {
-            kind: "assistant",
-            agentRole: "planner",
-            isFinal: true,
-          },
-        },
-      }),
-    );
-
-    expect(html).toContain("copy-assistant-message-content");
-    expect(html).toContain("group/message");
-    expect(html).toContain("group-hover/message:opacity-100");
-  });
-
   test("renders a hover-only copy button for completed intermediate assistant rows", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({

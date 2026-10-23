@@ -21,7 +21,8 @@ type Props = WorktreeInputProps & {
 
 const worktreeTabClassName = segmentedControlTriggerClassName({
   size: "md",
-  className: "border-none data-[state=active]:border-transparent",
+  className:
+    "border-none data-[state=active]:border-transparent data-[state=inactive]:text-foreground/70 dark:data-[state=inactive]:text-foreground/80",
 });
 
 export function WorkspaceSessionWorktreeFields({

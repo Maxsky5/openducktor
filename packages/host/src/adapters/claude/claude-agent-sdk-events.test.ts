@@ -395,13 +395,13 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     });
 
     expect(session.activeBackgroundSubagentTaskIds).toEqual(new Set());
-    expect(
-      events.filter(
-        (event) =>
-          event.type === "assistant_message" &&
-          event.message === "All background reviews are complete.",
-      ),
-    ).toHaveLength(1);
+    const replies = events.filter(
+      (event): event is Extract<AgentEvent, { type: "assistant_message" }> =>
+        event.type === "assistant_message" &&
+        event.message === "All background reviews are complete.",
+    );
+    expect(new Set(replies.map((event) => event.messageId)).size).toBe(1);
+    expect(replies.at(-1)).toHaveProperty("forkPoint");
   });
 
   test("lets SDK state settle the root while a nested background task is running", () => {

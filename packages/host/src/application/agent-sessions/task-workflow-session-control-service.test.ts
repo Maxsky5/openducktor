@@ -6,6 +6,8 @@ import type {
   AgentSessionControlUpdateModelInput,
   AgentSessionRecord,
   AgentWorkflowSessionStartInput,
+  AgentSessionControlForkInput,
+  AgentRole,
   TaskCard,
 } from "@openducktor/contracts";
 import { Deferred, Effect, Exit, Fiber } from "effect";
@@ -24,6 +26,8 @@ import {
 } from "../tasks/test-support/task-workflow-harness";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createTaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
+import { createTaskWorkflowSessionFork } from "./task-workflow-session-fork";
+import { createTaskSessionOperations } from "./task-session-operations";
 import { createAgentSessionCommandService as createControlService } from "./agent-session-command-service";
 
 type ControlServiceInput = Parameters<typeof createControlService>[0];
@@ -118,6 +122,7 @@ const createAgentSessionCommandService = ({
       runSend: (_ref, effect) => effect,
       validateRef: () => Effect.void,
       prepareResume: (request) => Effect.succeed({ input: request, save: () => Effect.void }),
+      prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
       prepareSend: (request) => Effect.succeed(request),
       recordAcceptedMessage,
       prepareModelUpdate: (request) =>
@@ -284,7 +289,199 @@ const createModelUpdateService = ({
     },
   });
 
+const createReplyForkHarness = (
+  role: AgentRole,
+  failure?: "save" | "save_clean" | "save_defect" | "stop_defect" | "publish" | "publish_defect",
+) => {
+  const calls: string[] = [];
+  const requests: AgentSessionControlForkInput[] = [];
+  const records: AgentSessionRecord[] = [];
+  const selectedModel = { ...storedModel!, variant: "current-variant", speed: "fast" };
+  const source = { ...summary, role, selectedModel };
+  const deps = {
+    ...createControlDeps(),
+    taskReader: { getTask: () => Effect.succeed(task("closed")) },
+  };
+  const fail = (message: string) =>
+    Effect.fail(new HostOperationError({ operation: "test.fork", message }));
+  const runtime: TestControlServiceInput["runtime"] = {
+    startSession: unexpectedSend,
+    resumeSession: unexpectedSend,
+    continueInterruptedTurn: unexpectedSend,
+    forkSession: (request) =>
+      Effect.sync(() => {
+        calls.push("native-fork");
+        requests.push(request);
+        return { ...summary, externalSessionId: "fork-1" };
+      }),
+    sendUserMessage: unexpectedSend,
+    updateSessionModel: unexpectedSend,
+    stopSession: (ref) =>
+      Effect.sync(() => {
+        calls.push(`stop:${ref.externalSessionId}`);
+      }).pipe(
+        Effect.andThen(
+          failure === "save"
+            ? fail("stop failed")
+            : failure === "stop_defect"
+              ? Effect.die(new Error("stop defect"))
+              : Effect.void,
+        ),
+      ),
+    releaseSession: (ref) =>
+      Effect.sync(() => {
+        calls.push(`release:${ref.externalSessionId}`);
+      }),
+    read: (ref) =>
+      Effect.succeed({
+        type: "live",
+        session: {
+          ref,
+          title: "Running source",
+          startedAt: summary.startedAt,
+          activity: "running",
+          pendingApprovals: [],
+          pendingQuestions: [],
+          contextUsage: null,
+        },
+      }),
+  };
+  const tasks = {
+    agentSessionsList: () => Effect.succeed([source]),
+    agentSessionUpsert: unexpectedSend,
+    agentSessionUpdateModel: unexpectedSend,
+    transitionTask: unexpectedSend,
+  };
+  const commands = createAgentSessionCommandService({ ...deps, runtime, tasks });
+  const sessions = createTaskSessionOperations({
+    ...deps,
+    tasks,
+    runtime: { ...runtime, ...commands.prepareSessionCreation },
+    taskSessionStart: { prepare: unexpectedSend, complete: unexpectedSend },
+    writes: {
+      saveSession: (input) =>
+        Effect.suspend(() => {
+          calls.push("save");
+          if (failure === "save_defect") return Effect.die(new Error("store defect"));
+          if (failure === "save" || failure === "save_clean" || failure === "stop_defect")
+            return fail("store failed");
+          records.push(input.session);
+          return Effect.succeed({
+            publish:
+              failure === "publish"
+                ? fail("event bus unavailable")
+                : failure === "publish_defect"
+                  ? Effect.die(new Error("event callback failed"))
+                  : Effect.void,
+          });
+        }),
+      transitionTask: unexpectedSend,
+    },
+  });
+  return {
+    calls,
+    requests,
+    records,
+    source,
+    fork: createTaskWorkflowSessionFork({
+      runtimeAdmission: { admit: (_kind, work) => work },
+      commands,
+      sessions,
+      stop: runtime.stopSession,
+    }),
+  };
+};
+
 describe("createAgentSessionCommandService", () => {
+  test.each(["spec", "planner", "build", "qa"] as const)(
+    "forks a completed reply for %s with current settings and no task transition",
+    async (role) => {
+      const h = createReplyForkHarness(role);
+      const result = await Effect.runPromise(
+        h.fork({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "workflow", taskId: "task-1", role },
+          forkPoint: { messageId: "completed-reply" },
+        }),
+      );
+      expect(h.calls).toEqual(["native-fork", "save"]);
+      expect(h.requests[0]).toMatchObject({
+        parentExternalSessionId: "session-1",
+        sourceWorkingDirectory: "/repo/worktree",
+        workingDirectory: "/repo/worktree",
+        model: h.source.selectedModel,
+        systemPrompt: "Current host context",
+        forkPoint: { messageId: "completed-reply" },
+        sessionScope: { kind: "workflow", taskId: "task-1", role },
+      });
+      expect(result.record).toEqual(h.records[0]!);
+      expect(result.record).toMatchObject({
+        externalSessionId: "fork-1",
+        role,
+        selectedModel: h.source.selectedModel,
+      });
+      expect(result.runtimeSession.status).toBe("idle");
+    },
+  );
+
+  test.each(["publish", "publish_defect"] as const)(
+    "returns the saved task fork when publication fails: %s",
+    async (failure) => {
+      const h = createReplyForkHarness("build", failure);
+      const result = await Effect.runPromise(
+        h.fork({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+          forkPoint: { messageId: "completed-reply" },
+        }),
+      );
+      expect(result).toMatchObject({
+        record: { externalSessionId: "fork-1" },
+        syncWarning: expect.stringContaining("fork was saved"),
+      });
+      expect(h.calls).toEqual(["native-fork", "save"]);
+      expect(h.records).toHaveLength(1);
+    },
+  );
+
+  test.each(["save", "save_clean", "save_defect", "stop_defect"] as const)(
+    "reports retained native history after a reply fork save failure: %s",
+    async (failure) => {
+      const h = createReplyForkHarness("build", failure);
+      const result = await Effect.runPromise(
+        Effect.result(
+          h.fork({
+            repoPath: "/repo",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "session-1",
+            sessionScope: { kind: "workflow", taskId: "task-1", role: "build" },
+            forkPoint: { messageId: "completed-reply" },
+          }),
+        ),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain(
+          failure === "save_defect" ? "store defect" : "store failed",
+        );
+        expect(result.failure.message).toContain(
+          "Native history for runtime session 'fork-1' can remain.",
+        );
+        if (failure === "save") expect(result.failure.message).toContain("stop failed");
+        if (failure === "stop_defect") expect(result.failure.message).toContain("stop defect");
+      }
+      expect(h.calls).toEqual(["native-fork", "save", "stop:fork-1", "release:fork-1"]);
+      expect(h.records).toEqual([]);
+    },
+  );
+
   test("rejects workflow startup while direct merge runs", async () => {
     const deps = createControlDeps();
     const service = createAgentSessionCommandService({

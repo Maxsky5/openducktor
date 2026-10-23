@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import type { AgentChatForkActions } from "./agent-chat-fork-context";
 import type { AgentChatSendResult } from "@/components/features/agents/agent-chat/agent-chat-send-result";
 import type {
   ChatSettings,
@@ -131,6 +133,8 @@ export type AgentChatInterruptedTurnResumeModel = {
 };
 
 export type AgentChatThreadModel = {
+  forkActions?: AgentChatForkActions | null;
+  forkDialog?: ReactNode;
   modelCatalog: AgentModelCatalog | null;
   transcript: AgentChatTranscriptPresentation;
   runtimePresentation: AgentChatRuntimePresentation;

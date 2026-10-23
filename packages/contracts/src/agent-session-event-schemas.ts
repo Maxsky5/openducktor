@@ -15,6 +15,7 @@ import {
   type AgentSessionLiveRef,
   agentModelSelectionSchema,
   agentSessionLiveRefSchema,
+  agentSessionForkPointSchema,
 } from "./agent-session-schemas";
 import { fileContentSchema, fileDiffSchema } from "./git-schemas";
 
@@ -365,6 +366,7 @@ const inferredAgentRuntimeEventSchema = z.discriminatedUnion("type", [
   transcriptEventSchema({
     type: z.literal("assistant_message"),
     messageId: z.string(),
+    forkPoint: agentSessionForkPointSchema.optional(),
     message: z.string(),
     durationMs: finiteNonNegativeNumberSchema.optional(),
     totalTokens: finiteNonNegativeNumberSchema.optional(),

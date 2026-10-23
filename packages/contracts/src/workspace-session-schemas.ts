@@ -35,6 +35,13 @@ export const workspaceSessionArchivePreviewSchema = z.strictObject({
   branchName: identitySchema.nullable(),
   worktreeExists: z.boolean(),
   hasUncommittedChanges: z.boolean(),
+  sharedWith: z.array(
+    z.strictObject({
+      workspaceId: identitySchema,
+      sessionId: identitySchema,
+      title: identitySchema,
+    }),
+  ),
 });
 export type WorkspaceSessionArchivePreview = z.infer<typeof workspaceSessionArchivePreviewSchema>;
 

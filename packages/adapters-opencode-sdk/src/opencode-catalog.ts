@@ -1,4 +1,4 @@
-import type { OpenCodeClient } from "@opencode/client";
+import type { ModelInfo, OpenCodeClient } from "@opencode/client";
 import {
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -16,16 +16,81 @@ export const readModelCatalog = async (
   client: OpenCodeClient,
   directory: string,
 ): Promise<AgentModelCatalog> => {
+  const models = await client.model.list({ location: { directory } });
+  return readModelCatalogFromModels(client, directory, models.data);
+};
+
+export const readCatalog = async (
+  client: OpenCodeClient,
+  directory: string,
+): Promise<AgentRuntimeCatalogRead> => {
+  // model.list waits for plugin activation; the other catalog list APIs can return empty before it.
+  const nativeModels = client.model.list({ location: { directory } });
+  const readySurface = <Value>(read: (models: ModelInfo[]) => Promise<Value>) =>
+    surface(async () => read((await nativeModels).data));
+  const [models, slashCommands, subagents, skills] = await Promise.all([
+    readySurface((models) => readModelCatalogFromModels(client, directory, models)),
+    readySurface(async () => ({
+      commands: [
+        ...(await client.command.list({ location: { directory } })).data
+          .filter((command) => command.name !== "compact")
+          .map((command) => {
+            const entry: AgentSlashCommandCatalog["commands"][number] = {
+              id: `command:${command.name}`,
+              trigger: command.name,
+              title: command.name,
+              source: "command" as const,
+              hints: [],
+            };
+            if (command.description) entry.description = command.description;
+            return entry;
+          }),
+        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      ],
+    })),
+    readySurface(async () => ({
+      subagents: (await client.agent.list({ location: { directory } })).data
+        .filter((agent) => !agent.hidden && agent.mode !== "primary")
+        .map((agent) => {
+          const entry: AgentSubagentCatalog["subagents"][number] = {
+            id: agent.id,
+            name: agent.id,
+          };
+          if (agent.description) entry.description = agent.description;
+          return entry;
+        }),
+    })),
+    readySurface(async () =>
+      skillCatalogSchema.parse({
+        skills: (await client.skill.list({ location: { directory } })).data.map((skill) => {
+          const entry: AgentSkillCatalog["skills"][number] = {
+            id: skill.id,
+            name: skill.name,
+            path: skill.path,
+          };
+          if (skill.description) entry.description = skill.description;
+          return entry;
+        }),
+      }),
+    ),
+  ]);
+  return { runtime: OPENCODE_RUNTIME_DESCRIPTOR, models, slashCommands, subagents, skills };
+};
+
+const readModelCatalogFromModels = async (
+  client: OpenCodeClient,
+  directory: string,
+  models: ModelInfo[],
+): Promise<AgentModelCatalog> => {
   const input = { location: { directory } };
-  const [models, providers, agents, defaultModel] = await Promise.all([
-    client.model.list(input),
+  const [providers, agents, defaultModel] = await Promise.all([
     client.provider.list(input),
     client.agent.list(input),
     client.model.default(input),
   ]);
   return {
     runtime: OPENCODE_RUNTIME_DESCRIPTOR,
-    models: models.data
+    models: models
       .filter((model) => model.enabled)
       .map((model) => {
         const descriptor: AgentModelCatalog["models"][number] = {
@@ -36,7 +101,8 @@ export const readModelCatalog = async (
             model.providerID,
           modelId: model.id,
           modelName: model.name,
-          variants: model.variants.map((variant) => variant.id),
+          // OpenCode accepts "default" even when the model has no named variants.
+          variants: [...new Set(["default", ...model.variants.map((variant) => variant.id)])],
           attachmentSupport: {
             image: model.capabilities.input.includes("image"),
             audio: model.capabilities.input.includes("audio"),
@@ -70,57 +136,4 @@ const surface = async <Value>(read: () => Promise<Value>) => {
   } catch (cause) {
     return { status: "failed" as const, cause };
   }
-};
-
-export const readCatalog = async (
-  client: OpenCodeClient,
-  directory: string,
-): Promise<AgentRuntimeCatalogRead> => {
-  const [models, slashCommands, subagents, skills] = await Promise.all([
-    surface(() => readModelCatalog(client, directory)),
-    surface(async () => ({
-      commands: [
-        ...(await client.command.list({ location: { directory } })).data
-          .filter((command) => command.name !== "compact")
-          .map((command) => {
-            const entry: AgentSlashCommandCatalog["commands"][number] = {
-              id: `command:${command.name}`,
-              trigger: command.name,
-              title: command.name,
-              source: "command" as const,
-              hints: [],
-            };
-            if (command.description) entry.description = command.description;
-            return entry;
-          }),
-        MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-      ],
-    })),
-    surface(async () => ({
-      subagents: (await client.agent.list({ location: { directory } })).data
-        .filter((agent) => !agent.hidden && agent.mode !== "primary")
-        .map((agent) => {
-          const entry: AgentSubagentCatalog["subagents"][number] = {
-            id: agent.id,
-            name: agent.id,
-          };
-          if (agent.description) entry.description = agent.description;
-          return entry;
-        }),
-    })),
-    surface(async () =>
-      skillCatalogSchema.parse({
-        skills: (await client.skill.list({ location: { directory } })).data.map((skill) => {
-          const entry: AgentSkillCatalog["skills"][number] = {
-            id: skill.id,
-            name: skill.name,
-            path: skill.path,
-          };
-          if (skill.description) entry.description = skill.description;
-          return entry;
-        }),
-      }),
-    ),
-  ]);
-  return { runtime: OPENCODE_RUNTIME_DESCRIPTOR, models, slashCommands, subagents, skills };
 };

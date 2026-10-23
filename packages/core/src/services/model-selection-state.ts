@@ -102,11 +102,13 @@ export const isSameSelection = (
   if (!a || !b) {
     return false;
   }
+  // OpenCode treats an omitted variant and "default" as the same native model settings.
+  const defaultVariant = a.runtimeKind === "opencode" ? "default" : "";
   return (
     a.providerId === b.providerId &&
     a.modelId === b.modelId &&
     a.runtimeKind === b.runtimeKind &&
-    (a.variant ?? "") === (b.variant ?? "") &&
+    (a.variant ?? defaultVariant) === (b.variant ?? defaultVariant) &&
     (a.profileId ?? "") === (b.profileId ?? "") &&
     a.speed === b.speed
   );

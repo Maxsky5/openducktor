@@ -393,6 +393,42 @@ test.each(["repository", "workflow"] as const)(
   },
 );
 
+test("a materialized repository fork replaces the source directory prompt without a custom role", async () => {
+  const session = createRepositorySession();
+  const destination = join(process.cwd(), "fork-destination");
+  const options = await buildClaudeAgentSdkOptions({
+    input: {
+      ...session.input,
+      parentExternalSessionId: "source-session",
+      forkPoint: { messageId: "completed-reply" },
+      workingDirectory: destination,
+      systemPrompt: "",
+    },
+    session,
+    claudePolicy: {},
+    sessionOptions: { resume: "bounded-child-session" },
+    serviceInput: createServiceInput(),
+    now: () => "2026-10-22T10:00:00.000Z",
+    randomId: () => "id",
+    emit: () => {},
+    resolvedDependencies: {
+      claudeExecutablePath: process.execPath,
+      mcpBridgeConnection: {
+        workspaceId: "workspace-1",
+        hostUrl: "http://127.0.0.1:1",
+        hostToken: "token",
+      },
+      mcpCommand: [process.execPath],
+    },
+  });
+  expect(options.systemPrompt).toEqual({
+    type: "preset",
+    preset: "claude_code",
+    append: expect.stringContaining(`cwd set to ${destination}`),
+  });
+  session.abortController.abort();
+});
+
 describe("buildClaudeAgentSdkBaseOptions", () => {
   test("rejects managed settings that allow enabled sandbox execution without isolation", async () => {
     const sandbox = { enabled: true, failIfUnavailable: false };

@@ -1,6 +1,11 @@
 import type { AgentSessionControlSummary, TaskCard } from "@openducktor/contracts";
-import { Effect } from "effect";
-import { HostOperationError, toHostOperationError, type HostError } from "../../effect/host-errors";
+import { Cause, Effect, Exit } from "effect";
+import {
+  causeMessage,
+  HostOperationError,
+  toHostOperationError,
+  type HostError,
+} from "../../effect/host-errors";
 import { resumeAndSaveSession } from "./session-resume";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
@@ -129,13 +134,14 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
               }),
             ),
           );
-          yield* validateTaskSessionWorkflowAvailable(task, scope.role, repoPath);
+          if (!input.forkPoint)
+            yield* validateTaskSessionWorkflowAvailable(task, scope.role, repoPath);
           const parent = yield* readStoredWorkflowSession(
             tasks,
             {
               repoPath,
               runtimeKind: input.runtimeKind,
-              workingDirectory: input.workingDirectory,
+              workingDirectory: input.sourceWorkingDirectory ?? input.workingDirectory,
               externalSessionId: input.parentExternalSessionId,
               sessionScope: scope,
             },
@@ -153,11 +159,23 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
             Effect.gen(function* () {
               yield* progress.checkCanceled();
               const summary = yield* runtime.forkSession(runtimeInput);
-              const stored = yield* Effect.result(
+              const saved = yield* Effect.exit(
                 Effect.gen(function* () {
+                  if (
+                    input.forkPoint &&
+                    (summary.externalSessionId === parent.externalSessionId ||
+                      summary.status !== "idle" ||
+                      summary.runtimeKind !== parent.runtimeKind ||
+                      summary.workingDirectory !== parent.workingDirectory)
+                  )
+                    return yield* new HostOperationError({
+                      operation: "task-workflow-session.fork.validate",
+                      message:
+                        "The runtime did not return a distinct idle fork in the source checkout. Reopen the source chat and retry.",
+                    });
                   yield* progress.created(summary);
                   yield* progress.checkCanceled();
-                  const saved = yield* storeWorkflowSession(writes.saveSession, {
+                  const stored = yield* storeWorkflowSession(writes.saveSession, {
                     repoPath,
                     sessionScope: scope,
                     model: input.model,
@@ -165,29 +183,60 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
                     summary,
                   });
                   progress.saved();
-                  return { session: summary, publish: saved.publish };
+                  return { session: summary, publish: stored.publish };
                 }),
               );
-              if (stored._tag === "Success") return stored.success;
-              if (stored.failure instanceof TaskSessionOwnershipCommittedError)
-                return yield* Effect.fail(stored.failure);
+              if (Exit.isSuccess(saved)) return saved.value;
+              const saveFailure = Cause.findErrorOption(saved.cause);
+              if (
+                saveFailure._tag === "Some" &&
+                saveFailure.value instanceof TaskSessionOwnershipCommittedError
+              )
+                return yield* Effect.failCause(saved.cause);
+              if (
+                summary.externalSessionId === parent.externalSessionId ||
+                (!input.forkPoint && saved.cause.reasons.some(Cause.isDieReason))
+              )
+                return yield* Effect.failCause(saved.cause);
               const ref = toControlSessionRef(repoPath, summary);
-              const cleaned = yield* Effect.result(
-                progress.stop(ref).pipe(Effect.andThen(runtime.releaseSession(ref))),
-              );
-              if (cleaned._tag === "Failure")
+              const stopped = yield* Effect.exit(progress.stop(ref));
+              if (
+                !input.forkPoint &&
+                Exit.isFailure(stopped) &&
+                stopped.cause.reasons.some(Cause.isDieReason)
+              )
+                return yield* Effect.failCause(stopped.cause);
+              const cleanupFailures = Exit.isFailure(stopped) ? [stopped.cause] : [];
+              if (Exit.isSuccess(stopped) || input.forkPoint) {
+                const released = yield* Effect.exit(runtime.releaseSession(ref));
+                if (Exit.isFailure(released)) {
+                  if (!input.forkPoint && released.cause.reasons.some(Cause.isDieReason))
+                    return yield* Effect.failCause(released.cause);
+                  cleanupFailures.push(released.cause);
+                }
+              }
+              if (cleanupFailures.length > 0 || input.forkPoint) {
+                let message = causeMessage(saved.cause);
+                if (cleanupFailures.length > 0)
+                  message += " Cleanup failed: " + cleanupFailures.map(causeMessage).join("; ");
+                if (input.forkPoint)
+                  message += ` Native history for runtime session '${summary.externalSessionId}' can remain. Inspect that conversation before retrying.`;
                 return yield* new HostOperationError({
                   operation: "task-workflow-session.store-control-result",
-                  message: stored.failure.message + " Cleanup failed: " + cleaned.failure.message,
-                  cause: { storeFailure: stored.failure, cleanupFailure: cleaned.failure },
+                  message,
+                  cause: {
+                    storeFailure: saveFailure._tag === "Some" ? saveFailure.value : saved.cause,
+                    cleanupFailures,
+                  },
                   details: {
                     repoPath,
                     externalSessionId: summary.externalSessionId,
-                    storeFailure: stored.failure,
-                    cleanupFailure: cleaned.failure,
+                    storeFailure: saved.cause,
+                    cleanupFailures,
                   },
                 });
-              return yield* Effect.fail(stored.failure);
+              }
+              return yield* Effect.failCause(saved.cause);
             }),
           );
         }),

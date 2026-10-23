@@ -1,5 +1,5 @@
 import {
-  createClaudeTranscriptReader,
+  createClaudeRuntimeTranscriptReader,
   type ManagedClaudeTranscriptReader,
 } from "./claude-transcript-reader";
 import {
@@ -55,6 +55,7 @@ import {
 } from "./claude-agent-sdk-context-usage";
 import { loadClaudeDetachedSessionContextUsage } from "./claude-agent-sdk-detached-context";
 import { claudeLiveHistoryContext } from "./claude-agent-sdk-history-loader";
+import { forkClaudeReply } from "./claude-agent-sdk-service-fork";
 import {
   prepareClaudeApprovalReply,
   prepareClaudeQuestionReply,
@@ -69,6 +70,7 @@ import {
   continuedClaudeSessionLaunch,
   forkedClaudeSessionLaunch,
   freshClaudeSessionLaunch,
+  loadClaudeSessionLaunchState,
   requireClaudeSessionScope,
   resumedClaudeSessionLaunch,
 } from "./claude-agent-sdk-session-policy";
@@ -111,10 +113,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   ) {
     this.now = input.now ?? (() => new Date().toISOString());
     this.randomId = input.randomId ?? randomUUID;
-    this.transcriptReader = createClaudeTranscriptReader({
-      processEnv: input.processEnv ?? process.env,
-      storage: input.historyStorage ?? "memory",
-    });
+    this.transcriptReader = createClaudeRuntimeTranscriptReader(input);
     this.historyReader = createClaudeTranscriptReadOwner(this.transcriptReader);
     const sessionStoreInput: Parameters<typeof createClaudeAgentSdkSessionStore>[0] = {
       now: this.now,
@@ -214,13 +213,24 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
 
   forkSession(input: ForkAgentSessionInput, runtimeId: string) {
     return requireClaudeSessionScope(input.sessionScope, "fork Claude session").pipe(
-      Effect.flatMap((scope) =>
-        this.createSession(
-          input,
-          runtimeId,
-          forkedClaudeSessionLaunch(scope, this.randomId(), input.parentExternalSessionId),
-        ),
-      ),
+      Effect.flatMap((scope) => {
+        const forkPoint = input.forkPoint;
+        if (!forkPoint) {
+          return this.createSession(
+            input,
+            runtimeId,
+            forkedClaudeSessionLaunch(scope, this.randomId(), input.parentExternalSessionId),
+          );
+        }
+        return forkClaudeReply({
+          input: { ...input, forkPoint },
+          scope,
+          sessionStore: this.sessionStore,
+          historyReader: this.historyReader,
+          now: this.now,
+          attach: (launch) => this.createSession(input, runtimeId, launch),
+        });
+      }),
     );
   }
 
@@ -427,27 +437,13 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     onContinuationAdmission?: () => void,
   ) {
     return Effect.gen({ self: this }, function* () {
-      const isNew = !sessionInput.options.resume || sessionInput.options.forkSession === true;
-      const claudePolicy = isNew
-        ? yield* this.input.launchPolicy.resolve({
-            role: input.sessionScope.kind === "workflow" ? input.sessionScope.role : null,
-          })
-        : null;
+      const { claudePolicy, initialTodos } = yield* loadClaudeSessionLaunchState(
+        input,
+        sessionInput,
+        this.input.launchPolicy,
+        this.historyReader,
+      );
       const launchSessionInput = { ...sessionInput, claudePolicy };
-      const resumeSessionId = sessionInput.options.resume;
-      const initialTodos = resumeSessionId
-        ? yield* loadClaudeTodos(
-            {
-              ...input,
-              externalSessionId: resumeSessionId,
-            },
-            { reader: this.historyReader },
-          ).pipe(
-            Effect.mapError((cause) =>
-              toClaudeServiceError("claudeRuntime.loadSessionTodos", cause),
-            ),
-          )
-        : [];
       const mcpCommand = yield* resolveOpenDucktorMcpCommand({
         runtimeDistribution: this.input.runtimeDistribution,
         toolDiscovery: this.input.toolDiscovery,

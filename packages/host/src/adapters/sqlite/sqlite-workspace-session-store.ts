@@ -6,7 +6,7 @@ import {
   workspaceSessionSchema,
   workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError, HostValidationError } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
@@ -18,39 +18,13 @@ import type {
 import type { SqliteTaskRepositoryContextProvider } from "./sqlite-task-repository-context";
 import type { TaskStoreSession } from "./sqlite-task-store-schema";
 import { type WorkspaceSessionRow, workspaceSessions } from "./sqlite-workspace-session-schema";
+import { decodeRecord, readActiveWorkspaceSessions } from "./sqlite-workspace-session-reads";
 
 const validateRecord = (value: WorkspaceSession) =>
   Effect.try({
     try: () => workspaceSessionSchema.parse(value),
     catch: (cause) =>
       new HostValidationError({ message: "Invalid Workspace Session record.", cause }),
-  });
-
-const decodeRecord = (row: WorkspaceSessionRow) =>
-  Effect.try({
-    try: () => {
-      const record = {
-        id: row.id,
-        runtimeKind: row.runtimeKind,
-        externalSessionId: row.externalSessionId,
-        executionTarget: JSON.parse(row.executionTargetJson),
-        roleSnapshot: row.roleSnapshotJson === null ? null : JSON.parse(row.roleSnapshotJson),
-        selectedModel: row.selectedModelJson === null ? null : JSON.parse(row.selectedModelJson),
-        generatedTitle: row.generatedTitle,
-        manualTitle: row.manualTitle,
-        targetBranch: row.targetBranchJson === null ? null : JSON.parse(row.targetBranchJson),
-        createdAt: row.createdAt,
-        lastActivityAt: row.lastActivityAt ?? undefined,
-        updatedAt: row.updatedAt,
-        archivedAt: row.archivedAt,
-      };
-      return workspaceSessionSchema.parse(record);
-    },
-    catch: (cause) =>
-      new HostValidationError({
-        message: `Stored Workspace Session ${row.id} is invalid.`,
-        cause,
-      }),
   });
 
 const encodeRecord = (record: WorkspaceSession): WorkspaceSessionRow => ({
@@ -90,9 +64,13 @@ const getRecord = (session: TaskStoreSession, sessionId: string) =>
     return yield* decodeRecord(row);
   });
 
-export const createSqliteWorkspaceSessionStore = (
-  contextProvider: SqliteTaskRepositoryContextProvider,
-): WorkspaceSessionStorePort => {
+export const createSqliteWorkspaceSessionStore = ({
+  contextProvider,
+  listForWorktreeOwnership,
+}: {
+  contextProvider: SqliteTaskRepositoryContextProvider;
+  listForWorktreeOwnership: WorkspaceSessionStorePort["listForWorktreeOwnership"];
+}): WorkspaceSessionStorePort => {
   const withDatabase = <A>(
     scope: WorkspaceSessionStoreScope,
     operation: string,
@@ -142,6 +120,7 @@ export const createSqliteWorkspaceSessionStore = (
     );
 
   return {
+    listForWorktreeOwnership,
     listRuntimeOwners: (input) =>
       withDatabase(input, "workspaceSessionStore.owners", (session) =>
         listRuntimeSessionOwners(session).pipe(
@@ -201,20 +180,7 @@ export const createSqliteWorkspaceSessionStore = (
           .pipe(Effect.map((rows) => rows.map(({ id }) => id))),
       ),
     listActive: (input) =>
-      withDatabase(input, "workspaceSessionStore.listActive", (session) =>
-        Effect.gen(function* () {
-          const rows = yield* session.execute(
-            (database) =>
-              database
-                .select()
-                .from(workspaceSessions)
-                .where(isNull(workspaceSessions.archivedAt))
-                .orderBy(desc(workspaceSessions.updatedAt)),
-            "workspaceSessionStore.listActive",
-          );
-          return yield* Effect.forEach(rows, decodeRecord);
-        }),
-      ),
+      withDatabase(input, "workspaceSessionStore.listActive", readActiveWorkspaceSessions),
     listArchived: (input) =>
       withDatabase(input, "workspaceSessionStore.listArchived", (session) =>
         Effect.gen(function* () {

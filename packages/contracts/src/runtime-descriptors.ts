@@ -47,7 +47,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
   sessionLifecycle: {
     supportedStartModes: ["fresh", "reuse", "fork"],
     supportsSessionFork: true,
-    forkTargets: ["session"],
+    forkTargets: ["session", "message"],
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: false,
@@ -131,7 +131,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
   sessionLifecycle: {
     supportedStartModes: ["fresh", "reuse", "fork"],
     supportsSessionFork: true,
-    forkTargets: ["session"],
+    forkTargets: ["session", "message"],
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
@@ -229,7 +229,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
   sessionLifecycle: {
     supportedStartModes: ["fresh", "reuse", "fork"],
     supportsSessionFork: true,
-    forkTargets: ["session"],
+    forkTargets: ["session", "message"],
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,

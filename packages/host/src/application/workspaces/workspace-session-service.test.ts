@@ -10,10 +10,12 @@ import path from "node:path";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentSessionControlStartInput,
+  type AgentSessionControlForkInput,
   type AgentSessionLiveReadResult,
   type WorkspaceSessionCreateInput,
   type WorkspaceSession,
   repoConfigSchema,
+  globalConfigSchema,
 } from "@openducktor/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { BrowserServiceError } from "../browser/browser-service-error";
@@ -148,11 +150,16 @@ describe("host-owned Workspace Session lifecycle", () => {
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
     };
-    const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+    const store = createSqliteWorkspaceSessionStore(database);
     const pendingTitles = new Set<string>();
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
+      claudeSessionMetadata: {
+        readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
+      },
+      runtimeAdmission: { admit: (_kind, work) => work },
+      runForkSourceOperation: (_target, work) => work,
       browserTabs: { closeOwnerTabs: () => Effect.void },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
@@ -259,6 +266,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       }),
       settingsConfig: createSettingsConfigTestDouble({
+        readConfig: () => Effect.succeed(null),
         defaultWorktreeBasePath: () => path.join(database.configDir, "worktrees"),
         resolveConfiguredPath: (value) => value,
         join: path.join,
@@ -325,6 +333,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           }),
       },
       live: {
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         resumeSession: (request) =>
           Effect.succeed({
             externalSessionId: request.externalSessionId,
@@ -401,6 +410,289 @@ describe("host-owned Workspace Session lifecycle", () => {
       registered,
     };
   };
+
+  const saveArchivedClaudeChild = (
+    h: ReturnType<typeof setup>,
+    source: WorkspaceSession,
+    title: string,
+  ) =>
+    h.dependencies.store.create({
+      workspaceId: h.config.workspaceId,
+      repoPath: h.config.repoPath,
+      session: {
+        ...source,
+        id: crypto.randomUUID(),
+        runtimeKind: "claude",
+        selectedModel: null,
+        externalSessionId: "native-child",
+        manualTitle: title,
+        archivedAt: 2,
+        executionTarget: {
+          kind: "local_worktree",
+          workingDirectory: path.join(database.configDir, "child-worktree"),
+          branchName: "child",
+          worktreeState: "removed",
+        },
+      },
+    });
+
+  test.each(["local_repo_root", "local_worktree"] as const)(
+    "forks a running chat in its saved %s without changing its source",
+    async (location) => {
+      const h = setup();
+      const draft = await Effect.runPromise(
+        h.service.create(
+          location === "local_worktree"
+            ? { ...worktreeInput(), manualTitle: "a".repeat(112) + "💻" + "x".repeat(6) }
+            : input(),
+        ),
+      );
+      const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+      const started = await Effect.runPromise(h.service.start(ref));
+      const selectedModel = {
+        ...input().selectedModel!,
+        modelId: "current-model",
+        variant: "current-variant",
+        speed: "fast",
+      };
+      await Effect.runPromise(
+        h.dependencies.store.setSelectedModel({
+          ...ref,
+          repoPath: h.config.repoPath,
+          selectedModel,
+        }),
+      );
+      const source = await Effect.runPromise(h.service.get(ref));
+      h.roles.length = 0;
+      h.state.observation = "running";
+      h.calls.length = 0;
+      const requests: AgentSessionControlForkInput[] = [];
+      const service = createWorkspaceSessionService({
+        ...h.dependencies,
+        live: {
+          ...h.dependencies.live,
+          forkSession: (request) =>
+            Effect.sync(() => {
+              requests.push(request);
+              return {
+                externalSessionId: "fork-native",
+                runtimeKind: request.runtimeKind,
+                workingDirectory: request.workingDirectory,
+                startedAt: "2026-10-22T12:00:00Z",
+                status: "idle" as const,
+              };
+            }),
+        },
+      });
+      const result = await Effect.runPromise(
+        service.fork({
+          ...ref,
+          forkPoint: { messageId: "completed-reply" },
+          destination: { kind: "same_folder" },
+        }),
+      );
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        parentExternalSessionId: started.session.externalSessionId,
+        sourceWorkingDirectory: source.executionTarget.workingDirectory,
+        workingDirectory: source.executionTarget.workingDirectory,
+        model: selectedModel,
+        systemPrompt: "Original prompt.",
+        forkPoint: { messageId: "completed-reply" },
+      });
+      expect(result.record).toMatchObject({
+        externalSessionId: "fork-native",
+        executionTarget: source.executionTarget,
+        targetBranch: source.targetBranch,
+        roleSnapshot: source.roleSnapshot,
+        selectedModel,
+        manualTitle:
+          location === "local_worktree" ? "a".repeat(112) + " (fork)" : "My session (fork)",
+        archivedAt: null,
+      });
+      expect(await Effect.runPromise(service.get(ref))).toEqual(source);
+      expect(await Effect.runPromise(service.listActive("fairnest"))).toHaveLength(2);
+      expect(h.calls).toEqual(["save"]);
+    },
+  );
+
+  test("rejects a fork worktree with a tracked-upstream target before creating it", async () => {
+    const h = setup();
+    const draft = await Effect.runPromise(
+      h.service.create({ ...input(), targetBranch: { branch: "@{upstream}" } }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+    await Effect.runPromise(h.service.start(ref));
+    const source = await Effect.runPromise(h.service.get(ref));
+    h.calls.length = 0;
+    await expect(
+      Effect.runPromise(
+        h.service.fork({
+          ...ref,
+          forkPoint: { messageId: "completed-reply" },
+          destination: { kind: "new_worktree", name: "fork-chat", branchName: "odt/fork-chat" },
+        }),
+      ),
+    ).rejects.toThrow("Tracked upstream is available only for the current checkout.");
+    expect(h.calls).toEqual([]);
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(source);
+  });
+
+  test.each([false, true])(
+    "cleans every acquired fork resource after a save failure, terminal cleanup fails=%s",
+    async (terminalFailure) => {
+      const h = setup();
+      const draft = await Effect.runPromise(h.service.create(input()));
+      const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+      await Effect.runPromise(h.service.start(ref));
+      h.dependencies.git.getCurrentBranch = () =>
+        Effect.succeed({ name: "main", detached: false, revision: "source-commit" });
+      h.state.failSave = true;
+      h.state.failCloseTerminals = terminalFailure;
+      h.calls.length = 0;
+      const service = createWorkspaceSessionService({
+        ...h.dependencies,
+        live: {
+          ...h.dependencies.live,
+          forkSession: (request) =>
+            Effect.succeed({
+              externalSessionId: "fork-native",
+              runtimeKind: request.runtimeKind,
+              workingDirectory: request.workingDirectory,
+              startedAt: "2026-10-22T12:00:00Z",
+              status: "idle",
+            }),
+        },
+      });
+      const result = await Effect.runPromise(
+        Effect.result(
+          service.fork({
+            ...ref,
+            forkPoint: { messageId: "completed-reply" },
+            destination: { kind: "new_worktree", name: "fork-chat", branchName: "odt/fork-chat" },
+          }),
+        ),
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("database write failed");
+        expect(result.failure.message).toContain(
+          "Native history for runtime session 'fork-native' can remain.",
+        );
+        if (terminalFailure) expect(result.failure.message).toContain("terminal-1");
+      }
+      expect(h.calls).toEqual([
+        "worktree",
+        "copy",
+        "actions",
+        "save",
+        "stop",
+        "release",
+        "close-action-terminals",
+        "remove-worktree",
+        "delete-branch",
+      ]);
+      expect(h.paths.has(h.state.worktree)).toBe(false);
+      expect(h.branches.has("refs/heads/odt/fork-chat")).toBe(false);
+      expect(await Effect.runPromise(service.listActive("fairnest"))).toHaveLength(1);
+    },
+  );
+
+  test.each(["typed", "defect", "throw"] as const)(
+    "returns a committed workspace fork with a publication warning: %s",
+    async (failure) => {
+      const h = setup();
+      const draft = await Effect.runPromise(h.service.create(input()));
+      const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+      await Effect.runPromise(h.service.start(ref));
+      const service = createWorkspaceSessionService({
+        ...h.dependencies,
+        live: {
+          ...h.dependencies.live,
+          forkSession: (request) =>
+            Effect.succeed({
+              externalSessionId: "fork-native",
+              runtimeKind: request.runtimeKind,
+              workingDirectory: request.workingDirectory,
+              startedAt: "2026-10-22T12:00:00Z",
+              status: "idle",
+            }),
+        },
+      });
+      const router = createEffectHostCommandRouter({
+        handlers: createWorkspaceSessionCommandHandlers(service, () => {
+          if (failure === "throw") throw new Error("event callback failed");
+          return failure === "defect"
+            ? Effect.die(new Error("event callback failed"))
+            : Effect.fail(
+                new HostOperationError({
+                  operation: "test.publish",
+                  message: "event bus unavailable",
+                }),
+              );
+        }),
+      });
+      const result = await Effect.runPromise(
+        router.invoke("workspace_session_fork", {
+          ...ref,
+          forkPoint: { messageId: "completed-reply" },
+          destination: { kind: "same_folder" },
+        }),
+      );
+      expect(result).toMatchObject({
+        record: { externalSessionId: "fork-native" },
+        syncWarning: expect.stringContaining("fork was saved"),
+      });
+      expect(await Effect.runPromise(service.listActive("fairnest"))).toHaveLength(2);
+      expect(h.calls).not.toContain("stop");
+      expect(h.calls).not.toContain("release");
+    },
+  );
+
+  test("releases a failed fork even when stopping it fails and keeps the source worktree", async () => {
+    const h = setup();
+    const draft = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: draft.session.id };
+    await Effect.runPromise(h.service.start(ref));
+    const source = await Effect.runPromise(h.service.get(ref));
+    h.calls.length = 0;
+    h.state.failSave = true;
+    h.state.failStop = true;
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      live: {
+        ...h.dependencies.live,
+        forkSession: (request) =>
+          Effect.succeed({
+            externalSessionId: "fork-native",
+            runtimeKind: request.runtimeKind,
+            workingDirectory: request.workingDirectory,
+            startedAt: "2026-10-22T12:00:00Z",
+            status: "idle",
+          }),
+      },
+    });
+    const result = await Effect.runPromise(
+      Effect.result(
+        service.fork({
+          ...ref,
+          forkPoint: { messageId: "completed-reply" },
+          destination: { kind: "same_folder" },
+        }),
+      ),
+    );
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.failure.message).toContain("stop failed");
+      expect(result.failure.message).toContain(
+        "Native history for runtime session 'fork-native' can remain.",
+      );
+    }
+    expect(h.calls).toEqual(["save", "stop", "release"]);
+    expect(h.paths.has(source.executionTarget.workingDirectory)).toBe(true);
+    expect(await Effect.runPromise(service.get(ref))).toEqual(source);
+    expect(await Effect.runPromise(service.listActive("fairnest"))).toHaveLength(1);
+  });
 
   test.each(["codex", "claude"] as const)(
     "keeps a fresh %s manual rename until the first turn ends",
@@ -1696,12 +1988,19 @@ describe("host-owned Workspace Session lifecycle", () => {
             const release = yield* Deferred.make<void>();
             const service = createWorkspaceSessionService({
               ...h.dependencies,
-              store: createSqliteWorkspaceSessionStore((repoPath, operation, use) => {
-                const provider =
-                  otherDatabase?.repoPath === repoPath
-                    ? otherDatabase.contextProvider
-                    : database.contextProvider;
-                return provider(repoPath, operation, use);
+              store: createSqliteWorkspaceSessionStore({
+                listForWorktreeOwnership: (scope) =>
+                  (scope.workspaceId === "other-workspace" && otherDatabase
+                    ? otherDatabase
+                    : database
+                  ).listForWorktreeOwnership(scope),
+                contextProvider: (repoPath, operation, use) => {
+                  const provider =
+                    otherDatabase?.repoPath === repoPath
+                      ? otherDatabase.contextProvider
+                      : database.contextProvider;
+                  return provider(repoPath, operation, use);
+                },
               }),
               settings: {
                 ...h.dependencies.settings,
@@ -1928,7 +2227,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       else h.dependencies.git.referenceExists = () => Effect.succeed(false);
       await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow(
         conflict === "directory"
-          ? "Cannot restore into an existing worktree or directory"
+          ? "not a registered worktree"
           : conflict === "branch"
             ? "Cannot restore because branch odt/my-feature already exists"
             : "Target branch origin/main is unavailable. Fetch it, or choose another target branch for this chat.",
@@ -1939,6 +2238,259 @@ describe("host-owned Workspace Session lifecycle", () => {
       expect(h.branches.has("refs/heads/odt/my-feature")).toBe(conflict === "branch");
     },
   );
+
+  test("protects shared worktrees through sibling archive and restore", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const scope = { workspaceId: "fairnest", repoPath: h.config.repoPath };
+    const sibling = await Effect.runPromise(
+      h.dependencies.store.create({
+        ...scope,
+        session: { ...session, id: crypto.randomUUID(), manualTitle: "Sibling chat" },
+      }),
+    );
+    const ref = { workspaceId: scope.workspaceId, sessionId: session.id };
+    expect((await Effect.runPromise(h.service.archivePreview(ref))).sharedWith).toEqual([
+      { workspaceId: scope.workspaceId, sessionId: sibling.id, title: "Sibling chat" },
+    ]);
+    await expect(
+      Effect.runPromise(
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: {
+            workingDirectory: session.executionTarget.workingDirectory,
+            branchName: "odt/my-feature",
+          },
+        }),
+      ),
+    ).rejects.toThrow("Sibling chat");
+    expect(h.calls).not.toContain("remove-worktree");
+    const archived = await Effect.runPromise(
+      h.service.archive({ ...ref, confirmStop: true, removeWorktree: false }),
+    );
+    expect(archived.executionTarget).toMatchObject({ worktreeState: "present" });
+    const siblingRef = { workspaceId: scope.workspaceId, sessionId: sibling.id };
+    expect((await Effect.runPromise(h.service.archivePreview(siblingRef))).sharedWith).toEqual([]);
+    await Effect.runPromise(
+      h.service.archive({
+        ...siblingRef,
+        confirmStop: true,
+        removeWorktree: true,
+        worktreeConfirmation: {
+          workingDirectory: session.executionTarget.workingDirectory,
+          branchName: "odt/my-feature",
+        },
+      }),
+    );
+    expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(false);
+    const restored = await Effect.runPromise(h.service.restore(ref));
+    expect(restored.archivedAt).toBeNull();
+    expect(restored.executionTarget).toMatchObject({ worktreeState: "present" });
+    expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
+    expect(h.state.startPoint).toBe("refs/remotes/origin/main");
+    const actionCount = h.actionRuns.length;
+    const restoredSibling = await Effect.runPromise(h.service.restore(siblingRef));
+    expect(restoredSibling.archivedAt).toBeNull();
+    expect(restoredSibling.executionTarget).toEqual(restored.executionTarget);
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(restored);
+    expect(await Effect.runPromise(h.service.get(siblingRef))).toEqual(restoredSibling);
+    expect(h.actionRuns).toHaveLength(actionCount);
+  });
+
+  test("rechecks native history dependencies after the worktree write lock is acquired", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const directory = session.executionTarget.workingDirectory;
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const child = await Effect.runPromise(saveArchivedClaudeChild(h, session, "Dependent child"));
+    let nativeDirectory = child.executionTarget.workingDirectory;
+    h.dependencies.claudeSessionMetadata.readWorkingDirectory = () =>
+      Effect.sync(() => nativeDirectory);
+    expect((await Effect.runPromise(h.service.archivePreview(ref))).sharedWith).toEqual([]);
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const readHeld = yield* Deferred.make<void>();
+          const releaseRead = yield* Deferred.make<void>();
+          const writeRequested = yield* Deferred.make<void>();
+          const reader = yield* Effect.forkScoped(
+            h.dependencies.lifecycle.runWorktreeRead(
+              directory,
+              Deferred.succeed(readHeld, undefined).pipe(
+                Effect.andThen(Deferred.await(releaseRead)),
+              ),
+            ),
+          );
+          yield* Deferred.await(readHeld);
+          const service = createWorkspaceSessionService({
+            ...h.dependencies,
+            lifecycle: {
+              ...h.dependencies.lifecycle,
+              acquireWorktreeLifecycle: (paths) =>
+                Deferred.succeed(writeRequested, undefined).pipe(
+                  Effect.andThen(h.dependencies.lifecycle.acquireWorktreeLifecycle(paths)),
+                ),
+            },
+          });
+          const archive = yield* Effect.forkScoped(
+            Effect.result(
+              service.archive({
+                ...ref,
+                confirmStop: true,
+                removeWorktree: true,
+                worktreeConfirmation: { workingDirectory: directory, branchName: "odt/my-feature" },
+              }),
+            ),
+          );
+          yield* Deferred.await(writeRequested);
+          nativeDirectory = directory;
+          yield* Deferred.succeed(releaseRead, undefined);
+          yield* Fiber.join(reader);
+          const result = yield* Fiber.join(archive);
+          expect(result._tag).toBe("Failure");
+          if (result._tag === "Failure")
+            expect(result.failure.message).toContain("Dependent child");
+        }),
+      ),
+    );
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
+    expect(h.paths.has(directory)).toBe(true);
+    expect(h.calls).not.toContain("remove-worktree");
+    expect(h.calls).not.toContain("delete-branch");
+  });
+
+  test("keeps worktree and branch when metadata fails but allows archive without removal", async () => {
+    const h = setup();
+    const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+    const ref = { workspaceId: "fairnest", sessionId: session.id };
+    const directory = session.executionTarget.workingDirectory;
+    await Effect.runPromise(saveArchivedClaudeChild(h, session, "Unreadable child"));
+    h.dependencies.claudeSessionMetadata.readWorkingDirectory = () =>
+      Effect.fail(
+        new HostOperationError({
+          operation: "claude.session.metadata",
+          message: "Claude metadata is unavailable. Restore access and retry.",
+        }),
+      );
+
+    await expect(Effect.runPromise(h.service.archivePreview(ref))).rejects.toThrow(
+      "Restore access and retry",
+    );
+    await expect(
+      Effect.runPromise(
+        h.service.archive({
+          ...ref,
+          confirmStop: true,
+          removeWorktree: true,
+          worktreeConfirmation: { workingDirectory: directory, branchName: "odt/my-feature" },
+        }),
+      ),
+    ).rejects.toThrow("Restore access and retry");
+    expect(await Effect.runPromise(h.service.get(ref))).toEqual(session);
+    expect(h.paths.has(directory)).toBe(true);
+    expect(h.branches.has("refs/heads/odt/my-feature")).toBe(true);
+    expect(h.calls).not.toContain("remove-worktree");
+    expect(h.calls).not.toContain("delete-branch");
+
+    const archived = await Effect.runPromise(
+      h.service.archive({ ...ref, confirmStop: true, removeWorktree: false }),
+    );
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.executionTarget).toEqual(session.executionTarget);
+    expect(h.paths.has(directory)).toBe(true);
+    expect(h.branches.has("refs/heads/odt/my-feature")).toBe(true);
+  });
+
+  test("archive checks durable owners in closed workspaces through canonical aliases", async () => {
+    const h = setup();
+    const otherDatabase = await createSqliteTaskStoreHarness({
+      workspaceId: "closed-owner",
+      repoPath: "/repos/closed-owner",
+    });
+    try {
+      const { session } = await Effect.runPromise(h.service.create(worktreeInput()));
+      const otherScope = { workspaceId: "closed-owner", repoPath: otherDatabase.repoPath };
+      const otherStore = createSqliteWorkspaceSessionStore(otherDatabase);
+      const alias = path.join(database.configDir, "shared-worktree-alias");
+      const sibling = await Effect.runPromise(
+        otherStore.create({
+          ...otherScope,
+          session: {
+            ...session,
+            executionTarget: { ...session.executionTarget, workingDirectory: alias },
+            generatedTitle: "Closed workspace chat",
+            manualTitle: null,
+          },
+        }),
+      );
+      await Effect.runPromise(
+        otherStore.create({
+          ...otherScope,
+          session: {
+            ...sibling,
+            id: crypto.randomUUID(),
+            executionTarget: {
+              ...sibling.executionTarget,
+              workingDirectory: "/unrelated-worktree",
+            },
+            manualTitle: "Unrelated chat",
+          },
+        }),
+      );
+      const listOwners = h.dependencies.store.listForWorktreeOwnership;
+      h.dependencies.store.listForWorktreeOwnership = (scope) =>
+        scope.workspaceId === otherScope.workspaceId
+          ? otherStore.listForWorktreeOwnership(scope)
+          : listOwners(scope);
+      h.dependencies.settingsConfig.readConfig = () =>
+        Effect.succeed(
+          globalConfigSchema.parse({
+            version: 4,
+            workspaces: {
+              [otherScope.workspaceId]: { ...h.config, ...otherScope, closed: true },
+            },
+          }),
+        );
+      h.dependencies.worktreeFiles.resolveWorktreeRemovalPath = (directory) =>
+        Effect.succeed(directory === alias ? session.executionTarget.workingDirectory : directory);
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      expect((await Effect.runPromise(h.service.archivePreview(ref))).sharedWith).toEqual([
+        {
+          workspaceId: otherScope.workspaceId,
+          sessionId: sibling.id,
+          title: "Closed workspace chat",
+        },
+      ]);
+      await expect(
+        Effect.runPromise(
+          h.service.archive({
+            ...ref,
+            confirmStop: true,
+            removeWorktree: true,
+            worktreeConfirmation: {
+              workingDirectory: session.executionTarget.workingDirectory,
+              branchName: "odt/my-feature",
+            },
+          }),
+        ),
+      ).rejects.toThrow("Closed workspace chat");
+      expect(h.paths.has(session.executionTarget.workingDirectory)).toBe(true);
+      expect(h.calls).not.toContain("remove-worktree");
+      await Effect.runPromise(
+        otherStore.archive({
+          ...otherScope,
+          sessionId: sibling.id,
+          archivedAt: 1000,
+        }),
+      );
+      expect((await Effect.runPromise(h.service.archivePreview(ref))).sharedWith).toEqual([]);
+    } finally {
+      await otherDatabase.cleanup();
+    }
+  });
 
   test("removes a dirty worktree only after stopping, and restores the same session from the default branch", async () => {
     const h = setup();
@@ -1951,6 +2503,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       branchName: "odt/my-feature",
       worktreeExists: true,
       hasUncommittedChanges: true,
+      sharedWith: [],
     });
     await expect(
       Effect.runPromise(

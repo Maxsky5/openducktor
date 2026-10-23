@@ -107,6 +107,26 @@ export const updateWorkspaceSessionQueries = (
   workspaceId: string,
   session: WorkspaceSession,
 ): void => {
+  const previous = [false, true]
+    .flatMap(
+      (archived) =>
+        queryClient.getQueryData<WorkspaceSession[]>(
+          workspaceSessionQueryKeys.list(workspaceId, archived),
+        ) ?? [],
+    )
+    .find((record) => record.id === session.id);
+  const ownershipChanged =
+    previous === undefined ||
+    (previous.archivedAt === null) !== (session.archivedAt === null) ||
+    replaceEqualDeep(previous.executionTarget, session.executionTarget) !==
+      previous.executionTarget;
+  const titleChanged =
+    previous !== undefined &&
+    (previous.manualTitle?.trim() || previous.generatedTitle) !==
+      (session.manualTitle?.trim() || session.generatedTitle);
+  if (ownershipChanged || titleChanged) {
+    void queryClient.invalidateQueries({ queryKey: ["workspace-session-archive-preview"] });
+  }
   const idsKey = workspaceSessionQueryKeys.ids(workspaceId);
   for (const queryKey of [
     idsKey,

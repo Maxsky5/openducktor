@@ -48,7 +48,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       workspaceId: "fairnest",
       sessionId: "session-1",
     };
-    const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+    const store = createSqliteWorkspaceSessionStore(database);
     await Effect.runPromise(
       store.create({
         ...storeRef,

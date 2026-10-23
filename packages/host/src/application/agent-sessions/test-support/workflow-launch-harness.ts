@@ -512,6 +512,7 @@ export const createLaunchHarness = async (
       run: unexpected("repository operation"),
       runSend: unexpected("repository send"),
       prepareResume: unexpected("repository resume"),
+      prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
       prepareSend: unexpected("repository send"),
       recordAcceptedMessage: unexpected("repository message record"),
       prepareModelUpdate: unexpected("repository model update"),

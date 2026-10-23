@@ -18,6 +18,9 @@ import {
 } from "./sqlite-task-store-connection-slot";
 import { mapSqliteTaskStoreAdapterError } from "./sqlite-task-store-errors";
 import type { TaskStoreSession } from "./sqlite-task-store-schema";
+import type { WorkspaceSession } from "@openducktor/contracts";
+import type { WorkspaceSessionStoreScope } from "../../ports/workspace-session-store-port";
+import { readWorkspaceSessionsForWorktreeOwnership } from "./sqlite-workspace-session-reads";
 
 export type ResolveWorkspaceIdForRepoPath = (
   repoPath: string,
@@ -44,12 +47,16 @@ export type SqliteTaskRepositoryContextProvider = <A>(
 export type SqliteTaskRepositoryContextManager = {
   readonly closeWorkspace: (
     workspaceId: string,
-  ) => Effect.Effect<void, HostOperationError<{ failures: HostOperationErrorAggregate[] }>>;
+    cleanup?: Effect.Effect<void, HostOperationErrorAggregate>,
+  ) => Effect.Effect<void, HostOperationErrorAggregate>;
   readonly dispose: () => Effect.Effect<
     void,
     HostOperationError<{ failures: HostOperationErrorAggregate[] }>
   >;
   readonly withDatabase: SqliteTaskRepositoryContextProvider;
+  readonly listWorkspaceSessionsForWorktreeOwnership: (
+    scope: WorkspaceSessionStoreScope,
+  ) => Effect.Effect<WorkspaceSession[], TaskStoreError>;
 };
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
@@ -59,6 +66,9 @@ type CreateSqliteTaskRepositoryContextManagerInput = {
     repoPath: string;
     workspaceId: string;
   }) => Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
+  assertWorkspaceOwnershipReadAdmitted: (
+    input: WorkspaceSessionStoreScope,
+  ) => Effect.Effect<void, TaskStoreError>;
   onBackgroundFailure?: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   openConnection?: OpenSqliteTaskStoreConnection;
   processEnv: NodeJS.ProcessEnv;
@@ -146,6 +156,7 @@ const createAdmissionGate = (stoppedError = hostIsStoppingError): AdmissionGate 
 export const createSqliteTaskRepositoryContextManager = ({
   configDir,
   assertWorkspaceAdmitted,
+  assertWorkspaceOwnershipReadAdmitted,
   onBackgroundFailure = (failure) => Effect.logError(failure.message),
   openConnection = openSqliteTaskStoreConnection,
   processEnv,
@@ -209,7 +220,34 @@ export const createSqliteTaskRepositoryContextManager = ({
       }),
     );
 
-  const closeWorkspace = (workspaceId: string) =>
+  const listWorkspaceSessionsForWorktreeOwnership: SqliteTaskRepositoryContextManager["listWorkspaceSessionsForWorktreeOwnership"] =
+    (scope) =>
+      admission.withLease(() =>
+        Effect.gen(function* () {
+          const databasePath = yield* resolveDatabasePath(scope);
+          return yield* getWorkspaceAdmission(scope.workspaceId).withLease(() =>
+            Effect.gen(function* () {
+              yield* assertWorkspaceOwnershipReadAdmitted(scope);
+              return yield* getSlot(databasePath)
+                .run(readWorkspaceSessionsForWorktreeOwnership)
+                .pipe(
+                  Effect.mapError((cause) =>
+                    mapSqliteTaskStoreAdapterError(
+                      "workspaceSessionStore.worktreeOwners",
+                      databasePath,
+                      cause,
+                    ),
+                  ),
+                );
+            }),
+          );
+        }),
+      );
+
+  const closeWorkspace = (
+    workspaceId: string,
+    cleanup: Effect.Effect<void, HostOperationErrorAggregate> = Effect.void,
+  ) =>
     Effect.gen(function* () {
       yield* getWorkspaceAdmission(workspaceId).stop();
       const matches = Array.from(slots.entries()).filter(
@@ -232,6 +270,7 @@ export const createSqliteTaskRepositoryContextManager = ({
           details: { failures, workspaceId },
         });
       }
+      yield* cleanup;
       workspaceAdmissions.delete(workspaceId);
     });
 
@@ -256,5 +295,5 @@ export const createSqliteTaskRepositoryContextManager = ({
       }
     });
 
-  return { closeWorkspace, dispose, withDatabase };
+  return { closeWorkspace, dispose, withDatabase, listWorkspaceSessionsForWorktreeOwnership };
 };

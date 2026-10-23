@@ -150,6 +150,7 @@ export const assistantMessageMapper: CodexEventMapper = {
     }
     events.push(assistantMessageEvent);
     if (input.isFinalAgentMessage && asyncQuestion.kind === "not_async_question") {
+      assistantMessageEvent.forkPoint = { messageId };
       const terminalPartEvent: CodexCanonicalStreamPartEvent = {
         kind: "stream_part",
         source: ctx.source,

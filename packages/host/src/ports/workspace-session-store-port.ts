@@ -30,6 +30,8 @@ export type WorkspaceSessionStorePort = {
   get(input: WorkspaceSessionStoreRef): Result;
   listIds(input: WorkspaceSessionStoreScope): Result<string[]>;
   listActive(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
+  /** Reads all saved sessions without an archive limit. Allows configured closed workspaces and unavailable roots. */
+  listForWorktreeOwnership(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   listArchived(input: WorkspaceSessionStoreScope): Result<WorkspaceSession[]>;
   findByRuntimeSession(
     input: WorkspaceSessionStoreScope & { runtimeKind: RuntimeKind; externalSessionId: string },

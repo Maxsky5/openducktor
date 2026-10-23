@@ -357,7 +357,6 @@ export const codexAppServerRequestParamsSchemas = {
   "thread/fork": z.strictObject({
     threadId: z.string(),
     lastTurnId: nullableString,
-    beforeTurnId: nullableString,
     path: nullableString,
     ...threadConfigurationFields,
     ephemeral: z.boolean().optional(),

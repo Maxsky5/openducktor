@@ -403,6 +403,19 @@ export const createWorkspaceSessionRuntimePersistence = ({
             }),
         };
       }),
+    prepareForkSource: (input) =>
+      Effect.gen(function* () {
+        const known = yield* findActive(input);
+        if (!known)
+          return yield* new HostValidationError({
+            field: "externalSessionId",
+            message: "The fork source has no saved Workspace Session. Import it before forking.",
+          });
+        return {
+          model: known.session.selectedModel,
+          systemPrompt: known.session.roleSnapshot?.systemPrompt ?? "",
+        };
+      }),
     prepareSend: (input) => prepare(input).pipe(Effect.map((prepared) => prepared.input)),
     validateRef,
     prepareModelUpdate: (input) =>

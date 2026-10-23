@@ -207,6 +207,7 @@ export const buildClaudeAgentSdkOptions = async ({
     preserveNativeSettings ||
     (sessionOptions.resume &&
       !sessionOptions.forkSession &&
+      !("parentExternalSessionId" in input) &&
       input.sessionScope?.kind === "repository" &&
       !("systemPrompt" in input && input.systemPrompt))
   ) {

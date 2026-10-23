@@ -32,7 +32,7 @@ test.each([
     const repoPath = db.configDir;
     const workspaceId = "fairnest";
     const config = repoConfigSchema.parse({ workspaceId, workspaceName: "Fairnest", repoPath });
-    const store = createSqliteWorkspaceSessionStore(db.contextProvider);
+    const store = createSqliteWorkspaceSessionStore(db);
     const task = await Effect.runPromise(
       db.store.createTask({
         repoPath,

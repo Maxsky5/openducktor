@@ -174,6 +174,7 @@ export const createAgentSessionLiveStateService = ({
     });
   const lifecycle = createAgentSessionLiveRuntimeLifecycle({
     admitRoot: startedRoots.accept,
+    releaseRoot: startedRoots.releaseSession,
     adapterRegistry,
     coordinator,
     publishChanges,

@@ -110,6 +110,15 @@ const mergeQueuedSessionEvent = <Event extends QueuedSessionEvent>(
   }
 
   if (
+    previous.type === "assistant_message" &&
+    event.type === "assistant_message" &&
+    previous.forkPoint &&
+    !event.forkPoint
+  ) {
+    return { ...event, forkPoint: previous.forkPoint };
+  }
+
+  if (
     previous.type === "assistant_part" &&
     event.type === "assistant_part" &&
     (event.part.kind === "text" || event.part.kind === "reasoning")

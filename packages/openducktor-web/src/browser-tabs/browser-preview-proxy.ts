@@ -174,7 +174,8 @@ export const createBrowserPreviewProxies = (input: {
     });
     upstream.on("error", () => socket.destroy());
     socket.on("error", () => upstream.destroy());
-    // A tab that leaves during the handshake cancels it, so the dev server keeps no connection.
+    // Upgrade sockets stay half-open after client EOF, so close them to cancel the handshake.
+    socket.once("end", () => socket.destroy());
     socket.once("close", () => upstream.destroy());
     upstream.end();
   };

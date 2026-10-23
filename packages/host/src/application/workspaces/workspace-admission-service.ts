@@ -42,6 +42,11 @@ export type WorkspaceAdmissionService = {
     repoPath: string;
     workspaceId: string;
   }): Effect.Effect<void, HostValidationErrorAggregate>;
+  assertTaskStoreOwnershipReadAccess(input: {
+    operation: string;
+    repoPath: string;
+    workspaceId: string;
+  }): Effect.Effect<void, HostValidationErrorAggregate>;
   withProcessStartAdmission: WithProcessStartAdmission;
   blockWorkspace(input: {
     reason: WorkspaceBlockReason;
@@ -141,6 +146,16 @@ export const createWorkspaceAdmissionService = ({
       }),
     );
 
+  const assertTaskStoreOwnershipReadAccess: WorkspaceAdmissionService["assertTaskStoreOwnershipReadAccess"] =
+    (input) =>
+      Effect.gen(function* () {
+        yield* ensureInitialized();
+        const reservation = reservationsByWorkspaceId.get(input.workspaceId);
+        if (reservation) return yield* reservedWorkspaceError(reservation);
+        const blocked = blockedByWorkspaceId.get(input.workspaceId);
+        if (blocked?.reason === "removal") return yield* blockedWorkspaceError(blocked);
+      });
+
   const processStartError = (normalizedRepoPath: string): HostValidationError | null => {
     const reservation = [...reservationsByWorkspaceId.values()].find(
       (candidate) => normalizePathForComparison(candidate.repoPath) === normalizedRepoPath,
@@ -209,6 +224,7 @@ export const createWorkspaceAdmissionService = ({
       reservationsByWorkspaceId.delete(workspaceId);
     },
     assertTaskStoreAccess,
+    assertTaskStoreOwnershipReadAccess,
     withProcessStartAdmission,
     blockWorkspace: (input) => {
       blockedByWorkspaceId.set(input.workspaceId, input);

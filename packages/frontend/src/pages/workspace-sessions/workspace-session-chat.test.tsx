@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import type {
   AgentModelCatalog,
   AgentModelSelection,
@@ -345,41 +346,43 @@ const createWorkspaceChatHarness = ({
     };
     return (
       <QueryProvider connection={connection}>
-        <QueryStatus />
-        <RuntimeDefinitionsContext value={definitions}>
-          <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
-            <AgentOperationsContext value={operations}>
-              <AgentSessionHistoryLoadContext
-                value={{
-                  loadAgentSessionHistory: async () => {
-                    if (store.getSessionSnapshot(session)?.historyLoadState === "stale")
-                      counters.revalidations += 1;
-                    else counters.baselineLoads += 1;
-                    return session;
-                  },
-                }}
-              >
-                <AgentSessionReadModelStateContext value={readModel}>
-                  <AgentSessionsContext value={store}>
-                    <AgentMessageQueuesContext value={messageQueues}>
-                      {children ?? (
-                        <WorkspaceSessionChat
-                          isVisible
-                          workspace={workspace}
-                          record={entry}
-                          chatSettings={DEFAULT_CHAT_SETTINGS}
-                          reusablePrompts={[]}
-                          onToolRefresh={() => {}}
-                          isMounted={() => true}
-                        />
-                      )}
-                    </AgentMessageQueuesContext>
-                  </AgentSessionsContext>
-                </AgentSessionReadModelStateContext>
-              </AgentSessionHistoryLoadContext>
-            </AgentOperationsContext>
-          </HostRuntimeStatusContext>
-        </RuntimeDefinitionsContext>
+        <MemoryRouter>
+          <QueryStatus />
+          <RuntimeDefinitionsContext value={definitions}>
+            <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
+              <AgentOperationsContext value={operations}>
+                <AgentSessionHistoryLoadContext
+                  value={{
+                    loadAgentSessionHistory: async () => {
+                      if (store.getSessionSnapshot(session)?.historyLoadState === "stale")
+                        counters.revalidations += 1;
+                      else counters.baselineLoads += 1;
+                      return session;
+                    },
+                  }}
+                >
+                  <AgentSessionReadModelStateContext value={readModel}>
+                    <AgentSessionsContext value={store}>
+                      <AgentMessageQueuesContext value={messageQueues}>
+                        {children ?? (
+                          <WorkspaceSessionChat
+                            isVisible
+                            workspace={workspace}
+                            record={entry}
+                            chatSettings={DEFAULT_CHAT_SETTINGS}
+                            reusablePrompts={[]}
+                            onToolRefresh={() => {}}
+                            isMounted={() => true}
+                          />
+                        )}
+                      </AgentMessageQueuesContext>
+                    </AgentSessionsContext>
+                  </AgentSessionReadModelStateContext>
+                </AgentSessionHistoryLoadContext>
+              </AgentOperationsContext>
+            </HostRuntimeStatusContext>
+          </RuntimeDefinitionsContext>
+        </MemoryRouter>
       </QueryProvider>
     );
   }

@@ -60,6 +60,11 @@ import {
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 import { iso, modelSelection, projectInboxUser } from "./opencode-message-projection";
+import {
+  readReplyForkBoundary,
+  requireIdleFork,
+  checkReplyForkBoundary,
+} from "./opencode-reply-fork";
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMessageId } from "./opencode-message-id";
@@ -352,22 +357,46 @@ export class OpencodeSdkAdapter {
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
     assertAgentRuntimePolicyBinding(input, "fork the OpenCode conversation");
-    const sourceRef: SessionRef = { ...input, externalSessionId: input.parentExternalSessionId };
+    const sourceRef: SessionRef = {
+      ...input,
+      workingDirectory: input.sourceWorkingDirectory ?? input.workingDirectory,
+      externalSessionId: input.parentExternalSessionId,
+    };
     return nativeRequest(sourceRef, "fork the conversation", async () => {
+      if (input.forkPoint && input.runtimeHistoryAnchor)
+        throw operationError(
+          sourceRef,
+          "fork the conversation",
+          "unsupported_operation",
+          "A reply fork cannot also use a legacy history boundary.",
+          "Select one completed reply and fork again.",
+        );
       const source = await this.readSession(sourceRef, "verify the fork source");
+      if (input.forkPoint && source.parentID)
+        throw operationError(
+          sourceRef,
+          "fork the conversation",
+          "unsupported_operation",
+          "Forking a delegated child conversation is not supported.",
+          "Open the root conversation and select a completed reply.",
+        );
+      const boundary = input.forkPoint
+        ? await readReplyForkBoundary(this.client, sourceRef, input.forkPoint.messageId)
+        : undefined;
       const native = forkNativePermissions(source, sourceRef);
       const settings = await compileCreationSettings(
         this.client,
         input,
         await this.options.resolveCreationSettings(input.sessionScope),
       );
-      await this.hooks.ensureMcp(input);
+      if (!input.forkPoint) await this.hooks.ensureMcp(input);
       const request: OpenCodeRequestDraft<Parameters<OpenCodeClient["session"]["fork"]>[0]> = {
         sessionID: source.id,
       };
       if (input.runtimeHistoryAnchor) request.before = input.runtimeHistoryAnchor;
+      if (boundary?.type === "before") request.before = boundary.messageID;
       assertAgentWorkStartCurrent(input);
-      const detail = await this.client.session.fork(request);
+      let detail = await this.client.session.fork(request);
       const sessionID = newSessionIdSchema.parse(detail).id;
       if (sessionID === source.id)
         throw operationError(
@@ -376,16 +405,29 @@ export class OpencodeSdkAdapter {
           "identity_mismatch",
           "The native fork did not return a distinct conversation with the requested source.",
         );
-      const ref: SessionRef = { ...sourceRef, externalSessionId: sessionID };
+      const ref: SessionRef = {
+        ...sourceRef,
+        workingDirectory: input.workingDirectory,
+        externalSessionId: sessionID,
+      };
       try {
-        verifySession(detail, input);
-        if (detail.fork?.sessionID !== source.id)
+        verifySession(detail, { ...ref, workingDirectory: sourceRef.workingDirectory });
+        if (boundary) {
+          checkReplyForkBoundary(sourceRef, detail, boundary);
+          await requireIdleFork(this.client, ref);
+        } else if (detail.fork?.sessionID !== source.id)
           throw operationError(
             sourceRef,
             "fork the conversation",
             "identity_mismatch",
             "The native fork did not return the requested source conversation.",
           );
+        if (sourceRef.workingDirectory !== ref.workingDirectory) {
+          await this.client.session.move({ sessionID, directory: ref.workingDirectory });
+          detail = await this.readSession(ref, "confirm the fork destination");
+        }
+        if (input.forkPoint) await this.hooks.ensureMcp(input);
+        assertAgentWorkStartCurrent(input);
         await installOpenCodeRootPolicy({
           client: this.client,
           detail,
@@ -402,14 +444,12 @@ export class OpencodeSdkAdapter {
         ).title;
         if (title) await this.client.session.update({ sessionID: detail.id, title });
         if (input.model) await this.updateNativeModel(ref, input.model);
-        return this.summary(
-          this.admit(
-            ref,
-            input.sessionScope,
-            await this.readSession(ref, "confirm the fork"),
-            true,
-          ),
-        );
+        const confirmed = await this.readSession(ref, "confirm the fork");
+        if (boundary) {
+          checkReplyForkBoundary(sourceRef, confirmed, boundary);
+          await requireIdleFork(this.client, ref);
+        }
+        return this.summary(this.admit(ref, input.sessionScope, confirmed, true));
       } catch (cause) {
         return this.cleanupNewSession(sessionID, cause);
       }

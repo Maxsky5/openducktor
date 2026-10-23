@@ -6,6 +6,8 @@ import type {
   AgentSessionWorkflowScope,
   AgentMessageTarget,
   AgentSessionResumeIntent,
+  AgentWorkflowSessionForkInput,
+  AgentSessionControlForkInput,
 } from "@openducktor/contracts";
 import { isAgentSessionBlockedOnInput, BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { Effect } from "effect";
@@ -173,6 +175,41 @@ export const createAgentSessionCommandService = ({
         }),
       ),
     prepareSessionCreation: creation,
+    runForkSourceOperation: <A, E, R>(target: AgentMessageTarget, work: Effect.Effect<A, E, R>) =>
+      owner.supervise(owner.withRootLock(target, work)),
+    runWorkflowForkOperation: <A, E>(
+      input: AgentWorkflowSessionForkInput,
+      use: (prepared: AgentSessionControlForkInput) => Effect.Effect<A, E>,
+    ) =>
+      owner.supervise(
+        Effect.gen(function* () {
+          const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+          const source = { ...input, repoPath };
+          return yield* owner.withRootLock(
+            source,
+            Effect.gen(function* () {
+              const accepted = yield* policyFor(input.sessionScope).prepareForkSource(source);
+              if (!accepted.model)
+                return yield* new HostValidationError({
+                  field: "model",
+                  message:
+                    "The source session has no accepted model settings. Select its model before forking.",
+                });
+              return yield* use({
+                repoPath,
+                runtimeKind: input.runtimeKind,
+                workingDirectory: input.workingDirectory,
+                sourceWorkingDirectory: input.workingDirectory,
+                parentExternalSessionId: input.externalSessionId,
+                sessionScope: input.sessionScope,
+                forkPoint: input.forkPoint,
+                model: accepted.model,
+                systemPrompt: "",
+              });
+            }),
+          );
+        }),
+      ),
     startSession: (input: Parameters<typeof runtime.startSession>[0]) =>
       owner.supervise(creation.startSession(input)),
     startWorkflowSession: (input: Parameters<typeof workflow.startWorkflowSession>[0]) =>

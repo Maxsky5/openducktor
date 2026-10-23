@@ -108,6 +108,7 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       workspaceSessionClient.workspaceSessionCreate.bind(workspaceSessionClient),
     workspaceSessionStart:
       workspaceSessionClient.workspaceSessionStart.bind(workspaceSessionClient),
+    workspaceSessionFork: workspaceSessionClient.workspaceSessionFork.bind(workspaceSessionClient),
     workspaceSessionLaunch:
       workspaceSessionClient.workspaceSessionLaunch.bind(workspaceSessionClient),
     workspaceSessionSetDraftModel:
@@ -291,6 +292,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
     agentSessionStop: agentClient.agentSessionStop.bind(agentClient),
     agentSessionControlFork:
       agentSessionLiveClient.agentSessionControlFork.bind(agentSessionLiveClient),
+    agentSessionWorkflowFork:
+      agentSessionLiveClient.agentSessionWorkflowFork.bind(agentSessionLiveClient),
     agentSessionControlRelease:
       agentSessionLiveClient.agentSessionControlRelease.bind(agentSessionLiveClient),
     agentSessionControlResume:

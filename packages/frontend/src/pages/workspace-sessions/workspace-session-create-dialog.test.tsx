@@ -436,6 +436,11 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
     const name = view.getByLabelText("Name optional");
     const fieldset = name.closest("fieldset");
     expect(fieldset?.disabled).toBe(true);
+    fireEvent.click(view.getByRole("radio", { name: "Current checkout" }));
+    expect(view.getByRole("radio", { name: "New worktree" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(view.getByLabelText("Worktree name")).toBeDefined();
     expect(
       view
         .getByRole("button", { name: "Select model, OpenCode, Test model" })

@@ -25,6 +25,7 @@ const setup = (overrides: Partial<Parameters<typeof createSessionOperationOwner>
     run: (_target, _operation, work) => work,
     runSend: (_target, work) => work,
     validateRef: unexpected,
+    prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
     prepareSend: unexpected,
     prepareResume: unexpected,
     prepareModelUpdate: unexpected,

@@ -13,6 +13,7 @@ import {
   findClaudeSubagentTaskSession,
   hasActiveClaudeBackgroundWork,
   rememberAssistantTextForCurrentTurn,
+  userTurnIndex,
 } from "./claude-agent-sdk-event-session";
 import {
   emitClaudeSubagentUserMessage,
@@ -25,6 +26,7 @@ import {
 } from "./claude-agent-sdk-local-commands";
 import {
   emitClaudePermissionDeniedToolPart,
+  emitClaudeDeferredReplyForkPoint,
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
 import {
@@ -334,6 +336,7 @@ const handleSessionStateChanged = ({
     { type: "system"; subtype: "session_state_changed" }
   >;
 }): void => {
+  const awaitedIdle = session.resultAwaitsSdkIdle === true;
   applyClaudeLifecycleEvent({
     emit,
     session,
@@ -343,6 +346,9 @@ const handleSessionStateChanged = ({
       state: message.state,
     },
   });
+  if (awaitedIdle && message.state === "idle" && session.activity === "idle") {
+    emitClaudeDeferredReplyForkPoint({ emit, session, timestamp });
+  }
 };
 
 const handleAssistantMessage = ({
@@ -361,6 +367,8 @@ const handleAssistantMessage = ({
   }
   delete session.lastError;
   delete session.usageReset;
+  session.lastAssistantNativeUuid = message.uuid;
+  session.lastAssistantNativeUuidTurnIndex = userTurnIndex(session);
   const assistantModel = message.message.model ? modelSelection(message.message.model) : undefined;
   const assistantMessage = message.message;
   const content = assistantMessage.content;

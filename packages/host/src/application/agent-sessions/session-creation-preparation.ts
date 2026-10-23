@@ -1,5 +1,5 @@
 import type { AgentMessageTarget } from "@openducktor/contracts";
-import { agentSessionScopesEqual } from "@openducktor/core";
+import { agentSessionRefKey, agentSessionScopesEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { AgentSessionOperationPolicy } from "./agent-session-operation-policy";
@@ -47,38 +47,41 @@ export const createSessionCreationPreparation = ({
           field: "workingDirectory",
           message: "Select the owned checkout before forking a session.",
         });
-      const target = {
+      const source = {
         ...input,
-        workingDirectory: input.workingDirectory,
+        workingDirectory: input.sourceWorkingDirectory ?? input.workingDirectory,
         externalSessionId: input.parentExternalSessionId,
       };
-      const root = yield* resolveRoot(target);
+      const root = yield* resolveRoot(source);
       const sameTask =
         root.sessionScope.kind === "workflow" &&
         input.sessionScope.kind === "workflow" &&
         root.sessionScope.taskId === input.sessionScope.taskId;
-      if (!sameTask && !agentSessionScopesEqual(root.sessionScope, input.sessionScope))
+      const scopeMatches = agentSessionScopesEqual(root.sessionScope, input.sessionScope);
+      const sourceMatches = agentSessionRefKey(root) === agentSessionRefKey(source);
+      if (input.forkPoint ? !sourceMatches || !scopeMatches : !sameTask && !scopeMatches)
         return yield* new HostValidationError({
           field: "sessionScope",
           message: "The fork parent belongs to another task or workspace chat.",
         });
+      const destination = { ...source, workingDirectory: input.workingDirectory };
       yield* turnPreparation.model(
-        target,
+        destination,
         input.model
           ? { ...input.model, runtimeKind: input.model.runtimeKind ?? input.runtimeKind }
           : null,
       );
-      const owned = yield* policyFor(root.sessionScope).prepareSend({ ...target, parts: [] });
-      const systemPrompt = yield* turnPreparation.context(target);
+      const sourceSettings = yield* policyFor(root.sessionScope).prepareForkSource(source);
+      const systemPrompt = yield* turnPreparation.context(destination);
       const prepared = { ...input };
       if (root.sessionScope.kind === "repository") {
-        if (owned.systemPrompt === undefined)
+        if (sourceSettings.systemPrompt === undefined)
           return yield* new HostValidationError({
             field: "sessionScope",
             message:
               "The saved workspace role context is unavailable. Reopen the saved chat before forking.",
           });
-        prepared.systemPrompt = owned.systemPrompt;
+        prepared.systemPrompt = sourceSettings.systemPrompt;
       } else if (systemPrompt !== undefined) prepared.systemPrompt = systemPrompt;
       return yield* runtime.forkSession(prepared);
     }),

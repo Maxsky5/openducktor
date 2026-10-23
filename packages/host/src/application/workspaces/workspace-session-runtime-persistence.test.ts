@@ -423,6 +423,44 @@ describe("Workspace Session persistence through the shared command module", () =
     },
   );
 
+  test("blocks a workspace fork when accepted source settings remain uncertain", async () => {
+    const h = await setup();
+    h.state.failModelSave = true;
+    h.state.failRestore = true;
+    const changed = await Effect.runPromise(
+      Effect.result(
+        h.live.updateSessionModel({
+          ...h.ref,
+          sessionScope: { kind: "repository" },
+          model: { providerId: "provider", modelId: "new-model" },
+        }),
+      ),
+    );
+    expect(changed).toMatchObject({
+      _tag: "Failure",
+      failure: { message: expect.stringContaining("Runtime model restore failed") },
+    });
+    const forked = await Effect.runPromise(
+      Effect.result(
+        h.workspaceService().fork({
+          workspaceId: "fairnest",
+          sessionId: h.record.id,
+          forkPoint: { messageId: "completed-reply" },
+          destination: { kind: "same_folder" },
+        }),
+      ),
+    );
+    expect(forked).toMatchObject({
+      _tag: "Failure",
+      failure: { message: expect.stringContaining("earlier operation with uncertain acceptance") },
+    });
+    expect(
+      await Effect.runPromise(
+        h.store.listActive({ workspaceId: "fairnest", repoPath: h.ref.repoPath }),
+      ),
+    ).toHaveLength(1);
+  });
+
   test("does not roll back a saved model when publication fails", async () => {
     const h = await setup();
     h.state.failPublish = true;
@@ -672,6 +710,11 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      claudeSessionMetadata: {
+        readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
+      },
+      runtimeAdmission: { admit: (_kind, work) => work },
+      runForkSourceOperation: h.live.runForkSourceOperation,
       browserTabs: { closeOwnerTabs: () => Effect.void },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
@@ -726,7 +769,10 @@ describe("Workspace Session persistence through the shared command module", () =
             h.state.registered = false;
           }),
       }),
-      settingsConfig: createSettingsConfigTestDouble({ pathExists: () => Effect.succeed(true) }),
+      settingsConfig: createSettingsConfigTestDouble({
+        readConfig: () => Effect.succeed(null),
+        pathExists: () => Effect.succeed(true),
+      }),
       worktreeFiles: createWorktreeFilePortTestDouble({
         resolveWorktreeRemovalPath: (value) => Effect.succeed(value),
       }),

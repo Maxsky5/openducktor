@@ -101,7 +101,12 @@ test("rejects a malformed start response", async () => {
 
 test("reads archive impact and forwards explicit worktree removal through the host boundary", async () => {
   const calls: Array<{ command: HostCommandName; args: unknown }> = [];
-  const preview = { branchName: "feature/chat", worktreeExists: true, hasUncommittedChanges: true };
+  const preview = {
+    branchName: "feature/chat",
+    worktreeExists: true,
+    hasUncommittedChanges: true,
+    sharedWith: [{ workspaceId: "workspace", sessionId: "fork", title: "Chat (fork)" }],
+  };
   const archived: WorkspaceSession = {
     id: "chat",
     runtimeKind: "codex",

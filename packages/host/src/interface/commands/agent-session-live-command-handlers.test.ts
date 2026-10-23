@@ -177,6 +177,7 @@ const createHarness = async (
       handlers: createAgentSessionLiveCommandHandlers(
         {
           ...service,
+          forkWorkflowSession: () => Effect.die(new Error("unexpected workflow fork")),
           startWorkflowSession,
         },
         {

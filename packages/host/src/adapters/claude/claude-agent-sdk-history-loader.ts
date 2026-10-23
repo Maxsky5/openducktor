@@ -9,10 +9,11 @@ import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import {
   isClaudeSessionMissingError,
   loadClaudeHistoryProjectionInput,
+  type ClaudeHistoryMessage,
   type ClaudeHistoryReadFailure,
 } from "./claude-agent-sdk-history-messages";
 import type { ClaudeTranscriptReadOptions } from "./claude-transcript-reader";
-import type { ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
+import { hasFinalStopStep, type ClaudeLiveUserMessage } from "./claude-agent-sdk-history-support";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeWork } from "./claude-agent-sdk-session-store";
@@ -25,6 +26,7 @@ export type ClaudeLiveHistoryContext = {
   source: "fresh" | "persisted";
   subagentAgentIdsByToolUseId?: ReadonlyMap<string, string>;
   userMessages: readonly ClaudeLiveUserMessage[];
+  completedReplyMessageIds?: () => ReadonlySet<string>;
 };
 
 /** A resumed or forked session must load its saved transcript. */
@@ -47,6 +49,7 @@ export const claudeLiveHistoryContext = (
       return ids;
     },
     hasActiveWork: () => hasActiveClaudeWork(session),
+    completedReplyMessageIds: () => new Set(session.completedReplyChainIds?.keys()),
     source:
       isSubagent ||
       "externalSessionId" in session.input ||
@@ -100,11 +103,41 @@ export const loadClaudeHistory = (
   liveContext?: ClaudeLiveHistoryContext,
   options: ClaudeTranscriptReadOptions = {},
 ): Effect.Effect<AgentSessionHistoryMessage[], ClaudeHistoryReadFailure> =>
+  projectClaudeHistory(input, now, liveContext, loadClaudeHistoryProjectionInput(input, options));
+
+type ClaudeHistorySnapshot = {
+  history: AgentSessionHistoryMessage[];
+  messages: readonly ClaudeHistoryMessage[];
+};
+
+export const loadClaudeHistorySnapshot = (
+  input: LoadAgentSessionHistoryInput,
+  now: () => string,
+  liveContext?: ClaudeLiveHistoryContext,
+  options: ClaudeTranscriptReadOptions = {},
+): Effect.Effect<ClaudeHistorySnapshot, ClaudeHistoryReadFailure> =>
+  Effect.gen(function* () {
+    const projectionInput = yield* loadClaudeHistoryProjectionInput(input, options);
+    const history = yield* projectClaudeHistory(
+      input,
+      now,
+      liveContext,
+      Effect.succeed(projectionInput),
+    );
+    return { history, messages: projectionInput.messages };
+  });
+
+const projectClaudeHistory = (
+  input: LoadAgentSessionHistoryInput,
+  now: () => string,
+  liveContext: ClaudeLiveHistoryContext | undefined,
+  loadProjectionInput: ReturnType<typeof loadClaudeHistoryProjectionInput>,
+): Effect.Effect<AgentSessionHistoryMessage[], ClaudeHistoryReadFailure> =>
   Effect.gen(function* () {
     if (liveContext?.source === "fresh" && liveContext.userMessages.length === 0) {
       return finalizeClaudeHistory(input, []);
     }
-    const projectionInput = yield* loadClaudeHistoryProjectionInput(input, options).pipe(
+    const projectionInput = yield* loadProjectionInput.pipe(
       Effect.catch((cause) => {
         // The UI can read history after the first live message but before Claude writes the
         // transcript. In this gap, the fresh session and its live events hold the new messages.
@@ -143,5 +176,20 @@ export const loadClaudeHistory = (
       },
     });
     if (subagents) yield* subagents.reconcile(history);
+    if (!isSubagentTranscript) {
+      const currentUserIndex = history.findLastIndex((message) => message.role === "user");
+      const active = liveContext?.hasActiveWork() ?? false;
+      const completed = liveContext?.completedReplyMessageIds?.();
+      for (const [index, message] of history.entries()) {
+        if (
+          message.role === "assistant" &&
+          message.text.trim().length > 0 &&
+          hasFinalStopStep(message) &&
+          (!active || index < currentUserIndex || completed?.has(message.messageId))
+        ) {
+          message.forkPoint = { messageId: message.messageId };
+        }
+      }
+    }
     return finalizeClaudeHistory(input, history);
   });

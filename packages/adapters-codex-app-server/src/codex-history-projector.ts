@@ -44,6 +44,9 @@ export const projectCodexCanonicalEventsToHistory = (
       if (event.questionRequest) {
         message.questionRequest = event.questionRequest;
       }
+      if (event.forkPoint) {
+        message.forkPoint = event.forkPoint;
+      }
       if (event.totalTokens !== undefined) {
         message.totalTokens = event.totalTokens;
       }

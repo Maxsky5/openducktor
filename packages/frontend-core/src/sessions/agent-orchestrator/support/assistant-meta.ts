@@ -1,4 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
+import type { AgentSessionForkPoint } from "@openducktor/contracts";
 import type {
   AgentChatMessage,
   AgentSessionContextUsage,
@@ -10,6 +11,7 @@ type AssistantMessageMetaInput = {
   role: AgentRole | null;
   model?: AgentSessionState["selectedModel"] | undefined;
   isFinal: boolean;
+  forkPoint?: AgentSessionForkPoint | undefined;
   durationMs?: number | undefined;
   totalTokens?: number | undefined;
   contextWindow?: number | undefined;
@@ -46,6 +48,7 @@ export const createAssistantMessageMeta = ({
   role,
   model,
   isFinal,
+  forkPoint,
   durationMs,
   totalTokens,
   contextWindow,
@@ -59,6 +62,9 @@ export const createAssistantMessageMeta = ({
     kind: "assistant",
     isFinal,
   };
+  if (isFinal && forkPoint) {
+    meta.forkPoint = forkPoint;
+  }
   if (role) {
     meta.agentRole = role;
   }
@@ -94,6 +100,7 @@ export const toAssistantMessageMeta = (
   durationMs?: number,
   totalTokens?: number,
   model?: AgentSessionState["selectedModel"],
+  forkPoint?: AgentSessionForkPoint,
 ): Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "assistant" }> => {
   return createAssistantMessageMeta({
     role: session.sessionAssociation.kind === "workflow" ? session.sessionAssociation.role : null,
@@ -101,5 +108,6 @@ export const toAssistantMessageMeta = (
     model,
     durationMs,
     totalTokens,
+    forkPoint,
   });
 };

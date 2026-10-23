@@ -166,7 +166,11 @@ export const createClaudeAgentSdkSession = async ({
       externalSessionId: session.externalSessionId,
       runtimeId,
     });
-    if (sessionInput.options.resume && !sessionInput.options.forkSession) {
+    if (
+      sessionInput.options.resume &&
+      !sessionInput.options.forkSession &&
+      sessionInput.forkSourceWorkingDirectory === undefined
+    ) {
       if (sessionInput.reconcileTitle === true && !isContinuation) {
         await reconcileClaudeSessionTitle({ session, title: sessionInput.title });
       } else {
@@ -205,7 +209,12 @@ export const createClaudeAgentSdkSession = async ({
     }
     session.summary.status = isContinuation ? "running" : "idle";
     // Restoring an idle session must not move its activity time in the session list.
-    if (sessionInput.options.resume && !sessionInput.options.forkSession && !isContinuation) {
+    if (
+      sessionInput.options.resume &&
+      !sessionInput.options.forkSession &&
+      sessionInput.forkSourceWorkingDirectory === undefined &&
+      !isContinuation
+    ) {
       return session.summary;
     }
     const timestamp = now();

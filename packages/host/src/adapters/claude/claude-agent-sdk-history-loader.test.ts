@@ -275,6 +275,7 @@ describe("claudeLiveHistoryContext", () => {
     expect(context).toEqual({
       activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
+      completedReplyMessageIds: expect.any(Function),
       source: "fresh",
       subagentAgentIdsByToolUseId: expect.any(Map),
       userMessages: [acceptedUserMessage],
@@ -300,6 +301,7 @@ describe("claudeLiveHistoryContext", () => {
     expect(context).toEqual({
       activeBackgroundTaskIds: expect.any(Function),
       hasActiveWork: expect.any(Function),
+      completedReplyMessageIds: expect.any(Function),
       source: "persisted",
       subagentAgentIdsByToolUseId: expect.any(Map),
       userMessages: [acceptedUserMessage],

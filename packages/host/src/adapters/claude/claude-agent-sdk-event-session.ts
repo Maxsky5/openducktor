@@ -27,6 +27,7 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     pendingApprovals?: Map<string, PendingApproval>;
     pendingQuestions?: Map<string, PendingQuestion>;
     pendingUserTurnCount?: number;
+    resultAwaitsSdkIdle?: boolean;
     retractedSubagentTaskIds?: Set<string>;
     retractedToolUseIds?: Set<string>;
     lastAssistantTextMessageId?: string;
@@ -35,6 +36,9 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     lastAssistantTextModel?: AgentModelSelection;
     lastAssistantTextTurnIndex?: number;
     lastSuccessfulResultTurnIndex?: number;
+    lastAssistantNativeUuid?: string;
+    lastAssistantNativeUuidTurnIndex?: number;
+    completedReplyChainIds?: Map<string, string>;
     model?: AgentModelSelection | undefined;
     pendingSubagentAssistantMessage?: {
       messageId: string;

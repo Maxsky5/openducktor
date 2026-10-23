@@ -1,4 +1,4 @@
-import type { AgentTurnOutcome } from "@openducktor/contracts";
+import type { AgentSessionForkPoint, AgentTurnOutcome } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingQuestionRequest,
@@ -44,6 +44,7 @@ export type CodexCanonicalAssistantMessageEvent = CodexCanonicalEventBase & {
   kind: "assistant_message";
   messageId: string;
   message: string;
+  forkPoint?: AgentSessionForkPoint;
   model?: AgentModelSelection;
   totalTokens?: number;
   contextWindow?: number;

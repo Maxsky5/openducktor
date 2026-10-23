@@ -167,6 +167,8 @@ export const createTaskWorkflowSessionPolicy = ({
               },
             };
           }),
+        prepareForkSource: (input) =>
+          readStored(input, "send").pipe(Effect.map((stored) => ({ model: stored.selectedModel }))),
         prepareSend: (input) =>
           Effect.gen(function* () {
             const stored = yield* readStored(input, "send");

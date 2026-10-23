@@ -97,6 +97,9 @@ export const createTaskSessionLifecycleCoordinator = () => {
         }
       });
     },
+    acquireWorktreeRead(path: string) {
+      return TxReentrantLock.readLock(worktreeGate(path));
+    },
     runWorktreeRead<Value, Error, Requirements>(
       path: string,
       read: Effect.Effect<Value, Error, Requirements>,

@@ -25,6 +25,7 @@ import {
   shouldFinalizeClaudeTurn,
 } from "./claude-agent-sdk-user-messages";
 import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
+import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
   ErrorState & {
@@ -44,6 +45,9 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
     | "lastAssistantTextModel"
     | "lastAssistantTextTurnIndex"
     | "lastSuccessfulResultTurnIndex"
+    | "lastAssistantNativeUuid"
+    | "lastAssistantNativeUuidTurnIndex"
+    | "completedReplyChainIds"
     | "model"
     | "toolInputsByCallId"
     | "toolMessageIdsByCallId"
@@ -140,33 +144,6 @@ export const handleClaudeResultMessage = ({
   });
 };
 
-const streamedTextMessageIds = (session: ClaudeResultEventSession): string[] =>
-  session.streamAssistantMessageIdsByBlockIndex
-    ? [...new Set(session.streamAssistantMessageIdsByBlockIndex.values())]
-    : [];
-
-const resultModelForCompletedTurn = (
-  session: ClaudeResultEventSession,
-  completedUserTurnIndex: number,
-  duplicatesAssistantTextFromSameTurn: boolean,
-): AgentModelSelection | undefined => {
-  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1];
-  const acceptedModel = acceptedMessage?.model;
-  const completedAssistantModel = duplicatesAssistantTextFromSameTurn
-    ? session.lastAssistantTextModel
-    : undefined;
-  if (!acceptedModel) {
-    return completedAssistantModel ?? session.model;
-  }
-  if (!completedAssistantModel) {
-    return acceptedModel;
-  }
-  return {
-    ...acceptedModel,
-    modelId: completedAssistantModel.modelId,
-  };
-};
-
 export const emitClaudePermissionDeniedToolPart = ({
   emit,
   permission,
@@ -210,6 +187,57 @@ export const emitClaudePermissionDeniedToolPart = ({
     timestamp,
     part: createClaudeCompletedToolPart(completedToolInput),
   });
+};
+
+export const emitClaudeDeferredReplyForkPoint = (input: {
+  session: ClaudeResultEventSession;
+  emit: (event: AgentEvent) => void;
+  timestamp: string;
+}): void => {
+  const { session } = input;
+  if (
+    !session.lastAssistantTextMessageId ||
+    !session.lastAssistantTextFinal ||
+    !session.lastAssistantText
+  )
+    return;
+  const message: Extract<AgentEvent, { type: "assistant_message" }> = {
+    type: "assistant_message",
+    externalSessionId: session.externalSessionId,
+    timestamp: input.timestamp,
+    messageId: session.lastAssistantTextMessageId,
+    message: session.lastAssistantText,
+  };
+  if (session.lastAssistantTextModel) message.model = session.lastAssistantTextModel;
+  attachClaudeCompletedReplyForkPoint(session, message, session.lastAssistantTextTurnIndex ?? -1);
+  if (message.forkPoint) input.emit(message);
+};
+
+const streamedTextMessageIds = (session: ClaudeResultEventSession): string[] =>
+  session.streamAssistantMessageIdsByBlockIndex
+    ? [...new Set(session.streamAssistantMessageIdsByBlockIndex.values())]
+    : [];
+
+const resultModelForCompletedTurn = (
+  session: ClaudeResultEventSession,
+  completedUserTurnIndex: number,
+  duplicatesAssistantTextFromSameTurn: boolean,
+): AgentModelSelection | undefined => {
+  const acceptedMessage = session.acceptedUserMessages?.[completedUserTurnIndex - 1];
+  const acceptedModel = acceptedMessage?.model;
+  const completedAssistantModel = duplicatesAssistantTextFromSameTurn
+    ? session.lastAssistantTextModel
+    : undefined;
+  if (!acceptedModel) {
+    return completedAssistantModel ?? session.model;
+  }
+  if (!completedAssistantModel) {
+    return acceptedModel;
+  }
+  return {
+    ...acceptedModel,
+    modelId: completedAssistantModel.modelId,
+  };
 };
 
 const emitFinalAssistantMarker = ({
@@ -259,7 +287,11 @@ const emitSuccessfulResultText = ({
   if (
     duplicatesAssistantTextFromSameTurn &&
     session.lastAssistantTextFinal &&
-    !acceptedTurnHasModel
+    !acceptedTurnHasModel &&
+    (isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
+      lifecycleOutcomeForClaudeResult(message) !== "completed" ||
+      !session.lastAssistantNativeUuid ||
+      session.lastAssistantNativeUuidTurnIndex !== completedUserTurnIndex)
   ) {
     return;
   }
@@ -293,5 +325,24 @@ const emitSuccessfulResultText = ({
   if (resultModel) {
     assistantMessage.model = resultModel;
   }
+  if (lifecycleOutcomeForClaudeResult(message) === "completed") {
+    attachClaudeCompletedReplyForkPoint(session, assistantMessage, completedUserTurnIndex);
+  }
   emit(assistantMessage);
+};
+
+const attachClaudeCompletedReplyForkPoint = (
+  session: ClaudeResultEventSession,
+  message: Extract<AgentEvent, { type: "assistant_message" }>,
+  completedUserTurnIndex: number,
+): void => {
+  if (
+    isClaudeSubagentTranscriptTarget(session.externalSessionId) ||
+    !session.lastAssistantNativeUuid ||
+    session.lastAssistantNativeUuidTurnIndex !== completedUserTurnIndex
+  )
+    return;
+  message.forkPoint = { messageId: message.messageId };
+  session.completedReplyChainIds ??= new Map();
+  session.completedReplyChainIds.set(message.messageId, session.lastAssistantNativeUuid);
 };

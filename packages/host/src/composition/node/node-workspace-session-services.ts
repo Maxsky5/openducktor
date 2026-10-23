@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { claudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionLaunchService } from "../../application/workspaces/workspace-session-launch-service";
@@ -7,11 +8,24 @@ import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
 import { createWorkspaceSessionLaunchCommandHandlers } from "../../interface/commands/workspace-session-launch-command-handlers";
 
-type Input = Parameters<typeof createWorkspaceSessionService>[0] &
+type Input = Omit<
+  Parameters<typeof createWorkspaceSessionService>[0],
+  "runForkSourceOperation" | "claudeSessionMetadata" | "live"
+> &
   Parameters<typeof createWorkspaceSessionImportService>[0] & {
-    live: Parameters<typeof createWorkspaceSessionLaunchService>[0]["live"];
+    live: Omit<
+      Parameters<typeof createWorkspaceSessionService>[0]["live"],
+      "resumeSession" | "forkSession"
+    > &
+      Parameters<typeof createWorkspaceSessionLaunchService>[0]["live"];
     eventBus: CreateNodeHostCommandRouterInput["eventBus"];
-    commands: Parameters<typeof createWorkspaceSessionLaunchService>[0]["commands"];
+    commands: Parameters<typeof createWorkspaceSessionLaunchService>[0]["commands"] &
+      Pick<
+        ReturnType<
+          typeof import("../../application/agent-sessions/agent-session-command-service").createAgentSessionCommandService
+        >,
+        "prepareSessionCreation" | "runForkSourceOperation"
+      >;
     resolveParts: Parameters<typeof createWorkspaceSessionLaunchService>[0]["resolveParts"];
   };
 
@@ -22,7 +36,13 @@ export const createNodeWorkspaceSessionServices = ({
 }: Input) => {
   const workspaceSessionService = createWorkspaceSessionService({
     ...dependencies,
-    live: { ...dependencies.live, resumeSession: commands.resumeSession },
+    claudeSessionMetadata: claudeSessionMetadataAdapter,
+    runForkSourceOperation: commands.runForkSourceOperation,
+    live: {
+      ...dependencies.live,
+      resumeSession: commands.resumeSession,
+      forkSession: commands.prepareSessionCreation.forkSession,
+    },
   });
   const workspaceSessionImports = createWorkspaceSessionImportService(dependencies);
   const workspaceSessionLaunchService = createWorkspaceSessionLaunchService({

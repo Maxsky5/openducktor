@@ -10,7 +10,7 @@ test("reload roots recover workflow roles and repository scope from persisted ow
   const harness = await createSqliteTaskStoreHarness();
   try {
     const { repoPath } = harness;
-    const store = createSqliteWorkspaceSessionStore(harness.contextProvider);
+    const store = createSqliteWorkspaceSessionStore(harness);
     const config = repoConfigSchema.parse({
       workspaceId: "fairnest",
       workspaceName: "Fairnest",

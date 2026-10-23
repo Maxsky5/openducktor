@@ -162,8 +162,13 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       worktreeFiles: createWorktreeFileAdapter(),
       worktreeActions,
     };
-    const store = createSqliteWorkspaceSessionStore(database.contextProvider);
+    const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
+      claudeSessionMetadata: {
+        readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
+      },
+      runtimeAdmission: { admit: (_kind, work) => work },
+      runForkSourceOperation: (_target, work) => work,
       browserTabs: { closeOwnerTabs: () => Effect.void },
       terminalService: {
         acquireWorkspaceSessionCleanup: () => Effect.succeed({ closedTerminalIds: [] }),
@@ -190,6 +195,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
           }),
       },
       live: {
+        forkSession: () => Effect.die(new Error("unexpected fork")),
         resumeSession: (request) =>
           Effect.succeed({
             externalSessionId: request.externalSessionId,
@@ -247,6 +253,81 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
   };
 
+  // This case creates two real worktrees and commits in the source checkout.
+  test("forks a worktree at the source committed HEAD with configured setup", async () => {
+    await writeFile(path.join(repoPath, ".env"), "ROOT_ENV=1\n");
+    const h = setup();
+    gitCommand("branch", "release", "main~1");
+    const targetBranch = { branch: "release" };
+    const draft = await h.router.invoke("workspace_session_create", {
+      ...h.createInput,
+      targetBranch,
+    });
+    await h.router.invoke("workspace_session_start", {
+      workspaceId: "fairnest",
+      sessionId: draft.session.id,
+    });
+    const source = draft.session.executionTarget.workingDirectory;
+    await writeFile(path.join(source, "tracked.txt"), "source commit\n");
+    runGit(source, "add", "tracked.txt");
+    runGit(source, ...commitIdentity, "commit", "-m", "Source checkout change");
+    const sourceHead = runGit(source, "rev-parse", "HEAD");
+    await writeFile(path.join(source, "tracked.txt"), "uncommitted source change\n");
+    await writeFile(path.join(source, ".env"), "SOURCE_ENV=1\n");
+    const service = createWorkspaceSessionService({
+      ...h.dependencies,
+      live: {
+        ...h.dependencies.live,
+        forkSession: (request) =>
+          Effect.gen(function* () {
+            expect(request.sourceWorkingDirectory).toBe(source);
+            const destination = yield* h.dependencies.git.canonicalizePath(
+              request.workingDirectory,
+            );
+            // Runtime directory reads use a separate fiber at the native Promise boundary.
+            yield* Effect.promise(() =>
+              Effect.runPromise(h.dependencies.lifecycle.runWorktreeRead(destination, Effect.void)),
+            );
+            return {
+              externalSessionId: "fork-native",
+              runtimeKind: request.runtimeKind,
+              workingDirectory: destination,
+              startedAt: "2026-10-22T12:00:00Z",
+              status: "idle" as const,
+            };
+          }),
+      },
+    });
+    const fork = await Effect.runPromise(
+      service.fork({
+        workspaceId: "fairnest",
+        sessionId: draft.session.id,
+        forkPoint: { messageId: "completed-reply" },
+        destination: { kind: "new_worktree", name: "forked-chat", branchName: "odt/forked-chat" },
+      }),
+    );
+    const destination = fork.record.executionTarget.workingDirectory;
+    expect(fork.record.targetBranch).toEqual(targetBranch);
+    expect(runGit(destination, "rev-parse", "HEAD")).toBe(sourceHead);
+    expect(runGit(repoPath, "rev-parse", "HEAD")).toBe(fixtureHead);
+    expect(await readFile(path.join(destination, "tracked.txt"), "utf8")).toBe("source commit\n");
+    expect(await readFile(path.join(source, "tracked.txt"), "utf8")).toBe(
+      "uncommitted source change\n",
+    );
+    expect(h.actionRuns.at(-1)).toMatchObject({
+      worktreePath: destination,
+      env: "ROOT_ENV=1\n",
+      context: { kind: "workspace_session", sessionId: fork.record.id },
+    });
+    expect(
+      (
+        await Effect.runPromise(
+          service.get({ workspaceId: "fairnest", sessionId: draft.session.id }),
+        )
+      ).executionTarget,
+    ).toEqual(draft.session.executionTarget);
+  }, 10_000);
+
   // This case copies a real repository and creates a worktree with Git on Windows.
   test("creates from_branch at the selected branch HEAD instead of the source checkout HEAD", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
@@ -277,7 +358,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
       const h = setup({ actions: false });
       const archived = await Effect.runPromise(
-        createSqliteWorkspaceSessionStore(database.contextProvider).create({
+        createSqliteWorkspaceSessionStore(database).create({
           workspaceId: "fairnest",
           repoPath,
           session: {
@@ -437,7 +518,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await writeFile(path.join(directory, "tracked.txt"), "discard this edit\n");
     await writeFile(path.join(directory, "untracked.txt"), "discard this file\n");
     const archived = await Effect.runPromise(
-      createSqliteWorkspaceSessionStore(database.contextProvider).create({
+      createSqliteWorkspaceSessionStore(database).create({
         workspaceId: "fairnest",
         repoPath,
         session: {
@@ -487,6 +568,39 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     await expect(h.router.invoke("workspace_session_ids_list", {})).rejects.toThrow("workspaceId");
   }, 15_000);
 
+  // Each case creates and removes a real Git worktree, which can exceed the host limit on Windows.
+  test.each(["unrelated repository", "plain directory"] as const)(
+    "restore keeps a replacement %s and its archived record unchanged",
+    async (replacement) => {
+      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+      const h = setup({ actions: false });
+      const { session } = await h.router.invoke("workspace_session_create", h.createInput);
+      const ref = { workspaceId: "fairnest", sessionId: session.id };
+      const directory = session.executionTarget.workingDirectory;
+      const archived = await h.router.invoke("workspace_session_archive", {
+        ...ref,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: directory, branchName: "odt/named-chat" },
+      });
+      await mkdir(directory);
+      if (replacement === "unrelated repository") runGit(directory, "init", "-b", "main");
+      const retainedFile = path.join(directory, "retained.txt");
+      await writeFile(retainedFile, "Keep this replacement checkout.\n");
+      const actionCount = h.actionRuns.length;
+
+      await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow(
+        replacement === "plain directory"
+          ? "not the saved canonical Git directory"
+          : "not a registered worktree",
+      );
+
+      expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
+      expect(await readFile(retainedFile, "utf8")).toBe("Keep this replacement checkout.\n");
+      expect(h.actionRuns).toHaveLength(actionCount);
+    },
+    15_000,
+  );
+
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.
   test("restores an archived removed-worktree session from the current default branch", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
@@ -494,7 +608,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     const branchName = "feature/archive-review";
     const directory = path.join(root, "worktrees", "workspace-sessions", "restored-chat");
     const archived = await Effect.runPromise(
-      createSqliteWorkspaceSessionStore(database.contextProvider).create({
+      createSqliteWorkspaceSessionStore(database).create({
         workspaceId: "fairnest",
         repoPath,
         session: {
@@ -519,6 +633,13 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       }),
     );
     const ref = { workspaceId: "fairnest", sessionId: archived.id };
+    const sibling = await Effect.runPromise(
+      createSqliteWorkspaceSessionStore(database).create({
+        workspaceId: "fairnest",
+        repoPath,
+        session: { ...archived, id: crypto.randomUUID() },
+      }),
+    );
     await writeFile(path.join(repoPath, "tracked.txt"), "new default branch content\n");
     gitCommand(...commitIdentity, "commit", "-a", "-m", "Advance default branch");
     const defaultHead = gitCommand("rev-parse", "main");
@@ -552,6 +673,22 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       },
     ]);
     await expect(readFile(path.join(directory, "untracked.txt"), "utf8")).rejects.toThrow();
+    await writeFile(path.join(directory, "tracked.txt"), "Keep the restored chat's edit.\n");
+    gitCommand("-C", directory, "checkout", "-b", "feature/current-chat");
+    await writeFile(path.join(repoPath, ".env"), "CHANGED_SOURCE=1\n");
+    const restoredSibling = await h.router.invoke("workspace_session_restore", {
+      workspaceId: "fairnest",
+      sessionId: sibling.id,
+    });
+    expect(restoredSibling.archivedAt).toBeNull();
+    expect(restoredSibling.executionTarget).toEqual(restored.executionTarget);
+    expect(await readFile(path.join(directory, "tracked.txt"), "utf8")).toBe(
+      "Keep the restored chat's edit.\n",
+    );
+    expect(await readFile(path.join(directory, ".env"), "utf8")).toBe("TEST_VALUE=local\n");
+    expect(h.actionRuns).toHaveLength(1);
+    expect(gitCommand("-C", directory, "rev-parse", "HEAD")).toBe(defaultHead);
+    expect(gitCommand("-C", directory, "branch", "--show-current")).toBe("feature/current-chat");
   }, 15_000);
 
   // Real Git worktree commands and SQLite writes can exceed the host suite limit on Windows.

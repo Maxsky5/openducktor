@@ -279,6 +279,29 @@ export const createSessionOperationOwner = (deps: {
   return {
     run,
     supervise,
+    withRootLock: <A, E, R>(target: AgentMessageTarget, effect: Effect.Effect<A, E, R>) =>
+      gate.run(
+        agentSessionRefKey(target),
+        Effect.gen(function* () {
+          if (sessionFor(target).unresolved)
+            return yield* new HostValidationError({
+              field: "operation",
+              message:
+                "The source session has an earlier operation with uncertain acceptance. Inspect that operation before forking.",
+            });
+          const root = yield* deps.resolveRoot(target);
+          if (
+            agentSessionRefKey(root) !== agentSessionRefKey(target) ||
+            !agentSessionScopesEqual(root.sessionScope, target.sessionScope)
+          )
+            return yield* new HostValidationError({
+              field: "externalSessionId",
+              message:
+                "Fork requires the saved root session of this task and role. Select its root chat and retry.",
+            });
+          return yield* effect;
+        }),
+      ),
     captureGuard,
     cancel: (ref: AgentSessionLiveRef) => {
       sessionFor(ref).generation += 1;
