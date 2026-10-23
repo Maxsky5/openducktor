@@ -237,7 +237,7 @@ describe("agents-page-selection", () => {
     expect(resolved).toEqual({ sessionSummary: null, role: "build" });
   });
 
-  test("prioritizes active running session over status defaults", () => {
+  test("prioritizes confirmed running sessions over stale work and status defaults", () => {
     const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
@@ -256,7 +256,15 @@ describe("agents-page-selection", () => {
     });
 
     const resolved = resolveAgentStudioSelectedSessionSummary({
-      sessionsForTask: [olderBuildSession, runningSpecSession],
+      sessionsForTask: [
+        olderBuildSession,
+        runningSpecSession,
+        {
+          ...olderBuildSession,
+          activityState: "running",
+          statusUnavailableReason: "Reconnect Claude.",
+        },
+      ],
       sessionExternalId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
@@ -281,6 +289,7 @@ describe("agents-page-selection", () => {
       sessionAssociation: { kind: "workflow", taskId: "task-1", role: "spec" },
 
       status: "idle",
+      statusUnavailableReason: "Reconnect Claude.",
       startedAt: "2026-02-22T09:00:00.000Z",
       pendingQuestions: [
         {

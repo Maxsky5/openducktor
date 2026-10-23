@@ -6,11 +6,17 @@ import {
   type AgentRuntimeCatalog,
   settingsSnapshotSchema,
   taskCardSchema,
+  type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshot,
   type AgentSessionModelSelection,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import { createClaudeLiveSessionState } from "../../adapters/agent-sessions/claude-live-session-state";
+import { handleClaudeSdkMessage } from "../../adapters/claude/claude-agent-sdk-events";
+import { createClaudeSession } from "../../adapters/claude/claude-agent-sdk-session-io.test-support";
+import { claudeSdkMessageFixture } from "../../adapters/claude/claude-agent-sdk-test-messages";
 import { AgentSessionBusyError } from "../../ports/agent-session-send-error";
+import { toAgentSessionLiveEnvelope } from "./agent-session-live-envelope";
 import { createAgentSessionCommandService } from "./agent-session-command-service";
 import { createSessionTurnPreparation } from "./session-turn-preparation";
 import { createAgentMessageDeliveryService } from "./agent-message-delivery-service";
@@ -44,6 +50,7 @@ const setup = (
   runtimeKind: RuntimeKind,
   catalog?: Effect.Effect<AgentRuntimeCatalog>,
   activities: AgentSessionLiveSnapshot["activity"][] = [],
+  readLiveSnapshot?: () => AgentSessionLiveSnapshot,
 ) => {
   const recipient = { ...target, runtimeKind };
   let savedModel = { ...selection(), runtimeKind };
@@ -59,6 +66,7 @@ const setup = (
   let readCount = 0;
   const waiting = Promise.withResolvers<void>();
   const live = (): AgentSessionLiveSnapshot => {
+    if (readLiveSnapshot) return { ...readLiveSnapshot(), model: savedModel };
     const snapshot: AgentSessionLiveSnapshot = {
       ref: recipient,
       title: "Session",
@@ -164,7 +172,11 @@ const setup = (
         }),
       sendUserMessage: (input) =>
         Effect.suspend(() => {
-          if ((foregroundTurnActive ?? activity === "running") && input.delivery !== "steer")
+          const snapshot = live();
+          if (
+            (snapshot.foregroundTurnActive ?? snapshot.activity === "running") &&
+            input.delivery !== "steer"
+          )
             return Effect.fail(
               new AgentSessionBusyError({
                 message: "Session is working",
@@ -349,7 +361,7 @@ describe("message delivery uses prepared session settings", () => {
   });
 });
 
-const settingsCatalog: AgentRuntimeCatalog = {
+const settingsCatalog = {
   models: {
     status: "available",
     catalog: {
@@ -366,9 +378,107 @@ const settingsCatalog: AgentRuntimeCatalog = {
       defaultModelsByProvider: { provider: "current" },
     },
   },
-};
+} satisfies AgentRuntimeCatalog;
 
 describe("explicit settings ordering", () => {
+  test("applies settings and delivers the queue after a Claude foreground turn reaches Idle", async () => {
+    const nativeSession = createClaudeSession({
+      externalSessionId: target.externalSessionId,
+      input: {
+        ...target,
+        runtimeKind: "claude",
+        runtimePolicy: { kind: "claude" },
+        systemPrompt: "Build",
+      },
+      summary: {
+        externalSessionId: target.externalSessionId,
+        runtimeKind: "claude",
+        workingDirectory: target.workingDirectory,
+        sessionAssociation: target.sessionScope,
+        startedAt: "2026-10-13T12:00:00Z",
+        status: "idle",
+      },
+    });
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary(target.repoPath, nativeSession.summary);
+    const claudeSettingsCatalog: AgentRuntimeCatalog = {
+      models: {
+        ...settingsCatalog.models,
+        catalog: {
+          ...settingsCatalog.models.catalog,
+          runtime: RUNTIME_DESCRIPTORS_BY_KIND.claude,
+        },
+      },
+    };
+    const h = setup("claude", Effect.succeed(claudeSettingsCatalog), [], () => {
+      const snapshot = state.readSnapshot({ ...target, runtimeKind: "claude" });
+      if (snapshot.type !== "live") throw new Error("Claude session must remain live");
+      return snapshot.session;
+    });
+    const changes: AgentSessionLiveEnvelope[] = [];
+    const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session: nativeSession,
+        message,
+        timestamp: "2026-10-13T12:01:00Z",
+        modelSelection: (modelId) => ({ runtimeKind: "claude", providerId: "provider", modelId }),
+        emit: (event) =>
+          changes.push(...state.applyEvent(nativeSession, event).map(toAgentSessionLiveEnvelope)),
+      });
+    const publish = async () => {
+      const pending = changes.splice(0);
+      for (const change of pending) await Effect.runPromise(h.commands.observeOperation(change));
+      h.delivery.observeChanges(pending);
+    };
+    try {
+      send(
+        claudeSdkMessageFixture({
+          type: "user",
+          origin: { kind: "auto-continuation" },
+          message: { content: "Continue the check" },
+        }),
+      );
+      await publish();
+      expect(h.live()).toMatchObject({ activity: "running", foregroundTurnActive: true });
+      expect(
+        await Effect.runPromise(
+          h.delivery.submit({
+            ...h.target,
+            submissionId: "queued",
+            mode: "default",
+            parts: [{ kind: "text", text: "Next" }],
+          }),
+        ),
+      ).toMatchObject({ kind: "queued" });
+      const updating = Effect.runPromiseExit(
+        h.commands.updateSessionModel({
+          ...h.target,
+          model: { providerId: "provider", modelId: "next", profileId: "build" },
+        }),
+      );
+      await h.waiting;
+      expect(h.native.models).toBe(0);
+      send(
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          stop_reason: "end_turn",
+          terminal_reason: "completed",
+          result: "Checks complete",
+          origin: { kind: "auto-continuation" },
+        }),
+      );
+      expect(h.live()).toMatchObject({ activity: "idle", foregroundTurnActive: false });
+      await publish();
+      expect(await updating).toMatchObject({ _tag: "Success" });
+      await Promise.all(h.background.splice(0).map((effect) => Effect.runPromise(effect)));
+      expect(h.order).toEqual(["settings", "send:next"]);
+      expect(h.delivery.listQueues(target.repoPath)).toEqual([]);
+    } finally {
+      await Effect.runPromise(h.commands.shutdownOperations());
+    }
+  });
+
   test.each(["waiting_for_question", "waiting_for_permission"] as const)(
     "keeps settings pending for child %s after the foreground turn ends",
     async (activity) => {

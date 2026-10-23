@@ -124,6 +124,7 @@ export const getCardLayout = (inputs: FooterInputs): CardLayout => {
       session.role,
       session.startedAt,
       session.activityState,
+      session.statusUnavailableReason,
     ]),
     inputs.historicalSessions.map((session) => [
       agentSessionIdentityKey(session),

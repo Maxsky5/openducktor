@@ -46,6 +46,73 @@ function Card(props: ComponentProps<typeof KanbanTaskCard>) {
 }
 
 describe("Kanban card session shortcuts", () => {
+  test("shows a changing status failure without confirming stale running or hiding input", () => {
+    const props = cardProps();
+    props.task = createTaskCardFixture({
+      status: "in_progress",
+      availableActions: ["open_builder"],
+    });
+    const unavailable = {
+      ...session("build"),
+      activityState: "running" as const,
+      statusUnavailableReason: "Reconnect the Claude runtime.",
+    };
+    const view = render(<Card {...props} taskSessions={[unavailable]} />);
+    try {
+      expect(view.getByText(/Status unavailable/).textContent).toContain(
+        unavailable.statusUnavailableReason,
+      );
+      expect(view.queryByText("Running")).toBeNull();
+      expect(view.container.querySelector(".kanban-active-session-ray")).toBeNull();
+      const next = { ...unavailable, statusUnavailableReason: "Update Claude Code." };
+      view.rerender(<Card {...props} taskSessions={[next]} />);
+      expect(view.getByText(/Status unavailable/).textContent).toContain(
+        next.statusUnavailableReason,
+      );
+      expect(view.queryByText(/Reconnect the Claude runtime/)).toBeNull();
+      view.rerender(
+        <Card
+          {...props}
+          hasActiveSession
+          activeSessionRole="build"
+          taskActivityState="waiting_input"
+          taskSessions={[{ ...next, activityState: "waiting_input" }]}
+        />,
+      );
+      expect(view.getByRole("button", { name: "Builder Waiting input" })).toBeDefined();
+      expect(view.getByText(/Status unavailable/).textContent).toContain(
+        next.statusUnavailableReason,
+      );
+      const confirmed = {
+        ...unavailable,
+        externalSessionId: "confirmed-build",
+        startedAt: "2026-09-01T10:00:00Z",
+        statusUnavailableReason: null,
+      };
+      view.rerender(
+        <Card
+          {...props}
+          hasActiveSession
+          activeSessionRole="build"
+          taskActivityState="active"
+          taskSessions={[next, confirmed]}
+        />,
+      );
+      fireEvent.click(view.getByRole("button", { name: "Builder Running" }));
+      expect(props.onOpenSession).toHaveBeenLastCalledWith(props.task.id, "build", {
+        session: confirmed,
+      });
+      expect(view.getByText(/Status unavailable/).textContent).toContain(
+        next.statusUnavailableReason,
+      );
+      view.rerender(<Card {...props} taskSessions={[{ ...next, activityState: "error" }]} />);
+      expect(view.getByText(/Status unavailable/).textContent).toContain("Builder error.");
+      expect(view.container.querySelector(".kanban-active-session-ray")).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   for (const taskCardView of ["normal", "compact"] as const) {
     test(`shows each role and opens Planner above Start Builder in ${taskCardView} mode`, () => {
       const props = { ...cardProps(), taskCardView };

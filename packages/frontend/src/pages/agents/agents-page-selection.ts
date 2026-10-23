@@ -126,7 +126,7 @@ type AgentStudioSessionSelectionInput = {
 };
 
 const isActiveSessionSelectionCandidate = (session: AgentSessionSummary): boolean =>
-  isAgentSessionActivityActive(session.activityState);
+  isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason);
 
 export const resolveAgentStudioSessionSelection = ({
   sessionsForTask,

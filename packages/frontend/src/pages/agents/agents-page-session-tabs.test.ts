@@ -181,6 +181,38 @@ describe("agents-page-session-tabs", () => {
     expect(states.qa.availability).toBe("blocked");
   });
 
+  test.each([
+    ["running", "none", "available", "not_started"],
+    ["idle", "none", "available", "not_started"],
+    ["waiting_input", "waiting_input", "waiting_input", "in_progress"],
+    ["error", "error", "failed", "in_progress"],
+  ] as const)(
+    "keeps unavailable %s activity out of workflow overrides",
+    (activityState, liveSession, tone, completion) => {
+      const task = buildTask();
+      const states = buildWorkflowStateByRole({
+        task,
+        roleWorkflowsByTask: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: task.agentWorkflows.planner,
+          build: { required: true, canSkip: false, available: true, completed: false },
+          qa: task.agentWorkflows.qa,
+        },
+        liveSessionByRole: buildLiveSessionByRoleMap([
+          {
+            ...buildSession({
+              sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+            }),
+            activityState,
+            statusUnavailableReason: "Update Claude Code and reconnect the runtime.",
+          },
+        ]),
+      });
+      expect(states.build).toEqual({ availability: "available", completion, liveSession, tone });
+      expect(states.spec.completion).toBe("done");
+    },
+  );
+
   test("does not mark builder as in_progress when stopped session exists but builder is not available", () => {
     const liveSessionByRole = buildLiveSessionByRoleMap([
       buildSession({

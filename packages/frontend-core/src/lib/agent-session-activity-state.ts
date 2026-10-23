@@ -45,8 +45,10 @@ export const isAgentSessionForegroundActive = (
 
 export const isAgentSessionActivityActive = (
   activityState: OptionalAgentSessionActivityState,
+  statusUnavailableReason?: string | null,
 ): activityState is ActiveAgentSessionActivityState =>
-  activityState === "waiting_input" || isAgentSessionActivityWorking(activityState);
+  activityState === "waiting_input" ||
+  (!statusUnavailableReason && isAgentSessionActivityWorking(activityState));
 
 export const compareActiveAgentSessionActivityState = (
   left: ActiveAgentSessionActivityState,

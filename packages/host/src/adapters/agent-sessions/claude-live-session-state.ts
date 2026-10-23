@@ -336,7 +336,7 @@ export const createClaudeLiveSessionState = () => {
       changes.push(...commitSnapshot(next));
     } else if (event.type === "session_idle") {
       nativeActivityByRef.set(key, "idle");
-      const next = { ...snapshot };
+      const next = { ...snapshot, foregroundTurnActive: false };
       delete next.statusUnavailableReason;
       changes.push(...commitSnapshot(next));
     } else if (event.type === "assistant_part") {

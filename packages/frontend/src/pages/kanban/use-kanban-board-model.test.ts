@@ -63,6 +63,36 @@ const createSession = (overrides: AgentSessionFixtureOverrides = {}): AgentSessi
 };
 
 describe("use-kanban-board-model helpers", () => {
+  test("keeps unavailable sessions visible without counting stale work as active", () => {
+    const unavailable = createSession({
+      statusUnavailableReason: "Update Claude Code and reconnect the runtime.",
+      status: "running",
+    });
+    const sessionsByTask = buildTaskSessionsByTaskId([unavailable]);
+    expect(sessionsByTask.get("task-1")).toMatchObject([
+      { statusUnavailableReason: unavailable.statusUnavailableReason },
+    ]);
+    expect(buildActiveTaskSessionContextByTaskId([unavailable]).size).toBe(0);
+    expect(buildTaskActivityStateByTaskId([createTaskCard()], sessionsByTask).get("task-1")).toBe(
+      "idle",
+    );
+
+    const waiting = {
+      ...unavailable,
+      activityState: "waiting_input" as const,
+      pendingQuestionCount: 1,
+    };
+    expect(buildActiveTaskSessionContextByTaskId([waiting]).get("task-1")).toEqual({
+      role: "build",
+      activityState: "waiting_input",
+    });
+    expect(
+      buildTaskActivityStateByTaskId([createTaskCard()], buildTaskSessionsByTaskId([waiting])).get(
+        "task-1",
+      ),
+    ).toBe("waiting_input");
+  });
+
   test("buildTaskSessionsByTaskId keeps waiting-input sessions even when they are idle", () => {
     const taskSessionsByTaskId = buildTaskSessionsByTaskId([
       createSession({

@@ -7,6 +7,7 @@ import {
   createEmptyAgentActivitySnapshot,
 } from "./agent-session-snapshots";
 import { createSessionMessagesState } from "./agent-orchestrator/support/messages";
+import { createAgentSessionsStore } from "./agent-sessions-store";
 
 const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "session-1",
@@ -27,6 +28,45 @@ const session = (overrides: Partial<AgentSessionState> = {}): AgentSessionState 
 });
 
 describe("createAgentActivitySnapshot", () => {
+  test.each(["workflow", "repository"] as const)(
+    "publishes cause-only status failure and recovery to %s summary subscribers",
+    (kind) => {
+      const store = createAgentSessionsStore("/repo");
+      const liveSession = session({
+        runtimeKind: "claude",
+        sessionAssociation:
+          kind === "workflow" ? { kind, taskId: "task-1", role: "build" } : { kind },
+      });
+      store.replaceSession(liveSession);
+      const summaries = () => {
+        const snapshot = store.getActivitySnapshot();
+        return kind === "workflow" ? snapshot.sessions : snapshot.repositorySessions;
+      };
+      const published: ReturnType<typeof summaries>[] = [];
+      const unsubscribe = store.subscribe(() => published.push(summaries()));
+      const reasons = [
+        "Claude status is unavailable. Reconnect the runtime.",
+        "Claude status is unavailable. Update Claude Code.",
+        null,
+      ];
+      let previous = summaries();
+      try {
+        for (const statusUnavailableReason of reasons) {
+          store.updateSession(liveSession, (current) => ({ ...current, statusUnavailableReason }));
+          expect(summaries()).not.toBe(previous);
+          expect(summaries()[0]).toMatchObject({
+            activityState: "running",
+            statusUnavailableReason,
+          });
+          previous = summaries();
+        }
+        expect(published).toHaveLength(3);
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
   test("publishes a task-bound session from its task and role", () => {
     const snapshot = createAgentActivitySnapshot({
       collection: createAgentSessionCollection([session()]),

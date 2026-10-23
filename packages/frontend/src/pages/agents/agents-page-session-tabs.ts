@@ -112,7 +112,14 @@ export const buildLiveSessionByRoleMap = (
 
   return createRoleRecord((role) => {
     const latestSession = latestSessionByRole[role];
-    return latestSession ? latestSession.activityState : "none";
+    if (!latestSession) return "none";
+    if (
+      latestSession.statusUnavailableReason &&
+      latestSession.activityState !== "waiting_input" &&
+      latestSession.activityState !== "error"
+    )
+      return "none";
+    return latestSession.activityState;
   });
 };
 

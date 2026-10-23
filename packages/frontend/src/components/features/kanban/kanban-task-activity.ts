@@ -16,38 +16,44 @@ export type ActiveAgentSessionSummary = AgentSessionSummary & {
 
 export type ActiveTaskSessionContext = {
   role: AgentRole;
-  activityState: KanbanTaskSession["activityState"];
+  activityState: ActiveAgentSessionActivityState;
 };
 
 export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionContext>;
 
 export type KanbanTaskSession = AgentSessionIdentity &
-  Pick<AgentSessionSummary, "role"> & {
+  Pick<AgentSessionSummary, "role" | "statusUnavailableReason" | "activityState"> & {
     startedAt?: AgentSessionState["startedAt"];
-    activityState: ActiveAgentSessionActivityState;
   };
 
-export const toKanbanTaskSession = (session: ActiveAgentSessionSummary): KanbanTaskSession => ({
+export const toKanbanTaskSession = (session: AgentSessionSummary): KanbanTaskSession => ({
   ...toAgentSessionIdentity(session),
   role: session.role,
   startedAt: session.startedAt,
   activityState: session.activityState,
+  statusUnavailableReason: session.statusUnavailableReason,
 });
 
 export const isKanbanActiveTaskSession = (
   session: AgentSessionSummary,
 ): session is ActiveAgentSessionSummary => {
-  return isAgentSessionActivityActive(session.activityState);
+  return isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason);
 };
 
 export const toKanbanTaskActivityState = (
-  taskSessions: Array<Pick<KanbanTaskSession, "activityState">> | undefined,
+  taskSessions:
+    | Array<Pick<KanbanTaskSession, "activityState" | "statusUnavailableReason">>
+    | undefined,
 ): KanbanTaskActivityState => {
   if (!taskSessions || taskSessions.length === 0) {
     return "idle";
   }
 
-  return taskSessions.some((session) => session.activityState === "waiting_input")
-    ? "waiting_input"
-    : "active";
+  if (taskSessions.some((session) => session.activityState === "waiting_input"))
+    return "waiting_input";
+  return taskSessions.some((session) =>
+    isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason),
+  )
+    ? "active"
+    : "idle";
 };

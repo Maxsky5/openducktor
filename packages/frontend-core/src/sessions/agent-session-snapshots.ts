@@ -11,7 +11,7 @@ import type { AgentSessionActivityState } from "../types/agent-session-activity"
 import { isWorkflowAgentSession } from "./agent-orchestrator/support/workflow-session";
 
 export type AgentSessionSummary = AgentSessionIdentity &
-  Pick<WorkflowAgentSessionState, "title" | "startedAt"> & {
+  Pick<WorkflowAgentSessionState, "title" | "startedAt" | "statusUnavailableReason"> & {
     taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
     role: WorkflowAgentSessionState["sessionAssociation"]["role"];
     activityState: AgentSessionActivityState;
@@ -88,6 +88,7 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
     activityState: getAgentSessionActivityStateFromSession(session),
+    statusUnavailableReason: session.statusUnavailableReason,
     startedAt: session.startedAt,
     selectedModel: session.selectedModel,
     pendingApprovalCount: session.pendingApprovals.length,
@@ -112,6 +113,7 @@ const sameSummary = (left: AgentSessionSummary | undefined, right: AgentSessionS
   left.taskId === right.taskId &&
   left.role === right.role &&
   left.activityState === right.activityState &&
+  left.statusUnavailableReason === right.statusUnavailableReason &&
   left.startedAt === right.startedAt &&
   left.workingDirectory === right.workingDirectory &&
   left.selectedModel === right.selectedModel &&
@@ -183,6 +185,7 @@ const repositoryActivitySummaries = (
       startedAt: session.startedAt,
       selectedModel: session.selectedModel,
       activityState: getAgentSessionActivityStateFromSession(session),
+      statusUnavailableReason: session.statusUnavailableReason,
       pendingApprovalCount: session.pendingApprovals.length,
       pendingQuestionCount: session.pendingQuestions.length,
     };
@@ -194,6 +197,7 @@ const repositoryActivitySummaries = (
       prior.startedAt === summary.startedAt &&
       prior.selectedModel === summary.selectedModel &&
       prior.activityState === summary.activityState &&
+      prior.statusUnavailableReason === summary.statusUnavailableReason &&
       prior.pendingApprovalCount === summary.pendingApprovalCount &&
       prior.pendingQuestionCount === summary.pendingQuestionCount &&
       prior.workingDirectory === summary.workingDirectory
