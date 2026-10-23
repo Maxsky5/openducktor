@@ -4,6 +4,8 @@ Use this document to find the owner of a rule and trace a user action across pac
 
 OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend-core` holds the client behavior that all clients share. `packages/frontend` is the shared browser UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux.
 
+This guide covers the desktop app and browser runner. Read [the marketing website guide](../apps/marketing-website/README.md) for the public Astro website.
+
 ## Layer ownership
 
 | Layer | Main code | Owns | Does not own |
@@ -14,9 +16,13 @@ OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the defau
 | Contracts | `packages/contracts/src/*` | Zod schemas for tasks, sessions, workflows, host commands, and MCP data | Runtime control and workflow policy |
 | Core | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | Ports, role policy, tool mapping, prompt helpers | Shell calls and task-store adapter calls |
 | Clients and runtime adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Host client and native runtime protocols | Workflow policy and shell transport |
-| Host | `packages/host/src/*` | Command router, Effect services, live session state, runtimes, process, files, Git, task store, and MCP | Frontend cache and public schemas |
+| Host | `packages/host/src/*` | Command router, Effect services, live session state, runtime drivers, process, files, Git, task store, and MCP | Frontend cache and public schemas |
+| Runtime orchestration | `packages/runtime-orchestration/src/*` | Shared runtime lifecycle, registry, admission, and lifecycle plans | Platform processes, task policy, and settings persistence |
+| Remote host | `packages/remote-host/src/*` | Remote access, connection lifetime, and shared HTTP, SSE, and WebSocket transport | Workflow policy and runtime lifecycle |
 | Shells | `apps/electron/src/*`, `packages/openducktor-web/src/*` | IPC, preload, HTTP/SSE, renderer start, URLs, and previews | Workflow policy and task-store rules |
 | MCP | `packages/openducktor-mcp/src/*` | stdio, schema checks, bridge readiness, and `odt_*` calls | UI state and direct SQLite access |
+
+The host supplies one `RuntimeDriver` per runtime kind to the shared orchestrator. [ADR 0010](adr/0010-own-runtime-orchestration-in-a-platform-independent-package.md) defines this boundary. Both shells use the remote host package. Read [the remote host protocol](remote-host-protocol.md) before you change that transport.
 
 ## Shell startup
 

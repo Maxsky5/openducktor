@@ -22,6 +22,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 - Keep the main path direct.
 - Add normalization or extra checks only for a known case.
 - Add defensive code only when a clear risk requires it.
+- Before adding complexity for a speculative or very unlikely race condition or security edge case, explain the concrete failure mode, likelihood, and complexity cost to the user. Get their approval before proceeding. Do not expand scope for theoretical robustness without that approval.
 
 ### Verify runtime behavior
 
@@ -30,28 +31,36 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 
 ### Protect durable data
 
-- Get human approval before you change a database schema, migration file, persisted record schema, or durable SQLite task-store record shape.
-- Stop and ask for approval when a change needs new persisted data or a durable storage change.
+- Get human approval before you add a new kind of persisted data or change a storage schema, migration file, record shape, storage location, or storage format.
+- Apply this rule to all durable storage, including databases, settings, files, and browser storage.
 
 ## Monorepo map
 
-- `apps/electron`: Electron desktop shell, renderer startup, preload bridge, packaging, and IPC transport.
-- `packages/frontend-core`: Platform-independent client behavior for desktop, browser, and mobile: host connections, query caches, session projection, history, notification policy, recovery, and drafts.
-- `packages/frontend`: Shared React and Vite UI.
-- `packages/contracts`: Shared runtime schemas and IPC contracts.
-- `packages/core`: Core domain services and ports.
-- `packages/host`: Effect-native TypeScript host, command routing, use cases, and infrastructure adapters.
-- `packages/runtime-orchestration`: Platform-independent lifecycle of the shared agent runtimes. The host plugs in one driver for each runtime kind.
-- `packages/adapters-opencode-sdk`: `AgentEnginePort` adapter.
-- `packages/host-client`: Typed host client and remote protocol client.
-- `packages/openducktor-mcp`: MCP server for `odt_*` workflow tools.
+| Path | Owns |
+|---|---|
+| `apps/electron` | Desktop shell, preload, IPC, and packaging |
+| `apps/marketing-website` | Public Astro website |
+| `packages/frontend` | Shared React UI |
+| `packages/frontend-core` | Client connections, caches, session projection, recovery, and drafts |
+| `packages/contracts` | Public Zod schemas and data contracts |
+| `packages/core` | Agent ports, role policy, workflow tool mapping, and prompt helpers |
+| `packages/host` | Effect use cases, task policy, runtime drivers, and platform adapters |
+| `packages/runtime-orchestration` | Shared runtime lifecycle, registry, and admission rules |
+| `packages/adapters-opencode-sdk` | OpenCode V2 protocol adapter |
+| `packages/adapters-codex-app-server` | Codex app-server protocol adapter |
+| `packages/host-client` | Typed host client and remote protocol client |
+| `packages/remote-host` | Remote access and shared HTTP, SSE, and WebSocket transport |
+| `packages/openducktor-web` | Browser runner, CLI, and web shell |
+| `packages/openducktor-mcp` | MCP server for `odt_*` workflow tools |
 
 ## Architecture
+
+Read [docs/architecture-overview.md](docs/architecture-overview.md) before you change a cross-package data flow or ownership boundary.
 
 - Define ports in core or domain code.
 - Put adapters in infrastructure code.
 - Use an existing contract instead of coupling UI code to infrastructure code.
-- Change `packages/contracts` before the host or frontend code that uses a data contract.
+- When a shared data contract changes, update `packages/contracts` before its consumers.
 
 ### Effect
 
@@ -103,15 +112,11 @@ Read [docs/external-mcp.md](docs/external-mcp.md) before you change the MCP pack
 Read [docs/agent-orchestrator-module-map.md](docs/agent-orchestrator-module-map.md) before you change Agent Studio orchestration.
 
 - Keep `ODT_TOOL_SCHEMAS` and `AGENT_ROLE_TOOL_POLICY` consistent.
-- Update MCP, core, adapters, host, and frontend code together when a shared workflow tool or role policy changes.
+- Update every affected layer in the same change when a shared workflow tool or role policy changes.
 
 ## Tests
 
-Read [docs/testing.md](docs/testing.md) before you add or change tests.
-
-- Add deep tests for changed host, core, adapter, and MCP behavior.
-- Add frontend tests for changed frontend behavior.
-- Keep production APIs independent from test-only needs.
+Read [docs/testing.md](docs/testing.md) before you change behavior or tests.
 
 ## Documentation
 

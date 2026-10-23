@@ -1,6 +1,6 @@
 # Testing guide
 
-Read this guide before you add or change tests.
+Read this guide before you change behavior or tests.
 
 ## Coverage
 

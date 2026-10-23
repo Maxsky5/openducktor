@@ -178,7 +178,7 @@ OpenDucktor uses one SQLite database per configured workspace.
 - Add or update tests for non-trivial behavior changes.
 - Frontend behavior changes should include frontend tests.
 - Core, adapters, MCP, and host changes should include targeted tests in the touched area.
-- Run the relevant checks before opening a pull request.
+- Run all [verification checks](#verification-commands) before you complete any change.
 
 ## Pull Requests
 
