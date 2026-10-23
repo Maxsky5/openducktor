@@ -8,6 +8,7 @@ import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
+import type { SessionView } from "./session-view-resolution";
 import { useSessionsWorkspaceMatch } from "./use-sessions-workspace-match";
 
 const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", workspaceName: "Alpha" });
@@ -31,12 +32,13 @@ const closed = createWorkspaceRecordFixture({
   isActive: false,
 });
 
-function Probe(): ReactElement {
+function Probe({ keptViews }: { keptViews: readonly SessionView[] }): ReactElement {
   const location = useLocation();
-  const workspaceMatch = useSessionsWorkspaceMatch();
+  const workspaceMatch = useSessionsWorkspaceMatch(keptViews);
   return (
     <>
       <output aria-label="Address">{`${location.pathname}${location.search}`}</output>
+      <output aria-label="Address state">{JSON.stringify(location.state)}</output>
       <output aria-label="State">
         {workspaceMatch.kind === "failed"
           ? `failed: ${workspaceMatch.message}`
@@ -54,8 +56,10 @@ function Probe(): ReactElement {
 const renderWorkspaceMatch = ({
   initialEntry,
   selectWorkspace = async () => true,
+  keptViews = [],
 }: {
   initialEntry: string;
+  keptViews?: readonly SessionView[];
   /** Resolves false when another workspace action replaced the switch before it applied. */
   selectWorkspace?: (workspaceId: string) => Promise<boolean>;
 }) => {
@@ -82,7 +86,7 @@ const renderWorkspaceMatch = ({
         <button type="button" onClick={() => setActive(gamma)}>
           Select Gamma from the rail
         </button>
-        <Probe />
+        <Probe keptViews={keptViews} />
       </WorkspaceStateContext.Provider>
     );
   }
@@ -122,6 +126,34 @@ test("follows a workspace change from elsewhere and drops the old selection", as
   fireEvent.click(screen.getByRole("button", { name: "Select Beta from the rail" }));
 
   await waitFor(() => expect(address()).toBe("/sessions?workspace=beta&kind=task"));
+  expect(state()).toBe("ready");
+});
+
+test("returns to the kept address of the workspace that the rail selects", async () => {
+  const sessionless = { sessionlessTask: { workspaceId: "beta", taskId: "t-2", role: "build" } };
+  const keptView = (kind: SessionView["kind"], search: string): SessionView => ({
+    id: `${kind}-view`,
+    search,
+    state: sessionless,
+    kind,
+    workspace: beta,
+    scope: [],
+  });
+  renderWorkspaceMatch({
+    initialEntry: "/sessions?workspace=alpha&kind=task&task=t-1",
+    keptViews: [
+      keptView("task", "?workspace=beta&kind=task&task=t-2&agent=build&attention=permission"),
+      keptView("workspace", "?workspace=beta&kind=workspace&session=chat-1"),
+    ],
+  });
+  await waitFor(() => expect(state()).toBe("ready"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Select Beta from the rail" }));
+
+  await waitFor(() =>
+    expect(address()).toBe("/sessions?workspace=beta&kind=task&task=t-2&agent=build"),
+  );
+  expect(screen.getByLabelText("Address state").textContent).toBe(JSON.stringify(sessionless));
   expect(state()).toBe("ready");
 });
 

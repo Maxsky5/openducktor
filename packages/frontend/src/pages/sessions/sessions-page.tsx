@@ -9,11 +9,14 @@ import {
   TASK_SESSION_QUERY_KEYS,
 } from "@/features/session-navigation/session-navigation-target";
 import { useSessionPanelLayoutPruning } from "@/features/session-panels";
-import { SessionViews } from "./session-views";
+import { SessionViews, useSessionViews } from "./session-views";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 import { useTaskSnapshotContext } from "@/state/app-state-contexts";
 import { SessionsEmptyState } from "./sessions-empty-state";
-import { useSessionsWorkspaceMatch } from "./use-sessions-workspace-match";
+import {
+  isSessionsWorkspaceReady,
+  useSessionsWorkspaceMatch,
+} from "./use-sessions-workspace-match";
 
 /**
  * One page for task sessions and workspace sessions.
@@ -26,8 +29,16 @@ export function SessionsPage(): ReactElement {
   const activeWorkspace = useActiveWorkspace();
   const { tasks } = useTaskSnapshotContext();
   const [searchParams] = useSearchParams();
-  const workspaceMatch = useSessionsWorkspaceMatch();
   const kind = parseSessionsPageKind(searchParams.get(SESSIONS_QUERY_KEYS.kind));
+  const sessionViews = useSessionViews({
+    workspace: activeWorkspace,
+    kind,
+    isReady: isSessionsWorkspaceReady(
+      searchParams.get(SESSIONS_QUERY_KEYS.workspace),
+      activeWorkspace?.workspaceId ?? null,
+    ),
+  });
+  const workspaceMatch = useSessionsWorkspaceMatch(sessionViews.views);
 
   if (!activeWorkspace) {
     return (
@@ -57,11 +68,7 @@ export function SessionsPage(): ReactElement {
       {workspaceMatch.kind === "ready" && kind === null ? (
         <SessionsEmptyState key={activeWorkspace.workspaceId} workspace={activeWorkspace} />
       ) : null}
-      <SessionViews
-        workspace={activeWorkspace}
-        kind={kind}
-        isReady={workspaceMatch.kind === "ready"}
-      />
+      <SessionViews {...sessionViews} />
     </>
   );
 }

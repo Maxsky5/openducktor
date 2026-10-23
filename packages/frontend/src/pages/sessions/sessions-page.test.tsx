@@ -105,6 +105,12 @@ function Harness({
                   <button type="button" onClick={() => setIsListed(false)}>
                     Unlist active workspace
                   </button>
+                  <button type="button" onClick={() => setActive(workspace)}>
+                    Select alpha from the rail
+                  </button>
+                  <button type="button" onClick={() => setActive(other)}>
+                    Select beta from the rail
+                  </button>
                   <Routes>
                     <Route path="/before-session" element={<p>Previous page</p>} />
                     <Route path="/kanban" element={<p>Kanban board</p>} />
@@ -183,6 +189,73 @@ test.each(["partial", "fresh"] as const)(
     }
   },
 );
+
+test.each([
+  [
+    "task",
+    "/sessions?workspace=alpha&kind=task&task=current&session=native-opencode&agent=planner",
+  ],
+  ["workspace", "/sessions?workspace=alpha&kind=workspace&session=chat"],
+] as const)(
+  "a rail switch returns to the kept %s view of the workspace",
+  async (kind, keptHref) => {
+    let mounts = 0;
+    // Like the real content, new content without a selection restores its saved selection.
+    function Conversation() {
+      const [mount] = useState(() => ++mounts);
+      // Views that do not settle mount new content without end inside one click.
+      if (mount > 3) throw new Error("Session views mounted a fourth conversation.");
+      const workspaceId = useActiveWorkspace()!.workspaceId;
+      const navigate = useNavigate();
+      const isActive = useSessionViewActive();
+      const location = useLocation();
+      const [restores] = useState(
+        () => !new URLSearchParams(location.search).has(kind === "task" ? "task" : "session"),
+      );
+      useEffect(() => {
+        if (isActive && restores) {
+          navigate(keptHref.replace("workspace=alpha", `workspace=${workspaceId}`), {
+            replace: true,
+          });
+        }
+      }, [isActive, navigate, restores, workspaceId]);
+      return <input aria-label={`${workspaceId} draft`} />;
+    }
+    const page = { AgentsPage: Conversation };
+    mock.module("@/pages/agents/agents-page", () => page);
+    mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
+      default: Conversation,
+    }));
+    const view = render(
+      <MemoryRouter initialEntries={[keptHref]}>
+        <Harness />
+        <Address />
+      </MemoryRouter>,
+    );
+    try {
+      const kept = view.getByLabelText("alpha draft");
+      fireEvent.change(kept, { target: { value: "Kept draft" } });
+      for (let round = 0; round < 3; round += 1) {
+        fireEvent.click(view.getByRole("button", { name: "Select beta from the rail" }));
+        await view.findByLabelText("beta draft");
+        fireEvent.click(view.getByRole("button", { name: "Select alpha from the rail" }));
+        await waitFor(() => expect(view.getByLabelText("Address").textContent).toBe(keptHref));
+      }
+      expect(view.getByLabelText("alpha draft")).toBe(kept);
+      expect(view.getByDisplayValue("Kept draft")).toBe(kept);
+      expect(mounts).toBe(2);
+    } finally {
+      view.unmount();
+      mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+      mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
+    }
+  },
+);
+
+function Address() {
+  const location = useLocation();
+  return <output aria-label="Address">{`${location.pathname}${location.search}`}</output>;
+}
 
 test("task and chat views share six slots and removed tasks release their kept views", async () => {
   function Conversation() {

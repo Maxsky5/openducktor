@@ -477,7 +477,7 @@ Rules:
 
 ## Session navigation
 
-Files: `pages/sessions/sessions-page.tsx`, `pages/sessions/use-sessions-workspace-match.ts`, `features/session-navigation/session-navigation-target.ts`, `features/session-navigation/visible-session-target.tsx`, `features/session-navigation/use-session-navigation-model.ts`, `state/read-models/session-navigation-read-model.ts`, and `components/layout/sidebar/workspace-sidebar.tsx`.
+Files: `pages/sessions/sessions-page.tsx`, `pages/sessions/session-views.tsx`, `pages/sessions/session-view-resolution.ts`, `pages/sessions/use-sessions-workspace-match.ts`, `features/session-navigation/session-navigation-target.ts`, `features/session-navigation/visible-session-target.tsx`, `features/session-navigation/use-session-navigation-model.ts`, `state/read-models/session-navigation-read-model.ts`, and `components/layout/sidebar/workspace-sidebar.tsx`.
 
 The Sessions page shows one content at a time. The `kind` query value selects task content or workspace session content, and that content owns the other query values.
 
@@ -486,8 +486,15 @@ Rules:
 - Build each session address with `buildSessionNavigationHref`. A task session address names the workspace, task, native session ID, and role. A task context address names the workspace and task, and it can name a role. A workspace session address names the saved record ID.
 - The workspace, task, and native session ID identify a stored task session. Read its runtime and working directory from the existing session read model. Keep those fields out of the URL.
 - An address or saved selection opens a session only when exactly one session of the task has its external ID. More matches show an error.
-- The address names its workspace. A new address for another workspace selects that workspace. A workspace change from elsewhere replaces the address and drops the old selection, also while the address still waits for its own workspace.
+- The address names its workspace. A new address for another workspace selects that workspace. A workspace change from elsewhere, such as the workspace rail, replaces the address with the address of the last kept view of that workspace and content kind. That address keeps only the page and selection keys, so a one-time request such as a notification focus does not repeat. This also applies while the address still waits for its own workspace. Without a kept view, the address names no selection, and the content restores its saved selection.
 - A workspace switch that fails or that another workspace action interrupts shows the failure with Retry.
+- `useSessionViews` keeps recent content mounted and hidden, so drafts, scroll positions, and terminals stay when the user goes back. `resolveSessionViews` selects the kept views and the view that shows the address. Each view keeps the search and history state of its address.
+- `useSessionViews` stores the result of `resolveSessionViews` during render. For the same input, the resolver must return its own result unchanged. Otherwise React renders without end and stops with error 301.
+- Two kept views of one workspace and content kind never hold the same selection. Content that resolves the selection of another kept view leaves it to that view, and its address write then shows that view.
+- The property test in `session-view-resolution.test.ts` checks the two rules above.
+- A view takes each address that it shows. When its content shows more than the address names, the view holds what the content shows.
+- The active view stays while the address names less than its selection. It also takes an address that adds to an empty selection or to a task without a session.
+- A task address without a session goes back to the last view of its task. A chat address without a chat goes back to the last chat view of the workspace.
 - Content publishes the visible target after its own selection commits. The session list marks that target as selected. A pending, cancelled, or failed navigation never marks another entry.
 - The session list reveals the selected entry before paint when it opens or the sidebar expands or collapses. Status, group, recency, and record updates keep the user's scroll position.
 - Entry keys and the selected key both come from `sessionNavigationTargetKey`.

@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   buildSessionsPageHref,
   parseSessionsPageKind,
+  SESSIONS_PATH,
   SESSIONS_QUERY_KEYS,
+  type SessionsPageKind,
 } from "@/features/session-navigation/session-navigation-target";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useWorkspaceState } from "@/state/app-state-provider";
+import { keptSessionViewAddress, type SessionView } from "./session-view-resolution";
 
 export type SessionsWorkspaceMatch =
   | { kind: "ready" }
@@ -19,11 +22,14 @@ type SwitchAttempt = { locationKey: string; retry: number };
  * Keep the workspace named in the Sessions address and the active workspace in step.
  *
  * A new address that names another workspace opens that workspace. When the active workspace
- * changes for another reason, for example from the workspace rail, the address follows the
- * active workspace and drops the old selection. This also applies while the address still
- * waits for its own workspace. Content renders only when both agree.
+ * changes for another reason, for example from the workspace rail, the address goes to the
+ * kept address of that workspace and content kind. Without one, the address names the workspace
+ * without a selection. This also applies while the address still waits for its own workspace.
+ * Content renders only when both agree.
  */
-export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
+export function useSessionsWorkspaceMatch(
+  keptViews: readonly SessionView[],
+): SessionsWorkspaceMatch {
   const { workspaces, closedWorkspaces, activeWorkspace, selectWorkspace } = useWorkspaceState();
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,6 +45,10 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
   const [retry, setRetry] = useState(0);
   const [failure, setFailure] = useState<{ locationKey: string; message: string } | null>(null);
   const [interruptedAttempt, setInterruptedAttempt] = useState<SwitchAttempt | null>(null);
+
+  const keptAddress = useEffectEvent((workspaceId: string, kind: SessionsPageKind) =>
+    keptSessionViewAddress(keptViews, workspaceId, kind),
+  );
 
   useEffect(() => {
     if (activeWorkspaceId === null) return;
@@ -63,7 +73,13 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
       matchedLocationKeyRef.current === location.key ||
       originRef.current.activeWorkspaceId !== activeWorkspaceId
     ) {
-      navigate(buildSessionsPageHref(activeWorkspaceId, kind), { replace: true });
+      const kept = kind === null ? null : keptAddress(activeWorkspaceId, kind);
+      navigate(
+        kept
+          ? { pathname: SESSIONS_PATH, search: kept.search }
+          : buildSessionsPageHref(activeWorkspaceId, kind),
+        { replace: true, state: kept?.state },
+      );
       return;
     }
     if (!isOpen) return;
@@ -100,8 +116,8 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
     selectWorkspace,
   ]);
 
+  if (isSessionsWorkspaceReady(requestedWorkspaceId, activeWorkspaceId)) return { kind: "ready" };
   if (requestedWorkspaceId === null || activeWorkspaceId === null) return { kind: "pending" };
-  if (requestedWorkspaceId === activeWorkspaceId) return { kind: "ready" };
   if (!isOpen) {
     const closed = closedWorkspaces.find((entry) => entry.workspaceId === requestedWorkspaceId);
     return {
@@ -130,3 +146,9 @@ export function useSessionsWorkspaceMatch(): SessionsWorkspaceMatch {
   }
   return { kind: "pending" };
 }
+
+/** Content renders only when the address names the active workspace. */
+export const isSessionsWorkspaceReady = (
+  requestedWorkspaceId: string | null,
+  activeWorkspaceId: string | null,
+): boolean => requestedWorkspaceId !== null && requestedWorkspaceId === activeWorkspaceId;
