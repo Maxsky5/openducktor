@@ -15,12 +15,13 @@ import { createMessageCardElement } from "./agent-chat-message-card-test-harness
 
 enableReactActEnvironment();
 
-test("the task card opens and closes the real detail sheet without leaving chat", async () => {
-  const task = createTaskCardFixture({
-    id: "created-task",
-    title: "Created task detail",
-    description: "The full task description.",
-  });
+const task = createTaskCardFixture({
+  id: "created-task",
+  title: "Created task detail",
+  description: "The full task description.",
+});
+
+function renderTaskCard() {
   const workspace: WorkspaceStateContextValue = {
     isSwitchingWorkspace: false,
     isLoadingBranches: false,
@@ -82,8 +83,7 @@ test("the task card opens and closes the real detail sheet without leaving chat"
       throw new Error("Unexpected model mutation");
     },
   };
-  const url = window.location.href;
-  const view = render(
+  return render(
     <QueryProvider>
       <WorkspaceStateContext value={workspace}>
         <ActiveWorkspaceContext
@@ -127,22 +127,25 @@ test("the task card opens and closes the real detail sheet without leaving chat"
       </WorkspaceStateContext>
     </QueryProvider>,
   );
+}
+
+// The file load reads the module of the lazy sheet, so the test does not pay for that read.
+await import("@/components/features/tasks/task-details-sheet-viewer");
+
+test("the task card opens and closes the real detail sheet without leaving chat", async () => {
+  const url = window.location.href;
+  const view = renderTaskCard();
   try {
     fireEvent.click(view.getByRole("button", { name: "Open task details" }));
-    await waitFor(
-      () => {
-        expect(view.getByRole("button", { name: "Close" })).toBeDefined();
-        expect(view.getAllByRole("heading", { name: task.title, level: 2 }).length).toBeGreaterThan(
-          0,
-        );
-      },
-      { timeout: 1500 },
-    );
+    await waitFor(() => {
+      expect(view.getByRole("button", { name: "Close" })).toBeDefined();
+      expect(view.getAllByRole("heading", { name: task.title, level: 2 }).length).toBeGreaterThan(
+        0,
+      );
+    });
     expect(window.location.href).toBe(url);
     fireEvent.click(view.getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(view.queryByRole("button", { name: "Close" })).toBeNull(), {
-      timeout: 1500,
-    });
+    await waitFor(() => expect(view.queryByRole("button", { name: "Close" })).toBeNull());
     expect(view.getByRole("button", { name: "Open task details" })).toBeDefined();
     expect(window.location.href).toBe(url);
   } finally {
