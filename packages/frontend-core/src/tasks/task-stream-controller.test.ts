@@ -1203,6 +1203,78 @@ describe("task stream controller recovery", () => {
     expect(harness.records[1]?.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  test("terminal recovery completes a queued live refresh before acknowledging its replay", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const firstRefresh = deferred<void>();
+    const firstRefreshStarted = deferred<void>();
+    const secondRefresh = deferred<void>();
+    const readPort = {
+      agentSessionsListForTasks: async (_repoPath: string, taskIds: string[]) =>
+        taskIds.map((taskId) => ({ taskId, agentSessions: [recordFixture(taskId)] })),
+      taskIdsList: async () => [],
+    };
+    const refreshLiveSessions = mock(async (repoPath: string) => {
+      if (repoPath === "/repo-a") {
+        firstRefreshStarted.resolve();
+        await firstRefresh.promise;
+      } else {
+        await secondRefresh.promise;
+      }
+    });
+    const harness = createHarness({
+      agentSessionViewSync: createSessionSync(queryClient, readPort, { refreshLiveSessions }),
+      getOpenRepoPaths: () => ["/repo-a", "/repo-b"],
+    });
+    const stops = (
+      [
+        ["/repo-a", "task-a"],
+        ["/repo-b", "task-b"],
+      ] as const
+    ).map(([repoPath, taskId]) => {
+      queryClient.setQueryData(agentSessionQueryKeys.list(repoPath, taskId), []);
+      return new QueryObserver(
+        queryClient,
+        agentSessionListQueryOptions(repoPath, taskId, readPort),
+      ).subscribe(() => {});
+    });
+    try {
+      await harness.controller.start();
+      harness.emit(0, { type: "change", cursor: cursor(0), event: event("unobserved") });
+      await flush();
+      expect(harness.records[0]?.acknowledge).toHaveBeenCalledWith(cursor(0));
+
+      const changes: TaskStreamFrame[] = [
+        { type: "change", cursor: cursor(1), event: event("task-a", "/repo-a") },
+        { type: "change", cursor: cursor(2), event: event("task-b", "/repo-b") },
+      ];
+      for (const change of changes) harness.emit(0, change);
+      await firstRefreshStarted.promise;
+      harness.failTerminally(0, new Error("stream ended"));
+      await flush();
+      expect(harness.records[1]?.input).toEqual({ cursor: cursor(0) });
+
+      for (const change of changes) harness.emit(1, change);
+      await flush();
+      expect(refreshLiveSessions.mock.calls).toEqual([["/repo-a"]]);
+      expect(harness.records[1]?.acknowledge).not.toHaveBeenCalled();
+
+      firstRefresh.resolve();
+      await flush();
+      expect(refreshLiveSessions.mock.calls).toEqual([["/repo-a"], ["/repo-b"]]);
+      expect(harness.records[1]?.acknowledge).not.toHaveBeenCalled();
+
+      secondRefresh.resolve();
+      await flush();
+      expect(harness.records[1]?.acknowledge.mock.calls).toEqual([[cursor(2)]]);
+    } finally {
+      firstRefresh.resolve();
+      secondRefresh.resolve();
+      await harness.controller.stop();
+      for (const stop of stops) stop();
+      queryClient.clear();
+    }
+  });
+
   test("keeps a terminal recovery acquisition failure in the degraded episode", async () => {
     const terminalFailure = new Error("stream ended");
     const recoveryFailure = new Error("replacement unavailable");

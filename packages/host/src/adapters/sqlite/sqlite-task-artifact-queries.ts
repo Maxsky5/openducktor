@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
 import { type TaskArtifact, taskArtifactSchema } from "@openducktor/contracts";
 import { and, asc, desc, eq, gt, notExists, sql } from "drizzle-orm";
@@ -113,7 +114,7 @@ export const readArtifactInDatabase = (
       .update(JSON.stringify([input.repoPath, artifact]))
       .update(content)
       .digest("hex");
-    return { artifact, content, version };
+    return { artifact, content, version, isUtf8: isUtf8(content) };
   });
 
 export const artifactMetadataFromRow = (

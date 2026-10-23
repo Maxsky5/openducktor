@@ -48,9 +48,15 @@ const file = {
   content: Uint8Array.from([0, 255, 10, 13, 127]),
 };
 
+const openFixtureDatabase = (databasePath: string) => {
+  const database = new Database(databasePath);
+  database.exec("PRAGMA synchronous = OFF");
+  return database;
+};
+
 const createLegacyStore = async (databasePath: string, migrationCount = 7) => {
   await mkdir(path.dirname(databasePath), { recursive: true });
-  const database = new Database(databasePath);
+  const database = openFixtureDatabase(databasePath);
   database.exec(
     "PRAGMA foreign_keys = ON; CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL, created_at NUMERIC)",
   );
@@ -72,7 +78,7 @@ describe("task artifact migration", () => {
     const { databasePath, repoPath, store } = await createHarness();
     await createLegacyStore(databasePath);
     insertRawTask({ databasePath, taskId: "legacy", status: "human_review" });
-    const database = new Database(databasePath);
+    const database = openFixtureDatabase(databasePath);
     const rows = [
       ["spec", -1, "  \ufeff# First\r\n\r\n", "plain_text", null, null, null, null],
       [
@@ -115,12 +121,24 @@ describe("task artifact migration", () => {
         "qa-agent",
         1730000000020,
       ],
-    ];
-    for (const row of rows)
+    ] as const;
+    for (const [kind, revision, markdown, ...metadata] of rows)
       database.run(
-        "INSERT INTO task_documents (task_id, kind, revision, markdown, format, verdict, source_tool, updated_by, updated_at_ms) VALUES ('legacy', ?, ?, ?, ?, ?, ?, ?, ?)",
-        row,
+        "INSERT INTO task_documents (task_id, kind, revision, markdown, format, verdict, source_tool, updated_by, updated_at_ms) VALUES ('legacy', ?, ?, CAST(? AS TEXT), ?, ?, ?, ?, ?)",
+        [kind, revision, Buffer.from(markdown, "utf8"), ...metadata],
       );
+    const markdownBytes = rows.map(([kind, revision, markdown]) => [
+      kind,
+      revision,
+      Buffer.from(markdown, "utf8").toString("hex").toUpperCase(),
+    ]);
+    expect(
+      database
+        .query(
+          "SELECT kind, revision, hex(CAST(markdown AS BLOB)) FROM task_documents ORDER BY rowid",
+        )
+        .values(),
+    ).toEqual(markdownBytes);
     const before = database.query("SELECT * FROM tasks").all();
     database.close();
 
@@ -138,6 +156,13 @@ describe("task artifact migration", () => {
           )
           .values(),
       ).toEqual(rows);
+      expect(
+        migrated
+          .query(
+            "SELECT workflow_kind, revision, hex(CAST(markdown AS BLOB)) FROM tasks_artifacts ORDER BY rowid",
+          )
+          .values(),
+      ).toEqual(markdownBytes);
       expect(migrated.query("SELECT * FROM tasks").all()).toEqual(before);
     } finally {
       migrated.close();
@@ -249,7 +274,7 @@ describe("task artifact migration", () => {
         4,
       ],
     ];
-    const database = new Database(databasePath);
+    const database = openFixtureDatabase(databasePath);
     for (const row of rows)
       database.run(
         `INSERT INTO tasks_artifacts (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -296,7 +321,7 @@ describe("task artifact migration", () => {
     const { databasePath, repoPath, store } = await createHarness();
     await createLegacyStore(databasePath);
     insertRawTask({ databasePath, taskId: "legacy" });
-    const database = new Database(databasePath);
+    const database = openFixtureDatabase(databasePath);
     database.exec("PRAGMA ignore_check_constraints = ON");
     database.run(
       "INSERT INTO task_documents (task_id, kind, revision, markdown, format) VALUES ('legacy', 'spec', 1, 'preserve me', 'invalid')",
@@ -323,7 +348,7 @@ describe("task artifact migration", () => {
     const { databasePath, repoPath, store } = await createHarness();
     await createLegacyStore(databasePath, 8);
     insertRawTask({ databasePath, taskId: "legacy" });
-    const database = new Database(databasePath);
+    const database = openFixtureDatabase(databasePath);
     database.exec("PRAGMA ignore_check_constraints = ON");
     database.run(
       "INSERT INTO tasks_artifacts (artifact_id, task_id, classification, revision, name, updated_at_ms, content, file_name, media_type, byte_size) VALUES ('free-invalid', 'legacy', 'free', 1, 'Preserve me', 1730000000010, ?, 'original.bin', 'application/octet-stream', 3)",
@@ -447,7 +472,7 @@ describe("task artifact repository", () => {
       store.createArtifact({ ...scope, ...file, name: "Other output" }),
     );
     await Effect.runPromise(store.setSpecArtifact({ ...scope, markdown: "# Workflow" }));
-    const database = new Database(databasePath);
+    const database = openFixtureDatabase(databasePath);
     try {
       for (const assignment of [
         "workflow_kind = 'spec'",
@@ -641,7 +666,7 @@ describe("task artifact repository", () => {
         }),
       ),
     ).rejects.toThrow("at most 10 MiB");
-    const database = new Database(databasePath);
+    const database = openFixtureDatabase(databasePath);
     database.exec(
       "CREATE TRIGGER reject_artifact_update BEFORE UPDATE ON tasks_artifacts BEGIN SELECT RAISE(ABORT, 'forced write failure'); END",
     );

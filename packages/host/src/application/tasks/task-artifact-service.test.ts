@@ -195,7 +195,7 @@ describe("task artifact service", () => {
   test("keeps exact invalid text and empty files readable and previews only captured requested bytes", async () => {
     const h = await setup();
     try {
-      const bytes = Buffer.from([0xef, 0xbb, 0xbf, 0xff, 0x0d, 0x0a]);
+      const bytes = Buffer.from([0x61, 0x62, 0x63, 0xc3, 0xa9, 0xff]);
       const { artifact } = await run(
         h.base.createTaskArtifact({
           ...h.scope,
@@ -207,6 +207,18 @@ describe("task artifact service", () => {
         h.base.readTaskArtifact({ ...h.scope, artifactId: artifact.artifactId, maxBytes: 4 }),
       );
       expect(Buffer.from(read.dataBase64, "base64")).toEqual(bytes.subarray(0, 4));
+      expect(read.nextByteOffset).toBe(4);
+      const remaining = await run(
+        h.base.readTaskArtifact({
+          ...h.scope,
+          artifactId: artifact.artifactId,
+          byteOffset: 4,
+          expectedVersion: read.version,
+          maxBytes: 4,
+        }),
+      );
+      expect(Buffer.from(remaining.dataBase64, "base64")).toEqual(bytes.subarray(4));
+      expect(remaining.nextByteOffset).toBeNull();
       const empty = await run(h.base.createTaskArtifact({ ...h.scope, ...file("") }));
       expect(
         await run(h.base.readTaskArtifact({ ...h.scope, artifactId: empty.artifact.artifactId })),

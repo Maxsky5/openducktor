@@ -53,7 +53,7 @@ export const createArtifactUseCases = ({
               message: "Artifact is unavailable for this task. Refresh the artifact collection.",
             }),
           );
-        const { artifact, content, version } = stored;
+        const { artifact, content, version, isUtf8 } = stored;
         if (request.expectedVersion !== undefined && request.expectedVersion !== version) {
           return yield* Effect.fail(
             new HostValidationError({
@@ -78,6 +78,7 @@ export const createArtifactUseCases = ({
               artifact.mediaType,
               byteOffset,
               request.maxBytes ?? TASK_ARTIFACT_MAX_FILE_BYTES,
+              isUtf8,
             ),
           catch: (cause) =>
             cause instanceof HostValidationError

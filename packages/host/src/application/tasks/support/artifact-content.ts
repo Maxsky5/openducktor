@@ -17,16 +17,13 @@ export const artifactChunkEnd = (
   mediaType: string,
   offset: number,
   maxBytes: number,
+  isUtf8: boolean,
 ): number => {
   const end = Math.min(content.length, offset + maxBytes);
   const type = mediaType.toLowerCase();
   if (!type.startsWith("text/") && type !== "application/json") return end;
   // Keep invalid text readable as bytes. The preview reports the decode error.
-  try {
-    new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(content);
-  } catch {
-    return end;
-  }
+  if (!isUtf8) return end;
   if (offset < content.length && continuationByte(content[offset]!)) {
     throw new HostValidationError({
       field: "byteOffset",

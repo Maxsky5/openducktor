@@ -92,6 +92,7 @@ export const createAgentSessionViewSync = ({
         !isWorkspaceOpen(repoPath) ||
         !isCurrentOwner()
       ) {
+        if (liveRefreshes.get(repoPath) === refresh) liveRefreshes.delete(repoPath);
         return;
       }
       await refreshLiveSessions(repoPath);

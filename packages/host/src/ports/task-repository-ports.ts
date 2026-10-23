@@ -128,6 +128,7 @@ export type StoredArtifactContent = {
   artifact: TaskArtifact;
   content: Uint8Array;
   version: string;
+  isUtf8: boolean;
 };
 export type TaskArtifactRepository = {
   listArtifacts(input: ArtifactStoreScope): Effect.Effect<TaskArtifact[], TaskStoreError>;
