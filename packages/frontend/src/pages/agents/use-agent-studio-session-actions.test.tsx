@@ -532,7 +532,7 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("Prepare creates a fresh Builder session before sending its first message", async () => {
+  test("Prepare starts a fresh Builder after QA rejection before sending its first message", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const selectAgentStudioSelection = mock(() => {});
     const preparedIdentity = sessionIdentity("builder-prepared");
@@ -547,10 +547,12 @@ describe("useAgentStudioSessionActions", () => {
     const args: HookArgs = {
       ...createBaseArgs(),
       role: "build",
-      launchActionId: "build_implementation_start",
+      launchActionId: "build_after_qa_rejected",
       selectedSession: selectedSessionFromSession(existingSession),
       sessionsForTask: summarizeSessions([existingSession]),
       selectedTask: createTask({
+        status: "in_progress",
+        artifactSummary: { qaReport: { has: true, verdict: "rejected" } },
         agentWorkflows: {
           builder: { required: true, canSkip: false, available: true, completed: false },
         },
@@ -579,9 +581,9 @@ describe("useAgentStudioSessionActions", () => {
       await harness.mount();
       await harness.run((state) => {
         state.handlePrepareMessageFirstSession({
-          id: "build:build_implementation_start:message_first",
+          id: "build:build_after_qa_rejected:message_first",
           role: "build",
-          launchActionId: "build_implementation_start",
+          launchActionId: "build_after_qa_rejected",
           label: "Prepare Builder session",
           description: "Start a Builder session without sending a kickoff.",
           disabled: false,
