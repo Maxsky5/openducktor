@@ -96,7 +96,6 @@ const mcpArtifactReadMetadataSchema = artifactReadMetadataSchema.extend({
 const mcpArtifactContentChunkSchema = mcpArtifactReadMetadataSchema
   .extend({
     dataBase64: artifactContentChunkSchema.shape.dataBase64,
-    imagePreview: artifactContentChunkSchema.shape.imagePreview,
   })
   .superRefine(checkArtifactContentChunk);
 

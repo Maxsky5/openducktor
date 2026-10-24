@@ -191,7 +191,6 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       if (artifact === undefined) return yield* missingFreeTaskArtifact(code);
       selections.push({ artifactId: artifact.artifactId, workflow: false });
     }
-    // Overlap reads so independent image preview deadlines do not add up across a batch.
     const artifacts = yield* Effect.forEach(
       selections,
       ({ artifactId, workflow }) => {
@@ -199,7 +198,6 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
           repoPath,
           taskId: task.id,
           artifactId,
-          includeImagePreview: (parsed.byteOffset ?? 0) === 0,
         };
         if (parsed.maxBytes !== undefined) request.maxBytes = parsed.maxBytes;
         else if (!workflow) request.maxBytes = TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES;

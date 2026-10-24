@@ -31,7 +31,6 @@ export const createArtifactUseCases = ({
   taskStore,
   taskSessionLifecycleCoordinator,
   gitPort,
-  artifactImagePreview,
 }: TaskServiceUseCaseInput): ArtifactUseCases => {
   return {
     listTaskArtifacts(input) {
@@ -89,7 +88,7 @@ export const createArtifactUseCases = ({
                   cause,
                 }),
         });
-        const chunk = {
+        return {
           artifact,
           version,
           dataBase64: Buffer.from(content.subarray(byteOffset, end)).toString("base64"),
@@ -97,19 +96,6 @@ export const createArtifactUseCases = ({
           nextByteOffset: end < content.length ? end : null,
           totalBytes: content.length,
         };
-        if (!request.includeImagePreview || !artifact.mediaType.toLowerCase().startsWith("image/"))
-          return chunk;
-        const imagePreview = artifactImagePreview
-          ? yield* artifactImagePreview.previewArtifactImage({
-              mediaType: artifact.mediaType,
-              content,
-            })
-          : {
-              state: "failed" as const,
-              message: "Image preview service is unavailable.",
-              nextAction: "Read the original bytes or restart the host.",
-            };
-        return { ...chunk, imagePreview };
       });
     },
     createTaskArtifact(input) {

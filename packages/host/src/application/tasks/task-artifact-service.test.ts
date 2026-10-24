@@ -128,71 +128,76 @@ describe("task artifact service", () => {
     }
   });
 
-  test("reads exact UTF-8 chunks and rejects offsets or versions that cannot continue", async () => {
-    const h = await setup();
-    try {
-      const original = "\ufeffa😀é\r\nz";
-      const { artifact } = await run(h.base.createTaskArtifact({ ...h.scope, ...file(original) }));
-      const ref = { ...h.scope, artifactId: artifact.artifactId };
-      const first = await run(h.base.readTaskArtifact({ ...ref, maxBytes: 4 }));
-      expect(Buffer.from(first.dataBase64, "base64")).toEqual(Buffer.from("\ufeffa"));
-      const chunks = [Buffer.from(first.dataBase64, "base64")];
-      let offset = first.nextByteOffset;
-      while (offset !== null) {
-        const chunk = await run(
-          h.base.readTaskArtifact({
+  test.each(["text/plain", "image/svg+xml"])(
+    "reads exact %s UTF-8 chunks and rejects invalid continuations",
+    async (mediaType) => {
+      const h = await setup();
+      try {
+        const original = "\ufeffa😀é\r\nz";
+        const { artifact } = await run(
+          h.base.createTaskArtifact({ ...h.scope, ...file(original), mediaType }),
+        );
+        const ref = { ...h.scope, artifactId: artifact.artifactId };
+        const first = await run(h.base.readTaskArtifact({ ...ref, maxBytes: 6 }));
+        expect(Buffer.from(first.dataBase64, "base64")).toEqual(Buffer.from("\ufeffa"));
+        const chunks = [Buffer.from(first.dataBase64, "base64")];
+        let offset = first.nextByteOffset;
+        while (offset !== null) {
+          const chunk = await run(
+            h.base.readTaskArtifact({
+              ...ref,
+              maxBytes: 4,
+              byteOffset: offset,
+              expectedVersion: first.version,
+            }),
+          );
+          chunks.push(Buffer.from(chunk.dataBase64, "base64"));
+          offset = chunk.nextByteOffset;
+        }
+        expect(Buffer.concat(chunks)).toEqual(Buffer.from(original));
+        expect(
+          await run(
+            Effect.flip(
+              h.base.readTaskArtifact({ ...ref, byteOffset: 1, expectedVersion: first.version }),
+            ),
+          ),
+        ).toMatchObject({ field: "byteOffset" });
+        expect(
+          await run(Effect.flip(h.base.readTaskArtifact({ ...ref, byteOffset: 4 }))),
+        ).toMatchObject({ field: "artifact" });
+        await run(h.base.renameTaskArtifact({ ...ref, name: "Renamed" }));
+        expect(
+          await run(
+            Effect.flip(
+              h.base.readTaskArtifact({ ...ref, byteOffset: 4, expectedVersion: first.version }),
+            ),
+          ),
+        ).toMatchObject({ field: "expectedVersion" });
+        const renamed = await run(h.base.readTaskArtifact(ref));
+        await run(
+          h.base.replaceTaskArtifact({
             ...ref,
-            maxBytes: 4,
-            byteOffset: offset,
-            expectedVersion: first.version,
+            fileName: "next.txt",
+            mediaType: "text/plain",
+            dataBase64: Buffer.from("replacement").toString("base64"),
           }),
         );
-        chunks.push(Buffer.from(chunk.dataBase64, "base64"));
-        offset = chunk.nextByteOffset;
+        expect(
+          await run(
+            Effect.flip(h.base.readTaskArtifact({ ...ref, expectedVersion: renamed.version })),
+          ),
+        ).toMatchObject({ field: "expectedVersion" });
+        await run(h.base.deleteTaskArtifact(ref));
+        expect(await run(Effect.flip(h.base.readTaskArtifact(ref)))).toMatchObject({
+          field: "artifactId",
+        });
+      } finally {
+        await h.cleanup();
       }
-      expect(Buffer.concat(chunks)).toEqual(Buffer.from(original));
-      expect(
-        await run(
-          Effect.flip(
-            h.base.readTaskArtifact({ ...ref, byteOffset: 1, expectedVersion: first.version }),
-          ),
-        ),
-      ).toMatchObject({ field: "byteOffset" });
-      expect(
-        await run(Effect.flip(h.base.readTaskArtifact({ ...ref, byteOffset: 4 }))),
-      ).toMatchObject({ field: "artifact" });
-      await run(h.base.renameTaskArtifact({ ...ref, name: "Renamed" }));
-      expect(
-        await run(
-          Effect.flip(
-            h.base.readTaskArtifact({ ...ref, byteOffset: 4, expectedVersion: first.version }),
-          ),
-        ),
-      ).toMatchObject({ field: "expectedVersion" });
-      const renamed = await run(h.base.readTaskArtifact(ref));
-      await run(
-        h.base.replaceTaskArtifact({
-          ...ref,
-          fileName: "next.txt",
-          mediaType: "text/plain",
-          dataBase64: Buffer.from("replacement").toString("base64"),
-        }),
-      );
-      expect(
-        await run(
-          Effect.flip(h.base.readTaskArtifact({ ...ref, expectedVersion: renamed.version })),
-        ),
-      ).toMatchObject({ field: "expectedVersion" });
-      await run(h.base.deleteTaskArtifact(ref));
-      expect(await run(Effect.flip(h.base.readTaskArtifact(ref)))).toMatchObject({
-        field: "artifactId",
-      });
-    } finally {
-      await h.cleanup();
-    }
-  });
+    },
+  );
 
-  test("keeps exact invalid text and empty files readable and previews only captured requested bytes", async () => {
+  test("keeps exact invalid text and empty files readable", async () => {
     const h = await setup();
     try {
       const bytes = Buffer.from([0x61, 0x62, 0x63, 0xc3, 0xa9, 0xff]);
@@ -223,50 +228,6 @@ describe("task artifact service", () => {
       expect(
         await run(h.base.readTaskArtifact({ ...h.scope, artifactId: empty.artifact.artifactId })),
       ).toMatchObject({ dataBase64: "", totalBytes: 0, nextByteOffset: null });
-      const image = await run(
-        h.base.createTaskArtifact({
-          ...h.scope,
-          ...file("old image bytes"),
-          fileName: "image.png",
-          mediaType: "image/png",
-        }),
-      );
-      let previews = 0;
-      const base = createTaskServiceWithMutationProgress({
-        taskStore: h.store,
-        artifactImagePreview: {
-          previewArtifactImage: ({ content }) =>
-            Effect.gen(function* () {
-              previews++;
-              expect(Buffer.from(content).toString()).toBe("old image bytes");
-              yield* h.store
-                .replaceArtifact({
-                  ...h.scope,
-                  artifactId: image.artifact.artifactId,
-                  fileName: "new.png",
-                  mediaType: "image/png",
-                  content: Buffer.from("new image bytes"),
-                })
-                .pipe(Effect.orDie);
-              return {
-                state: "failed" as const,
-                message: "Invalid image",
-                nextAction: "Download the original.",
-              };
-            }),
-        },
-      });
-      const ref = { ...h.scope, artifactId: image.artifact.artifactId };
-      await run(base.readTaskArtifact(ref));
-      expect(previews).toBe(0);
-      const preview = await run(base.readTaskArtifact({ ...ref, includeImagePreview: true }));
-      expect(Buffer.from(preview.dataBase64, "base64").toString()).toBe("old image bytes");
-      expect(preview.artifact.revision).toBe(1);
-      expect(preview.imagePreview?.state).toBe("failed");
-      expect(previews).toBe(1);
-      expect(
-        await run(Effect.flip(base.readTaskArtifact({ ...ref, expectedVersion: preview.version }))),
-      ).toMatchObject({ field: "expectedVersion" });
     } finally {
       await h.cleanup();
     }

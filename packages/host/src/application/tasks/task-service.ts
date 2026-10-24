@@ -39,7 +39,6 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import { TaskAssetError } from "../../effect/task-asset-error";
-import type { ArtifactImagePreviewPort } from "../../ports/artifact-image-preview-port";
 import {
   GitProviderCapabilityError,
   GitProviderRepositoryError,
@@ -304,7 +303,6 @@ export type RepoPullRequestSyncResult =
 export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type TaskTerminalCleanupPort = Pick<TerminalService, "acquireTaskCleanup">;
 export type CreateTaskServiceInput = {
-  artifactImagePreview?: ArtifactImagePreviewPort;
   publishCompletion?:
     | ((
         observation: import("@openducktor/contracts").TaskCompletionObservation,

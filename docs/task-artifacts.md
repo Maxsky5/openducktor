@@ -35,7 +35,7 @@ Creating a file with an existing name creates another artifact. UI uploads get a
 
 The workspace SQLite task store saves free-artifact bytes as BLOB data. It does not keep a path to the source file. Artifacts survive session completion, app restart, and task worktree removal. List reads return metadata without file bodies. A content read captures one artifact version; a continued read fails if that version changes.
 
-Download returns the original saved bytes with the stored filename after an explicit user action. Preview conversion does not change the original content. Invalid UTF-8 text produces a preview error instead of replacement characters. Download remains available when the original content is readable. Workflow artifacts retain Copy and Expand; free artifacts have Download and Expand. Expand shows the loaded content in a larger dialog, keeps that content stable while open, and returns focus to its button when closed. The inline preview stays mounted.
+Download returns the original saved bytes with the stored filename after an explicit user action. Previews use the original image bytes without host conversion. Invalid UTF-8 text produces a preview error instead of replacement characters. Download remains available when the original content is readable. Workflow artifacts retain Copy and Expand; free artifacts have Download and Expand. Expand shows the loaded content in a larger dialog, keeps that content stable while open, and returns focus to its button when closed. The inline preview stays mounted.
 
 ## Preview formats and isolation
 
@@ -65,7 +65,7 @@ Both shells load the same constant trusted bootstrap response. It contains no ta
 
 The bootstrap and its nested HTML frame use `sandbox="allow-scripts"` without same-origin permission. The app sends the selected HTML through a private MessageChannel only after the trusted bootstrap is ready. Each preview generation owns its frames and channel ports. Changing the HTML content, selecting another artifact, or closing the view disposes them. A startup failure reports an error and does not switch to an unrestricted preview.
 
-SVG uses browser image mode, never inline markup or an object document. Scripts and external SVG resources remain disabled. Agent image reads can also request a host preview from the same captured bytes as the original read. The host validates supported raster files and uses a worker to convert SVG or large raster images. Preview output cannot exceed 2 MiB. A failed conversion does not prevent access to the original bytes.
+SVG uses browser image mode, never inline markup or an object document. Scripts and external SVG resources remain disabled. Agent reads return complete PNG, JPEG, WebP, and GIF files as native image content, and partial reads as original-byte resources. Valid UTF-8 SVG reads return readable XML and an original-byte resource. The host does not resize or convert artifact images. See [External MCP](external-mcp.md#read-and-manage-task-artifacts) for read limits and continuation rules.
 
 ## Task lifecycle
 
