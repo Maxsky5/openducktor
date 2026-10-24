@@ -10,6 +10,7 @@ import {
   odtBrowserToolResultSchema,
   readTaskAssetsResultSchema,
   readTaskArtifactsResultSchema,
+  taskAssetMediaTypeSchema,
 } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 
@@ -153,7 +154,7 @@ export const toTaskArtifactsToolResult = (
   requestId: string | number = 0,
 ): ToolResult => {
   const parsed = readTaskArtifactsResultSchema.parse(payload);
-  const artifacts = parsed.artifacts.map(toTaskArtifactResult);
+  const artifacts = parsed.artifacts.map(toArtifactResult);
   const result = toToolResult(
     mcpToolPayloadSchema.parse({ artifacts: artifacts.map(({ entry }) => entry) }),
   );
@@ -168,49 +169,6 @@ export const toTaskArtifactsToolResult = (
     });
   }
   return result;
-};
-
-const toTaskArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][number]) => {
-  const { dataBase64, ...metadata } = payload;
-  const entry: ReadTaskArtifactsOutput["artifacts"][number] = metadata;
-  const bytes = Buffer.from(dataBase64, "base64");
-  const { artifact } = metadata;
-  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?version=${encodeURIComponent(metadata.version)}&offset=${metadata.byteOffset}&length=${bytes.byteLength}`;
-  const blocks: ToolResult["content"] = [];
-  const originalResource = () => ({
-    type: "resource" as const,
-    resource: { uri, mimeType: artifact.mediaType, blob: dataBase64 },
-  });
-  const mediaType = artifact.mediaType.toLowerCase();
-  if (
-    mediaType.startsWith("text/") ||
-    mediaType === "application/json" ||
-    mediaType === "image/svg+xml"
-  ) {
-    try {
-      entry.content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-      if (mediaType === "image/svg+xml") blocks.push(originalResource());
-    } catch {
-      blocks.push({
-        type: "text",
-        text: `Cannot decode artifact ${artifact.code} as UTF-8. The blob resource has the original bytes. Download the artifact or decode it with the correct encoding.`,
-      });
-      blocks.push(originalResource());
-    }
-  } else if (
-    ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mediaType) &&
-    metadata.byteOffset === 0 &&
-    metadata.nextByteOffset === null
-  ) {
-    blocks.push({
-      type: "image",
-      mimeType: mediaType,
-      data: dataBase64,
-    });
-  } else {
-    blocks.push(originalResource());
-  }
-  return { entry, blocks };
 };
 
 export const toBrowserToolResult = (
@@ -259,4 +217,47 @@ export const toToolError = (cause: unknown): ToolResult => {
     ],
     isError: true,
   };
+};
+
+const toArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][number]) => {
+  const { dataBase64, ...metadata } = payload;
+  const entry: ReadTaskArtifactsOutput["artifacts"][number] = metadata;
+  const bytes = Buffer.from(dataBase64, "base64");
+  const { artifact } = metadata;
+  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?version=${encodeURIComponent(metadata.version)}&offset=${metadata.byteOffset}&length=${bytes.byteLength}`;
+  const blocks: ToolResult["content"] = [];
+  const resource = {
+    type: "resource" as const,
+    resource: { uri, mimeType: artifact.mediaType, blob: dataBase64 },
+  };
+  const mediaType = artifact.mediaType.toLowerCase();
+  if (
+    mediaType.startsWith("text/") ||
+    mediaType === "application/json" ||
+    mediaType === "image/svg+xml"
+  ) {
+    try {
+      entry.content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+      if (mediaType === "image/svg+xml") blocks.push(resource);
+    } catch {
+      blocks.push({
+        type: "text",
+        text: `Cannot decode artifact ${artifact.code} as UTF-8. The blob resource has the original bytes. Download the artifact or decode it with the correct encoding.`,
+      });
+      blocks.push(resource);
+    }
+  } else if (
+    taskAssetMediaTypeSchema.options.some((type) => type === mediaType) &&
+    metadata.byteOffset === 0 &&
+    metadata.nextByteOffset === null
+  ) {
+    blocks.push({
+      type: "image",
+      mimeType: mediaType,
+      data: dataBase64,
+    });
+  } else {
+    blocks.push(resource);
+  }
+  return { entry, blocks };
 };

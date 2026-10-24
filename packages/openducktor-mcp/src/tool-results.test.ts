@@ -156,7 +156,7 @@ describe("task artifact results", () => {
   test.each(["image/png", "image/jpeg", "image/webp", "image/gif"])(
     "returns complete %s bytes as one native image without codec work",
     (mediaType) => {
-      // Opaque bytes must pass through, even when an image decoder would reject them.
+      // Reads must return these bytes even though an image decoder would reject them.
       const original = chunk(Buffer.from([0, 1, 0xfe, 0xff]), mediaType);
       const result = toTaskArtifactsToolResult({ artifacts: [original] });
       expect(result.content.slice(1)).toEqual([
@@ -313,7 +313,7 @@ describe("task artifact results", () => {
     ).toThrow("10 MiB MCP response limit");
   });
 
-  test("bounds aggregate native image responses without changing their bytes", () => {
+  test("rejects an image batch that exceeds the response limit", () => {
     const original = chunk(Buffer.alloc(1024 * 1024, 0xff), "image/png");
     const result = toTaskArtifactsToolResult({ artifacts: [original] });
     expect(result.content.slice(1)).toEqual([
