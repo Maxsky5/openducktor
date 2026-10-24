@@ -8,3 +8,12 @@ export const readClaudeSdkMessageTimestamp = (
   if (timestamp === undefined) return now();
   return Number.isNaN(Date.parse(timestamp)) ? now() : timestamp;
 };
+
+export const claudeReplyDurationMs = (
+  startedAt: string | undefined,
+  finishedAt: string | undefined,
+): number | undefined => {
+  if (startedAt === undefined || finishedAt === undefined) return undefined;
+  const durationMs = Date.parse(finishedAt) - Date.parse(startedAt);
+  return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined;
+};

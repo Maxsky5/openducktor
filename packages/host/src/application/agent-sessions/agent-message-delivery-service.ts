@@ -161,7 +161,7 @@ export const createAgentMessageDeliveryService = (
    * fail, so the next completed turn delivers instead and the queue does not show a failed try.
    */
   const release = (queue: MessageQueue): void => {
-    if (!conditions.isWorking(queue.key)) scheduleDrain(queue.key);
+    if (conditions.canDeliver(queue.key)) scheduleDrain(queue.key);
   };
 
   /** Releases a turn that completed during the send. A stale count only gets a busy refusal. */
@@ -211,11 +211,7 @@ export const createAgentMessageDeliveryService = (
       if (!queue || queue.pause !== null || queue.sendingNewTurn) return;
       const head = queue.entries[0];
       if (!head || head.state !== "queued") return;
-      if (conditions.isBlockedOnInput(sessionKey)) {
-        // The answer to the pending input releases the entry.
-        queue.waitsForInput = true;
-        return;
-      }
+      if (!conditions.canDeliver(sessionKey)) return;
       head.state = "sending";
       delete head.error;
       const completedTurns = queue.completedTurns;
@@ -397,14 +393,6 @@ export const createAgentMessageDeliveryService = (
     if (queue) pauseQueue(queue, cause);
   };
 
-  /** The answer to blocking input releases a delivery that waited for it. */
-  const releaseAfterInput = (sessionKey: string): void => {
-    const queue = registry.find(sessionKey);
-    if (!queue?.waitsForInput) return;
-    queue.waitsForInput = false;
-    release(queue);
-  };
-
   /**
    * A live accepted message removes its pending entry at once, so the transcript and the queue
    * change together. It names its submission, or the native ID of an unknown delivery.
@@ -471,14 +459,17 @@ export const createAgentMessageDeliveryService = (
     listQueues: registry.list,
     observeChanges: (envelopes) => {
       const completed = new Set<MessageQueue>();
+      const ready = new Set<MessageQueue>();
       const changes = envelopes.flatMap((envelope) => [
         ...sessionChanges(envelope),
         ...omittedQueueSessions(envelope, registry.list),
       ]);
       for (const envelope of changes) {
         const signal = conditions.observe(envelope);
-        if (signal?.kind === "input_answered") releaseAfterInput(signal.sessionKey);
-        else if (signal?.kind === "pause") pause(signal.ref, signal.pause);
+        if (signal?.kind === "delivery_ready") {
+          const queue = registry.find(signal.sessionKey);
+          if (queue) ready.add(queue);
+        } else if (signal?.kind === "pause") pause(signal.ref, signal.pause);
         else if (signal?.kind === "user_message")
           resolveAccepted(signal.ref, signal.acceptedMessage);
         else if (signal?.kind === "turn_completed") {
@@ -489,8 +480,9 @@ export const createAgentMessageDeliveryService = (
       // Pauses of the same batch apply first, so a failed turn never releases the next entry.
       for (const queue of completed) {
         queue.completedTurns += 1;
-        scheduleDrain(queue.key);
+        ready.add(queue);
       }
+      for (const queue of ready) release(queue);
     },
     pauseForStop: (ref) =>
       dependencies

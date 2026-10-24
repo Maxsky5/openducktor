@@ -421,9 +421,15 @@ export function claudeSdkMessageFixture(
     case "session_state_changed":
       return { state: "idle", ...message, session_id, uuid };
     case "background_tasks_changed":
-      return { tasks: [], ...message, session_id, uuid };
+      return {
+        ...message,
+        tasks: (message.tasks ?? []).map((task) => ({ run_id: `run:${task.task_id}`, ...task })),
+        session_id,
+        uuid,
+      };
     case "task_notification":
       return {
+        run_id: `run:${message.task_id ?? "task-1"}`,
         output_file: "/tmp/task-output",
         status: "completed",
         summary: "Task completed",
@@ -434,6 +440,7 @@ export function claudeSdkMessageFixture(
       };
     case "task_progress":
       return {
+        run_id: `run:${message.task_id ?? "task-1"}`,
         description: "Task in progress",
         task_id: "task-1",
         usage: { duration_ms: 0, tool_uses: 0, total_tokens: 0 },
@@ -443,6 +450,7 @@ export function claudeSdkMessageFixture(
       };
     case "task_started":
       return {
+        run_id: `run:${message.task_id ?? "task-1"}`,
         description: "Task started",
         task_id: "task-1",
         ...message,
@@ -450,7 +458,14 @@ export function claudeSdkMessageFixture(
         uuid,
       };
     case "task_updated":
-      return { patch: {}, task_id: "task-1", ...message, session_id, uuid };
+      return {
+        patch: {},
+        task_id: "task-1",
+        run_id: `run:${message.task_id ?? "task-1"}`,
+        ...message,
+        session_id,
+        uuid,
+      };
   }
 }
 

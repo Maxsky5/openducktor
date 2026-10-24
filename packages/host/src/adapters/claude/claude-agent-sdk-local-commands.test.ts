@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
-import { createEventTestSession } from "./claude-agent-sdk-events.test-support";
+import {
+  claudeAcceptedUserMessageFixture,
+  createEventTestSession,
+} from "./claude-agent-sdk-events.test-support";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import {
   claudeHistoryMessagesFixture,
@@ -215,6 +218,7 @@ describe("Claude local slash commands", () => {
     const session = createEventTestSession("running");
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(claudeAcceptedUserMessageFixture());
     session.sdkState = "running";
 
     handleClaudeSdkMessage({
@@ -239,6 +243,7 @@ describe("Claude local slash commands", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
+        user_message_uuid: "user-message-1",
         uuid: "58286517-42d4-4871-8a71-5cef439716e0",
         session_id: "session-1",
         duration_ms: 38,

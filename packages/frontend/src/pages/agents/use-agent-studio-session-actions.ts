@@ -4,6 +4,10 @@ import {
 } from "@/features/agent-chat-composer/message-delivery/use-agent-chat-send";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import {
+  getAgentSessionActivityStateFromSession,
+  isAgentSessionActivityWorking,
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type {
   GitBranch,
   ReusablePrompt,
@@ -205,6 +209,7 @@ export function useAgentStudioSessionActions({
     modelCatalog: selectedSession.runtimeData.modelCatalog,
     messages: loadedSession?.messages.items,
     isSessionWorking: sessionState.isSessionWorking,
+    foregroundTurnActive: loadedSession?.foregroundTurnActive,
     isWaitingInput: sessionState.isWaitingInput,
     selectedModelDescriptor,
     draftRules: { reusablePrompts, supportsAttachments },
@@ -260,7 +265,13 @@ export function useAgentStudioSessionActions({
     launchActionId,
   });
   const kickoffLabel = LAUNCH_ACTION_LABELS[launchActionId];
-  const canStopSession = selectedSessionIdentity !== null && isSessionWorking;
+  const canStopSession =
+    selectedSessionIdentity !== null &&
+    isAgentSessionActivityWorking(
+      loadedSession
+        ? getAgentSessionActivityStateFromSession(loadedSession)
+        : selectedSession.activityState,
+    );
   const canResumeSession = sessionState.canResumeSession;
 
   const selectedSessionKey =

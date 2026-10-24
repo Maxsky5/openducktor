@@ -7,7 +7,6 @@ import {
 import {
   type ClaudeBackgroundWorkSession,
   type ClaudeEventSession,
-  hasActiveClaudeBackgroundWork,
   userTurnIndex,
 } from "./claude-agent-sdk-event-session";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
@@ -19,11 +18,8 @@ import {
 import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
+import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
 import { disabledToolReason } from "./claude-tool-availability";
-import {
-  readClaudeTurnOriginKind,
-  shouldFinalizeClaudeTurn,
-} from "./claude-agent-sdk-user-messages";
 import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 
@@ -36,13 +32,15 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
     | "disabledTools"
     | "activeManualCompaction"
     | "activity"
-    | "assistantTurnOriginKind"
+    | "replyStartedAt"
+    | "sdkInitiatedTurnActive"
     | "externalSessionId"
     | "pendingUserTurnCount"
     | "lastAssistantTextMessageId"
     | "lastAssistantText"
     | "lastAssistantTextFinal"
     | "lastAssistantTextModel"
+    | "lastAssistantTextDurationMs"
     | "lastAssistantTextTurnIndex"
     | "lastSuccessfulResultTurnIndex"
     | "lastAssistantNativeUuid"
@@ -82,30 +80,60 @@ export const handleClaudeResultMessage = ({
   session,
   timestamp,
 }: ClaudeResultEventInput): void => {
+  session.completedNativeResultIds ??= new Set();
+  if (session.completedNativeResultIds.has(message.uuid)) return;
   const completedUserTurnIndex = userTurnIndex(session);
-  const originKind = readClaudeTurnOriginKind(message) ?? session.assistantTurnOriginKind;
-  const hasActiveBackgroundWork = hasActiveClaudeBackgroundWork(session);
-  const shouldFinalize = shouldFinalizeClaudeTurn(originKind, hasActiveBackgroundWork ? 1 : 0);
-  delete session.assistantTurnOriginKind;
   const failed = isFailedClaudeResult(message);
   const lifecycleOutcome = lifecycleOutcomeForClaudeResult(message);
   const resultText = message.subtype === "success" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
-  if (!handledManualCompaction && shouldFinalize) {
+  if (!handledManualCompaction) {
     emitSuccessfulResultText({ emit, message, session, timestamp, completedUserTurnIndex });
   }
-  if (!failed && !handledManualCompaction && shouldFinalize && lifecycleOutcome === "completed") {
+  if (!failed && !handledManualCompaction && lifecycleOutcome === "completed") {
     // A tool-only result carries no assistant text, so the turn index is the only
     // record that the latest accepted turn finished.
     session.lastSuccessfulResultTurnIndex = completedUserTurnIndex;
-    if (resultText.length === 0) {
+    const hasCurrentFinalText =
+      session.lastAssistantTextFinal &&
+      session.lastAssistantTextTurnIndex === completedUserTurnIndex;
+    const hasCurrentAssistant =
+      session.lastAssistantNativeUuid &&
+      session.lastAssistantNativeUuidTurnIndex === completedUserTurnIndex;
+    if (resultText.length === 0 && hasCurrentFinalText) {
+      emitClaudeDeferredReplyForkPoint({ emit, session, timestamp });
+    }
+    // A notification can finish without any assistant output.
+    if (
+      resultText.length === 0 &&
+      !hasCurrentFinalText &&
+      (!session.sdkInitiatedTurnActive || hasCurrentAssistant)
+    ) {
       emitFinalAssistantMarker({ emit, message, session, timestamp });
     }
   }
   if (isClaudeResultStoppedBySteer(message, (session.unreadSteeredUserMessages?.size ?? 0) > 0)) {
     return;
   }
+  session.completedNativeResultIds.add(message.uuid);
+  delete session.replyStartedAt;
+  if (message.result_index !== undefined) session.lastNativeResultIndex = message.result_index;
+  const consumedIds = new Set(session.foregroundMessageIds);
+  for (const messageId of message.user_message_uuids ??
+    (message.user_message_uuid ? [message.user_message_uuid] : [])) {
+    consumedIds.add(messageId);
+  }
+  const acceptedIds = new Set(session.acceptedUserMessages?.map((accepted) => accepted.messageId));
+  const messageIds = [...consumedIds].filter(
+    (messageId) =>
+      session.nativeCommandStates?.get(messageId) !== "result" &&
+      (acceptedIds.has(messageId) || session.nativeSubmittedMessageIds?.has(messageId)),
+  );
+  session.nativeCommandStates ??= new Map();
+  for (const messageId of messageIds) session.nativeCommandStates.set(messageId, "result");
+  session.foregroundMessageIds?.clear();
+  const consumedMessageCount = messageIds.filter((messageId) => acceptedIds.has(messageId)).length;
   if (failed) {
     clearClaudeManualCompaction(session);
     const errors = message.subtype === "success" ? [] : message.errors;
@@ -125,21 +153,23 @@ export const handleClaudeResultMessage = ({
     if (lastError?.usageLimit) turnError.usageLimit = lastError.usageLimit;
     if (lastError) lastError.message = turnError.message;
     emit(turnError);
-    applyClaudeLifecycleEvent({
-      emit,
-      session,
-      timestamp,
-      event: { kind: "result", outcome: "failed" },
-    });
-    return;
   }
+  emit({
+    type: "session_turn_finished",
+    externalSessionId: session.externalSessionId,
+    timestamp,
+    completionId: message.uuid,
+    messageIds,
+    turnOutcome: failed ? "failed" : "completed",
+  });
   applyClaudeLifecycleEvent({
     emit,
     session,
     timestamp,
     event: {
       kind: "result",
-      outcome: lifecycleOutcome,
+      outcome: failed ? "failed" : lifecycleOutcome,
+      consumedMessageCount,
     },
   });
 };
@@ -209,6 +239,8 @@ export const emitClaudeDeferredReplyForkPoint = (input: {
     message: session.lastAssistantText,
   };
   if (session.lastAssistantTextModel) message.model = session.lastAssistantTextModel;
+  if (session.lastAssistantTextDurationMs !== undefined)
+    message.durationMs = session.lastAssistantTextDurationMs;
   attachClaudeCompletedReplyForkPoint(session, message, session.lastAssistantTextTurnIndex ?? -1);
   if (message.forkPoint) input.emit(message);
 };
@@ -305,6 +337,9 @@ const emitSuccessfulResultText = ({
     session.lastAssistantTextMessageId = messageId;
     session.lastAssistantText = text;
     session.lastAssistantTextTurnIndex = completedUserTurnIndex;
+    const durationMs = claudeReplyDurationMs(session.replyStartedAt, timestamp);
+    if (durationMs !== undefined) session.lastAssistantTextDurationMs = durationMs;
+    else delete session.lastAssistantTextDurationMs;
   }
   session.lastAssistantTextFinal = true;
   if (streamedMessageIds.length > 1) {
@@ -325,6 +360,8 @@ const emitSuccessfulResultText = ({
   if (resultModel) {
     assistantMessage.model = resultModel;
   }
+  if (session.lastAssistantTextDurationMs !== undefined)
+    assistantMessage.durationMs = session.lastAssistantTextDurationMs;
   if (lifecycleOutcomeForClaudeResult(message) === "completed") {
     attachClaudeCompletedReplyForkPoint(session, assistantMessage, completedUserTurnIndex);
   }

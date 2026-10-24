@@ -6,6 +6,11 @@ import { createSerialLane } from "../../effect/serial-gate";
 
 type CreateClaudeLiveSessionEventCoordinatorInput = {
   readonly runtimeId: string;
+  readonly acceptsEvent: (
+    session: ClaudeSessionContext,
+    event: ClaudeAgentSdkEvent,
+    phase: "accept" | "deliver",
+  ) => boolean;
   readonly processEvent: (
     session: ClaudeSessionContext,
     event: ClaudeAgentSdkEvent,
@@ -14,6 +19,7 @@ type CreateClaudeLiveSessionEventCoordinatorInput = {
 
 export const createClaudeLiveSessionEventCoordinator = ({
   processEvent,
+  acceptsEvent,
   runtimeId,
 }: CreateClaudeLiveSessionEventCoordinatorInput) => {
   const queuedEvents: Array<{
@@ -39,6 +45,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
       if (!queued) {
         continue;
       }
+      if (!acceptsEvent(queued.session, queued.event, "deliver")) continue;
       const result = yield* Effect.result(processEvent(queued.session, queued.event));
       if (result._tag === "Failure" && forwardingFailure === null) {
         forwardingFailure = result.failure;
@@ -67,6 +74,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
           continue;
         }
         queuedEvents.splice(index, 1);
+        if (!acceptsEvent(queued.session, queued.event, "deliver")) continue;
         yield* processEvent(queued.session, queued.event);
       }
     });
@@ -75,7 +83,9 @@ export const createClaudeLiveSessionEventCoordinator = ({
     drainMatchingEvents(
       (event) =>
         event.externalSessionId === externalSessionId &&
-        (event.type === "transcript_retracted" || event.type === "session_finished"),
+        (event.type === "transcript_retracted" ||
+          event.type === "session_error" ||
+          event.type === "session_finished"),
     );
 
   const drainInBackground = (): void => {
@@ -108,6 +118,7 @@ export const createClaudeLiveSessionEventCoordinator = ({
         details: { eventRuntimeId: session.runtimeId, runtimeId },
       });
     }
+    if (!acceptsEvent(session, event, "accept")) return;
     queuedEvents.push({ session, event });
     if (forwarding) {
       drainInBackground();
@@ -158,12 +169,22 @@ export const createClaudeLiveSessionEventCoordinator = ({
           return yield* Effect.fail(runtimeReleasedError());
         }
         forwarding = false;
-        const value = yield* effect;
-        yield* drainMatchingEvents((event) => event.type === "transcript_retracted");
+        const result = yield* Effect.result(effect);
+        yield* drainMatchingEvents(
+          (event) =>
+            event.type === "transcript_retracted" ||
+            event.type === "session_error" ||
+            event.type === "session_finished" ||
+            event.statusUnavailable === true,
+        );
+        if (result._tag === "Failure") {
+          forwarding = true;
+          return yield* Effect.fail(result.failure);
+        }
         released = true;
         forwardingFailure = null;
         queuedEvents.splice(0);
-        return value;
+        return result.success;
       }),
     );
 

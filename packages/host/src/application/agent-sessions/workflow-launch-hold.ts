@@ -63,8 +63,12 @@ export const createWorkflowLaunchHold = () => {
       return change;
     },
     project: (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
-      holds.has(agentSessionRefKey(snapshot.ref)) && snapshot.activity === "idle"
-        ? { ...snapshot, activity: "running" }
+      holds.has(agentSessionRefKey(snapshot.ref))
+        ? {
+            ...snapshot,
+            foregroundTurnActive: true,
+            activity: snapshot.activity === "idle" ? "running" : snapshot.activity,
+          }
         : snapshot,
   };
 };

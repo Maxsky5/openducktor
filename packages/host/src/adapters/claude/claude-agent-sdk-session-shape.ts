@@ -13,7 +13,12 @@ import {
   toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import { trimTrailingPathSeparators } from "@openducktor/path-support";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  claudeBlockingInputActivity,
+  hasClaudeNativeBackgroundActivity,
+  isClaudeForegroundTurnActive,
+} from "./claude-agent-sdk-activity";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { encodeClaudePromptTextWithSourceRanges } from "./claude-agent-sdk-messages";
 import type {
@@ -173,27 +178,43 @@ export const toClaudeUserMessageEvent = (
 };
 
 export const snapshotForClaudeSession = (session: ClaudeSession): AgentSessionRuntimeSnapshot => {
+  if (session.statusUnavailableReason)
+    throw new HostOperationError({
+      operation: "claudeRuntime.getSessionSnapshot",
+      message: session.statusUnavailableReason,
+      details: { externalSessionId: session.externalSessionId },
+    });
   const ref = claudeSessionRef(session);
   if (session.activity === "stopped") {
     return toAgentSessionRuntimeSnapshot({ ref, snapshot: null });
   }
-  const runtimeActivity =
-    session.sdkState === "idle" &&
-    session.activeSdkUserTurnCount === 0 &&
-    session.pendingUserTurnCount === 0
-      ? "idle"
-      : session.activity;
+  const foregroundTurnActive = isClaudeForegroundTurnActive(session);
+  let runtimeActivity = session.activity;
+  if (
+    foregroundTurnActive ||
+    hasClaudeNativeBackgroundActivity(session) ||
+    session.resultAwaitsSdkIdle
+  ) {
+    runtimeActivity = "running";
+  } else if (session.sdkState === "idle") {
+    runtimeActivity = "idle";
+  }
   const snapshot: NonNullable<Parameters<typeof toAgentSessionRuntimeSnapshot>[0]["snapshot"]> = {
     title: session.summary.title ?? "Claude session",
     startedAt: session.startedAt,
     runtimeActivity,
+    foregroundTurnActive,
     pendingApprovals: [...session.pendingApprovals.values()].map((entry) => entry.event),
     pendingQuestions: [...session.pendingQuestions.values()].map((entry) => entry.event),
   };
   if (session.parentExternalSessionId) {
     snapshot.parentExternalSessionId = session.parentExternalSessionId;
   }
-  return toAgentSessionRuntimeSnapshot({ ref, snapshot });
+  const runtimeSnapshot = toAgentSessionRuntimeSnapshot({ ref, snapshot });
+  const inputActivity = claudeBlockingInputActivity(session);
+  if (runtimeSnapshot.availability === "runtime" && inputActivity)
+    runtimeSnapshot.classification = inputActivity;
+  return runtimeSnapshot;
 };
 
 const normalizeTargetPath = (value: string): string => trimTrailingPathSeparators(value.trim());

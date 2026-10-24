@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import type { AgentSessionLiveEnvelope, AgentSessionTranscriptEvent } from "@openducktor/contracts";
 import { getAgentSession } from "../../agent-session-collection";
 import { createSettingsSnapshotFixture } from "../../../test-support/shared-test-fixtures";
@@ -32,6 +33,7 @@ const createConsumerHarness = (
   const updateSession = createSessionUpdater(sessionsRef);
   const guardedUpdateSession: UpdateSession = (identity, updater) =>
     updateSession(identity, updater);
+  const sessionTurnState = createSessionTurnState();
   const consumer = createAgentSessionTranscriptEventConsumer(
     {
       feedback: createFeedbackFake(),
@@ -42,7 +44,7 @@ const createConsumerHarness = (
       },
       updateSession: guardedUpdateSession,
       updateSessionTodos: () => undefined,
-      sessionTurnState: createSessionTurnState(),
+      sessionTurnState,
     },
     { batchWindowMs },
   );
@@ -63,10 +65,106 @@ const createConsumerHarness = (
       },
     },
     sessionsRef,
+    sessionTurnState,
   };
 };
 
 describe("agent session transcript event consumer", () => {
+  test.each([
+    ["baseline", "read", "active-submission"],
+    ["live", "queued", "active-submission"],
+    ["live", "read", "other-submission"],
+  ] as const)(
+    "keeps a pending submission for a %s %s message from %s",
+    (provenance, state, submissionId) => {
+      const session = buildSession({
+        runtimeKind: "claude",
+        status: "running",
+        foregroundTurnActive: false,
+        pendingSubmissionId: "active-submission",
+      });
+      const { consumer, sessionsRef } = createConsumerHarness(0, session);
+      try {
+        consumer.handle(
+          {
+            type: "user_message",
+            sessionRef: { ...sessionRef, runtimeKind: "claude" },
+            externalSessionId: sessionRef.externalSessionId,
+            timestamp: "2026-10-23T18:10:00.000Z",
+            messageId: "prompt",
+            submissionId,
+            state,
+            message: "Continue the review",
+            parts: [{ kind: "text", text: "Continue the review" }],
+          },
+          provenance,
+        );
+        expect(getSession(sessionsRef).pendingSubmissionId).toBe("active-submission");
+      } finally {
+        consumer.close();
+      }
+    },
+  );
+
+  test("settles only the matching Claude response while background work and input remain", () => {
+    const liveRef = { ...sessionRef, runtimeKind: "claude" as const };
+    const session = buildSession({
+      runtimeKind: "claude",
+      status: "running",
+      foregroundTurnActive: false,
+      statusUnavailableReason: "Status confirmation lost",
+      pendingQuestions: [{ requestId: "background-question", questions: [] }],
+    });
+    const { consumer, sessionsRef, sessionTurnState } = createConsumerHarness(0, session);
+    const sessionKey = agentSessionIdentityKey(session);
+    const userTimestamp = "2026-10-23T18:10:00.000Z";
+    const finish = (completionId: string, messageIds: string[]) =>
+      consumer.handle({
+        type: "session_turn_finished",
+        sessionRef: liveRef,
+        externalSessionId: liveRef.externalSessionId,
+        timestamp: "2026-10-23T18:10:02.000Z",
+        completionId,
+        messageIds,
+        turnOutcome: "completed",
+      });
+    try {
+      consumer.handle({
+        type: "user_message",
+        sessionRef: liveRef,
+        externalSessionId: liveRef.externalSessionId,
+        timestamp: userTimestamp,
+        messageId: "active-prompt",
+        state: "read",
+        message: "Continue the review",
+        parts: [{ kind: "text", text: "Continue the review" }],
+      });
+      consumer.handle({
+        type: "assistant_message",
+        sessionRef: liveRef,
+        externalSessionId: liveRef.externalSessionId,
+        timestamp: "2026-10-23T18:10:01.000Z",
+        messageId: "automatic-reply",
+        message: "The background check is complete.",
+      });
+      finish("automatic-result", []);
+      finish("previous-result", ["previous-prompt"]);
+      expect(sessionTurnState.timing.readTurnUserMessageStartedAtMs(sessionKey)).toBe(
+        Date.parse(userTimestamp),
+      );
+      finish("current-result", ["active-prompt"]);
+      expect(sessionTurnState.timing.readTurnUserMessageStartedAtMs(sessionKey)).toBeUndefined();
+      expect(getSession(sessionsRef)).toMatchObject({
+        status: "running",
+        foregroundTurnActive: false,
+        statusUnavailableReason: "Status confirmation lost",
+        pendingQuestions: [{ requestId: "background-question", questions: [] }],
+      });
+    } finally {
+      consumer.close();
+    }
+  });
+
   test("restores a past interruption without clearing a current stop request", () => {
     const liveRef = { ...sessionRef, runtimeKind: "opencode" as const };
     const stopRequestedAt = "2026-10-10T08:00:10.000Z";

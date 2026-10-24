@@ -131,13 +131,15 @@ describe("projectSessionSnapshotActivity", () => {
     expect(
       projectSessionSnapshotActivity(
         { status: "running", executionEpisodeId: "episode-1", runtimeStatusMessage: "Working" },
-        snapshot("a", { activity }),
+        snapshot("a", { activity, foregroundTurnActive: false }),
       ),
     ).toEqual({
       status,
       executionEpisodeId: "episode-1",
       runtimeStatusMessage: status === "idle" ? null : "Working",
       pendingUserMessageStartedAt: undefined,
+      foregroundTurnActive: false,
+      statusUnavailableReason: null,
     });
   });
 
@@ -159,6 +161,8 @@ describe("projectSessionSnapshotActivity", () => {
         pendingUserMessageStartedAt: 123,
         runtimeStatusMessage: "Working",
         executionEpisodeId: "episode-1",
+        foregroundTurnActive: undefined,
+        statusUnavailableReason: null,
       });
     },
   );
@@ -183,6 +187,8 @@ describe("projectSessionSnapshotActivity", () => {
         pendingUserMessageStartedAt: undefined,
         runtimeStatusMessage: "Previous runtime message",
         executionEpisodeId: "episode-1",
+        foregroundTurnActive: undefined,
+        statusUnavailableReason: null,
       });
     },
   );

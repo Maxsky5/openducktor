@@ -13,6 +13,7 @@ import {
   type RuntimeExecutableProbePort,
 } from "../../ports/runtime-executable-probe-port";
 import { useRuntimeProbeResource } from "../runtimes/runtime-executable-probe-lifecycle";
+import { getClaudeCodeCompatibilityError } from "./claude-code-compatibility";
 
 const DEFAULT_INITIALIZATION_TIMEOUT_MS = 10_000;
 const claudeInitializationResponseSchema = z.object({
@@ -116,6 +117,13 @@ export const createClaudeExecutableProbe = ({
                 message: `The executable at ${executablePath} returned an invalid Claude Agent SDK initialization response.`,
               }),
           ),
+          Effect.flatMap((initialization) => {
+            const compatibilityError = getClaudeCodeCompatibilityError(
+              initialization,
+              executablePath,
+            );
+            return compatibilityError ? Effect.fail(compatibilityError) : Effect.void;
+          }),
           Effect.timeoutOrElse({
             duration: `${initializationTimeoutMs} millis`,
             orElse: () =>

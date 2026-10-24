@@ -25,8 +25,8 @@ import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/ag
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
 
 const comparePrimaryTaskSession = (
-  left: ActiveAgentSessionSummary,
-  right: ActiveAgentSessionSummary,
+  left: AgentSessionSummary,
+  right: AgentSessionSummary,
 ): number => {
   return compareActiveSessionForPrimary(toKanbanTaskSession(left), toKanbanTaskSession(right));
 };
@@ -111,9 +111,9 @@ export const sortTasksByActivityState = (
 export const buildTaskSessionsByTaskId = (
   sessions: AgentSessionSummary[],
 ): Map<string, KanbanTaskSession[]> => {
-  const sessionsByTaskId = new Map<string, ActiveAgentSessionSummary[]>();
+  const sessionsByTaskId = new Map<string, AgentSessionSummary[]>();
   for (const session of sessions) {
-    if (!isKanbanActiveTaskSession(session)) {
+    if (!isKanbanActiveTaskSession(session) && !session.statusUnavailableReason) {
       continue;
     }
 

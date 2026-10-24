@@ -45,6 +45,7 @@ import {
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
+import { deriveSelectedSessionViewProjection } from "./selected-session/selected-session-view-projection";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 enableReactActEnvironment();
@@ -325,6 +326,38 @@ const createBaseArgs = (): HookArgs => {
 };
 
 describe("useAgentStudioSessionActions", () => {
+  test("keeps Stop available after an unconfirmed termination", async () => {
+    const unavailableReason = "Claude termination is unconfirmed. Retry Stop.";
+    const session = createSession({
+      runtimeKind: "claude",
+      status: "running",
+      foregroundTurnActive: false,
+      statusUnavailableReason: unavailableReason,
+    });
+    const selectedSession = {
+      ...selectedSessionFromSession(session),
+      ...deriveSelectedSessionViewProjection({
+        selectedSessionIdentity: toAgentSessionIdentity(session),
+        session,
+        sessionSummary: null,
+        selectedTask: null,
+        sessionFault: null,
+        readModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+        runtimeReadinessState: "ready",
+      }),
+    };
+    const harness = createHookHarness({ ...createBaseArgs(), selectedSession });
+    try {
+      await harness.mount();
+      expect(selectedSession.activityState).toBeNull();
+      expect(selectedSession.sessionAuxiliaryError).toBe(unavailableReason);
+      expect(harness.getLatest().isSessionWorking).toBe(false);
+      expect(harness.getLatest().canStopSession).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("shows the host reason and next action when the runtime refuses a continuation", async () => {
     const failure = new HostInvokeError("Continuation refused", {
       kind: "agent_session_resume",
@@ -887,6 +920,7 @@ describe("useAgentStudioSessionActions", () => {
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
     expect(harness.getLatest().isWaitingInput).toBe(true);
+    expect(harness.getLatest().canStopSession).toBe(false);
 
     await harness.unmount();
   });

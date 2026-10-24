@@ -1,10 +1,12 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
-import { compareActiveAgentSessionActivityState } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  compareActiveAgentSessionActivityState,
+  isAgentSessionActivityActive,
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { ActiveAgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
 
 export type SessionTargetOptions = {
   session: AgentSessionIdentity;
@@ -14,7 +16,8 @@ type PrimarySessionOrderingCandidate = {
   externalSessionId: string;
   runtimeKind: AgentSessionIdentity["runtimeKind"];
   workingDirectory: AgentSessionIdentity["workingDirectory"];
-  activityState: ActiveAgentSessionActivityState;
+  activityState: KanbanTaskSession["activityState"];
+  statusUnavailableReason?: KanbanTaskSession["statusUnavailableReason"];
   startedAt?: string;
 };
 
@@ -22,10 +25,22 @@ export const compareActiveSessionForPrimary = (
   left: PrimarySessionOrderingCandidate,
   right: PrimarySessionOrderingCandidate,
 ): number => {
-  const activityPriority = compareActiveAgentSessionActivityState(
+  const leftActivity = isAgentSessionActivityActive(
     left.activityState,
+    left.statusUnavailableReason,
+  )
+    ? left.activityState
+    : null;
+  const rightActivity = isAgentSessionActivityActive(
     right.activityState,
-  );
+    right.statusUnavailableReason,
+  )
+    ? right.activityState
+    : null;
+  const activityPriority =
+    leftActivity && rightActivity
+      ? compareActiveAgentSessionActivityState(leftActivity, rightActivity)
+      : Number(rightActivity !== null) - Number(leftActivity !== null);
   if (activityPriority !== 0) {
     return activityPriority;
   }

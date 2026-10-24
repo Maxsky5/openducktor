@@ -257,7 +257,7 @@ export const createSessionOperationOwner = (deps: {
           );
           const policy = deps.policyFor(target);
           if (kind === "submission") work = policy.runSend(target, work);
-          // Model changes take the lifecycle lock after the live turn becomes idle.
+          // Model changes take the lifecycle lock after the foreground turn ends.
           else if (kind !== "model")
             work = policy.run(
               target,

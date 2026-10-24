@@ -11,7 +11,7 @@ import type { AgentSessionActivityState } from "../types/agent-session-activity"
 import { isWorkflowAgentSession } from "./agent-orchestrator/support/workflow-session";
 
 export type AgentSessionSummary = AgentSessionIdentity &
-  Pick<WorkflowAgentSessionState, "title" | "startedAt"> & {
+  Pick<WorkflowAgentSessionState, "title" | "startedAt" | "statusUnavailableReason"> & {
     taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
     role: WorkflowAgentSessionState["sessionAssociation"]["role"];
     activityState: AgentSessionActivityState;
@@ -55,7 +55,7 @@ export const createAgentActivitySnapshot = ({
     }
     const nextSummary = toAgentSessionSummary(session);
     const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
-    return sameSummary(previousSummary, nextSummary) && previousSummary
+    return sameTaskSummary(previousSummary, nextSummary) && previousSummary
       ? [previousSummary]
       : [nextSummary];
   });
@@ -83,20 +83,11 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
     );
   }
 
-  const summary: AgentSessionSummary = {
-    ...toAgentSessionIdentity(session),
+  return {
+    ...toSummary(session),
     taskId: session.sessionAssociation.taskId,
     role: session.sessionAssociation.role,
-    activityState: getAgentSessionActivityStateFromSession(session),
-    startedAt: session.startedAt,
-    selectedModel: session.selectedModel,
-    pendingApprovalCount: session.pendingApprovals.length,
-    pendingQuestionCount: session.pendingQuestions.length,
   };
-  if (session.title) {
-    summary.title = session.title;
-  }
-  return summary;
 }
 
 const newestFirst = (left: AgentSessionState, right: AgentSessionState): number => {
@@ -105,17 +96,37 @@ const newestFirst = (left: AgentSessionState, right: AgentSessionState): number 
   return 0;
 };
 
-const sameSummary = (left: AgentSessionSummary | undefined, right: AgentSessionSummary): boolean =>
+const sameTaskSummary = (
+  left: AgentSessionSummary | undefined,
+  right: AgentSessionSummary,
+): boolean =>
+  sameSummary(left, right) && left?.taskId === right.taskId && left?.role === right.role;
+
+const toSummary = (session: AgentSessionState): RepositoryAgentSessionSummary => {
+  const summary: RepositoryAgentSessionSummary = {
+    ...toAgentSessionIdentity(session),
+    startedAt: session.startedAt,
+    selectedModel: session.selectedModel,
+    activityState: getAgentSessionActivityStateFromSession(session),
+    statusUnavailableReason: session.statusUnavailableReason,
+    pendingApprovalCount: session.pendingApprovals.length,
+    pendingQuestionCount: session.pendingQuestions.length,
+  };
+  if (session.title) summary.title = session.title;
+  return summary;
+};
+
+const sameSummary = (
+  left: RepositoryAgentSessionSummary | undefined,
+  right: RepositoryAgentSessionSummary,
+): boolean =>
   left !== undefined &&
-  agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
   left.title === right.title &&
-  left.taskId === right.taskId &&
-  left.role === right.role &&
   left.activityState === right.activityState &&
+  left.statusUnavailableReason === right.statusUnavailableReason &&
   left.startedAt === right.startedAt &&
   left.workingDirectory === right.workingDirectory &&
   left.selectedModel === right.selectedModel &&
-  left.runtimeKind === right.runtimeKind &&
   left.pendingApprovalCount === right.pendingApprovalCount &&
   left.pendingQuestionCount === right.pendingQuestionCount;
 
@@ -178,27 +189,9 @@ const repositoryActivitySummaries = (
       session.liveParentExternalSessionId !== undefined
     )
       return [];
-    const summary: RepositoryAgentSessionSummary = {
-      ...toAgentSessionIdentity(session),
-      startedAt: session.startedAt,
-      selectedModel: session.selectedModel,
-      activityState: getAgentSessionActivityStateFromSession(session),
-      pendingApprovalCount: session.pendingApprovals.length,
-      pendingQuestionCount: session.pendingQuestions.length,
-    };
-    if (session.title) summary.title = session.title;
+    const summary = toSummary(session);
     const prior = previousByIdentity.get(agentSessionIdentityKey(session));
-    if (
-      prior &&
-      prior.title === summary.title &&
-      prior.startedAt === summary.startedAt &&
-      prior.selectedModel === summary.selectedModel &&
-      prior.activityState === summary.activityState &&
-      prior.pendingApprovalCount === summary.pendingApprovalCount &&
-      prior.pendingQuestionCount === summary.pendingQuestionCount &&
-      prior.workingDirectory === summary.workingDirectory
-    )
-      return [prior];
+    if (sameSummary(prior, summary) && prior) return [prior];
     return [summary];
   });
   return reuseArray(previous, next);

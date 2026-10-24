@@ -187,14 +187,24 @@ export const projectObservedSessionActivity = (
 
 type SessionSnapshotActivity = Pick<
   AgentSessionState,
-  "status" | "pendingUserMessageStartedAt" | "executionEpisodeId" | "runtimeStatusMessage"
+  | "status"
+  | "pendingUserMessageStartedAt"
+  | "executionEpisodeId"
+  | "runtimeStatusMessage"
+  | "foregroundTurnActive"
+  | "statusUnavailableReason"
 >;
 
 export const projectSessionSnapshotActivity = (
   current: SessionSnapshotActivity,
   snapshot: Pick<
     AgentSessionLiveSnapshot,
-    "activity" | "executionEpisodeId" | "pendingApprovals" | "pendingQuestions"
+    | "activity"
+    | "executionEpisodeId"
+    | "pendingApprovals"
+    | "pendingQuestions"
+    | "foregroundTurnActive"
+    | "statusUnavailableReason"
   >,
 ): SessionSnapshotActivity => {
   const isNewEpisode =
@@ -210,6 +220,8 @@ export const projectSessionSnapshotActivity = (
   );
   return {
     executionEpisodeId: snapshot.executionEpisodeId ?? current.executionEpisodeId,
+    foregroundTurnActive: snapshot.foregroundTurnActive,
+    statusUnavailableReason: snapshot.statusUnavailableReason ?? null,
     ...activity,
     runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
   };
@@ -499,6 +511,8 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
     ...activity,
     runtimeStatusMessage: null,
     livePresence: "absent",
+    foregroundTurnActive: undefined,
+    statusUnavailableReason: null,
     pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
     pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
     contextUsage: null,
@@ -529,6 +543,8 @@ const resetSessionLiveStateForSnapshot = (
           ),
     runtimeStatusMessage: null,
     livePresence: hasLiveSnapshot ? "present" : "absent",
+    foregroundTurnActive: undefined,
+    statusUnavailableReason: null,
     pendingApprovals: [],
     pendingQuestions: [],
     contextUsage: null,

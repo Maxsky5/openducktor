@@ -295,7 +295,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
 
     expect(projection.hasSnapshot).toBe(true);
     expect([...projection.sessions.keys()]).toEqual([key("b")]);
-    expect(badges(projection)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(badges(projection)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: false,
+      statusUnavailableReason: null,
+    });
   });
 
   test("reports running and waiting sessions side by side", () => {
@@ -310,7 +315,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
       ]),
     );
 
-    expect(badges(projection)).toEqual({ inputRequired: true, error: false, active: true });
+    expect(badges(projection)).toEqual({
+      inputRequired: true,
+      error: false,
+      active: true,
+      statusUnavailableReason: null,
+    });
   });
 
   test("attributes subagent pending input to its parent and ignores the subagent status", () => {
@@ -326,7 +336,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
       ]),
     );
 
-    expect(badges(projection)).toEqual({ inputRequired: true, error: false, active: false });
+    expect(badges(projection)).toEqual({
+      inputRequired: true,
+      error: false,
+      active: false,
+      statusUnavailableReason: null,
+    });
   });
 
   test("derives the error badge from a session error transcript event", () => {
@@ -336,7 +351,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
       sessionErrorEvent("a"),
     );
 
-    expect(badges(projection)).toEqual({ inputRequired: false, error: true, active: false });
+    expect(badges(projection)).toEqual({
+      inputRequired: false,
+      error: true,
+      active: false,
+      statusUnavailableReason: null,
+    });
   });
 
   test("clears a preserved error when the session starts a new execution episode", () => {
@@ -345,7 +365,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
       sessionSnapshot([snapshot("a", { activity: "running", executionEpisodeId: "episode-1" })]),
       sessionErrorEvent("a"),
     );
-    expect(badges(failed)).toEqual({ inputRequired: false, error: true, active: false });
+    expect(badges(failed)).toEqual({
+      inputRequired: false,
+      error: true,
+      active: false,
+      statusUnavailableReason: null,
+    });
 
     const keptOverIdleReport = apply(
       failed,
@@ -355,13 +380,19 @@ describe("applyWorkspaceActivityEnvelope", () => {
       inputRequired: false,
       error: true,
       active: false,
+      statusUnavailableReason: null,
     });
 
     const newEpisode = apply(
       keptOverIdleReport,
       sessionSnapshot([snapshot("a", { activity: "idle", executionEpisodeId: "episode-2" })]),
     );
-    expect(badges(newEpisode)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(badges(newEpisode)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: false,
+      statusUnavailableReason: null,
+    });
   });
 
   test("clears a tile that transcript activity marked active when the session settles", () => {
@@ -378,7 +409,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
         timestamp: "2026-09-15T08:01:00.000Z",
       },
     });
-    expect(badges(active)).toEqual({ inputRequired: false, error: false, active: true });
+    expect(badges(active)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: true,
+      statusUnavailableReason: null,
+    });
 
     const settled = apply(active, {
       type: "transcript_event",
@@ -389,7 +425,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
         timestamp: "2026-09-15T08:01:01.000Z",
       },
     });
-    expect(badges(settled)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(badges(settled)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: false,
+      statusUnavailableReason: null,
+    });
   });
 
   test("drops a removed session", () => {
@@ -403,7 +444,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
     );
 
     expect(projection.sessions.size).toBe(0);
-    expect(badges(projection)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(badges(projection)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: false,
+      statusUnavailableReason: null,
+    });
   });
 
   test("records a fault reason and clears it on the next snapshot", () => {
@@ -436,7 +482,12 @@ describe("applyWorkspaceActivityEnvelope", () => {
       message: "Codex thread reported a system error. (during codex-live-session.process-event)",
       statusUnavailable: false,
     });
-    expect(badges(faulted)).toEqual({ inputRequired: false, error: false, active: false });
+    expect(badges(faulted)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: false,
+      statusUnavailableReason: null,
+    });
     expect(applyWorkspaceActivityEnvelope(faulted, fault)).toBe(faulted);
 
     const updated = apply(faulted, { type: "session_upsert", session: snapshot("a") });
@@ -455,8 +506,40 @@ describe("applyWorkspaceActivityEnvelope", () => {
       statusUnavailable: true,
     });
 
-    expect(faulted.sessions).toBe(ready.sessions);
+    expect(faulted.sessions.get(key("a"))?.statusUnavailableReason).toBe(
+      "Status read failed. (during opencode-live-session.refresh-session)",
+    );
     expect(faulted.faults.get(key("a"))?.statusUnavailable).toBe(true);
+    const unchanged = apply(faulted, {
+      type: "transcript_event",
+      event: {
+        type: "session_turn_finished",
+        externalSessionId: "a",
+        sessionRef: snapshot("a").ref,
+        timestamp: "2026-09-15T08:01:01.000Z",
+        completionId: "automatic-result",
+        messageIds: [],
+        turnOutcome: "completed",
+      },
+    });
+    expect(unchanged).toBe(faulted);
+    const recovered = apply(unchanged, {
+      type: "transcript_event",
+      event: {
+        type: "session_status",
+        externalSessionId: "a",
+        sessionRef: snapshot("a").ref,
+        timestamp: "2026-09-15T08:01:02.000Z",
+        status: { type: "busy", message: null },
+      },
+    });
+    expect(recovered.faults.size).toBe(0);
+    expect(badges(recovered)).toEqual({
+      inputRequired: false,
+      error: false,
+      active: true,
+      statusUnavailableReason: null,
+    });
     expect(apply(faulted, { type: "session_upsert", session: snapshot("a") }).faults.size).toBe(0);
   });
 

@@ -13,6 +13,9 @@ describe("handleClaudeSdkMessage result events", () => {
     const session = createSession("running");
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+    );
 
     handleClaudeSdkMessage({
       session,
@@ -25,6 +28,7 @@ describe("handleClaudeSdkMessage result events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         is_error: false,
         stop_reason: "tool_use",
@@ -61,6 +65,8 @@ describe("handleClaudeSdkMessage result events", () => {
       message: claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
+        uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        user_message_uuid: "user-message-1",
         is_error: false,
         stop_reason: "tool_use",
         usage: { input_tokens: 1, output_tokens: 1 },
@@ -70,8 +76,16 @@ describe("handleClaudeSdkMessage result events", () => {
     expect(session.lastSuccessfulResultTurnIndex).toBe(1);
     expect(session.lastAssistantTextFinal).toBeUndefined();
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "session_idle", turnOutcome: "completed" }),
+      expect.objectContaining({
+        type: "session_turn_finished",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: ["user-message-1"],
+        turnOutcome: "completed",
+      }),
     );
+    const idle = events.find((event) => event.type === "session_idle");
+    expect(idle).toBeDefined();
+    expect(idle).not.toHaveProperty("turnOutcome");
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "assistant_message",
@@ -98,6 +112,7 @@ describe("handleClaudeSdkMessage result events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         is_error: false,
         result: "",
@@ -116,6 +131,10 @@ describe("handleClaudeSdkMessage result events", () => {
     const session = createSession("running");
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 2;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-2" }),
+    );
 
     handleClaudeSdkMessage({
       session,
@@ -128,6 +147,7 @@ describe("handleClaudeSdkMessage result events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         is_error: false,
         stop_reason: "end_turn",
@@ -182,10 +202,17 @@ describe("handleClaudeSdkMessage result events", () => {
         message: "FINALSMOKE_VISIBLE",
       },
       {
+        type: "session_turn_finished",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: [],
+        turnOutcome: "completed",
+      },
+      {
         type: "session_idle",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        turnOutcome: "completed",
       },
     ]);
   });
@@ -246,6 +273,7 @@ describe("handleClaudeSdkMessage result events", () => {
       timestamp: "2026-06-25T20:00:02.000Z",
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
@@ -293,6 +321,7 @@ describe("handleClaudeSdkMessage result events", () => {
       emit: (event) => events.push(event),
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "90aa9a3a-d1f6-4dda-88fb-d56e8ac6711a",
         session_id: "session-1",
@@ -349,6 +378,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
@@ -369,6 +399,12 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_message",
         messageId: "claude-stream:session-1:1:1:0",
         message: "Final result",
+      }),
+      expect.objectContaining({
+        type: "session_turn_finished",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: ["user-message-1"],
+        turnOutcome: "completed",
       }),
       expect.objectContaining({ type: "session_idle" }),
     ]);
@@ -396,6 +432,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
@@ -416,6 +453,12 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_message",
         messageId: "claude-stream:session-1:1:1:0",
         message: "First block\nSecond block",
+      }),
+      expect.objectContaining({
+        type: "session_turn_finished",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: ["user-message-1"],
+        turnOutcome: "completed",
       }),
       expect.objectContaining({ type: "session_idle" }),
     ]);
@@ -443,6 +486,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
@@ -459,6 +503,12 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_message",
         messageId: "native-response-1",
         message: "First block\nSecond block",
+      }),
+      expect.objectContaining({
+        type: "session_turn_finished",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: ["user-message-1"],
+        turnOutcome: "completed",
       }),
       expect.objectContaining({ type: "session_idle" }),
     ]);
@@ -498,6 +548,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
@@ -596,6 +647,7 @@ describe("handleClaudeSdkMessage result events", () => {
       ...commonInput,
       message: claudeSdkMessageFixture({
         type: "result",
+        user_message_uuid: "user-message-1",
         subtype: "success",
         uuid: "dcc7f731-b816-43af-8384-3d398334d9c1",
         session_id: "session-1",
@@ -638,6 +690,12 @@ describe("handleClaudeSdkMessage result events", () => {
         type: "assistant_message",
         messageId: "dcc7f731-b816-43af-8384-3d398334d9c1",
         message: "Spec persisted and task moved to spec_ready.",
+      }),
+      expect.objectContaining({
+        type: "session_turn_finished",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: ["user-message-1"],
+        turnOutcome: "completed",
       }),
       expect.objectContaining({ type: "session_idle" }),
     ]);
@@ -684,18 +742,28 @@ describe("handleClaudeSdkMessage result events", () => {
         message: "FINAL_WITH_USAGE",
       },
       {
+        type: "session_turn_finished",
+        externalSessionId: "session-1",
+        timestamp: "2026-06-25T20:00:00.000Z",
+        completionId: "dcc7f731-b816-43af-8384-3d398334d9c1",
+        messageIds: [],
+        turnOutcome: "completed",
+      },
+      {
         type: "session_idle",
         externalSessionId: "session-1",
         timestamp: "2026-06-25T20:00:00.000Z",
-        turnOutcome: "completed",
       },
     ]);
   });
-  test("completes a deferred-tool turn at the next SDK idle state, but a bare idle state ends no turn", () => {
+  test("completes a deferred-tool turn once and emits no completion for a bare idle state", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
     session.activeSdkUserTurnCount = 1;
     session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+    );
     session.sdkState = "running";
     const handle = (message: Parameters<typeof claudeSdkMessageFixture>[0]) =>
       handleClaudeSdkMessage({
@@ -718,6 +786,7 @@ describe("handleClaudeSdkMessage result events", () => {
 
     handle({
       type: "result",
+      user_message_uuid: "user-message-1",
       subtype: "success",
       is_error: false,
       result: "",
@@ -726,10 +795,14 @@ describe("handleClaudeSdkMessage result events", () => {
       usage: { input_tokens: 1, output_tokens: 1 },
     });
     expect(events.filter((event) => event.type === "session_idle")).toEqual([]);
-    handle(idleState);
-    expect(events.filter((event) => event.type === "session_idle")).toEqual([
-      expect.objectContaining({ turnOutcome: "completed" }),
+    expect(events.filter((event) => event.type === "session_turn_finished")).toEqual([
+      expect.objectContaining({ messageIds: ["user-message-1"], turnOutcome: "completed" }),
     ]);
+    handle(idleState);
+    const idle = events.find((event) => event.type === "session_idle");
+    expect(idle).toBeDefined();
+    expect(idle).not.toHaveProperty("turnOutcome");
+    expect(events.filter((event) => event.type === "session_turn_finished")).toHaveLength(1);
 
     events.length = 0;
     session.activity = "running";
@@ -737,5 +810,6 @@ describe("handleClaudeSdkMessage result events", () => {
     const [bareIdle] = events.filter((event) => event.type === "session_idle");
     expect(bareIdle).toBeDefined();
     expect(bareIdle).not.toHaveProperty("turnOutcome");
+    expect(events.filter((event) => event.type === "session_turn_finished")).toEqual([]);
   });
 });

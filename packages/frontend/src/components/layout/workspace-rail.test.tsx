@@ -408,7 +408,13 @@ describe("WorkspaceRail", () => {
 
   test("shows no activity badge when no session of the workspace is active", () => {
     workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
-    workspaceActivity.alpha = { kind: "ready", inputRequired: false, error: false, active: false };
+    workspaceActivity.alpha = {
+      kind: "ready",
+      statusUnavailableReason: null,
+      inputRequired: false,
+      error: false,
+      active: false,
+    };
 
     renderRail();
 
@@ -417,7 +423,13 @@ describe("WorkspaceRail", () => {
 
   test("shows the input required and active badges side by side, in order", () => {
     workspaceState.workspaces = [workspaceRecord("alpha", { workspaceName: "Alpha Repo" })];
-    workspaceActivity.alpha = { kind: "ready", inputRequired: true, error: false, active: true };
+    workspaceActivity.alpha = {
+      kind: "ready",
+      statusUnavailableReason: null,
+      inputRequired: true,
+      error: false,
+      active: true,
+    };
 
     renderRail();
 
@@ -447,7 +459,13 @@ describe("WorkspaceRail", () => {
       workspaceRecord("alpha", { workspaceName: "Alpha Repo", isActive: true }),
       workspaceRecord("beta", { workspaceName: "Beta Repo" }),
     ];
-    workspaceActivity.beta = { kind: "ready", inputRequired: false, error: false, active: true };
+    workspaceActivity.beta = {
+      kind: "ready",
+      statusUnavailableReason: null,
+      inputRequired: false,
+      error: false,
+      active: true,
+    };
 
     renderRail();
 
@@ -463,8 +481,20 @@ describe("WorkspaceRail", () => {
       workspaceRecord("alpha", { workspaceName: "Alpha Repo" }),
       workspaceRecord("beta", { workspaceName: "Beta Repo" }),
     ];
-    workspaceActivity.alpha = { kind: "ready", inputRequired: true, error: false, active: false };
-    workspaceActivity.beta = { kind: "ready", inputRequired: false, error: true, active: false };
+    workspaceActivity.alpha = {
+      kind: "ready",
+      statusUnavailableReason: null,
+      inputRequired: true,
+      error: false,
+      active: false,
+    };
+    workspaceActivity.beta = {
+      kind: "ready",
+      statusUnavailableReason: null,
+      inputRequired: false,
+      error: true,
+      active: false,
+    };
 
     renderRail();
 

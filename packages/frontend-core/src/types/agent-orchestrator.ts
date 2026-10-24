@@ -235,6 +235,9 @@ export type AgentSessionState = {
   runtimeKind: RuntimeKind;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   runtimeStatusMessage: string | null;
+  /** Native foreground activity, separate from background work and delivery. */
+  foregroundTurnActive?: boolean | undefined;
+  statusUnavailableReason?: string | null | undefined;
   startedAt: string;
   workingDirectory: string;
   /** Live-only parent link used to project descendant pending input to active ancestors. */

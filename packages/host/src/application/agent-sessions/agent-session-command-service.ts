@@ -9,7 +9,7 @@ import type {
   AgentWorkflowSessionForkInput,
   AgentSessionControlForkInput,
 } from "@openducktor/contracts";
-import { isAgentSessionBlockedOnInput, BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
+import { BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { Effect } from "effect";
 import {
   type HostError,
@@ -28,6 +28,7 @@ import type { AgentSessionLiveStateService } from "./agent-session-live-state-se
 import { createSessionOperationOwner } from "./session-operation-owner";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
+import { hasForegroundTurn, hasBlockingInput } from "./session-foreground-readiness";
 
 type ObservedSessionCommands = Pick<
   AgentSessionLiveStateService,
@@ -103,7 +104,7 @@ export const createAgentSessionCommandService = ({
   const checkPending = (ref: AgentSessionLiveRef) =>
     readAvailableSession(ref).pipe(
       Effect.flatMap((live) => {
-        if (live.type === "live" && isAgentSessionBlockedOnInput(live.session))
+        if (live.type === "live" && hasBlockingInput(live.session))
           return new HostOperationError({
             operation: "session.prepare",
             message: BLOCKED_ON_INPUT_REASON,
@@ -114,7 +115,7 @@ export const createAgentSessionCommandService = ({
   const {
     continuationModel,
     updateModel,
-    waitForIdle,
+    waitUntilReady,
     observe: observeModelUpdate,
     cancel: cancelModelUpdate,
   } = createSessionModelPreparation({
@@ -390,17 +391,17 @@ export const createAgentSessionCommandService = ({
           Effect.gen(function* () {
             const live = yield* requireReadySession(ref);
             const steering =
-              input.delivery === "steer" &&
-              live.type === "live" &&
-              (live.session.activity === "running" || live.session.activity === "retrying");
+              input.delivery === "steer" && live.type === "live" && hasForegroundTurn(live.session);
+            if (input.delivery === "steer" && !steering)
+              return yield* new HostOperationError({
+                operation: "session.steer",
+                message:
+                  "The running turn ended before steering. Send a new message with current context.",
+              });
             const content = yield* policy.prepareSend(ref);
             const systemPrompt = steering ? undefined : yield* turnPreparation.context(ref);
             const current = yield* checkPending(ref);
-            if (
-              steering &&
-              (current.type !== "live" ||
-                !["running", "retrying"].includes(current.session.activity))
-            )
+            if (steering && (current.type !== "live" || !hasForegroundTurn(current.session)))
               return yield* new HostOperationError({
                 operation: "session.steer",
                 message:
@@ -447,8 +448,8 @@ export const createAgentSessionCommandService = ({
           ref,
           "model",
           Effect.gen(function* () {
-            yield* checkPending(ref);
-            yield* waitForIdle(ref);
+            yield* readAvailableSession(ref);
+            yield* waitUntilReady(ref);
             yield* policy.run(
               ref,
               "model",

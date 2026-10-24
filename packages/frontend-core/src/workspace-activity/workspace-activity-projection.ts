@@ -1,6 +1,9 @@
 import type { AgentSessionLiveEnvelope, AgentSessionLiveSnapshot } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "../lib/agent-session-identity";
-import { projectSessionTranscriptActivity } from "../sessions/agent-orchestrator/session-read-model/agent-session-live-activity";
+import {
+  confirmsSessionActivity,
+  projectSessionTranscriptActivity,
+} from "../sessions/agent-orchestrator/session-read-model/agent-session-live-activity";
 import { projectSessionSnapshotActivity } from "../sessions/agent-orchestrator/session-read-model/agent-session-live-projection";
 import type { WorkspaceActivitySession, WorkspaceSessionFault } from "./workspace-activity-state";
 
@@ -78,7 +81,10 @@ export const applyWorkspaceActivityEnvelope = (
         pendingQuestions: next.preview.pendingQuestions.filter((request) => questions.has(request)),
       };
     }
-    const faults = withoutFault(current.faults, key);
+    const faults =
+      current.faults.get(key)?.statusUnavailable && !confirmsSessionActivity(envelope.event)
+        ? current.faults
+        : withoutFault(current.faults, key);
     if (next === session) {
       return faults === current.faults ? current : { ...current, faults };
     }
@@ -100,7 +106,14 @@ export const applyWorkspaceActivityEnvelope = (
       }
       const faults = new Map(current.faults);
       faults.set(key, fault);
-      return { ...current, faults };
+      const session = current.sessions.get(key);
+      if (!fault.statusUnavailable || !session) return { ...current, faults };
+      const sessions = new Map(current.sessions);
+      sessions.set(key, {
+        ...session,
+        statusUnavailableReason: session.statusUnavailableReason ?? fault.message,
+      });
+      return { ...current, sessions, faults };
     }
     return withUnavailableReason(current, faultReason(envelope));
   }
@@ -141,7 +154,7 @@ const toActivitySession = (
     stopRequestedAt: null,
     pendingApprovals: snapshot.pendingApprovals,
     pendingQuestions: snapshot.pendingQuestions,
-    // Only a snapshot sets or clears it, so transcript events keep a failed status read.
+    // Apply the snapshot reason last because a starting session can keep its old state.
     statusUnavailableReason: snapshot.statusUnavailableReason ?? null,
     preview,
   };

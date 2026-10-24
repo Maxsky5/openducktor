@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
+import { agentSessionRefKey, type AgentEvent, type AgentSessionSummary } from "@openducktor/core";
+import { createSessionConditions } from "../../application/agent-sessions/agent-message-session-conditions";
+import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
 import { handleClaudeSdkMessage } from "../claude/claude-agent-sdk-events";
 import { snapshotForClaudeSession } from "../claude/claude-agent-sdk-session-shape";
@@ -201,26 +203,50 @@ describe("Claude host live-session state", () => {
     expect(snapshotForClaudeSession(wakeSession).classification).toBe("idle");
   });
 
-  test("retains a subagent permission only on the child snapshot", () => {
+  test("blocks parent delivery on child input and restores its latest native activity", () => {
     const state = createClaudeLiveSessionState();
+    const conditions = createSessionConditions();
+    const publish = (changes: AgentSessionLiveAdapterChange[]) => {
+      for (const change of changes) {
+        if (change.type === "session_upsert") {
+          conditions.observe({ type: "session_upsert", session: change.snapshot });
+        }
+      }
+    };
     state.applyControlSummary("/repo", summary);
     const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const childRef = { ...ref, externalSessionId: childExternalSessionId };
+    const status = {
+      type: "session_status" as const,
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:01:59.000Z",
+      status: { type: "busy" as const, message: null },
+      foregroundTurnActive: false,
+    };
+    publish(state.applyEvent(session, status));
+    expect(conditions.canDeliver(agentSessionRefKey(ref))).toBe(true);
 
-    state.applyEvent(session, {
-      type: "approval_required",
-      externalSessionId: childExternalSessionId,
-      timestamp: "2026-07-17T10:02:00.000Z",
-      requestId: "opaque-1",
-      requestType: "command_execution",
-      title: "Approve Bash",
-      parentExternalSessionId: "session-1",
-      childExternalSessionId,
-      subagentCorrelationKey: "child-1",
-    });
+    publish(
+      state.applyEvent(session, {
+        type: "approval_required",
+        externalSessionId: childExternalSessionId,
+        timestamp: "2026-07-17T10:02:00.000Z",
+        requestId: "opaque-1",
+        requestType: "command_execution",
+        title: "Approve Bash",
+        parentExternalSessionId: "session-1",
+        childExternalSessionId,
+        subagentCorrelationKey: "child-1",
+      }),
+    );
 
     expect(state.readSnapshot(ref)).toMatchObject({
       type: "live",
-      session: { pendingApprovals: [] },
+      session: {
+        activity: "waiting_for_permission",
+        foregroundTurnActive: false,
+        pendingApprovals: [],
+      },
     });
     expect(state.readSnapshot({ ...ref, externalSessionId: childExternalSessionId })).toMatchObject(
       {
@@ -232,6 +258,44 @@ describe("Claude host live-session state", () => {
         },
       },
     );
+    expect(conditions.canDeliver(agentSessionRefKey(ref))).toBe(false);
+
+    publish(state.applyEvent(session, status));
+    expect(conditions.canDeliver(agentSessionRefKey(ref))).toBe(false);
+    const resolution = {
+      type: "approval_resolved" as const,
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:01.000Z",
+      requestId: "opaque-1",
+    };
+    const applied = state.applyPendingResolution(session, resolution);
+    publish(applied.changes);
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "running", foregroundTurnActive: false },
+    });
+    expect(conditions.canDeliver(agentSessionRefKey(ref))).toBe(true);
+
+    applied.rollback();
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "waiting_for_permission", foregroundTurnActive: false },
+    });
+    state.applyEvent(session, {
+      type: "session_idle",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:02.000Z",
+    });
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "waiting_for_permission", foregroundTurnActive: false },
+    });
+    publish(state.removeSession(childRef));
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "idle", foregroundTurnActive: false },
+    });
+    expect(conditions.canDeliver(agentSessionRefKey(ref))).toBe(true);
   });
 
   test("retains nested subagent ancestry from the emitting transcript", () => {
@@ -295,6 +359,177 @@ describe("Claude host live-session state", () => {
       type: "missing",
       ref: { ...ref, externalSessionId: grandchildExternalSessionId },
     });
+  });
+
+  test.each([true, false])("keeps nested question blocking=%s on its owner", (blocking) => {
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
+    state.applyEvent(session, {
+      type: "session_status",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:00.000Z",
+      status: { type: "busy", message: null },
+      foregroundTurnActive: false,
+    });
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const childPart = {
+      kind: "subagent" as const,
+      messageId: "root-assistant",
+      partId: "claude-subagent:child-1",
+      correlationKey: "child-1",
+      status: "running" as const,
+      externalSessionId: childExternalSessionId,
+    };
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:00.000Z",
+      part: childPart,
+    });
+    const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
+    state.applyEvent(session, {
+      type: "question_required",
+      externalSessionId: grandchildExternalSessionId,
+      parentExternalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:01.000Z",
+      requestId: "grandchild-question",
+      questions: [{ header: "Check", question: "Continue?", options: [] }],
+      blocking,
+    });
+    const activity = blocking ? "waiting_for_question" : "running";
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity, foregroundTurnActive: false, pendingQuestions: [] },
+    });
+    expect(state.readSnapshot({ ...ref, externalSessionId: childExternalSessionId })).toMatchObject(
+      {
+        type: "live",
+        session: { activity, pendingQuestions: [] },
+      },
+    );
+    expect(
+      state.readSnapshot({ ...ref, externalSessionId: grandchildExternalSessionId }),
+    ).toMatchObject({
+      type: "live",
+      session: {
+        parentExternalSessionId: childExternalSessionId,
+        pendingQuestions: [{ requestId: "grandchild-question", blocking }],
+      },
+    });
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:02.000Z",
+      part: { ...childPart, status: "completed" },
+    });
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity, foregroundTurnActive: false },
+    });
+    state.applyEvent(session, {
+      type: "question_resolved",
+      externalSessionId: grandchildExternalSessionId,
+      timestamp: "2026-07-17T10:02:03.000Z",
+      requestId: "grandchild-question",
+    });
+    expect(state.readSnapshot({ ...ref, externalSessionId: childExternalSessionId })).toMatchObject(
+      {
+        type: "live",
+        session: { activity: "idle", pendingQuestions: [] },
+      },
+    );
+    expect(state.readSnapshot(ref)).toMatchObject({
+      type: "live",
+      session: { activity: "running", foregroundTurnActive: false },
+    });
+  });
+
+  test("invalidates input and foreground facts throughout an unavailable session tree", () => {
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const childRef = { ...ref, externalSessionId: childExternalSessionId };
+    const grandchildExternalSessionId = `${childExternalSessionId}::claude-subagent::grandchild-1`;
+    const grandchildRef = { ...ref, externalSessionId: grandchildExternalSessionId };
+    state.applyEvent(session, {
+      type: "assistant_part",
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:00.000Z",
+      part: {
+        kind: "subagent",
+        messageId: "child-assistant",
+        partId: "grandchild-part",
+        correlationKey: "grandchild-1",
+        externalSessionId: grandchildExternalSessionId,
+        status: "running",
+      },
+    });
+    state.applyEvent(session, {
+      type: "approval_required",
+      externalSessionId: childExternalSessionId,
+      timestamp: "2026-07-17T10:02:01.000Z",
+      requestId: "child-approval",
+      requestType: "command_execution",
+      title: "Approve Bash",
+    });
+    for (const currentRef of [ref, childRef, grandchildRef]) {
+      state.applyEvent(session, {
+        type: "session_status",
+        externalSessionId: currentRef.externalSessionId,
+        timestamp: "2026-07-17T10:02:02.000Z",
+        status: { type: "busy", message: null },
+        foregroundTurnActive: true,
+      });
+    }
+    const reason = "Claude termination could not be confirmed. Inspect Claude Code and retry Stop.";
+    const changes = state.applyEvent(session, {
+      type: "session_context_error",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:03.000Z",
+      message: reason,
+      statusUnavailable: true,
+    });
+    expect(changes.filter((change) => change.type === "fault")).toEqual(
+      [ref, childRef, grandchildRef].map((currentRef) => ({
+        type: "fault",
+        repoPath: ref.repoPath,
+        operation: "claude-live-session.termination",
+        ref: currentRef,
+        message: reason,
+        statusUnavailable: true,
+      })),
+    );
+    state.applyEvent(session, {
+      type: "session_context_updated",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:04.000Z",
+      totalTokens: 100,
+    });
+    state.applyControlSummary(
+      "/repo",
+      { ...summary, title: "Renamed session" },
+      { keepActivity: true },
+    );
+    for (const currentRef of [ref, childRef, grandchildRef]) {
+      const snapshot = state.readSnapshot(currentRef);
+      expect(snapshot).toMatchObject({
+        type: "live",
+        session: { statusUnavailableReason: reason, pendingApprovals: [], pendingQuestions: [] },
+      });
+      expect(snapshot).not.toHaveProperty("session.foregroundTurnActive");
+    }
+    state.applyEvent(session, {
+      type: "session_status",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-07-17T10:02:05.000Z",
+      status: { type: "idle" },
+      foregroundTurnActive: false,
+    });
+    expect(state.readSnapshot(ref)).not.toHaveProperty("session.statusUnavailableReason");
+    expect(state.readSnapshot(grandchildRef)).toHaveProperty(
+      "session.statusUnavailableReason",
+      reason,
+    );
   });
 
   test("drops late root and subagent events after release until an explicit resume", () => {

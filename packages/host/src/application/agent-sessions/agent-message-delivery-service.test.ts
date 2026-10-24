@@ -5,6 +5,7 @@ import {
   acceptedThenFailed,
   createHarness,
   failureOf,
+  foregroundEnd,
   ref,
   sessionState,
   target,
@@ -13,6 +14,84 @@ import {
 } from "./test-support/agent-message-delivery-harness";
 
 describe("agent message delivery: submit and drain", () => {
+  test("drains after an automatic foreground turn while background work stays running", async () => {
+    const h = createHarness();
+    h.upsertSession({ activity: "running", foregroundTurnActive: true });
+    h.outcomes.push("busy", "busy");
+    await h.submit("first");
+    await h.submit("second");
+
+    h.service.observeChanges([foregroundEnd()]);
+    await h.runBackground();
+    expect(h.sentTexts()).toEqual(["first:new_turn"]);
+
+    h.upsertSession({ activity: "running", foregroundTurnActive: false });
+    await h.runBackground();
+    expect(h.queueTexts()).toEqual(["first:queued", "second:queued"]);
+    expect(h.pause()).toBeNull();
+
+    h.upsertSession({ activity: "running", foregroundTurnActive: true });
+    h.service.observeChanges([foregroundEnd()]);
+    h.upsertSession({ activity: "running", foregroundTurnActive: false });
+    await h.runBackground();
+    expect(h.sentTexts()).toEqual(["first:new_turn", "first:new_turn", "first:new_turn"]);
+    expect(h.queueTexts()).toEqual(["second:queued"]);
+  });
+
+  test("waits for available foreground state and blocking input before queue delivery", async () => {
+    const h = createHarness();
+    h.outcomes.push("busy");
+    await h.submit("first");
+    h.upsertSession({
+      activity: "running",
+      foregroundTurnActive: false,
+      statusUnavailableReason: "Claude connection lost. Reconnect the session.",
+    });
+    h.service.observeChanges([foregroundEnd()]);
+    await h.runBackground();
+    expect(h.sentTexts()).toEqual(["first:new_turn"]);
+    h.upsertSession({ activity: "running", foregroundTurnActive: true });
+    await h.runBackground();
+    expect(h.sentTexts()).toEqual(["first:new_turn"]);
+    h.upsertSession({
+      activity: "waiting_for_permission",
+      foregroundTurnActive: false,
+      // A child owns the request. Its parent carries only the waiting activity.
+      blocked: false,
+    });
+    await h.runBackground();
+    expect(h.sentTexts()).toEqual(["first:new_turn"]);
+    h.upsertSession({ activity: "running", foregroundTurnActive: false });
+    await h.runBackground();
+    expect(h.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
+  });
+
+  test.each(["failed", "interrupted"] as const)(
+    "keeps a queue paused after an automatic %s turn and later foreground updates",
+    async (outcome) => {
+      const h = createHarness();
+      h.outcomes.push("busy");
+      await h.submit("first");
+      h.upsertSession({ activity: "running", foregroundTurnActive: true });
+      h.service.observeChanges([foregroundEnd(outcome)]);
+      h.upsertSession({ activity: "running", foregroundTurnActive: false });
+      await h.runBackground();
+      expect(h.sentTexts()).toEqual(["first:new_turn"]);
+      expect(h.pause()).toContain(outcome === "failed" ? "turn failed" : "turn was interrupted");
+      await h.manage({ kind: "resume" });
+      await h.runBackground();
+      expect(h.queueTexts()).toEqual([]);
+    },
+  );
+
+  test("does not retain an automatic turn failure when no message waits", async () => {
+    const h = createHarness();
+    h.service.observeChanges([foregroundEnd("failed")]);
+    h.upsertSession({ activity: "running", foregroundTurnActive: false });
+    expect(await h.submit("later")).toMatchObject({ kind: "accepted" });
+    expect(h.service.listQueues("/repo")).toEqual([]);
+  });
+
   test("starts a turn at once when the session is idle and has no queue", async () => {
     const harness = createHarness();
 

@@ -193,8 +193,10 @@ export const handleAssistantMessage = (
         : upsertSessionMessage(settledOwner, assistantMessage),
     };
   });
-  context.turn.clearTurnDuration(context.session.key, event.timestamp);
-  clearTurnTracking(context);
+  if (context.session.identity.runtimeKind !== "claude") {
+    context.turn.clearTurnDuration(context.session.key, event.timestamp);
+    clearTurnTracking(context);
+  }
 };
 
 export const handleTranscriptRetracted = (
@@ -223,13 +225,32 @@ export const handleTranscriptRetracted = (
 export const handleUserMessage = (
   context: Pick<SessionLifecycleEventContext, "session" | "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,
+  provenance?: SessionTranscriptEventProvenance,
 ): void => {
   context.turn.recordTurnUserMessageTimestamp(context.session.key, event.timestamp);
-  context.store.updateSession(context.session.identity, (current) => ({
-    ...current,
-    ...closeBackgroundQuestions(current, event.resolvedQuestionRequestIds ?? []),
-    messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
-  }));
+  const tracksTurn =
+    provenance !== "baseline" &&
+    context.session.identity.runtimeKind === "claude" &&
+    event.state === "read";
+  if (tracksTurn) {
+    context.turn.turnMetadata.recordTurnMessage(context.session.key, event.messageId);
+  }
+  context.store.updateSession(context.session.identity, (current) => {
+    const next = {
+      ...current,
+      ...closeBackgroundQuestions(current, event.resolvedQuestionRequestIds ?? []),
+      messages: upsertUserSessionMessage(current, toUserChatMessage(event)),
+    };
+    if (
+      tracksTurn &&
+      event.submissionId !== undefined &&
+      current.pendingSubmissionId === event.submissionId
+    ) {
+      next.pendingSubmissionId = undefined;
+      next.pendingUserMessageStartedAt = undefined;
+    }
+    return next;
+  });
 };
 
 export const handleSessionStatus = (
@@ -402,8 +423,10 @@ export const handleTurnError = (
       ),
     };
   });
-  context.turn.clearTurnDuration(context.session.key, event.timestamp);
-  clearTurnTracking(context);
+  if (context.session.identity.runtimeKind !== "claude") {
+    context.turn.clearTurnDuration(context.session.key, event.timestamp);
+    clearTurnTracking(context);
+  }
 };
 
 export const handleSessionIdle = (
@@ -435,6 +458,19 @@ export const handleSessionIdle = (
     context.turn.clearTurnDuration(context.session.key, event.timestamp);
     clearTurnTracking(context);
   }
+};
+
+export const handleSessionTurnFinished = (
+  context: SessionLifecycleEventContext,
+  event: Extract<SessionEvent, { type: "session_turn_finished" }>,
+  provenance?: SessionTranscriptEventProvenance,
+): void => {
+  if (provenance === "baseline") return;
+  const session = context.store.readSession(context.session.identity);
+  if (!session || session.pendingSubmissionId !== undefined) return;
+  if (!context.turn.turnMetadata.consumeTurnMessages(context.session.key, event.messageIds)) return;
+  context.turn.clearTurnDuration(context.session.key, event.timestamp);
+  clearTurnTracking(context);
 };
 
 export const handleSessionFinished = (

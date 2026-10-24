@@ -49,9 +49,7 @@ export const CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV =
   "CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS";
 
 /**
- * Private bundled CLI switch that makes the CLI emit `session_state_changed` frames.
- * The continuation admission waits for the running state, so the continuation launch
- * sets it.
+ * Emit public session-state frames. The SDK filters its own host-only frames.
  */
 export const CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV = "CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS";
 
@@ -85,21 +83,19 @@ export const buildClaudeAgentSdkBaseOptions = ({
   resumeInterruptedTurn?: boolean;
 }): Options => {
   const inheritedEnv = sanitizeChildProcessEnvironment(processEnv ?? {});
-  // The private Claude switches must come only from this adapter. An inherited value
-  // would start a hidden continuation for a session that is not a continuation.
-  delete inheritedEnv[CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV];
+  // Inherited resume switches can start a hidden continuation.
   delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV];
   delete inheritedEnv[CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS_ENV];
   const env = {
     ...inheritedEnv,
     CLAUDE_AGENT_SDK_CLIENT_APP: "openducktor",
+    [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
   };
   const options: Options = {
     cwd,
     env: resumeInterruptedTurn
       ? {
           ...env,
-          [CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS_ENV]: "1",
           [CLAUDE_CODE_RESUME_INTERRUPTED_TURN_ENV]: "1",
           // Explicit Resume must work after the CLI's six-hour API-error limit.
           // Zero keeps the default limit.

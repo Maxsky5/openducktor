@@ -12,6 +12,7 @@ export type AgentSessionRecencySummary = AgentSessionIdentity &
 
 export type AgentSessionOptionSummary = AgentSessionRecencySummary & { role: AgentRole } & {
   activityState: AgentSessionActivityState;
+  statusUnavailableReason?: AgentSessionState["statusUnavailableReason"];
 };
 
 export const compareAgentSessionRecency = (
@@ -63,7 +64,12 @@ export const formatAgentSessionOptionDescription = (session: AgentSessionOptionS
   const startedAtLabel = Number.isNaN(startedAt.getTime())
     ? session.startedAt
     : startedAt.toLocaleString();
-  return `${startedAtLabel} · ${formatAgentSessionActivityStateLabel(
-    session.activityState,
-  )} · ${session.externalSessionId.slice(0, 8)}`;
+  const activityLabel = formatAgentSessionActivityStateLabel(session.activityState);
+  let statusLabel = activityLabel;
+  if (session.statusUnavailableReason) {
+    statusLabel = `status unavailable: ${session.statusUnavailableReason}`;
+    if (session.activityState === "waiting_input" || session.activityState === "error")
+      statusLabel = `${activityLabel} · ${statusLabel}`;
+  }
+  return `${startedAtLabel} · ${statusLabel} · ${session.externalSessionId.slice(0, 8)}`;
 };

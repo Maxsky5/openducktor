@@ -1,5 +1,6 @@
 import { type AgentSessionRef, assertAgentRuntimeQuerySession } from "@openducktor/core";
-import { HostValidationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { isClaudeSessionClosing } from "./claude-agent-sdk-session-lifecycle";
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeSession, ClaudeSessionStore } from "./claude-agent-sdk-types";
 import { claudeSessionRef } from "./claude-agent-sdk-utils";
@@ -32,5 +33,13 @@ export const requireClaudeSession = (
       details: { externalSessionId },
     });
   }
+  if (isClaudeSessionClosing(session))
+    throw new HostOperationError({
+      operation: "claudeRuntime.requireSession",
+      message:
+        session.statusUnavailableReason ??
+        "Claude session is closing. Wait for Stop to finish before sending input or changing settings.",
+      details: { externalSessionId },
+    });
   return session;
 };

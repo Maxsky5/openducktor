@@ -7,6 +7,7 @@ import {
 import { emptyClaudeQuery } from "./claude-agent-sdk-session-io.test-support";
 import { createClaudePermissionTestSession } from "./claude-agent-sdk-permissions.test-support";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
+import { claudeSubagentEventSession } from "./claude-agent-sdk-event-session";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
   ...createClaudePermissionTestSession("build"),
@@ -59,6 +60,47 @@ describe("createClaudeSessionSummary", () => {
 });
 
 describe("snapshotForClaudeSession", () => {
+  test("classifies verified child input without exposing the child's reply handle on the parent", () => {
+    const session = createSession({
+      foregroundTurnActive: false,
+      sdkState: "idle",
+      activity: "idle",
+    });
+    session.subagentTaskIdsByToolUseId.set("agent-tool", "child");
+    const child = claudeSubagentEventSession(session, "agent-tool");
+    if (!child) throw new Error("Expected the verified child session.");
+    child.pendingApprovals = new Map([
+      [
+        "child-approval",
+        {
+          event: {
+            type: "approval_required",
+            externalSessionId: child.externalSessionId,
+            timestamp: "2026-10-23T19:00:00.000Z",
+            requestId: "child-approval",
+            requestType: "runtime_tool",
+            title: "Approve build",
+            tool: { name: "Bash", input: {} },
+            mutation: "unknown",
+          },
+          resolve: () => {},
+        },
+      ],
+    ]);
+    const waiting = snapshotForClaudeSession(session);
+    expect(waiting).toMatchObject({
+      availability: "runtime",
+      classification: "waiting_for_permission",
+      foregroundTurnActive: false,
+      pendingApprovals: [],
+    });
+    child.pendingApprovals.clear();
+    expect(snapshotForClaudeSession(session)).toMatchObject({
+      classification: "idle",
+      foregroundTurnActive: false,
+    });
+  });
+
   test("uses authoritative SDK idle state when no local turn remains pending", () => {
     const snapshot = snapshotForClaudeSession(
       createSession({

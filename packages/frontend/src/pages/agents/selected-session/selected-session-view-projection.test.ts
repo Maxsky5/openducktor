@@ -104,6 +104,26 @@ describe("selected-session-view-projection", () => {
     expect(projection.sessionAuxiliaryError).toBe("This session stopped streaming.");
   });
 
+  test.each(["snapshot", "fault"] as const)(
+    "shows %s status uncertainty without claiming Running",
+    (source) => {
+      const message = "Claude status is unavailable. Reconnect the runtime.";
+      const session = createAgentSessionFixture({
+        status: "running",
+        historyLoadState: "loaded",
+        statusUnavailableReason: source === "snapshot" ? message : null,
+      });
+      const projection = project({
+        selectedSessionIdentity: toAgentSessionIdentity(session),
+        session,
+        sessionFault: source === "fault" ? { message, statusUnavailable: true } : null,
+      });
+      expect(projection.activityState).toBeNull();
+      expect(projection.transcriptState).toEqual({ kind: "visible" });
+      expect(projection.sessionAuxiliaryError).toBe(message);
+    },
+  );
+
   test("ignores a loaded session that does not match the selected identity", () => {
     const selectedSummary = createAgentSessionSummaryFixture({
       externalSessionId: "selected-planner-session",

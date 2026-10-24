@@ -35,6 +35,7 @@ import {
   handleSessionError,
   handleSessionFinished,
   handleSessionIdle,
+  handleSessionTurnFinished,
   handleSessionStatus,
   handleSessionTodosUpdated,
   handleTranscriptRetracted,
@@ -142,7 +143,7 @@ const dispatchTranscriptEvent = (
       handleTranscriptRetracted(context, event);
       return;
     case "user_message":
-      handleUserMessage(context, event);
+      handleUserMessage(context, event, provenance);
       return;
     case "session_todos_updated":
       handleSessionTodosUpdated(context, event);
@@ -167,6 +168,9 @@ const dispatchTranscriptEvent = (
       return;
     case "session_idle":
       handleSessionIdle(context, event, provenance);
+      return;
+    case "session_turn_finished":
+      handleSessionTurnFinished(context, event, provenance);
       return;
     case "session_finished":
       handleSessionFinished(context, event);
