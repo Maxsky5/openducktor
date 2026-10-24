@@ -6,6 +6,7 @@ import {
   createEventTestSession as createSession,
 } from "./claude-agent-sdk-events.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
+import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 
 const readSdkState = (session: ReturnType<typeof createSession>) => session.sdkState;
 
@@ -39,7 +40,7 @@ describe("handleClaudeSdkMessage result settlement", () => {
       ) =>
         handleClaudeSdkMessage({
           session,
-          timestamp,
+          timestamp: readClaudeSdkMessageTimestamp(message, () => timestamp),
           message,
           modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
           emit: (event) => events.push(event),
@@ -58,7 +59,6 @@ describe("handleClaudeSdkMessage result settlement", () => {
         "2026-10-24T14:53:42.194Z",
         claudeSdkMessageFixture({
           type: "user",
-          timestamp: "2026-10-24T14:53:42.194Z",
           message: { role: "user", content: "The review is complete." },
           origin: { kind: "peer", from: "child", senderTaskId: "child" },
         }),
@@ -113,7 +113,6 @@ describe("handleClaudeSdkMessage result settlement", () => {
         "2026-10-24T14:53:45.781Z",
         claudeSdkMessageFixture({
           type: "user",
-          timestamp: "2026-10-24T14:53:45.781Z",
           message: { role: "user", content: "The child task completed." },
           origin: { kind: "task-notification" },
         }),
@@ -141,35 +140,38 @@ describe("handleClaudeSdkMessage result settlement", () => {
     },
   );
 
-  test("uses native timestamps for a result-only wake reply without reusing an earlier reply", () => {
+  test("times a result-only wake reply without wire timestamps or an earlier reply's identity", () => {
     const events: AgentEvent[] = [];
     const session = createSession("idle");
     session.lastAssistantText = "The review is complete.";
     session.lastAssistantTextFinal = true;
     session.lastAssistantTextMessageId = "earlier-reply";
     session.lastAssistantTextTurnIndex = 0;
-    const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+    const send = (
+      timestamp: string,
+      message: Parameters<typeof handleClaudeSdkMessage>[0]["message"],
+    ) =>
       handleClaudeSdkMessage({
         session,
-        timestamp: "2026-10-24T15:00:00.000Z",
+        timestamp: readClaudeSdkMessageTimestamp(message, () => timestamp),
         message,
         modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
         emit: (event) => events.push(event),
       });
     send(
+      "2026-10-24T14:53:42.194Z",
       claudeSdkMessageFixture({
         type: "user",
-        timestamp: "2026-10-24T14:53:42.194Z",
         message: { role: "user", content: "The review is complete." },
         origin: { kind: "peer", from: "child" },
       }),
     );
     send(
+      "2026-10-24T14:53:45.731Z",
       claudeSdkMessageFixture({
         type: "result",
         subtype: "success",
         uuid: "794ff108-dadf-4f7f-97ef-d58b8cfba005",
-        timestamp: "2026-10-24T14:53:45.731Z",
         result: "The review is complete.",
         terminal_reason: "completed",
         stop_reason: "end_turn",

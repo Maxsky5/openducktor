@@ -19,7 +19,6 @@ import { timestampMs } from "./claude-agent-sdk-tool-shapes";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
-import { readStringProp } from "./claude-agent-sdk-utils";
 import { disabledToolReason } from "./claude-tool-availability";
 import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
@@ -338,10 +337,7 @@ const emitSuccessfulResultText = ({
     session.lastAssistantTextMessageId = messageId;
     session.lastAssistantText = text;
     session.lastAssistantTextTurnIndex = completedUserTurnIndex;
-    const durationMs = claudeReplyDurationMs(
-      session.wakeStartedAt,
-      readStringProp(message, "timestamp"),
-    );
+    const durationMs = claudeReplyDurationMs(session.wakeStartedAt, timestamp);
     if (durationMs !== undefined) session.lastAssistantTextDurationMs = durationMs;
     else delete session.lastAssistantTextDurationMs;
   }

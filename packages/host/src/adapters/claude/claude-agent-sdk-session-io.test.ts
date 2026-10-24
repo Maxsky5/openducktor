@@ -12,6 +12,84 @@ import {
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("sendClaudeUserMessage", () => {
+  test.each([false, true])(
+    "times a synthetic peer replay without replacing an active human turn, foreground %s",
+    async (foregroundTurnActive) => {
+      const events: AgentEvent[] = [];
+      const session = createClaudeSession({
+        foregroundTurnActive,
+        activeSdkUserTurnCount: foregroundTurnActive ? 1 : 0,
+        pendingUserTurnCount: foregroundTurnActive ? 1 : 0,
+        acceptedUserMessages: [
+          {
+            messageId: "3b087ade-60ba-4824-a8ab-c8d012129136",
+            text: "Review the files.",
+            parts: [],
+            timestamp: "2026-10-24T15:17:41.837Z",
+          },
+        ],
+        query: claudeQueryWithMessages([
+          claudeSdkMessageFixture({
+            type: "user",
+            uuid: "0a1ab7f4-898c-43fc-87dd-a52cfca2e1d4",
+            isReplay: true,
+            isSynthetic: true,
+            timestamp: "2026-10-24T15:18:11.126Z",
+            origin: { kind: "peer", from: "child", senderTaskId: "child" },
+            message: { role: "user", content: "The child review is complete." },
+          }),
+          claudeSdkMessageFixture({
+            type: "assistant",
+            uuid: "cd97ee29-60d6-4ccf-b253-33538a953f21",
+            timestamp: "2026-10-24T15:18:12.935Z",
+            message: {
+              id: "final-peer-response",
+              role: "assistant",
+              model: "claude-haiku-5-5",
+              stop_reason: null,
+              content: [{ type: "text", text: "The review found no issues." }],
+            },
+          }),
+          claudeSdkMessageFixture({
+            type: "result",
+            uuid: "d5206c31-87e3-4502-992d-445fb408b22c",
+            subtype: "success",
+            result: "The review found no issues.",
+            stop_reason: "end_turn",
+            terminal_reason: "completed",
+            origin: { kind: "peer", from: "child", senderTaskId: "child" },
+          }),
+        ]),
+      });
+      const sessionStore = createClaudeAgentSdkSessionStore();
+      sessionStore.set(session);
+      await consumeClaudeSession({
+        session,
+        now: () => "2026-10-24T15:18:12.943Z",
+        emit: (_session, event) => events.push(event),
+        onBackgroundFailure: ignoreClaudeBackgroundFailure,
+        sessionStore,
+      });
+      const replies = events.filter((event) => event.type === "assistant_message");
+      expect(replies).toHaveLength(1);
+      for (const reply of replies) {
+        expect(reply).toMatchObject({
+          messageId: "final-peer-response",
+        });
+        if (foregroundTurnActive) expect(reply).not.toHaveProperty("durationMs");
+        else expect(reply.durationMs).toBe(1_809);
+      }
+      expect(replies.at(-1)).toHaveProperty("forkPoint", { messageId: "final-peer-response" });
+      expect(events.filter((event) => event.type === "user_message")).toEqual([]);
+      if (!foregroundTurnActive) {
+        expect(events.find((event) => event.type === "session_status")).toHaveProperty(
+          "timestamp",
+          "2026-10-24T15:18:12.935Z",
+        );
+      }
+    },
+  );
+
   test("uses Claude SDK message timestamps for live transcript events", async () => {
     const events: AgentEvent[] = [];
     const session = createClaudeSession({

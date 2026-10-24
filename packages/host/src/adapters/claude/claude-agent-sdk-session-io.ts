@@ -11,6 +11,7 @@ import {
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { beginClaudeManualCompaction } from "./claude-agent-sdk-compaction";
+import { isClaudeForegroundTurnActive } from "./claude-agent-sdk-activity";
 import {
   flushClaudeLiveContextUsageRefresh,
   scheduleClaudeLiveContextUsageRefresh,
@@ -19,6 +20,7 @@ import {
 import { isClaudeContinuationAdmission } from "./claude-agent-sdk-continuation-admission";
 import { withClaudeNativeProcessDiagnostic } from "./claude-agent-sdk-native-process";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
 import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
@@ -48,6 +50,7 @@ import {
   rejectPendingAdmissions,
   waitForUserMessageAdmission,
 } from "./claude-agent-sdk-user-message-admission";
+import { isClaudeWakeUserMessage } from "./claude-agent-sdk-user-messages";
 import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
 
 export const applyClaudeSessionModel = async (
@@ -156,6 +159,16 @@ export const consumeClaudeSession = (input: {
         }
         if (!isLiveSession() || isClaudeSessionClosing(session)) continue;
         const timestamp = readClaudeSdkMessageTimestamp(message, now);
+        // Peer hand-backs arrive as hidden replay frames.
+        if (
+          message.type === "user" &&
+          message.origin !== undefined &&
+          message.origin.kind !== "human" &&
+          !isClaudeForegroundTurnActive(session) &&
+          isClaudeWakeUserMessage(message, parseClaudeUserToolResultIngress(message))
+        ) {
+          session.wakeStartedAt = timestamp;
+        }
         if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
           continuationAdmitted = true;
           onContinuationAdmission();
