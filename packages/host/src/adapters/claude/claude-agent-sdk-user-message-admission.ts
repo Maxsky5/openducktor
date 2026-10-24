@@ -7,6 +7,7 @@ import { z } from "zod";
 import { toClaudeUserMessageEvent } from "./claude-agent-sdk-session-shape";
 import type { ClaudeAgentSdkEvent, ClaudeSession } from "./claude-agent-sdk-types";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
+import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
 
 /** Replay signals are not new transcript content, so a handled signal needs no further work. */
 export const applyClaudeUserMessageSignal = ({
@@ -28,6 +29,17 @@ export const applyClaudeUserMessageSignal = ({
   );
   const knownMessage =
     acceptedIndex !== -1 || session.nativeSubmittedMessageIds?.has(signal.messageId);
+  if (
+    signal.kind === "replay" &&
+    acceptedIndex !== -1 &&
+    previousState !== "result" &&
+    previousState !== "terminal" &&
+    session.replyStartedAt === undefined &&
+    message.type === "user" &&
+    isClaudeHumanUserMessage(message)
+  ) {
+    session.replyStartedAt = timestamp;
+  }
   if (signal.kind === "lifecycle" && knownMessage && previousState === undefined) {
     session.nativeCommandStates ??= new Map();
     session.nativeCommandStates.set(signal.messageId, "queued");
@@ -43,7 +55,6 @@ export const applyClaudeUserMessageSignal = ({
     session.foregroundTurnActive = true;
     session.nativeCommandStates ??= new Map();
     session.nativeCommandStates.set(signal.messageId, "started");
-    delete session.wakeStartedAt;
   }
   if (
     knownMessage &&

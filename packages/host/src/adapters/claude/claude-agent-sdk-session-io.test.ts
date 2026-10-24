@@ -12,6 +12,127 @@ import {
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("sendClaudeUserMessage", () => {
+  test("keeps the native human prompt start through tools, steering, and later fork receipts", async () => {
+    const humanId = "3b087ade-60ba-4824-a8ab-c8d012129136";
+    const steerId = "a9eebbad-b78f-4411-8208-c535d80fba32";
+    const events: AgentEvent[] = [];
+    const session = createClaudeSession({
+      foregroundTurnActive: true,
+      activeSdkUserTurnCount: 1,
+      pendingUserTurnCount: 1,
+      sdkState: "running",
+      acceptedUserMessages: [
+        { messageId: humanId, text: "Review", parts: [], timestamp: "2026-10-24T15:40:22.590Z" },
+      ],
+      unreadSteeredUserMessages: new Map([
+        [
+          steerId,
+          {
+            messageId: steerId,
+            text: "Keep checking",
+            parts: [],
+            timestamp: "2026-10-24T15:40:26.100Z",
+          },
+        ],
+      ]),
+      query: claudeQueryWithMessages([
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: humanId,
+          isReplay: true,
+          timestamp: "2026-10-24T15:40:22.630Z",
+          message: { role: "user", content: "Review" },
+        }),
+        claudeSdkMessageFixture({
+          type: "assistant",
+          timestamp: "2026-10-24T15:40:24.897Z",
+          message: {
+            id: "agent-call",
+            role: "assistant",
+            model: "claude-haiku-5-5",
+            stop_reason: null,
+            content: [
+              {
+                type: "tool_use",
+                id: "agent",
+                name: "Agent",
+                input: {
+                  description: "Review",
+                  subagent_type: "general-purpose",
+                  prompt: "Inspect",
+                },
+              },
+            ],
+          },
+        }),
+        claudeSdkMessageFixture({
+          type: "user",
+          timestamp: "2026-10-24T15:40:26.050Z",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "agent", content: "Ready" }],
+          },
+        }),
+        claudeSdkMessageFixture({
+          type: "user",
+          uuid: steerId,
+          isReplay: true,
+          origin: { kind: "human" },
+          timestamp: "2026-10-24T15:40:26.100Z",
+          message: { role: "user", content: "Keep checking" },
+        }),
+        claudeSdkMessageFixture({
+          type: "user",
+          isReplay: true,
+          isSynthetic: true,
+          origin: { kind: "peer", from: "child" },
+          timestamp: "2026-10-24T15:40:26.200Z",
+          message: { role: "user", content: "A review update" },
+        }),
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: "cd97ee29-60d6-4ccf-b253-33538a953f21",
+          timestamp: "2026-10-24T15:40:27.977Z",
+          message: {
+            id: "human-final",
+            role: "assistant",
+            model: "claude-haiku-5-5",
+            stop_reason: null,
+            content: [{ type: "text", text: "The review is complete." }],
+          },
+        }),
+        claudeSdkMessageFixture({
+          type: "result",
+          uuid: "d5206c31-87e3-4502-992d-445fb408b22c",
+          user_message_uuid: humanId,
+          subtype: "success",
+          result: "The review is complete.",
+          stop_reason: "end_turn",
+          terminal_reason: "tool_deferred",
+        }),
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "session_state_changed",
+          state: "idle",
+        }),
+      ]),
+    });
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
+    await consumeClaudeSession({
+      session,
+      now: () => "2026-10-24T15:40:30.000Z",
+      emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+      sessionStore,
+    });
+    const replies = events.filter((event) => event.type === "assistant_message");
+    expect(replies).toHaveLength(2);
+    expect(replies.map((reply) => reply.durationMs)).toEqual([5_347, 5_347]);
+    expect(replies[0]).not.toHaveProperty("forkPoint");
+    expect(replies[1]).toHaveProperty("forkPoint", { messageId: "human-final" });
+  });
+
   test.each([false, true])(
     "times a synthetic peer replay without replacing an active human turn, foreground %s",
     async (foregroundTurnActive) => {

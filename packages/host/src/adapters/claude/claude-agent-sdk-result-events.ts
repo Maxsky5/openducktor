@@ -32,7 +32,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
     | "disabledTools"
     | "activeManualCompaction"
     | "activity"
-    | "wakeStartedAt"
+    | "replyStartedAt"
     | "sdkInitiatedTurnActive"
     | "externalSessionId"
     | "pendingUserTurnCount"
@@ -117,7 +117,7 @@ export const handleClaudeResultMessage = ({
     return;
   }
   session.completedNativeResultIds.add(message.uuid);
-  delete session.wakeStartedAt;
+  delete session.replyStartedAt;
   if (message.result_index !== undefined) session.lastNativeResultIndex = message.result_index;
   const consumedIds = new Set(session.foregroundMessageIds);
   for (const messageId of message.user_message_uuids ??
@@ -337,7 +337,7 @@ const emitSuccessfulResultText = ({
     session.lastAssistantTextMessageId = messageId;
     session.lastAssistantText = text;
     session.lastAssistantTextTurnIndex = completedUserTurnIndex;
-    const durationMs = claudeReplyDurationMs(session.wakeStartedAt, timestamp);
+    const durationMs = claudeReplyDurationMs(session.replyStartedAt, timestamp);
     if (durationMs !== undefined) session.lastAssistantTextDurationMs = durationMs;
     else delete session.lastAssistantTextDurationMs;
   }

@@ -25,7 +25,7 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     activeManualCompaction?: ClaudeManualCompactionState;
     activeSdkUserTurnCount?: number;
     activity: ClaudeSessionActivity;
-    wakeStartedAt?: string;
+    replyStartedAt?: string;
     externalSessionId: string;
     hiddenSubagentTaskIds?: Set<string>;
     pendingApprovals?: Map<string, PendingApproval>;

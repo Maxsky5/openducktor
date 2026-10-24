@@ -128,7 +128,7 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     activeSdkUserTurnCount: number;
     abortController: AbortController;
     activity: ClaudeSessionActivity;
-    wakeStartedAt?: string;
+    replyStartedAt?: string;
     externalSessionId: string;
     input: ClaudeSessionInput;
     lastAssistantTextMessageId?: string;

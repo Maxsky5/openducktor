@@ -148,9 +148,8 @@ export const handleClaudeSdkMessage = ({
   }
   if (message.type === "user") {
     const userToolResultMessage = parseClaudeUserToolResultIngress(message);
-    if (userToolResultMessage.turnOriginKind === "human") delete session.wakeStartedAt;
     if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
-      session.wakeStartedAt = timestamp;
+      session.replyStartedAt ??= timestamp;
       delete session.lastAssistantNativeUuid;
       delete session.lastAssistantNativeUuidTurnIndex;
       delete session.lastAssistantTextMessageId;
@@ -460,7 +459,7 @@ const handleAssistantMessage = ({
       if (assistantModel) {
         event.model = assistantModel;
       }
-      const durationMs = claudeReplyDurationMs(session.wakeStartedAt, timestamp);
+      const durationMs = claudeReplyDurationMs(session.replyStartedAt, timestamp);
       if (durationMs !== undefined) {
         event.durationMs = durationMs;
         session.lastAssistantTextDurationMs = durationMs;
@@ -475,7 +474,7 @@ const handleAssistantMessage = ({
       return;
     }
     rememberAssistantTextForCurrentTurn(session, text, assistantMessageId, assistantModel);
-    const durationMs = claudeReplyDurationMs(session.wakeStartedAt, timestamp);
+    const durationMs = claudeReplyDurationMs(session.replyStartedAt, timestamp);
     if (durationMs !== undefined) session.lastAssistantTextDurationMs = durationMs;
     emit(
       claudeAssistantTextPartEvent({

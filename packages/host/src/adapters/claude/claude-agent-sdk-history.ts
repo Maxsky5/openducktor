@@ -31,6 +31,7 @@ import {
 } from "./claude-agent-sdk-history-input";
 import {
   mergeUnmatchedLiveUserMessages,
+  hasFinalStopStep,
   type ClaudeLiveUserMessage,
   retractedHistoryMessageIds,
 } from "./claude-agent-sdk-history-support";
@@ -120,7 +121,7 @@ export const toClaudeHistoryMessages = (
   let lastAssistantText: string | undefined;
   let lastFinalAssistantMessage: MutableAssistantHistoryMessage | null = null;
   let lastFinalAssistantText: string | undefined;
-  let wakeStartedAt: string | undefined;
+  let replyStartedAt: string | undefined;
   let pendingManualCompaction: ManualCompactionInput | null = null;
   let manualCompactionBoundaryReceived = false;
   let unclaimedManualCompactionBoundary = false;
@@ -181,14 +182,15 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "user") {
-      if (entry.interruptedByShutdown === true && lastFinalAssistantMessage) {
-        clearClaudeHistoryAssistantFinality(lastFinalAssistantMessage);
-        lastFinalAssistantMessage = null;
-        lastFinalAssistantText = undefined;
+      if (entry.interruptedByShutdown === true) {
+        if (lastFinalAssistantMessage)
+          clearClaudeHistoryAssistantFinality(lastFinalAssistantMessage);
+        replyStartedAt = undefined;
+        resetCurrentUserTurnAssistantTracking();
       }
       const originKind = readClaudeTurnOriginKind(entry);
-      if (originKind !== undefined) {
-        wakeStartedAt = originKind === "human" ? undefined : readStringProp(entry, "timestamp");
+      if (originKind !== undefined && originKind !== "human") {
+        replyStartedAt = readStringProp(entry, "timestamp");
         resetCurrentUserTurnAssistantTracking();
       }
     }
@@ -211,7 +213,7 @@ export const toClaudeHistoryMessages = (
     const projectedInput = projectHistoryInput(entry, timestamp);
     if (projectedInput.handled) {
       if (projectedInput.manualCompaction) {
-        wakeStartedAt = undefined;
+        replyStartedAt = undefined;
         pendingManualCompaction = projectedInput.manualCompaction;
         manualCompactionBoundaryReceived = unclaimedManualCompactionBoundary;
         unclaimedManualCompactionBoundary = false;
@@ -222,12 +224,23 @@ export const toClaudeHistoryMessages = (
       if (!projectedMessage) {
         continue;
       }
-      history.push(projectedMessage);
       if (projectedMessage.role === "user") {
-        wakeStartedAt = undefined;
-        resetCurrentUserTurnAssistantTracking();
+        // Native history can omit a notification's result and assistant output.
+        const previous = history.findLast((message) => message.role !== "system");
+        history.push(projectedMessage);
+        // Steering keeps the first prompt's start, even before assistant output.
+        if (!lastAssistantMessage || hasFinalStopStep(lastAssistantMessage)) {
+          if (
+            lastAssistantMessage ||
+            (previous?.role === "assistant" && hasFinalStopStep(previous))
+          )
+            replyStartedAt = undefined;
+          replyStartedAt ??= readStringProp(entry, "timestamp");
+          resetCurrentUserTurnAssistantTracking();
+        }
         continue;
       }
+      history.push(projectedMessage);
       lastAssistantMessage = projectedMessage;
       lastAssistantTextMessage = projectedMessage;
       lastAssistantText = projectedMessage.text.trim();
@@ -331,7 +344,10 @@ export const toClaudeHistoryMessages = (
         ];
       });
       if (assistantSnapshot.text.trim().length > 0 && isLiveFinalAssistantStopReason(stopReason)) {
-        const durationMs = claudeReplyDurationMs(wakeStartedAt, readStringProp(entry, "timestamp"));
+        const durationMs = claudeReplyDurationMs(
+          replyStartedAt,
+          readStringProp(entry, "timestamp"),
+        );
         if (durationMs !== undefined) assistantSnapshot.durationMs = durationMs;
       }
       const assistantMessage = appendOrMergeAssistantSnapshot(assistantSnapshot);
@@ -353,8 +369,8 @@ export const toClaudeHistoryMessages = (
       continue;
     }
     if (entry.type === "result") {
-      const durationMs = claudeReplyDurationMs(wakeStartedAt, readStringProp(entry, "timestamp"));
-      wakeStartedAt = undefined;
+      const durationMs = claudeReplyDurationMs(replyStartedAt, readStringProp(entry, "timestamp"));
+      replyStartedAt = undefined;
       if (pendingManualCompaction) {
         if (isFailedClaudeResult(entry)) {
           history.push({
@@ -391,6 +407,7 @@ export const toClaudeHistoryMessages = (
         if (lastError) {
           lastError.text = failedClaudeResultText(entry);
           lastError.timestamp = timestamp;
+          resetCurrentUserTurnAssistantTracking();
           continue;
         }
         history.push({
@@ -405,6 +422,7 @@ export const toClaudeHistoryMessages = (
           },
           parts: [],
         });
+        resetCurrentUserTurnAssistantTracking();
         continue;
       }
       const resultText = successfulClaudeResultText(entry);

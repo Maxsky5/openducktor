@@ -248,7 +248,7 @@ test.each(["root", "nested"])(
   },
 );
 
-test("keeps an earlier completed reply when a later user turn stops during shutdown", async () => {
+test("keeps an earlier reply and starts a new clock after shutdown", async () => {
   await withCompletionTranscript("end_turn", async (cwd, config, append) => {
     const base = { cwd, sessionId, isSidechain: false, type: "user" };
     await append([
@@ -261,13 +261,46 @@ test("keeps an earlier completed reply when a later user turn stops during shutd
       },
       {
         ...base,
-        uuid: "next-shutdown",
+        type: "assistant",
+        uuid: "interrupted-assistant",
         parentUuid: "next-user",
+        timestamp: "2026-10-21T10:00:11.500Z",
+        message: {
+          id: "interrupted-response",
+          role: "assistant",
+          content: [{ type: "text", text: "A partial reply" }],
+          stop_reason: "end_turn",
+        },
+      },
+      {
+        ...base,
+        uuid: "next-shutdown",
+        parentUuid: "interrupted-assistant",
         timestamp: "2026-10-21T10:00:12.000Z",
         interruptedByShutdown: true,
         message: {
           role: "user",
           content: [{ type: "text", text: "[Request interrupted by user]" }],
+        },
+      },
+      {
+        ...base,
+        uuid: "resumed-user",
+        parentUuid: "next-shutdown",
+        timestamp: "2026-10-21T10:00:13.000Z",
+        message: { role: "user", content: "Continue with the next file" },
+      },
+      {
+        ...base,
+        type: "assistant",
+        uuid: "resumed-assistant",
+        parentUuid: "resumed-user",
+        timestamp: "2026-10-21T10:00:14.000Z",
+        message: {
+          id: "resumed-response",
+          role: "assistant",
+          content: [{ type: "text", text: "The next file is checked." }],
+          stop_reason: "end_turn",
         },
       },
     ]);
@@ -285,11 +318,11 @@ test("keeps an earlier completed reply when a later user turn stops during shutd
         { processEnv: { CLAUDE_CONFIG_DIR: config } },
       ),
     );
+    expect(history.at(-1)).toMatchObject({ messageId: "resumed-response", durationMs: 1_000 });
     const earlierReply = history.find((message) => message.messageId === "final-response");
     expect(earlierReply?.parts).toContainEqual(
       expect.objectContaining({ kind: "step", phase: "finish", reason: "stop" }),
     );
-    expect(history.at(-1)).toMatchObject({ messageId: "next-user", role: "user" });
   });
 });
 

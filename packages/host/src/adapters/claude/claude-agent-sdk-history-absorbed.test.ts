@@ -8,17 +8,18 @@ import { loadClaudeHistory } from "./claude-agent-sdk-history-loader";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 
 const sessionId = "00000000-0000-4000-8000-000000000001";
-const startedAt = "2026-10-21T18:21:10.235Z";
-const finishedAt = "2026-10-21T18:21:27.097Z";
+const startedAt = "2026-10-24T15:40:22.630Z";
+const finishedAt = "2026-10-24T15:40:27.977Z";
 
 test.each([
-  { origin: "peer", isMeta: true, absorbed: true, users: 1 },
-  { origin: "peer", isMeta: true, absorbed: false, users: 1 },
-  { origin: "human", isMeta: false, absorbed: true, users: 2 },
-  { origin: "observer", isMeta: false, absorbed: true, users: 1 },
+  { origin: "peer", isMeta: true, absorbed: true, users: 1, durationMs: 5_347 },
+  { origin: "peer", isMeta: true, absorbed: false, users: 1, durationMs: 1_977 },
+  { origin: "human", isMeta: false, absorbed: true, users: 2, durationMs: 5_347 },
+  { origin: "human", isMeta: false, absorbed: false, users: 2, durationMs: 5_347 },
+  { origin: "observer", isMeta: false, absorbed: true, users: 1, durationMs: 5_347 },
 ])(
   "preserves the completed reply after queued $origin input, absorbed $absorbed",
-  async ({ origin, isMeta, absorbed, users }) => {
+  async ({ origin, isMeta, absorbed, users, durationMs }) => {
     const root = await mkdtemp(join(tmpdir(), "claude-absorbed-history-"));
     try {
       const cwd = await realpath(root);
@@ -43,7 +44,7 @@ test.each([
           type: "assistant",
           uuid: "agent-call",
           parentUuid: "root-user",
-          timestamp: "2026-10-21T18:21:12.777Z",
+          timestamp: "2026-10-24T15:40:24.897Z",
           message: {
             id: "tool-response",
             model: "claude-haiku-5-5",
@@ -69,7 +70,7 @@ test.each([
           type: "user",
           uuid: "agent-result",
           parentUuid: "agent-call",
-          timestamp: "2026-10-21T18:21:25.735Z",
+          timestamp: "2026-10-24T15:40:26.050Z",
           toolUseResult: {
             status: "completed",
             agentId: "child",
@@ -77,7 +78,7 @@ test.each([
             handback: true,
             handbackReport: "CHILD_DONE",
             resolvedModel: "claude-haiku-5-5",
-            totalDurationMs: 7970,
+            totalDurationMs: 1153,
           },
           message: {
             role: "user",
@@ -95,7 +96,7 @@ test.each([
           type: "attachment",
           uuid: "queued-attachment",
           parentUuid: "agent-result",
-          timestamp: "2026-10-21T18:21:25.683Z",
+          timestamp: "2026-10-24T15:40:26.000Z",
           attachment: {
             type: "queued_command",
             prompt: "CHILD_DONE",
@@ -114,7 +115,7 @@ test.each([
           reason: "absorbed_mid_turn",
           commandUuid: "queued-source",
           deliveryId: "delivery",
-          timestamp: "2026-10-21T18:21:25.757Z",
+          timestamp: "2026-10-24T15:40:26.100Z",
           sessionId,
         });
       }
@@ -134,6 +135,42 @@ test.each([
           stop_reason: "end_turn",
         },
       });
+      rows.push(
+        {
+          ...base,
+          type: "user",
+          uuid: "last-notification",
+          parentUuid: "root-final",
+          timestamp: "2026-10-24T15:40:28.000Z",
+          origin: { kind: "task-notification" },
+          message: {
+            role: "user",
+            content:
+              "<task-notification><task-id>child</task-id><status>completed</status></task-notification>",
+          },
+        },
+        {
+          ...base,
+          type: "user",
+          uuid: "next-user",
+          parentUuid: "last-notification",
+          timestamp: "2026-10-24T15:40:30.000Z",
+          message: { role: "user", content: "Check the next file." },
+        },
+        {
+          ...base,
+          type: "assistant",
+          uuid: "next-final",
+          parentUuid: "next-user",
+          timestamp: "2026-10-24T15:40:31.000Z",
+          message: {
+            id: "next-response",
+            role: "assistant",
+            content: [{ type: "text", text: "NEXT_DONE" }],
+            stop_reason: "end_turn",
+          },
+        },
+      );
       await writeFile(
         join(project, `${sessionId}.jsonl`),
         `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`,
@@ -152,23 +189,25 @@ test.each([
           { processEnv: { CLAUDE_CONFIG_DIR: config } },
         ),
       );
-      const reply = history.at(-1);
+      const reply = history.find((message) => message.messageId === "final-response");
       expect(reply).toMatchObject({
         messageId: "final-response",
         text: "ROOT_DONE",
         timestamp: finishedAt,
+        durationMs,
       });
       expect(
         reply?.parts.some(
           (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
         ),
       ).toBe(true);
-      expect(history.filter((message) => message.role === "user")).toHaveLength(users);
+      expect(history.filter((message) => message.role === "user")).toHaveLength(users + 1);
+      expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 1_000 });
       expect(history.flatMap((message) => message.parts)).toContainEqual(
         expect.objectContaining({
           kind: "subagent",
           status: "completed",
-          metadata: expect.objectContaining({ totalDurationMs: 7970 }),
+          metadata: expect.objectContaining({ totalDurationMs: 1153 }),
         }),
       );
       const continuation = decideClaudePersistedContinuation(history, sessionId);

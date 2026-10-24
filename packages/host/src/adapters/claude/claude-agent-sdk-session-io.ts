@@ -167,7 +167,7 @@ export const consumeClaudeSession = (input: {
           !isClaudeForegroundTurnActive(session) &&
           isClaudeWakeUserMessage(message, parseClaudeUserToolResultIngress(message))
         ) {
-          session.wakeStartedAt = timestamp;
+          session.replyStartedAt = timestamp;
         }
         if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
           continuationAdmitted = true;
