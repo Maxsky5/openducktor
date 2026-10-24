@@ -124,6 +124,7 @@ const readChatOwners = (
                     }),
                 ),
               );
+            if (historyDirectory === null) return false;
             return (yield* resolvePath(historyDirectory)) === sourcePath;
           }),
         { concurrency: PATH_READ_CONCURRENCY },

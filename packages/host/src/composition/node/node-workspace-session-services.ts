@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { claudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
+import { createClaudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionLaunchService } from "../../application/workspaces/workspace-session-launch-service";
@@ -32,16 +32,19 @@ type Input = Omit<
         "prepareSessionCreation" | "runForkSourceOperation"
       >;
     resolveParts: Parameters<typeof createWorkspaceSessionLaunchService>[0]["resolveParts"];
+    /** The user environment, which also runs Claude. */
+    readEnv: () => NodeJS.ProcessEnv;
   };
 
 export const createNodeWorkspaceSessionServices = ({
   eventBus,
   commands,
+  readEnv,
   ...dependencies
 }: Input) => {
   const workspaceSessionService = createWorkspaceSessionService({
     ...dependencies,
-    claudeSessionMetadata: claudeSessionMetadataAdapter,
+    claudeSessionMetadata: createClaudeSessionMetadataAdapter(readEnv),
     runForkSourceOperation: commands.runForkSourceOperation,
     live: {
       ...dependencies.live,
