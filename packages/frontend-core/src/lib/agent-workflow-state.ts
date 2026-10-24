@@ -47,7 +47,7 @@ export const buildRoleWorkflowState = ({
 
   if (role === "build" && qaRejected) {
     completion = "done";
-  } else if (role === "qa" && qaRejected) {
+  } else if (role === "qa" && qaRejected && (taskStatus !== "blocked" || !active)) {
     completion = "rejected";
   } else if (role === "qa" && qaReviewRejected && !active) {
     completion = "rejected";

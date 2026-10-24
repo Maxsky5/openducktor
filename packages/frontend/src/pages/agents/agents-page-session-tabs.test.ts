@@ -567,6 +567,72 @@ describe("agents-page-session-tabs", () => {
     });
   });
 
+  describe.each(["ai_review", "blocked"] as const)("QA retry in %s", (taskStatus) => {
+    test.each([
+      { activity: "starting", status: "starting", tone: "in_progress", completion: "in_progress" },
+      { activity: "running", status: "running", tone: "in_progress", completion: "in_progress" },
+      {
+        activity: "waiting_input",
+        status: "running",
+        tone: "waiting_input",
+        completion: "in_progress",
+      },
+      { activity: "error", status: "error", tone: "failed", completion: "in_progress" },
+      { activity: "idle", status: "idle", tone: "rejected", completion: "rejected" },
+      { activity: "stopped", status: "stopped", tone: "rejected", completion: "rejected" },
+    ] as const)(
+      "shows $tone for a $activity QA session",
+      ({ activity, status, tone, completion }) => {
+        const task = buildTask({
+          issueType: "feature",
+          status: taskStatus,
+          artifactSummary: {
+            spec: { present: true, updatedAt: "2026-02-22T08:00:00.000Z" },
+            plan: { present: true, updatedAt: "2026-02-22T08:10:00.000Z" },
+            qaReport: { present: true, updatedAt: "2026-02-22T08:20:00.000Z", verdict: "rejected" },
+          },
+          agentWorkflows: {
+            spec: { required: true, canSkip: false, available: true, completed: true },
+            planner: { required: true, canSkip: false, available: true, completed: true },
+            build: {
+              required: true,
+              canSkip: false,
+              available: true,
+              completed: taskStatus === "ai_review",
+            },
+            qa: { required: true, canSkip: false, available: true, completed: false },
+          },
+        });
+        const savedTask = structuredClone(task);
+        const qaSession = buildSession({
+          sessionAssociation: { kind: "workflow", taskId: task.id, role: "qa" },
+          status,
+          pendingQuestions:
+            activity === "waiting_input" ? [{ requestId: "q-1", questions: [] }] : [],
+        });
+
+        const states = buildWorkflowStateByRole({
+          task,
+          roleWorkflowsByTask: {
+            spec: task.agentWorkflows.spec,
+            planner: task.agentWorkflows.planner,
+            build: task.agentWorkflows.build,
+            qa: task.agentWorkflows.qa,
+          },
+          liveSessionByRole: buildLiveSessionByRoleMap([qaSession]),
+        });
+
+        expect(states.qa).toEqual({
+          tone,
+          availability: "available",
+          completion,
+          liveSession: activity,
+        });
+        expect(task).toEqual(savedTask);
+      },
+    );
+  });
+
   test("does not mark builder done from stale approved qa report after build reopens", () => {
     const task = buildTask({
       status: "in_progress",

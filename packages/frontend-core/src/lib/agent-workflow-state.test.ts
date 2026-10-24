@@ -44,6 +44,14 @@ describe("built-in workflow rail state", () => {
     ).toMatchObject({ tone: "rejected", completion: "rejected" });
   });
 
+  test("shows an active QA retry on a blocked task ahead of the saved rejection", () => {
+    const task = rejectedTask("blocked");
+    const qa = (liveSession: "running" | "idle") =>
+      buildRoleWorkflowState({ task, role: "qa", workflow: task.agentWorkflows.qa, liveSession });
+    expect(qa("running")).toMatchObject({ tone: "in_progress", completion: "in_progress" });
+    expect(qa("idle")).toMatchObject({ tone: "rejected", completion: "rejected" });
+  });
+
   test("asks for input on a blocked Builder that is not working", () => {
     const task = rejectedTask("blocked");
     const state = buildRoleWorkflowState({
