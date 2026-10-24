@@ -178,15 +178,6 @@ export const createTaskSessionStartPreparationService = ({
                 yield* taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([worktreePath]);
                 const exists = yield* dependencies.settingsConfig.pathExists(worktreePath);
                 if (exists) {
-                  if (!(yield* dependencies.gitPort.isGitRepository(worktreePath))) {
-                    return yield* Effect.fail(
-                      new HostValidationError({
-                        field: "taskId",
-                        message: `Canonical task worktree path exists but is not a Git worktree: ${worktreePath}`,
-                        details: { repoPath: canonicalRepoPath, taskId, role, worktreePath },
-                      }),
-                    );
-                  }
                   yield* validateExistingGitTaskWorktree(
                     dependencies,
                     canonicalRepoPath,

@@ -2,7 +2,7 @@ import {
   type GitBranch,
   type GitTargetBranch,
   effectiveWorkspaceSessionTargetBranch,
-  type WorkspaceSessionCreateInput,
+  type WorkspaceSessionLocation,
   workspaceSessionAllowsTargetBranch,
 } from "@openducktor/contracts";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -17,14 +17,15 @@ import {
   targetBranchSelectionValue,
 } from "@openducktor/frontend-core/lib/target-branch";
 
-type Location = WorkspaceSessionCreateInput["location"];
-
 /**
  * Holds the work location and the target together, so a location change can drop a pick that
  * the new location cannot use. The target then falls back to the repository default.
  */
 export function useWorkspaceSessionLocationTarget(defaultTarget: GitTargetBranch | null) {
-  const [choice, setChoice] = useState<{ location: Location; picked: GitTargetBranch | null }>({
+  const [choice, setChoice] = useState<{
+    location: WorkspaceSessionLocation;
+    picked: GitTargetBranch | null;
+  }>({
     location: "local_repo_root",
     picked: null,
   });
@@ -32,14 +33,14 @@ export function useWorkspaceSessionLocationTarget(defaultTarget: GitTargetBranch
   return {
     location,
     targetBranch: effectiveWorkspaceSessionTargetBranch(location, picked, defaultTarget),
-    changeLocation: (next: Location) =>
+    changeLocation: (next: WorkspaceSessionLocation) =>
       setChoice((current) => ({ location: next, picked: usablePick(next, current.picked) })),
     pickTarget: (target: GitTargetBranch) =>
       setChoice((current) => ({ ...current, picked: target })),
   };
 }
 
-function usablePick(location: Location, picked: GitTargetBranch | null) {
+function usablePick(location: WorkspaceSessionLocation, picked: GitTargetBranch | null) {
   return picked && workspaceSessionAllowsTargetBranch(location, picked) ? picked : null;
 }
 

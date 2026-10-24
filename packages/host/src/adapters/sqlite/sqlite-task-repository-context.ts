@@ -7,7 +7,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../effect/host-errors";
 import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/sqlite-task-store-path";
-import type { TaskStoreError } from "../../ports/task-repository-ports";
+import type { TaskOwnershipReader, TaskStoreError } from "../../ports/task-repository-ports";
 import {
   type OpenSqliteTaskStoreConnection,
   openSqliteTaskStoreConnection,
@@ -21,6 +21,7 @@ import type { TaskStoreSession } from "./sqlite-task-store-schema";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import type { WorkspaceSessionStoreScope } from "../../ports/workspace-session-store-port";
 import { readWorkspaceSessionsForWorktreeOwnership } from "./sqlite-workspace-session-reads";
+import { readOpenTasksForWorktreeOwnership } from "./sqlite-task-agent-sessions";
 
 export type ResolveWorkspaceIdForRepoPath = (
   repoPath: string,
@@ -57,6 +58,7 @@ export type SqliteTaskRepositoryContextManager = {
   readonly listWorkspaceSessionsForWorktreeOwnership: (
     scope: WorkspaceSessionStoreScope,
   ) => Effect.Effect<WorkspaceSession[], TaskStoreError>;
+  readonly listOpenTasksForWorktreeOwnership: TaskOwnershipReader["listOpenTasksForWorktreeOwnership"];
 };
 
 type CreateSqliteTaskRepositoryContextManagerInput = {
@@ -220,28 +222,45 @@ export const createSqliteTaskRepositoryContextManager = ({
       }),
     );
 
+  /**
+   * Ownership reads admit a closed workspace and find its database by workspace ID, so a closed
+   * workspace or a missing repository still reports what needs a worktree.
+   */
+  const readForWorktreeOwnership = <A>(
+    scope: WorkspaceSessionStoreScope,
+    operation: string,
+    read: (session: TaskStoreSession) => Effect.Effect<A, unknown>,
+  ) =>
+    admission.withLease(() =>
+      Effect.gen(function* () {
+        const databasePath = yield* resolveDatabasePath(scope);
+        return yield* getWorkspaceAdmission(scope.workspaceId).withLease(() =>
+          Effect.gen(function* () {
+            yield* assertWorkspaceOwnershipReadAdmitted(scope);
+            return yield* getSlot(databasePath)
+              .run(read)
+              .pipe(
+                Effect.mapError((cause) =>
+                  mapSqliteTaskStoreAdapterError(operation, databasePath, cause),
+                ),
+              );
+          }),
+        );
+      }),
+    );
   const listWorkspaceSessionsForWorktreeOwnership: SqliteTaskRepositoryContextManager["listWorkspaceSessionsForWorktreeOwnership"] =
     (scope) =>
-      admission.withLease(() =>
-        Effect.gen(function* () {
-          const databasePath = yield* resolveDatabasePath(scope);
-          return yield* getWorkspaceAdmission(scope.workspaceId).withLease(() =>
-            Effect.gen(function* () {
-              yield* assertWorkspaceOwnershipReadAdmitted(scope);
-              return yield* getSlot(databasePath)
-                .run(readWorkspaceSessionsForWorktreeOwnership)
-                .pipe(
-                  Effect.mapError((cause) =>
-                    mapSqliteTaskStoreAdapterError(
-                      "workspaceSessionStore.worktreeOwners",
-                      databasePath,
-                      cause,
-                    ),
-                  ),
-                );
-            }),
-          );
-        }),
+      readForWorktreeOwnership(
+        scope,
+        "workspaceSessionStore.worktreeOwners",
+        readWorkspaceSessionsForWorktreeOwnership,
+      );
+  const listOpenTasksForWorktreeOwnership: SqliteTaskRepositoryContextManager["listOpenTasksForWorktreeOwnership"] =
+    (scope) =>
+      readForWorktreeOwnership(
+        scope,
+        "taskStore.worktreeOwners",
+        readOpenTasksForWorktreeOwnership,
       );
 
   const closeWorkspace = (
@@ -295,5 +314,11 @@ export const createSqliteTaskRepositoryContextManager = ({
       }
     });
 
-  return { closeWorkspace, dispose, withDatabase, listWorkspaceSessionsForWorktreeOwnership };
+  return {
+    closeWorkspace,
+    dispose,
+    withDatabase,
+    listWorkspaceSessionsForWorktreeOwnership,
+    listOpenTasksForWorktreeOwnership,
+  };
 };

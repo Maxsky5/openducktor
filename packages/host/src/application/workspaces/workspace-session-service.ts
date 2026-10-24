@@ -15,21 +15,13 @@ import {
   type WorkspaceSessionArchiveInput,
   type AgentSessionModelSelection,
   type AgentSessionLiveRef,
-  type WorkspaceSessionCreateInput,
-  type WorkspaceSessionCreateResult,
   type WorkspaceSessionRefInput,
   type WorkspaceSessionSetTargetBranchInput,
   WORKSPACE_SESSION_UPSTREAM_TARGET_MESSAGE,
   workspaceSessionAllowsTargetBranch,
-  workspaceSessionCreateInputSchema,
-  workspaceSessionRenameInputSchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
-import {
-  HostOperationError,
-  HostResourceError,
-  HostValidationError,
-} from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TerminalService } from "../terminals/terminal-service";
 import {
@@ -47,7 +39,6 @@ import {
 import { createWorkspaceSessionRecordReader } from "./workspace-session-record-reader";
 import {
   validateWorkspaceSessionTarget,
-  withWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
 import {
@@ -57,10 +48,17 @@ import {
 
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
-import { readWorkspaceSessionWorktreeOwners } from "./workspace-session-worktree-owners";
+import { readWorktreeOwners, requireNoWorktreeOwners } from "./workspace-session-worktree-owners";
+import { listWorkspaceSessionWorktrees } from "./workspace-session-existing-worktree";
+import {
+  createWorkspaceSessionCreate,
+  type WorkspaceSessionCreateDependencies,
+} from "./workspace-session-create";
+import type { TaskOwnershipReader } from "../../ports/task-repository-ports";
 import type { ClaudeSessionMetadataPort } from "../../ports/claude-session-metadata-port";
 
 export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependencies &
+  WorkspaceSessionCreateDependencies &
   WorkspaceSessionForkDependencies &
   WorkspaceSessionStartDependencies &
   WorkspaceSessionRestoreDependencies & {
@@ -69,6 +67,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
     sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
     isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     store: WorkspaceSessionStorePort;
+    taskOwnership: TaskOwnershipReader;
     claudeSessionMetadata: ClaudeSessionMetadataPort;
     terminalService: Pick<TerminalService, "acquireWorkspaceSessionCleanup">;
     browserTabs: BrowserOwnerCleanupPort;
@@ -93,79 +92,11 @@ export const createWorkspaceSessionService = (
       scopeFor(workspaceId).pipe(Effect.flatMap(store.listArchived)),
     get: (input: WorkspaceSessionRefInput) =>
       recordFor(input).pipe(Effect.map(({ session }) => session)),
-    create: (rawInput: WorkspaceSessionCreateInput) =>
-      Effect.gen(function* () {
-        const input = yield* Effect.try({
-          try: () => workspaceSessionCreateInputSchema.parse(rawInput),
-          catch: (cause) =>
-            new HostValidationError({
-              message: "Invalid Workspace Session creation input.",
-              cause,
-            }),
-        });
-        const manualTitle = yield* Effect.try({
-          try: () =>
-            workspaceSessionRenameInputSchema.shape.manualTitle.parse(input.manualTitle) || null,
-          catch: (cause) =>
-            new HostValidationError({
-              message: "Workspace Session title must be at most 120 characters.",
-              field: "manualTitle",
-              cause,
-            }),
-        });
-        const sessionId = crypto.randomUUID();
-        const config = yield* settings.getRepoConfig(input.workspaceId);
-        const roles =
-          input.customAgentRoleId === null ? [] : yield* settings.listCustomAgentRoles();
-        const role = roles.find((candidate) => candidate.id === input.customAgentRoleId);
-        if (input.customAgentRoleId !== null && !role) {
-          return yield* Effect.fail(
-            new HostResourceError({
-              resource: input.customAgentRoleId,
-              operation: "workspaceSession.create",
-              message:
-                "The selected Custom Agent Role no longer exists. Select another Role or No Role.",
-            }),
-          );
-        }
-        const roleSnapshot = role ? { ...role } : null;
-        const repoPath = yield* git.canonicalizePath(config.repoPath);
-        return yield* withWorkspaceSessionTarget(
-          dependencies,
-          {
-            owner: { workspaceId: input.workspaceId, sessionId },
-            worktree: input.worktree,
-            repoConfig: { ...config, repoPath },
-            location: input.location,
-            targetBranch: input.targetBranch,
-          },
-          (executionTarget, retainTarget) =>
-            Effect.gen(function* () {
-              const now = yield* Clock.currentTimeMillis;
-              const session: WorkspaceSession = {
-                id: sessionId,
-                runtimeKind: input.runtimeKind,
-                externalSessionId: null,
-                executionTarget,
-                roleSnapshot,
-                selectedModel: input.selectedModel,
-                generatedTitle: null,
-                manualTitle,
-                targetBranch: input.targetBranch,
-                createdAt: now,
-                updatedAt: now,
-                archivedAt: null,
-              };
-              const saved = yield* store.create({
-                workspaceId: input.workspaceId,
-                repoPath,
-                session,
-              });
-              retainTarget();
-              return { session: saved } satisfies WorkspaceSessionCreateResult;
-            }),
-        );
-      }),
+    create: createWorkspaceSessionCreate(dependencies),
+    listWorktrees: (workspaceId: string) =>
+      scopeFor(workspaceId).pipe(
+        Effect.flatMap(({ repoPath }) => listWorkspaceSessionWorktrees(dependencies, repoPath)),
+      ),
     start: (input: WorkspaceSessionRefInput) =>
       createWorkspaceSessionStart(dependencies)(input).pipe(
         Effect.flatMap((started) => {
@@ -326,13 +257,18 @@ export const createWorkspaceSessionService = (
           });
         }
         const config = yield* settings.getRepoConfig(input.workspaceId);
-        const sharedWith = yield* readWorkspaceSessionWorktreeOwners(dependencies, ref, session);
-        return yield* readWorkspaceSessionArchivePreview(
-          dependencies,
-          { ...config, repoPath: ref.repoPath },
-          session.executionTarget,
-          sharedWith,
+        const { owners, preview } = yield* Effect.all(
+          {
+            owners: readWorktreeOwners(dependencies, ref, session),
+            preview: readWorkspaceSessionArchivePreview(
+              dependencies,
+              { ...config, repoPath: ref.repoPath },
+              session.executionTarget,
+            ),
+          },
+          { concurrency: 2 },
         );
+        return { ...preview, ...owners };
       }),
     archive: (input: WorkspaceSessionArchiveInput) =>
       operationGate.run(
@@ -357,17 +293,7 @@ export const createWorkspaceSessionService = (
                 });
               }
               const config = yield* settings.getRepoConfig(input.workspaceId);
-              const sharedWith = yield* readWorkspaceSessionWorktreeOwners(
-                dependencies,
-                ref,
-                session,
-              );
-              if (sharedWith.length > 0) {
-                return yield* new HostValidationError({
-                  field: "removeWorktree",
-                  message: `Cannot remove this worktree while saved chats need it for files or history: ${sharedWith.map((owner) => owner.title).join(", ")}. Turn off worktree removal to archive this chat.`,
-                });
-              }
+              yield* requireNoWorktreeOwners(dependencies, ref, session);
               const preview = yield* readWorkspaceSessionArchivePreview(
                 dependencies,
                 { ...config, repoPath: ref.repoPath },
@@ -423,6 +349,9 @@ export const createWorkspaceSessionService = (
             );
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
+                // Stop and cleanup can take time. Check again just before the files go.
+                if (input.removeWorktree)
+                  yield* requireNoWorktreeOwners(dependencies, ref, session);
                 if (
                   input.removeWorktree &&
                   target.kind === "local_worktree" &&

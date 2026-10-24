@@ -125,8 +125,7 @@ function PanelHarness({
     isVisible,
     applyTarget: async () => {},
     repoPath: "/repo",
-    workspaceId: "workspace-1",
-    sessionId: sessionId,
+    workspaceSession: { workspaceId: "workspace-1", sessionId },
     workingDirectory,
     contextMode: contextMode,
     branchKey: branchKey,
@@ -1515,6 +1514,7 @@ test("returning to the app rechecks the target and file tree", async () => {
 });
 
 test("refresh recovers local Git and file reads when the comparison target disappears", async () => {
+  const chatSession = { workspaceId: "workspace-1", sessionId: "session-1" };
   let targetAvailable = true;
   const comparison = mock(async (): Promise<GitComparisonTarget> =>
     targetAvailable
@@ -1593,11 +1593,20 @@ test("refresh recovers local Git and file reads when the comparison target disap
     await waitFor(() =>
       expect(
         queryClient.getQueryData<WorkspaceFileTree>(
-          filesystemQueryKeys.tree("/repo", null, "feature"),
+          filesystemQueryKeys.tree("/repo", null, "feature", {
+            kind: "chat",
+            session: chatSession,
+          }),
         )?.entries,
       ).toHaveLength(1),
     );
     expect(fileTreeTargets).toContain(undefined);
+    // The chat tree names its session, so the host checks the saved chat directory.
+    expect(filesystemRefreshTree.mock.calls.every(([input]) => input.scope)).toBe(true);
+    expect(filesystemRefreshTree.mock.calls[0]?.[0].scope).toEqual({
+      kind: "chat",
+      session: chatSession,
+    });
     expect(statusTargets.filter((target) => target === targetReference)).toHaveLength(
       staleStatusReads,
     );

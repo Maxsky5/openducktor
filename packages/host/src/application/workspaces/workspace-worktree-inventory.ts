@@ -102,15 +102,17 @@ export const collectWorkspaceTaskWorktreePaths = (
     const inventory = yield* dependencies.gitPort.listWorktrees(repoPath);
     const previousPrefixTaskPaths = new Set<string>();
     for (const worktree of inventory) {
+      const { branch } = worktree;
+      if (branch === null) continue;
       const task = tasks.find((candidate) =>
-        isRelatedTaskBranch(worktree.branch, repoConfig.branchPrefix, candidate.id),
+        isRelatedTaskBranch(branch, repoConfig.branchPrefix, candidate.id),
       );
       if (task) {
         candidates.set(normalizePathForComparison(worktree.worktreePath), {
           path: worktree.worktreePath,
           taskId: task.id,
         });
-      } else if (tasks.some((candidate) => branchMatchesTaskId(worktree.branch, candidate.id))) {
+      } else if (tasks.some((candidate) => branchMatchesTaskId(branch, candidate.id))) {
         previousPrefixTaskPaths.add(normalizePathForComparison(worktree.worktreePath));
       }
     }

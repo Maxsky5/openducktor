@@ -11,16 +11,21 @@ export {
 } from "./workspace-session-limits";
 
 const identitySchema = z.string().min(1);
-const workingDirectorySchema = z.string().regex(/^(?:\/|[a-zA-Z]:[\\/]|\\\\)/, {
-  message: "Execution Target must have an absolute working directory.",
-});
+export const workspaceSessionWorkingDirectorySchema = z
+  .string()
+  .regex(/^(?:\/|[a-zA-Z]:[\\/]|\\\\)/, {
+    message: "Execution Target must have an absolute working directory.",
+  });
 
 export const workspaceSessionExecutionTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("local_repo_root"), workingDirectory: workingDirectorySchema }),
+  z.strictObject({
+    kind: z.literal("local_repo_root"),
+    workingDirectory: workspaceSessionWorkingDirectorySchema,
+  }),
   z
     .strictObject({
       kind: z.literal("local_worktree"),
-      workingDirectory: workingDirectorySchema,
+      workingDirectory: workspaceSessionWorkingDirectorySchema,
       branchName: identitySchema.nullable(),
       worktreeState: z.enum(["present", "removed"]),
     })
@@ -40,6 +45,13 @@ export const workspaceSessionArchivePreviewSchema = z.strictObject({
       workspaceId: identitySchema,
       sessionId: identitySchema,
       title: identitySchema,
+    }),
+  ),
+  taskOwners: z.array(
+    z.strictObject({
+      workspaceId: identitySchema,
+      taskId: identitySchema,
+      title: z.string(),
     }),
   ),
 });

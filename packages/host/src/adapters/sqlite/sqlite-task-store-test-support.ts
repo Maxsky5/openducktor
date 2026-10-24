@@ -90,6 +90,7 @@ export type SqliteTaskStoreTestHarness = {
   readonly configDir: string;
   readonly contextProvider: SqliteTaskRepositoryContextProvider;
   readonly listForWorktreeOwnership: SqliteTaskRepositoryContextManager["listWorkspaceSessionsForWorktreeOwnership"];
+  readonly listOpenTasksForWorktreeOwnership: SqliteTaskRepositoryContextManager["listOpenTasksForWorktreeOwnership"];
   readonly databasePath: string;
   readonly repoPath: string;
   readonly store: TaskStorePort;
@@ -132,6 +133,7 @@ export const createSqliteTaskStoreHarness = async ({
     contextProvider: contextManager.withDatabase,
     databasePath,
     listForWorktreeOwnership: contextManager.listWorkspaceSessionsForWorktreeOwnership,
+    listOpenTasksForWorktreeOwnership: contextManager.listOpenTasksForWorktreeOwnership,
     repoPath,
     store,
   };

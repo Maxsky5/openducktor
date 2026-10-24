@@ -1,8 +1,13 @@
 import { Effect } from "effect";
-import { claudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
+import { createClaudeSessionMetadataAdapter } from "../../adapters/claude/claude-session-metadata-adapter";
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionLaunchService } from "../../application/workspaces/workspace-session-launch-service";
+import {
+  createWorkspaceSessionFileAccess,
+  scopeFilesToChats,
+} from "../../application/workspaces/workspace-session-file-access";
+import type { WorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
@@ -27,16 +32,19 @@ type Input = Omit<
         "prepareSessionCreation" | "runForkSourceOperation"
       >;
     resolveParts: Parameters<typeof createWorkspaceSessionLaunchService>[0]["resolveParts"];
+    /** The user environment, which also runs Claude. */
+    readEnv: () => NodeJS.ProcessEnv;
   };
 
 export const createNodeWorkspaceSessionServices = ({
   eventBus,
   commands,
+  readEnv,
   ...dependencies
 }: Input) => {
   const workspaceSessionService = createWorkspaceSessionService({
     ...dependencies,
-    claudeSessionMetadata: claudeSessionMetadataAdapter,
+    claudeSessionMetadata: createClaudeSessionMetadataAdapter(readEnv),
     runForkSourceOperation: commands.runForkSourceOperation,
     live: {
       ...dependencies.live,
@@ -63,6 +71,7 @@ export const createNodeWorkspaceSessionServices = ({
       );
     },
   );
+  const fileAccess = createWorkspaceSessionFileAccess(dependencies);
   return {
     handlers: {
       ...createWorkspaceSessionCommandHandlers(
@@ -75,6 +84,8 @@ export const createNodeWorkspaceSessionServices = ({
     workspaceSessionService,
     workspaceSessionImports,
     workspaceSessionLaunchService,
+    /** Keeps each chat file request in the saved chat directory. */
+    scopeFiles: (files: WorkspaceFilesService) => scopeFilesToChats(files, fileAccess),
     unsubscribeImportCatalogs,
   };
 };

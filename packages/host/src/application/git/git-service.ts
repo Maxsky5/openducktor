@@ -63,8 +63,13 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
     },
     getCurrentBranch(input) {
       return Effect.gen(function* () {
-        const { repoPath, workingDir } = input;
-        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const { repoPath, workingDir, readContext } = input;
+        const workingDirectory = yield* resolveGitWorkingDirectory(
+          gitPort,
+          repoPath,
+          workingDir,
+          readContext,
+        );
         const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
         return yield* Effect.try({
           try: () => gitCurrentBranchSchema.parse(currentBranch),
@@ -82,6 +87,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
           gitPort,
           input.repoPath,
           input.workingDir,
+          input.readContext,
         );
         const currentBranch = yield* gitPort.getCurrentBranch(workingDirectory);
         const reference =
@@ -142,7 +148,12 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
     getWorktreeStatus(input) {
       return Effect.gen(function* () {
         const { repoPath, targetBranch, diffScope, workingDir } = input;
-        const workingDirectory = yield* resolveGitWorkingDirectory(gitPort, repoPath, workingDir);
+        const workingDirectory = yield* resolveGitWorkingDirectory(
+          gitPort,
+          repoPath,
+          workingDir,
+          input.readContext,
+        );
         const statusData = yield* gitPort.getWorktreeStatusData(
           workingDirectory,
           targetBranch,

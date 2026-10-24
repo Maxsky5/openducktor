@@ -64,6 +64,7 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
 ): GitPort => ({
   readPublicationTarget: unexpectedEffectCall("Git port", "readPublicationTarget"),
   inspectPublication: unexpectedEffectCall("Git port", "inspectPublication"),
+  readCheckout: unexpectedEffectCall("Git port", "readCheckout"),
   abortConflict: unexpectedEffectCall("Git port", "abortConflict"),
   canonicalizePath: unexpectedEffectCall("Git port", "canonicalizePath"),
   changeSelection: unexpectedEffectCall("Git port", "changeSelection"),
@@ -107,7 +108,6 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   referenceExists: unexpectedEffectCall("Git port", "referenceExists"),
   removeWorktree: unexpectedEffectCall("Git port", "removeWorktree"),
   restoreWorktreeToReference: unexpectedEffectCall("Git port", "restoreWorktreeToReference"),
-  shareGitCommonDirectory: unexpectedEffectCall("Git port", "shareGitCommonDirectory"),
   suggestedSquashCommitMessage: unexpectedEffectCall("Git port", "suggestedSquashCommitMessage"),
   switchBranch: unexpectedEffectCall("Git port", "switchBranch"),
   ...overrides,

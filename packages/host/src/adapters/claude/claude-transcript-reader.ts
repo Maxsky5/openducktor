@@ -107,6 +107,30 @@ const findTranscripts = async (
   return matches;
 };
 
+/** The Claude folder that a Claude process with this environment uses. */
+const claudeConfigDirectory = (environment: NodeJS.ProcessEnv) =>
+  resolve(environment.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")).normalize("NFC");
+
+/**
+ * Lists the root transcripts of one Claude session. Claude deletes old transcripts after its
+ * cleanup period, so a saved session can have none.
+ */
+export const findClaudeSessionTranscripts = async (
+  environment: NodeJS.ProcessEnv,
+  sessionId: string,
+): Promise<string[]> => {
+  try {
+    return await findTranscripts(
+      join(claudeConfigDirectory(environment), "projects"),
+      `${sessionId}.jsonl`,
+      false,
+    );
+  } catch (cause) {
+    if (isMissingFile(cause)) return [];
+    throw cause;
+  }
+};
+
 const resolveTranscriptPaths = (
   input: LoadAgentSessionHistoryInput,
   options: ClaudeTranscriptReadOptions,
@@ -115,14 +139,9 @@ const resolveTranscriptPaths = (
     try: async () => {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
       if (!z.uuid().safeParse(target.sessionId).success) throw missingTranscript();
-      const environment = options.processEnv ?? process.env;
-      const config = resolve(environment.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")).normalize(
-        "NFC",
-      );
-      const roots = await findTranscripts(
-        join(config, "projects"),
-        `${target.sessionId}.jsonl`,
-        false,
+      const roots = await findClaudeSessionTranscripts(
+        options.processEnv ?? process.env,
+        target.sessionId,
       );
       if (roots.length === 0) throw missingTranscript();
       if (roots.length !== 1) {

@@ -25,12 +25,12 @@ import {
   type GitCommandRunner,
   type ResolveGitCommand,
   referenceExists,
-  resolveGitCommonDirectory,
   runGit,
   runGitAllowFailure,
 } from "../../infrastructure/git/git-command-runner";
 import { buildFileDiffs, loadDiffPayload } from "../../infrastructure/git/git-diff";
 import { createGitCliLocalChangeMethods } from "./git-cli-local-change-methods";
+import { createGitCliCheckoutMethods } from "./git-cli-checkout-methods";
 import {
   isAncestor,
   isMergeIncluded,
@@ -61,8 +61,6 @@ import {
   createWorktree,
   deleteLocalBranch,
   deleteReference,
-  isRegisteredWorktree,
-  listWorktrees,
   removeWorktree,
   restoreDeletedBranch,
 } from "../../infrastructure/git/git-worktree";
@@ -164,6 +162,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
   const captureBranch = createGitReadCapture<GitCurrentBranch>();
   const captureChanges = createGitReadCapture<GitChangedFile[]>();
   const captureStatusOutput = createGitReadCapture<string>();
+  const checkouts = createGitCliCheckoutMethods(runner);
   const captureIdentity = (dir: string) =>
     runGit(runner, dir, ["rev-parse", "--absolute-git-dir"]).pipe(
       Effect.flatMap((output) =>
@@ -196,6 +195,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         captureBranch.clear();
         captureChanges.clear();
         captureStatusOutput.clear();
+        checkouts.clear();
       }),
     getFileTreeContext: (dir, target) => readFileTreeContext(runner, dir, target),
     listFileRegions(dir, regions) {
@@ -209,54 +209,7 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         return [...files.values()];
       });
     },
-    canonicalizePath(inputPath) {
-      return Effect.tryPromise({
-        try: () => realpath(inputPath),
-        catch: (cause) =>
-          toHostOperationError(cause, "git.canonicalizePath", {
-            path: inputPath,
-          }),
-      });
-    },
-    isGitRepository(workingDirectory) {
-      return Effect.gen(function* () {
-        const result = yield* runGitAllowFailure(runner, workingDirectory, [
-          "rev-parse",
-          "--is-inside-work-tree",
-        ]);
-        return result.ok && result.stdout.trim() === "true";
-      });
-    },
-    getRepositoryRoot(workingDirectory) {
-      return Effect.gen(function* () {
-        const output = yield* runGit(runner, workingDirectory, ["rev-parse", "--show-toplevel"]);
-        const repositoryRoot = output.replace(/\r?\n$/u, "");
-        if (!repositoryRoot) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "git.rev-parse.show-toplevel",
-              message: "Git returned an empty repository root.",
-            }),
-          );
-        }
-        return repositoryRoot;
-      });
-    },
-    shareGitCommonDirectory(repoPath, workingDir) {
-      return Effect.gen(function* () {
-        const [repoCommonDir, workingCommonDir] = yield* Effect.all([
-          resolveGitCommonDirectory(runner, repoPath),
-          resolveGitCommonDirectory(runner, workingDir),
-        ]);
-        return repoCommonDir === workingCommonDir;
-      });
-    },
-    isRegisteredWorktree(repoPath, worktreePath) {
-      return isRegisteredWorktree(runner, repoPath, worktreePath);
-    },
-    listWorktrees(repoPath) {
-      return listWorktrees(runner, repoPath);
-    },
+    ...checkouts.methods,
     getTrackedUpstreamReference(workingDir) {
       return Effect.gen(function* () {
         const branch = yield* getCurrentBranchUnchecked(runner, workingDir);

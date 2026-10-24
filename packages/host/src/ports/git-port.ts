@@ -23,7 +23,6 @@ import type {
   GitRebaseAbortResult,
   GitRebaseBranchResult,
   GitUpstreamAheadBehind,
-  GitWorktreeSummary,
 } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
 import type {
@@ -38,6 +37,18 @@ export type GitPortError =
   | HostPathAccessErrorAggregate
   | HostResourceErrorAggregate
   | HostValidationErrorAggregate;
+
+/** One entry of `git worktree list`. A null branch means detached HEAD. */
+export type GitWorktreeEntry = {
+  worktreePath: string;
+  branch: string | null;
+};
+
+/** The checkout root and the shared Git directory of a work tree. Both paths are canonical. */
+export type GitCheckout = {
+  root: string;
+  commonDirectory: string;
+};
 
 export type GitRemote = {
   name: string;
@@ -162,15 +173,21 @@ export type GitPort = {
   canonicalizePath(path: string): Effect.Effect<string, HostOperationErrorAggregate>;
   isGitRepository(path: string): Effect.Effect<boolean, GitPortError>;
   getRepositoryRoot(workingDirectory: string): Effect.Effect<string, GitPortError>;
-  shareGitCommonDirectory(
-    repoPath: string,
-    workingDir: string,
-  ): Effect.Effect<boolean, GitPortError>;
+  /**
+   * Reads a directory with one Git process. Null when the directory is not in a work tree.
+   * One read context shares one read of each directory.
+   */
+  readCheckout(
+    directory: string,
+    readContext?: GitReadContext,
+  ): Effect.Effect<GitCheckout | null, GitPortError>;
+  /** One read context shares one worktree list of each repository. */
   isRegisteredWorktree(
     repoPath: string,
     worktreePath: string,
+    readContext?: GitReadContext,
   ): Effect.Effect<boolean, GitPortError>;
-  listWorktrees(repoPath: string): Effect.Effect<GitWorktreeSummary[], GitPortError>;
+  listWorktrees(repoPath: string): Effect.Effect<GitWorktreeEntry[], GitPortError>;
   getTrackedUpstreamReference(workingDir: string): Effect.Effect<string | null, GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;

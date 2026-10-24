@@ -14,7 +14,9 @@ import { ClientConnectionProvider } from "../connection/client-connection-react"
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import {
   filesystemQueryKeys,
+  workspaceFilePreviewQueryOptions,
   workspaceFileTreeQueryOptions,
+  workspaceTextFileQueryOptions,
   workspaceTextFileWriteMutationOptions,
 } from "./filesystem";
 
@@ -94,11 +96,11 @@ describe("workspaceFileTreeQueryOptions", () => {
         contents: "saved",
         revision: "revision-1",
       };
-      if (access) input.access = access;
+      if (access) input.scope = { kind: access };
       const otherFileKey = filesystemQueryKeys.textFile(
         "/repo",
         "file.txt",
-        access ? undefined : "local",
+        access ? undefined : { kind: "local" },
       );
       const treeKey = filesystemQueryKeys.treeRoot("/repo");
       const unrelatedKey = filesystemQueryKeys.treeRoot("/other");
@@ -115,7 +117,7 @@ describe("workspaceFileTreeQueryOptions", () => {
 
       expect(
         result.current.queryClient.getQueryData<WorkspaceTextFileWriteResult>(
-          filesystemQueryKeys.textFile("/repo", "file.txt", access),
+          filesystemQueryKeys.textFile("/repo", "file.txt", access ? { kind: access } : undefined),
         ),
       ).toEqual(saved);
       expect(result.current.queryClient.getQueryState(treeKey)?.isInvalidated).toBe(true);
@@ -174,5 +176,114 @@ describe("workspaceFileTreeQueryOptions", () => {
     expect(result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(key)).toEqual(
       baseline,
     );
+  });
+});
+
+describe("workspace session file context", () => {
+  const chat = { kind: "chat" as const, session: { workspaceId: "workspace", sessionId: "chat" } };
+  const textResult = (rootPath: string, relativePath: string): WorkspaceTextFileWriteResult => ({
+    kind: "text",
+    rootPath,
+    relativePath,
+    contents: "text",
+    size: 4,
+    mtimeMs: 1,
+    revision: "revision-1",
+  });
+
+  test("tree and file reads send the session and keep entries under their directory keys", async () => {
+    const treeInputs: Array<Parameters<HostClient["filesystemRefreshTree"]>[0]> = [];
+    const readInputs: Array<Parameters<HostClient["filesystemReadTextFile"]>[0]> = [];
+    const { queryClient } = createTestClientConnection({
+      client: {
+        filesystemRefreshTree: async (input) => {
+          treeInputs.push(input);
+          return {
+            kind: "snapshot",
+            rootPath: "/worktree",
+            context: {
+              rootPath: "/worktree",
+              gitDirectory: "/repo/.git/worktrees/worktree",
+              branch: "main",
+              head: "head",
+              targetBranch: null,
+              targetRevision: null,
+              indexVersion: "index",
+              sparsePolicy: "",
+            },
+            cursor: { viewId: "view", revision: 0 },
+            entries: [],
+          };
+        },
+        filesystemReadTextFile: async (input) => {
+          readInputs.push(input);
+          return textResult(input.rootPath, input.relativePath);
+        },
+      },
+    });
+    const tree = workspaceFileTreeQueryOptions("/worktree", null, undefined, chat);
+    const text = workspaceTextFileQueryOptions("/worktree", "a.ts", chat);
+    const preview = workspaceFilePreviewQueryOptions("/worktree", "b.md", chat);
+
+    await queryClient.fetchQuery(tree);
+    await queryClient.fetchQuery(text);
+    await queryClient.fetchQuery(preview);
+
+    expect(treeInputs).toEqual([
+      {
+        rootPath: "/worktree",
+        scope: chat,
+        mode: "full",
+        refreshId: expect.any(String),
+      },
+    ]);
+    expect(readInputs).toEqual([
+      { rootPath: "/worktree", relativePath: "a.ts", scope: chat },
+      { rootPath: "/worktree", relativePath: "b.md", scope: chat },
+    ]);
+    expect(tree.queryKey).not.toEqual(workspaceFileTreeQueryOptions("/worktree", null).queryKey);
+    expect(text.queryKey).not.toEqual(filesystemQueryKeys.textFile("/worktree", "a.ts"));
+    expect(tree.queryKey.slice(0, 3)).toEqual([...filesystemQueryKeys.treeRoot("/worktree")]);
+    expect(text.queryKey.slice(0, 3)).toEqual([...filesystemQueryKeys.textFileRoot("/worktree")]);
+  });
+
+  test("a save sends the session and updates the text entry that the chat reads", async () => {
+    const writes: WorkspaceTextFileWriteInput[] = [];
+    const wrapper = createHostWrapper({
+      filesystemWriteTextFile: async (input) => {
+        writes.push(input);
+        return { ...textResult(input.rootPath, input.relativePath), contents: input.contents };
+      },
+    });
+    const { result } = renderHook(
+      () => {
+        const queryClient = useQueryClient();
+        return {
+          queryClient,
+          mutation: useMutation(workspaceTextFileWriteMutationOptions(queryClient)),
+        };
+      },
+      { wrapper },
+    );
+    const unscopedKey = filesystemQueryKeys.textFile("/worktree", "a.ts");
+    act(() => result.current.queryClient.setQueryData<string>(unscopedKey, "unscoped"));
+
+    await act(async () => {
+      await result.current.mutation.mutateAsync({
+        rootPath: "/worktree",
+        relativePath: "a.ts",
+        contents: "saved",
+        revision: "revision-1",
+        scope: chat,
+      });
+    });
+
+    expect(writes[0]?.scope).toEqual(chat);
+    expect(
+      result.current.queryClient.getQueryData<WorkspaceTextFileReadResult>(
+        workspaceTextFileQueryOptions("/worktree", "a.ts", chat).queryKey,
+      ),
+    ).toMatchObject({ contents: "saved" });
+    expect(result.current.queryClient.getQueryData<string>(unscopedKey)).toBe("unscoped");
   });
 });

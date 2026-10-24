@@ -1,5 +1,5 @@
 import type { WorkspaceSession } from "@openducktor/contracts";
-import { type ReactElement, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { useWorkspaceSessionTools } from "@/components/features/agents/use-workspace-session-tools";
 import { RepositoryBranchSwitcher } from "@/components/features/repository/repository-branch-switcher";
@@ -124,6 +124,10 @@ export function WorkspaceSessionContent({
     (file: TaskExecutionSelectedFile | null) => onSelectedFileChange(record.id, file),
     [onSelectedFileChange, record.id],
   );
+  const workspaceSession = useMemo(
+    () => ({ workspaceId: workspace.workspaceId, sessionId: record.id }),
+    [workspace.workspaceId, record.id],
+  );
   const previewContent = (
     <WorkspaceSessionFilePreview
       key={selectedKey}
@@ -135,6 +139,7 @@ export function WorkspaceSessionContent({
       branch={branch}
       hasRootBranch={hasRootBranch}
       onFileSaved={onFileSaved}
+      workspaceSession={workspaceSession}
     />
   );
   const mainContent = (
@@ -173,8 +178,7 @@ export function WorkspaceSessionContent({
       (assistance ? null : "Wait for the selected chat to load, or reload session data."),
     conflictAssistanceIsStarting: assistance?.isStarting ?? false,
     repoPath: workspace.repoPath,
-    workspaceId: workspace.workspaceId,
-    sessionId: record.id,
+    workspaceSession,
     workingDirectory,
     contextMode: record.executionTarget.kind === "local_repo_root" ? "repository" : "worktree",
     repositoryBranchControl: <RepositoryBranchSwitcher layout="inline" />,

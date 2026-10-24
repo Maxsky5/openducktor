@@ -45,7 +45,7 @@ export type WorkspaceSessionForkDependencies = WorkspaceSessionRecordReaderDepen
     git: Pick<GitPort, "getCurrentBranch">;
     worktreeFiles: Pick<WorktreeFilePort, "resolveWorktreeRemovalPath">;
     store: Pick<WorkspaceSessionStorePort, "create">;
-    lifecycle: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead" | "acquireWorktreeRead">;
+    lifecycle: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
     operationGate: Pick<ReturnType<typeof createWorkspaceSessionOperationGate>, "run">;
     runtimeAdmission: Pick<RuntimeAdmissionPort, "admit">;
     runForkSourceOperation: ReturnType<
@@ -161,21 +161,17 @@ export const createWorkspaceSessionFork = (deps: WorkspaceSessionForkDependencie
                     {
                       owner: { workspaceId: input.workspaceId, sessionId: id },
                       repoConfig: { ...config, repoPath: ref.repoPath },
-                      location: "local_worktree",
-                      targetBranch,
-                      worktree: {
-                        mode: "from_name",
-                        name: input.destination.name,
-                        branchName: input.destination.branchName,
+                      destination: {
+                        location: "local_worktree",
+                        worktree: {
+                          mode: "from_name",
+                          name: input.destination.name,
+                          branchName: input.destination.branchName,
+                        },
                       },
+                      targetBranch,
                       startPoint: head.revision,
                       rollbackMode: "all_owned",
-                      guardWorktree: (path) =>
-                        Effect.gen(function* () {
-                          const canonical =
-                            yield* deps.worktreeFiles.resolveWorktreeRemovalPath(path);
-                          yield* deps.lifecycle.acquireWorktreeRead(canonical);
-                        }),
                     },
                     (target, retain) => create(target, retain, targetBranch),
                   );

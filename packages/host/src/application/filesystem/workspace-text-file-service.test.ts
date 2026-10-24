@@ -25,7 +25,7 @@ const createGitPort = (
   requestedPaths?: Array<string | undefined>,
 ): Parameters<typeof createWorkspaceTextFileService>[1] =>
   ({
-    isGitRepository: () => Effect.succeed(true),
+    readCheckout: (root) => Effect.succeed({ root, commonDirectory: `${root}/.git` }),
     getCurrentBranch: () => Effect.succeed({ name: "main", detached: false }),
     listFiles: (_rootPath, relativePath, options?: { caseInsensitive?: boolean }) => {
       requestedPaths?.push(relativePath);
@@ -70,7 +70,7 @@ describe("createWorkspaceTextFileService", () => {
     await mkdir(path.join(rootPath, "directory"));
     const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
     const exit = await Effect.runPromiseExit(
-      service.readTextFile({ rootPath, relativePath: "directory", access: "local" }),
+      service.readTextFile({ rootPath, relativePath: "directory", scope: { kind: "local" } }),
     );
     expect(exit._tag).toBe("Failure");
     if (exit._tag === "Failure") {
@@ -87,7 +87,7 @@ describe("createWorkspaceTextFileService", () => {
       await mkdir(path.dirname(filePath), { recursive: true });
       await writeFile(filePath, "plain text");
       const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
-      const input = { rootPath, relativePath, access: "local" as const };
+      const input = { rootPath, relativePath, scope: { kind: "local" as const } };
       const loaded = await Effect.runPromise(service.readTextFile(input));
       expect(loaded.kind).toBe("text");
       if (loaded.kind !== "text") throw new Error("Expected text.");
@@ -103,11 +103,11 @@ describe("createWorkspaceTextFileService", () => {
     const filePath = path.join(rootPath, "report.md");
     await writeFile(filePath, "# Before\n");
     const service = createWorkspaceTextFileService(createFilesystemAdapter(), {
-      isGitRepository: () => Effect.die("Local access must not read Git"),
+      readCheckout: () => Effect.die("Local access must not read Git"),
       listFiles: () => Effect.die("Local access must not list Git files"),
       getCurrentBranch: () => Effect.die("Local access must not check a branch"),
     });
-    const input = { rootPath, relativePath: "report.md", access: "local" as const };
+    const input = { rootPath, relativePath: "report.md", scope: { kind: "local" as const } };
     const loaded = await Effect.runPromise(service.readTextFile(input));
     if (loaded.kind !== "text") throw new Error("Expected text.");
     const saved = await Effect.runPromise(
@@ -132,7 +132,7 @@ describe("createWorkspaceTextFileService", () => {
     await symlink(path.join(outsideRoot, "outside.txt"), path.join(rootPath, "link.txt"));
     const service = createWorkspaceTextFileService(createFilesystemAdapter(), createGitPort([]));
     for (const relativePath of [`../${path.basename(outsideRoot)}/outside.txt`, "link.txt"]) {
-      const input = { rootPath, relativePath, access: "local" as const };
+      const input = { rootPath, relativePath, scope: { kind: "local" as const } };
       const result = await Effect.runPromiseExit(service.readTextFile(input));
       expect(result._tag).toBe("Failure");
       const failure = await writeFailure(

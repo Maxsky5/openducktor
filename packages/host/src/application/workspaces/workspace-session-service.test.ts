@@ -56,7 +56,7 @@ import {
   type WorkspaceSessionServiceDependencies,
 } from "./workspace-session-service";
 
-const input = (): WorkspaceSessionCreateInput => ({
+const input = (): Extract<WorkspaceSessionCreateInput, { location: "local_repo_root" }> => ({
   workspaceId: "fairnest",
   runtimeKind: "opencode",
   selectedModel: {
@@ -72,7 +72,7 @@ const input = (): WorkspaceSessionCreateInput => ({
   targetBranch: { remote: "origin", branch: "main" },
 });
 
-const worktreeInput = (): WorkspaceSessionCreateInput => ({
+const worktreeInput = (): Extract<WorkspaceSessionCreateInput, { location: "local_worktree" }> => ({
   ...input(),
   location: "local_worktree",
   worktree: { mode: "from_name", name: "my-feature", branchName: null },
@@ -171,6 +171,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       markTitleSyncPending: (ref) => {
         pendingTitles.add(ref.externalSessionId);
       },
+      taskOwnership: database,
       store: {
         ...store,
         archive: (request) =>
@@ -226,7 +227,10 @@ describe("host-owned Workspace Session lifecycle", () => {
               isRemote: false,
             })),
           ),
-        shareGitCommonDirectory: () => Effect.succeed(true),
+        readCheckout: (directory) =>
+          Effect.succeed(
+            state.validGit ? { root: directory, commonDirectory: `${config.repoPath}/.git` } : null,
+          ),
         isRegisteredWorktree: (_repo, directory) => Effect.succeed(registered.has(directory)),
         createWorktree: (_repo, directory, branch, createBranch, startPoint) =>
           Effect.suspend(() => {
@@ -1906,7 +1910,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       h.state.observation = "running";
       await expect(
         Effect.runPromise(h.service.archive({ ...ref, confirmStop: true, removeWorktree: false })),
-      ).rejects.toThrow(/saved canonical Git directory|not a registered worktree/);
+      ).rejects.toThrow(/is not a Git checkout|not a registered worktree/);
       expect(h.calls).not.toContain("stop");
       expect(await Effect.runPromise(h.service.get(ref))).toEqual(started.session);
     },
@@ -2198,7 +2202,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     h.state.validGit = false;
     await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow(
-      "saved canonical Git directory",
+      "Workspace repository is not a Git work tree",
     );
     expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
   });
@@ -2504,6 +2508,7 @@ describe("host-owned Workspace Session lifecycle", () => {
       worktreeExists: true,
       hasUncommittedChanges: true,
       sharedWith: [],
+      taskOwners: [],
     });
     await expect(
       Effect.runPromise(

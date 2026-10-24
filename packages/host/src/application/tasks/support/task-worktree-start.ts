@@ -1,6 +1,7 @@
 import type { RepoConfig, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
+import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
 import {
@@ -27,40 +28,23 @@ export const validateExistingGitTaskWorktree = (
       dependencies.gitPort.canonicalizePath(worktreePath),
       dependencies.gitPort.canonicalizePath(canonicalRepoPath),
     ]);
-    if (canonicalWorktreePath === canonicalRepositoryPath) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Canonical worktree for task ${taskId} resolves to the repository root.`,
-          details: { repoPath: canonicalRepoPath, taskId, worktreePath },
-        }),
-      );
-    }
-    const sharesGitCommonDirectory = yield* dependencies.gitPort.shareGitCommonDirectory(
-      canonicalRepoPath,
-      worktreePath,
+    const checkout = yield* classifyWorkspaceCheckout(dependencies.gitPort, {
+      canonicalRepoPath: canonicalRepositoryPath,
+      canonicalDirectory: canonicalWorktreePath,
+    });
+    if (checkout === "local_worktree") return;
+    const message = {
+      local_repo_root: `Canonical worktree for task ${taskId} resolves to the repository root.`,
+      not_git_directory: `Canonical task worktree path exists but is not a Git worktree: ${worktreePath}`,
+      outside_workspace: `Existing canonical path is not a registered worktree for task ${taskId}: ${worktreePath}`,
+    }[checkout];
+    return yield* Effect.fail(
+      new HostValidationError({
+        field: "taskId",
+        message,
+        details: { repoPath: canonicalRepoPath, taskId, worktreePath },
+      }),
     );
-    if (!sharesGitCommonDirectory) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Existing worktree path does not belong to repository ${canonicalRepoPath}: ${worktreePath}`,
-          details: { repoPath: canonicalRepoPath, taskId, worktreePath },
-        }),
-      );
-    }
-
-    if (
-      !(yield* dependencies.gitPort.isRegisteredWorktree(canonicalRepoPath, canonicalWorktreePath))
-    ) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Existing canonical path is not a registered worktree for task ${taskId}: ${worktreePath}`,
-          details: { repoPath: canonicalRepoPath, taskId, worktreePath },
-        }),
-      );
-    }
   });
 
 export const prepareNewTaskWorktree = (

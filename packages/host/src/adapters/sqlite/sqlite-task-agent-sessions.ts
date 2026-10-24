@@ -1,11 +1,11 @@
 import { listRuntimeSessionOwners } from "./sqlite-runtime-session-owners";
 import { type AgentSessionRecord, type TaskAgentSessions } from "@openducktor/contracts";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { hasSameAgentSessionIdentity } from "../../domain/agent-session-identity";
 import { compactAgentSessionRecord } from "../../domain/agent-session-records";
 import { HostResourceError } from "../../effect/host-errors";
-import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { OpenTaskDirectories, TaskStorePort } from "../../ports/task-repository-ports";
 import { agentSessionsFromRow, encodeAgentSessionBatch } from "./sqlite-json-codecs";
 import { requireTaskRow } from "./sqlite-task-queries";
 import {
@@ -66,6 +66,32 @@ export const listAgentSessionsForTasks = (
       });
     }
     return results;
+  });
+
+/** Reads every open task with the working directories of its sessions in one query. */
+export const readOpenTasksForWorktreeOwnership = (
+  session: TaskStoreSession,
+): Effect.Effect<OpenTaskDirectories[], SqliteTaskStoreReadError> =>
+  Effect.gen(function* () {
+    const rows = yield* session.execute(
+      (database) =>
+        database
+          .select({ id: tasks.id, title: tasks.title, agentSessionsJson: tasks.agentSessionsJson })
+          .from(tasks)
+          .where(ne(tasks.status, "closed")),
+      "sqliteTaskRepository.openTasksForWorktreeOwnership",
+    );
+    return yield* Effect.forEach(rows, (row) =>
+      agentSessionsFromRow(row).pipe(
+        Effect.map((agentSessions) => ({
+          taskId: row.id,
+          title: row.title,
+          sessionDirectories: agentSessions
+            .map((agentSession) => agentSession.workingDirectory.trim())
+            .filter(Boolean),
+        })),
+      ),
+    );
   });
 
 /** Save a root's event time without changing the task's edit time. */

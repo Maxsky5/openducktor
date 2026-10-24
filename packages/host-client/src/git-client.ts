@@ -66,16 +66,21 @@ const gitGetBranches = async (invokeFn: InvokeFn, repoPath: string): Promise<Git
   );
 };
 
+type DirectoryReadArgs = {
+  repoPath: string;
+  workingDir: string | null;
+  readContext?: GitReadContext;
+};
+
 const gitGetCurrentBranch = async (
   invokeFn: InvokeFn,
   repoPath: string,
   workingDir?: string,
+  readContext?: GitReadContext,
 ): Promise<GitCurrentBranch> => {
-  return invokeFn(
-    "git_get_current_branch",
-    { repoPath, workingDir: workingDir ?? null },
-    gitCurrentBranchSchema,
-  );
+  const args: DirectoryReadArgs = { repoPath, workingDir: workingDir ?? null };
+  if (readContext) args.readContext = readContext;
+  return invokeFn("git_get_current_branch", args, gitCurrentBranchSchema);
 };
 
 const gitSwitchBranch = async (
@@ -250,11 +255,6 @@ type CommitAllArgs = {
   message: string;
   expectedBranch?: GitCurrentBranch;
 };
-type LocalChangesReadArgs = {
-  repoPath: string;
-  workingDir: string | null;
-  readContext?: GitReadContext;
-};
 
 const gitCommitAll = async (
   invokeFn: InvokeFn,
@@ -284,7 +284,7 @@ const gitGetLocalChanges = async (
   workingDir?: string,
   readContext?: GitReadContext,
 ): Promise<GitLocalChanges> => {
-  const args: LocalChangesReadArgs = { repoPath, workingDir: workingDir ?? null };
+  const args: DirectoryReadArgs = { repoPath, workingDir: workingDir ?? null };
   if (readContext) args.readContext = readContext;
   return invokeFn("git_get_local_changes", args, gitLocalChangesSchema);
 };
@@ -392,20 +392,24 @@ export class HostGitClient {
     return gitGetBranches(this.invokeFn, repoPath);
   }
 
-  async gitGetCurrentBranch(repoPath: string, workingDir?: string): Promise<GitCurrentBranch> {
-    return gitGetCurrentBranch(this.invokeFn, repoPath, workingDir);
+  /** A refresh ID lets the reads of one refresh share their directory checks. */
+  async gitGetCurrentBranch(
+    repoPath: string,
+    workingDir?: string,
+    readContext?: GitReadContext,
+  ): Promise<GitCurrentBranch> {
+    return gitGetCurrentBranch(this.invokeFn, repoPath, workingDir, readContext);
   }
 
   async gitGetComparisonTarget(
     repoPath: string,
     workingDir: string,
     target: GitTargetBranch,
+    readContext?: GitReadContext,
   ): Promise<GitComparisonTarget> {
-    return this.invokeFn(
-      "git_comparison_target_get",
-      { repoPath, workingDir, target },
-      gitComparisonTargetSchema,
-    );
+    const args: DirectoryReadArgs & { target: GitTargetBranch } = { repoPath, workingDir, target };
+    if (readContext) args.readContext = readContext;
+    return this.invokeFn("git_comparison_target_get", args, gitComparisonTargetSchema);
   }
 
   async gitSwitchBranch(

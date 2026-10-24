@@ -162,6 +162,7 @@ export const createGitLocalChangeMethods = (
         gitPort,
         input.repoPath,
         input.workingDir,
+        input.readContext,
       );
       return yield* readLocalChanges(gitPort, workingDirectory, input.readContext);
     });

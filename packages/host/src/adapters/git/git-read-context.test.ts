@@ -56,4 +56,50 @@ describe("Git logical read context", () => {
     await Effect.runPromise(git.getStatus("/repo", { refreshId: "next" }));
     expect(statusReads).toBe(3);
   });
+
+  test("shares checkout reads and the worktree list of one refresh", async () => {
+    const commands: string[] = [];
+    const directory = process.cwd();
+    const git = createGitCliAdapter({
+      runner: (dir, args) =>
+        Effect.sync(() => {
+          commands.push(`${args[0]} ${dir}`);
+          if (args[0] === "rev-parse")
+            return { ok: true, stdout: `true\n${directory}\n${directory}\n`, stderr: "" };
+          if (args[0] === "worktree")
+            return {
+              ok: true,
+              stdout: `worktree ${directory}\0branch refs/heads/main\0\0`,
+              stderr: "",
+            };
+          throw new Error(`Unexpected Git command: ${args.join(" ")}`);
+        }),
+    });
+    const refresh = { refreshId: "refresh" };
+    const checks = Effect.all(
+      [
+        git.readCheckout(directory, refresh),
+        git.readCheckout(directory, refresh),
+        git.isRegisteredWorktree("/repo", directory, refresh),
+        git.isRegisteredWorktree("/repo", "/elsewhere", refresh),
+      ],
+      { concurrency: "unbounded" },
+    );
+    expect(await Effect.runPromise(checks)).toEqual([
+      { root: directory, commonDirectory: directory },
+      { root: directory, commonDirectory: directory },
+      true,
+      false,
+    ]);
+    expect(commands).toEqual([`rev-parse ${directory}`, "worktree /repo"]);
+
+    await Effect.runPromise(git.readCheckout(directory, { refreshId: "next" }));
+    await Effect.runPromise(git.isRegisteredWorktree("/repo", directory));
+    expect(commands).toEqual([
+      `rev-parse ${directory}`,
+      "worktree /repo",
+      `rev-parse ${directory}`,
+      "worktree /repo",
+    ]);
+  });
 });

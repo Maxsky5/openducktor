@@ -342,6 +342,8 @@ export function Combobox({
             aria-describedby={triggerAriaDescribedBy}
             className={cn(
               "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal text-foreground hover:bg-accent focus-visible:ring-0 focus-visible:border-ring",
+              // A wrapped value needs its full height, or it covers the content around the field.
+              shouldWrapTriggerLabel && "h-auto min-h-9 py-2",
               triggerClassName,
             )}
           >

@@ -2,10 +2,11 @@ import {
   WORKSPACE_SESSION_MANUAL_TITLE_LIMIT,
   type WorkspaceSession,
   type WorkspaceSessionCreateInput,
+  type WorkspaceSessionLocation,
   type WorkspaceSessionWorktreeInput,
 } from "@openducktor/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Folder, GitBranch, LoaderCircle } from "lucide-react";
+import { Folder, FolderGit2, GitBranch, LoaderCircle } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 import { WorkspaceSessionModelFields } from "./workspace-session-model-fields";
 import {
@@ -35,6 +36,7 @@ import {
 import {
   customAgentRolesQueryOptions,
   updateWorkspaceSessionQueries,
+  workspaceSessionWorktreesQueryOptions,
 } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
 import {
@@ -48,6 +50,10 @@ import {
   useWorkspaceSessionLocationTarget,
   WorkspaceSessionTargetBranchField,
 } from "./workspace-session-target-branch-field";
+import {
+  useExistingWorktreeChoice,
+  WorkspaceSessionExistingWorktreeField,
+} from "./workspace-session-existing-worktree-field";
 import { WorkspaceSessionWorktreeFields } from "./workspace-session-worktree-fields";
 import { WorkspaceSessionWorkLocationField } from "./workspace-session-work-location-field";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -92,6 +98,7 @@ export function WorkspaceSessionCreateDialog({
   const { location, targetBranch, changeLocation, pickTarget } =
     useWorkspaceSessionLocationTarget(defaultTarget);
   const branches = useQuery({ ...repoBranchesQueryOptions(workspace.repoPath), enabled: open });
+  const existing = useExistingWorktreeChoice(workspace.workspaceId, open, location);
   const mounted = useMountedRef();
   const create = useMutation({
     mutationFn: (input: WorkspaceSessionCreateInput) => host.workspaceSessionCreate(input),
@@ -106,18 +113,24 @@ export function WorkspaceSessionCreateDialog({
         void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
       if (mounted.current) onCreated(result.session);
     },
-    onError: (error) => {
+    onError: (error, input) => {
       if (workspaceSessionValidationError(error))
         void invalidateRepoBranchesQuery(queryClient, workspace.repoPath);
+      // A new read shows a worktree that the failure removed as unavailable.
+      if (input.location === "existing_worktree")
+        void queryClient.invalidateQueries({
+          queryKey: workspaceSessionWorktreesQueryOptions(workspace.workspaceId).queryKey,
+        });
     },
   });
-  const worktreeError = workspaceSessionValidationError(create.error);
+  const worktreeError = newWorktreeError(location, create.error);
   const input = buildWorkspaceSessionCreateInput({
     workspaceId: workspace.workspaceId,
     name,
     roleId,
     location,
     worktree,
+    existingWorktree: existing.listedWorktree,
     targetBranch,
     selection: model.selection,
     selectedModelAvailable: Boolean(model.selectedModelEntry),
@@ -223,8 +236,24 @@ export function WorkspaceSessionCreateDialog({
                     description: "Use an isolated directory and branch.",
                     icon: GitBranch,
                   },
+                  {
+                    value: "existing_worktree",
+                    label: "Existing worktree",
+                    description: "Use a worktree that already exists.",
+                    icon: FolderGit2,
+                  },
                 ]}
               />
+              {location === "existing_worktree" && (
+                <WorkspaceSessionExistingWorktreeField
+                  choice={existing}
+                  disabled={create.isPending}
+                  onChange={(value) => {
+                    create.reset();
+                    existing.select(value);
+                  }}
+                />
+              )}
               <WorkspaceSessionTargetBranchField
                 value={targetBranch}
                 defaultTarget={defaultTarget}
@@ -269,4 +298,9 @@ export function WorkspaceSessionCreateDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Worktree name and branch errors belong to New worktree. Other locations show them below. */
+function newWorktreeError(location: WorkspaceSessionLocation, error: Error | null) {
+  return location === "local_worktree" ? workspaceSessionValidationError(error) : null;
 }

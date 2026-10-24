@@ -163,7 +163,12 @@ export const gitComparisonTargetQueryOptions = (
     queryKey: gitQueryKeys.comparisonTarget(repoPath, workingDir, target, branchKey),
     queryFn: ({ client, signal }): Promise<GitComparisonTarget> => {
       signal.throwIfAborted();
-      return connectionHost(client).gitGetComparisonTarget(repoPath, workingDir, target);
+      return connectionHost(client).gitGetComparisonTarget(
+        repoPath,
+        workingDir,
+        target,
+        workspaceReadContext(client, workingDir),
+      );
     },
     staleTime: 0,
   });
@@ -440,7 +445,12 @@ async function readCurrentBranch(
       : gitQueryKeys.worktreeBranch(repoPath, workingDir);
   const before = client.getQueryData<GitCurrentBranch>(key);
   const args: Parameters<GitCurrentBranchQueryHost["gitGetCurrentBranch"]> = [repoPath];
-  if (workingDir !== undefined) args.push(workingDir);
+  if (workingDir !== undefined) {
+    args.push(workingDir);
+    // A refresh shares the directory checks of its Git reads on the host.
+    const readContext = workspaceReadContext(client, workingDir);
+    if (readContext) args.push(readContext);
+  }
   const branch = await hostClient.gitGetCurrentBranch(...args);
   if (
     before &&

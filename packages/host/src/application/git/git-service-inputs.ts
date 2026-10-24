@@ -11,6 +11,7 @@ import { HostDependencyError, HostValidationError } from "../../effect/host-erro
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
+import { readWorkspaceCheckout } from "./workspace-checkout";
 export type CreateGitServiceInput = {
   gitPort: GitPort;
   settingsConfig?: SettingsConfigPort;
@@ -79,10 +80,15 @@ export const validateWorktreePathSegments = (
   }
   return Effect.void;
 };
+/**
+ * Resolves the directory of a Git request. The directory can be inside the repository checkout or
+ * inside a registered worktree of the repository.
+ */
 export const resolveGitWorkingDirectory = (
   gitPort: GitPort,
   repoPath: string,
   workingDir: string | undefined,
+  readContext?: GitReadContext,
 ) =>
   Effect.gen(function* () {
     const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath).pipe(
@@ -95,48 +101,46 @@ export const resolveGitWorkingDirectory = (
           }),
       ),
     );
-    if (!(yield* gitPort.isGitRepository(canonicalRepoPath))) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `Not a git repository: ${canonicalRepoPath}`,
-          field: "repoPath",
-        }),
-      );
-    }
-    if (!workingDir || workingDir === repoPath) {
-      return canonicalRepoPath;
-    }
-    const canonicalWorkingDir = yield* gitPort.canonicalizePath(workingDir).pipe(
-      Effect.mapError(
-        (error) =>
-          new HostValidationError({
-            message: `working_dir does not exist or is not accessible: ${workingDir}`,
-            field: "workingDir",
-            cause: error,
-          }),
-      ),
+    const canonicalWorkingDir =
+      !workingDir || workingDir === repoPath
+        ? canonicalRepoPath
+        : yield* gitPort.canonicalizePath(workingDir).pipe(
+            Effect.mapError(
+              (error) =>
+                new HostValidationError({
+                  message: `working_dir does not exist or is not accessible: ${workingDir}`,
+                  field: "workingDir",
+                  cause: error,
+                }),
+            ),
+          );
+    const checkout = yield* readWorkspaceCheckout(
+      gitPort,
+      { canonicalRepoPath, canonicalDirectory: canonicalWorkingDir },
+      readContext,
     );
-    if (canonicalWorkingDir === canonicalRepoPath) {
-      return canonicalWorkingDir;
-    }
-    if (!(yield* gitPort.isGitRepository(canonicalWorkingDir))) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `Not a git repository: ${canonicalWorkingDir}`,
-          field: "workingDir",
-        }),
-      );
-    }
-    if (!(yield* gitPort.shareGitCommonDirectory(canonicalRepoPath, canonicalWorkingDir))) {
-      return yield* Effect.fail(
-        new HostValidationError({
+    switch (checkout.kind) {
+      case "repository_checkout":
+      case "worktree":
+        return canonicalWorkingDir;
+      case "repository_missing":
+        return yield* notGitRepository(canonicalRepoPath, "repoPath");
+      case "not_git_directory":
+        return yield* notGitRepository(canonicalWorkingDir, "workingDir");
+      case "other_repository":
+        return yield* new HostValidationError({
           message: `working_dir is not within authorized repository or linked worktrees: ${workingDir}`,
           field: "workingDir",
-        }),
-      );
+        });
+      case "unlisted_worktree":
+        return yield* new HostValidationError({
+          message: `working_dir is in a checkout that Git no longer lists as a worktree of the repository: ${workingDir}. If you moved this worktree, run git worktree repair in it and retry.`,
+          field: "workingDir",
+        });
     }
-    return canonicalWorkingDir;
   });
+const notGitRepository = (directory: string, field: "repoPath" | "workingDir") =>
+  Effect.fail(new HostValidationError({ message: `Not a git repository: ${directory}`, field }));
 const requireGlobalConfig = (
   payload: GlobalConfig | null,
 ): Effect.Effect<GlobalConfig, HostValidationError> => {

@@ -10,6 +10,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TaskWorktreeService } from "../tasks/worktrees/task-worktree-service";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
+import { classifyWorkspaceCheckout } from "../git/workspace-checkout";
 import { validateWorkspaceSessionTarget } from "../workspaces/workspace-session-target";
 import { isTaskTerminalContext, isWorkspaceSessionTerminalContext } from "./terminal-context";
 import { TerminalServiceError } from "./terminal-service-error";
@@ -89,11 +90,12 @@ export const createTerminalTargetResolver = ({
             }),
         ),
       );
-      const registered = yield* Effect.gen(function* () {
-        if (!(yield* git.isGitRepository(savedWorkingDir))) return false;
-        if (!(yield* git.shareGitCommonDirectory(repoPath, savedWorkingDir))) return false;
-        return yield* git.isRegisteredWorktree(repoPath, savedWorkingDir);
+      const registered = yield* classifyWorkspaceCheckout(git, {
+        canonicalRepoPath: repoPath,
+        canonicalDirectory: savedWorkingDir,
       }).pipe(
+        // Git lists the repository checkout as a worktree too.
+        Effect.map((checkout) => checkout === "local_worktree" || checkout === "local_repo_root"),
         Effect.mapError(
           (cause) =>
             new TerminalServiceError({

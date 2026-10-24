@@ -93,7 +93,8 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       git: createGitPortTestDouble({
         canonicalizePath: (value) => Effect.succeed(value),
         isGitRepository: () => Effect.succeed(true),
-        shareGitCommonDirectory: () => Effect.succeed(true),
+        readCheckout: (path: string) =>
+          Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
         isRegisteredWorktree: () => Effect.succeed(true),
       }),
       publishUpdated: () => Effect.void,

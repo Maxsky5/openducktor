@@ -17,6 +17,7 @@ import {
   closeOwnerBrowserTabs,
 } from "../../browser/browser-owner-cleanup";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
+import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
@@ -99,36 +100,20 @@ export const validateExistingTaskWorktreeCandidate = (
   Effect.gen(function* () {
     const canonicalRepoPath = yield* gitPort.canonicalizePath(repoPath);
     const canonicalWorktreePath = yield* gitPort.canonicalizePath(worktreePath);
-    if (
-      normalizePathForComparison(canonicalWorktreePath) ===
-      normalizePathForComparison(canonicalRepoPath)
-    ) {
+    const checkout = yield* classifyWorkspaceCheckout(gitPort, {
+      canonicalRepoPath,
+      canonicalDirectory: canonicalWorktreePath,
+    });
+    if (checkout !== "local_worktree") {
+      const reason = {
+        local_repo_root: `worktree ${worktreePath} resolves to the repository root`,
+        not_git_directory: `${worktreePath} is not a Git worktree owned by the repository`,
+        outside_workspace: `${worktreePath} is not a registered worktree of ${canonicalRepoPath}`,
+      }[checkout];
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Cannot ${operationLabel} task ${taskId} because worktree ${worktreePath} resolves to the repository root.`,
-          details: { repoPath: canonicalRepoPath, taskId, worktreePath: canonicalWorktreePath },
-        }),
-      );
-    }
-    if (!(yield* gitPort.isGitRepository(canonicalWorktreePath))) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Cannot ${operationLabel} task ${taskId} because ${worktreePath} is not a Git worktree owned by the repository.`,
-          details: { repoPath: canonicalRepoPath, taskId, worktreePath: canonicalWorktreePath },
-        }),
-      );
-    }
-    const [sharesCommonDirectory, registered] = yield* Effect.all([
-      gitPort.shareGitCommonDirectory(canonicalRepoPath, canonicalWorktreePath),
-      gitPort.isRegisteredWorktree(canonicalRepoPath, canonicalWorktreePath),
-    ]);
-    if (!sharesCommonDirectory || !registered) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Cannot ${operationLabel} task ${taskId} because ${worktreePath} is not a registered worktree of ${canonicalRepoPath}.`,
+          message: `Cannot ${operationLabel} task ${taskId} because ${reason}.`,
           details: { repoPath: canonicalRepoPath, taskId, worktreePath: canonicalWorktreePath },
         }),
       );

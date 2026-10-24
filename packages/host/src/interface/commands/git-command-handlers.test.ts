@@ -526,6 +526,34 @@ describe("createGitCommandHandlers", () => {
       },
     ]);
   });
+  test("passes the refresh ID of a branch read and rejects a malformed one", async () => {
+    const { calls, service } = createRecordingGitService();
+    const router = createHostCommandRouter({
+      handlers: createGitCommandHandlers(service),
+    });
+    await router.invoke("git_get_current_branch", {
+      repoPath: "/repo",
+      workingDir: "/worktree",
+      readContext: { refreshId: "refresh" },
+    });
+    expect(calls).toEqual([
+      {
+        method: "getCurrentBranch",
+        input: {
+          repoPath: "/repo",
+          workingDir: "/worktree",
+          readContext: { refreshId: "refresh" },
+        },
+      },
+    ]);
+    await expect(
+      router.invoke("git_get_current_branch", {
+        repoPath: "/repo",
+        readContext: { refreshId: "" },
+      }),
+    ).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+  });
   test("rejects malformed git command inputs before calling the service", async () => {
     const { calls, service } = createRecordingGitService();
     const router = createHostCommandRouter({
