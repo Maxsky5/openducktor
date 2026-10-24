@@ -63,6 +63,7 @@ import { useActiveWorkspace } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
 import { createRuntimeDefinitionsContextValue } from "@/pages/agents/agent-studio-test-utils";
+import * as terminalMount from "@/features/terminals/terminal-viewport-mount";
 
 // Every test here renders the full workspace session page, which can exceed 1000 ms on a loaded
 // CI runner. Each test sets a 5_000 ms budget for that render.
@@ -856,6 +857,11 @@ test.each(["cached", "pending", "cached empty", "pending empty"] as const)(
 );
 
 test("chat terminal viewports drop the least recent chat with its pane", async () => {
+  // Each xterm adds 790 style rules, and happy-dom checks all of them on each style read.
+  const mount = spyOn(terminalMount, "mountTerminalViewport").mockImplementation((input) => {
+    input.onHydrated();
+    return { activate: () => undefined, dispose: () => undefined };
+  });
   const hostClient = createChatTerminalClient();
   chatStub.mockImplementation(({ workspace, record }) => (
     <input data-chat-draft data-testid={`${workspace.workspaceId}:${record.id} draft`} />
@@ -905,6 +911,7 @@ test("chat terminal viewports drop the least recent chat with its pane", async (
     expect(view.container.querySelectorAll("[data-chat-draft]")).toHaveLength(6);
   } finally {
     view.unmount();
+    mount.mockRestore();
   }
 }, 5_000);
 
