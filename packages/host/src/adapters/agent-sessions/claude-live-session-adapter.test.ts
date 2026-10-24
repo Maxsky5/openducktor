@@ -20,11 +20,14 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
 import { consumeClaudeSession, sendClaudeUserMessage } from "../claude/claude-agent-sdk-session-io";
 import {
+  claudeQueryWithMessages,
   createNonAdmittingClaudeSession,
   ignoreClaudeBackgroundFailure,
   throwingClaudeQuery,
 } from "../claude/claude-agent-sdk-session-io.test-support";
+import { claudeSdkMessageFixture } from "../claude/claude-agent-sdk-test-messages";
 import { createClaudeAgentSdkSessionStore } from "../claude/claude-agent-sdk-session-store";
+import { beginClaudeSessionClose } from "../claude/claude-agent-sdk-session-lifecycle";
 import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import {
   createClaudeAgentSdkEventHub,
@@ -460,18 +463,48 @@ describe("Claude host live-session adapter", () => {
     expect(store.get(current.externalSessionId)).toBeUndefined();
   });
 
-  test.each(["latest closed", "after Stop", "replacement live", "replacement closed"] as const)(
-    "delivers queued errors only for the latest execution: %s",
-    async (scenario) => {
-      const store = createClaudeAgentSdkSessionStore();
+  test.each(["success", "failure"] as const)(
+    "delivers accepted turn output after natural stream closure: %s",
+    async (outcome) => {
+      const result =
+        outcome === "success"
+          ? claudeSdkMessageFixture({
+              type: "result",
+              uuid: "b2df82cf-31ea-4a64-a43f-7bf755178e2d",
+              subtype: "success",
+              result: "The reply is complete.",
+              stop_reason: "end_turn",
+            })
+          : claudeSdkMessageFixture({
+              type: "result",
+              uuid: "b2df82cf-31ea-4a64-a43f-7bf755178e2d",
+              subtype: "error_max_turns",
+              errors: ["The native turn failed."],
+            });
       const current = createNonAdmittingClaudeSession({
         input: { ...session.input },
         runtimeId: runtime.runtimeId,
         summary: { ...summary },
+        query: claudeQueryWithMessages([
+          claudeSdkMessageFixture({
+            type: "assistant",
+            uuid: "2c303b60-a614-4daa-b04d-1b6268985313",
+            message: {
+              id: "native-reply",
+              role: "assistant",
+              model: "claude-haiku-5-5",
+              stop_reason: null,
+              content: [{ type: "text", text: "The reply is complete." }],
+            },
+          }),
+          result,
+        ]),
       });
+      const store = createClaudeAgentSdkSessionStore();
       store.set(current);
       const harness = await createHarness(workingDirectoryDependencies, store);
       harness.setStartSession(() => Effect.succeed(current.summary));
+      harness.setLoadSessionContextUsage(() => Effect.succeed(null));
       await Effect.runPromise(harness.adapter.startSession(startInput));
       harness.changes.splice(0);
       const entered = deferred<void>();
@@ -491,37 +524,124 @@ describe("Claude host live-session adapter", () => {
       );
       await entered.promise;
       try {
-        if (scenario === "after Stop") await Effect.runPromise(store.stopSession(sessionRef));
-        harness.eventHub.emit(current, {
-          type: "session_error",
-          externalSessionId: current.externalSessionId,
-          timestamp: "2026-10-23T00:00:00.000Z",
-          message: "Failure from the old execution",
+        await consumeClaudeSession({
+          emit: harness.eventHub.emit,
+          now: () => "2026-10-24T16:00:00.000Z",
+          onBackgroundFailure: ignoreClaudeBackgroundFailure,
+          session: current,
+          sessionStore: store,
         });
-        if (scenario !== "after Stop") store.close(current);
-        if (scenario === "replacement live" || scenario === "replacement closed") {
-          const replacement = createNonAdmittingClaudeSession({
-            input: { ...session.input },
-            runtimeId: runtime.runtimeId,
-            summary: { ...summary },
-          });
-          store.set(replacement);
-          if (scenario === "replacement closed") store.close(replacement);
-        }
       } finally {
         release.resolve();
       }
       await updating;
-      const errorMessages = harness.changes.flatMap((change) =>
-        change.type === "transcript_event" && change.event.type === "session_error"
-          ? [change.event.message]
+      const terminalEvents = harness.changes.flatMap((change) =>
+        change.type === "transcript_event" &&
+        ["assistant_message", "turn_error", "session_turn_finished", "session_finished"].includes(
+          change.event.type,
+        )
+          ? [change.event]
           : [],
       );
-      expect(errorMessages).toEqual(
-        scenario === "latest closed" ? ["Failure from the old execution"] : [],
+      expect(terminalEvents).toMatchObject(
+        outcome === "success"
+          ? [
+              { type: "assistant_message", message: "The reply is complete." },
+              { type: "session_turn_finished", turnOutcome: "completed" },
+              { type: "session_finished" },
+            ]
+          : [
+              { type: "turn_error", message: "The native turn failed." },
+              { type: "session_turn_finished", turnOutcome: "failed" },
+              { type: "session_finished" },
+            ],
       );
+      expect(store.get(current.externalSessionId)).toBeUndefined();
     },
   );
+
+  test.each([
+    "latest closed",
+    "unconfirmed closing",
+    "after Stop",
+    "replacement live",
+    "replacement closed",
+  ] as const)("keeps queued events within their execution: %s", async (scenario) => {
+    const store = createClaudeAgentSdkSessionStore();
+    const current = createNonAdmittingClaudeSession({
+      input: { ...session.input },
+      runtimeId: runtime.runtimeId,
+      summary: { ...summary },
+    });
+    store.set(current);
+    const harness = await createHarness(workingDirectoryDependencies, store);
+    harness.setStartSession(() => Effect.succeed(current.summary));
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    harness.changes.splice(0);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    harness.setUpdateSessionModel(() =>
+      Effect.promise(async () => {
+        entered.resolve();
+        await release.promise;
+      }),
+    );
+    const updating = Effect.runPromise(
+      harness.adapter.updateSessionModel({
+        ...sessionRef,
+        sessionScope: current.input.sessionScope,
+        model: null,
+      }),
+    );
+    await entered.promise;
+    try {
+      if (scenario === "after Stop") await Effect.runPromise(store.stopSession(sessionRef));
+      harness.eventHub.emit(current, {
+        type: "session_error",
+        externalSessionId: current.externalSessionId,
+        timestamp: "2026-10-23T00:00:00.000Z",
+        message: "Failure from the old execution",
+      });
+      harness.eventHub.emit(current, {
+        type: "assistant_message",
+        externalSessionId: current.externalSessionId,
+        timestamp: "2026-10-23T00:00:00.000Z",
+        messageId: "queued-reply",
+        message: "The accepted reply",
+      });
+      if (scenario === "unconfirmed closing") beginClaudeSessionClose(current);
+      else if (scenario !== "after Stop") store.close(current);
+      if (scenario === "replacement live" || scenario === "replacement closed") {
+        const replacement = createNonAdmittingClaudeSession({
+          input: { ...session.input },
+          runtimeId: runtime.runtimeId,
+          summary: { ...summary },
+        });
+        store.set(replacement);
+        if (scenario === "replacement closed") store.close(replacement);
+      }
+    } finally {
+      release.resolve();
+    }
+    await updating;
+    const errorMessages = harness.changes.flatMap((change) =>
+      change.type === "transcript_event" && change.event.type === "session_error"
+        ? [change.event.message]
+        : [],
+    );
+    expect(errorMessages).toEqual(
+      scenario === "latest closed" || scenario === "unconfirmed closing"
+        ? ["Failure from the old execution"]
+        : [],
+    );
+    expect(
+      harness.changes.flatMap((change) =>
+        change.type === "transcript_event" && change.event.type === "assistant_message"
+          ? [change.event.messageId]
+          : [],
+      ),
+    ).toEqual(scenario === "latest closed" ? ["queued-reply"] : []);
+  });
 
   test.each(["Stop", "runtime release"] as const)(
     "delivers an accepted error before finish during %s",

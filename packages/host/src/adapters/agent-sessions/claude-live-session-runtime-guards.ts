@@ -30,10 +30,10 @@ export const createEventGuard =
   ): boolean => {
     const current = store.get(session.externalSessionId);
     if (current && current !== session) return false;
-    // Closing can finish before a queued error reaches the adapter.
+    // A query can close while its accepted events wait for delivery.
     if (
       event.type === "session_finished" ||
-      (phase === "deliver" && event.type === "session_error")
+      (phase === "deliver" && (event.type === "session_error" || isClaudeSessionClosed(session)))
     )
       return store.isLatest(session) && (current === session || isClaudeSessionClosed(session));
     if (event.statusUnavailable) return current === session;
