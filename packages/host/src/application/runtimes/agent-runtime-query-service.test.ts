@@ -119,7 +119,8 @@ const harness = async (
     gitPort: {
       canonicalizePath: (path) => Effect.succeed(path === "/alias" ? repoPath : path),
       isGitRepository: (path) => Effect.succeed(path === repoPath),
-      shareGitCommonDirectory: () => Effect.succeed(false),
+      readCheckout: (path) =>
+        Effect.succeed(path === repoPath ? { root: path, commonDirectory: `${path}/.git` } : null),
       isRegisteredWorktree: () => Effect.succeed(false),
     },
     settingsConfig: createSettingsConfigTestDouble({

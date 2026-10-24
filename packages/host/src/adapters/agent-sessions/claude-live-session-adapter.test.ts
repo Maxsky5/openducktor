@@ -33,7 +33,10 @@ const runtime = {
 };
 
 const workingDirectoryDependencies = {
-  gitPort: createGitPortTestDouble({ isGitRepository: () => Effect.succeed(false) }),
+  gitPort: createGitPortTestDouble({
+    isGitRepository: () => Effect.succeed(false),
+    readCheckout: () => Effect.succeed(null),
+  }),
   settingsConfig: {
     canonicalizePath: (path: string) => Effect.succeed(path),
     defaultRepoWorktreeBasePath: () => "/legacy-worktrees/repo",

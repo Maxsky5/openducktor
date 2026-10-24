@@ -97,7 +97,8 @@ const historyHarness = async (
     gitPort: {
       canonicalizePath: settingsConfig.canonicalizePath,
       isGitRepository: () => Effect.succeed(true),
-      shareGitCommonDirectory: () => Effect.succeed(false),
+      readCheckout: (path: string) =>
+        Effect.succeed({ root: path, commonDirectory: `${path}/.git` }),
       isRegisteredWorktree: () => Effect.succeed(false),
     },
     settingsConfig,

@@ -238,7 +238,7 @@ export const workspaceTerminalDependencies = (records: Map<string, WorkspaceSess
   git: createGitPortTestDouble({
     canonicalizePath: (path) => Effect.succeed(path),
     isGitRepository: () => Effect.succeed(true),
-    shareGitCommonDirectory: () => Effect.succeed(true),
+    readCheckout: (path: string) => Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
     isRegisteredWorktree: () => Effect.succeed(true),
   }),
 });

@@ -754,7 +754,8 @@ describe("Workspace Session persistence through the shared command module", () =
       git: createGitPortTestDouble({
         canonicalizePath: (value) => Effect.succeed(value),
         isGitRepository: () => Effect.succeed(true),
-        shareGitCommonDirectory: () => Effect.succeed(true),
+        readCheckout: (path: string) =>
+          Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
         isRegisteredWorktree: () => Effect.succeed(h.state.registered),
         getCurrentBranch: (directory) =>
           Effect.succeed({

@@ -9,7 +9,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
   classifyWorkspaceCheckout,
   type WorkspaceCheckoutGitPort,
-} from "../workspaces/workspace-checkout";
+} from "../git/workspace-checkout";
 import type { WorkspaceSettingsService } from "../workspaces/workspace-settings-model";
 
 export type RuntimeWorkingDirectoryDependencies = {

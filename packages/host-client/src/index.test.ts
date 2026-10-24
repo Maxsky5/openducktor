@@ -1608,6 +1608,33 @@ describe("HostClient", () => {
     ]);
   });
 
+  test("sends the refresh ID of branch and comparison reads", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "git_get_current_branch") return { name: "main", detached: false };
+      if (command === "git_comparison_target_get")
+        return { kind: "available", reference: "refs/heads/main" };
+      throw new Error(`Unexpected command: ${command}`);
+    });
+    const readContext = { refreshId: "refresh" };
+    await client.gitGetCurrentBranch("/repo", "/worktree", readContext);
+    await client.gitGetComparisonTarget("/repo", "/worktree", { branch: "main" }, readContext);
+    expect(calls).toEqual([
+      {
+        command: "git_get_current_branch",
+        args: { repoPath: "/repo", workingDir: "/worktree", readContext },
+      },
+      {
+        command: "git_comparison_target_get",
+        args: {
+          repoPath: "/repo",
+          workingDir: "/worktree",
+          target: { branch: "main" },
+          readContext,
+        },
+      },
+    ]);
+  });
+
   test("git commands use expected IPC routes and payloads", async () => {
     const { client, calls } = createClient((command) => {
       if (command === "git_get_branches") {

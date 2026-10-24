@@ -25,7 +25,7 @@ const createGitPort = (
   requestedPaths?: Array<string | undefined>,
 ): Parameters<typeof createWorkspaceTextFileService>[1] =>
   ({
-    isGitRepository: () => Effect.succeed(true),
+    readCheckout: (root) => Effect.succeed({ root, commonDirectory: `${root}/.git` }),
     getCurrentBranch: () => Effect.succeed({ name: "main", detached: false }),
     listFiles: (_rootPath, relativePath, options?: { caseInsensitive?: boolean }) => {
       requestedPaths?.push(relativePath);
@@ -103,7 +103,7 @@ describe("createWorkspaceTextFileService", () => {
     const filePath = path.join(rootPath, "report.md");
     await writeFile(filePath, "# Before\n");
     const service = createWorkspaceTextFileService(createFilesystemAdapter(), {
-      isGitRepository: () => Effect.die("Local access must not read Git"),
+      readCheckout: () => Effect.die("Local access must not read Git"),
       listFiles: () => Effect.die("Local access must not list Git files"),
       getCurrentBranch: () => Effect.die("Local access must not check a branch"),
     });

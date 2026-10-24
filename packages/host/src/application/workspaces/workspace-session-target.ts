@@ -13,7 +13,10 @@ import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
-import { classifyWorkspaceCheckout, type WorkspaceCheckoutGitPort } from "./workspace-checkout";
+import {
+  classifyWorkspaceCheckout,
+  type WorkspaceCheckoutGitPort,
+} from "../git/workspace-checkout";
 import {
   runWorkspaceSessionWorktreeActions,
   stopWorktreeActionTerminals,

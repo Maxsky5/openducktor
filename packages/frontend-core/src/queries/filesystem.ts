@@ -244,6 +244,8 @@ const fileReadOptions = (rootPath: string, relativePath: string, access?: "local
   }): Promise<WorkspaceTextFileReadResult> => {
     const input: WorkspaceTextFileReadInput = { rootPath, relativePath };
     if (access) input.access = access;
+    const readContext = workspaceReadContext(client, rootPath);
+    if (readContext) input.readContext = readContext;
     const result = await connectionHost(client).filesystemReadTextFile(input);
     signal.throwIfAborted();
     return result;

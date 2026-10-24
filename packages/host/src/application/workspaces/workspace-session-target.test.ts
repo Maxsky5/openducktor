@@ -7,7 +7,7 @@ import { validateWorkspaceSessionTarget } from "./workspace-session-target";
 test("rejects a saved worktree target that resolves to the repository root", async () => {
   const git = createGitPortTestDouble({
     canonicalizePath: (path) => Effect.succeed(path),
-    isGitRepository: () => Effect.succeed(true),
+    readCheckout: (path) => Effect.succeed({ root: path, commonDirectory: "/repo/.git" }),
   });
 
   const error = await Effect.runPromise(

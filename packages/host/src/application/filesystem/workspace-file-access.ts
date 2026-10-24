@@ -1,3 +1,4 @@
+import type { GitReadContext } from "@openducktor/contracts";
 import { Data, Effect } from "effect";
 import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import type { FilesystemPort } from "../../ports/filesystem-port";
@@ -53,15 +54,21 @@ export const canonicalizeWorkspaceRoot = (filesystem: FilesystemPort, rootPath: 
     return canonicalRoot;
   });
 
+/** One file list request. A read context shares the checkout read with the rest of a refresh. */
+type FileListRead = {
+  relativePath?: string | undefined;
+  options?: GitFileListOptions;
+  readContext?: GitReadContext | undefined;
+};
+
 export const loadWorkspaceFileEntries = (
-  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  gitPort: Pick<GitPort, "readCheckout" | "listFiles">,
   canonicalRoot: string,
-  relativePath?: string,
-  options?: GitFileListOptions,
+  { relativePath, options, readContext }: FileListRead = {},
 ) =>
   Effect.gen(function* () {
-    const isGitRepository = yield* gitPort
-      .isGitRepository(canonicalRoot)
+    const checkout = yield* gitPort
+      .readCheckout(canonicalRoot, readContext)
       .pipe(
         Effect.mapError((cause) =>
           workspaceFileValidationError(
@@ -71,7 +78,7 @@ export const loadWorkspaceFileEntries = (
           ),
         ),
       );
-    if (!isGitRepository) {
+    if (!checkout) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "rootPath",
@@ -91,12 +98,11 @@ export const loadWorkspaceFileEntries = (
   });
 
 export const loadWorkspaceFilePaths = (
-  gitPort: Pick<GitPort, "isGitRepository" | "listFiles">,
+  gitPort: Pick<GitPort, "readCheckout" | "listFiles">,
   canonicalRoot: string,
-  relativePath?: string,
-  options?: GitFileListOptions,
+  read: FileListRead = {},
 ) =>
-  loadWorkspaceFileEntries(gitPort, canonicalRoot, relativePath, options).pipe(
+  loadWorkspaceFileEntries(gitPort, canonicalRoot, read).pipe(
     Effect.map((entries) => entries.map((entry) => entry.path)),
   );
 

@@ -173,7 +173,7 @@ const createGitPort = (input: {
   createGitPortTestDouble({
     canonicalizePath: (path: string) => Effect.succeed(path),
     isGitRepository: () => Effect.succeed(true),
-    shareGitCommonDirectory: () => Effect.succeed(true),
+    readCheckout: (path: string) => Effect.succeed({ root: path, commonDirectory: "/shared/.git" }),
     isRegisteredWorktree: () => Effect.succeed(input.registered ?? true),
     listBranches: () => Effect.succeed(input.branches ?? []),
     removeWorktree: (_repoPath: string, worktreePath: string) => {
