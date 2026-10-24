@@ -22,6 +22,7 @@
     "@openducktor/core": "workspace:*",
     "@openducktor/frontend-core": "workspace:*",
     "@openducktor/host-client": "workspace:*",
+    "@openducktor/workflows": "workspace:*",
     "@react-native/normalize-colors": "0.88.0",
     "@shopify/flash-list": "2.3.3",
     "@tanstack/react-query": "^5.104.4",

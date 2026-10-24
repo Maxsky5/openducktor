@@ -419,6 +419,25 @@
           }
         ]
       }
+    },
+    {
+      "files": ["packages/workflows/src/**/*.ts"],
+      "rules": {
+        "architecture/allowed-imports": [
+          "error",
+          {
+            "root": "packages/workflows",
+            "packages": ["@openducktor/contracts", "zod"],
+            "message": "Workflow rules import only contracts and portable schema helpers. Keep platform calls in the host."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/workflows/src/**/*.test.ts"],
+      "rules": {
+        "architecture/allowed-imports": "off"
+      }
     }
   ],
   "options": {

@@ -92,6 +92,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
+        "@openducktor/workflows": "workspace:*",
         "@react-native/normalize-colors": "0.88.0",
         "@shopify/flash-list": "2.3.3",
         "@tanstack/react-query": "^5.104.4",
@@ -453,6 +454,14 @@
       },
       "devDependencies": {
         "bun-types": "^1.4.2",
+      },
+    },
+    "packages/workflows": {
+      "name": "@openducktor/workflows",
+      "version": "1.0.0",
+      "dependencies": {
+        "@openducktor/contracts": "workspace:*",
+        "zod": "^4.6.7",
       },
     },
     "tools/oxlint/anti-slop": {
@@ -1172,6 +1181,8 @@
     "@openducktor/runtime-orchestration": ["@openducktor/runtime-orchestration@workspace:packages/runtime-orchestration"],
 
     "@openducktor/web": ["@openducktor/web@workspace:packages/openducktor-web"],
+
+    "@openducktor/workflows": ["@openducktor/workflows@workspace:packages/workflows"],
 
     "@oslojs/encoding": ["@oslojs/encoding@1.1.0", "", {}, "sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ=="],
 
