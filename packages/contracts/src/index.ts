@@ -7,6 +7,19 @@ export * from "./agent-session-control-schemas";
 export * from "./agent-session-event-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./workflow-operation-schemas";
+export {
+  workflowValueSchema,
+  workflowFactDefinitionSchema,
+  workflowConditionSchema,
+} from "./workflow-condition-schemas";
+export type {
+  WorkflowValue,
+  WorkflowFactDefinition,
+  WorkflowCondition,
+} from "./workflow-condition-schemas";
+export * from "./workflow-definition-schemas";
+export type * from "./workflow-evaluation";
+export type * from "./workflow-presentation";
 export * from "./agent-session-schemas";
 export * from "./agent-workflow-schemas";
 export * from "./app-update-schemas";
