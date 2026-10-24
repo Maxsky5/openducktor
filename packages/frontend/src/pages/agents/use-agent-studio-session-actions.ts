@@ -218,16 +218,15 @@ export function useAgentStudioSessionActions({
   });
 
   const isSessionWorking = sessionState.isSessionWorking;
-  const isSessionInteractionBusy = isSessionWorking || messageDelivery.isSending;
 
   const handlePrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): void => {
-      if (selectedSessionIdentity !== null && isSessionInteractionBusy) {
+      if (selectedSessionIdentity !== null && messageDelivery.isSending) {
         return;
       }
       handleQuickAction({ ...option, postStartAction: "none", initialStartMode: "fresh" });
     },
-    [handleQuickAction, isSessionInteractionBusy, selectedSessionIdentity],
+    [handleQuickAction, messageDelivery.isSending, selectedSessionIdentity],
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
