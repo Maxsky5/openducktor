@@ -239,6 +239,8 @@ Files: `packages/host/src/application/agent-sessions/session-turn-preparation.ts
 
 Opening a chat prepares its selected session before enabling Send. Preparation creates or reattaches the session. Send uses current context and accepted settings without creating or reattaching a session.
 
+The Prepare session quick actions use the session start dialog and default to a fresh session. They create and select the session without sending a kickoff. The chat then prepares that selected session before enabling Send.
+
 ## Pending input
 
 Files: `session-read-model/agent-session-live-projection.ts`, `handlers/pending-input-actions.ts`, and `packages/host/src/application/agent-sessions/host-approval-policy.ts`.

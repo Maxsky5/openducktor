@@ -220,14 +220,14 @@ export function useAgentStudioSessionActions({
   const isSessionWorking = sessionState.isSessionWorking;
   const isSessionInteractionBusy = isSessionWorking || messageDelivery.isSending;
 
-  const canPrepareMessageFirstSession = useCallback(
-    (option: SessionCreateOption): boolean => {
-      if (option.disabled || (selectedSessionIdentity !== null && isSessionInteractionBusy)) {
-        return false;
+  const handlePrepareMessageFirstSession = useCallback(
+    (option: SessionCreateOption): void => {
+      if (selectedSessionIdentity !== null && isSessionInteractionBusy) {
+        return;
       }
-      return canStartRole(option.role);
+      handleQuickAction({ ...option, postStartAction: "none", initialStartMode: "fresh" });
     },
-    [canStartRole, isSessionInteractionBusy, selectedSessionIdentity],
+    [handleQuickAction, isSessionInteractionBusy, selectedSessionIdentity],
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
@@ -249,16 +249,13 @@ export function useAgentStudioSessionActions({
       replyAgentApproval,
     });
 
-  const {
-    handleWorkflowStepSelect,
-    handleSessionSelectionChange,
-    handlePrepareMessageFirstSession,
-  } = useAgentStudioSelectionActions({
-    taskId,
-    sessionsForTask,
-    canPrepareMessageFirstSession,
-    selectAgentStudioSelection,
-  });
+  const { handleWorkflowStepSelect, handleSessionSelectionChange } = useAgentStudioSelectionActions(
+    {
+      taskId,
+      sessionsForTask,
+      selectAgentStudioSelection,
+    },
+  );
 
   const canUseKickoffPrompt = canUseAgentStudioKickoffPrompt({
     canStartSession: canStartRole(role),
