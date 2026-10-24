@@ -35,6 +35,23 @@ const createGroupedOptions = (): ComboboxGroup[] => [
 ];
 
 describe("Combobox", () => {
+  // The DOM test environment has no layout, so these cases check the height rule of the trigger.
+  test("grows a wrapping trigger with its value and keeps a single-line trigger fixed", () => {
+    const options = [{ value: "/a/very/long/path", label: "/a/very/long/path" }];
+    const { rerender } = render(
+      <Combobox value="/a/very/long/path" options={options} wrapLabels onValueChange={() => {}} />,
+    );
+    const wrapped = screen.getByRole("button").className.split(/\s+/);
+    expect(wrapped).toContain("h-auto");
+    expect(wrapped).toContain("min-h-9");
+    expect(wrapped).not.toContain("h-9");
+
+    rerender(<Combobox value="/a/very/long/path" options={options} onValueChange={() => {}} />);
+    const singleLine = screen.getByRole("button").className.split(/\s+/);
+    expect(singleLine).toContain("h-9");
+    expect(singleLine).not.toContain("h-auto");
+  });
+
   test("uses all-terms substring matching, trims whitespace, and drops empty groups", async () => {
     const groupedOptions = createGroupedOptions();
 
