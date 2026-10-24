@@ -40,7 +40,7 @@ test("checks real legacy directories when the workspace base is absent and rejec
     const escapedDirectory = join(workingDirectory, "escape");
     await symlink(outsideDirectory, escapedDirectory, "junction");
     const dependencies = {
-      gitPort: createGitPortTestDouble({ isGitRepository: () => Effect.succeed(false) }),
+      gitPort: createGitPortTestDouble({ readCheckout: () => Effect.succeed(null) }),
       settingsConfig: {
         ...createSettingsConfigAdapter(),
         defaultWorktreeBasePath: () => join(root, "missing-workspace-base"),

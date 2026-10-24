@@ -29,10 +29,9 @@ type TreeGit = Pick<
   GitPort,
   | "getFileTreeContext"
   | "listFileRegions"
-  | "getRepositoryRoot"
+  | "readCheckout"
   | "getStatus"
   | "listChangedFiles"
-  | "isGitRepository"
   | "listFiles"
 >;
 type Change = {
@@ -112,10 +111,21 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
             const context = yield* git.getFileTreeContext(root, input.targetBranch);
             if (input.mode === "incremental" && view && !sameContext(context, view.context))
               return reset("context_changed");
-            const repositoryRoot = yield* git.getRepositoryRoot(root);
+            // The Git panel of this refresh reads the same checkout.
+            const readContext = { refreshId: input.refreshId };
+            const checkout = yield* git.readCheckout(root, readContext);
+            if (!checkout)
+              return yield* new HostValidationError({
+                field: "rootPath",
+                message: `File explorer requires a Git repository root: ${root}`,
+                details: { rootPath: root },
+              });
+            const repositoryRoot = checkout.root;
             const needsSnapshot = !view || needsFull || !sameContext(context, view.context);
             // Inventory reads can take time. Read Git badges after that inventory.
-            const files = needsSnapshot ? yield* loadWorkspaceFileEntries(git, root) : [];
+            const files = needsSnapshot
+              ? yield* loadWorkspaceFileEntries(git, root, { readContext })
+              : [];
             // Earlier Git captures can miss unstaged edits without changing this context.
             const statuses = yield* git.getStatus(root);
             const comparison = input.targetBranch

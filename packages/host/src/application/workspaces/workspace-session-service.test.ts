@@ -226,7 +226,10 @@ describe("host-owned Workspace Session lifecycle", () => {
               isRemote: false,
             })),
           ),
-        shareGitCommonDirectory: () => Effect.succeed(true),
+        readCheckout: (directory) =>
+          Effect.succeed(
+            state.validGit ? { root: directory, commonDirectory: `${config.repoPath}/.git` } : null,
+          ),
         isRegisteredWorktree: (_repo, directory) => Effect.succeed(registered.has(directory)),
         createWorktree: (_repo, directory, branch, createBranch, startPoint) =>
           Effect.suspend(() => {
@@ -2198,7 +2201,7 @@ describe("host-owned Workspace Session lifecycle", () => {
     );
     h.state.validGit = false;
     await expect(Effect.runPromise(h.service.restore(ref))).rejects.toThrow(
-      "saved canonical Git directory",
+      "Workspace repository is not a Git work tree",
     );
     expect(await Effect.runPromise(h.service.get(ref))).toEqual(archived);
   });

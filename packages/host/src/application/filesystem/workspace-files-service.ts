@@ -50,7 +50,7 @@ export const createWorkspaceFilesService = (
     | "getCurrentBranch"
     | "getRepositoryRoot"
     | "getStatus"
-    | "isGitRepository"
+    | "readCheckout"
     | "listChangedFiles"
     | "listFiles"
   >,

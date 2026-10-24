@@ -1,11 +1,12 @@
-import type { GitWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { type CanonicalPathPlatform, canonicalPathsEqual } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type { GitWorktreeEntry } from "../../ports/git-port";
 import { isAncestor } from "./git-merge";
 import {
   combineOutput,
   type GitCommandRunner,
+  realPathIfPresent,
   referenceExists,
   requireNonEmptyEffect,
   runGit,
@@ -53,15 +54,12 @@ export const createWorktree = (
 export const listWorktrees = (runner: GitCommandRunner, repoPath: string) =>
   Effect.gen(function* () {
     const output = yield* runGit(runner, repoPath, ["worktree", "list", "--porcelain", "-z"]);
-    const worktrees: GitWorktreeSummary[] = [];
+    const worktrees: GitWorktreeEntry[] = [];
     let currentPath: string | null = null;
     let currentBranch: string | null = null;
     const flush = (): void => {
       if (currentPath !== null) {
-        worktrees.push({
-          branch: currentBranch ?? "detached",
-          worktreePath: currentPath,
-        });
+        worktrees.push({ branch: currentBranch, worktreePath: currentPath });
       }
       currentPath = null;
       currentBranch = null;
@@ -76,29 +74,43 @@ export const listWorktrees = (runner: GitCommandRunner, repoPath: string) =>
       if (currentPath === null) {
         continue;
       }
+      // A detached HEAD has no branch line, so its branch stays null.
       if (entry.startsWith("branch ")) {
         currentBranch = entry.slice("branch ".length).replace(/^refs\/heads\//, "");
-        continue;
-      }
-      if (entry === "detached") {
-        currentBranch = "detached";
       }
     }
     flush();
     return worktrees;
   });
 
-export const isRegisteredWorktree = (
-  runner: GitCommandRunner,
-  repoPath: string,
+/** Folds the letter case and Unicode form that a macOS file system ignores in a path. */
+const foldPath = (value: string) => value.normalize("NFC").toLowerCase();
+
+/**
+ * Checks a path against a worktree list. Git keeps a path as the user typed it, so on macOS its
+ * letter case or Unicode form can differ from the real path of the same directory. Only an entry
+ * that folds to the same path can be that directory, so only such an entry gets a real path read.
+ */
+export const isListedWorktreePath = (
+  worktrees: readonly GitWorktreeEntry[],
   worktreePath: string,
 ) =>
   Effect.gen(function* () {
-    const targetPath = yield* requireNonEmptyEffect(worktreePath, "worktree path");
-    const worktrees = yield* listWorktrees(runner, repoPath);
-    return worktrees.some((worktree) =>
-      canonicalPathsEqual(worktree.worktreePath, targetPath, HOST_PATH_PLATFORM),
-    );
+    if (
+      worktrees.some((entry) =>
+        canonicalPathsEqual(entry.worktreePath, worktreePath, HOST_PATH_PLATFORM),
+      )
+    )
+      return true;
+    const folded = foldPath(worktreePath);
+    const candidates = worktrees.filter((entry) => foldPath(entry.worktreePath) === folded);
+    if (candidates.length === 0) return false;
+    const realPath = yield* realPathIfPresent(worktreePath);
+    if (realPath === null) return false;
+    for (const entry of candidates) {
+      if ((yield* realPathIfPresent(entry.worktreePath)) === realPath) return true;
+    }
+    return false;
   });
 export const deleteReference = (runner: GitCommandRunner, repoPath: string, reference: string) =>
   Effect.gen(function* () {

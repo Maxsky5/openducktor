@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  WorkspaceTextFileReadInput,
   WorkspaceTextFileReadResult,
   WorkspaceFileTreeContext,
   WorkspaceFileTreeRefreshInput,
@@ -110,6 +111,48 @@ describe("workspace file refresh Query ownership", () => {
       }
     },
   );
+  test("a text read during a refresh sends the read context of that refresh", async () => {
+    const treeInputs: WorkspaceFileTreeRefreshInput[] = [];
+    const readInputs: WorkspaceTextFileReadInput[] = [];
+    const { queryClient } = createTestClientConnection({
+      queryClient: client(),
+      client: {
+        filesystemRefreshTree: async (input) => {
+          treeInputs.push(input);
+          return snapshot;
+        },
+        filesystemReadTextFile: async (input) => {
+          readInputs.push(input);
+          return {
+            kind: "text",
+            rootPath: "/repo",
+            relativePath: "file.txt",
+            contents: "disk",
+            size: 4,
+            mtimeMs: null,
+            revision: "revision",
+          };
+        },
+      },
+    });
+    const treeOptions = workspaceFileTreeQueryOptions("/repo", null);
+    const textOptions = workspaceTextFileQueryOptions("/repo", "file.txt");
+    await Promise.all([queryClient.fetchQuery(treeOptions), queryClient.fetchQuery(textOptions)]);
+    expect(readInputs[0]).not.toHaveProperty("readContext");
+    const stops = [
+      new QueryObserver(queryClient, { ...treeOptions, refetchOnMount: false }).subscribe(() => {}),
+      new QueryObserver(queryClient, { ...textOptions, refetchOnMount: false }).subscribe(() => {}),
+    ];
+    try {
+      await refreshWorkspaceFileQueries(queryClient, "/repo");
+      expect(readInputs).toHaveLength(2);
+      expect(readInputs[1]?.readContext).toEqual({ refreshId: treeInputs[1]!.refreshId });
+    } finally {
+      for (const stop of stops) stop();
+      queryClient.clear();
+    }
+  });
+
   test("runs one Git read for a burst from the same consumer", async () => {
     const queryClient = client();
     let files = 0,

@@ -30,10 +30,9 @@ test("a new branch reads its own host view while the previous sweep's Git callba
         indexVersion: "index",
         sparsePolicy: "policy",
       }),
-    getRepositoryRoot: () => Effect.succeed(root),
+    readCheckout: () => Effect.succeed({ root, commonDirectory: path.join(root, ".git") }),
     getStatus: () => Effect.succeed([]),
     listChangedFiles: () => Effect.succeed([]),
-    isGitRepository: () => Effect.succeed(true),
     listFiles: () => Effect.succeed([{ path: `${branch}.txt`, kind: "file" }]),
     listFileRegions: () => Effect.succeed([]),
   });

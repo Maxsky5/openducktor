@@ -389,6 +389,43 @@ export const resolveGitCommonDirectory = (runner: GitCommandRunner, workingDirec
       catch: (cause) => toHostOperationError(cause, "git.resolveGitCommonDirectory.realpath"),
     });
   });
+/** One process reads the work tree state, checkout root, and shared Git directory. */
+export const readGitCheckout = (runner: GitCommandRunner, directory: string) =>
+  Effect.gen(function* () {
+    const result = yield* runGitAllowFailure(runner, directory, [
+      "rev-parse",
+      "--is-inside-work-tree",
+      "--show-toplevel",
+      "--git-common-dir",
+    ]);
+    // Git fails outside a repository and inside a Git directory, which has no work tree.
+    if (!result.ok) return null;
+    const [insideWorkTree, root, commonDirectory] = result.stdout.split(/\r?\n/u);
+    if (insideWorkTree !== "true") return null;
+    if (!root || !commonDirectory) {
+      return yield* Effect.fail(
+        new HostOperationError({
+          operation: "git.readCheckout",
+          message: `Git returned an incomplete checkout for ${directory}.`,
+          details: { directory, output: result.stdout },
+        }),
+      );
+    }
+    return yield* Effect.tryPromise({
+      try: async () => ({
+        root: await realpath(root),
+        // Git prints the shared Git directory relative to the directory that it reads.
+        commonDirectory: await realpath(path.resolve(directory, commonDirectory)),
+      }),
+      catch: (cause) => toHostOperationError(cause, "git.readCheckout.realpath", { directory }),
+    });
+  });
+/** The real path of a path, or null when the path is missing. */
+export const realPathIfPresent = (inputPath: string) =>
+  Effect.tryPromise({
+    try: () => realpath(inputPath),
+    catch: (cause) => toHostPathStatError(cause, "git.realPath", inputPath),
+  }).pipe(Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(null)));
 export const pathExists = (inputPath: string) =>
   Effect.tryPromise({
     try: () => stat(inputPath),

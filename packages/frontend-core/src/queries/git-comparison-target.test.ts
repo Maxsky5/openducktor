@@ -1,14 +1,17 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
+import type { GitReadContext } from "@openducktor/contracts";
 import {
   gitComparisonTargetQueryOptions,
   gitQueryKeys,
   invalidateGitWorkingDirectoryQueries,
   currentBranchQueryOptions,
+  localChangesQueryOptions,
   worktreeBranchQueryOptions,
   worktreeStatusQueryOptions,
 } from "./git";
+import { scheduleWorkspaceRefresh, workspaceReadContext } from "./workspace-refresh";
 
 test("comparison target reads keep the working directory and target in their query keys", async () => {
   const calls: Array<{ repoPath: string; workingDir: string; branch: string }> = [];
@@ -148,4 +151,57 @@ test("Git actions invalidate root status cached without an explicit working dire
   } finally {
     client.clear();
   }
+});
+
+test("the reads of one directory refresh send one refresh ID so the host checks the directory once", async () => {
+  const contexts: Record<string, GitReadContext | undefined> = {};
+  const { queryClient: client } = createTestClientConnection({
+    client: {
+      gitGetCurrentBranch: async (_repoPath, _workingDir, readContext) => {
+        contexts.branch = readContext;
+        return { name: "feature", detached: false, revision: "head" };
+      },
+      gitGetComparisonTarget: async (_repoPath, _workingDir, target, readContext) => {
+        contexts.comparison = readContext;
+        return { kind: "available" as const, reference: target.branch };
+      },
+      gitGetWorktreeStatus: async (_repoPath, _target, _scope, _workingDir, readContext) => {
+        contexts.status = readContext;
+        throw new Error("The status is not needed for this check.");
+      },
+      gitGetLocalChanges: async (_repoPath, _workingDir, readContext) => {
+        contexts.local = readContext;
+        throw new Error("The local changes are not needed for this check.");
+      },
+    },
+  });
+  let refreshId: string | undefined;
+  await scheduleWorkspaceRefresh(client, "/worktree", "incremental", async () => {}, {
+    consumer: {},
+    context: "worktree",
+    priority: 0,
+    mayFetch: false,
+    run: async () => {
+      refreshId = workspaceReadContext(client, "/worktree")?.refreshId;
+      await client.fetchQuery(worktreeBranchQueryOptions("/repo", "/worktree"));
+      await client.fetchQuery(
+        gitComparisonTargetQueryOptions("/repo", "/worktree", { branch: "main" }, "feature"),
+      );
+      await Promise.allSettled([
+        client.fetchQuery(worktreeStatusQueryOptions("/repo", "main", "/worktree", "feature")),
+        client.fetchQuery(localChangesQueryOptions("/repo", "/worktree", "feature")),
+      ]);
+    },
+  });
+  if (!refreshId) throw new Error("The refresh did not set a read context.");
+  const context = { refreshId };
+  expect(contexts).toEqual({
+    branch: context,
+    comparison: context,
+    status: context,
+    local: context,
+  });
+
+  await client.fetchQuery({ ...worktreeBranchQueryOptions("/repo", "/worktree"), staleTime: 0 });
+  expect(contexts.branch).toBeUndefined();
 });

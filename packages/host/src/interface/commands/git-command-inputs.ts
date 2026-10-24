@@ -29,6 +29,7 @@ import {
   commandInputOptionalStringSchema,
   commandInputRecordSchema,
   commandInputStringSchema,
+  type CommandInputRecord,
   type HostCommandArgs,
   optionalBoolean,
   optionalString,
@@ -48,7 +49,10 @@ export const parseGitScopeInput = (input: HostCommandArgs): GitScopeInput => {
     "workingDir",
   );
 
-  return workingDir ? { repoPath, workingDir } : { repoPath };
+  const scope: GitScopeInput = workingDir ? { repoPath, workingDir } : { repoPath };
+  const readContext = optionalReadContext(record);
+  if (readContext) scope.readContext = readContext;
+  return scope;
 };
 
 export const parseGitComparisonTargetInput = (input: HostCommandArgs): GitComparisonTargetInput => {
@@ -285,11 +289,16 @@ export const parseGitWorktreeStatusInput = (input: HostCommandArgs): GitWorktree
   if (workingDir) {
     result.workingDir = workingDir;
   }
-  if (record.readContext !== undefined) {
-    const parsed = gitReadContextSchema.safeParse(record.readContext);
-    if (!parsed.success)
-      throw new HostValidationError({ field: "readContext", message: parsed.error.message });
-    result.readContext = parsed.data;
-  }
+  const readContext = optionalReadContext(record);
+  if (readContext) result.readContext = readContext;
   return result;
+};
+
+/** A refresh ID lets the reads of one refresh share their Git checks. */
+const optionalReadContext = (record: CommandInputRecord) => {
+  if (record.readContext === undefined) return undefined;
+  const parsed = gitReadContextSchema.safeParse(record.readContext);
+  if (!parsed.success)
+    throw new HostValidationError({ field: "readContext", message: parsed.error.message });
+  return parsed.data;
 };

@@ -2,7 +2,10 @@ import type { WorkspaceSessionExecutionTarget } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import { classifyWorkspaceCheckout, type WorkspaceCheckoutGitPort } from "./workspace-checkout";
+import {
+  classifyWorkspaceCheckout,
+  type WorkspaceCheckoutGitPort,
+} from "../git/workspace-checkout";
 
 export const invalidImport = (message: string) =>
   new HostValidationError({ field: "externalSessionId", message });

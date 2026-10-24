@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, mkdir, writeFile, rm, rename } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, writeFile, rm, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
@@ -16,6 +16,7 @@ import {
   type GitCommandRunner,
 } from "../../infrastructure/git/git-command-runner";
 import { HostOperationError } from "../../effect/host-errors";
+import { resolveGitWorkingDirectory } from "../git/git-service-inputs";
 import { createWorkspaceFilesService } from "./workspace-files-service";
 
 const withRepository = async (
@@ -78,6 +79,35 @@ describe("workspace tree refresh", () => {
         const entries = new Map(result.entries.map((entry) => [entry.path, entry]));
         expect(entries.get("new.txt")?.gitStatus).toBe("untracked");
         expect(entries.get("src/entry.txt")?.gitStatus).toBe("modified");
+      } finally {
+        await Effect.runPromise(service.dispose());
+      }
+    });
+  }, 10_000);
+
+  // This case starts real Git processes for setup, the Git panel check, and the tree refresh.
+  test("a tree refresh reuses the checkout read of the Git panel in the same refresh", async () => {
+    await withRepository(async (root) => {
+      const liveRunner = createDefaultGitRunner(() => process.env, { command: "git" });
+      // Every Git probe that asks for the work tree or its root.
+      const checkoutReads: string[] = [];
+      const git = createGitCliAdapter({
+        runner: (dir, args, options) => {
+          if (args.includes("--is-inside-work-tree") || args.includes("--show-toplevel"))
+            checkoutReads.push(dir);
+          return liveRunner(dir, args, options);
+        },
+      });
+      const service = createWorkspaceFilesService(createFilesystemAdapter(), git);
+      try {
+        const canonicalRoot = await realpath(root);
+        await Effect.runPromise(
+          resolveGitWorkingDirectory(git, canonicalRoot, canonicalRoot, { refreshId: "refresh" }),
+        );
+        await Effect.runPromise(
+          service.refreshTree({ rootPath: canonicalRoot, mode: "full", refreshId: "refresh" }),
+        );
+        expect(checkoutReads).toEqual([canonicalRoot]);
       } finally {
         await Effect.runPromise(service.dispose());
       }
@@ -412,7 +442,7 @@ describe("workspace tree refresh", () => {
     const inventory = [{ path: "stable.txt", kind: "file" as const }];
     const service = createWorkspaceFilesService(filesystem, {
       getCurrentBranch: () => Effect.succeed({ name: "main", detached: false }),
-      isGitRepository: () => Effect.succeed(true),
+      readCheckout: () => Effect.succeed({ root, commonDirectory: `${root}/.git` }),
       listChangedFiles: () => Effect.succeed([]),
       getFileTreeContext: () => Effect.succeed(context),
       getRepositoryRoot: () => Effect.succeed(root),

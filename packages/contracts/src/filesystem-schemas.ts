@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gitReadContextSchema } from "./git-schemas";
 
 export const directoryEntrySchema = z.object({
   name: z.string().min(1),
@@ -51,12 +52,16 @@ export const workspaceFileTreeSchema = z.object({
 });
 export type WorkspaceFileTree = z.infer<typeof workspaceFileTreeSchema>;
 
-/** Local access opens an explicitly selected file without requiring Git membership. */
+/**
+ * Local access opens an explicitly selected file without requiring Git membership. A read during
+ * a directory refresh sends its read context to share the Git reads of that refresh.
+ */
 export const workspaceTextFileReadInputSchema = z
   .object({
     rootPath: z.string().min(1),
     relativePath: z.string().min(1),
     access: z.literal("local").optional(),
+    readContext: gitReadContextSchema.optional(),
   })
   .strict();
 export type WorkspaceTextFileReadInput = z.infer<typeof workspaceTextFileReadInputSchema>;

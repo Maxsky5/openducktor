@@ -96,8 +96,14 @@ describe("task session preparation in an existing worktree", () => {
     },
     {
       reason: "another repository",
-      gitOverrides: { shareGitCommonDirectory: () => Effect.succeed(false) },
-      error: `Existing worktree path does not belong to repository /repo: ${worktreePath}`,
+      gitOverrides: {
+        readCheckout: (path) =>
+          Effect.succeed({
+            root: path,
+            commonDirectory: path === "/repo" ? "/repo/.git" : "/x/.git",
+          }),
+      },
+      error: `Existing canonical path is not a registered worktree for task task-1: ${worktreePath}`,
     },
     {
       reason: "unregistered worktree",
@@ -106,7 +112,10 @@ describe("task session preparation in an existing worktree", () => {
     },
     {
       reason: "directory without Git",
-      gitOverrides: { isGitRepository: (path) => Effect.succeed(path === "/repo") },
+      gitOverrides: {
+        readCheckout: (path) =>
+          Effect.succeed(path === "/repo" ? { root: path, commonDirectory: "/repo/.git" } : null),
+      },
       error: `Canonical task worktree path exists but is not a Git worktree: ${worktreePath}`,
     },
   ])("rejects an existing task directory that is $reason", async ({ gitOverrides, error }) => {
