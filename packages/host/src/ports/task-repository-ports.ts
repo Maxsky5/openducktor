@@ -201,6 +201,21 @@ export type RepoStoreDiagnostics = {
     prepare?: boolean;
   }): Effect.Effect<RepoStoreHealth, TaskStoreError>;
 };
+/** An open task and the working directories of its sessions. */
+export type OpenTaskDirectories = {
+  taskId: string;
+  title: string;
+  sessionDirectories: string[];
+};
+
+/** Reads the tasks that can own a worktree, also in a closed workspace. */
+export type TaskOwnershipReader = {
+  listOpenTasksForWorktreeOwnership(scope: {
+    workspaceId: string;
+    repoPath: string;
+  }): Effect.Effect<OpenTaskDirectories[], TaskStoreError>;
+};
+
 export type TaskStorePort = AgentSessionRepository &
   TaskArtifactRepository &
   DirectMergeRepository &

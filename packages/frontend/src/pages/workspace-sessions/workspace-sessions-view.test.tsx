@@ -122,6 +122,7 @@ test.each([
         worktreeExists: true,
         hasUncommittedChanges: true,
         sharedWith: [],
+        taskOwners: [],
       }),
       workspaceSessionArchive: async (input) => {
         requests.push(input);
@@ -1670,6 +1671,7 @@ test("a worktree archive keeps confirmation pending until the host succeeds", as
       worktreeExists: true,
       hasUncommittedChanges: false,
       sharedWith: [],
+      taskOwners: [],
     }),
     workspaceSessionArchive: (input) => {
       requests.push(input);
@@ -1730,6 +1732,7 @@ test("a failed direct archive does not show its error in the next worktree dialo
       worktreeExists: true,
       hasUncommittedChanges: false,
       sharedWith: [],
+      taskOwners: [],
     }),
     workspaceSessionArchive: async (input) => {
       requests.push(input);

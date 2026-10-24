@@ -1,3 +1,4 @@
+import type { WorkspaceSessionRefInput } from "@openducktor/contracts";
 import { type Ref, useCallback, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import {
   TaskExecutionSelectedFilePreview,
@@ -28,6 +29,7 @@ export function WorkspaceSessionFilePreview({
   branch,
   hasRootBranch,
   onFileSaved,
+  workspaceSession,
 }: {
   ref: Ref<WorkspaceSessionFilePreviewHandle>;
   initialFile: TaskExecutionSelectedFile | null;
@@ -37,6 +39,7 @@ export function WorkspaceSessionFilePreview({
   branch: ReturnType<typeof useWorkspaceSessionBranch>;
   hasRootBranch: boolean;
   onFileSaved: () => void;
+  workspaceSession: WorkspaceSessionRefInput;
 }) {
   const { preview, onLeavePolicyChange, closePreview, keepEditing, discardDraft } =
     useWorkspaceSessionFilePreview({ initialFile, onSelectionChange, isWorktree, onSafeToLeave });
@@ -67,6 +70,7 @@ export function WorkspaceSessionFilePreview({
         branch={previewBranch}
         requireBranch
         onFileSaved={onFileSaved}
+        workspaceSession={workspaceSession}
       />
     </div>
   );

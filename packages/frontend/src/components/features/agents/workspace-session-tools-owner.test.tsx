@@ -60,8 +60,7 @@ test("returning to a session checks fresh comparison data while its previous rea
   const args: Parameters<typeof useWorkspaceSessionTools>[0] = {
     isVisible: true,
     repoPath: "/repo",
-    workspaceId: "workspace",
-    sessionId: "session-a",
+    workspaceSession: { workspaceId: "workspace", sessionId: "session-a" },
     workingDirectory: "/repo",
     contextMode: "worktree",
     branchKey: "branch-a",
@@ -97,7 +96,13 @@ test("returning to a session checks fresh comparison data while its previous rea
     await waitFor(() => expect(targetCalls).toBe(1));
     currentBranch = "branch-b";
     currentFile = "session-b.txt";
-    view.rerender(panel({ ...args, sessionId: "session-b", branchKey: currentBranch }));
+    view.rerender(
+      panel({
+        ...args,
+        workspaceSession: { workspaceId: "workspace", sessionId: "session-b" },
+        branchKey: currentBranch,
+      }),
+    );
     await waitFor(() => expect(targetCalls).toBe(2));
     currentBranch = "branch-a";
     currentFile = "fresh-a.txt";
@@ -166,8 +171,7 @@ test("keeps a rebase lock and captured target while the panel closes and reopens
           <ToolsOwner
             isVisible={isOpen}
             repoPath="/repo"
-            workspaceId="workspace"
-            sessionId="session"
+            workspaceSession={{ workspaceId: "workspace", sessionId: "session" }}
             workingDirectory="/repo/a"
             contextMode="worktree"
             currentBranch={{ name: "feature", detached: false }}
@@ -273,8 +277,7 @@ test.each(["directory", "branch"] as const)(
               isVisible={isVisible}
               applyTarget={async () => {}}
               repoPath="/repo"
-              workspaceId="workspace"
-              sessionId={sessionId}
+              workspaceSession={{ workspaceId: "workspace", sessionId: sessionId }}
               workingDirectory={workingDirectory}
               contextMode="worktree"
               currentBranch={{ name: branchKey, detached: false }}

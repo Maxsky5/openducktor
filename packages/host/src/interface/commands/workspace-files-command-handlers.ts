@@ -63,7 +63,9 @@ const parseWriteTextFileInput = (args: HostCommandArgs): WorkspaceTextFileWriteI
   });
 };
 
-export const createWorkspaceFilesCommandHandlers = (workspaceFilesService: WorkspaceFilesService) =>
+export const createWorkspaceFilesCommandHandlers = <E>(
+  workspaceFilesService: WorkspaceFilesService<E>,
+) =>
   ({
     filesystem_refresh_tree: (args) => {
       const parsed = workspaceFileTreeRefreshInputSchema.safeParse(args);

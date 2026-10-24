@@ -454,6 +454,7 @@ export const createPersistenceHarness = async (
     repoPath: database.repoPath,
   });
   const workspaceDependencies = (): WorkspaceSessionServiceDependencies => ({
+    taskOwnership: database,
     claudeSessionMetadata: {
       readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
     },

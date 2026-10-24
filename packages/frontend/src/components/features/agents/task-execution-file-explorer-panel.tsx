@@ -213,6 +213,7 @@ function FileExplorerRootPathHeader({ rootPath }: { rootPath: string }): ReactEl
 export function TaskExecutionFileExplorerPanel({
   model: {
     rootPath: requestedRootPath,
+    workspaceSession,
     targetBranch,
     branchKey,
     unavailableReason,
@@ -233,6 +234,7 @@ export function TaskExecutionFileExplorerPanel({
       requestedRootPath ?? "__inactive_file_tree__",
       targetBranch,
       branchKey,
+      workspaceSession ? { kind: "chat", session: workspaceSession } : undefined,
     ),
     enabled: isActive && requestedRootPath !== null,
   });

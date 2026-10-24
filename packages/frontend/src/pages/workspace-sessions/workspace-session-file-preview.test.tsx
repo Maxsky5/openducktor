@@ -77,6 +77,7 @@ for (const isWorktree of [false, true]) {
               branch={branch}
               hasRootBranch={false}
               onFileSaved={() => {}}
+              workspaceSession={{ workspaceId: "workspace", sessionId: "session" }}
             />
           </>
         );
@@ -104,7 +105,7 @@ for (const isWorktree of [false, true]) {
           expect(read).toHaveBeenCalledWith({
             rootPath: "/private/tmp",
             relativePath: "screenshot.png",
-            access: "local",
+            scope: { kind: "local" },
           });
           expect(view.queryByRole("button", { name: "Retry branch" })).toBeNull();
           fireEvent.click(view.getByRole("button", { name: "Close file preview" }));

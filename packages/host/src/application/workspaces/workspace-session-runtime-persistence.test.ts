@@ -710,6 +710,7 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      taskOwnership: database,
       claudeSessionMetadata: {
         readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
       },

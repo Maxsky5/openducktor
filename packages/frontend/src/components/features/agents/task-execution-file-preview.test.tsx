@@ -185,6 +185,7 @@ const renderPreview = (
   onFileSaved: () => void = () => {},
   branch: string | null = null,
   requireBranch = false,
+  workspaceSession?: { workspaceId: string; sessionId: string },
 ) => {
   const fullModel: TaskExecutionSelectedFilePreviewModel = {
     selectedFile: model.selectedFile,
@@ -206,6 +207,7 @@ const renderPreview = (
         onFileSaved={onFileSaved}
         branch={branch}
         requireBranch={requireBranch}
+        workspaceSession={workspaceSession}
       />
     </PreviewTestProviders>
   );
@@ -350,6 +352,13 @@ function WindowsTranscriptPreview({
   );
 }
 
+/** The host request for a file that the user opened by path. */
+const localRequest = ({ rootPath, relativePath }: TaskExecutionSelectedFile) => ({
+  rootPath,
+  relativePath,
+  scope: { kind: "local" },
+});
+
 describe("TaskExecutionSelectedFilePreview", () => {
   for (const scope of ["task", "workspace"] as const) {
     for (const [href, rootPath] of [
@@ -377,7 +386,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
         try {
           fireEvent.click(screen.getByRole("link", { name: "outside file" }));
           await screen.findByText("before");
-          expect(readTextFileMock).toHaveBeenCalledWith(selectedFile);
+          expect(readTextFileMock).toHaveBeenCalledWith(localRequest(selectedFile));
           const item = firstCodeViewItem();
           act(() =>
             latestCodeViewProps?.onItemEditChange?.(item, { ...item.file, contents: "after" }),
@@ -386,13 +395,13 @@ describe("TaskExecutionSelectedFilePreview", () => {
           await dispatchPreviewSaveShortcut();
           await waitForCleanFile();
           expect(writeTextFileMock).toHaveBeenCalledWith({
-            ...selectedFile,
+            ...localRequest(selectedFile),
             contents: "after",
             revision: "revision:before",
           });
           expect(
             latestQueryClient?.getQueryData(
-              filesystemQueryKeys.textFile(rootPath, "a.ts", "local"),
+              filesystemQueryKeys.textFile(rootPath, "a.ts", { kind: "local" }),
             ),
           ).toMatchObject({ rootPath, contents: "after" });
           expect(
@@ -439,7 +448,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await waitFor(() =>
         expect(
           client.isFetching({
-            queryKey: filesystemQueryKeys.textFile("/tmp", "three.webp", "local"),
+            queryKey: filesystemQueryKeys.textFile("/tmp", "three.webp", { kind: "local" }),
           }),
         ).toBe(1),
       );
@@ -447,14 +456,14 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await waitFor(() =>
         expect(
           client.isFetching({
-            queryKey: filesystemQueryKeys.textFile("/tmp", "four.svg", "local"),
+            queryKey: filesystemQueryKeys.textFile("/tmp", "four.svg", { kind: "local" }),
           }),
         ).toBe(1),
       );
       expect(readTextFileMock).toHaveBeenCalledTimes(2);
       await act(async () => reads[0]!.resolve(result(0)));
       await waitFor(() => expect(readTextFileMock).toHaveBeenCalledTimes(3));
-      expect(readTextFileMock.mock.calls.at(-1)?.[0]).toEqual(files[3]);
+      expect(readTextFileMock.mock.calls.at(-1)?.[0]).toEqual(localRequest(files[3]!));
       await act(async () => {
         reads[1]!.resolve(result(1));
         reads[3]!.resolve(result(3));
@@ -502,7 +511,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
         await waitForCleanFile();
         expect(
           latestQueryClient?.getQueryData(
-            filesystemQueryKeys.textFile("/tmp", relativePath, "local"),
+            filesystemQueryKeys.textFile("/tmp", relativePath, { kind: "local" }),
           ),
         ).toMatchObject({ contents: "after" });
       } finally {
@@ -548,7 +557,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(readTextFileMock).toHaveBeenCalledWith({
       rootPath: "/tmp/assets",
       relativePath: "diagram.png",
-      access: "local",
+      scope: { kind: "local" },
     });
     expect(screen.getByRole("img", { name: "Web" }).getAttribute("src")).toBe(
       "https://example.com/image.png",
@@ -594,7 +603,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
       await waitFor(() =>
         expect(
           latestQueryClient?.getQueryData<WorkspaceTextFileReadResult>(
-            filesystemQueryKeys.image("/repo", "first.png", "local"),
+            filesystemQueryKeys.image("/repo", "first.png", { kind: "local" }),
           ),
         ).toBe(result),
       );
@@ -618,7 +627,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
         expect(readTextFileMock).toHaveBeenCalledWith({
           rootPath: "/repo",
           relativePath: "next.png",
-          access: "local",
+          scope: { kind: "local" },
         }),
       );
       expect(screen.getByText("/repo/first.png")).toBeTruthy();
@@ -648,7 +657,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(image.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U=");
     expect(screen.queryByLabelText("Code editor")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save file" })).toBeNull();
-    expect(readTextFileMock).toHaveBeenCalledWith(selectedFile);
+    expect(readTextFileMock).toHaveBeenCalledWith(localRequest(selectedFile));
     fireEvent.error(image);
     expect(screen.getByText(/The image could not be displayed/)).toBeTruthy();
     view.unmount();
@@ -681,7 +690,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await dispatchPreviewSaveShortcut();
     await waitForCleanFile();
     expect(writeTextFileMock).toHaveBeenCalledWith({
-      ...selectedFile,
+      ...localRequest(selectedFile),
       contents: "Report",
       revision: "revision:# Report\n",
     });
@@ -695,7 +704,7 @@ describe("TaskExecutionSelectedFilePreview", () => {
     await dispatchPreviewSaveShortcut();
     await waitForCleanFile();
     expect(writeTextFileMock).toHaveBeenCalledWith({
-      ...selectedFile,
+      ...localRequest(selectedFile),
       contents: "# Changed\n",
       revision: "revision:# Report\n:saved",
     });
@@ -1265,6 +1274,37 @@ describe("TaskExecutionSelectedFilePreview", () => {
     expect(onLeavePolicyChange).toHaveBeenLastCalledWith("allow");
     expect(onFileSaved).toHaveBeenCalledTimes(1);
   });
+
+  for (const access of [undefined, "local"] as const) {
+    test(`a chat preview sends its session only for files in its directory, access=${access}`, async () => {
+      const chat = { workspaceId: "workspace", sessionId: "chat" };
+      const selectedFile: TaskExecutionSelectedFile = access ? { ...firstFile, access } : firstFile;
+      const scope = access ? { kind: access } : { kind: "chat", session: chat };
+      render(
+        renderPreview({ selectedFile, onClose: () => {} }, "light", () => {}, null, false, chat),
+      );
+      await screen.findByText("const first = true;");
+      expect(readTextFileMock).toHaveBeenCalledWith({
+        rootPath: "/repo",
+        relativePath: "src/first.ts",
+        scope,
+      });
+      const item = firstCodeViewItem();
+      act(() =>
+        latestCodeViewProps?.onItemEditChange?.(item, { ...item?.file, contents: "changed" }),
+      );
+      await waitForDirtyFile();
+      await dispatchPreviewSaveShortcut();
+      await waitForCleanFile();
+      expect(writeTextFileMock).toHaveBeenCalledWith({
+        rootPath: "/repo",
+        relativePath: "src/first.ts",
+        contents: "changed",
+        revision: "revision:const first = true;",
+        scope,
+      });
+    });
+  }
 
   test("restores saved contents after a clean editor remount", async () => {
     const onClose = mock(() => {});

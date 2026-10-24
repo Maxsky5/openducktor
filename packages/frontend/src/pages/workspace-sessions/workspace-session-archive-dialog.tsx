@@ -62,8 +62,9 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
     enabled: props.open,
   });
   const sharedWith = preview.data?.sharedWith ?? [];
-  const isShared = sharedWith.length > 0;
-  const removeWorktree = wantsWorktreeRemoval && !isShared;
+  const taskOwners = preview.data?.taskOwners ?? [];
+  const isNeeded = sharedWith.length > 0 || taskOwners.length > 0;
+  const removeWorktree = wantsWorktreeRemoval && !isNeeded;
   const canArchive =
     !props.isArchiving &&
     (!removeWorktree ||
@@ -96,13 +97,19 @@ function WorktreeArchiveDialog({ workspaceId, record, ...props }: Props): ReactE
             id={switchId}
             checked={removeWorktree}
             onCheckedChange={setWantsWorktreeRemoval}
-            disabled={props.isArchiving || isShared}
+            disabled={props.isArchiving || isNeeded}
           />
         </div>
-        {isShared && (
+        {sharedWith.length > 0 && (
           <p className="text-sm text-muted-foreground">
             This worktree stays because these saved chats need it for files or history:{" "}
             {sharedWith.map((owner) => owner.title).join(", ")}.
+          </p>
+        )}
+        {taskOwners.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            This worktree stays because these tasks need it:{" "}
+            {taskOwners.map((task) => `${task.title} (${task.taskId})`).join(", ")}.
           </p>
         )}
         <ArchiveWorktreeNotice removeWorktree={removeWorktree} preview={preview} />

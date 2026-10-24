@@ -3,6 +3,11 @@ import { claudeSessionMetadataAdapter } from "../../adapters/claude/claude-sessi
 import { createWorkspaceSessionImportService } from "../../application/workspaces/workspace-session-import-service";
 import { createWorkspaceSessionService } from "../../application/workspaces/workspace-session-service";
 import { createWorkspaceSessionLaunchService } from "../../application/workspaces/workspace-session-launch-service";
+import {
+  createWorkspaceSessionFileAccess,
+  scopeFilesToChats,
+} from "../../application/workspaces/workspace-session-file-access";
+import type { WorkspaceFilesService } from "../../application/filesystem/workspace-files-service";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 import { createWorkspaceSessionCommandHandlers } from "../../interface/commands/workspace-session-command-handlers";
 import { createWorkspaceSessionImportCommandHandlers } from "../../interface/commands/workspace-session-import-command-handlers";
@@ -63,6 +68,7 @@ export const createNodeWorkspaceSessionServices = ({
       );
     },
   );
+  const fileAccess = createWorkspaceSessionFileAccess(dependencies);
   return {
     handlers: {
       ...createWorkspaceSessionCommandHandlers(
@@ -75,6 +81,8 @@ export const createNodeWorkspaceSessionServices = ({
     workspaceSessionService,
     workspaceSessionImports,
     workspaceSessionLaunchService,
+    /** Keeps each chat file request in the saved chat directory. */
+    scopeFiles: (files: WorkspaceFilesService) => scopeFilesToChats(files, fileAccess),
     unsubscribeImportCatalogs,
   };
 };

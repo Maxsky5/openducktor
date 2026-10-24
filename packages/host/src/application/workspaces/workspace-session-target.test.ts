@@ -23,6 +23,6 @@ test("rejects a saved worktree target that resolves to the repository root", asy
 
   expect(error).toBeInstanceOf(HostValidationError);
   expect(error.message).toBe(
-    "Workspace Session worktree resolves to the Workspace repository root: /repo. Select a session that uses a worktree.",
+    "The worktree of this chat is now the repository checkout: /repo. Archive this chat, or start a Current checkout chat.",
   );
 });
