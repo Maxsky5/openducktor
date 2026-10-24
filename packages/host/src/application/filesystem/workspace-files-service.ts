@@ -24,21 +24,22 @@ import {
   type WorkspaceTextFileWriteError,
 } from "./workspace-text-file-service";
 
-export type WorkspaceFilesService = {
+/** A wrapper that checks some requests first can add its own failures as `Extra`. */
+export type WorkspaceFilesService<Extra = never> = {
   dispose(): Effect.Effect<void>;
   refreshTree(
     input: WorkspaceFileTreeRefreshInput,
-  ): Effect.Effect<WorkspaceFileTreeRefreshResult, HostValidationErrorAggregate>;
+  ): Effect.Effect<WorkspaceFileTreeRefreshResult, HostValidationErrorAggregate | Extra>;
   listTree(input: {
     rootPath: string;
     targetBranch?: string;
   }): Effect.Effect<WorkspaceFileTree, HostValidationErrorAggregate>;
   readTextFile(
     input: WorkspaceTextFileReadInput,
-  ): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate>;
+  ): Effect.Effect<WorkspaceTextFileReadResult, HostValidationErrorAggregate | Extra>;
   writeTextFile(
     input: WorkspaceTextFileWriteInput,
-  ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError>;
+  ): Effect.Effect<WorkspaceTextFileWriteResult, WorkspaceTextFileWriteError | Extra>;
 };
 
 export const createWorkspaceFilesService = (

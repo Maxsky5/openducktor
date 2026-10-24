@@ -16,12 +16,16 @@ import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetDependencies,
 } from "./workspace-session-target";
+import type { WorktreeOwners } from "./workspace-session-worktree-owners";
 import {
   runWorkspaceSessionWorktreeActions,
   stopWorktreeActionTerminals,
 } from "./workspace-session-worktree-actions";
 
 type WorktreeTarget = Extract<WorkspaceSessionExecutionTarget, { kind: "local_worktree" }>;
+
+/** The archive preview of the worktree itself. The caller adds the owners. */
+type WorktreeArchivePreview = Omit<WorkspaceSessionArchivePreview, keyof WorktreeOwners>;
 
 const validateRemovableBranch = (
   { git }: WorkspaceSessionTargetDependencies,
@@ -45,8 +49,7 @@ export const readWorkspaceSessionArchivePreview = (
   dependencies: WorkspaceSessionTargetDependencies,
   config: RepoConfig,
   target: WorktreeTarget,
-  sharedWith: WorkspaceSessionArchivePreview["sharedWith"] = [],
-): Effect.Effect<WorkspaceSessionArchivePreview, HostError> =>
+): Effect.Effect<WorktreeArchivePreview, HostError> =>
   Effect.gen(function* () {
     const { git, settingsConfig } = dependencies;
     if (target.workingDirectory === config.repoPath) {
@@ -62,7 +65,6 @@ export const readWorkspaceSessionArchivePreview = (
         branchName: target.branchName,
         worktreeExists: false,
         hasUncommittedChanges: false,
-        sharedWith,
       };
     }
     yield* validateWorkspaceSessionTarget(dependencies, config.repoPath, target);
@@ -79,7 +81,6 @@ export const readWorkspaceSessionArchivePreview = (
       branchName: current.name,
       worktreeExists: true,
       hasUncommittedChanges: changes.length > 0,
-      sharedWith,
     };
   });
 

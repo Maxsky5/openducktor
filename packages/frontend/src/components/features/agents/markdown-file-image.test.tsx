@@ -69,7 +69,7 @@ test("bounds image reads, cancels queued reads on close, and releases unused ima
     await waitFor(() => expect(read).toHaveBeenCalledTimes(3));
 
     // A regular file preview can retain the same file independently of Markdown images.
-    const sharedKey = filesystemQueryKeys.textFile("/repo/docs", first, "local");
+    const sharedKey = filesystemQueryKeys.textFile("/repo/docs", first, { kind: "local" });
     client.setQueryData<WorkspaceTextFileReadResult>(sharedKey, result(first));
     view.unmount();
     await act(async () => {
@@ -132,7 +132,7 @@ test("keeps each Markdown image tied to its file across pending reads and report
       expect(read).toHaveBeenCalledWith({
         rootPath: "/repo/docs",
         relativePath: "plot.png",
-        access: "local",
+        scope: { kind: "local" },
       }),
     );
     const nextFile = { rootPath: "C:/repo", relativePath: "notes/b.md", access: "local" as const };

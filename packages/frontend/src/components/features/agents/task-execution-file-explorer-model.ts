@@ -1,4 +1,4 @@
-import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
+import type { WorkspaceFileTreeEntry, WorkspaceSessionRefInput } from "@openducktor/contracts";
 import type { GitStatusEntry } from "@pierre/trees";
 
 export type TaskExecutionSelectedFile = {
@@ -20,6 +20,8 @@ export function isMarkdownFile(path: string): boolean {
 
 export type TaskExecutionFileExplorerPanelModel = {
   rootPath: string | null;
+  /** A chat tree sends its session, so the host checks the saved chat directory. */
+  workspaceSession?: WorkspaceSessionRefInput;
   branchKey?: string;
   targetBranch: string | null;
   unavailableReason: string | null;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { gitReadContextSchema } from "./git-schemas";
+import { workspaceSessionRefInputSchema } from "./workspace-session-ref-schemas";
 
 export const directoryEntrySchema = z.object({
   name: z.string().min(1),
@@ -52,15 +53,29 @@ export const workspaceFileTreeSchema = z.object({
 });
 export type WorkspaceFileTree = z.infer<typeof workspaceFileTreeSchema>;
 
+const chatFileScopeSchema = z.strictObject({
+  kind: z.literal("chat"),
+  session: workspaceSessionRefInputSchema,
+});
+
 /**
- * Local access opens an explicitly selected file without requiring Git membership. A read during
- * a directory refresh sends its read context to share the Git reads of that refresh.
+ * Local access opens a file that the user selected, with no Git membership check. A chat scope
+ * makes the host check that the root is still the saved chat directory. A request without a
+ * scope reads a workspace file.
  */
+export const workspaceFileScopeSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("local") }),
+  chatFileScopeSchema,
+]);
+export type WorkspaceFileScope = z.infer<typeof workspaceFileScopeSchema>;
+export type ChatFileScope = z.infer<typeof chatFileScopeSchema>;
+
+/** A read during a directory refresh sends its read context to share the Git reads of that refresh. */
 export const workspaceTextFileReadInputSchema = z
   .object({
     rootPath: z.string().min(1),
     relativePath: z.string().min(1),
-    access: z.literal("local").optional(),
+    scope: workspaceFileScopeSchema.optional(),
     readContext: gitReadContextSchema.optional(),
   })
   .strict();
@@ -115,7 +130,7 @@ export const workspaceTextFileWriteInputSchema = z
     contents: z.string(),
     revision: z.string().min(1),
     expectedBranch: z.string().min(1).optional(),
-    access: z.literal("local").optional(),
+    scope: workspaceFileScopeSchema.optional(),
   })
   .strict();
 export type WorkspaceTextFileWriteInput = z.infer<typeof workspaceTextFileWriteInputSchema>;
@@ -167,6 +182,7 @@ export const workspaceFileTreeContextSchema = z
   .strict();
 export type WorkspaceFileTreeContext = z.infer<typeof workspaceFileTreeContextSchema>;
 const refreshInputFields = {
+  scope: chatFileScopeSchema.optional(),
   rootPath: z.string().min(1),
   targetBranch: z.string().min(1).optional(),
   refreshId: z.string().min(1).max(128),

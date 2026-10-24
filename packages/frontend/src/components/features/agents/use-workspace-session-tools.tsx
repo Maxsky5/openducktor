@@ -11,7 +11,11 @@ import {
 import { withFileQueries } from "@/features/agent-studio-git/refresh/git-file-refresh";
 import type { GitRefreshComparison } from "@/features/agent-studio-git/refresh/git-refresh-coordinator";
 import { useGitRefresh } from "@/features/agent-studio-git/refresh/use-git-refresh";
-import type { GitCurrentBranch, GitTargetBranch } from "@openducktor/contracts";
+import type {
+  GitCurrentBranch,
+  GitTargetBranch,
+  WorkspaceSessionRefInput,
+} from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useMemo } from "react";
 import type { InlineCommentOwner } from "@openducktor/frontend-core/drafts/inline-comment-owner";
@@ -35,8 +39,7 @@ type WorkspaceSessionToolsProps = {
   conflictAssistanceBlockedReason?: string | null;
   conflictAssistanceIsStarting?: boolean;
   repoPath: string;
-  workspaceId: string;
-  sessionId: string;
+  workspaceSession: WorkspaceSessionRefInput;
   workingDirectory: string | null;
   contextMode: "repository" | "worktree";
   branchKey: string;
@@ -68,8 +71,7 @@ export function useWorkspaceSessionTools({
   conflictAssistanceBlockedReason,
   conflictAssistanceIsStarting,
   repoPath,
-  workspaceId,
-  sessionId,
+  workspaceSession,
   workingDirectory,
   contextMode,
   branchKey,
@@ -87,6 +89,7 @@ export function useWorkspaceSessionTools({
   onSelectFile,
   repositoryBranchControl,
 }: WorkspaceSessionToolsProps) {
+  const { workspaceId, sessionId } = workspaceSession;
   const sessionKey = JSON.stringify([workspaceId, sessionId]);
   const commentOwner = useMemo<Extract<InlineCommentOwner, { kind: "workspace_session" }>>(
     () => ({ kind: "workspace_session", workspaceId, sessionId }),
@@ -177,6 +180,7 @@ export function useWorkspaceSessionTools({
   const fileModel = {
     ...workspaceFileModel({
       workingDirectory,
+      workspaceSession,
       resolvedTarget: markerTarget,
       branchReady,
       isFilesActive,
@@ -273,6 +277,7 @@ function useWorkspaceGitRefresh({
 
 function workspaceFileModel({
   workingDirectory,
+  workspaceSession,
   resolvedTarget,
   branchReady,
   isFilesActive,
@@ -280,6 +285,7 @@ function workspaceFileModel({
   onSelectFile,
 }: {
   workingDirectory: string | null;
+  workspaceSession: WorkspaceSessionRefInput;
   resolvedTarget: string | null;
   branchReady: boolean;
   isFilesActive: boolean;
@@ -294,6 +300,7 @@ function workspaceFileModel({
   }
   return {
     rootPath: workingDirectory,
+    workspaceSession,
     targetBranch: resolvedTarget,
     unavailableReason,
     isActive: isFilesActive && branchReady,

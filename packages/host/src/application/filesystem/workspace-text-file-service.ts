@@ -2,6 +2,7 @@ import {
   type GitReadContext,
   imagePreviewMime,
   type WorkspaceTextFileReadResult,
+  type WorkspaceFileScope,
   type WorkspaceTextFileReadInput,
   type WorkspaceTextFileWriteFailure,
   type WorkspaceTextFileWriteFailureCode,
@@ -175,11 +176,11 @@ const resolveAvailableWorkspaceFile = (
   gitPort: Pick<GitPort, "readCheckout" | "listFiles">,
   canonicalRoot: string,
   relativePath: string,
-  access?: "local",
+  scope: WorkspaceFileScope | undefined,
   readContext?: GitReadContext,
 ) =>
   Effect.gen(function* () {
-    if (access === "local")
+    if (scope?.kind === "local")
       return yield* canonicalizeContainedWorkspaceFile(filesystem, canonicalRoot, relativePath);
     const listedFilePaths = yield* loadWorkspaceFilePaths(gitPort, canonicalRoot, {
       relativePath,
@@ -240,7 +241,7 @@ export const createWorkspaceTextFileService = (
         gitPort,
         canonicalRoot,
         relativePath,
-        input.access,
+        input.scope,
         input.readContext,
       ).pipe(
         Effect.mapError((cause) =>
@@ -370,7 +371,7 @@ export const createWorkspaceTextFileService = (
         gitPort,
         canonicalRoot,
         relativePath,
-        input.access,
+        input.scope,
       ).pipe(
         Effect.mapError((cause) =>
           cause._tag === "WorkspaceFileAccessError"

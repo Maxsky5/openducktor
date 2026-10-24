@@ -48,6 +48,7 @@ describe("Workspace Session query cache", () => {
       worktreeExists: true,
       hasUncommittedChanges: false,
       sharedWith: [],
+      taskOwners: [],
     });
     const stop = observeWorkspaceSessionRecords(client, () => {});
     try {
@@ -75,6 +76,7 @@ describe("Workspace Session query cache", () => {
       worktreeExists: true,
       hasUncommittedChanges: false,
       sharedWith: [{ workspaceId: "A", sessionId: entry.id, title: "Untitled session" }],
+      taskOwners: [],
     };
     client.setQueryData(workspaceSessionQueryKeys.list("A", false), [entry]);
     try {

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { repoConfigSchema, type WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import {
@@ -11,8 +12,14 @@ import {
   initGitRepository,
 } from "../../test-support/git-repository-fixture";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import type { WorkspaceFilesService } from "../filesystem/workspace-files-service";
 import { resolveGitWorkingDirectory } from "./git-service-inputs";
+import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { classifyWorkspaceCheckout } from "./workspace-checkout";
+import {
+  createWorkspaceSessionFileAccess,
+  scopeFilesToChats,
+} from "../workspaces/workspace-session-file-access";
 
 const git = createGitCliAdapter({
   readEnv: () => gitFixtureEnv,
@@ -127,7 +134,7 @@ test.skipIf(!existsSync(tmpdir().toUpperCase()))(
   15_000,
 );
 
-test("the Git requests of one refresh share their checkout reads", async () => {
+test("Git requests and chat file reads of one refresh share their Git reads", async () => {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "odt-workspace-checkout-shared-"));
   try {
     const root = await realpath(temporaryDirectory);
@@ -148,16 +155,83 @@ test("the Git requests of one refresh share their checkout reads", async () => {
           };
         }),
     });
-    const check = (refreshId: string) =>
-      Effect.runPromise(resolveGitWorkingDirectory(counted, repoPath, worktree, { refreshId }));
+    const session: WorkspaceSession = {
+      id: "chat",
+      runtimeKind: "opencode",
+      externalSessionId: null,
+      executionTarget: {
+        kind: "local_worktree",
+        workingDirectory: worktree,
+        branchName: "feature",
+        worktreeState: "present",
+      },
+      roleSnapshot: null,
+      selectedModel: null,
+      generatedTitle: null,
+      manualTitle: null,
+      targetBranch: null,
+      createdAt: 1,
+      updatedAt: 1,
+      archivedAt: null,
+    };
+    const text = {
+      kind: "text" as const,
+      rootPath: worktree,
+      relativePath: "a.ts",
+      contents: "",
+      size: 0,
+      mtimeMs: null,
+      revision: "revision",
+    };
+    const files = scopeFilesToChats(
+      {
+        dispose: () => Effect.void,
+        refreshTree: () =>
+          Effect.succeed({ kind: "reset_required" as const, reason: "missing_view" as const }),
+        listTree: () => Effect.die(new Error("Unexpected tree list")),
+        readTextFile: () => Effect.succeed(text),
+        writeTextFile: () => Effect.succeed(text),
+      } satisfies WorkspaceFilesService,
+      createWorkspaceSessionFileAccess({
+        settings: {
+          getRepoConfig: () =>
+            Effect.succeed(
+              repoConfigSchema.parse({ workspaceId: "fairnest", workspaceName: "Fair", repoPath }),
+            ),
+        },
+        store: { get: () => Effect.succeed(session) },
+        git: counted,
+        settingsConfig: { pathExists: () => Effect.succeed(true) },
+        worktreeFiles: { resolveWorktreeRemovalPath: (value) => Effect.succeed(value) },
+        lifecycle: createTaskSessionLifecycleCoordinator(),
+      }),
+    );
+    const scope = {
+      kind: "chat" as const,
+      session: { workspaceId: "fairnest", sessionId: "chat" },
+    };
+    const readContext = { refreshId: "refresh" };
     const sharedCheck = [`rev-parse ${repoPath}`, `rev-parse ${worktree}`, `worktree ${repoPath}`];
 
-    await check("refresh");
-    await check("refresh");
+    await Effect.runPromise(resolveGitWorkingDirectory(counted, repoPath, worktree, readContext));
+    await Effect.runPromise(
+      files.refreshTree({ scope, rootPath: worktree, refreshId: "refresh", mode: "full" }),
+    );
+    await Effect.runPromise(
+      files.readTextFile({ scope, rootPath: worktree, relativePath: "a.ts", readContext }),
+    );
     expect(commands).toEqual(sharedCheck);
 
-    // A new refresh checks the directory again.
-    await check("next");
+    // A save must check the directory at write time, so it shares no refresh.
+    await Effect.runPromise(
+      files.writeTextFile({
+        scope,
+        rootPath: worktree,
+        relativePath: "a.ts",
+        contents: "",
+        revision: "revision",
+      }),
+    );
     expect(commands).toEqual([...sharedCheck, ...sharedCheck]);
   } finally {
     await removeTestDirectory(temporaryDirectory);

@@ -20,7 +20,9 @@ import {
   type WorkspaceSessionSetTargetBranchInput,
   type WorkspaceSessionForkInput,
   type WorkspaceSessionForkResult,
+  type WorkspaceSessionWorktreesListResult,
   workspaceSessionCreateResultSchema,
+  workspaceSessionWorktreesListResultSchema,
   workspaceSessionArchivePreviewSchema,
   workspaceSessionSchema,
   workspaceSessionStartResultSchema,
@@ -80,6 +82,14 @@ export class HostWorkspaceSessionClient {
 
   workspaceSessionGet(input: WorkspaceSessionRefInput): Promise<WorkspaceSession> {
     return this.invoke("workspace_session_get", input, workspaceSessionSchema);
+  }
+
+  workspaceSessionWorktreesList(workspaceId: string): Promise<WorkspaceSessionWorktreesListResult> {
+    return this.invoke(
+      "workspace_session_worktrees_list",
+      { workspaceId },
+      workspaceSessionWorktreesListResultSchema,
+    );
   }
 
   workspaceSessionCreate(

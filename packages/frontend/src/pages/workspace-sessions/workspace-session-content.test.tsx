@@ -637,6 +637,11 @@ test.each([
         rootPath,
         relativePath: "README.md",
       });
+      // The preview sends the chat session, so the host checks its saved directory.
+      expect(preview.mock.calls.at(-1)?.[0].workspaceSession).toEqual({
+        workspaceId: "workspace",
+        sessionId: sessionRecord.id,
+      });
       expect(error).not.toHaveBeenCalled();
     } finally {
       view.unmount();

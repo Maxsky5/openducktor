@@ -53,7 +53,11 @@ function ReadImage({
   image: MarkdownImageProps;
 }) {
   const result = useQuery(
-    workspaceImageFileQueryOptions(file.rootPath, file.relativePath, file.access),
+    workspaceImageFileQueryOptions(
+      file.rootPath,
+      file.relativePath,
+      file.access ? { kind: file.access } : undefined,
+    ),
   );
   const [failedSource, setFailedSource] = useState<string | null>(null);
   if (result.isError) return <ImageState message={errorMessage(result.error)} />;

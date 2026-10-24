@@ -194,8 +194,6 @@ export const assembleNodeEffectHostCommandRouter = (
       eventBus,
       lifecycleLogger,
     });
-  const filesystemService = createFilesystemService(filesystem);
-  const workspaceFilesService = createWorkspaceFilesService(filesystem, git);
   const gitService = createGitService({ gitPort: git, settingsConfig, worktreeFiles });
   const localAttachmentService = createLocalAttachmentService(localAttachments);
   const openInToolsService = createOpenInToolsService(openInTools);
@@ -380,6 +378,7 @@ export const assembleNodeEffectHostCommandRouter = (
     isTitleSyncPending: workspaceSessions.isTitleSyncPending,
     markTitleSyncPending: workspaceSessions.markTitleSyncPending,
     store: assets.workspaceSessionStore,
+    taskOwnership: assets.taskOwnership,
     settings: workspaceSettingsService,
     runtime: runtimeRegistry,
     runtimeAdmission,
@@ -394,6 +393,7 @@ export const assembleNodeEffectHostCommandRouter = (
     publishUpdated: workspaceSessions.publishUpdated,
     eventBus,
   });
+  const workspaceFiles = workspaceChats.scopeFiles(createWorkspaceFilesService(filesystem, git));
   const launchControls = createNodeSessionLaunchControls(agentSessionCommandService, [
     taskSessions.workflowLaunchService,
     workspaceChats.workspaceSessionLaunchService,
@@ -418,7 +418,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceProviderSetup,
     imageWorkers: defaultPorts.imageWorkers,
     shutdownWorkspaceFiles: () =>
-      workspaceFilesService.dispose().pipe(Effect.andThen(git.releaseReadCaptures())),
+      workspaceFiles.dispose().pipe(Effect.andThen(git.releaseReadCaptures())),
     lifecycleLogger,
     mcpHostBridge: resolvedMcpHostBridge,
     runtimeRegistry,
@@ -449,8 +449,8 @@ export const assembleNodeEffectHostCommandRouter = (
       runtimeRegistry,
       adapterRegistry: liveSessionAdapterRegistry,
     }),
-    ...createFilesystemCommandHandlers(filesystemService),
-    ...createWorkspaceFilesCommandHandlers(workspaceFilesService),
+    ...createFilesystemCommandHandlers(createFilesystemService(filesystem)),
+    ...createWorkspaceFilesCommandHandlers(workspaceFiles),
     ...createGitCommandHandlers(gitService),
     ...createNodeGitProviderCommandHandlers({
       resolver: gitProviderResolver,

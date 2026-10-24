@@ -1,4 +1,5 @@
 import { HostOperationError } from "../../effect/host-errors";
+import { WorktreeActionExitError } from "../actions/worktree-action-runner";
 import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
@@ -164,6 +165,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
+      taskOwnership: database,
       claudeSessionMetadata: {
         readWorkingDirectory: () => Effect.die(new Error("unexpected Claude metadata read")),
       },
@@ -351,86 +353,301 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     expect(h.starts).toEqual([]);
   }, 10_000);
 
-  // Competing requests run two real Git worktree operations and SQLite writes on Windows.
-  test.each(["create", "restore"] as const)(
-    "a failed %s leaves a competing chat's real worktree and files intact",
-    async (operation) => {
-      await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
-      const h = setup({ actions: false });
-      const archived = await Effect.runPromise(
-        createSqliteWorkspaceSessionStore(database).create({
-          workspaceId: "fairnest",
-          repoPath,
-          session: {
-            id: crypto.randomUUID(),
-            runtimeKind: "opencode",
-            externalSessionId: null,
-            executionTarget: {
-              kind: "local_worktree",
-              workingDirectory: path.join(root, "worktrees", "workspace-sessions", "named-chat"),
-              branchName: "odt/named-chat",
-              worktreeState: "removed",
-            },
-            roleSnapshot: null,
-            selectedModel: null,
-            generatedTitle: null,
-            manualTitle: null,
-            targetBranch: null,
-            createdAt: 1,
-            updatedAt: 2,
-            archivedAt: 2,
-          },
-        }),
+  const existingWorktreeInput = (h: ReturnType<typeof setup>, workingDirectory: string) => {
+    const { worktree: _worktree, ...fields } = h.createInput;
+    return {
+      ...fields,
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory },
+    };
+  };
+
+  // Each case adds real worktrees with several Git processes.
+  test("lists registered worktrees and creates fresh chats in one without changing it", async () => {
+    const h = setup();
+    const external = path.join(root, "external");
+    const detached = path.join(root, "detached");
+    const gone = path.join(root, "gone");
+    gitCommand("worktree", "add", "-b", "external", external, "main");
+    gitCommand("worktree", "add", "--detach", detached, "main");
+    gitCommand("worktree", "add", "-b", "gone", gone, "main");
+    await rm(gone, { recursive: true, force: true });
+
+    expect(
+      await h.router.invoke("workspace_session_worktrees_list", { workspaceId: "fairnest" }),
+    ).toEqual({
+      worktrees: [
+        { workingDirectory: detached, branchName: null },
+        { workingDirectory: external, branchName: "external" },
+      ],
+    });
+
+    await writeFile(path.join(external, "tracked.txt"), "local change\n");
+    await writeFile(path.join(external, "notes.txt"), "untracked\n");
+    // A branch change after selection is valid. The chat saves the branch present at creation.
+    runGit(external, "switch", "-c", "renamed");
+    const before = registeredWorktreePaths();
+    const input = existingWorktreeInput(h, external);
+    const first = await h.router.invoke("workspace_session_create", input);
+    const second = await h.router.invoke("workspace_session_create", input);
+
+    for (const created of [first, second])
+      expect(created.session.executionTarget).toEqual({
+        kind: "local_worktree",
+        workingDirectory: external,
+        branchName: "renamed",
+        worktreeState: "present",
+      });
+    expect(first.session.id).not.toBe(second.session.id);
+    expect(first.session.externalSessionId).toBeNull();
+    expect(registeredWorktreePaths()).toEqual(before);
+    expect(runGit(external, "branch", "--show-current")).toBe("renamed");
+    expect(await readFile(path.join(external, "tracked.txt"), "utf8")).toBe("local change\n");
+    expect(await readFile(path.join(external, "notes.txt"), "utf8")).toBe("untracked\n");
+    expect(h.actionRuns).toEqual([]);
+    expect(gitCommand("branch", "--list", "odt/*")).toBe("");
+  }, 15_000);
+
+  test("rejects a stale existing worktree choice and keeps the directory", async () => {
+    const h = setup();
+    const other = path.join(root, "other-repository");
+    await mkdir(other);
+    runGit(other, "init", "-b", "main");
+    const create = (workingDirectory: string) =>
+      Effect.runPromise(
+        Effect.flip(
+          Effect.tryPromise({
+            try: () =>
+              h.router.invoke(
+                "workspace_session_create",
+                existingWorktreeInput(h, workingDirectory),
+              ),
+            catch: (cause) => cause,
+          }),
+        ),
       );
-      const ref = { workspaceId: "fairnest", sessionId: archived.id };
-      const entered = Effect.runSync(Deferred.make<void>());
-      const release = Effect.runSync(Deferred.make<void>());
-      const createWorktree = h.targetDependencies.git.createWorktree;
-      let first = true;
-      h.targetDependencies.git.createWorktree = (...args) =>
+
+    expect(String(await create(path.join(root, "missing")))).toContain(
+      "Worktree directory is missing",
+    );
+    expect(String(await create(other))).toContain(
+      "is not a registered worktree of this repository",
+    );
+    expect(String(await create(repoPath))).toContain("is the current checkout");
+    expect(runGit(other, "rev-parse", "--is-inside-work-tree")).toBe("true");
+    expect(
+      await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
+    ).toEqual([]);
+  }, 15_000);
+
+  test("an existing worktree chat waits for setup at that path and reports its rollback", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    const h = setup();
+    const entered = Effect.runSync(Deferred.make<void>());
+    const release = Effect.runSync(Deferred.make<void>());
+    h.targetDependencies.worktreeActions.createRun = () => ({
+      run: () =>
         Effect.gen(function* () {
-          if (first) {
-            first = false;
-            yield* Deferred.succeed(entered, undefined);
-            yield* Deferred.await(release);
-          }
-          yield* createWorktree(...args);
-        });
-      const loser = Effect.runPromiseExit(
-        Effect.tryPromise({
-          try: () =>
-            operation === "create"
-              ? h.router.invoke("workspace_session_create", h.createInput).then(() => undefined)
-              : h.router.invoke("workspace_session_restore", ref).then(() => undefined),
-          catch: (cause) => cause,
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(release);
+          return yield* new WorktreeActionExitError({
+            actionName: "Install",
+            outputTail: [],
+            message: "Install failed.",
+            exitCode: 1,
+            signal: null,
+          });
         }),
+      stopTerminals: () => Effect.void,
+    });
+    const settingUp = Effect.runPromiseExit(
+      Effect.tryPromise({
+        try: () => h.router.invoke("workspace_session_create", h.createInput),
+        catch: (cause) => cause,
+      }),
+    );
+    await Effect.runPromise(Deferred.await(entered));
+    const directory = path.join(root, "worktrees", "workspace-sessions", "named-chat");
+    expect(registeredWorktreePaths()).toContain(directory);
+    // The existing worktree chat resolves its guard path just before it waits for the setup.
+    const guarding = Effect.runSync(Deferred.make<void>());
+    const { worktreeFiles } = h.targetDependencies;
+    const resolveRemovalPath = worktreeFiles.resolveWorktreeRemovalPath;
+    worktreeFiles.resolveWorktreeRemovalPath = (value) =>
+      resolveRemovalPath(value).pipe(Effect.tap(() => Deferred.succeed(guarding, undefined)));
+    const adopting = Effect.runPromiseExit(
+      Effect.tryPromise({
+        try: () => h.router.invoke("workspace_session_create", existingWorktreeInput(h, directory)),
+        catch: (cause) => cause,
+      }),
+    );
+    await Effect.runPromise(Deferred.await(guarding));
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+
+    const failedSetup = await settingUp;
+    expect(Exit.isFailure(failedSetup)).toBe(true);
+    if (Exit.isFailure(failedSetup))
+      expect(Cause.pretty(failedSetup.cause)).toContain("Install failed.");
+    const failedAdoption = await adopting;
+    expect(Exit.isFailure(failedAdoption)).toBe(true);
+    if (Exit.isFailure(failedAdoption))
+      expect(Cause.pretty(failedAdoption.cause)).toContain("Worktree directory is missing");
+    expect(registeredWorktreePaths()).not.toContain(directory);
+    expect(
+      await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
+    ).toEqual([]);
+  }, 15_000);
+
+  test("keeps a shared existing worktree when another chat needs it", async () => {
+    const h = setup();
+    const external = path.join(root, "external");
+    gitCommand("worktree", "add", "-b", "external", external, "main");
+    const input = existingWorktreeInput(h, external);
+    const first = await h.router.invoke("workspace_session_create", input);
+    const second = await h.router.invoke("workspace_session_create", input);
+    const ref = { workspaceId: "fairnest", sessionId: first.session.id };
+
+    expect(await h.router.invoke("workspace_session_archive_preview", ref)).toMatchObject({
+      branchName: "external",
+      sharedWith: [{ workspaceId: "fairnest", sessionId: second.session.id }],
+      taskOwners: [],
+    });
+    await expect(
+      h.router.invoke("workspace_session_archive", {
+        ...ref,
+        removeWorktree: true,
+        worktreeConfirmation: { workingDirectory: external, branchName: "external" },
+      }),
+    ).rejects.toThrow("saved chats need it for files or history");
+    const archived = await h.router.invoke("workspace_session_archive", ref);
+
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.executionTarget).toEqual(first.session.executionTarget);
+    expect(registeredWorktreePaths()).toContain(external);
+    expect(gitCommand("branch", "--list", "external")).toContain("external");
+  }, 15_000);
+
+  // Competing requests run two real Git worktree operations and SQLite writes on Windows.
+  test("a failed create leaves a competing chat's real worktree and files intact", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    const h = setup({ actions: false });
+    const entered = Effect.runSync(Deferred.make<void>());
+    const release = Effect.runSync(Deferred.make<void>());
+    const createWorktree = h.targetDependencies.git.createWorktree;
+    let first = true;
+    h.targetDependencies.git.createWorktree = (...args) =>
+      Effect.gen(function* () {
+        if (first) {
+          first = false;
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(release);
+        }
+        yield* createWorktree(...args);
+      });
+    const loser = Effect.runPromiseExit(
+      Effect.tryPromise({
+        try: () => h.router.invoke("workspace_session_create", h.createInput).then(() => undefined),
+        catch: (cause) => cause,
+      }),
+    );
+    try {
+      await Effect.runPromise(Deferred.await(entered));
+      const winner = await h.router.invoke("workspace_session_create", h.createInput);
+      const directory = winner.session.executionTarget.workingDirectory;
+      await writeFile(path.join(directory, "owned.txt"), "Keep the winning request's file.");
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      const failed = await loser;
+      expect(Exit.isFailure(failed)).toBe(true);
+      if (Exit.isFailure(failed))
+        expect(Cause.pretty(failed.cause)).toContain("Git did not confirm worktree creation");
+      expect(await readFile(path.join(directory, "owned.txt"), "utf8")).toBe(
+        "Keep the winning request's file.",
       );
-      try {
-        await Effect.runPromise(Deferred.await(entered));
-        const winner = await h.router.invoke("workspace_session_create", h.createInput);
-        const directory = winner.session.executionTarget.workingDirectory;
-        await writeFile(path.join(directory, "owned.txt"), "Keep the winning request's file.");
-        await Effect.runPromise(Deferred.succeed(release, undefined));
-        const failed = await loser;
-        expect(Exit.isFailure(failed)).toBe(true);
-        if (Exit.isFailure(failed))
-          expect(Cause.pretty(failed.cause)).toContain("Git did not confirm worktree creation");
-        expect(await readFile(path.join(directory, "owned.txt"), "utf8")).toBe(
-          "Keep the winning request's file.",
-        );
-        expect(registeredWorktreePaths()).toContain(directory);
-        expect(gitCommand("branch", "--list", "odt/named-chat")).toContain("odt/named-chat");
-        expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);
-        expect(
-          await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
-        ).toEqual([winner.session]);
-      } finally {
-        await Effect.runPromise(Deferred.succeed(release, undefined));
-        await loser;
-      }
-    },
-    15_000,
-  );
+      expect(registeredWorktreePaths()).toContain(directory);
+      expect(
+        await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
+      ).toEqual([winner.session]);
+    } finally {
+      await Effect.runPromise(Deferred.succeed(release, undefined));
+      await loser;
+    }
+  }, 15_000);
+
+  test("a new chat waits for a restore of the same directory and then leaves it intact", async () => {
+    await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
+    const h = setup({ actions: false });
+    const archived = await Effect.runPromise(
+      createSqliteWorkspaceSessionStore(database).create({
+        workspaceId: "fairnest",
+        repoPath,
+        session: {
+          id: crypto.randomUUID(),
+          runtimeKind: "opencode",
+          externalSessionId: null,
+          executionTarget: {
+            kind: "local_worktree",
+            workingDirectory: path.join(root, "worktrees", "workspace-sessions", "named-chat"),
+            branchName: "odt/named-chat",
+            worktreeState: "removed",
+          },
+          roleSnapshot: null,
+          selectedModel: null,
+          generatedTitle: null,
+          manualTitle: null,
+          targetBranch: null,
+          createdAt: 1,
+          updatedAt: 2,
+          archivedAt: 2,
+        },
+      }),
+    );
+    const ref = { workspaceId: "fairnest", sessionId: archived.id };
+    const entered = Effect.runSync(Deferred.make<void>());
+    const release = Effect.runSync(Deferred.make<void>());
+    const createWorktree = h.targetDependencies.git.createWorktree;
+    let first = true;
+    h.targetDependencies.git.createWorktree = (...args) =>
+      Effect.gen(function* () {
+        if (first) {
+          first = false;
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(release);
+        }
+        yield* createWorktree(...args);
+      });
+    const restore = h.router.invoke("workspace_session_restore", ref);
+    await Effect.runPromise(Deferred.await(entered));
+    // The new chat resolves its guard path just before it waits for the restore guard.
+    const guarding = Effect.runSync(Deferred.make<void>());
+    const { worktreeFiles } = h.targetDependencies;
+    const resolveRemovalPath = worktreeFiles.resolveWorktreeRemovalPath;
+    worktreeFiles.resolveWorktreeRemovalPath = (value) =>
+      resolveRemovalPath(value).pipe(Effect.tap(() => Deferred.succeed(guarding, undefined)));
+    const competing = Effect.runPromiseExit(
+      Effect.tryPromise({
+        try: () => h.router.invoke("workspace_session_create", h.createInput),
+        catch: (cause) => cause,
+      }),
+    );
+    await Effect.runPromise(Deferred.await(guarding));
+    await Effect.runPromise(Deferred.succeed(release, undefined));
+    const restored = await restore;
+    const directory = restored.executionTarget.workingDirectory;
+    await writeFile(path.join(directory, "owned.txt"), "Keep the restored chat's file.");
+    const failed = await competing;
+    expect(Exit.isFailure(failed)).toBe(true);
+    if (Exit.isFailure(failed))
+      expect(Cause.pretty(failed.cause)).toContain("Worktree directory already exists");
+    expect(await readFile(path.join(directory, "owned.txt"), "utf8")).toBe(
+      "Keep the restored chat's file.",
+    );
+    expect(registeredWorktreePaths()).toContain(directory);
+    expect(gitCommand("branch", "--list", "odt/named-chat")).toContain("odt/named-chat");
+    expect(restored.archivedAt).toBeNull();
+    expect(
+      await h.router.invoke("workspace_session_list_active", { workspaceId: "fairnest" }),
+    ).toEqual([restored]);
+  }, 15_000);
 
   test("creates from_name from the target branch instead of the source checkout HEAD", async () => {
     await writeFile(path.join(repoPath, ".env"), "TEST_VALUE=local\n");
@@ -589,9 +806,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
       const actionCount = h.actionRuns.length;
 
       await expect(h.router.invoke("workspace_session_restore", ref)).rejects.toThrow(
-        replacement === "plain directory"
-          ? "not the saved canonical Git directory"
-          : "not a registered worktree",
+        replacement === "plain directory" ? "is not a Git checkout" : "not a registered worktree",
       );
 
       expect(await h.router.invoke("workspace_session_get", ref)).toEqual(archived);

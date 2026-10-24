@@ -1,4 +1,5 @@
 import {
+  type GitReadContext,
   type GitTargetBranch,
   type RepoConfig,
   type WorkspaceSessionExecutionTarget,
@@ -6,13 +7,18 @@ import {
   type WorkspaceSessionWorktreeInput,
   workspaceSessionBranchNameSchema,
 } from "@openducktor/contracts";
-import { Cause, Effect, Exit, type Scope } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
+import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
+import {
+  type ExistingWorktreeDependencies,
+  readExistingWorktreeTarget,
+} from "./workspace-session-existing-worktree";
 import {
   classifyWorkspaceCheckout,
   type WorkspaceCheckoutGitPort,
@@ -46,45 +52,63 @@ export type WorkspaceSessionTargetCreationDependencies = {
     | "removeWorktree"
     | "deleteLocalBranch"
     | "deleteReference"
-  >;
+  > &
+    ExistingWorktreeDependencies["git"];
   settingsConfig: Pick<
     SettingsConfigPort,
     "defaultWorktreeBasePath" | "resolveConfiguredPath" | "join" | "pathExists"
   >;
   worktreeFiles: Pick<
     WorktreeFilePort,
-    "ensureDirectory" | "copyConfiguredPaths" | "pathIsWithinRoot" | "removePathIfPresent"
+    | "ensureDirectory"
+    | "copyConfiguredPaths"
+    | "pathIsWithinRoot"
+    | "removePathIfPresent"
+    | "resolveWorktreeRemovalPath"
   >;
   worktreeActions: WorktreeActionRunner;
+  lifecycle: Pick<
+    TaskSessionLifecycleCoordinator,
+    "acquireWorktreeRead" | "acquireWorktreeLifecycle"
+  >;
 };
 
+/** Where a new chat works: the repository checkout, a new worktree, or an existing worktree. */
+export type WorkspaceSessionDestination =
+  | { location: "local_repo_root" }
+  | { location: "local_worktree"; worktree: WorkspaceSessionWorktreeInput }
+  | { location: "existing_worktree"; existingWorktree: { workingDirectory: string } };
+
+/** Checks that a saved target is still its checkout of the workspace, and returns its real path. */
 export const validateWorkspaceSessionTarget = (
   { git }: WorkspaceSessionTargetValidationDependencies,
   repoPath: string,
   target: WorkspaceSessionExecutionTarget,
+  readContext?: GitReadContext,
 ) =>
   Effect.gen(function* () {
     const canonicalRepoPath = yield* git.canonicalizePath(repoPath);
     const canonicalPath = yield* git.canonicalizePath(target.workingDirectory);
-    const checkout = yield* classifyWorkspaceCheckout(git, {
-      canonicalRepoPath,
-      canonicalDirectory: canonicalPath,
-    });
+    const checkout = yield* classifyWorkspaceCheckout(
+      git,
+      { canonicalRepoPath, canonicalDirectory: canonicalPath },
+      readContext,
+    );
     if (checkout === "not_git_directory") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `Workspace Session directory is not the saved canonical Git directory: ${target.workingDirectory}`,
+          message: `The directory of this chat is not a Git checkout: ${target.workingDirectory}. Restore the checkout at this path, or archive this chat.`,
           field: "workingDirectory",
         }),
       );
     }
     if (checkout === target.kind) {
-      return;
+      return canonicalPath;
     }
     if (target.kind === "local_repo_root") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: "Workspace Session checkout no longer matches its Workspace.",
+          message: `This chat works in ${target.workingDirectory}, but the workspace repository is now ${repoPath}. Archive this chat and start a new chat.`,
           field: "workingDirectory",
         }),
       );
@@ -92,38 +116,52 @@ export const validateWorkspaceSessionTarget = (
     if (checkout === "local_repo_root") {
       return yield* Effect.fail(
         new HostValidationError({
-          message: `Workspace Session worktree resolves to the Workspace repository root: ${canonicalPath}. Select a session that uses a worktree.`,
+          message: `The worktree of this chat is now the repository checkout: ${canonicalPath}. Archive this chat, or start a Current checkout chat.`,
           field: "workingDirectory",
         }),
       );
     }
     return yield* Effect.fail(
       new HostValidationError({
-        message: `Workspace Session directory is not a registered worktree of ${repoPath}: ${canonicalPath}`,
+        message: `The directory of this chat is not a registered worktree of ${repoPath}: ${canonicalPath}. If you moved this worktree, run git worktree repair in it. Otherwise archive this chat.`,
         field: "workingDirectory",
       }),
     );
   });
 
+/**
+ * Resolves the destination of a new chat and runs `use` with its target. Archive removal holds the
+ * write guard of a directory, so a worktree destination holds a guard until `use` ends: a new chat
+ * never saves a directory that archive removes. A new worktree holds a read guard, because runtime
+ * and setup reads of it take read guards too. An existing worktree holds the write guard, so it
+ * waits until a new worktree at that path finishes its setup or its rollback.
+ */
 export const withWorkspaceSessionTarget = <A, E>(
   dependencies: WorkspaceSessionTargetCreationDependencies,
   input: {
     owner: WorkspaceSessionRefInput;
-    worktree: WorkspaceSessionWorktreeInput | undefined;
+    destination: WorkspaceSessionDestination;
     repoConfig: RepoConfig;
-    location: WorkspaceSessionExecutionTarget["kind"];
     targetBranch: GitTargetBranch;
     startPoint?: string;
     rollbackMode?: "all_owned";
-    guardWorktree?: (path: string) => Effect.Effect<void, HostError, Scope.Scope>;
   },
   use: (target: WorkspaceSessionExecutionTarget, retainTarget: () => void) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
   Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {
       const { git, settingsConfig, worktreeFiles } = dependencies;
-      const { repoConfig } = input;
+      const { repoConfig, destination } = input;
       const repoPath = yield* git.canonicalizePath(repoConfig.repoPath);
+      // The existing worktree check reads the repository checkout itself.
+      if (destination.location === "existing_worktree") {
+        const { workingDirectory } = destination.existingWorktree;
+        yield* dependencies.lifecycle.acquireWorktreeLifecycle([
+          yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
+        ]);
+        const target = yield* readExistingWorktreeTarget(dependencies, repoPath, workingDirectory);
+        return yield* restore(use(target, () => {}));
+      }
       if (!(yield* git.isGitRepository(repoPath))) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -132,20 +170,12 @@ export const withWorkspaceSessionTarget = <A, E>(
           }),
         );
       }
-      if (input.location === "local_repo_root") {
+      if (destination.location === "local_repo_root") {
         return yield* restore(
           use({ kind: "local_repo_root", workingDirectory: repoPath }, () => {}),
         );
       }
-      const worktree = input.worktree;
-      if (!worktree) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: "Choose a worktree name and creation mode.",
-            field: "worktree",
-          }),
-        );
-      }
+      const { worktree } = destination;
       const createBranch = worktree.mode === "from_name";
       const branch = worktree.branchName ?? `${repoConfig.branchPrefix}/${worktree.name}`;
       if (!workspaceSessionBranchNameSchema.safeParse(branch).success) {
@@ -189,6 +219,10 @@ export const withWorkspaceSessionTarget = <A, E>(
           : settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
       const namespace = settingsConfig.join(base, "workspace-sessions");
       const workingDirectory = settingsConfig.join(namespace, worktree.name);
+      // A restore of this directory holds its guard. Check the directory after it finishes.
+      yield* dependencies.lifecycle.acquireWorktreeRead(
+        yield* worktreeFiles.resolveWorktreeRemovalPath(workingDirectory),
+      );
       if (yield* settingsConfig.pathExists(workingDirectory)) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -197,7 +231,6 @@ export const withWorkspaceSessionTarget = <A, E>(
           }),
         );
       }
-      if (input.guardWorktree) yield* input.guardWorktree(workingDirectory);
       yield* worktreeFiles.ensureDirectory(namespace);
       let acquired = false;
       let retained = false;

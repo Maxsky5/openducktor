@@ -111,7 +111,7 @@ export const createWorkspaceTreeRefresh = (filesystem: FilesystemPort, git: Tree
             const context = yield* git.getFileTreeContext(root, input.targetBranch);
             if (input.mode === "incremental" && view && !sameContext(context, view.context))
               return reset("context_changed");
-            // The Git panel of this refresh reads the same checkout.
+            // The Git panel and the chat directory check of this refresh read the same checkout.
             const readContext = { refreshId: input.refreshId };
             const checkout = yield* git.readCheckout(root, readContext);
             if (!checkout)
