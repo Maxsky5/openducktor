@@ -373,10 +373,7 @@ export const assembleNodeEffectHostCommandRouter = (
     terminalService,
     browserTabs: browserService,
     lifecycle: taskSessionLifecycleCoordinator,
-    operationGate: workspaceSessions.operationGate,
-    sessionTitleGate: workspaceSessions.sessionTitleGate,
-    isTitleSyncPending: workspaceSessions.isTitleSyncPending,
-    markTitleSyncPending: workspaceSessions.markTitleSyncPending,
+    ...workspaceSessions,
     store: assets.workspaceSessionStore,
     taskOwnership: assets.taskOwnership,
     settings: workspaceSettingsService,
@@ -390,8 +387,8 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
     worktreeActions,
     registry: liveSessionAdapterRegistry,
-    publishUpdated: workspaceSessions.publishUpdated,
     eventBus,
+    readEnv,
   });
   const workspaceFiles = workspaceChats.scopeFiles(createWorkspaceFilesService(filesystem, git));
   const launchControls = createNodeSessionLaunchControls(agentSessionCommandService, [

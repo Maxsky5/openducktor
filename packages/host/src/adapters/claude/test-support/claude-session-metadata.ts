@@ -7,11 +7,11 @@ import * as sdk from "@anthropic-ai/claude-agent-sdk";
 import { spyOn } from "bun:test";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
-import { claudeSessionMetadataAdapter } from "../claude-session-metadata-adapter";
+import { createClaudeSessionMetadataAdapter } from "../claude-session-metadata-adapter";
 
 const config = await realpath(process.env.CLAUDE_CONFIG_DIR!);
 const read = (id: string) =>
-  Effect.runPromise(claudeSessionMetadataAdapter.readWorkingDirectory(id));
+  Effect.runPromise(createClaudeSessionMetadataAdapter(() => process.env).readWorkingDirectory(id));
 const query = spyOn(sdk, "query").mockImplementation(() => {
   throw new Error("Metadata must not start a Claude runtime.");
 });
@@ -101,8 +101,11 @@ try {
         return true;
       });
     };
-    await assertFailure(randomUUID(), /missing or unreadable/);
-    await assertFailure("not-a-session-uuid", /missing or unreadable/);
+    // Claude deletes old transcripts, so a missing transcript means no saved history.
+    assert.equal(await read(randomUUID()), null);
+    const empty = randomUUID();
+    await writeFile(join(project, `${empty}.jsonl`), "");
+    await assertFailure(empty, /cannot read the metadata/);
     for (const cwd of [undefined, "", "relative/worktree"]) {
       const id = randomUUID();
       await writeFile(
@@ -112,6 +115,7 @@ try {
       await assertFailure(id, /no absolute working directory/);
     }
     const id = randomUUID();
+    await writeFile(join(project, `${id}.jsonl`), "");
     const metadata = spyOn(sdk, "getSessionInfo").mockResolvedValue({
       sessionId: randomUUID(),
       cwd: config,

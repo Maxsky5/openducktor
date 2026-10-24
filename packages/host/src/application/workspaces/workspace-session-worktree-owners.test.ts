@@ -194,6 +194,15 @@ describe("workspace session worktree owners", () => {
     expect(await Effect.runPromise(chatOwners(dependencies, source))).toEqual([]);
   });
 
+  test("ignores a Claude chat whose transcript Claude deleted", async () => {
+    const source = record("source", "/worktrees/source");
+    const old = { ...record("old", "/repo"), archivedAt: 2 };
+    const dependencies = dependenciesFor([source, old], new Map());
+    dependencies.claudeSessionMetadata.readWorkingDirectory = () => Effect.succeed(null);
+
+    expect(await Effect.runPromise(chatOwners(dependencies, source))).toEqual([]);
+  });
+
   test("fails an ownership read when native metadata cannot be read", async () => {
     const source = record("source", "/worktrees/source");
     const child = { ...record("child", "/worktrees/child"), archivedAt: 2 };
