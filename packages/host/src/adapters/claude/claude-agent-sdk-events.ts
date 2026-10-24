@@ -9,7 +9,6 @@ import {
   type ClaudeEventSession,
   findClaudeSubagentSessionByAgentId,
   findClaudeSubagentTaskSession,
-  hasActiveClaudeBackgroundWork,
   rememberAssistantTextForCurrentTurn,
   updateTaskRoutes,
   userTurnIndex,
@@ -19,6 +18,7 @@ import {
   resolveForwardedClaudeSubagentMessage,
 } from "./claude-agent-sdk-forwarded-subagent-events";
 import { applyClaudeLifecycleEvent, publishClaudeActivity } from "./claude-agent-sdk-lifecycle";
+import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
 import { updateBackgroundTasks, applyTaskEvent } from "./claude-agent-sdk-activity";
 import {
   isClaudeMetaStreamMessage,
@@ -52,10 +52,7 @@ import {
   emitSupersededTranscriptMessage,
   settleClaudeStreamedAssistantText,
 } from "./claude-agent-sdk-transcript-retractions";
-import {
-  isClaudeWakeUserMessage,
-  shouldFinalizeClaudeTurn,
-} from "./claude-agent-sdk-user-messages";
+import { isClaudeWakeUserMessage } from "./claude-agent-sdk-user-messages";
 import { readStringProp, textFromContentBlocks } from "./claude-agent-sdk-utils";
 import type {
   ClaudeSdkAssistantMessageProjection,
@@ -151,13 +148,18 @@ export const handleClaudeSdkMessage = ({
   }
   if (message.type === "user") {
     const userToolResultMessage = parseClaudeUserToolResultIngress(message);
-    const originKind = userToolResultMessage.turnOriginKind;
-    if (originKind === "human") {
-      delete session.assistantTurnOriginKind;
-    } else if (originKind !== undefined) {
-      session.assistantTurnOriginKind = originKind;
-    }
+    if (userToolResultMessage.turnOriginKind === "human") delete session.wakeStartedAt;
     if (isRootSession && isClaudeWakeUserMessage(message, userToolResultMessage)) {
+      if (message.timestamp !== undefined) session.wakeStartedAt = message.timestamp;
+      else delete session.wakeStartedAt;
+      delete session.lastAssistantNativeUuid;
+      delete session.lastAssistantNativeUuidTurnIndex;
+      delete session.lastAssistantTextMessageId;
+      delete session.lastAssistantText;
+      delete session.lastAssistantTextFinal;
+      delete session.lastAssistantTextModel;
+      delete session.lastAssistantTextDurationMs;
+      delete session.lastAssistantTextTurnIndex;
       session.sdkInitiatedTurnActive = true;
       applyClaudeLifecycleEvent({ emit, session, timestamp, event: { kind: "sdk_turn_started" } });
     }
@@ -372,14 +374,7 @@ const handleAssistantMessage = ({
   const hasFinalStopReason = stopReason === "end_turn" || stopReason === "stop_sequence";
   const isPendingSubagentAssistantText =
     text.length > 0 && !hasToolUse && !stopReason && isForwardedSubagentText;
-  const isFinalAssistantText =
-    text.length > 0 &&
-    !hasToolUse &&
-    hasFinalStopReason &&
-    shouldFinalizeClaudeTurn(
-      session.assistantTurnOriginKind,
-      hasActiveClaudeBackgroundWork(session) ? 1 : 0,
-    );
+  const isFinalAssistantText = text.length > 0 && !hasToolUse && hasFinalStopReason;
   const responseId = readStringProp(assistantMessage, "id");
   const assistantMessageId = responseId ?? message.uuid;
   if ((text.length > 0 || hasToolUse) && !isFinalAssistantText && !isPendingSubagentAssistantText) {
@@ -465,6 +460,11 @@ const handleAssistantMessage = ({
       };
       if (assistantModel) {
         event.model = assistantModel;
+      }
+      const durationMs = claudeReplyDurationMs(session.wakeStartedAt, message.timestamp);
+      if (durationMs !== undefined) {
+        event.durationMs = durationMs;
+        session.lastAssistantTextDurationMs = durationMs;
       }
       emit(event);
       settleClaudeStreamedAssistantText({

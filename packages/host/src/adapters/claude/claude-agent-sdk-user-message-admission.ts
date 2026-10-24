@@ -43,6 +43,7 @@ export const applyClaudeUserMessageSignal = ({
     session.foregroundTurnActive = true;
     session.nativeCommandStates ??= new Map();
     session.nativeCommandStates.set(signal.messageId, "started");
+    delete session.wakeStartedAt;
   }
   if (
     knownMessage &&

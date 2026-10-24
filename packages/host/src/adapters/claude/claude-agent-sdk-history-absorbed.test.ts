@@ -12,13 +12,13 @@ const startedAt = "2026-10-21T18:21:10.235Z";
 const finishedAt = "2026-10-21T18:21:27.097Z";
 
 test.each([
-  { origin: "peer", isMeta: true, absorbed: true, final: true, users: 1 },
-  { origin: "peer", isMeta: true, absorbed: false, final: false, users: 1 },
-  { origin: "human", isMeta: false, absorbed: true, final: true, users: 2 },
-  { origin: "observer", isMeta: false, absorbed: true, final: true, users: 1 },
+  { origin: "peer", isMeta: true, absorbed: true, users: 1 },
+  { origin: "peer", isMeta: true, absorbed: false, users: 1 },
+  { origin: "human", isMeta: false, absorbed: true, users: 2 },
+  { origin: "observer", isMeta: false, absorbed: true, users: 1 },
 ])(
-  "preserves the running turn after queued $origin input, absorbed $absorbed",
-  async ({ origin, isMeta, absorbed, final, users }) => {
+  "preserves the completed reply after queued $origin input, absorbed $absorbed",
+  async ({ origin, isMeta, absorbed, users }) => {
     const root = await mkdtemp(join(tmpdir(), "claude-absorbed-history-"));
     try {
       const cwd = await realpath(root);
@@ -162,7 +162,7 @@ test.each([
         reply?.parts.some(
           (part) => part.kind === "step" && part.phase === "finish" && part.reason === "stop",
         ),
-      ).toBe(final);
+      ).toBe(true);
       expect(history.filter((message) => message.role === "user")).toHaveLength(users);
       expect(history.flatMap((message) => message.parts)).toContainEqual(
         expect.objectContaining({
@@ -172,13 +172,10 @@ test.each([
         }),
       );
       const continuation = decideClaudePersistedContinuation(history, sessionId);
-      expect(continuation.kind).toBe(final ? "reject" : "allow");
-      if (final) {
-        expect(reply).toMatchObject({
-          model: { providerId: "claude", modelId: "claude-haiku-5-5", variant: "low" },
-        });
-        expect(continuation).toMatchObject({ error: { reason: "completed_turn" } });
-      }
+      expect(reply).toMatchObject({
+        model: { providerId: "claude", modelId: "claude-haiku-5-5", variant: "low" },
+      });
+      expect(continuation).toMatchObject({ kind: "reject", error: { reason: "completed_turn" } });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

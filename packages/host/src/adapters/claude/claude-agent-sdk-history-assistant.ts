@@ -97,6 +97,7 @@ export const clearClaudeHistoryAssistantFinality = (
 ): void => {
   message.parts = message.parts.filter((part) => part.kind !== "step" || part.phase !== "finish");
   delete message.model;
+  delete message.durationMs;
 };
 
 export const isLiveFinalAssistantStopReason = (stopReason: string | undefined): boolean =>

@@ -207,7 +207,7 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
   });
 
-  test("keeps assistant responses to peer turns intermediate", () => {
+  test("completes assistant responses to peer turns", () => {
     const origins = [{ kind: "peer", from: "general-purpose", senderTaskId: "agent-1" }] as const;
 
     for (const [index, origin] of origins.entries()) {
@@ -286,14 +286,11 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
 
       expect(events).toContainEqual(
         expect.objectContaining({
-          type: "assistant_part",
-          part: expect.objectContaining({
-            kind: "text",
-            text: `Runtime-generated response ${index}`,
-          }),
+          type: "assistant_message",
+          message: `Runtime-generated response ${index}`,
+          model: expect.objectContaining({ modelId: "claude-sonnet-4-6" }),
         }),
       );
-      expect(events.some((event) => event.type === "assistant_message")).toBe(false);
 
       handleClaudeSdkMessage({
         session,
@@ -489,7 +486,13 @@ describe("handleClaudeSdkMessage assistant transcript events", () => {
       }),
     });
 
-    expect(events.some((event) => event.type === "assistant_message")).toBe(false);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        message: "The outer agent is complete.",
+        forkPoint: expect.any(Object),
+      }),
+    );
     expect(events.filter((event) => event.type === "session_idle")).toHaveLength(0);
     expect(session.activity).toBe("running");
     expect(session.activeSdkUserTurnCount).toBe(0);

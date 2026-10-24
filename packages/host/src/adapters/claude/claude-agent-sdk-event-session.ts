@@ -25,7 +25,7 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     activeManualCompaction?: ClaudeManualCompactionState;
     activeSdkUserTurnCount?: number;
     activity: ClaudeSessionActivity;
-    assistantTurnOriginKind?: string;
+    wakeStartedAt?: string;
     externalSessionId: string;
     hiddenSubagentTaskIds?: Set<string>;
     pendingApprovals?: Map<string, PendingApproval>;
@@ -39,6 +39,7 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     lastAssistantText?: string;
     lastAssistantTextFinal?: boolean;
     lastAssistantTextModel?: AgentModelSelection;
+    lastAssistantTextDurationMs?: number;
     lastAssistantTextTurnIndex?: number;
     lastSuccessfulResultTurnIndex?: number;
     lastAssistantNativeUuid?: string;
@@ -217,6 +218,7 @@ export const rememberAssistantTextForCurrentTurn = (
   session.lastAssistantTextMessageId = messageId;
   session.lastAssistantText = trimmed;
   session.lastAssistantTextFinal = isFinal;
+  delete session.lastAssistantTextDurationMs;
   if (model) {
     session.lastAssistantTextModel = model;
   } else {

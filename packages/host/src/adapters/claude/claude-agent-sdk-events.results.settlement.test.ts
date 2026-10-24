@@ -28,6 +28,163 @@ const idleTrace = () => {
 };
 
 describe("handleClaudeSdkMessage result settlement", () => {
+  test.each(["The review found no issues.", ""])(
+    "completes a peer reply with result %j without adding a notification-only reply",
+    (result) => {
+      const events: AgentEvent[] = [];
+      const session = createSession("idle");
+      const send = (
+        timestamp: string,
+        message: Parameters<typeof handleClaudeSdkMessage>[0]["message"],
+      ) =>
+        handleClaudeSdkMessage({
+          session,
+          timestamp,
+          message,
+          modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+          emit: (event) => events.push(event),
+        });
+      send(
+        "2026-10-24T14:53:40.000Z",
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "background_tasks_changed",
+          tasks: [
+            { task_id: "child", run_id: "1", task_type: "local_agent", description: "Review" },
+          ],
+        }),
+      );
+      send(
+        "2026-10-24T14:53:42.194Z",
+        claudeSdkMessageFixture({
+          type: "user",
+          timestamp: "2026-10-24T14:53:42.194Z",
+          message: { role: "user", content: "The review is complete." },
+          origin: { kind: "peer", from: "child", senderTaskId: "child" },
+        }),
+      );
+      send(
+        "2026-10-24T14:53:45.731Z",
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: "86e7ae2c-f54a-4a7c-8434-04a37f93e252",
+          timestamp: "2026-10-24T14:53:45.731Z",
+          message: {
+            id: "final-peer-response",
+            role: "assistant",
+            model: "claude-haiku-5-5",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "The review found no issues." }],
+          },
+        }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_message",
+          messageId: "final-peer-response",
+          message: "The review found no issues.",
+          model: { providerId: "claude", modelId: "claude-haiku-5-5", runtimeKind: "claude" },
+          durationMs: 3_537,
+        }),
+      );
+      send(
+        "2026-10-24T14:53:45.750Z",
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: "eb38c607-30c0-408b-ae46-c56741a03701",
+          result,
+          terminal_reason: "completed",
+          stop_reason: "end_turn",
+          origin: { kind: "peer", from: "child", senderTaskId: "child" },
+        }),
+      );
+      expect(session.activity).toBe("running");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_message",
+          messageId: "final-peer-response",
+          forkPoint: { messageId: "final-peer-response" },
+          durationMs: 3_537,
+        }),
+      );
+      const completedReplies = events.filter((event) => event.type === "assistant_message");
+      send(
+        "2026-10-24T14:53:45.781Z",
+        claudeSdkMessageFixture({
+          type: "user",
+          timestamp: "2026-10-24T14:53:45.781Z",
+          message: { role: "user", content: "The child task completed." },
+          origin: { kind: "task-notification" },
+        }),
+      );
+      send(
+        "2026-10-24T14:53:45.793Z",
+        claudeSdkMessageFixture({
+          type: "result",
+          subtype: "success",
+          uuid: "a9fce97a-788d-4267-98cd-6b4f719ade59",
+          terminal_reason: "completed",
+          stop_reason: "end_turn",
+          origin: { kind: "task-notification" },
+        }),
+      );
+      expect(events.filter((event) => event.type === "assistant_message")).toEqual(
+        completedReplies,
+      );
+      expect(session.completedNativeResultIds?.has("a9fce97a-788d-4267-98cd-6b4f719ade59")).toBe(
+        true,
+      );
+      expect(session.completedReplyChainIds?.get("final-peer-response")).toBe(
+        "86e7ae2c-f54a-4a7c-8434-04a37f93e252",
+      );
+    },
+  );
+
+  test("uses native timestamps for a result-only wake reply without reusing an earlier reply", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("idle");
+    session.lastAssistantText = "The review is complete.";
+    session.lastAssistantTextFinal = true;
+    session.lastAssistantTextMessageId = "earlier-reply";
+    session.lastAssistantTextTurnIndex = 0;
+    const send = (message: Parameters<typeof handleClaudeSdkMessage>[0]["message"]) =>
+      handleClaudeSdkMessage({
+        session,
+        timestamp: "2026-10-24T15:00:00.000Z",
+        message,
+        modelSelection: (modelId) => ({ providerId: "claude", modelId, runtimeKind: "claude" }),
+        emit: (event) => events.push(event),
+      });
+    send(
+      claudeSdkMessageFixture({
+        type: "user",
+        timestamp: "2026-10-24T14:53:42.194Z",
+        message: { role: "user", content: "The review is complete." },
+        origin: { kind: "peer", from: "child" },
+      }),
+    );
+    send(
+      claudeSdkMessageFixture({
+        type: "result",
+        subtype: "success",
+        uuid: "794ff108-dadf-4f7f-97ef-d58b8cfba005",
+        timestamp: "2026-10-24T14:53:45.731Z",
+        result: "The review is complete.",
+        terminal_reason: "completed",
+        stop_reason: "end_turn",
+        origin: { kind: "peer", from: "child" },
+      }),
+    );
+    expect(events.filter((event) => event.type === "assistant_message")).toEqual([
+      expect.objectContaining({
+        messageId: "794ff108-dadf-4f7f-97ef-d58b8cfba005",
+        message: "The review is complete.",
+        durationMs: 3_537,
+      }),
+    ]);
+  });
+
   test("marks the parent idle when its completed result arrives", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");
