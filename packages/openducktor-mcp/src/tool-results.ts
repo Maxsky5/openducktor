@@ -219,12 +219,19 @@ export const toToolError = (cause: unknown): ToolResult => {
   };
 };
 
-const toArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][number]) => {
+type ArtifactResult = {
+  entry: ReadTaskArtifactsOutput["artifacts"][number];
+  blocks: ToolResult["content"];
+};
+
+const toArtifactResult = (
+  payload: ReadTaskArtifactsResult["artifacts"][number],
+): ArtifactResult => {
   const { dataBase64, ...metadata } = payload;
-  const entry: ReadTaskArtifactsOutput["artifacts"][number] = metadata;
-  const bytes = Buffer.from(dataBase64, "base64");
+  const entry: ArtifactResult["entry"] = metadata;
+  const length = (metadata.nextByteOffset ?? metadata.totalBytes) - metadata.byteOffset;
   const { artifact } = metadata;
-  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?version=${encodeURIComponent(metadata.version)}&offset=${metadata.byteOffset}&length=${bytes.byteLength}`;
+  const uri = `odt-artifact:///tasks/${encodeURIComponent(artifact.taskId)}/artifacts/${artifact.classification}/${encodeURIComponent(artifact.code)}?version=${encodeURIComponent(metadata.version)}&offset=${metadata.byteOffset}&length=${length}`;
   const blocks: ToolResult["content"] = [];
   const resource = {
     type: "resource" as const,
@@ -237,7 +244,9 @@ const toArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][number])
     mediaType === "image/svg+xml"
   ) {
     try {
-      entry.content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+      entry.content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+        Buffer.from(dataBase64, "base64"),
+      );
       if (mediaType === "image/svg+xml") blocks.push(resource);
     } catch {
       blocks.push({
