@@ -34,12 +34,12 @@ type ChatPane = {
 
 /** Keep admitted sends live while the hidden chat surface stops its effects. */
 export const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
-  isVisible,
+  isActive,
   ...pane
-}: ChatPane & { isVisible: boolean }): ReactElement {
-  const [visit, setVisit] = useState({ isVisible, key: 0 });
-  if (visit.isVisible !== isVisible) {
-    setVisit({ isVisible, key: visit.key + (isVisible ? 1 : 0) });
+}: ChatPane & { isActive: boolean }): ReactElement {
+  const [visit, setVisit] = useState({ isActive, key: 0 });
+  if (visit.isActive !== isActive) {
+    setVisit({ isActive, key: visit.key + (isActive ? 1 : 0) });
   }
   const mounted = useRef(false);
   // Admitted sends can finish while the chat surface stops its effects.
@@ -51,16 +51,12 @@ export const WorkspaceSessionChatPane = memo(function WorkspaceSessionChatPane({
   }, []);
   const isMounted = useCallback(() => mounted.current, []);
   return (
-    <div
-      className="h-full min-h-0 overflow-hidden"
-      style={{ display: isVisible ? undefined : "none" }}
-      inert={!isVisible}
-    >
+    <div className="h-full min-h-0 overflow-hidden">
       <WorkspaceSessionChatPaneContent
         {...pane}
         isMounted={isMounted}
         visitKey={visit.key}
-        isVisible={isVisible}
+        isActive={isActive}
       />
     </div>
   );
@@ -76,8 +72,8 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
   isMounted,
   visitKey,
   onActionsReady,
-  isVisible,
-}: ChatPane & { isMounted: () => boolean; visitKey: number; isVisible: boolean }): ReactElement {
+  isActive,
+}: ChatPane & { isMounted: () => boolean; visitKey: number; isActive: boolean }): ReactElement {
   const owner = useMemo<ChatFileLinkOwner>(
     () => ({
       kind: "workspace",
@@ -115,7 +111,7 @@ const WorkspaceSessionChatPaneContent = memo(function WorkspaceSessionChatPaneCo
           onToolRefresh={onToolRefresh}
           isMounted={isMounted}
           visitKey={visitKey}
-          isVisible={isVisible}
+          isActive={isActive}
           onActionsReady={onActionsReady}
         />
       </div>

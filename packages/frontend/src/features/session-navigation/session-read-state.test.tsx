@@ -11,6 +11,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMemo, useState } from "react";
 import { SessionNavigationList } from "@/components/layout/sidebar/session-navigation-list";
 import { SessionNavigationRail } from "@/components/layout/sidebar/session-navigation-rail";
+import { SessionSelectionContext } from "@/components/layout/sidebar/session-navigation-selection";
 import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-provider";
 import {
   alphaWorkspace,
@@ -202,19 +203,18 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
     );
     useWatchSessionBlockers(model);
     const Navigation = rail ? SessionNavigationRail : SessionNavigationList;
+    const selectedKey = target ? sessionNavigationTargetKey(target) : null;
     return (
-      <Navigation
-        model={model}
-        selection={{
-          entryKey: target ? sessionNavigationTargetKey(target) : null,
-          visibleKey: target ? sessionNavigationTargetKey(target) : null,
-        }}
-        now={NOW}
-        onOpen={(entry: SessionNavigationEntry) => {
-          if (allowNavigation) setTarget(entry.target);
-        }}
-        onRetry={() => {}}
-      />
+      <SessionSelectionContext value={{ entryKey: selectedKey, visibleKey: selectedKey }}>
+        <Navigation
+          model={model}
+          now={NOW}
+          onOpen={(entry: SessionNavigationEntry) => {
+            if (allowNavigation) setTarget(entry.target);
+          }}
+          onRetry={() => {}}
+        />
+      </SessionSelectionContext>
     );
   }
   const runtimeStatus = createHostRuntimeStatusContextValue();

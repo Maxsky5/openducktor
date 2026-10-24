@@ -319,3 +319,30 @@ test("a failed write retries the intended chat and a workspace switch keeps erro
     storage.removeItem(keyB);
   }
 });
+
+test("turning active again with the same chat does not render the selection again", () => {
+  const workspaceId = crypto.randomUUID();
+  const sessions = [record("First")];
+  let renders = 0;
+  const h = renderHook(
+    (isActive: boolean) => {
+      renders += 1;
+      return useWorkspaceSessionSelection({
+        isActive,
+        workspaceId,
+        sessions,
+        requestedSessionId: "First",
+      }).selected?.id;
+    },
+    { initialProps: true, wrapper },
+  );
+  try {
+    h.rerender(false);
+    const before = renders;
+    h.rerender(true);
+    expect(h.result.current).toBe("First");
+    expect(renders - before).toBe(1);
+  } finally {
+    h.unmount();
+  }
+});

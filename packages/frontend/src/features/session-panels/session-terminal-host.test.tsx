@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { act, render, waitFor } from "@testing-library/react";
+import { Profiler, useState } from "react";
 import {
   createSessionPanelFixture,
   createTerminalSessionsFixture,
@@ -10,9 +11,13 @@ import { terminalQueryKeys } from "@openducktor/frontend-core/queries/terminals"
 import { QueryProvider } from "@/test-utils/query-provider";
 import { useTerminals, type TerminalTab } from "@/features/terminals";
 import * as transport from "@/features/terminals/use-terminal-transport";
+import * as terminalLayer from "@/features/terminals/terminal-layer";
 import { SessionPanel, sessionPanelOwnerKey, useSessionPanels } from ".";
 import { SessionTerminalHost, SessionTerminalSurface } from "./session-terminal-host";
-import { SessionViewContext } from "../session-navigation/session-view-context";
+import {
+  SessionViewContext,
+  SessionViewShownContext,
+} from "../session-navigation/session-view-context";
 
 const scopeKey = "task";
 const tab: TerminalTab = {
@@ -71,6 +76,79 @@ test("task views share one viewport through owner eviction and panel closure", (
   }
 });
 
+test("a surface update that keeps its terminals does not render the host again", () => {
+  const model = createSessionPanelFixture({
+    selectedTabId: tab.tabId,
+    terminals: createTerminalSessionsFixture({ scopeKey }),
+    terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
+    activeTerminalKey: "terminal",
+  });
+  let renderAgain = () => {};
+  function View() {
+    const [, setRenders] = useState(0);
+    renderAgain = () => setRenders((renders) => renders + 1);
+    // A new context value on each render runs the surface update again.
+    return (
+      <SessionViewContext value={{ id: "planner", isActive: true }}>
+        <SessionTerminalSurface model={model} />
+      </SessionViewContext>
+    );
+  }
+  let commits = 0;
+  const view = render(
+    <Profiler id="host" onRender={() => (commits += 1)}>
+      <SessionTerminalHost viewIds={["planner"]}>
+        <View />
+      </SessionTerminalHost>
+    </Profiler>,
+  );
+  try {
+    const before = commits;
+    act(() => renderAgain());
+    expect(commits - before).toBe(1);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a panel render with the same terminals does not render its terminals again", () => {
+  const model = createSessionPanelFixture({
+    panel: "bottom",
+    tabs: [{ id: tab.tabId, kind: "terminal", terminal: tab }],
+    selectedTabId: tab.tabId,
+    terminals: createTerminalSessionsFixture({ scopeKey }),
+    terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
+    activeTerminalKey: "terminal",
+  });
+  let renderAgain = () => {};
+  function View() {
+    const [renders, setRenders] = useState(0);
+    renderAgain = () => setRenders((count) => count + 1);
+    // Pages give new tool tabs on each render.
+    return (
+      <SessionViewContext value={{ id: "planner", isActive: true }}>
+        <SessionPanel model={model} toolTabs={{ diffs: { content: renders } }} />
+      </SessionViewContext>
+    );
+  }
+  const layer = spyOn(terminalLayer, "TerminalLayer");
+  const view = render(
+    <QueryProvider>
+      <SessionTerminalHost viewIds={["planner"]}>
+        <View />
+      </SessionTerminalHost>
+    </QueryProvider>,
+  );
+  try {
+    const before = layer.mock.calls.length;
+    act(() => renderAgain());
+    expect(layer.mock.calls.length - before).toBe(0);
+  } finally {
+    view.unmount();
+    layer.mockRestore();
+  }
+});
+
 test("a terminal tab and its moved content link to each other in each kept view", () => {
   const panelOf = (tabIdBase: string) =>
     createSessionPanelFixture({
@@ -88,7 +166,9 @@ test("a terminal tab and its moved content link to each other in each kept view"
       <SessionTerminalHost viewIds={["planner", "build"]}>
         {(["planner", "build"] as const).map((id) => (
           <SessionViewContext key={id} value={{ id, isActive: id === active }}>
-            <SessionPanel model={panels[id]} />
+            <SessionViewShownContext value={id === active}>
+              <SessionPanel model={panels[id]} />
+            </SessionViewShownContext>
           </SessionViewContext>
         ))}
       </SessionTerminalHost>

@@ -1,5 +1,6 @@
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
+import * as cssPresence from "@/components/ui/css-presence";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@/state/read-models/session-navigation-read-model";
 import { SessionNavigationList } from "./session-navigation-list";
@@ -26,18 +27,41 @@ const renderList = (
   } = {},
 ) =>
   render(
-    <SessionNavigationTestProvider>
-      <SessionNavigationList
-        model={model}
-        selection={{ entryKey: selectedKey, visibleKey: selectedKey }}
-        now={NOW}
-        onOpen={onOpen}
-        onRetry={onRetry}
-      />
+    <SessionNavigationTestProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
+      <SessionNavigationList model={model} now={NOW} onOpen={onOpen} onRetry={onRetry} />
     </SessionNavigationTestProvider>,
   );
 
 describe("SessionNavigationList", () => {
+  test("a new selection marks the rows without rendering the groups again", () => {
+    const entries = [workspaceSessionEntry("first"), workspaceSessionEntry("second")];
+    const model = navigationModel({ recent: entries });
+    const onOpen = () => {};
+    const onRetry = () => {};
+    // As in the sidebar, the list element stays the same while the selection changes.
+    const listElement = (
+      <SessionNavigationList model={model} now={NOW} onOpen={onOpen} onRetry={onRetry} />
+    );
+    const list = (selectedKey: string) => (
+      <SessionNavigationTestProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
+        {listElement}
+      </SessionNavigationTestProvider>
+    );
+    const presence = spyOn(cssPresence, "useCssPresence");
+    const view = render(list(entries[0]!.key));
+    try {
+      const before = presence.mock.calls.length;
+      view.rerender(list(entries[1]!.key));
+      const current = view.container.querySelectorAll('[aria-current="true"]');
+      expect(current).toHaveLength(1);
+      expect(current[0]?.getAttribute("aria-label")).toContain("second");
+      expect(presence.mock.calls.length - before).toBe(0);
+    } finally {
+      view.unmount();
+      presence.mockRestore();
+    }
+  });
+
   test("shows Needs you, Running, and Recent in order with accurate counts", () => {
     renderList(
       navigationModel({
@@ -300,13 +324,14 @@ describe("SessionNavigationList", () => {
     expect(screen.getByRole("status").textContent).toBe("Loading sessions…");
 
     view.rerender(
-      <SessionNavigationList
-        model={navigationModel({})}
-        selection={{ entryKey: null, visibleKey: null }}
-        now={NOW}
-        onOpen={() => {}}
-        onRetry={() => {}}
-      />,
+      <SessionNavigationTestProvider>
+        <SessionNavigationList
+          model={navigationModel({})}
+          now={NOW}
+          onOpen={() => {}}
+          onRetry={() => {}}
+        />
+      </SessionNavigationTestProvider>,
     );
     expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByText("No sessions yet. Start with New task or New chat.")).toBeTruthy();

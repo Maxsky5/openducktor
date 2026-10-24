@@ -86,7 +86,6 @@ describe("session command activity", () => {
         <SessionNavigationTestProvider>
           <SessionNavigationList
             model={navigationModel({ recent: entries })}
-            selection={{ entryKey: null, visibleKey: null }}
             now={NOW}
             onOpen={() => {}}
             onRetry={() => {}}

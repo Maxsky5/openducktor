@@ -36,7 +36,10 @@ import type { PanelDropTarget, ResolvedPanelTab } from "./session-panel-layout";
 import { PanelTabIcon } from "./session-panel-tab-icon";
 import { panelTabPresentation } from "./session-panel-tab-presentation";
 import type { SessionPanelsModel } from "./use-session-panels";
-import { useSessionViewActive } from "../session-navigation/session-view-context";
+import {
+  useSessionViewActive,
+  useSessionViewShown,
+} from "../session-navigation/session-view-context";
 
 export type PanelDropState = "accepted" | "rejected" | null;
 
@@ -93,13 +96,16 @@ export function SessionPanelsRoot({
   children: ReactNode;
 }): ReactElement {
   const sensors = useTabDragSensors();
-  const active = useSessionViewActive() && isActive;
+  // The confirmation sits in a portal, so it leaves as soon as its view hides.
+  const isViewShown = useSessionViewShown();
+  const isViewActive = useSessionViewActive();
+  const showsConfirmation = isViewShown && isViewActive && isActive;
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const { right, bottom, canMove, onMove, onDrop, platformError } = panels;
   const { candidate, onCancel } = panels.terminalClose;
   useEffect(() => {
-    if (!active) onCancel();
-  }, [active, candidate, onCancel]);
+    if (!showsConfirmation) onCancel();
+  }, [showsConfirmation, candidate, onCancel]);
 
   useEffect(() => {
     if (!platformError) return;
@@ -181,7 +187,7 @@ export function SessionPanelsRoot({
           ) : null}
         </DragOverlay>
       </DndContext>
-      {active && <TerminalCloseDialog model={panels.terminalClose} />}
+      {showsConfirmation && <TerminalCloseDialog model={panels.terminalClose} />}
     </SessionPanelMovesContext>
   );
 }

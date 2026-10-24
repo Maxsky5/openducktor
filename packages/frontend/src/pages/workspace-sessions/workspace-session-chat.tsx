@@ -11,7 +11,8 @@ import {
 } from "./workspace-session-chat-state";
 import { useWorkspaceSessionPromptInput } from "./use-workspace-session-prompt-input";
 import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
-import { Activity, type ReactElement, useMemo } from "react";
+import { type ReactElement, useMemo } from "react";
+import { SessionViewShownActivity } from "@/features/session-navigation/session-view-visibility";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { resolveAgentChatRuntimePresentation } from "@/components/features/agents/agent-chat/agent-chat-runtime-presentation";
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
@@ -47,7 +48,7 @@ import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-ta
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
 
 type WorkspaceSessionChatProps = {
-  isVisible: boolean;
+  isActive: boolean;
   workspace: ActiveWorkspace;
   record: WorkspaceSession;
   chatSettings: ChatSettings | null;
@@ -61,7 +62,7 @@ type WorkspaceSessionChatProps = {
 };
 
 export function WorkspaceSessionChat({
-  isVisible,
+  isActive,
   workspace,
   record,
   chatSettings,
@@ -134,7 +135,7 @@ export function WorkspaceSessionChat({
   });
   const { catalog: modelCatalog, error: catalogError } = modelTarget;
   useSelectedSessionHistoryLoad({
-    session: isVisible ? session : null,
+    session: isActive ? session : null,
     runtimeReadinessState: runtimeReadiness.state,
   });
   const contextError = useSelectedSessionContextLoad({
@@ -252,7 +253,7 @@ export function WorkspaceSessionChat({
   const fork = useWorkspaceSessionFork({
     workspace,
     record,
-    visible: isVisible,
+    visible: isActive,
     disabledReason: sessionForkDisabledReason({
       runtimeReadiness,
       interactionEnabled: canInteract,
@@ -323,7 +324,7 @@ export function WorkspaceSessionChat({
     }),
   });
   return (
-    <Activity mode={isVisible ? "visible" : "hidden"}>
+    <SessionViewShownActivity>
       <AgentChatSurface
         model={{
           ...surface,
@@ -331,6 +332,6 @@ export function WorkspaceSessionChat({
         }}
         visitKey={visitKey}
       />
-    </Activity>
+    </SessionViewShownActivity>
   );
 }

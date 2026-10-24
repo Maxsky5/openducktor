@@ -24,7 +24,7 @@ import {
   type SessionNavigationTarget,
 } from "@/features/session-navigation/session-navigation-target";
 import { useSessionNavigationModel } from "@/features/session-navigation/use-session-navigation-model";
-import { useVisibleSessionTarget } from "@/features/session-navigation/visible-session-target";
+import { useVisibleSessionControls } from "@/features/session-navigation/visible-session-target";
 import { useWatchSessionBlockers } from "@/features/session-navigation/session-read-state";
 import { useMinuteClock } from "@/lib/relative-time";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -39,8 +39,7 @@ import { SessionNavigationRail } from "./session-navigation-rail";
 import { SessionGroupingToggle } from "./session-grouping-toggle";
 import { type SessionNavigationScope, SessionScopeSwitch } from "./session-scope-switch";
 import { SidebarNavigation } from "./sidebar-navigation";
-import { useRevealSelectedSession } from "./use-reveal-selected-session";
-import { selectSessionEntry } from "./session-navigation-selection";
+import { SessionSelectionScope } from "./session-selection-scope";
 
 type WorkspaceSidebarProps = {
   isOpen: boolean;
@@ -161,61 +160,60 @@ export function WorkspaceSidebar({
   const { grouping, disabled: groupingDisabled, changeGrouping } = useSidebarSessionGrouping();
   const { model, retrySource } = useSessionNavigationModel(scopedWorkspaces, grouping);
   useWatchSessionBlockers(model);
-  const visibleTarget = useVisibleSessionTarget();
-  const selection = selectSessionEntry(model, visibleTarget, grouping);
-  const sessionsRegionRef = useRevealSelectedSession(model, selection, isOpen ? "list" : "rail");
+  const { readVisible } = useVisibleSessionControls();
   const now = useMinuteClock();
   const listScopeKey =
     scope === "all" ? scope : `${scope}:${activeWorkspace?.workspaceId ?? "none"}`;
 
   const navigation = useRef({
     queryClient,
-    activeWorkspace,
-    visibleTarget,
+    activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
     isSwitchingWorkspace,
     guardTransition,
     navigate,
+    readVisible,
     selectWorkspace,
   });
   useLayoutEffect(() => {
     navigation.current = {
       queryClient,
-      activeWorkspace,
-      visibleTarget,
+      activeWorkspaceId: activeWorkspace?.workspaceId ?? null,
       isSwitchingWorkspace,
       guardTransition,
       navigate,
+      readVisible,
       selectWorkspace,
     };
   }, [
     queryClient,
-    activeWorkspace,
-    visibleTarget,
+    activeWorkspace?.workspaceId,
     isSwitchingWorkspace,
     guardTransition,
     navigate,
+    readVisible,
     selectWorkspace,
   ]);
   const openEntry = useCallback(
     (entry: SessionNavigationEntry, target: SessionNavigationTarget = entry.target): void => {
       const {
         queryClient,
-        activeWorkspace,
-        visibleTarget,
+        activeWorkspaceId,
         isSwitchingWorkspace,
         guardTransition,
         navigate,
+        readVisible,
         selectWorkspace,
       } = navigation.current;
+      const visible = readVisible();
       // Reopening the visible session can cancel a pending workspace switch.
       if (
         !isSwitchingWorkspace &&
-        visibleTarget &&
-        sessionNavigationTargetKey(target) === sessionNavigationTargetKey(visibleTarget)
+        visible &&
+        sessionNavigationTargetKey(target) === sessionNavigationTargetKey(visible.target)
       )
         return;
       const href = buildSessionNavigationHref(target);
-      const open = () => {
+      guardTransition(() => {
         if (target.kind !== "workspace_session") {
           void prefetchTaskArtifacts(
             queryClient,
@@ -224,15 +222,12 @@ export function WorkspaceSidebar({
             target.role,
           );
         }
+        // The Sessions page opens the workspace that the address names.
         void navigate(href);
-      };
-      guardTransition(() => {
-        if (target.workspaceId === activeWorkspace?.workspaceId && !isSwitchingWorkspace) {
-          open();
-          return;
+        // An entry of the active workspace cancels a pending switch. Selection reports failures.
+        if (isSwitchingWorkspace && target.workspaceId === activeWorkspaceId) {
+          void selectWorkspace(target.workspaceId).catch(() => {});
         }
-        // Selection reports host failures; leave the current conversation open on failure.
-        void selectWorkspace(target.workspaceId, open).catch(() => {});
       });
     },
     [],
@@ -285,15 +280,15 @@ export function WorkspaceSidebar({
               disabled={groupingDisabled}
             />
           </div>
-          <div
-            ref={sessionsRegionRef}
+          <SessionSelectionScope
+            model={model}
+            grouping={grouping}
+            mode="list"
             className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
-            data-sidebar-scroll-region="sessions"
           >
             <SessionNavigationList
               key={listScopeKey}
               model={model}
-              selection={selection}
               now={now}
               onOpen={openEntry}
               onRetry={retrySource}
@@ -303,7 +298,7 @@ export function WorkspaceSidebar({
                 ) : null
               }
             />
-          </div>
+          </SessionSelectionScope>
           <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
             <SettingsModal
               triggerClassName="flex-1 justify-start border-transparent bg-transparent px-3 shadow-none text-sidebar-foreground"
@@ -343,19 +338,20 @@ export function WorkspaceSidebar({
               <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
             ) : null}
           </div>
-          <div
-            ref={sessionsRegionRef}
+          <SessionSelectionScope
+            model={model}
+            grouping={grouping}
+            mode="rail"
             className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto px-0.5 pb-2 pt-1"
           >
             <SessionNavigationRail
               key={listScopeKey}
               model={model}
-              selection={selection}
               now={now}
               onOpen={openEntry}
               onRetry={retrySource}
             />
-          </div>
+          </SessionSelectionScope>
           <div className="flex w-full shrink-0 flex-col items-center gap-1 border-t border-sidebar-border pt-2">
             <DiagnosticsTrigger className="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground" />
             <SettingsModal

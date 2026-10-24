@@ -9,6 +9,7 @@ import {
   type RefObject,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -45,7 +46,11 @@ import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
 import type { SessionPanelModel } from "./use-session-panels";
 import { SessionTerminalSurface } from "./session-terminal-host";
-import { useSessionViewActive } from "../session-navigation/session-view-context";
+import {
+  useSessionViewActive,
+  useSessionViewVisit,
+} from "../session-navigation/session-view-context";
+import { SessionViewShownActivity } from "../session-navigation/session-view-visibility";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";
 
@@ -63,7 +68,8 @@ export type ToolTabViews = Partial<Record<ToolTabKind, ToolTabView>>;
 type SessionPanelProps = {
   model: SessionPanelModel;
   toolTabs?: ToolTabViews | undefined;
-  isActive?: boolean;
+  /** The page shows the panel. The session view shows and hides the content with it. */
+  isShown?: boolean;
 };
 
 const OTHER_PANEL = { right: "bottom", bottom: "right" } satisfies Record<PanelId, PanelId>;
@@ -72,9 +78,12 @@ const OTHER_PANEL = { right: "bottom", bottom: "right" } satisfies Record<PanelI
 export const SessionPanel = memo(function SessionPanel({
   model,
   toolTabs,
-  isActive = true,
+  isShown = true,
 }: SessionPanelProps): ReactElement {
-  const active = useSessionViewActive() && isActive;
+  // The content stays mounted with its kept view and hides with it, so a switch paints the panel
+  // without a mount. Each visit gets fresh content, so its dialogs do not open again on return.
+  const visit = useSessionViewVisit();
+  const isActive = useSessionViewActive() && isShown;
   const hasTerminalTabs = model.tabs.some((tab) => tab.kind === "terminal");
   const showsTerminalStatus = model.panel === "bottom" || hasTerminalTabs;
   return (
@@ -85,9 +94,17 @@ export const SessionPanel = memo(function SessionPanel({
         data-testid={`session-panel-${model.panel}`}
         className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-card"
       >
-        {active && <SessionPanelTabStrip model={model} toolTabs={toolTabs} />}
+        <SessionViewShownActivity key={visit}>
+          {isShown && <SessionPanelTabStrip model={model} toolTabs={toolTabs} />}
+        </SessionViewShownActivity>
         {showsTerminalStatus ? <TerminalStatusMessages terminals={model.terminals} /> : null}
-        <SessionPanelBody model={model} toolTabs={toolTabs} isActive={active} />
+        <SessionPanelBody
+          model={model}
+          toolTabs={toolTabs}
+          isShown={isShown}
+          isActive={isActive}
+          visit={visit}
+        />
       </Tabs>
     </TooltipProvider>
   );
@@ -96,35 +113,50 @@ export const SessionPanel = memo(function SessionPanel({
 function SessionPanelBody({
   model,
   toolTabs,
-  isActive: active = true,
-}: SessionPanelProps): ReactElement {
+  isShown,
+  isActive,
+  visit,
+}: {
+  model: SessionPanelModel;
+  toolTabs: ToolTabViews | undefined;
+  isShown: boolean;
+  isActive: boolean;
+  visit: number;
+}): ReactElement {
   // A panel that slides out after its last tab closed keeps its empty area blank.
   const isEmpty = model.tabs.length === 0 && model.presence !== "closing";
   const isLoadingEmptyBottom = isEmpty && model.panel === "bottom" && model.terminals.isLoading;
+  // The terminal host keeps a surface only while its model stays the same object.
+  const surfaceModel = useMemo(
+    () => (isActive || !model.isVisible ? model : { ...model, isVisible: false }),
+    [isActive, model],
+  );
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
-      {active &&
-        model.tabs.map((tab) => (
-          <PanelTabContent
-            key={tab.id}
-            tab={tab}
-            isSelected={tab.id === model.selectedTabId}
-            model={model}
-            toolTabs={toolTabs}
-          />
-        ))}
-      {active && isEmpty && !isLoadingEmptyBottom ? (
-        <SessionPanelLauncher entries={model.launcher} onPick={model.onPick} />
-      ) : null}
-      {active && isLoadingEmptyBottom ? (
-        <p
-          role="status"
-          className="flex h-full items-center justify-center text-sm text-muted-foreground"
-        >
-          Loading terminals...
-        </p>
-      ) : null}
-      <SessionTerminalSurface model={{ ...model, isVisible: active && model.isVisible }} />
+      <SessionViewShownActivity key={visit}>
+        {isShown &&
+          model.tabs.map((tab) => (
+            <PanelTabContent
+              key={tab.id}
+              tab={tab}
+              isSelected={tab.id === model.selectedTabId}
+              model={model}
+              toolTabs={toolTabs}
+            />
+          ))}
+        {isShown && isEmpty && !isLoadingEmptyBottom ? (
+          <SessionPanelLauncher entries={model.launcher} onPick={model.onPick} />
+        ) : null}
+        {isShown && isLoadingEmptyBottom ? (
+          <p
+            role="status"
+            className="flex h-full items-center justify-center text-sm text-muted-foreground"
+          >
+            Loading terminals...
+          </p>
+        ) : null}
+      </SessionViewShownActivity>
+      <SessionTerminalSurface model={surfaceModel} />
     </div>
   );
 }

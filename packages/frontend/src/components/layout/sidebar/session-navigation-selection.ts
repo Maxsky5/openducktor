@@ -1,4 +1,5 @@
 import type { SidebarSessionGrouping } from "@openducktor/contracts";
+import { createContext, useContext } from "react";
 import {
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
@@ -11,6 +12,18 @@ import type {
 export type SessionSelection = {
   visibleKey: string | null;
   entryKey: string | null;
+};
+
+/** The session list gives the selection to its rows, so a new selection renders only the rows. */
+export const SessionSelectionContext = createContext<SessionSelection | null>(null);
+
+export const useSessionEntrySelection = (entryKey: string) => {
+  const selection = useContext(SessionSelectionContext);
+  if (!selection) throw new Error("SessionSelectionContext is missing.");
+  return {
+    isSelected: entryKey === selection.entryKey,
+    isVisible: entryKey === selection.visibleKey,
+  };
 };
 
 /** Grouped task selection can name another session; only the visible session counts as read. */

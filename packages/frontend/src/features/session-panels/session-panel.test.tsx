@@ -18,6 +18,10 @@ import {
 import { createTerminalActivityStore } from "@/features/terminals/terminal-activity-store";
 import { createTerminalTransportController } from "@/features/terminals/terminal-transport-controller";
 import { SessionPanel } from "./session-panel";
+import {
+  SessionViewContext,
+  SessionViewShownContext,
+} from "../session-navigation/session-view-context";
 import type { BrowserTabViewProps } from "./use-session-panel-browser-tabs";
 import type { ResolvedBrowserTab } from "./session-panel-layout";
 import { SessionPanelsRoot } from "./session-panels-root";
@@ -92,7 +96,53 @@ test("an inactive panel root closes its terminal confirmation and keeps its cont
   view.unmount();
 });
 
+test("a hidden panel root closes its terminal confirmation before its content turns inactive", () => {
+  const cancel = mock(() => {});
+  const root = (isShown: boolean) => (
+    <SessionViewContext value={{ id: "view", isActive: true }}>
+      <SessionViewShownContext value={isShown}>
+        <SessionPanelsRoot
+          panels={createSessionPanelsFixture({
+            terminalClose: {
+              candidate: terminal,
+              isConfirming: false,
+              onCancel: cancel,
+              onConfirm: () => {},
+            },
+          })}
+        >
+          <input data-testid="kept-content" />
+        </SessionPanelsRoot>
+      </SessionViewShownContext>
+    </SessionViewContext>
+  );
+  const view = renderWithConnection(root(true));
+  expect(view.getByRole("dialog", { name: "Terminate and close bun run dev?" })).toBeDefined();
+  view.rerender(root(false));
+  expect(view.queryAllByRole("dialog")).toHaveLength(0);
+  expect(cancel).toHaveBeenCalled();
+  view.unmount();
+});
+
 describe("SessionPanel", () => {
+  test("a view that shows again paints its panel before its content turns active", () => {
+    const model = createSessionPanelFixture();
+    const panel = (isShown: boolean, isActive: boolean) => (
+      <SessionViewContext value={{ id: "view", isActive }}>
+        <SessionViewShownContext value={isShown}>
+          <SessionPanel model={model} />
+        </SessionViewShownContext>
+      </SessionViewContext>
+    );
+    const view = renderWithConnection(panel(true, true));
+    expect(screen.getAllByRole("tab").length).toBeGreaterThan(0);
+    view.rerender(panel(false, false));
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    // The content turns active one frame after the view shows.
+    view.rerender(panel(true, false));
+    expect(screen.getAllByRole("tab").length).toBeGreaterThan(0);
+  });
+
   test("shows each tab with its label, the selected tab, and a close button", () => {
     renderWithConnection(<SessionPanel model={createSessionPanelFixture()} toolTabs={toolTabs} />);
 

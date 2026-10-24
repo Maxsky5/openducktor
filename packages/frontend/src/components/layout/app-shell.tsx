@@ -1,7 +1,16 @@
 import { DiagnosticsTrigger } from "@/components/features/diagnostics";
 import { LoaderCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import {
   OpenRepositoryModal,
@@ -73,16 +82,30 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
   }
 };
 
-const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
-  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
+// These read workspace state in their own components, so a workspace switch does not render the
+// whole shell again.
+function ActiveRepoConfigQuery(): null {
   const activeWorkspace = useActiveWorkspace();
-  const { workspaces } = useWorkspaceState();
   useQuery({
     ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
     enabled: activeWorkspace !== null,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
   });
+  return null;
+}
+
+function OpenRepositoryModalWhenEmpty({ onEmpty }: { onEmpty: () => void }): null {
+  const isEmpty = useWorkspaceState().workspaces.length === 0;
+  const open = useEffectEvent(onEmpty);
+  useEffect(() => {
+    if (isEmpty) open();
+  }, [isEmpty]);
+  return null;
+}
+
+const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
+  const { run: guardWorkspaceChange } = useWorkspacePreviewTransitionGuard();
   const [repositoryModal, setRepositoryModal] = useState<RepositoryModalRequest>({
     open: false,
     view: undefined,
@@ -90,9 +113,6 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
   const [isSidebarOpen, setSidebarOpen] = useState(
     () => readPersistedLeftSidebarPreference() === "opened",
   );
-  useEffect(() => {
-    if (workspaces.length === 0) setRepositoryModal({ open: true, view: undefined });
-  }, [workspaces.length]);
 
   const handleRepositoryModalOpenChange = useCallback((open: boolean) => {
     setRepositoryModal((current) => ({ ...current, open }));
@@ -119,6 +139,8 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
 
   return (
     <VisibleSessionTargetProvider>
+      <ActiveRepoConfigQuery />
+      <OpenRepositoryModalWhenEmpty onEmpty={openDefaultRepositoryModal} />
       <SessionReadStateProvider>
         <WorkspaceDialogsProvider>
           <SessionMenuProvider>

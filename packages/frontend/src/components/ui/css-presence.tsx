@@ -23,9 +23,11 @@ export function CssPresenceList({
   useLayoutEffect(() => {
     if (!isLoading) setReady(true);
   }, [isLoading]);
+  // No motion component measures layout here. With the default, each list render gives every
+  // child a new presence context, so all children render again.
   return (
     <AnimationReadyContext.Provider value={ready}>
-      <AnimatePresence>{children}</AnimatePresence>
+      <AnimatePresence presenceAffectsLayout={false}>{children}</AnimatePresence>
     </AnimationReadyContext.Provider>
   );
 }
