@@ -3,7 +3,6 @@ import { taskEventCursorSchema } from "./external-task-sync-schemas";
 import { qaWorkflowVerdictSchema } from "./task-schemas";
 
 export const TASK_ARTIFACT_MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const TASK_ARTIFACT_MAX_PREVIEW_BYTES = 2 * 1024 * 1024;
 export const TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES = 16 * 1024;
 export const TASK_ARTIFACT_MCP_MAX_READ_BYTES = 1024 * 1024;
 
@@ -101,7 +100,6 @@ export const artifactReadRequestSchema = artifactScopeSchema
     byteOffset: z.number().int().nonnegative().optional(),
     maxBytes: z.number().int().min(4).max(TASK_ARTIFACT_MAX_FILE_BYTES).optional(),
     expectedVersion: z.string().min(1).max(128).optional(),
-    includeImagePreview: z.boolean().optional(),
   })
   .refine((input) => !input.byteOffset || input.expectedVersion !== undefined, {
     path: ["expectedVersion"],
@@ -153,30 +151,6 @@ export const artifactDeleteRequestSchema = artifactScopeSchema.extend({
 });
 export type ArtifactDeleteRequest = z.infer<typeof artifactDeleteRequestSchema>;
 
-const artifactImagePreviewReadySchema = z
-  .strictObject({
-    state: z.literal("ready"),
-    mediaType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
-    dataBase64: boundedBase64Schema(TASK_ARTIFACT_MAX_PREVIEW_BYTES),
-    byteSize: z.number().int().nonnegative().max(TASK_ARTIFACT_MAX_PREVIEW_BYTES),
-    width: z.number().int().positive(),
-    height: z.number().int().positive(),
-  })
-  .refine((preview) => decodedBase64ByteSize(preview.dataBase64) === preview.byteSize, {
-    path: ["byteSize"],
-    message: "Preview byteSize must match its decoded content.",
-  });
-
-export const artifactImagePreviewSchema = z.discriminatedUnion("state", [
-  artifactImagePreviewReadySchema,
-  z.strictObject({
-    state: z.literal("failed"),
-    message: z.string().min(1).max(4096),
-    nextAction: z.string().min(1).max(1024),
-  }),
-]);
-export type ArtifactImagePreview = z.infer<typeof artifactImagePreviewSchema>;
-
 export const artifactReadMetadataSchema = z.strictObject({
   artifact: taskArtifactSchema,
   version: z.string().min(1).max(128),
@@ -189,7 +163,6 @@ export type ArtifactReadMetadata = z.infer<typeof artifactReadMetadataSchema>;
 export const artifactContentChunkSchema = artifactReadMetadataSchema
   .extend({
     dataBase64: boundedBase64Schema(TASK_ARTIFACT_MAX_FILE_BYTES),
-    imagePreview: artifactImagePreviewSchema.optional(),
   })
   .superRefine(checkArtifactContentChunk);
 export type ArtifactContentChunk = z.infer<typeof artifactContentChunkSchema>;

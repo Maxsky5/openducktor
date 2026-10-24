@@ -12,7 +12,6 @@ import {
   type TaskMetadataArtifact,
 } from "@openducktor/contracts";
 import { Deferred, Effect } from "effect";
-import sharp from "sharp";
 import type { JSONType } from "zod";
 import { taskRowFixture } from "../../adapters/sqlite/sqlite-task-row-test-fixtures";
 import {
@@ -210,9 +209,10 @@ test.each([
 });
 
 test("saves PNG bytes through dataBase64 and returns their format", async () => {
-  const image = await sharp({ create: { width: 1, height: 1, channels: 4, background: "red" } })
-    .png()
-    .toBuffer();
+  const image = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  );
   const result = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS.odt_set_task_artifact.parse(
     await Effect.runPromise(
       bridgeWith().invoke("odt_set_task_artifact", {
@@ -718,7 +718,6 @@ test("overlaps mixed workflow and free reads and keeps code request order", asyn
       const expected: Parameters<TaskService["readTaskArtifact"]>[0] = {
         ...taskScope(),
         artifactId,
-        includeImagePreview: true,
       };
       if (classification === "free") expected.maxBytes = 16 * 1024;
       return expected;
@@ -727,7 +726,7 @@ test("overlaps mixed workflow and free reads and keeps code request order", asyn
   expect(scopeCalls).toEqual(["fixture"]);
 });
 
-test("passes a continued read's byte and version controls and skips its preview", async () => {
+test("passes a continued read's byte and version controls", async () => {
   const { artifact } = await seedArtifact("notes", content, "Notes");
   const calls: unknown[] = [];
   const continued: ArtifactContentChunk = { ...chunk(artifact), byteOffset: 4, dataBase64: "" };
@@ -758,7 +757,6 @@ test("passes a continued read's byte and version controls and skips its preview"
       byteOffset: 4,
       expectedVersion: "version-1",
       maxBytes: 100,
-      includeImagePreview: false,
     },
   ]);
 });

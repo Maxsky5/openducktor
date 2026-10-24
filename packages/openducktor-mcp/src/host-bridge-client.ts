@@ -61,8 +61,6 @@ export type OdtHostBridgeClientDeps = {
 };
 
 const DEFAULT_TIMEOUT_MS = 10_000;
-// Allow the preview worker's ten-second limit plus cleanup and response delivery.
-const ARTIFACT_READ_TIMEOUT_MS = 15_000;
 const READY_TOOL_NAME = "odt_mcp_ready";
 const causeTextSchema = z.string();
 const causePrimitiveSchema = z.union([
@@ -257,9 +255,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
   private async invokeJson(
     command: typeof READY_TOOL_NAME | OdtToolName,
     input: Record<string, never> | OdtToolInput | BrowserBridgeBody,
-    timeoutMs = command === "odt_read_task_artifacts"
-      ? ARTIFACT_READ_TIMEOUT_MS
-      : DEFAULT_TIMEOUT_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
   ): Promise<OdtHostBridgeReady | ToolOutput<OdtToolName>> {
     const url = new URL(`/invoke/${command}`, this.baseUrl);
     const action = `host ${command}`;

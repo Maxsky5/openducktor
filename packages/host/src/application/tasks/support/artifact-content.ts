@@ -21,8 +21,9 @@ export const artifactChunkEnd = (
 ): number => {
   const end = Math.min(content.length, offset + maxBytes);
   const type = mediaType.toLowerCase();
-  if (!type.startsWith("text/") && type !== "application/json") return end;
-  // Keep invalid text readable as bytes. The preview reports the decode error.
+  if (!type.startsWith("text/") && type !== "application/json" && type !== "image/svg+xml")
+    return end;
+  // Keep invalid text readable as bytes. The MCP result reports the decode error.
   if (!isUtf8) return end;
   if (offset < content.length && continuationByte(content[offset]!)) {
     throw new HostValidationError({

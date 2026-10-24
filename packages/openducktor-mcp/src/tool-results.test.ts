@@ -135,6 +135,59 @@ describe("task artifact results", () => {
     expect(result.content[0]?.text).toBe(JSON.stringify(result.structuredContent, null, 2));
   });
 
+  test("returns exact SVG source and original bytes without a raster preview", () => {
+    const text = '\ufeff<svg xmlns="http://www.w3.org/2000/svg">\r\n<text>é😀</text>\r\n</svg>\n';
+    const original = chunk(Buffer.from(text), "image/svg+xml");
+    const result = toTaskArtifactsToolResult({ artifacts: [original] });
+    const { dataBase64, ...metadata } = original;
+    expect(result.structuredContent?.artifacts).toEqual([{ ...metadata, content: text }]);
+    expect(result.content.slice(1)).toEqual([
+      {
+        type: "resource",
+        resource: {
+          uri: expect.stringContaining("version=version-1&offset=0&length="),
+          mimeType: "image/svg+xml",
+          blob: dataBase64,
+        },
+      },
+    ]);
+  });
+
+  test.each(["image/png", "image/jpeg", "image/webp", "image/gif"])(
+    "returns complete %s bytes as one native image without codec work",
+    (mediaType) => {
+      // Opaque bytes must pass through, even when an image decoder would reject them.
+      const original = chunk(Buffer.from([0, 1, 0xfe, 0xff]), mediaType);
+      const result = toTaskArtifactsToolResult({ artifacts: [original] });
+      expect(result.content.slice(1)).toEqual([
+        { type: "image", mimeType: mediaType, data: original.dataBase64 },
+      ]);
+      expect(JSON.stringify(result).split(original.dataBase64)).toHaveLength(2);
+    },
+  );
+
+  test.each([
+    { byteOffset: 0, nextByteOffset: 4, totalBytes: 8 },
+    { byteOffset: 4, nextByteOffset: null, totalBytes: 8 },
+  ])("returns partial raster reads as bytes at offset $byteOffset", (range) => {
+    const original = {
+      ...chunk(Buffer.from([0, 1, 0xfe, 0xff]), "image/png"),
+      ...range,
+    };
+    original.artifact.byteSize = range.totalBytes;
+    const result = toTaskArtifactsToolResult({ artifacts: [original] });
+    expect(result.content.slice(1)).toEqual([
+      {
+        type: "resource",
+        resource: {
+          uri: expect.stringContaining(`offset=${range.byteOffset}&length=4`),
+          mimeType: "image/png",
+          blob: original.dataBase64,
+        },
+      },
+    ]);
+  });
+
   test("returns named spec and plan text in the selected order with chunk metadata", () => {
     const artifacts = [
       { code: "plan" as const, name: "Implementation plan", text: "# Plan\r\n1. Build\r\n" },
@@ -177,71 +230,35 @@ describe("task artifact results", () => {
     expect(JSON.parse(result.content[0]?.text ?? "null")).toEqual(result.structuredContent);
   });
 
-  test("returns invalid UTF-8 exactly as a blob with a separate decoding failure", () => {
-    const result = toTaskArtifactsToolResult({
-      artifacts: [chunk(Buffer.from([0xef, 0xbb, 0xbf, 0xc3, 0x28]))],
-    });
-    expect(result.content[1]).toMatchObject({
-      type: "text",
-      text: expect.stringContaining("Cannot decode artifact output"),
-    });
-    expect(result.content[2]).toMatchObject({
-      type: "resource",
-      resource: {
-        blob: "77u/wyg=",
-        mimeType: "text/plain",
-        uri: expect.stringContaining("version=version-1&offset=0&length=5"),
-      },
-    });
-    expect(result.structuredContent?.artifacts).toEqual([
-      {
-        artifact: { ...artifact, byteSize: 5 },
-        version: "version-1",
-        byteOffset: 0,
-        nextByteOffset: null,
-        totalBytes: 5,
-      },
-    ]);
-  });
-
-  test("keeps original bytes after preview failure and sends ready previews only once", () => {
-    const original = chunk(Buffer.from([1, 2, 3]), "image/svg+xml");
-    const failure = toTaskArtifactsToolResult({
-      artifacts: [
-        {
-          ...original,
-          imagePreview: {
-            state: "failed",
-            message: "Image cannot be decoded.",
-            nextAction: "Download the original.",
-          },
+  test.each(["text/plain", "image/svg+xml"])(
+    "returns invalid %s UTF-8 bytes with a decoding failure",
+    (mediaType) => {
+      const result = toTaskArtifactsToolResult({
+        artifacts: [chunk(Buffer.from([0xef, 0xbb, 0xbf, 0xc3, 0x28]), mediaType)],
+      });
+      expect(result.content[1]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("Cannot decode artifact output"),
+      });
+      expect(result.content[2]).toMatchObject({
+        type: "resource",
+        resource: {
+          blob: "77u/wyg=",
+          mimeType: mediaType,
+          uri: expect.stringContaining("version=version-1&offset=0&length=5"),
         },
-      ],
-    });
-    expect(failure.content[1]).toMatchObject({ type: "resource", resource: { blob: "AQID" } });
-    expect(failure.content[2]).toMatchObject({
-      type: "text",
-      text: expect.stringContaining("Image preview failed for artifact output"),
-    });
-    expect(failure.isError).toBeUndefined();
-    const ready = toTaskArtifactsToolResult({
-      artifacts: [
+      });
+      expect(result.structuredContent?.artifacts).toEqual([
         {
-          ...original,
-          imagePreview: {
-            state: "ready",
-            mediaType: "image/png",
-            dataBase64: "BAU=",
-            byteSize: 2,
-            width: 1,
-            height: 1,
-          },
+          artifact: { ...artifact, mediaType, byteSize: 5 },
+          version: "version-1",
+          byteOffset: 0,
+          nextByteOffset: null,
+          totalBytes: 5,
         },
-      ],
-    });
-    expect(ready.content[2]).toEqual({ type: "image", mimeType: "image/png", data: "BAU=" });
-    expect(JSON.stringify(ready).split("BAU=")).toHaveLength(2);
-  });
+      ]);
+    },
+  );
 
   test("blob resource URIs use stable codes and omit display names", () => {
     const original = chunk(Buffer.from([0xff]));
@@ -282,29 +299,28 @@ describe("task artifact results", () => {
     ]);
   });
 
-  test("bounds the full JSON-RPC response for escaped text plus a maximum preview", () => {
-    const payload = {
-      ...chunk(Buffer.alloc(512 * 1024)),
-      imagePreview: {
-        state: "ready" as const,
-        mediaType: "image/png" as const,
-        dataBase64: Buffer.alloc(2 * 1024 * 1024).toString("base64"),
-        byteSize: 2 * 1024 * 1024,
-        width: 1024,
-        height: 512,
-      },
-    };
+  test("bounds the full JSON-RPC response for escaped text and request IDs", () => {
+    const payload = chunk(Buffer.alloc(512 * 1024));
     const result = toTaskArtifactsToolResult({ artifacts: [payload] }, "request-1");
     expect(
       Buffer.byteLength(JSON.stringify({ jsonrpc: "2.0", id: "request-1", result })) + 1,
     ).toBeLessThan(10 * 1024 * 1024);
     expect(() =>
-      toTaskArtifactsToolResult({
-        artifacts: [{ ...payload, ...chunk(Buffer.alloc(768 * 1024)) }],
-      }),
+      toTaskArtifactsToolResult({ artifacts: [chunk(Buffer.alloc(1024 * 1024))] }),
     ).toThrow("10 MiB MCP response limit");
     expect(() =>
-      toTaskArtifactsToolResult({ artifacts: [payload] }, "x".repeat(2 * 1024 * 1024)),
+      toTaskArtifactsToolResult({ artifacts: [payload] }, "x".repeat(4 * 1024 * 1024)),
     ).toThrow("10 MiB MCP response limit");
+  });
+
+  test("bounds aggregate native image responses without changing their bytes", () => {
+    const original = chunk(Buffer.alloc(1024 * 1024, 0xff), "image/png");
+    const result = toTaskArtifactsToolResult({ artifacts: [original] });
+    expect(result.content.slice(1)).toEqual([
+      { type: "image", mimeType: "image/png", data: original.dataBase64 },
+    ]);
+    expect(() =>
+      toTaskArtifactsToolResult({ artifacts: Array.from({ length: 8 }, () => original) }),
+    ).toThrow("Select fewer artifacts or reduce maxBytes");
   });
 });

@@ -507,17 +507,12 @@ test("MCP keeps artifact codes through rename, replacement, and deletion", async
 test("MCP reads mixed JSON text and native media with the same display name", async () => {
   const text = "\ufeffOrdered é😀\r\nlast\n";
   const textChunk = artifactChunk("text-1", Buffer.from(text), "text/plain", "Shared output");
-  const imageChunk: ReadTaskArtifactsResult["artifacts"][number] = {
-    ...artifactChunk("image-1", Buffer.from([0, 1, 0xff]), "image/svg+xml", "Shared output"),
-    imagePreview: {
-      state: "ready",
-      mediaType: "image/png",
-      dataBase64: "BAU=",
-      byteSize: 2,
-      width: 1,
-      height: 1,
-    },
-  };
+  const imageChunk = artifactChunk(
+    "image-1",
+    Buffer.from([0, 1, 0xff]),
+    "image/png",
+    "Shared output",
+  );
   const invalidChunk = artifactChunk(
     "invalid-1",
     Buffer.from([0xc3, 0x28]),
@@ -536,17 +531,7 @@ test("MCP reads mixed JSON text and native media with the same display name", as
     });
     expect(result.isError).not.toBe(true);
     expect(result.content.slice(1)).toEqual([
-      {
-        type: "resource",
-        resource: {
-          uri: expect.stringContaining(
-            "/artifacts/free/image-1?version=version-image-1&offset=0&length=3",
-          ),
-          mimeType: "image/svg+xml",
-          blob: "AAH/",
-        },
-      },
-      { type: "image", mimeType: "image/png", data: "BAU=" },
+      { type: "image", mimeType: "image/png", data: "AAH/" },
       { type: "text", text: expect.stringContaining("Cannot decode artifact invalid-1 as UTF-8") },
       {
         type: "resource",
@@ -560,7 +545,7 @@ test("MCP reads mixed JSON text and native media with the same display name", as
       },
     ]);
     const { dataBase64: _textData, ...textMetadata } = textChunk;
-    const { dataBase64: _imageData, imagePreview: _preview, ...imageMetadata } = imageChunk;
+    const { dataBase64: _imageData, ...imageMetadata } = imageChunk;
     const { dataBase64: _invalidData, ...invalidMetadata } = invalidChunk;
     expect(result.structuredContent).toEqual({
       artifacts: [{ ...textMetadata, content: text }, imageMetadata, invalidMetadata],
@@ -569,7 +554,7 @@ test("MCP reads mixed JSON text and native media with the same display name", as
       type: "text",
       text: JSON.stringify(result.structuredContent, null, 2),
     });
-    for (const body of ["AAH/", "BAU=", "wyg="]) {
+    for (const body of ["AAH/", "wyg="]) {
       expect(JSON.stringify(result).split(body)).toHaveLength(2);
     }
     expect(

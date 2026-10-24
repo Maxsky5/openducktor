@@ -171,7 +171,7 @@ export const toTaskArtifactsToolResult = (
 };
 
 const toTaskArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][number]) => {
-  const { dataBase64, imagePreview, ...metadata } = payload;
+  const { dataBase64, ...metadata } = payload;
   const entry: ReadTaskArtifactsOutput["artifacts"][number] = metadata;
   const bytes = Buffer.from(dataBase64, "base64");
   const { artifact } = metadata;
@@ -182,9 +182,14 @@ const toTaskArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][numb
     resource: { uri, mimeType: artifact.mediaType, blob: dataBase64 },
   });
   const mediaType = artifact.mediaType.toLowerCase();
-  if (mediaType.startsWith("text/") || mediaType === "application/json") {
+  if (
+    mediaType.startsWith("text/") ||
+    mediaType === "application/json" ||
+    mediaType === "image/svg+xml"
+  ) {
     try {
       entry.content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+      if (mediaType === "image/svg+xml") blocks.push(originalResource());
     } catch {
       blocks.push({
         type: "text",
@@ -192,20 +197,18 @@ const toTaskArtifactResult = (payload: ReadTaskArtifactsResult["artifacts"][numb
       });
       blocks.push(originalResource());
     }
-  } else {
-    blocks.push(originalResource());
-  }
-  if (imagePreview?.state === "ready") {
+  } else if (
+    ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(mediaType) &&
+    metadata.byteOffset === 0 &&
+    metadata.nextByteOffset === null
+  ) {
     blocks.push({
       type: "image",
-      mimeType: imagePreview.mediaType,
-      data: imagePreview.dataBase64,
+      mimeType: mediaType,
+      data: dataBase64,
     });
-  } else if (imagePreview?.state === "failed") {
-    blocks.push({
-      type: "text",
-      text: `Image preview failed for artifact ${artifact.code}: ${imagePreview.message} ${imagePreview.nextAction} The blob resource has the original bytes.`,
-    });
+  } else {
+    blocks.push(originalResource());
   }
   return { entry, blocks };
 };

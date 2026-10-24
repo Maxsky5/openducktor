@@ -9,8 +9,5 @@ export default {
     "node-pty",
     // The host bundle externalizes the browser automation package.
     "playwright-core",
-    // The artifact preview worker loads these external codecs at runtime.
-    "sharp",
-    "@resvg/resvg-wasm",
   ],
 };

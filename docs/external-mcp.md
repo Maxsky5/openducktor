@@ -144,7 +144,7 @@ The host finds the task or Workspace Session of a call from the runtime session 
 - The host follows the live parent links of a subagent session to its root session.
 - The root session must belong to a task or to an active Workspace Session of the call workspace, with the same runtime kind. Otherwise the call fails with `browser_unmanaged_caller`.
 
-The bridge request body is the tool input plus `workspaceId` and `caller: { runtime, runtimeSessionId }`. Browser calls wait up to 35 seconds for the host, which ends each call within 30 seconds. Artifact reads wait up to 15 seconds. This gives the host time to stop the worker after its 10-second limit and return the original bytes with any preview error. Other tools wait up to 10 seconds.
+The bridge request body is the tool input plus `workspaceId` and `caller: { runtime, runtimeSessionId }`. Browser calls wait up to 35 seconds for the host, which ends each call within 30 seconds. Other tools wait up to 10 seconds.
 
 Browser tools have no MCP `outputSchema` or `structuredContent`. The result has text blocks and, for `odt_browser_screenshot`, an `image` block. A browser failure returns its message to the agent. `details.browserFailure.code` keeps the browser failure code.
 
@@ -295,7 +295,7 @@ The workflow codes `spec`, `plan`, and `qaReport` are reserved. Builder can requ
 
 The result contains an `artifacts` array in request order. Each entry has `artifact` metadata, `version`, `byteOffset`, `nextByteOffset`, and `totalBytes`. Valid UTF-8 text appears in that entry's `content` string, with its code and media type in `artifact`. The response has one JSON text block and the same object in `structuredContent`, without separate raw text bodies. Text reads preserve the BOM and line endings. Binary content uses an embedded blob resource whose URI identifies the artifact, version, and byte range. Invalid UTF-8 returns exact bytes in a blob resource and a decoding error message. One failed artifact read fails the call.
 
-The first image read also requests a preview from the same captured version. A ready preview appears once as a native image block. A failed preview returns a separate error message while keeping original bytes available. SVG previews use the host's isolated renderer; the original SVG remains a blob resource.
+A complete PNG, JPEG, WebP, or GIF read returns the original bytes once as a native image block. A partial image read returns a blob resource with its byte range, never a native image block. Increase `maxBytes` within the input limit to read a complete image when it fits. Valid UTF-8 SVG source appears in `content` with the original `image/svg+xml` media type and an exact-byte blob resource. Reads preserve UTF-8 character boundaries, the BOM, line endings, and Unicode. Invalid SVG text returns a decoding error and the original byte resource. Reads do not decode, resize, re-encode, or convert images. Limits produce errors or versioned byte chunks, without changing the bytes.
 
 All four workflow roles can create, rename, replace, and delete free artifacts. These actions never change task status or QA verdict. Workflow writes use the same setter and follow role and lifecycle rules. Closed tasks permit reads only.
 

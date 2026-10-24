@@ -24,7 +24,7 @@
     "test:release:homebrew:cask": "bun test scripts/release-homebrew-cask.test.ts",
     "test:anti-slop": "bun run --filter @openducktor/anti-slop-oxlint test",
     "test:scripts": "bun test scripts/release-version.test.ts scripts/release-homebrew-cask.test.ts scripts/audit-check.test.ts scripts/bun-test-preload.test.ts scripts/install-script.test.ts scripts/install-powershell.test.ts",
-    "test:workers": "node scripts/check-generated-image-workers.mjs && node scripts/check-claude-transcript-workers.mjs && node scripts/check-artifact-image-preview-workers.mjs",
+    "test:workers": "node scripts/check-generated-image-workers.mjs && node scripts/check-claude-transcript-workers.mjs",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces --sequential test && bun run test:scripts",
@@ -59,7 +59,6 @@
   },
   "overrides": {
     "@hono/node-server": "^1.19.11",
-    "@xmldom/xmldom": "^0.8.15",
     "body-parser": "^2.4.0",
     "express-rate-limit": "^8.2.2",
     "fast-uri": "^3.1.6",

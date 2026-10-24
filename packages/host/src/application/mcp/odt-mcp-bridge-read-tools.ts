@@ -199,7 +199,6 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
           repoPath,
           taskId: task.id,
           artifactId,
-          includeImagePreview: (parsed.byteOffset ?? 0) === 0,
         };
         if (parsed.maxBytes !== undefined) request.maxBytes = parsed.maxBytes;
         else if (!workflow) request.maxBytes = TASK_ARTIFACT_MCP_DEFAULT_READ_BYTES;
