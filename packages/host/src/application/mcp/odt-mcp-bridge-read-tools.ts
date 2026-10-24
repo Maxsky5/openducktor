@@ -191,7 +191,6 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       if (artifact === undefined) return yield* missingFreeTaskArtifact(code);
       selections.push({ artifactId: artifact.artifactId, workflow: false });
     }
-    // Overlap reads so independent image preview deadlines do not add up across a batch.
     const artifacts = yield* Effect.forEach(
       selections,
       ({ artifactId, workflow }) => {
