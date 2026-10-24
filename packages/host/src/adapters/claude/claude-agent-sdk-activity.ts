@@ -68,10 +68,7 @@ export const isClaudeForegroundTurnActive = (
   (session.pendingUserTurnCount ?? 0) > 0;
 
 export const hasClaudeNativeBackgroundActivity = (session: ClaudeNativeActivityState): boolean => {
-  return (session.nativePendingDeliveries?.size ?? 0) > 0 || hasClaudeNativeBackgroundWork(session);
-};
-
-export const hasClaudeNativeBackgroundWork = (session: ClaudeNativeActivityState): boolean => {
+  if ((session.nativePendingDeliveries?.size ?? 0) > 0) return true;
   for (const run of session.nativeBackgroundTasks?.values() ?? []) {
     if (!run.ambient && !run.ended && run.background) return true;
   }

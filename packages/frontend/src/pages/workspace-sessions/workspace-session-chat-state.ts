@@ -115,7 +115,8 @@ export function projectWorkspaceSessionChatState({
     transcriptTarget: identity
       ? { ...identity, sessionScope: { kind: "repository" as const } }
       : null,
-    canStopSession: isWorking || activityState === "waiting_input",
+    canStopSession:
+      isAgentSessionActivityWorking(observedActivity) || observedActivity === "waiting_input",
     observationReady,
     targetFault,
     statusUnavailableReason,

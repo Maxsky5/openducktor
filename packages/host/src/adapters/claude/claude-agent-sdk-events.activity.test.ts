@@ -335,32 +335,66 @@ describe("Claude native background activity", () => {
     expect(session.activity).toBe("idle");
   });
 
-  test("settles a cancelled admitted command before freeing foreground readiness", async () => {
-    const session = createClaudeSession({
-      pendingUserTurnCount: 1,
-      activeSdkUserTurnCount: 1,
-      foregroundTurnActive: true,
-      activity: "running",
-      acceptedUserMessages: [
-        { messageId: "user", text: "Build", parts: [], timestamp: "2026-10-23T19:00:00.000Z" },
-      ],
-    });
-    const events: AgentEvent[] = [];
-    const admission = waitForUserMessageAdmission(session, "user");
-    const signal = (state: string) =>
-      applyClaudeUserMessageSignal({
-        session,
-        emit: (event) => events.push(event),
-        timestamp: "2026-10-23T19:00:01.000Z",
-        message: { type: "command_lifecycle", command_uuid: "user", state },
+  test.each([
+    { label: "without background work", backgroundWorkActive: false },
+    { label: "with background work", backgroundWorkActive: true },
+  ])(
+    "settles a cancelled admitted command before freeing foreground readiness $label",
+    async ({ backgroundWorkActive }) => {
+      const session = createClaudeSession({
+        pendingUserTurnCount: 1,
+        activeSdkUserTurnCount: 1,
+        foregroundTurnActive: true,
+        activity: "running",
+        acceptedUserMessages: [
+          { messageId: "user", text: "Build", parts: [], timestamp: "2026-10-23T19:00:00.000Z" },
+        ],
       });
-    signal("queued");
-    await admission.admitted;
-    signal("cancelled");
-    signal("cancelled");
-    expect(events.map((event) => event.type)).toEqual(["turn_error", "session_idle"]);
-    expect(session.pendingUserTurnCount).toBe(0);
-    expect(session.activeSdkUserTurnCount).toBe(0);
-    expect(session.foregroundTurnActive).toBe(false);
-  });
+      const events: AgentEvent[] = [];
+      if (backgroundWorkActive) {
+        handleClaudeSdkMessage({
+          session,
+          emit: (event) => events.push(event),
+          modelSelection: (modelId) => ({ providerId: "claude", runtimeKind: "claude", modelId }),
+          timestamp: "2026-10-23T19:00:00.000Z",
+          message: claudeSdkMessageFixture({
+            type: "system",
+            subtype: "background_tasks_changed",
+            tasks: [
+              { task_id: "build", run_id: "run-1", task_type: "local_bash", description: "Build" },
+            ],
+          }),
+        });
+      }
+      const admission = waitForUserMessageAdmission(session, "user");
+      const signal = (state: string) =>
+        applyClaudeUserMessageSignal({
+          session,
+          emit: (event) => events.push(event),
+          timestamp: "2026-10-23T19:00:01.000Z",
+          message: { type: "command_lifecycle", command_uuid: "user", state },
+        });
+      signal("queued");
+      await admission.admitted;
+      signal("cancelled");
+      signal("cancelled");
+      expect(events).toEqual([
+        expect.objectContaining({ type: "turn_error", messageId: "user" }),
+        expect.objectContaining(
+          backgroundWorkActive
+            ? {
+                type: "session_status",
+                status: { type: "busy", message: null },
+                foregroundTurnActive: false,
+              }
+            : { type: "session_idle" },
+        ),
+      ]);
+      expect(session.activity).toBe(backgroundWorkActive ? "running" : "idle");
+      expect(session.acceptedUserMessages).toEqual([]);
+      expect(session.pendingUserTurnCount).toBe(0);
+      expect(session.activeSdkUserTurnCount).toBe(0);
+      expect(session.foregroundTurnActive).toBe(false);
+    },
+  );
 });

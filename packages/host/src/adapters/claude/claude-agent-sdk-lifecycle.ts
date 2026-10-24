@@ -156,7 +156,7 @@ const cancelTurn = (input: ClaudeLifecycleInput): void => {
   }
   input.session.foregroundTurnActive = false;
   input.session.sdkState = "idle";
-  publishClaudeActivity(input);
+  publishClaudeActivity(input, true);
 };
 
 const startTurn = (input: ClaudeLifecycleInput): void => {

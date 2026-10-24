@@ -449,6 +449,32 @@ const createPresentationScenario = (
   };
 };
 
+test("keeps Stop available after an unconfirmed termination", async () => {
+  const { Harness, session, store, operations } = createPresentationScenario("claude");
+  const runningSession = { ...session, status: "running" as const, foregroundTurnActive: false };
+  const unavailableReason = "Claude termination is unconfirmed. Retry Stop.";
+  store.replaceSession(runningSession);
+  const stopAgentSession = mock(async () => {
+    store.replaceSession({ ...runningSession, statusUnavailableReason: unavailableReason });
+    throw new Error(unavailableReason);
+  });
+  operations.stopAgentSession = stopAgentSession;
+  const view = render(<Harness />);
+  try {
+    const stop = await view.findByRole("button", { name: "Stop session" });
+    await act(async () => fireEvent.click(stop));
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe(unavailableReason));
+    expect(view.getByLabelText("Message composer").getAttribute("contenteditable")).toBe("false");
+    const retryStop = view.getByRole("button", { name: "Stop session" });
+    expect(retryStop.hasAttribute("disabled")).toBe(false);
+    await act(async () => fireEvent.click(retryStop));
+    expect(stopAgentSession).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+  }
+  // The full chat render waits for catalog, history, and runtime reads.
+}, 5000);
+
 test("loads scoped Claude history before preparation completes and keeps Send locked", async () => {
   const { Harness, connection, workspace, entry, session, store, definitions, operations } =
     createPresentationScenario("claude");
@@ -1302,6 +1328,7 @@ test.each(["retry", "streaming", "record-failure"] as const)(
           });
         });
         expect(composer.getAttribute("contenteditable")).toBe("false");
+        expect(view.getByRole("button", { name: "Stop session" })).toBeTruthy();
         return;
       }
       const composer = view.getByLabelText("Message composer");
