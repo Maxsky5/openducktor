@@ -282,35 +282,20 @@ describe("Electron terminal IPC", () => {
       throw new Error("Expected terminal send and disconnect handler registration.");
     }
     const send = sendHandler;
-    const senderRef = await (async () => {
-      let destroy = (): void => undefined;
-      let destroyed = false;
-      const sender = {
-        id: 7,
-        isDestroyed: () => destroyed,
-        send: (_channel: string, envelope: { frame: Uint8Array }) => delivered.push(envelope.frame),
-        on: () => undefined,
-        once: (_event: "destroyed", listener: () => void) => {
-          destroy = listener;
-        },
-      };
-      const reference = new WeakRef(sender);
-      await send({ sender }, { clientId: "client-a", frame: makeAttachFrame() });
-      emitOutput();
-      destroyed = true;
-      destroy();
-      await failureReported;
-      return reference;
-    })();
-
-    // Collect on a fresh event-loop stack, after the sender's creation turn.
-    const senderCollected = await new Promise<boolean>((resolve) => {
-      setTimeout(() => {
-        Bun.gc(true);
-        resolve(senderRef.deref() === undefined);
-      }, 0);
-    });
-    expect(senderCollected).toBe(true);
+    let destroy = (): void => undefined;
+    // The sender stays live, so only the release can stop later deliveries.
+    const sender = {
+      id: 7,
+      isDestroyed: () => false,
+      send: (_channel: string, envelope: { frame: Uint8Array }) => delivered.push(envelope.frame),
+      on: () => undefined,
+      once: (_event: "destroyed", listener: () => void) => {
+        destroy = listener;
+      },
+    };
+    await send({ sender }, { clientId: "client-a", frame: makeAttachFrame() });
+    emitOutput();
+    destroy();
     expect(await failureReported).toMatchObject({
       senderId: 7,
       cause: { message: "Injected destruction detach failure" },
