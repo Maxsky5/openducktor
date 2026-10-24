@@ -62,7 +62,11 @@ describe("checkout and worktree reads with real Git", () => {
   });
 
   test("lists a detached HEAD with a null branch, apart from a branch named detached", async () => {
-    const worktrees = await Effect.runPromise(listWorktrees(runner, repository));
+    // Git prints paths with forward slashes on Windows.
+    const worktrees = (await Effect.runPromise(listWorktrees(runner, repository))).map((entry) => ({
+      ...entry,
+      worktreePath: path.normalize(entry.worktreePath),
+    }));
     expect(worktrees).toHaveLength(4);
     expect(worktrees).toEqual(
       expect.arrayContaining([
