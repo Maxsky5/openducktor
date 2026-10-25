@@ -21,7 +21,7 @@ import {
   loadTaskBranchCleanup,
 } from "../support/task-worktree-cleanup";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
-import type { CreateTaskServiceInput, TaskService } from "../task-service";
+import type { TaskService, TaskServiceUseCaseInput } from "../task-service";
 
 type TaskBranchCleanup = {
   sourceBranch: string;
@@ -33,12 +33,13 @@ export const createTaskLinkMergedPullRequestUseCase = ({
   gitProviderResolver,
   taskStore,
   settingsConfig,
+  taskActivityGuard,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-}: CreateTaskServiceInput) => ({
+}: TaskServiceUseCaseInput) => ({
   linkMergedPullRequest(input: Parameters<TaskService["linkMergedPullRequest"]>[0]) {
     return Effect.gen(function* () {
       const { repoPath, taskId, pullRequest } = input;
@@ -145,7 +146,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
           const cleanupEffect = cleanup
             ? cleanupMergedTaskState(
-                dependencies,
+                { ...dependencies, taskActivityGuard, taskSessionLifecycleCoordinator },
                 taskStore,
                 repoPath,
                 taskId,

@@ -12,10 +12,10 @@ import { taskListWithCurrent } from "../support/task-workflow-helpers";
 import { cleanupMergedTaskState } from "../support/task-worktree-cleanup";
 import { TaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type {
-  CreateTaskServiceInput,
   RepoPullRequestSyncResult,
   TaskService,
   TaskServiceError,
+  TaskServiceUseCaseInput,
 } from "../task-service";
 
 export const createTaskPullRequestSyncUseCases = ({
@@ -23,12 +23,13 @@ export const createTaskPullRequestSyncUseCases = ({
   gitProviderResolver,
   taskStore,
   settingsConfig,
+  taskActivityGuard,
   taskSessionLifecycleCoordinator,
   taskWorktreeService,
   terminalService,
   worktreeFiles,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<
+}: TaskServiceUseCaseInput): Pick<
   TaskService,
   "repoPullRequestSync" | "repoPullRequestSyncDetailed"
 > => {
@@ -116,7 +117,7 @@ export const createTaskPullRequestSyncUseCases = ({
             yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
             yield* completeTaskClosure({
               cleanup: cleanupMergedTaskState(
-                cleanupDependencies,
+                { ...cleanupDependencies, taskActivityGuard, taskSessionLifecycleCoordinator },
                 taskStore,
                 effectiveRepoPath,
                 task.id,

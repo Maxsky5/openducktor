@@ -19,7 +19,8 @@ import type { TaskServiceUseCaseInput, TaskService } from "../task-service";
 export const createTaskDirectMergeUseCase = (services: TaskServiceUseCaseInput) => ({
   directMerge(input: Parameters<TaskService["directMerge"]>[0]) {
     return Effect.gen(function* () {
-      const { taskStore, completionState } = services;
+      const { taskStore, completionState, taskActivityGuard, taskSessionLifecycleCoordinator } =
+        services;
       const { taskId, input: mergeInput } = input;
       const { dependencies, effectiveRepoPath, current, currentTasks, approval, state } =
         yield* prepareDirectMerge(services, input);
@@ -90,7 +91,13 @@ export const createTaskDirectMergeUseCase = (services: TaskServiceUseCaseInput) 
               yield* completionState.publish(state);
               if (!approval.publishTarget) {
                 const task = yield* closeMergedTask(
-                  { ...dependencies, taskStore, completionState },
+                  {
+                    ...dependencies,
+                    taskStore,
+                    completionState,
+                    taskActivityGuard,
+                    taskSessionLifecycleCoordinator,
+                  },
                   { repoPath: effectiveRepoPath, taskId },
                   directMerge,
                   currentTasks,

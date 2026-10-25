@@ -1,5 +1,6 @@
 import type {
   AgentRole,
+  AgentSessionRecord,
   DirectMergeRecord,
   GitTargetBranch,
   TaskCard,
@@ -8,9 +9,10 @@ import { runtimeRequiredScopesByRole } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
+import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
@@ -21,13 +23,14 @@ import type {
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
 import type { TaskTerminalCleanupPort } from "../task-service";
+import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import type {
   TaskWorktreeService,
   TaskWorktreeServiceError,
 } from "../worktrees/task-worktree-service";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
-import { runTaskRuntimeCleanup } from "./task-cleanup-support";
+import { runTaskRuntimeCleanup, selectWorkflowCleanupSessionRecords } from "./task-cleanup-support";
 
 type TaskWorktreeCleanupError =
   | GitPortError
@@ -99,14 +102,47 @@ export const findLatestCleanupTarget = (
     }
     return undefined;
   });
+type MergedTaskCleanupServices = {
+  gitPort: GitPort;
+  settingsConfig: SettingsConfigPort;
+  taskActivityGuard?: TaskActivityGuardPort | undefined;
+  taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
+  taskWorktreeService: TaskWorktreeService;
+  terminalService: TaskTerminalCleanupPort;
+  worktreeFiles?: WorktreeFilePort;
+};
+/**
+ * A live session keeps its working directory, so a later runtime read of a removed worktree
+ * reports a fault that blocks task cleanup. Close Task, Reset Task, and Delete release the task
+ * sessions before they remove the worktree. A merged task does the same.
+ */
+const releaseMergedTaskSessions = (
+  taskActivityGuard: TaskActivityGuardPort | undefined,
+  repoPath: string,
+  taskId: string,
+  sessions: AgentSessionRecord[],
+) =>
+  Effect.gen(function* () {
+    const workflowSessions = selectWorkflowCleanupSessionRecords(sessions);
+    if (workflowSessions.length === 0) {
+      return;
+    }
+    if (!taskActivityGuard) {
+      return yield* new HostDependencyError({
+        dependency: "taskActivityGuard",
+        operation: "merged task cleanup",
+        message:
+          "Merged task cleanup requires runtime session activity checks for tasks with spec, planner, build, or QA sessions.",
+        details: { repoPath, taskId },
+      });
+    }
+    yield* taskActivityGuard.cleanupTaskSessions({
+      repoPath,
+      taskSessions: [{ taskId, sessions: workflowSessions }],
+    });
+  });
 export const cleanupMergedTaskState = (
-  dependencies: {
-    gitPort: GitPort;
-    settingsConfig: SettingsConfigPort;
-    taskWorktreeService: TaskWorktreeService;
-    terminalService: TaskTerminalCleanupPort;
-    worktreeFiles?: WorktreeFilePort;
-  },
+  dependencies: MergedTaskCleanupServices,
   taskStore: TaskStorePort,
   repoPath: string,
   taskId: string,
@@ -128,10 +164,21 @@ export const cleanupMergedTaskState = (
       taskId,
       sourceBranch,
     );
+    // Runtime reads of the worktree wait until the cleanup ends, so none restores a released session.
+    if (cleanupTarget) {
+      yield* dependencies.taskSessionLifecycleCoordinator.acquireWorktreeLifecycle([cleanupTarget]);
+    }
+    const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
+    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+    yield* releaseMergedTaskSessions(
+      dependencies.taskActivityGuard,
+      canonicalRepoPath,
+      taskId,
+      metadata.agentSessions,
+    );
     if (cleanupTarget && (yield* dependencies.settingsConfig.pathExists(cleanupTarget))) {
       const worktreeFiles = yield* requireWorktreeFiles(dependencies.worktreeFiles);
       const canonicalCleanupTarget = yield* dependencies.gitPort.canonicalizePath(cleanupTarget);
-      const canonicalRepoPath = yield* dependencies.gitPort.canonicalizePath(repoPath);
       if (!canonicalPathsEqual(canonicalCleanupTarget, canonicalRepoPath, canonicalPathPlatform)) {
         yield* removeWorktreeAndFilesystemPath(
           {
@@ -162,13 +209,7 @@ export const cleanupMergedTaskState = (
     yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete, onDeleting);
   });
 export const cleanupDirectMergeTaskState = (
-  dependencies: {
-    gitPort: GitPort;
-    settingsConfig: SettingsConfigPort;
-    taskWorktreeService: TaskWorktreeService;
-    terminalService: TaskTerminalCleanupPort;
-    worktreeFiles?: WorktreeFilePort;
-  },
+  dependencies: MergedTaskCleanupServices,
   taskStore: TaskStorePort,
   repoPath: string,
   taskId: string,
@@ -241,7 +282,7 @@ export const resolveBuildStartPoint = (
     return yield* Effect.fail(
       new HostValidationError({
         field: "targetBranch",
-        message: `Configured target branch is unavailable for task worktree creation: ${configuredTargetBranch}`,
+        message: `Target branch ${configuredTargetBranch} does not exist in this repository. Choose an existing target branch, or fetch this branch first.`,
         details: { repoPath, targetBranch: configuredTargetBranch },
       }),
     );

@@ -63,11 +63,20 @@ const createService = (
   sessionsByTaskId: Record<string, TestSession[]>,
   guard?: TaskActivityGuardPort,
   tasks?: ReturnType<typeof task>[],
+  existingPaths = new Set(["/repo", "/worktrees/repo/task-1"]),
 ) => {
   const input = {
     gitPort: createDirectMergeGitPort({ calls: [] }),
-    settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+    settingsConfig: createBuildSettingsConfig(existingPaths),
     taskStore: createStopImpactTaskStore(sessionsByTaskId, tasks),
+    taskWorktreeService: {
+      getTaskWorktree: ({ taskId }: { taskId: string }) =>
+        Effect.succeed(
+          existingPaths.has(`/worktrees/repo/${taskId}`)
+            ? { workingDirectory: `/worktrees/repo/${taskId}` }
+            : null,
+        ),
+    },
     workspaceSettingsService: createBuildWorkspaceSettingsService({
       workspaceId: "repo",
       repoPath: "/repo",
@@ -93,7 +102,7 @@ describe("getTaskStopImpact", () => {
       }),
     );
 
-    expect(result).toEqual({ stoppableSessionCount: 0 });
+    expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 0 });
     expect(countCalls).toEqual([]);
   });
 
@@ -122,7 +131,7 @@ describe("getTaskStopImpact", () => {
       }),
     );
 
-    expect(result).toEqual({ stoppableSessionCount: 1 });
+    expect(result).toEqual({ stoppableSessionCount: 1, removedWorktreeCount: 1 });
     expect(countCalls).toEqual([
       {
         sessionIds: ["live-build", "idle-planner"],
@@ -158,7 +167,7 @@ describe("getTaskStopImpact", () => {
       }),
     );
 
-    expect(result).toEqual({ stoppableSessionCount: 1 });
+    expect(result).toEqual({ stoppableSessionCount: 1, removedWorktreeCount: 1 });
     expect(countCalls).toEqual([
       {
         sessionIds: ["root-planner", "idle-build"],
@@ -256,7 +265,7 @@ describe("getTaskStopImpact", () => {
       }),
     );
 
-    expect(result).toEqual({ stoppableSessionCount: 1 });
+    expect(result).toEqual({ stoppableSessionCount: 1, removedWorktreeCount: 1 });
     expect(countCalls).toEqual([
       {
         sessionIds: ["live-build"],
@@ -288,13 +297,54 @@ describe("getTaskStopImpact", () => {
       }),
     );
 
-    expect(result).toEqual({ stoppableSessionCount: 1 });
+    expect(result).toEqual({ stoppableSessionCount: 1, removedWorktreeCount: 1 });
     expect(countCalls).toEqual([
       {
         sessionIds: ["live-qa"],
         sessionRoles: ["qa"],
       },
     ]);
+  });
+
+  test("counts only the task worktrees that still exist", async () => {
+    const service = createService(
+      {
+        "task-1": [
+          createAgentSessionRecord({
+            externalSessionId: "approved-build",
+            workingDirectory: "/worktrees/repo/task-1",
+          }),
+          createAgentSessionRecord({
+            externalSessionId: "legacy-build",
+            workingDirectory: "/worktrees/repo/legacy-build",
+          }),
+        ],
+      },
+      makeGuard(new Set()),
+      undefined,
+      // Approve removed the task worktree. The legacy worktree of an older Builder stays.
+      new Set(["/repo", "/worktrees/repo/legacy-build"]),
+    );
+
+    const result = await Effect.runPromise(
+      service.getTaskStopImpact({ repoPath: "/repo", taskIds: ["task-1"], operation: "delete" }),
+    );
+
+    expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 1 });
+  });
+
+  test("close counts no worktree for a task that is already closed", async () => {
+    const service = createService(
+      { "task-1": [createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" })] },
+      makeGuard(new Set()),
+      [task({ id: "task-1", status: "closed" })],
+    );
+
+    const result = await Effect.runPromise(
+      service.getTaskStopImpact({ repoPath: "/repo", taskIds: ["task-1"], operation: "close" }),
+    );
+
+    expect(result).toEqual({ stoppableSessionCount: 0, removedWorktreeCount: 0 });
   });
 
   test("fails with an actionable dependency error when a guard is required but missing", async () => {

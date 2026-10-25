@@ -498,7 +498,16 @@ describe("createTaskService direct merge", () => {
     const service = createTaskService({
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
-        cleanupTaskSessions: () => Effect.die(new Error("unexpected session cleanup")),
+        cleanupTaskSessions: (input) =>
+          Effect.sync(() => {
+            calls.push({
+              type: "releaseSessions",
+              sessionIds: input.taskSessions.flatMap((entry) =>
+                entry.sessions.map((session) => session.externalSessionId),
+              ),
+            });
+            return { stoppedSessionCount: 0 };
+          }),
       },
       gitPort: createDirectMergeGitPort({
         calls,
@@ -529,6 +538,8 @@ describe("createTaskService direct merge", () => {
       { type: "currentBranch", workingDir: "/repo" },
       { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
+      { type: "releaseSessions", sessionIds: [buildSession.externalSessionId] },
       {
         type: "removeWorktree",
         repoPath: "/repo",

@@ -44,7 +44,8 @@ const createHarness = (
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
-      cleanupTaskSessions: () => Effect.die(new Error("must not stop sessions")),
+      // Completion stops nothing: it checked that no session runs. It releases the idle ones.
+      cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     },
     gitPort: extendGitPort(
       createDirectMergeGitPort({

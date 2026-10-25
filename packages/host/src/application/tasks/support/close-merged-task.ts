@@ -9,6 +9,7 @@ import {
   errorMessage,
   toHostOperationError,
 } from "../../../effect/host-errors";
+import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { TaskCompletionState } from "../task-completion-state";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
@@ -20,7 +21,10 @@ import { enrichTask } from "./task-workflow-helpers";
 /** Callers hold the task lifecycle guard and validate closure before entering this operation. */
 export const closeMergedTask = (
   services: ReturnType<typeof requireMergedTaskCleanupDependencies> &
-    Pick<TaskServiceUseCaseInput, "taskStore" | "completionState">,
+    Pick<
+      TaskServiceUseCaseInput,
+      "taskStore" | "completionState" | "taskSessionLifecycleCoordinator"
+    > & { taskActivityGuard: TaskActivityGuardPort | undefined },
   input: TaskDirectMergeCompleteIntent,
   merge: DirectMergeRecord,
   currentTasks: TaskCard[],
