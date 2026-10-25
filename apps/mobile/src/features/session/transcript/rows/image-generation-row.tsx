@@ -23,11 +23,10 @@ import {
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-image-generation-model";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { useQuery } from "@tanstack/react-query";
-import { memo, type ReactElement, useMemo, useState } from "react";
+import { memo, type ReactElement, useMemo } from "react";
 import { View } from "react-native";
 import Animated, { useReducedMotion } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
-import { useActiveSession } from "@/host-session/active-session-context";
 import { type Base64Resource, base64ResourceFileQueryOptions } from "@/platform/resource-files";
 import { useResourceFiles } from "@/platform/resource-files-context";
 import { ImagePlaceholder } from "@/rich-content/images/host-image";
@@ -182,9 +181,9 @@ function SavedImage({
 
 /**
  * The image bytes go from the host to a device cache file and leave JavaScript memory. The view
- * mounts only while its row is within a few rows of the viewport. The file goes away when it
- * unmounts, because the read has no cache time. `enabled` is false while the image metadata
- * reads again.
+ * mounts only while its row is within a few rows of the viewport. The file stays while the read
+ * is in the query cache, so a row that comes back shows it without a new read. `enabled` is false
+ * while the image metadata reads again.
  */
 function LoadedImage({
   input,
@@ -198,16 +197,12 @@ function LoadedImage({
   enabled: boolean;
 }): ReactElement {
   const operations = useAgentOperationsContext();
-  const { remote } = useActiveSession().remote;
   const files = useResourceFiles();
-  // The first connection generation keys the read, so a reconnect does not read it again.
-  const [generation] = useState(() => remote.readState().generation);
   const options = useMemo(
     () =>
       base64ResourceFileQueryOptions(
         files,
         ["generated-image", ...generatedImageReadIdentity(input).map((part) => part ?? "")],
-        generation,
         (signal) =>
           readInBatch(operations, input, signal, (request) =>
             runImagePreview(signal, async (): Promise<Base64Resource> => {
@@ -218,7 +213,7 @@ function LoadedImage({
             }),
           ),
       ),
-    [files, generation, input, operations],
+    [files, input, operations],
   );
   const query = useQuery({ ...options, enabled });
   if (query.isError) return <ImageError message={errorMessage(query.error)} />;

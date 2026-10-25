@@ -7,7 +7,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { UserAttachmentPart } from "@openducktor/frontend-core/sessions/messages/agent-chat-user-message-content";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { memo, type ReactElement, useMemo, useState } from "react";
+import { memo, type ReactElement, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useActiveSession } from "@/host-session/active-session-context";
@@ -119,14 +119,12 @@ function StagedImageRead({ path, name, label, mediaType }: StagedImageProps): Re
   const { action, share } = useImageActions();
   const { remote } = useActiveSession().remote;
   const files = useResourceFiles();
-  // The first connection generation keys the read, so a reconnect does not read it again.
-  const [generation] = useState(() => remote.readState().generation);
   const options = useMemo(
     () =>
-      resourceFileQueryOptions(files, ["staged-preview", path], generation, (signal) =>
+      resourceFileQueryOptions(files, ["staged-preview", path], (signal) =>
         remote.readStagedPreview(path, signal),
       ),
-    [files, generation, path, remote],
+    [files, path, remote],
   );
   const query = useQuery(options);
   const source = useMemo(() => (query.data ? { uri: query.data.uri } : null), [query.data]);
@@ -161,7 +159,7 @@ function StagedImageRead({ path, name, label, mediaType }: StagedImageProps): Re
         source={source}
         recyclingKey={path}
         contentFit="cover"
-        cachePolicy="none"
+        cachePolicy="memory"
         transition={120}
         style={styles.image}
       />

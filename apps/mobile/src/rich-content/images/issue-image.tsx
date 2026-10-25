@@ -1,8 +1,7 @@
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useQuery } from "@tanstack/react-query";
-import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
-import { useActiveSession } from "@/host-session/active-session-context";
+import { memo, type ReactElement, useCallback, useMemo } from "react";
 import { base64ResourceFileQueryOptions } from "@/platform/resource-files";
 import { useResourceFiles } from "@/platform/resource-files-context";
 import { Button } from "@/ui/button";
@@ -63,23 +62,19 @@ function LoadedIssueImage({
   accessibilityHint: string;
 }): ReactElement {
   const host = useHostClient();
-  const { remote } = useActiveSession().remote;
   const files = useResourceFiles();
-  // The first connection generation of this view keys the read, so a reconnect does not read again.
-  const [generation] = useState(() => remote.readState().generation);
   const { repoPath, providerId } = issue;
   const options = useMemo(
     () =>
       base64ResourceFileQueryOptions(
         files,
         ["issue-image", providerId, repoPath, taskId, url],
-        generation,
         async () => {
           const image = await host.issueImageGet({ repoPath, taskId, url });
           return { base64: image.bytesBase64, mediaType: image.mediaType };
         },
       ),
-    [files, generation, host, providerId, repoPath, taskId, url],
+    [files, host, providerId, repoPath, taskId, url],
   );
   const query = useQuery(options);
   const file = query.data;
@@ -104,7 +99,7 @@ function LoadedIssueImage({
       uri={file.uri}
       recyclingKey={url}
       alt={alt}
-      cachePolicy="none"
+      cachePolicy="memory"
       onPress={press}
       accessibilityHint={accessibilityHint}
     />

@@ -24,8 +24,11 @@ export type FittedImageProps = {
   /** Names the image. A recycled list row shows no old image while the new one loads. */
   recyclingKey: string;
   alt: string;
-  /** `none` for device cache files, `disk` for web images. No policy keeps decoded images in JS memory. */
-  cachePolicy: "none" | "disk";
+  /**
+   * `memory` for device cache files, so a row that comes back shows the decoded image at once.
+   * `disk` for web images. The native cache keeps decoded images out of JavaScript memory.
+   */
+  cachePolicy: "memory" | "disk";
   /** Opens the image, such as in the share sheet or the browser. Without it, the image is not a control. */
   onPress?: (() => void) | undefined;
   /** Says what a press does, such as "Opens the share sheet." */

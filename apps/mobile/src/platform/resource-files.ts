@@ -32,7 +32,7 @@ export const clearResourceCache = (): void => {
 
 /**
  * Keeps resource bytes out of JavaScript memory. Each connection has its own folder; a file goes
- * away when its last view closes, and the folder goes away with the connection.
+ * away when its read leaves the query cache, and the folder goes away with the connection.
  */
 export const createResourceFiles = (connectionKey: number) => {
   const directory = new Directory(Paths.cache, CACHE_ROOT, String(connectionKey));
@@ -110,20 +110,19 @@ export const watchResourceFileRemoval = (queryClient: QueryClient, files: Resour
 };
 
 /**
- * Shares one resource read while views use it. `gcTime: 0` drops the file when the last view
- * closes, and recovery does not refetch it.
+ * Shares one read of a resource that does not change. The file stays for the default inactive
+ * cache time after its last view closes, so a row that scrolls back shows it without a new read.
+ * Recovery does not refetch it.
  */
 export const base64ResourceFileQueryOptions = (
   files: ResourceFiles,
   key: readonly string[],
-  generation: number,
   read: (signal: AbortSignal) => Promise<Base64Resource>,
 ) =>
   queryOptions({
-    queryKey: [QUERY_ROOT, generation, ...key],
+    queryKey: [QUERY_ROOT, ...key],
     queryFn: async ({ signal }): Promise<ResourceFile> => files.writeBase64(await read(signal)),
     staleTime: Infinity,
-    gcTime: 0,
     retry: false,
     meta: { skipHostRecovery: true },
   });
@@ -131,11 +130,10 @@ export const base64ResourceFileQueryOptions = (
 export const resourceFileQueryOptions = (
   files: ResourceFiles,
   key: readonly string[],
-  generation: number,
   read: ResourceRead,
 ) =>
   queryOptions({
-    queryKey: [QUERY_ROOT, generation, ...key],
+    queryKey: [QUERY_ROOT, ...key],
     queryFn: async ({ signal }): Promise<ResourceFile> => {
       const resource = await read(signal);
       const mediaType = resource.headers["content-type"];
@@ -144,7 +142,6 @@ export const resourceFileQueryOptions = (
       return files.write(resource.bytes, mediaType.split(";")[0]?.trim() ?? mediaType);
     },
     staleTime: Infinity,
-    gcTime: 0,
     retry: false,
     meta: { skipHostRecovery: true },
   });

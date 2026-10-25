@@ -36,7 +36,7 @@ export const ShareableImage = memo(function ShareableImage({
         uri={uri}
         recyclingKey={recyclingKey}
         alt={alt}
-        cachePolicy="none"
+        cachePolicy="memory"
         onPress={shareImage}
         accessibilityHint="Opens the share sheet."
       />

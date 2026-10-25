@@ -1,7 +1,7 @@
 import { type TaskAssetRenderContext, taskAssetRenderContextSchema } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useQuery } from "@tanstack/react-query";
-import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
+import { memo, type ReactElement, useCallback, useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { sansWeight } from "@/theme/tokens";
@@ -90,18 +90,13 @@ function LoadedHostImage({
 }): ReactElement {
   const { remote } = useActiveSession().remote;
   const files = useResourceFiles();
-  // The first connection generation of this view keys the read, so a reconnect does not read again.
-  const [generation] = useState(() => remote.readState().generation);
   const { workspaceId, taskId, assetId } = renderContext;
   const options = useMemo(
     () =>
-      resourceFileQueryOptions(
-        files,
-        ["task-asset", workspaceId, taskId, assetId],
-        generation,
-        (signal) => remote.readTaskAsset(renderContext, signal),
+      resourceFileQueryOptions(files, ["task-asset", workspaceId, taskId, assetId], (signal) =>
+        remote.readTaskAsset(renderContext, signal),
       ),
-    [assetId, files, generation, remote, renderContext, taskId, workspaceId],
+    [assetId, files, remote, renderContext, taskId, workspaceId],
   );
   const query = useQuery(options);
   const file = query.data;
@@ -137,7 +132,7 @@ function LoadedHostImage({
       uri={query.data.uri}
       recyclingKey={assetId}
       alt={alt}
-      cachePolicy="none"
+      cachePolicy="memory"
       onPress={onPress === undefined ? undefined : press}
       accessibilityHint={accessibilityHint}
     />

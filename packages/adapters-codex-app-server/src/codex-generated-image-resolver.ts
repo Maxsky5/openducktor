@@ -29,6 +29,7 @@ type BatchItem = {
   revision: string;
   result: { preparation: CodexImageGenerationPreparation } | { error: Error };
 };
+type ImageSelection<Identity> = { identity: Identity; result: BatchItem["result"] };
 type ImageBatch = {
   ref: AgentSessionLiveRef;
   items: Map<string, BatchItem>;
@@ -38,8 +39,18 @@ type ImageBatch = {
   released: boolean;
   timer: ReturnType<typeof setTimeout>;
 };
+/**
+ * The completed images with a saved file in the last history read of a thread, by item ID. A
+ * `null` item is not one such image. These items do not change, and the host checks each file
+ * digest against the requested revision, so a later preview of them needs no history read.
+ */
+type SavedImages = {
+  workingDirectory: string;
+  items: Map<string, CodexImageGenerationPreparation | null>;
+};
 type ImageRuntime = {
   reads: Map<string, Promise<CodexThreadHistoryReadResponse | undefined>>;
+  savedImages: Map<string, SavedImages>;
   cancellation: AbortController;
   batches: Map<string, ImageBatch>;
   reservations: Set<ImageBatch>;
@@ -64,6 +75,7 @@ export class CodexGeneratedImageResolver {
     if (!this.runtimes.has(runtimeId))
       this.runtimes.set(runtimeId, {
         reads: new Map(),
+        savedImages: new Map(),
         cancellation: new AbortController(),
         batches: new Map(),
         reservations: new Set(),
@@ -81,9 +93,11 @@ export class CodexGeneratedImageResolver {
   }
 
   releaseSession(ref: AgentSessionLiveRef): void {
-    for (const runtime of this.runtimes.values())
+    for (const runtime of this.runtimes.values()) {
+      runtime.savedImages.delete(ref.externalSessionId);
       for (const [batchId, batch] of runtime.batches)
         if (sameRef(batch.ref, ref)) releaseBatch(runtime, batchId);
+    }
   }
 
   /** Keep only the selected sources until their queued previews consume them. */
@@ -115,20 +129,13 @@ export class CodexGeneratedImageResolver {
     owner.runtime.batches.set(batchId, batch);
     owner.runtime.reservations.add(batch);
     try {
-      const response = await this.readHistory(owner, input.ref);
+      const selections = await this.selectImages(owner, input.ref, input.images);
       this.assertCurrent(owner);
       if (owner.runtime.batches.get(batchId) !== batch)
         throw new Error("The image preview batch expired. Reopen the preview.");
       let retainedBytes = 0;
       const admittedImages: AgentGeneratedImageBatchInput["images"] = [];
-      for (const identity of input.images) {
-        let result: BatchItem["result"];
-        try {
-          result = { preparation: selectImage(response, identity) };
-        } catch (error) {
-          if (!(error instanceof Error)) throw error;
-          result = { error };
-        }
+      for (const { identity, result } of selections) {
         const bytes = "preparation" in result ? result.preparation.item.result.length * 2 : 0;
         if (retainedBytes + bytes > IMAGE_BATCH_RETAINED_BYTE_LIMIT) continue;
         retainedBytes += bytes;
@@ -156,8 +163,12 @@ export class CodexGeneratedImageResolver {
     signal?: AbortSignal,
   ): Promise<AgentGeneratedImageDescribeResult> {
     const owner = await this.resolveOwner(input.ref, signal);
-    const response = await this.readHistory(owner, input.ref);
-    const preparations = input.images.map((identity) => selectImage(response, identity));
+    const preparations = (await this.selectImages(owner, input.ref, input.images)).map(
+      ({ result }) => {
+        if ("error" in result) throw result.error;
+        return result.preparation;
+      },
+    );
     const images = await this.prepare(preparations, owner.signal);
     this.assertCurrent(owner);
     return { ref: input.ref, images };
@@ -251,6 +262,36 @@ export class CodexGeneratedImageResolver {
       throw new Error("The image runtime changed during the read. Reopen the session.");
   }
 
+  /**
+   * Selects each image from the saved images of the last history read. When one is not there, it
+   * reads the public history once for all of them.
+   */
+  private async selectImages<Identity extends ImageIdentity>(
+    owner: ImageReadOwner,
+    ref: AgentSessionLiveRef,
+    identities: readonly Identity[],
+  ): Promise<ImageSelection<Identity>[]> {
+    const saved = owner.runtime.savedImages.get(ref.externalSessionId);
+    let history: Promise<CodexThreadHistoryReadResponse> | undefined;
+    const selections: ImageSelection<Identity>[] = [];
+    for (const identity of identities) {
+      const known = savedImage(saved, ref, identity);
+      if (known) {
+        selections.push({ identity, result: { preparation: known } });
+        continue;
+      }
+      history ??= this.readHistory(owner, ref);
+      const response = await history;
+      try {
+        selections.push({ identity, result: { preparation: selectImage(response, identity) } });
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        selections.push({ identity, result: { error } });
+      }
+    }
+    return selections;
+  }
+
   private async readHistory(
     owner: ImageReadOwner,
     ref: AgentSessionLiveRef,
@@ -277,6 +318,10 @@ export class CodexGeneratedImageResolver {
       throw new Error(
         "Image public history does not match the requested session and working directory.",
       );
+    owner.runtime.savedImages.set(threadId, {
+      workingDirectory: ref.workingDirectory,
+      items: savedImagesOf(response),
+    });
     return response;
   }
 
@@ -319,6 +364,34 @@ const releaseBatch = (runtime: ImageRuntime, batchId: string): void => {
 const finishBatchRead = (runtime: ImageRuntime, batch: ImageBatch): void => {
   batch.activeReads--;
   if (batch.released && batch.activeReads === 0) runtime.reservations.delete(batch);
+};
+const savedImagesOf = (response: CodexThreadHistoryReadResponse): SavedImages["items"] => {
+  const items: SavedImages["items"] = new Map();
+  for (const turn of response.thread.turns)
+    for (const item of turn.items) {
+      if (item.type !== "imageGeneration") continue;
+      const saved =
+        !items.has(item.id) && item.status === "completed" && item.savedPath !== undefined;
+      items.set(
+        item.id,
+        saved
+          ? { item: { ...item, result: "" }, context: { turnId: turn.id, turnStatus: turn.status } }
+          : null,
+      );
+    }
+  return items;
+};
+const savedImage = (
+  saved: SavedImages | undefined,
+  ref: AgentSessionLiveRef,
+  identity: ImageIdentity,
+): CodexImageGenerationPreparation | undefined => {
+  if (saved?.workingDirectory !== ref.workingDirectory) return undefined;
+  const preparation = saved.items.get(identity.itemId);
+  if (!preparation) return undefined;
+  if (identity.turnId !== undefined && preparation.context.turnId !== identity.turnId)
+    return undefined;
+  return preparation;
 };
 const selectImage = (
   response: CodexThreadHistoryReadResponse,

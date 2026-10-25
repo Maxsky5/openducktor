@@ -63,7 +63,7 @@ function MarkdownImageContent({
             uri={stagedUri}
             recyclingKey={stagedUri}
             alt={alt}
-            cachePolicy="none"
+            cachePolicy="memory"
             onPress={shareStaged}
             accessibilityHint={SHARE_HINT}
           />
