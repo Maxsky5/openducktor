@@ -31,6 +31,8 @@ type TerminalLayerProps = {
   /** The mount key of the selected terminal, or null when the panel shows another tab. */
   activeKey: string | null;
   isVisible: boolean;
+  /** A shown view can paint before its content becomes ready for input and focus. */
+  isInteractive: boolean;
   focusRequest: number;
   /** The ID base of the panel tabs, so each viewport links to its tab. */
   tabIdBase: string;
@@ -48,6 +50,7 @@ export function TerminalLayer({
   mounts,
   activeKey,
   isVisible,
+  isInteractive,
   focusRequest,
   tabIdBase,
 }: TerminalLayerProps): ReactElement {
@@ -72,14 +75,15 @@ export function TerminalLayer({
       className="absolute inset-0 overflow-hidden bg-(--terminal-panel) data-[active=false]:pointer-events-none data-[active=false]:invisible"
     >
       {mounts.map((mount) => {
-        const active = isVisible && mount.key === activeKey;
+        const shown = isVisible && mount.key === activeKey;
+        const canInteract = shown && isInteractive;
         const viewport = (
           <TerminalViewport
             scopeKey={mount.scopeKey}
             tab={mount.tab}
             controller={terminals.controller}
-            focusRequest={active ? focusRequest : 0}
-            active={active}
+            focusRequest={canInteract ? focusRequest : 0}
+            active={canInteract}
             platform={terminals.platform}
             onRetryCreate={retryTerminalCreation}
             onLifecycle={terminals.onLifecycle}
@@ -96,15 +100,52 @@ export function TerminalLayer({
             value={value}
             {...tabLinkIds(tabIdBase, value).content}
             data-terminal-viewport
-            data-viewport-state={active ? "active" : "inactive"}
-            aria-hidden={!active}
-            inert={!active}
+            data-viewport-state={shown ? "active" : "inactive"}
+            aria-hidden={!shown}
+            inert={!canInteract}
             className={viewportClassName}
           >
             {viewport}
           </TabsContent>
         );
       })}
+    </div>
+  );
+}
+
+/** Discovery and transport failures. Panels that show terminals render this above their body. */
+export function TerminalStatusMessages({
+  terminals,
+}: {
+  terminals: Pick<
+    TerminalSessionsModel,
+    "discoveryError" | "transportError" | "isLoading" | "onRetryDiscovery"
+  >;
+}): ReactElement | null {
+  if (terminals.discoveryError === null && terminals.transportError === null) return null;
+  return (
+    <div className="shrink-0">
+      {terminals.discoveryError !== null ? (
+        <div className="flex items-center gap-3 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+          <p role="alert" className="min-w-0 flex-1 break-words">
+            Terminal discovery failed: {terminals.discoveryError}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={terminals.onRetryDiscovery}
+            disabled={terminals.isLoading}
+          >
+            Retry terminal discovery
+          </Button>
+        </div>
+      ) : null}
+      {terminals.transportError !== null ? (
+        <p role="alert" className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+          Terminal transport failed: {terminals.transportError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -232,40 +273,3 @@ const TerminalViewport = memo(function TerminalViewport({
     </div>
   );
 });
-
-/** Discovery and transport failures. Panels that show terminals render this above their body. */
-export function TerminalStatusMessages({
-  terminals,
-}: {
-  terminals: Pick<
-    TerminalSessionsModel,
-    "discoveryError" | "transportError" | "isLoading" | "onRetryDiscovery"
-  >;
-}): ReactElement | null {
-  if (terminals.discoveryError === null && terminals.transportError === null) return null;
-  return (
-    <div className="shrink-0">
-      {terminals.discoveryError !== null ? (
-        <div className="flex items-center gap-3 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          <p role="alert" className="min-w-0 flex-1 break-words">
-            Terminal discovery failed: {terminals.discoveryError}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={terminals.onRetryDiscovery}
-            disabled={terminals.isLoading}
-          >
-            Retry terminal discovery
-          </Button>
-        </div>
-      ) : null}
-      {terminals.transportError !== null ? (
-        <p role="alert" className="bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          Terminal transport failed: {terminals.transportError}
-        </p>
-      ) : null}
-    </div>
-  );
-}

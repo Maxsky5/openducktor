@@ -141,4 +141,42 @@ describe("withClaudeSkillMentions", () => {
 
     expect(withClaudeSkillMentions(session, [GRILL_SKILL])).toBe(session);
   });
+
+  test("rechecks replaced messages that keep the same id", () => {
+    const skills = [GRILL_SKILL, GITNEXUS_SKILL];
+    const session = threadSession(userMessage("/grill-me"));
+    withClaudeSkillMentions(session, skills);
+
+    const updated = withClaudeSkillMentions(
+      threadSession(userMessage("/gitnexus:generate_map (MCP)")),
+      skills,
+    );
+
+    expect(updated.messages.items[0]?.meta).toMatchObject({
+      kind: "user",
+      parts: [
+        { kind: "text", text: "/gitnexus:generate_map (MCP)" },
+        { kind: "skill_mention", skill: GITNEXUS_SKILL },
+      ],
+    });
+  });
+
+  test("uses the current skill catalog after it changes", () => {
+    const session = threadSession(userMessage("/grill-me"));
+    const unrelatedSkills = [GITNEXUS_SKILL];
+    expect(withClaudeSkillMentions(session, unrelatedSkills)).toBe(session);
+
+    const skills = [GITNEXUS_SKILL, GRILL_SKILL];
+    const initial = withClaudeSkillMentions(session, skills);
+    expect(initial.messages.items[0]?.meta).toMatchObject({
+      parts: [{ kind: "text" }, { kind: "skill_mention", skill: GRILL_SKILL }],
+    });
+
+    const updatedSkill = { ...GRILL_SKILL, title: "Review a plan", path: "/new/skill/path" };
+    const updated = withClaudeSkillMentions(session, [updatedSkill]);
+    expect(updated.messages.items[0]?.meta).toMatchObject({
+      parts: [{ kind: "text" }, { kind: "skill_mention", skill: updatedSkill }],
+    });
+    expect(withClaudeSkillMentions(session, unrelatedSkills)).toBe(session);
+  });
 });

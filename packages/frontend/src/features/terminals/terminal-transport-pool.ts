@@ -12,6 +12,10 @@ type SharedTransport = {
 
 const transports = new WeakMap<TerminalBridge, SharedTransport>();
 
+export const readTerminalTransportController = (
+  bridge: TerminalBridge,
+): TerminalTransportController | null => transports.get(bridge)?.controller ?? null;
+
 export const acquireTerminalTransport = (
   bridge: TerminalBridge,
   onError: (error: string | null) => void,

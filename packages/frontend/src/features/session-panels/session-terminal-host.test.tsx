@@ -5,13 +5,18 @@ import {
   createSessionPanelFixture,
   createTerminalSessionsFixture,
 } from "@/test-utils/session-panel-fixtures";
-import type { TerminalSummary } from "@openducktor/contracts";
+import {
+  decodeTerminalProtocolFrame,
+  encodeTerminalProtocolFrame,
+  TERMINAL_PROTOCOL_VERSION,
+  type TerminalSummary,
+} from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { terminalQueryKeys } from "@openducktor/frontend-core/queries/terminals";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { useTerminals, type TerminalTab } from "@/features/terminals";
-import * as transport from "@/features/terminals/use-terminal-transport";
 import * as terminalLayer from "@/features/terminals/terminal-layer";
+import type { TerminalBridge } from "@/lib/shell-bridge";
 import { SessionPanel, sessionPanelOwnerKey, useSessionPanels } from ".";
 import { SessionTerminalHost, SessionTerminalSurface } from "./session-terminal-host";
 import {
@@ -38,32 +43,50 @@ const tab: TerminalTab = {
   },
 };
 
-test("task views share one viewport through owner eviction and panel closure", () => {
+test("task views share one viewport from the first shown frame through eviction and panel closure", () => {
   const model = createSessionPanelFixture({
+    panel: "bottom",
+    tabs: [{ id: tab.tabId, kind: "terminal", terminal: tab }],
     selectedTabId: tab.tabId,
     terminals: createTerminalSessionsFixture({ scopeKey }),
     terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
     activeTerminalKey: "terminal",
   });
-  const content = (ids: string[], active: string, panelOpen = true) => (
-    <SessionTerminalHost viewIds={ids}>
-      {ids.map((id) => (
-        <SessionViewContext key={id} value={{ id, isActive: id === active }}>
-          <div data-testid={id}>{panelOpen && <SessionTerminalSurface model={model} />}</div>
-        </SessionViewContext>
-      ))}
-    </SessionTerminalHost>
+  const content = (
+    ids: string[],
+    active: string,
+    { panelOpen = true, shown = active }: { panelOpen?: boolean; shown?: string } = {},
+  ) => (
+    <QueryProvider>
+      <SessionTerminalHost viewIds={ids}>
+        {ids.map((id) => (
+          <SessionViewContext key={id} value={{ id, isActive: id === active }}>
+            <SessionViewShownContext value={id === shown}>
+              <div data-testid={id} style={{ display: id === shown ? undefined : "none" }}>
+                {panelOpen && <SessionPanel model={model} />}
+              </div>
+            </SessionViewShownContext>
+          </SessionViewContext>
+        ))}
+      </SessionTerminalHost>
+    </QueryProvider>
   );
   const view = render(content(["planner", "build"], "planner"));
   try {
     const viewport = view.container.querySelector("[data-terminal-viewport]");
     expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1);
     expect(view.getByTestId("planner").contains(viewport)).toBe(true);
+    // Retained session views show immediately, then change content activity after that paint.
+    view.rerender(content(["planner", "build"], "planner", { shown: "build" }));
+    expect(view.getByTestId("build").contains(viewport)).toBe(true);
+    expect(viewport?.getAttribute("data-viewport-state")).toBe("active");
+    expect(viewport?.hasAttribute("inert")).toBe(true);
     view.rerender(content(["planner", "build"], "build"));
     expect(view.getByTestId("build").contains(viewport)).toBe(true);
+    expect(viewport?.hasAttribute("inert")).toBe(false);
     view.rerender(content(["build"], "build"));
     expect(viewport?.isConnected).toBe(true);
-    view.rerender(content(["build"], "build", false));
+    view.rerender(content(["build"], "build", { panelOpen: false }));
     expect(viewport?.isConnected).toBe(true);
     expect(viewport?.getAttribute("data-viewport-state")).toBe("inactive");
     view.rerender(content(["build"], "build"));
@@ -222,10 +245,6 @@ test("the terminal surface adds no box above the panel tab content", () => {
 test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
   "a first task-role visit keeps the terminal viewport and live state: %s",
   async (mode) => {
-    const transportStub = spyOn(transport, "useTerminalTransport").mockReturnValue({
-      controller: null,
-      transportError: null,
-    });
     const owner = { kind: "task", workspaceId: `roles-${mode}`, taskId: "task" } as const;
     const key = sessionPanelOwnerKey(owner);
     const scope = {
@@ -245,11 +264,44 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
       startedBy: "user",
     };
     let summaries = mode.includes("created") ? [] : [summary];
-    let fail = false;
+    let failDiscovery = false;
+    const sentTypes: string[] = [];
+    let connections = 0;
+    let disconnections = 0;
+    const terminalBridge: TerminalBridge = {
+      connect: async (onFrame) => {
+        connections += 1;
+        return {
+          send: async (frame) => {
+            const { message } = decodeTerminalProtocolFrame(frame);
+            sentTypes.push(message.type);
+            if (message.type === "attach")
+              onFrame(
+                encodeTerminalProtocolFrame({
+                  message: {
+                    version: TERMINAL_PROTOCOL_VERSION,
+                    type: "snapshot",
+                    terminalId: summary.terminalId,
+                    earliestRetainedSequence: 0,
+                    snapshotSequenceEnd: 0,
+                    lifecycle: "running",
+                    title: summary.label,
+                    complete: true,
+                  },
+                  payload: new Uint8Array(),
+                }),
+              );
+          },
+          close: () => {
+            disconnections += 1;
+          },
+        };
+      },
+    };
     const connection = createTestClientConnection({
       client: {
         terminalList: async () => {
-          if (fail) throw new Error("Discovery failed");
+          if (failDiscovery) throw new Error("Discovery failed");
           return { hostInstanceId: "host", terminals: summaries };
         },
         terminalCreate: async () => {
@@ -264,59 +316,78 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
       terminals: summaries,
     });
     const models = new Map<string, ReturnType<typeof useTerminals>>();
+    type Role = "build" | "qa" | "planner" | "spec";
     const model = (id: string) => {
       const result = models.get(id);
       if (!result) throw new Error(`Missing terminal model: ${id}`);
       return result;
     };
-    function Conversation({ id }: { id: "planner" | "build" }) {
-      const terminals = useTerminals({ scope, isScopeLoading: false });
+    function Conversation({ id }: { id: Role }) {
+      const terminals = useTerminals(
+        { scope, isScopeLoading: false },
+        { hostClient: connection.host.client, terminalBridge },
+      );
       models.set(id, terminals);
       const panels = useSessionPanels({ owner, selectionKey: id, terminals });
       return <SessionTerminalSurface model={panels.bottom} />;
     }
-    const content = (ids: Array<"planner" | "build">, active: string) => (
+    const content = (ids: Role[], active: Role) => (
       <QueryProvider connection={connection}>
         <SessionTerminalHost viewIds={ids}>
           {ids.map((id) => (
             <SessionViewContext key={id} value={{ id, isActive: id === active }}>
-              <Conversation id={id} />
+              <SessionViewShownContext value={id === active}>
+                <Conversation id={id} />
+              </SessionViewShownContext>
             </SessionViewContext>
           ))}
         </SessionTerminalHost>
       </QueryProvider>
     );
-    const view = render(content(["planner"], "planner"));
+    const view = render(content(["build"], "build"));
     try {
-      await waitFor(() => expect(model("planner").isLoading).toBe(false));
+      await waitFor(() => expect(model("build").isLoading).toBe(false));
       if (mode.includes("created"))
         await act(async () => {
-          expect(model("planner").createTerminal()).not.toBeNull();
+          expect(model("build").createTerminal()).not.toBeNull();
         });
-      await waitFor(() => expect(model("planner").tabs[0]?.terminalId).toBe(summary.terminalId));
+      await waitFor(() => expect(model("build").tabs[0]?.terminalId).toBe(summary.terminalId));
+      await waitFor(() => expect(sentTypes.filter((type) => type === "attach")).toHaveLength(1));
+      const screen = view.container.querySelector(".xterm-screen");
+      const application = view.getByRole("application");
+      expect(screen).not.toBeNull();
+      expect(application.classList.contains("invisible")).toBe(false);
       if (mode === "stale-failed") {
-        act(() => model("planner").onLifecycle(key, summary.terminalId, "exited"));
-        fail = true;
+        act(() => model("build").onLifecycle(key, summary.terminalId, "exited"));
+        failDiscovery = true;
       }
       const original = view.container.querySelector("[data-terminal-viewport]");
-      const tabId = model("planner").tabs[0]?.tabId;
+      const tabId = model("build").tabs[0]?.tabId;
       expect(original).not.toBeNull();
-      await act(async () =>
-        view.rerender(
-          content(mode === "evict-created" ? ["build"] : ["planner", "build"], "build"),
-        ),
-      );
-      await waitFor(() => expect(model("build").isSynced).toBe(true));
-      expect(original?.isConnected).toBe(true);
-      expect(view.container.querySelector("[data-terminal-viewport]")).toBe(original);
-      expect(model("build").tabs[0]?.tabId).toBe(tabId);
-      if (mode === "stale-failed") {
-        await waitFor(() => expect(model("build").discoveryError).toBe("Discovery failed"));
-        expect(model("build").tabs[0]?.summary?.lifecycle).toBe("exited");
+      const ids: Role[] = ["build"];
+      for (const role of ["qa", "planner", "spec"] as const) {
+        ids.push(role);
+        await act(async () =>
+          view.rerender(content(mode === "evict-created" ? [role] : ids, role)),
+        );
+        await waitFor(() => expect(model(role).isSynced).toBe(true));
+        expect(original?.isConnected).toBe(true);
+        expect(view.container.querySelector("[data-terminal-viewport]")).toBe(original);
+        expect(screen?.isConnected).toBe(true);
+        expect(view.container.querySelector(".xterm-screen")).toBe(screen);
+        expect(view.getByRole("application")).toBe(application);
+        expect(model(role).tabs[0]?.tabId).toBe(tabId);
+        expect(connections).toBe(1);
+        expect(disconnections).toBe(0);
+        expect(sentTypes.filter((type) => type === "attach")).toHaveLength(1);
+        expect(sentTypes).not.toContain("detach");
+        if (mode === "stale-failed") {
+          await waitFor(() => expect(model(role).discoveryError).toBe("Discovery failed"));
+          expect(model(role).tabs[0]?.summary?.lifecycle).toBe("exited");
+        }
       }
     } finally {
       view.unmount();
-      transportStub.mockRestore();
       await connection.dispose();
     }
   },

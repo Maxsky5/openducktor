@@ -333,6 +333,152 @@ describe("useAgentChatTranscriptModel", () => {
     await harness.unmount();
   });
 
+  test("updates Claude skill transcript rows during assistant streaming", async () => {
+    const skills: AgentSkillReference[] = [
+      { id: "review", name: "review", path: "/skills/review" },
+    ];
+    const baseSession = createLargeSession("claude-skill-stream");
+    const messages = [
+      buildMessage("user", "/review", {
+        id: "skill-request",
+        meta: { kind: "user", state: "read", parts: [{ kind: "text", text: "/review" }] },
+      }),
+      ...baseSession.messages.items,
+    ];
+    const project = (content: string, version: number) =>
+      withClaudeSkillMentions(
+        {
+          ...baseSession,
+          runtimeKind: "claude",
+          messages: createSessionMessagesState(
+            baseSession.externalSessionId,
+            [
+              ...messages,
+              buildMessage("assistant", content, {
+                id: "streaming-assistant",
+                meta: { kind: "assistant", isFinal: false, agentRole: "build" },
+              }),
+            ],
+            version,
+          ),
+        },
+        skills,
+      );
+    const harness = await mountHarness({
+      session: project("Streaming", 1),
+      showThinkingMessages: true,
+    });
+    try {
+      await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+        timeoutMs: 1_000,
+      });
+
+      for (const version of [2, 3]) {
+        const content = `Streaming update ${version}`;
+        await harness.update({ session: project(content, version), showThinkingMessages: true });
+
+        const latest = harness.getLatest();
+        expect(latest.hasCurrentRowsForActiveSession).toBe(true);
+        expect(latest.isTranscriptModelPending).toBe(false);
+        expect(latest.transcriptState.rows.at(-1)).toMatchObject({
+          kind: "message",
+          message: { id: "streaming-assistant", content },
+        });
+        expect(latest.transcriptState.rows[0]).toMatchObject({
+          kind: "message",
+          message: {
+            meta: {
+              parts: [
+                { kind: "text", text: "/review" },
+                { kind: "skill_mention", skill: skills[0] },
+              ],
+            },
+          },
+        });
+      }
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each([
+    { field: "title", title: "Review the current branch", path: "/skills/review" },
+    { field: "path", title: "Review changes", path: "/workspace/skills/review" },
+  ])(
+    "refreshes loaded Claude skill $field when the catalog changes without new messages",
+    async ({ field, title, path }) => {
+      const initialSkill: AgentSkillReference = {
+        id: "review",
+        name: "review",
+        title: "Review changes",
+        path: "/skills/review",
+      };
+      const updatedSkill: AgentSkillReference = {
+        ...initialSkill,
+        title,
+        path,
+      };
+      const baseSession = createLargeSession(`claude-skill-catalog-${field}-refresh`);
+      const session: AgentChatTranscriptSession = {
+        ...baseSession,
+        runtimeKind: "claude",
+        messages: createSessionMessagesState(
+          baseSession.externalSessionId,
+          [
+            buildMessage("user", "/review", {
+              id: "skill-request",
+              meta: { kind: "user", state: "read", parts: [{ kind: "text", text: "/review" }] },
+            }),
+            ...baseSession.messages.items,
+          ],
+          1,
+        ),
+      };
+      const harness = await mountHarness({
+        session: withClaudeSkillMentions(session, [initialSkill]),
+        showThinkingMessages: true,
+      });
+      try {
+        await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+          timeoutMs: 1_000,
+        });
+        expect(harness.getLatest().transcriptState.rows[0]).toMatchObject({
+          kind: "message",
+          message: {
+            meta: {
+              parts: [
+                { kind: "text", text: "/review" },
+                { kind: "skill_mention", skill: initialSkill },
+              ],
+            },
+          },
+        });
+
+        await harness.update({
+          session: withClaudeSkillMentions(session, [updatedSkill]),
+          showThinkingMessages: true,
+        });
+        await flushTranscriptDerivation(() => harness.getLatest().hasCurrentRowsForActiveSession, {
+          timeoutMs: 1_000,
+        });
+
+        expect(harness.getLatest().transcriptState.rows[0]).toMatchObject({
+          kind: "message",
+          message: {
+            meta: {
+              parts: [
+                { kind: "text", text: "/review" },
+                { kind: "skill_mention", skill: updatedSkill },
+              ],
+            },
+          },
+        });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
   test("does not use stale prefix metadata for a shrinking assistant replacement", async () => {
     const firstUserMessage = buildMessage("user", "Attached context", {
       id: "user-with-attachment",
