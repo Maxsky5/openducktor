@@ -57,12 +57,19 @@ type SetupOptions = {
   /** A controlled panel selection. Without it, the panel keeps its own selection. */
   selection?: ArtifactSelection;
   variant?: "panel" | "section";
+  artifactSummary?: TaskCard["artifactSummary"];
   listError?: Error;
 };
 
 const setup = (
   artifacts: TaskArtifact[],
-  { canManageFree = true, selection, variant = "panel", listError }: SetupOptions = {},
+  {
+    canManageFree = true,
+    selection,
+    variant = "panel",
+    artifactSummary,
+    listError,
+  }: SetupOptions = {},
 ) => {
   const onSelectionChange = mock((_selection: ArtifactSelection) => {});
   const read = mock(async ({ artifactId }: { artifactId: string }) => {
@@ -96,6 +103,8 @@ const setup = (
       taskArtifactDelete: remove,
     },
   });
+  const ownProps: TaskArtifactsProps = { repoPath: "/repo", taskId: "task-1" };
+  if (artifactSummary) ownProps.artifactSummary = artifactSummary;
   const view = render(
     createElement(
       ClientConnectionProvider,
@@ -107,10 +116,7 @@ const setup = (
             selection,
             onSelectionChange,
           })
-        : createElement(variant === "section" ? TaskArtifactsSection : StatefulPanel, {
-            repoPath: "/repo",
-            taskId: "task-1",
-          }),
+        : createElement(variant === "section" ? TaskArtifactsSection : StatefulPanel, ownProps),
     ),
   );
   const select = (next: ArtifactSelection) =>
@@ -710,15 +716,41 @@ describe("task artifacts collection", () => {
   describe("section layout", () => {
     const toggle = () => screen.getByRole("button", { name: /^Artifacts/ });
 
-    test("starts collapsed with a count, and Add artifact does not toggle the card", async () => {
+    test("opens with a count when the task has artifacts", async () => {
       const view = setup([freeArtifact(), freeArtifact("file-2", "Other notes")], {
         variant: "section",
       });
       try {
+        expect(await within(toggle()).findByText("2")).toBeTruthy();
+        expect(toggle().getAttribute("aria-expanded")).toBe("true");
+      } finally {
+        view.unmount();
+        view.connection.queryClient.clear();
+      }
+    });
+
+    test("opens from the workflow summary before the list loads", () => {
+      const view = setup([], {
+        variant: "section",
+        artifactSummary: {
+          spec: { has: true },
+          plan: { has: false },
+          qaReport: { has: false, verdict: "not_reviewed" },
+        },
+      });
+      try {
+        expect(toggle().getAttribute("aria-expanded")).toBe("true");
+      } finally {
+        view.unmount();
+        view.connection.queryClient.clear();
+      }
+    });
+
+    test("stays collapsed without artifacts, and Add artifact does not toggle it", async () => {
+      const view = setup([], { variant: "section" });
+      try {
         const header = toggle();
-        expect(header.getAttribute("aria-expanded")).toBe("false");
-        expect(await within(header).findByText("2")).toBeTruthy();
-        fireEvent.click(screen.getByRole("button", { name: "Add artifact" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Add artifact" }));
         expect(await screen.findByRole("dialog", { name: "Add artifact" })).toBeTruthy();
         expect(header.getAttribute("aria-expanded")).toBe("false");
       } finally {
@@ -732,7 +764,6 @@ describe("task artifacts collection", () => {
         variant: "section",
       });
       try {
-        fireEvent.click(toggle());
         const row = await screen.findByRole("button", { name: /^Notes / });
         act(() => row.focus());
         fireEvent.click(row);

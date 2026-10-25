@@ -57,6 +57,7 @@ export function TaskDetailsSheetBody({
         <TaskArtifactsSection
           repoPath={repoPath}
           taskId={task.id}
+          artifactSummary={task.artifactSummary}
           {...(workspaceId ? { workspaceId } : {})}
         />
       ) : (

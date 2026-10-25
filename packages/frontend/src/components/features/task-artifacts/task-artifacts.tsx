@@ -273,8 +273,11 @@ function ArtifactSection(props: TaskArtifactsProps): ReactElement {
         title="Artifacts"
         icon={SECTION_ICON}
         summary={count > 0 ? String(count) : null}
-        // A failed read opens the card, so its alert and Retry show. The count stays after a retry.
-        defaultExpanded={collection.errorUpdateCount > 0}
+        // The task summary opens the card before the list loads. A failed read opens it too,
+        // so its alert and Retry show.
+        defaultExpanded={
+          count > 0 || hasWorkflowArtifact(props.artifactSummary) || collection.errorUpdateCount > 0
+        }
         headerAction={
           state.canManage ? <AddArtifactButton size="xs" onAction={state.openAction} /> : null
         }
@@ -304,6 +307,9 @@ function ArtifactSection(props: TaskArtifactsProps): ReactElement {
     </>
   );
 }
+
+const hasWorkflowArtifact = (summary: TaskArtifactsProps["artifactSummary"]): boolean =>
+  summary !== undefined && (summary.spec.has || summary.plan.has || summary.qaReport.has);
 
 function AddArtifactButton({
   size,
