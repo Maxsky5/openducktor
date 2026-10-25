@@ -1030,6 +1030,73 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test.each(["Send", "quick action"] as const)(
+    "first Send shares its starting state and gate when %s starts first",
+    async (first) => {
+      const started = createDeferred<ReturnType<typeof sessionIdentity>>();
+      const startAgentSession = mock(() => started.promise);
+      const harness = createHookHarness({
+        ...createBaseArgs(),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      });
+      const quickAction = {
+        id: "quick:spec_initial",
+        role: "spec",
+        launchActionId: "spec_initial",
+        label: "Start Spec",
+        description: "Start a Spec session.",
+        postStartAction: "kickoff",
+        disabled: false,
+      } as const;
+      let sendPromise: Promise<AgentChatSendResult> | undefined;
+      try {
+        await harness.mount();
+        if (first === "quick action") {
+          await harness.run((state) => state.handleQuickAction(quickAction));
+          await harness.waitFor((state) => {
+            const modal = state.sessionStartModal;
+            return (
+              modal?.selectedModelSelection?.modelId === "gpt-5" && !modal.isKickoffPromptLoading
+            );
+          });
+        }
+        await harness.run((state) => {
+          sendPromise = state.messageDelivery.onSend(createComposerDraft("hello world"), "default");
+        });
+        if (first === "Send") {
+          await harness.waitFor(() => startAgentSession.mock.calls.length === 1);
+          expect(harness.getLatest().isStarting).toBe(true);
+          await harness.run((state) => state.handleQuickAction(quickAction));
+          expect(harness.getLatest().sessionStartModal).toBeNull();
+        } else {
+          expect(startAgentSession).not.toHaveBeenCalled();
+          await harness.run((state) => {
+            state.sessionStartModal?.onConfirm({
+              runInBackground: false,
+              startMode: "fresh",
+              sourceSessionOptionValue: null,
+            });
+          });
+          await harness.waitFor(() => startAgentSession.mock.calls.length === 1);
+          expect(harness.getLatest().isStarting).toBe(true);
+        }
+        expect(startAgentSession).toHaveBeenCalledTimes(1);
+        await harness.run(async () => {
+          started.resolve(sessionIdentity("session-new"));
+          expect(await sendPromise).toBe(first === "Send");
+        });
+        expect(harness.getLatest().isStarting).toBe(false);
+      } finally {
+        await harness.run(async (state) => {
+          state.sessionStartModal?.onOpenChange(false);
+          started.resolve(sessionIdentity("session-new"));
+          await sendPromise;
+        });
+        await harness.unmount();
+      }
+    },
+  );
+
   test("onSend marks the context as sending until the send settles", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise.then(() => null));

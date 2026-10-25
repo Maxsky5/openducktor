@@ -12,6 +12,7 @@ import {
   isSessionStartFailureFeedbackHandled,
   SessionStartWorkflowError,
   type RunSessionStartWorkflow,
+  type SessionStartWorkflowResult,
   type SessionLaunchActionId,
 } from "@/features/session-start";
 import { useSessionStartContext } from "@/features/session-start/use-session-start-context";
@@ -33,7 +34,9 @@ type UseAgentStudioSendTargetArgs = {
   selectionForNewSession: AgentModelSelection | null;
   selectedTask: TaskCard | null;
   canStartSession: boolean;
-  runSessionStartWorkflow: RunSessionStartWorkflow;
+  startPreparedSession: (
+    input: Parameters<RunSessionStartWorkflow>[0],
+  ) => Promise<SessionStartWorkflowResult | undefined>;
   scheduleQueryUpdate: (updates: QueryUpdate) => void;
   selectedSessionIdentity: AgentSessionIdentity | null;
   isCatalogLoading: boolean;
@@ -51,7 +54,7 @@ export function useAgentStudioSendTarget({
   selectionForNewSession,
   selectedTask,
   canStartSession,
-  runSessionStartWorkflow,
+  startPreparedSession,
   scheduleQueryUpdate,
   selectedSessionIdentity,
   isCatalogLoading,
@@ -116,7 +119,7 @@ export function useAgentStudioSendTarget({
         }
         if (!canStartSession || !selectionForNewSession?.runtimeKind)
           throw new Error("Select an available runtime and model before sending a message.");
-        const launch = await runSessionStartWorkflow({
+        const launch = await startPreparedSession({
           request: {
             taskId,
             role,
@@ -142,6 +145,7 @@ export function useAgentStudioSendTarget({
             unknownStarts.current.add(activityKey);
           throw cause;
         });
+        if (!launch) return null;
         if (isCurrentContext()) {
           completedContext.current = isCurrentContext;
           scheduleQueryUpdate(
@@ -191,7 +195,7 @@ export function useAgentStudioSendTarget({
       isStarting,
       launchActionId,
       role,
-      runSessionStartWorkflow,
+      startPreparedSession,
       scheduleQueryUpdate,
       selectedTask,
       selectionForNewSession,

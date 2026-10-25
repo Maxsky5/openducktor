@@ -148,7 +148,7 @@ const createBaseArgs = (): HookArgs => ({
   },
   selectedTask: createTaskCardFixture({ id: "task-1" }),
   canStartSession: true,
-  runSessionStartWorkflow: async () => ({
+  startPreparedSession: async () => ({
     ...sessionIdentity("session-new"),
     postStartActionError: null,
   }),
@@ -168,13 +168,13 @@ describe("useAgentStudioSendTarget", () => {
     "blocks task Send until the catalog read completes for %s",
     async (externalSessionId) => {
       const sendAgentMessage = mock(async () => null);
-      const runSessionStartWorkflow = mock(createBaseArgs().runSessionStartWorkflow);
+      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
       const args = {
         ...createBaseArgs(),
         selectedSessionIdentity: createSelectedSessionIdentity(externalSessionId),
         isCatalogLoading: true,
         sendAgentMessage,
-        runSessionStartWorkflow,
+        startPreparedSession: runSessionStartWorkflow,
       };
       const harness = createTaskHarness(args);
       try {
@@ -254,11 +254,11 @@ describe("useAgentStudioSendTarget", () => {
   test.each(["model", "runtime", "start policy"] as const)(
     "blocks first Send when %s is unavailable",
     async (missing) => {
-      const runSessionStartWorkflow = mock(createBaseArgs().runSessionStartWorkflow);
+      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
       const args: HookArgs = {
         ...createBaseArgs(),
         selectedSessionIdentity: null,
-        runSessionStartWorkflow,
+        startPreparedSession: runSessionStartWorkflow,
       };
       if (missing === "model") args.selectionForNewSession = null;
       if (missing === "runtime")
@@ -279,12 +279,12 @@ describe("useAgentStudioSendTarget", () => {
 
   test("blocks system compaction without a selected session", async () => {
     const sendAgentMessage = mock(async () => null);
-    const runSessionStartWorkflow = mock(createBaseArgs().runSessionStartWorkflow);
+    const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
     const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: null,
       sendAgentMessage,
-      runSessionStartWorkflow,
+      startPreparedSession: runSessionStartWorkflow,
     });
 
     await harness.mount();
@@ -358,7 +358,7 @@ describe("useAgentStudioSendTarget", () => {
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
       sendAgentMessage,
-      runSessionStartWorkflow,
+      startPreparedSession: runSessionStartWorkflow,
       scheduleQueryUpdate,
     };
     const harness = createTaskHarness(initialArgs);
@@ -428,7 +428,7 @@ describe("useAgentStudioSendTarget", () => {
       const args: HookArgs = {
         ...createBaseArgs(),
         selectedSessionIdentity: null,
-        runSessionStartWorkflow,
+        startPreparedSession: runSessionStartWorkflow,
         scheduleQueryUpdate,
       };
       const harness = createTaskHarness(args);
@@ -488,7 +488,7 @@ describe("useAgentStudioSendTarget", () => {
     const args: HookArgs = {
       ...createBaseArgs(),
       selectedSessionIdentity: null,
-      runSessionStartWorkflow,
+      startPreparedSession: runSessionStartWorkflow,
       scheduleQueryUpdate,
     };
     const harness = createTaskHarness(args);
@@ -555,7 +555,7 @@ describe("useAgentStudioSendTarget", () => {
       const harness = createTaskHarness({
         ...createBaseArgs(),
         selectedSessionIdentity: null,
-        runSessionStartWorkflow,
+        startPreparedSession: runSessionStartWorkflow,
         sendAgentMessage,
       });
       try {
@@ -591,7 +591,7 @@ describe("useAgentStudioSendTarget", () => {
       const args: HookArgs = {
         ...createBaseArgs(),
         selectedSessionIdentity: null,
-        runSessionStartWorkflow,
+        startPreparedSession: runSessionStartWorkflow,
       };
       const harness = createTaskHarness(args);
       try {
@@ -700,11 +700,11 @@ describe("useAgentStudioSendTarget", () => {
       const staged = createDeferred<StagedLocalAttachment>();
       const stage = mock(() => staged.promise);
       const sendAgentMessage = mock(async () => null);
-      const runSessionStartWorkflow = mock(createBaseArgs().runSessionStartWorkflow);
+      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
       const args: HookArgs = {
         ...createBaseArgs(),
         selectedSessionIdentity: null,
-        runSessionStartWorkflow,
+        startPreparedSession: runSessionStartWorkflow,
         sendAgentMessage,
       };
       const harness = createTaskHarness(args, { workspaceStageLocalAttachment: stage });

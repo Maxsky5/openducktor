@@ -167,67 +167,63 @@ export function useAgentStudioSessionStartFlow({
     ],
   );
 
+  const runWorkflow = useCallback(
+    async (input: Parameters<RunSessionStartWorkflow>[0]): Promise<SessionStartWorkflowResult> => {
+      const activity = beginStartingActivity(
+        buildAgentStudioSessionActivityKey({ workspaceId, ...input.request, session: null }),
+      );
+      try {
+        return await runSessionStartWorkflow(input);
+      } finally {
+        activity.finish();
+      }
+    },
+    [beginStartingActivity, runSessionStartWorkflow, workspaceId],
+  );
+
   const runSessionStartRequest = useCallback(
     async (request: SessionStartFlowRequest): Promise<SessionStartWorkflowResult | undefined> => {
       const executeWithDecision = async (
         decision: ResolvedSessionStartDecision,
       ): Promise<SessionStartWorkflowResult | undefined> => {
-        const execute = async (): Promise<SessionStartWorkflowResult> => {
-          const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
-            request,
-            decision,
-            task: request.taskId === taskId ? selectedTask : null,
-            onPostStartMessageFailure: showSessionStartMessageRecovery,
-          };
-
-          const workflow = await runSessionStartWorkflow(workflowInput);
-          if (
-            workflow.postStartActionError &&
-            !workflow.retryPostStartMessage &&
-            !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
-          ) {
-            toast.error(sessionStartPostActionErrorTitle(request.postStartAction), {
-              description: workflow.postStartActionError.message,
-            });
-          }
-
-          if (isCurrentContext())
-            scheduleQueryUpdate(
-              buildAgentStudioSelectionQueryUpdate({
-                taskId: request.taskId,
-                sessionExternalId: workflow.externalSessionId,
-                role: request.role,
-              }),
-            );
-          return workflow;
+        const workflowInput: Parameters<typeof runSessionStartWorkflow>[0] = {
+          request,
+          decision,
+          task: request.taskId === taskId ? selectedTask : null,
+          onPostStartMessageFailure: showSessionStartMessageRecovery,
         };
 
-        const activity = beginStartingActivity(
-          buildAgentStudioSessionActivityKey({
-            workspaceId,
-            taskId: request.taskId,
-            role: request.role,
-            session: null,
-          }),
-        );
-        try {
-          return await execute();
-        } finally {
-          activity.finish();
+        const workflow = await runWorkflow(workflowInput);
+        if (
+          workflow.postStartActionError &&
+          !workflow.retryPostStartMessage &&
+          !isSessionStartFailureFeedbackHandled(workflow.postStartActionError)
+        ) {
+          toast.error(sessionStartPostActionErrorTitle(request.postStartAction), {
+            description: workflow.postStartActionError.message,
+          });
         }
+
+        if (isCurrentContext())
+          scheduleQueryUpdate(
+            buildAgentStudioSelectionQueryUpdate({
+              taskId: request.taskId,
+              sessionExternalId: workflow.externalSessionId,
+              role: request.role,
+            }),
+          );
+        return workflow;
       };
 
       return executeRequestedSessionStart(request, executeWithDecision);
     },
     [
       isCurrentContext,
-      beginStartingActivity,
       executeRequestedSessionStart,
-      runSessionStartWorkflow,
+      runWorkflow,
       selectedTask,
       scheduleQueryUpdate,
       taskId,
-      workspaceId,
     ],
   );
 
@@ -244,6 +240,19 @@ export function useAgentStudioSessionStartFlow({
       return sessionStartGate.run(startKey, () => runSessionStartRequest(request));
     },
     [runSessionStartRequest, sessionStartGate, workspaceId],
+  );
+
+  const startPreparedSession = useCallback(
+    async (input: Parameters<RunSessionStartWorkflow>[0]) => {
+      // A joined modal launch does not contain this typed draft.
+      let launched: ReturnType<RunSessionStartWorkflow> | undefined;
+      await sessionStartGate.run(
+        buildSessionStartKey({ workspaceId, ...input.request }),
+        () => (launched = runWorkflow(input)),
+      );
+      return launched;
+    },
+    [runWorkflow, sessionStartGate, workspaceId],
   );
 
   const runSessionStart = useCallback(
@@ -390,6 +399,7 @@ export function useAgentStudioSessionStartFlow({
     sessionStartModal,
     humanReviewFeedbackModal,
     startSessionRequest,
+    startPreparedSession,
     startLaunchKickoff,
     handleCreateSession: handleCreateSessionWithHumanFeedback,
     handleQuickAction,
@@ -399,6 +409,9 @@ export function useAgentStudioSessionStartFlow({
     humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
     startSessionRequest: (
       request: AgentStudioSessionStartRequest,
+    ) => Promise<SessionStartWorkflowResult | undefined>;
+    startPreparedSession: (
+      input: Parameters<RunSessionStartWorkflow>[0],
     ) => Promise<SessionStartWorkflowResult | undefined>;
     startLaunchKickoff: () => Promise<void>;
     handleCreateSession: (option: SessionCreateOption) => void;
