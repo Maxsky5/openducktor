@@ -9,7 +9,6 @@ import {
 } from "./codex-app-server-permission-schemas";
 import {
   codexAppServerThreadItemSchema,
-  codexAppServerThreadSchema,
   codexAppServerThreadStatusSchema,
   codexAppServerTurnSchema,
 } from "./codex-app-server-thread-schemas";
@@ -113,7 +112,6 @@ const toolRequestUserInputParamsSchema = z.object({
 });
 export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUnion("method", [
   notification("skills/changed", z.object({}).strict()),
-  notification("thread/started", z.object({ thread: codexAppServerThreadSchema })),
   notification(
     "serverRequest/resolved",
     z.object({ requestId: requestIdSchema, threadId: z.string() }),
@@ -176,7 +174,6 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
 
 const consumedRuntimeNotificationMethods = new Set([
   "skills/changed",
-  "thread/started",
   "serverRequest/resolved",
   "thread/tokenUsage/updated",
   "turn/started",

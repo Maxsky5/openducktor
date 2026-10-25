@@ -20,7 +20,7 @@ const childThread = () =>
     parentThreadId: "parent-thread",
     preview: description,
     name: "Workflow artifact audit",
-    agentNickname: "Scout",
+    agentNickname: "Raman",
     agentRole: "explorer",
     status: { type: "active", activeFlags: [] },
   });
@@ -38,6 +38,13 @@ class SubagentMetadataTransport extends RecordingTransport {
   items: CodexAppServerThreadItem[] = [activity("started"), activity("completed")];
 
   override async request(request: CodexJsonRpcRequest) {
+    if (
+      request.method === "thread/read" &&
+      requestThreadId(request.params) === "grandchild-thread"
+    ) {
+      this.calls.push(request);
+      return { thread: { ...this.child, id: "grandchild-thread", parentThreadId: "child-thread" } };
+    }
     if (request.method === "thread/read" && requestThreadId(request.params) === "child-thread") {
       this.calls.push(request);
       return { thread: this.child };
@@ -62,13 +69,17 @@ class SubagentMetadataTransport extends RecordingTransport {
 
 describe("Codex subagent metadata", () => {
   test.each([
-    { order: "before", status: "active" },
-    { order: "after", status: "active" },
-    { order: "before", status: "idle" },
-    { order: "after", status: "idle" },
+    { role: "thermo-nuclear-review-subagent", nickname: "Dalton", preview: "", status: "active" },
+    {
+      role: "thermo-nuclear-code-quality-review-subagent",
+      nickname: "Godel",
+      preview: "",
+      status: "idle",
+    },
+    { role: "explorer", nickname: "Raman", preview: description, status: "active" },
   ] as const)(
-    "shows native task text with $status metadata $order the activity item",
-    async ({ order, status }) => {
+    "reads $role at child discovery without a thread/started notification",
+    async ({ role, nickname, preview, status }) => {
       const stream = createRuntimeStreamSubscription();
       const transport = new SubagentMetadataTransport("runtime-live", false);
       const adapter = createAdapterWithTransport(transport, {
@@ -78,9 +89,13 @@ describe("Codex subagent metadata", () => {
       await adapter.resumeSession(parent);
       const events: AgentEvent[] = [];
       const unsubscribe = await adapter.subscribeEvents(parent, (event) => events.push(event));
-      const child = childThread();
-      if (status === "idle") child.status = { type: "idle" };
-      const metadata = { method: "thread/started", params: { thread: child } };
+      Object.assign(transport.child, {
+        agentRole: role,
+        agentNickname: nickname,
+        preview,
+        name: null,
+      });
+      if (status === "idle") transport.child.status = { type: "idle" };
       const started = {
         method: "item/completed",
         params: {
@@ -91,13 +106,13 @@ describe("Codex subagent metadata", () => {
         },
       };
       try {
-        for (const notification of order === "before" ? [metadata, started] : [started, metadata]) {
-          stream.emitNotification(notification);
+        for (let delivery = 0; delivery < 2; delivery++) {
+          stream.emitNotification(started);
           await flushCodexAdapterWork();
         }
         expect(events.at(-1)).toMatchObject({
           type: "assistant_part",
-          part: { agent: "Scout", description, status: "running" },
+          part: { agent: role, status: "running" },
         });
         stream.emitNotification({
           method: "item/completed",
@@ -114,40 +129,66 @@ describe("Codex subagent metadata", () => {
           part: {
             kind: "subagent",
             externalSessionId: "child-thread",
-            agent: "Scout",
-            description,
+            agent: role,
             status: "completed",
           },
         });
-        expect(transport.calls.filter((call) => call.method === "thread/read")).toHaveLength(0);
+        const last = events.at(-1);
+        if (last?.type !== "assistant_part") throw new Error("Expected a subagent update");
+        if (preview) expect(last.part).toMatchObject({ description: preview });
+        else expect(last.part).not.toHaveProperty("description");
+        expect(transport.calls.filter((call) => call.method === "thread/read")).toHaveLength(1);
       } finally {
         unsubscribe();
       }
     },
   );
 
-  test("loads each referenced child's native description once for history", async () => {
-    const transport = new SubagentMetadataTransport("runtime-live", false);
-    const adapter = createAdapterWithTransport(transport);
+  test.each([
+    { role: "explorer", sourceRole: "reviewer", expected: "explorer" },
+    { role: null, sourceRole: "reviewer", expected: "reviewer" },
+    { role: null, sourceRole: null, expected: undefined },
+  ])(
+    "uses the configured role, not a random nickname: $expected",
+    async ({ role, sourceRole, expected }) => {
+      const transport = new SubagentMetadataTransport("runtime-live", false);
+      transport.child.agentRole = role;
+      transport.child.source = {
+        subAgent: {
+          thread_spawn: {
+            parent_thread_id: "parent-thread",
+            depth: 1,
+            agent_path: "/root/meaningless_identifier",
+            agent_nickname: "Raman",
+            agent_role: sourceRole,
+          },
+        },
+      };
+      const adapter = createAdapterWithTransport(transport);
 
-    const history = await adapter.loadSessionHistory(codexSessionRuntimeRef("parent-thread"));
-    const parts = history.flatMap((message) => message.parts);
+      const history = await adapter.loadSessionHistory(codexSessionRuntimeRef("parent-thread"));
+      const parts = history.flatMap((message) => message.parts);
 
-    expect(parts).toEqual([
-      expect.objectContaining({ kind: "subagent", agent: "Scout", description, status: "running" }),
-      expect.objectContaining({
-        kind: "subagent",
-        agent: "Scout",
-        description,
-        status: "completed",
-      }),
-    ]);
-    expect(
-      transport.calls.filter(
-        (call) => call.method === "thread/read" && requestThreadId(call.params) === "child-thread",
-      ),
-    ).toHaveLength(1);
-  });
+      expect(parts).toEqual([
+        expect.objectContaining({ kind: "subagent", description, status: "running" }),
+        expect.objectContaining({
+          kind: "subagent",
+          description,
+          status: "completed",
+        }),
+      ]);
+      for (const part of parts) {
+        if (expected) expect(part).toMatchObject({ agent: expected });
+        else expect(part).not.toHaveProperty("agent");
+      }
+      expect(
+        transport.calls.filter(
+          (call) =>
+            call.method === "thread/read" && requestThreadId(call.params) === "child-thread",
+        ),
+      ).toHaveLength(1);
+    },
+  );
 
   test.each([
     { preview: " ", name: "Review workflow actions", expected: "Review workflow actions" },
@@ -175,28 +216,30 @@ describe("Codex subagent metadata", () => {
     "reports a child %s failure to its retained parent",
     async (failure) => {
       const stream = createRuntimeStreamSubscription();
-      const adapter = createAdapterWithTransport(
-        new SubagentMetadataTransport("runtime-live", false),
-        {
-          subscribeEvents: stream.subscribeEvents,
-        },
-      );
+      const transport = new SubagentMetadataTransport("runtime-live", false);
+      const adapter = createAdapterWithTransport(transport, {
+        subscribeEvents: stream.subscribeEvents,
+      });
       const parent = codexSessionRuntimeRef("parent-thread");
       await adapter.resumeSession(parent);
       const events: AgentEvent[] = [];
       const unsubscribe = await adapter.subscribeEvents(parent, (event) => events.push(event));
       try {
-        const child = childThread();
-        stream.emitNotification({
-          method: "thread/started",
+        if (failure === "working directory") transport.child.cwd = "/another-repo";
+        else Object.assign(transport.child, { preview: null });
+        const started = {
+          method: "item/completed",
           params: {
-            thread:
-              failure === "working directory"
-                ? { ...child, cwd: "/another-repo" }
-                : { ...child, preview: null },
+            threadId: "parent-thread",
+            turnId: "parent-turn",
+            completedAtMs: 1_783_683_601_000,
+            item: activity("started"),
           },
-        });
-        await flushCodexAdapterWork();
+        };
+        for (let delivery = 0; delivery < 2; delivery++) {
+          stream.emitNotification(started);
+          await flushCodexAdapterWork();
+        }
 
         expect(events).toContainEqual(
           expect.objectContaining({
@@ -208,6 +251,7 @@ describe("Codex subagent metadata", () => {
           }),
         );
         expect(events.some((event) => event.type === "assistant_part")).toBe(false);
+        expect(transport.calls.filter((call) => call.method === "thread/read")).toHaveLength(1);
       } finally {
         unsubscribe();
       }
@@ -227,12 +271,27 @@ describe("Codex subagent metadata", () => {
       },
     );
     await adapter.resumeSession(codexSessionRuntimeRef("parent-thread"));
-    stream.emitNotification({ method: "thread/started", params: { thread: childThread() } });
+    stream.emitNotification({
+      method: "item/completed",
+      params: {
+        threadId: "parent-thread",
+        turnId: "parent-turn",
+        completedAtMs: 1_783_683_601_000,
+        item: activity("started"),
+      },
+    });
     await flushCodexAdapterWork();
     stream.emitNotification({
-      method: "thread/started",
+      method: "item/completed",
       params: {
-        thread: { ...childThread(), id: "grandchild-thread", parentThreadId: "child-thread" },
+        threadId: "child-thread",
+        turnId: "child-turn",
+        completedAtMs: 1_783_683_602_000,
+        item: {
+          ...activity("started"),
+          id: "grandchild-started",
+          agentThreadId: "grandchild-thread",
+        },
       },
     });
     await flushCodexAdapterWork();
@@ -243,7 +302,7 @@ describe("Codex subagent metadata", () => {
         externalSessionId: "child-thread",
         part: expect.objectContaining({
           externalSessionId: "grandchild-thread",
-          agent: "Scout",
+          agent: "explorer",
           description,
         }),
       }),

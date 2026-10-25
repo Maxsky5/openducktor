@@ -97,14 +97,9 @@ const threadIdFromFaultMessage = (
     sourceKind === "server_request" &&
     (message.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL ||
       message.method === CODEX_APP_SERVER_SERVER_REQUEST_METHOD.EXEC_COMMAND_APPROVAL);
-  let threadId = usesLegacyConversationId ? message.params.conversationId : message.params.threadId;
-  if (
-    sourceKind === "notification" &&
-    message.method === "thread/started" &&
-    isPlainObject(message.params.thread)
-  ) {
-    threadId = message.params.thread.parentThreadId ?? message.params.thread.id;
-  }
+  const threadId = usesLegacyConversationId
+    ? message.params.conversationId
+    : message.params.threadId;
   const parsed = nonEmptyStringSchema.safeParse(threadId);
   return parsed.success ? parsed.data : null;
 };

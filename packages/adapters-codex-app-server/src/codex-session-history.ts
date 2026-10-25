@@ -1,7 +1,6 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
-  AgentRuntimeQueryError,
   type AgentSessionHistoryMessage,
   type AgentModelSelection,
   type LoadAgentSessionHistoryInput,
@@ -22,9 +21,9 @@ import {
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import {
   codexSubagentDisplayDetails,
-  codexThreadSnapshot,
   type CodexSubagentDisplayDetails,
 } from "./codex-app-server-threads";
+import { readCodexSubagentThread, type CodexSubagentScope } from "./codex-subagent-metadata";
 import type {
   CodexImageGenerationItem,
   CodexImageGenerationPreparer,
@@ -149,22 +148,12 @@ const loadSubagentDetails = async (
   }
   const entries = await Promise.all(
     [...parentsByChild].map(async ([childThreadId, parentThreadId]) => {
-      const result = await client.threadRead({ threadId: childThreadId, includeTurns: false });
-      const thread = codexThreadSnapshot(result.thread);
+      const scope: CodexSubagentScope = { parentThreadId };
       // Inherited children keep their source directory when a fork uses another worktree.
-      const hasWrongDirectory =
-        parentThreadId === input.externalSessionId && thread.cwd !== input.workingDirectory;
-      if (
-        thread.id !== childThreadId ||
-        hasWrongDirectory ||
-        thread.parentThreadId !== parentThreadId ||
-        (thread.subAgentSource && thread.subAgentSource.parentThreadId !== parentThreadId)
-      ) {
-        throw new AgentRuntimeQueryError(
-          "scope_mismatch",
-          `Codex subagent metadata for '${childThreadId}' does not match its parent and working directory. Reload the matching session.`,
-        );
+      if (parentThreadId === input.externalSessionId) {
+        scope.workingDirectory = input.workingDirectory;
       }
+      const thread = await readCodexSubagentThread(client, childThreadId, scope);
       return [childThreadId, codexSubagentDisplayDetails(thread)] as const;
     }),
   );

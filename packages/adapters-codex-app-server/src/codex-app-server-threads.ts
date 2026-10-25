@@ -151,11 +151,7 @@ export const codexSubagentDisplayDetails = (
   thread: CodexThreadSnapshot,
 ): CodexSubagentDisplayDetails => {
   const details: CodexSubagentDisplayDetails = {};
-  const agent =
-    thread.agentNickname ??
-    thread.agentRole ??
-    thread.subAgentSource?.agentNickname ??
-    thread.subAgentSource?.agentRole;
+  const agent = thread.agentRole ?? thread.subAgentSource?.agentRole;
   if (agent) details.agent = agent;
   if (thread.description) details.description = thread.description;
   return details;

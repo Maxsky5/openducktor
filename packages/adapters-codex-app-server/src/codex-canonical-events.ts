@@ -7,6 +7,7 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import type { NormalizedCodexToolInvocation } from "./codex-tool-normalizer";
+import type { CodexThreadSnapshot } from "./codex-app-server-threads";
 
 export type CodexCanonicalSource = "live" | "thread_read";
 
@@ -103,6 +104,7 @@ export type CodexMappingContext = {
   threadId: string;
   turnId?: string;
   timestamp?: string;
+  subagentThread?: CodexThreadSnapshot;
 };
 
 export type CodexMappingResult = {

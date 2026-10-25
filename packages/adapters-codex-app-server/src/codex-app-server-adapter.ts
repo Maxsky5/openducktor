@@ -173,6 +173,7 @@ import type {
   CodexThreadResumeResult,
   CodexThreadForkParams,
 } from "./types";
+import { readCodexSubagentThread } from "./codex-subagent-metadata";
 
 export { createCodexAppServerClient } from "./app-server-client";
 
@@ -300,6 +301,12 @@ export class CodexAppServerAdapter
       pendingInput: this.pendingInput,
       asyncQuestions: this.asyncQuestions,
       subagents: this.subagents,
+      readSubagentThread: (runtimeId, childThreadId, scope) =>
+        readCodexSubagentThread(
+          this.runtimeClients.clientForRuntime(runtimeId),
+          childThreadId,
+          scope,
+        ),
       updateThreadStatus: (
         runtimeId: string,
         threadId: string,

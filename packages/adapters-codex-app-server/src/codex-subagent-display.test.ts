@@ -84,7 +84,7 @@ describe("Codex subagent display details", () => {
       description: "A different native preview",
       parentThreadId: "parent-thread",
       status: { classification: "running" },
-      agentNickname: "Scout",
+      agentNickname: "Raman",
       agentRole: "explorer",
       subAgentSource: null,
     });
@@ -112,7 +112,7 @@ describe("Codex subagent display details", () => {
           kind: "subagent",
           correlationKey: "codex-subagent:parent-thread:spawn-reviewer",
           externalSessionId: "child-thread",
-          agent: "Scout",
+          agent: "explorer",
           description: "Review the adapter",
           prompt: "Review the adapter",
           status: "completed",

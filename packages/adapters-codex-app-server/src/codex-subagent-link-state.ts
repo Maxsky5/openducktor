@@ -261,14 +261,6 @@ export class CodexSubagentLinkState {
     this.upsertLink(link);
   }
 
-  recordThreadDetails(
-    thread: CodexThreadSnapshot,
-    runtimeId: string,
-  ): CodexSubagentPart | undefined {
-    const link = this.threadDetailsLink(thread, runtimeId);
-    return link ? this.upsertLink(link) : undefined;
-  }
-
   private threadDetailsLink(
     thread: CodexThreadSnapshot,
     runtimeId: string | undefined,
@@ -324,7 +316,14 @@ export class CodexSubagentLinkState {
     return link;
   }
 
-  upsertLink(input: CodexSubagentLinkInput): CodexSubagentPart {
+  upsertLink(input: CodexSubagentLinkInput, thread?: CodexThreadSnapshot): CodexSubagentPart {
+    if (thread) {
+      const details = this.threadDetailsLink(thread, input.runtimeId);
+      if (details?.agent && !input.agent) input.agent = details.agent;
+      if (details?.description && !input.description) input.description = details.description;
+      const metadata = mergeDefined(details?.metadata, input.metadata);
+      if (metadata) input.metadata = metadata;
+    }
     const previousRoute = input.childThreadId
       ? this.routeForChild(input.childThreadId, input.runtimeId)
       : null;

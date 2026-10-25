@@ -374,7 +374,6 @@ export const toMcpElicitationApprovalRequest = (
 export const codexNotificationTurnId = (notification: CodexNotificationRecord): string | null => {
   switch (notification.method) {
     case "skills/changed":
-    case "thread/started":
     case "serverRequest/resolved":
     case "thread/status/changed":
       return null;
@@ -390,7 +389,6 @@ export const codexNotificationThreadId = (
   notification: CodexAppServerConsumedRuntimeNotification,
 ): string | null => {
   if (notification.method === "skills/changed") return null;
-  if (notification.method === "thread/started") return notification.params.thread.id;
   return notification.params.threadId;
 };
 

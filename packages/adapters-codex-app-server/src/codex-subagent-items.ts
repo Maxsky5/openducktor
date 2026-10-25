@@ -248,7 +248,7 @@ const subagentActivityParts = (
   if (runtimeId) {
     link.runtimeId = runtimeId;
   }
-  return [linkState.upsertLink(link)];
+  return [linkState.upsertLink(link, ctx.subagentThread)];
 };
 
 export const codexSubagentPartsFromItem = (
