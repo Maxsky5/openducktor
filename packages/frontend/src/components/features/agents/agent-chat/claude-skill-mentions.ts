@@ -8,18 +8,92 @@ const REFERENCE_END_BOUNDARY_PATTERN = /[\s,.;!?)}\]}"']/u;
 type SkillMention = Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>;
 type SkillToken = { skill: AgentSkillReference; value: string };
 type MessageProjection = { message: AgentChatMessage; revisionKeys: string[] };
-type CatalogProjection = {
+type CatalogCache = {
   tokens: SkillToken[];
   messages: WeakMap<AgentChatMessage, MessageProjection>;
 };
 
-const catalogProjections = new WeakMap<readonly AgentSkillReference[], CatalogProjection>();
+const catalogs = new WeakMap<readonly AgentSkillReference[], CatalogCache>();
 
-const hasStartBoundary = (text: string, start: number): boolean =>
-  start === 0 || REFERENCE_START_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
+/** Keep unchanged message objects so streaming updates can reuse transcript rows. */
+export const withClaudeSkillMentions = (
+  session: AgentChatTranscriptSession,
+  skills: readonly AgentSkillReference[],
+): AgentChatTranscriptSession => {
+  if (session.runtimeKind !== "claude" || skills.length === 0) {
+    return session;
+  }
 
-const hasEndBoundary = (text: string, end: number): boolean =>
-  end === text.length || REFERENCE_END_BOUNDARY_PATTERN.test(text[end] ?? "");
+  let catalog = catalogs.get(skills);
+  if (!catalog) {
+    catalog = {
+      tokens: skills
+        .map((skill) => ({ skill, value: `/${skill.name}` }))
+        .sort((left, right) => right.value.length - left.value.length),
+      messages: new WeakMap(),
+    };
+    catalogs.set(skills, catalog);
+  }
+
+  let changed = false;
+  let version = session.messages.version;
+  const items = session.messages.items.map((message) => {
+    const projection = projectMessage(message, catalog);
+    if (projection.message === message) {
+      return message;
+    }
+    changed = true;
+    for (const key of projection.revisionKeys) {
+      version = hashText(version, key);
+    }
+    return projection.message;
+  });
+
+  if (!changed) {
+    return session;
+  }
+
+  return {
+    ...session,
+    messages: {
+      ...session.messages,
+      items,
+      version,
+    },
+  };
+};
+
+const projectMessage = (message: AgentChatMessage, catalog: CatalogCache): MessageProjection => {
+  const cached = catalog.messages.get(message);
+  if (cached) return cached;
+
+  const mentions = readSkillMentions(message, catalog.tokens);
+  const projection: MessageProjection = { message, revisionKeys: [] };
+  if (mentions.length > 0 && message.meta?.kind === "user") {
+    projection.message = {
+      ...message,
+      meta: { ...message.meta, parts: [...(message.meta.parts ?? []), ...mentions] },
+    };
+    projection.revisionKeys = mentions.map((mention) => {
+      // Cache the skill hash so streaming updates do not hash its metadata again.
+      const skillHash = hashText(
+        0,
+        JSON.stringify([
+          mention.skill.id,
+          mention.skill.name,
+          mention.skill.path,
+          mention.skill.title,
+          mention.skill.displayName,
+          mention.skill.description,
+          mention.skill.color,
+        ]),
+      );
+      return `${message.id}:${mention.skill.id}:${mention.sourceText?.start}:${mention.sourceText?.end}:${skillHash}`;
+    });
+  }
+  catalog.messages.set(message, projection);
+  return projection;
+};
 
 const readSkillMentions = (
   message: AgentChatMessage,
@@ -77,92 +151,16 @@ const readSkillMentions = (
   return mentions;
 };
 
-const updateRevision = (revision: number, value: string): number => {
-  let nextRevision = revision;
+const hasStartBoundary = (text: string, start: number): boolean =>
+  start === 0 || REFERENCE_START_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
+
+const hasEndBoundary = (text: string, end: number): boolean =>
+  end === text.length || REFERENCE_END_BOUNDARY_PATTERN.test(text[end] ?? "");
+
+const hashText = (seed: number, value: string): number => {
+  let hash = seed;
   for (let index = 0; index < value.length; index += 1) {
-    nextRevision = (nextRevision * 31 + value.charCodeAt(index)) | 0;
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
   }
-  return nextRevision;
-};
-
-const projectMessage = (
-  message: AgentChatMessage,
-  catalog: CatalogProjection,
-): MessageProjection => {
-  const cached = catalog.messages.get(message);
-  if (cached) return cached;
-
-  const mentions = readSkillMentions(message, catalog.tokens);
-  const projection: MessageProjection = { message, revisionKeys: [] };
-  if (mentions.length > 0 && message.meta?.kind === "user") {
-    projection.message = {
-      ...message,
-      meta: { ...message.meta, parts: [...(message.meta.parts ?? []), ...mentions] },
-    };
-    projection.revisionKeys = mentions.map((mention) => {
-      // Cache the metadata digest so streaming updates only hash the short revision key.
-      const skillRevision = updateRevision(
-        0,
-        JSON.stringify([
-          mention.skill.id,
-          mention.skill.name,
-          mention.skill.path,
-          mention.skill.title,
-          mention.skill.displayName,
-          mention.skill.description,
-          mention.skill.color,
-        ]),
-      );
-      return `${message.id}:${mention.skill.id}:${mention.sourceText?.start}:${mention.sourceText?.end}:${skillRevision}`;
-    });
-  }
-  catalog.messages.set(message, projection);
-  return projection;
-};
-
-export const withClaudeSkillMentions = (
-  session: AgentChatTranscriptSession,
-  skills: readonly AgentSkillReference[],
-): AgentChatTranscriptSession => {
-  if (session.runtimeKind !== "claude" || skills.length === 0) {
-    return session;
-  }
-
-  let catalog = catalogProjections.get(skills);
-  if (!catalog) {
-    catalog = {
-      tokens: skills
-        .map((skill) => ({ skill, value: `/${skill.name}` }))
-        .sort((left, right) => right.value.length - left.value.length),
-      messages: new WeakMap(),
-    };
-    catalogProjections.set(skills, catalog);
-  }
-
-  let changed = false;
-  let version = session.messages.version;
-  const items = session.messages.items.map((message) => {
-    const projection = projectMessage(message, catalog);
-    if (projection.message === message) {
-      return message;
-    }
-    changed = true;
-    for (const key of projection.revisionKeys) {
-      version = updateRevision(version, key);
-    }
-    return projection.message;
-  });
-
-  if (!changed) {
-    return session;
-  }
-
-  return {
-    ...session,
-    messages: {
-      ...session.messages,
-      items,
-      version,
-    },
-  };
+  return hash;
 };

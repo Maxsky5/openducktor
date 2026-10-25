@@ -333,7 +333,7 @@ describe("useAgentChatTranscriptModel", () => {
     await harness.unmount();
   });
 
-  test("keeps Claude skill transcripts current between streaming assistant updates", async () => {
+  test("updates Claude skill transcript rows during assistant streaming", async () => {
     const skills: AgentSkillReference[] = [
       { id: "review", name: "review", path: "/skills/review" },
     ];

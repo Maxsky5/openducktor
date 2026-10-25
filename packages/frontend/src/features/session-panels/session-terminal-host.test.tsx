@@ -52,7 +52,11 @@ test("task views share one viewport from the first shown frame through eviction 
     terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
     activeTerminalKey: "terminal",
   });
-  const content = (ids: string[], active: string, panelOpen = true, shown = active) => (
+  const content = (
+    ids: string[],
+    active: string,
+    { panelOpen = true, shown = active }: { panelOpen?: boolean; shown?: string } = {},
+  ) => (
     <QueryProvider>
       <SessionTerminalHost viewIds={ids}>
         {ids.map((id) => (
@@ -73,7 +77,7 @@ test("task views share one viewport from the first shown frame through eviction 
     expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1);
     expect(view.getByTestId("planner").contains(viewport)).toBe(true);
     // Retained session views show immediately, then change content activity after that paint.
-    view.rerender(content(["planner", "build"], "planner", true, "build"));
+    view.rerender(content(["planner", "build"], "planner", { shown: "build" }));
     expect(view.getByTestId("build").contains(viewport)).toBe(true);
     expect(viewport?.getAttribute("data-viewport-state")).toBe("active");
     expect(viewport?.hasAttribute("inert")).toBe(true);
@@ -82,7 +86,7 @@ test("task views share one viewport from the first shown frame through eviction 
     expect(viewport?.hasAttribute("inert")).toBe(false);
     view.rerender(content(["build"], "build"));
     expect(viewport?.isConnected).toBe(true);
-    view.rerender(content(["build"], "build", false));
+    view.rerender(content(["build"], "build", { panelOpen: false }));
     expect(viewport?.isConnected).toBe(true);
     expect(viewport?.getAttribute("data-viewport-state")).toBe("inactive");
     view.rerender(content(["build"], "build"));
@@ -260,8 +264,8 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
       startedBy: "user",
     };
     let summaries = mode.includes("created") ? [] : [summary];
-    let fail = false;
-    const sent: string[] = [];
+    let failDiscovery = false;
+    const sentTypes: string[] = [];
     let connections = 0;
     let disconnections = 0;
     const terminalBridge: TerminalBridge = {
@@ -270,7 +274,7 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
         return {
           send: async (frame) => {
             const { message } = decodeTerminalProtocolFrame(frame);
-            sent.push(message.type);
+            sentTypes.push(message.type);
             if (message.type === "attach")
               onFrame(
                 encodeTerminalProtocolFrame({
@@ -297,7 +301,7 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
     const connection = createTestClientConnection({
       client: {
         terminalList: async () => {
-          if (fail) throw new Error("Discovery failed");
+          if (failDiscovery) throw new Error("Discovery failed");
           return { hostInstanceId: "host", terminals: summaries };
         },
         terminalCreate: async () => {
@@ -348,14 +352,14 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
           expect(model("build").createTerminal()).not.toBeNull();
         });
       await waitFor(() => expect(model("build").tabs[0]?.terminalId).toBe(summary.terminalId));
-      await waitFor(() => expect(sent.filter((type) => type === "attach")).toHaveLength(1));
-      const renderer = view.container.querySelector(".xterm-screen");
+      await waitFor(() => expect(sentTypes.filter((type) => type === "attach")).toHaveLength(1));
+      const screen = view.container.querySelector(".xterm-screen");
       const application = view.getByRole("application");
-      expect(renderer).not.toBeNull();
+      expect(screen).not.toBeNull();
       expect(application.classList.contains("invisible")).toBe(false);
       if (mode === "stale-failed") {
         act(() => model("build").onLifecycle(key, summary.terminalId, "exited"));
-        fail = true;
+        failDiscovery = true;
       }
       const original = view.container.querySelector("[data-terminal-viewport]");
       const tabId = model("build").tabs[0]?.tabId;
@@ -369,14 +373,14 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
         await waitFor(() => expect(model(role).isSynced).toBe(true));
         expect(original?.isConnected).toBe(true);
         expect(view.container.querySelector("[data-terminal-viewport]")).toBe(original);
-        expect(renderer?.isConnected).toBe(true);
-        expect(view.container.querySelector(".xterm-screen") === renderer).toBe(true);
-        expect(view.getByRole("application") === application).toBe(true);
+        expect(screen?.isConnected).toBe(true);
+        expect(view.container.querySelector(".xterm-screen")).toBe(screen);
+        expect(view.getByRole("application")).toBe(application);
         expect(model(role).tabs[0]?.tabId).toBe(tabId);
         expect(connections).toBe(1);
         expect(disconnections).toBe(0);
-        expect(sent.filter((type) => type === "attach")).toHaveLength(1);
-        expect(sent).not.toContain("detach");
+        expect(sentTypes.filter((type) => type === "attach")).toHaveLength(1);
+        expect(sentTypes).not.toContain("detach");
         if (mode === "stale-failed") {
           await waitFor(() => expect(model(role).discoveryError).toBe("Discovery failed"));
           expect(model(role).tabs[0]?.summary?.lifecycle).toBe("exited");

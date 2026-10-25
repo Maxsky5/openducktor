@@ -65,6 +65,46 @@ export function SessionTerminalHost({
   );
 }
 
+export function SessionTerminalSurface({ model }: { model: SessionPanelModel }) {
+  const host = useContext(TerminalHostContext);
+  const view = useContext(SessionViewContext);
+  const isShown = useSessionViewShown();
+  const viewId = view?.id ?? null;
+  const anchor = useRef<HTMLDivElement | null>(null);
+  const scope = model.terminals.scopeKey;
+  const key = scope === null ? null : `${scope}:${model.panel}`;
+  const bind = useCallback(
+    (node: HTMLDivElement | null) => {
+      anchor.current = node;
+      if (host && key && viewId) host.place(key, viewId, node);
+    },
+    [host, key, viewId],
+  );
+  useLayoutEffect(() => {
+    if (host && view)
+      host.update(key, view.id, {
+        model,
+        anchor: anchor.current,
+        isShown,
+        isActive: view.isActive,
+      });
+  }, [host, isShown, key, model, view]);
+  if (!host || !view)
+    return (
+      <TerminalLayer
+        terminals={model.terminals}
+        mounts={model.terminalMounts}
+        activeKey={model.activeTerminalKey}
+        isVisible={isShown && model.isVisible}
+        isInteractive={view?.isActive ?? true}
+        focusRequest={isShown && (view?.isActive ?? true) ? model.focusRequest : 0}
+        tabIdBase={model.tabIdBase}
+      />
+    );
+  // The anchor and its moved root add no box, so only the terminal layer can cover panel content.
+  return <div ref={bind} className="contents" data-terminal-anchor />;
+}
+
 // The host keeps an unchanged surface, so a change to one view renders only its terminals.
 const TerminalSurfacePortal = memo(function TerminalSurfacePortal({
   surface: { container, model, isVisible, isInteractive, focusRequest },
@@ -86,40 +126,6 @@ const TerminalSurfacePortal = memo(function TerminalSurfacePortal({
     container,
   );
 });
-
-export function SessionTerminalSurface({ model }: { model: SessionPanelModel }) {
-  const host = useContext(TerminalHostContext);
-  const view = useContext(SessionViewContext);
-  const isShown = useSessionViewShown();
-  const viewId = view?.id ?? null;
-  const anchor = useRef<HTMLDivElement | null>(null);
-  const scope = model.terminals.scopeKey;
-  const key = scope === null ? null : `${scope}:${model.panel}`;
-  const bind = useCallback(
-    (node: HTMLDivElement | null) => {
-      anchor.current = node;
-      if (host && key && viewId) host.place(key, viewId, node);
-    },
-    [host, key, viewId],
-  );
-  useLayoutEffect(() => {
-    if (host && view) host.update(key, view.id, isShown, view.isActive, model, anchor.current);
-  }, [host, isShown, key, model, view]);
-  if (!host || !view)
-    return (
-      <TerminalLayer
-        terminals={model.terminals}
-        mounts={model.terminalMounts}
-        activeKey={model.activeTerminalKey}
-        isVisible={isShown && model.isVisible}
-        isInteractive={view?.isActive ?? true}
-        focusRequest={isShown && (view?.isActive ?? true) ? model.focusRequest : 0}
-        tabIdBase={model.tabIdBase}
-      />
-    );
-  // The anchor and its moved root add no box, so only the terminal layer can cover panel content.
-  return <div ref={bind} className="contents" data-terminal-anchor />;
-}
 
 function createHost(parking: RefObject<HTMLDivElement | null>) {
   const entries = new Map<string, Surface>();
@@ -194,14 +200,8 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
         notify();
       }
     },
-    update(
-      key: string | null,
-      viewId: string,
-      isShown: boolean,
-      isActive: boolean,
-      model: SessionPanelModel,
-      anchor: HTMLDivElement | null,
-    ) {
+    update(key: string | null, viewId: string, binding: Binding) {
+      const { model, isShown } = binding;
       for (const entry of entries.values()) {
         if (entry.key !== key && entry.bindings.get(viewId)?.model.panel === model.panel)
           entry.bindings.delete(viewId);
@@ -214,7 +214,7 @@ function createHost(parking: RefObject<HTMLDivElement | null>) {
           entry = { key, viewId, container, bindings: new Map() };
           entries.set(key, entry);
         }
-        entry.bindings.set(viewId, { model, anchor, isShown, isActive });
+        entry.bindings.set(viewId, binding);
         if (isShown) entry.viewId = viewId;
       }
       dropUnused();
