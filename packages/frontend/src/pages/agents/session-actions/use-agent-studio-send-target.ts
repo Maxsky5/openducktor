@@ -75,8 +75,8 @@ export function useAgentStudioSendTarget({
         buildAgentStudioSessionActivityKey({ workspaceId, taskId, role, session: null }),
       );
   }, [role, selectedSessionIdentity, taskId, workspaceId]);
-  return useMemo((): AgentChatSendTarget => {
-    return {
+  return useMemo(
+    (): AgentChatSendTarget => ({
       activity,
       activityKey,
       capture: () => isCurrentContext,
@@ -93,110 +93,110 @@ export function useAgentStudioSendTarget({
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
         requireCompactionTarget(parts, selectedSessionIdentity);
-        if (!selectedSessionIdentity) {
-          if (!canStartSession || !selectionForNewSession?.runtimeKind)
-            throw new Error("Select an available runtime and model before sending a message.");
-          const launch = await runSessionStartWorkflow({
-            request: {
-              taskId,
-              role,
-              launchActionId,
-              postStartAction: "send_message",
-              parts,
-              assertBeforeLaunch: () => {
-                if (!isCurrentContext())
+        if (selectedSessionIdentity) {
+          assertCanPrepareSession(selectedSessionIdentity);
+          if (!isCurrentContext()) return null;
+          return {
+            identity: selectedSessionIdentity,
+            sendOptions: {
+              assertCanSubmit: (session) => {
+                if (
+                  !isCurrentContext() ||
+                  !matchesAgentSessionIdentity(session, selectedSessionIdentity)
+                )
                   throw new Error(
                     "The original chat is no longer selected. Reopen it to send your draft.",
                   );
+                assertCanPrepareSession(selectedSessionIdentity);
               },
             },
-            decision: { startMode: "fresh", selectedModel: selectionForNewSession },
-            task: selectedTask,
-            isCurrent: isCurrentContext,
-          }).catch((cause: unknown) => {
-            const failure =
-              cause instanceof SessionStartWorkflowError ? cause.originalCause : cause;
-            if (
-              failure instanceof RemoteConnectionError &&
-              failure.failure.code === "outcome_unknown"
-            )
-              startedDrafts.current.add(activityKey);
-            throw cause;
-          });
-          startedDrafts.current.add(activityKey);
-          if (isCurrentContext())
-            scheduleQueryUpdate(
-              buildAgentStudioSelectionQueryUpdate({
-                taskId,
-                sessionExternalId: launch.externalSessionId,
-                role,
-              }),
-            );
-          if (
-            !launch.postStartMessageReceipt &&
-            launch.postStartActionError &&
-            launch.retryPostStartMessage
-          )
-            return {
-              result: {
-                kind: "recover_draft",
-                originKey: agentStudioChatDraftScopeKey(workspaceId, {
-                  taskId,
-                  role,
-                  session: null,
-                }),
-                recoveryKey: agentStudioChatDraftScopeKey(workspaceId, {
-                  taskId,
-                  role,
-                  session: launch,
-                }),
-                error: launch.postStartActionError,
-                inAppFeedbackHandled: isSessionStartFailureFeedbackHandled(
-                  launch.postStartActionError,
-                ),
-              },
-            };
-          // An accepted or uncertain host send must not become another send from this draft.
-          return { result: true };
+          };
         }
-        assertCanPrepareSession(selectedSessionIdentity);
-        if (!isCurrentContext()) return null;
-        return {
-          identity: selectedSessionIdentity,
-          sendOptions: {
-            assertCanSubmit: (session) => {
-              if (
-                !isCurrentContext() ||
-                !matchesAgentSessionIdentity(session, selectedSessionIdentity)
-              )
+        if (!canStartSession || !selectionForNewSession?.runtimeKind)
+          throw new Error("Select an available runtime and model before sending a message.");
+        const launch = await runSessionStartWorkflow({
+          request: {
+            taskId,
+            role,
+            launchActionId,
+            postStartAction: "send_message",
+            parts,
+            assertBeforeLaunch: () => {
+              if (!isCurrentContext())
                 throw new Error(
                   "The original chat is no longer selected. Reopen it to send your draft.",
                 );
-              assertCanPrepareSession(selectedSessionIdentity);
             },
           },
-        };
+          decision: { startMode: "fresh", selectedModel: selectionForNewSession },
+          task: selectedTask,
+          isCurrent: isCurrentContext,
+        }).catch((cause: unknown) => {
+          const failure = cause instanceof SessionStartWorkflowError ? cause.originalCause : cause;
+          if (
+            failure instanceof RemoteConnectionError &&
+            failure.failure.code === "outcome_unknown"
+          )
+            startedDrafts.current.add(activityKey);
+          throw cause;
+        });
+        startedDrafts.current.add(activityKey);
+        if (isCurrentContext())
+          scheduleQueryUpdate(
+            buildAgentStudioSelectionQueryUpdate({
+              taskId,
+              sessionExternalId: launch.externalSessionId,
+              role,
+            }),
+          );
+        if (
+          !launch.postStartMessageReceipt &&
+          launch.postStartActionError &&
+          launch.retryPostStartMessage
+        )
+          return {
+            result: {
+              kind: "recover_draft",
+              originKey: agentStudioChatDraftScopeKey(workspaceId, {
+                taskId,
+                role,
+                session: null,
+              }),
+              recoveryKey: agentStudioChatDraftScopeKey(workspaceId, {
+                taskId,
+                role,
+                session: launch,
+              }),
+              error: launch.postStartActionError,
+              inAppFeedbackHandled: isSessionStartFailureFeedbackHandled(
+                launch.postStartActionError,
+              ),
+            },
+          };
+        // An accepted or uncertain host send must not become another send from this draft.
+        return { result: true };
       },
-    };
-  }, [
-    activity,
-    activityKey,
-    assertCanPrepareSession,
-    agentStudioReady,
-    canStartSession,
-    isCurrentContext,
-    isCatalogLoading,
-    isStarting,
-    launchActionId,
-    role,
-    runSessionStartWorkflow,
-    scheduleQueryUpdate,
-    selectedTask,
-    selectionForNewSession,
-    selectedSessionIdentity,
-    taskId,
-    workspaceId,
-  ]);
+    }),
+    [
+      activity,
+      activityKey,
+      assertCanPrepareSession,
+      agentStudioReady,
+      canStartSession,
+      isCurrentContext,
+      isCatalogLoading,
+      isStarting,
+      launchActionId,
+      role,
+      runSessionStartWorkflow,
+      scheduleQueryUpdate,
+      selectedTask,
+      selectionForNewSession,
+      selectedSessionIdentity,
+      taskId,
+      workspaceId,
+    ],
+  );
 }
 
 /** A compaction needs an existing session of a runtime that can compact it. */
