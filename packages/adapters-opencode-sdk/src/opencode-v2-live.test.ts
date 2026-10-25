@@ -159,6 +159,27 @@ describe("OpenCode V2 cleanup status", () => {
   );
 });
 describe("OpenCode V2 live observation", () => {
+  test.each([
+    ["no title", undefined],
+    ["an empty title", ""],
+  ] as const)("names a conversation with %s by the runtime label", async (_case, title) => {
+    const detail = session(title === undefined ? {} : { title });
+    const fixture = prepareFixture(({ url }) =>
+      url.pathname === "/api/session/ses_saved" ? response(detail) : undefined,
+    );
+    const runtime = await fixture.prepare();
+    try {
+      const read = await runtime.connection.readSessionSources(ref.repoPath, [
+        { ...ref, sessionScope: { kind: "repository" } },
+      ]);
+      expect(read.sources).toMatchObject([
+        { externalSessionId: ref.externalSessionId, title: "OpenCode" },
+      ]);
+    } finally {
+      await runtime.release();
+    }
+  });
+
   test.each(["session.created", "session.moved"] as const)(
     "rejects an authoritative directory change in %s even without a publisher location",
     async (type) => {

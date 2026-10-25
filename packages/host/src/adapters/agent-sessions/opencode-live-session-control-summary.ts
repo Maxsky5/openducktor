@@ -1,4 +1,8 @@
-import type { AgentSessionContextUsage, AgentSessionLiveRef } from "@openducktor/contracts";
+import {
+  type AgentSessionContextUsage,
+  type AgentSessionLiveRef,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentSessionSummary } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
@@ -46,7 +50,7 @@ export const toOpenCodeLiveSession = ({
   const snapshotInput: OpenCodeLiveSnapshotInput = {
     ref,
     activity: runtimeActivity,
-    title: summary.title ?? previous?.snapshot.title ?? "OpenCode",
+    title: summary.title ?? previous?.snapshot.title ?? OPENCODE_RUNTIME_DESCRIPTOR.label,
     startedAt: summary.startedAt,
     pendingApprovals: previous?.snapshot.pendingApprovals ?? [],
     pendingQuestions: previous?.snapshot.pendingQuestions ?? [],
