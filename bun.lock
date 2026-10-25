@@ -19,7 +19,7 @@
     },
     "apps/electron": {
       "name": "@openducktor/electron",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@azure/msal-node-extensions": "^5.5.2",
         "@ff-labs/fff-node": "0.11.0",
@@ -63,7 +63,7 @@
     },
     "apps/marketing-website": {
       "name": "@openducktor/marketing-website",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "@astrojs/check": "^0.9.9",
         "@fontsource-variable/space-grotesk": "^5.3.0",
@@ -84,7 +84,7 @@
     },
     "packages/adapters-codex-app-server": {
       "name": "@openducktor/adapters-codex-app-server",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@noble/hashes": "^2.4.0",
         "@openducktor/contracts": "workspace:*",
@@ -98,7 +98,7 @@
     },
     "packages/adapters-opencode-sdk": {
       "name": "@openducktor/adapters-opencode-sdk",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@opencode/client": "2.0.32",
         "@openducktor/contracts": "workspace:*",
@@ -109,21 +109,21 @@
     },
     "packages/build-tools": {
       "name": "@openducktor/build-tools",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "bun-types": "^1.4.2",
       },
     },
     "packages/contracts": {
       "name": "@openducktor/contracts",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "zod": "^4.6.7",
       },
     },
     "packages/core": {
       "name": "@openducktor/core",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
@@ -132,7 +132,7 @@
     },
     "packages/frontend": {
       "name": "@openducktor/frontend",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/modifiers": "^9.0.0",
@@ -221,7 +221,7 @@
     },
     "packages/frontend-core": {
       "name": "@openducktor/frontend-core",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -244,7 +244,7 @@
     },
     "packages/host": {
       "name": "@openducktor/host",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.306",
         "@azure/msal-node": "^7.1.0",
@@ -281,7 +281,7 @@
     },
     "packages/host-client": {
       "name": "@openducktor/host-client",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -290,7 +290,7 @@
     },
     "packages/openducktor-mcp": {
       "name": "@openducktor/mcp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "bin": {
         "openducktor-mcp": "dist/index.js",
       },
@@ -307,7 +307,7 @@
     },
     "packages/openducktor-web": {
       "name": "@openducktor/web",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "bin": {
         "openducktor-web": "dist/cli.js",
         "web": "dist/cli.js",
@@ -348,14 +348,14 @@
     },
     "packages/path-support": {
       "name": "@openducktor/path-support",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "bun-types": "^1.4.2",
       },
     },
     "packages/remote-host": {
       "name": "@openducktor/remote-host",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/host": "workspace:*",
@@ -372,7 +372,7 @@
     },
     "packages/runtime-orchestration": {
       "name": "@openducktor/runtime-orchestration",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
@@ -385,7 +385,7 @@
     },
     "tools/oxlint/anti-slop": {
       "name": "@openducktor/anti-slop-oxlint",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "devDependencies": {
         "@oxlint/plugins": "1.88.0",
       },
@@ -442,6 +442,8 @@
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.116.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-4UEapYQ+epLEMsAuLZDvW8ExVSOtHD8a7zTyLzhw0H9RXJ1eilPgmqhjwgcdg22diwx13spw6fJ4rONZ+bS7Ww=="],
 
     "@astrojs/astro2tsx": ["@astrojs/astro2tsx@0.1.2", "", { "dependencies": { "@emnapi/core": "1.11.3", "@napi-rs/wasm-runtime": "1.2.4" } }, "sha512-Uj/M9zbrhu5cIZEvWAGTbQJRKSxXWJ/E59BZwt7F+chrKhbfttW+9rkS/l+1QxoJP1KU3UnpM62M7yszfAI0WA=="],
+
+    "@astrojs/check": ["@astrojs/check@0.9.10", "", { "dependencies": { "@astrojs/language-server": "^2.16.7", "chokidar": "^4.0.3", "kleur": "^4.1.5", "yargs": "^18.0.0" }, "peerDependencies": { "typescript": "^5.0.0 || ^6.0.0" }, "bin": { "astro-check": "./bin/astro-check.js" } }, "sha512-zgx/UQMozdjOa3bOxjgeCFdtpE3c9rRX6xHwa+2QXvy8z8Akifu2AtubHyv/zzC2znO8dl8fFWL4K+Ba9kS8HQ=="],
 
     "@astrojs/compiler": ["@astrojs/compiler@2.13.1", "", {}, "sha512-f3FN83d2G/v32ipNClRKgYv30onQlMZX1vCeZMjPsMMPl1mDpmbl0+N5BYo4S/ofzqJyS5hvwacEo0CCVDn/Qg=="],
 
@@ -3086,8 +3088,6 @@
     "@opencode/protocol/effect": ["effect@4.0.1", "", {}, "sha512-b1VlQG9g8fwxE5QnIZuPoOP/0MsqHJSRKxUijjoM80E5q95FXrX5yWtY5XI8G+GJsBQAVSDbLS458z9a++uVvw=="],
 
     "@opencode/schema/effect": ["effect@4.0.1", "", {}, "sha512-b1VlQG9g8fwxE5QnIZuPoOP/0MsqHJSRKxUijjoM80E5q95FXrX5yWtY5XI8G+GJsBQAVSDbLS458z9a++uVvw=="],
-
-    "@openducktor/marketing-website/@astrojs/check": ["@astrojs/check@0.9.10", "", { "dependencies": { "@astrojs/language-server": "^2.16.7", "chokidar": "^4.0.3", "kleur": "^4.1.5", "yargs": "^18.0.0" }, "peerDependencies": { "typescript": "^5.0.0 || ^6.0.0" }, "bin": { "astro-check": "./bin/astro-check.js" } }, "sha512-zgx/UQMozdjOa3bOxjgeCFdtpE3c9rRX6xHwa+2QXvy8z8Akifu2AtubHyv/zzC2znO8dl8fFWL4K+Ba9kS8HQ=="],
 
     "@openducktor/marketing-website/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
 
