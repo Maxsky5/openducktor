@@ -59,8 +59,6 @@ describe("TaskDetailsMarkdownContent", () => {
     const rendered = render(
       createElement(TaskDetailsMarkdownContent, {
         markdown: "# Spec\n\nDetails",
-        empty: "No spec",
-        active: true,
         copyableMarkdown: "# Spec\n\nDetails",
       }),
     );
@@ -76,8 +74,6 @@ describe("TaskDetailsMarkdownContent", () => {
     const rendered = render(
       createElement(TaskDetailsMarkdownContent, {
         markdown: "# Plan\n\nText",
-        empty: "No plan",
-        active: true,
       }),
     );
 
@@ -89,8 +85,6 @@ describe("TaskDetailsMarkdownContent", () => {
     const rendered = render(
       createElement(TaskDetailsMarkdownContent, {
         markdown: "---\ntitle: Keep this specification title\n---\nSpecification body",
-        empty: "No spec",
-        active: true,
       }),
     );
 
@@ -103,8 +97,6 @@ describe("TaskDetailsMarkdownContent", () => {
     const rendered = render(
       createElement(TaskDetailsMarkdownContent, {
         markdown: "---\ntitle: Hidden description title\n---\nDescription body",
-        empty: "No description",
-        active: true,
         stripTaskDescriptionFrontMatter: true,
       }),
     );
@@ -120,8 +112,6 @@ describe("TaskDetailsMarkdownContent", () => {
       const rendered = render(
         createElement(TaskDetailsMarkdownContent, {
           markdown,
-          empty: "No doc",
-          active: true,
           copyableMarkdown: markdown,
         }),
       );
@@ -147,8 +137,6 @@ describe("TaskDetailsMarkdownContent", () => {
       const rendered = render(
         createElement(TaskDetailsMarkdownContent, {
           markdown,
-          empty: "No doc",
-          active: true,
           copyableMarkdown: markdown,
         }),
       );
@@ -177,8 +165,6 @@ describe("TaskDetailsMarkdownContent", () => {
       const rendered = render(
         createElement(TaskDetailsMarkdownContent, {
           markdown: "# QA\n\nfailed",
-          empty: "No QA",
-          active: true,
           copyableMarkdown: "# QA\n\nfailed",
         }),
       );
@@ -208,8 +194,6 @@ describe("TaskDetailsMarkdownContent", () => {
       const rendered = render(
         createElement(TaskDetailsMarkdownContent, {
           markdown: "# Spec",
-          empty: "No doc",
-          active: true,
           copyableMarkdown: "# Spec",
         }),
       );
@@ -246,8 +230,6 @@ describe("TaskDetailsMarkdownContent", () => {
               null,
               createElement(TaskDetailsMarkdownContent, {
                 markdown,
-                empty: "No doc",
-                active: true,
                 copyableMarkdown: markdown,
               }),
             ),

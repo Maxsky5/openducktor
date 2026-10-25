@@ -4,7 +4,10 @@ import { memo, type ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
+import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
+
+const SUBTASKS_ICON = <GitBranch className="size-3.5" />;
 
 type TaskDetailsSubtasksProps = {
   subtasks: TaskCard[];
@@ -13,11 +16,12 @@ type TaskDetailsSubtasksProps = {
 export const TaskDetailsSubtasks = memo(
   function TaskDetailsSubtasks({ subtasks }: TaskDetailsSubtasksProps): ReactElement {
     return (
-      <section className="space-y-3 rounded-xl border border-border/90 bg-card p-4 shadow-sm">
-        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <GitBranch className="size-3.5" />
-          Subtasks
-        </h4>
+      <CollapsibleCard
+        title="Subtasks"
+        icon={SUBTASKS_ICON}
+        summary={subtasks.length > 0 ? String(subtasks.length) : null}
+        defaultExpanded
+      >
         {subtasks.length > 0 ? (
           <ul className="space-y-2">
             {subtasks.map((subtask) => (
@@ -44,11 +48,9 @@ export const TaskDetailsSubtasks = memo(
             ))}
           </ul>
         ) : (
-          <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-            No subtasks yet.
-          </p>
+          <CollapsibleCardEmpty>No subtasks yet.</CollapsibleCardEmpty>
         )}
-      </section>
+      </CollapsibleCard>
     );
   },
   (previous, next) => {

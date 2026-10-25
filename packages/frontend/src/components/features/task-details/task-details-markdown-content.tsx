@@ -17,9 +17,8 @@ import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 type TaskDetailsMarkdownContentProps = {
+  /** Markdown with content. The caller shows the empty state. */
   markdown: string;
-  empty: string;
-  active: boolean;
   copyableMarkdown?: string;
   stripTaskDescriptionFrontMatter?: boolean;
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId">;
@@ -61,7 +60,6 @@ const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
 });
 
 type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
-  active: boolean;
   copyableMarkdown: string | undefined;
   copied: boolean;
   onCopy: (e: MouseEvent<HTMLButtonElement>) => void;
@@ -69,7 +67,6 @@ type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
 };
 
 function DeferredTaskDetailsMarkdown({
-  active,
   markdown,
   hasLabeledCodeFence,
   stripTaskDescriptionFrontMatter,
@@ -85,7 +82,7 @@ function DeferredTaskDetailsMarkdown({
   );
 
   useEffect(() => {
-    if (!active || isMarkdownReady) {
+    if (isMarkdownReady) {
       return;
     }
 
@@ -98,7 +95,7 @@ function DeferredTaskDetailsMarkdown({
     return () => {
       cancelAnimationFrame(frameId);
     };
-  }, [active, isMarkdownReady]);
+  }, [isMarkdownReady]);
 
   if (!isMarkdownReady) {
     return (
@@ -136,8 +133,6 @@ function DeferredTaskDetailsMarkdown({
 
 export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownContent({
   markdown,
-  empty,
-  active,
   copyableMarkdown,
   stripTaskDescriptionFrontMatter = false,
   taskAssetContext,
@@ -147,9 +142,8 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
     getSuccessDescription: buildCopyPreview,
     errorLogContext: "TaskDetailsMarkdownContent",
   });
-  const hasContent = /\S/.test(markdown);
   const hasLabeledCodeFence = LABELED_CODE_FENCE_PATTERN.test(markdown);
-  const shouldDeferMarkdown = hasContent && markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
+  const shouldDeferMarkdown = markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
 
   const handleCopy = useCallback(
     (e: MouseEvent<HTMLButtonElement>): void => {
@@ -163,19 +157,10 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
     [copyToClipboard, copyableMarkdown],
   );
 
-  if (!hasContent) {
-    return (
-      <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-        {empty}
-      </p>
-    );
-  }
-
   if (shouldDeferMarkdown) {
     return (
       <DeferredTaskDetailsMarkdown
         key={markdown}
-        active={active}
         markdown={markdown}
         hasLabeledCodeFence={hasLabeledCodeFence}
         stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}

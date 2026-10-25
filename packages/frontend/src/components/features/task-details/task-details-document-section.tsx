@@ -9,18 +9,25 @@ import {
   useIssueImageComponents,
 } from "@/components/features/issue-source/issue-markdown-renderer";
 
-import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
+import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
 
 const TaskDetailsMarkdownContent = lazy(async () => {
   const module = await import("./task-details-markdown-content");
   return { default: module.TaskDetailsMarkdownContent };
 });
 
+const MARKDOWN_SKELETON = (
+  <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
+    <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
+    <div className="h-3 w-full animate-pulse rounded bg-card" />
+    <div className="h-3 w-3/4 animate-pulse rounded bg-card" />
+  </div>
+);
+
 type TaskDetailsDocumentSectionProps = {
   title: string;
   icon: ReactElement;
   markdown: string;
-  updatedAt: string | null;
   empty: string;
   defaultExpanded?: boolean;
   /** Task ID used to enrich the fullscreen modal title. */
@@ -35,7 +42,6 @@ export const TaskDetailsDocumentSection = memo(
     title,
     icon,
     markdown,
-    updatedAt,
     empty,
     defaultExpanded = false,
     taskId,
@@ -62,34 +68,12 @@ export const TaskDetailsDocumentSection = memo(
 
     return (
       <>
-        {hasContent ? (
-          <TaskDetailsCollapsibleCard
-            title={title}
-            icon={icon}
-            updatedAt={updatedAt}
-            defaultExpanded={defaultExpanded}
-            renderChildren={({ isExpanded }) => (
-              <Suspense
-                fallback={
-                  <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
-                    <div className="h-3 w-4/5 animate-pulse rounded bg-card" />
-                    <div className="h-3 w-full animate-pulse rounded bg-card" />
-                    <div className="h-3 w-3/4 animate-pulse rounded bg-card" />
-                  </div>
-                }
-              >
-                <TaskDetailsMarkdownContent
-                  active={isExpanded}
-                  markdown={markdown}
-                  empty={empty}
-                  copyableMarkdown={markdown}
-                  stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-                  {...(taskAssetContext ? { taskAssetContext } : {})}
-                  {...(issueImageContext ? { issueImageContext } : {})}
-                />
-              </Suspense>
-            )}
-            headerAction={
+        <CollapsibleCard
+          title={title}
+          icon={icon}
+          defaultExpanded={defaultExpanded}
+          headerAction={
+            hasContent ? (
               <Button
                 variant="ghost"
                 size="icon"
@@ -100,20 +84,23 @@ export const TaskDetailsDocumentSection = memo(
               >
                 <Expand className="size-3.5" />
               </Button>
-            }
-          />
-        ) : (
-          <TaskDetailsCollapsibleCard
-            title={title}
-            icon={icon}
-            updatedAt={updatedAt}
-            defaultExpanded={defaultExpanded}
-          >
-            <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-              {empty}
-            </p>
-          </TaskDetailsCollapsibleCard>
-        )}
+            ) : null
+          }
+        >
+          {hasContent ? (
+            <Suspense fallback={MARKDOWN_SKELETON}>
+              <TaskDetailsMarkdownContent
+                markdown={markdown}
+                copyableMarkdown={markdown}
+                stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+                {...(taskAssetContext ? { taskAssetContext } : {})}
+                {...(issueImageContext ? { issueImageContext } : {})}
+              />
+            </Suspense>
+          ) : (
+            <CollapsibleCardEmpty>{empty}</CollapsibleCardEmpty>
+          )}
+        </CollapsibleCard>
         {modalSnapshot ? (
           <MarkdownPreviewModal
             open
@@ -135,7 +122,6 @@ export const TaskDetailsDocumentSection = memo(
   (previous, next) =>
     previous.title === next.title &&
     previous.markdown === next.markdown &&
-    previous.updatedAt === next.updatedAt &&
     previous.empty === next.empty &&
     previous.defaultExpanded === next.defaultExpanded &&
     previous.taskId === next.taskId &&

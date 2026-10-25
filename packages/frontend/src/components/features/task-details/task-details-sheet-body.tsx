@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import { CircleHelp } from "lucide-react";
 import type { ReactElement } from "react";
-import { TaskArtifacts } from "@/components/features/task-artifacts/task-artifacts";
+import { TaskArtifactsSection } from "@/components/features/task-artifacts/task-artifacts";
 import { TaskDetailsDocumentSection } from "./task-details-document-section";
 import { TaskDetailsMetadata } from "./task-details-metadata";
 import { TaskDetailsSubtasks } from "./task-details-subtasks";
@@ -23,13 +23,12 @@ export function TaskDetailsSheetBody({
   subtasks,
 }: TaskDetailsSheetBodyProps): ReactElement {
   return (
-    <div className="space-y-3 px-5 py-4">
+    <div className="space-y-2 px-5 py-4">
       <TaskDetailsDocumentSection
         key={`${task.id}:description`}
         icon={DESCRIPTION_ICON}
         title="Description"
         markdown={task.description}
-        updatedAt={null}
         empty="No description yet."
         defaultExpanded
         taskId={task.id}
@@ -55,18 +54,19 @@ export function TaskDetailsSheetBody({
           : {})}
       />
       {repoPath ? (
-        <div className="h-[min(60dvh,36rem)] min-h-64 overflow-hidden rounded-lg border border-border">
-          <TaskArtifacts
-            repoPath={repoPath}
-            taskId={task.id}
-            {...(workspaceId ? { workspaceId } : {})}
-          />
-        </div>
+        <TaskArtifactsSection
+          repoPath={repoPath}
+          taskId={task.id}
+          artifactSummary={task.artifactSummary}
+          {...(workspaceId ? { workspaceId } : {})}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">Select a workspace to read artifacts.</p>
       )}
       <TaskDetailsMetadata key={`${task.id}:metadata`} task={task} />
-      {shouldRenderSubtasks ? <TaskDetailsSubtasks subtasks={subtasks} /> : null}
+      {shouldRenderSubtasks ? (
+        <TaskDetailsSubtasks key={`${task.id}:subtasks`} subtasks={subtasks} />
+      ) : null}
     </div>
   );
 }

@@ -7,7 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { pullRequestHealthError } from "@/lib/git-provider-health";
-import { canUnlinkTaskPullRequest, statusBadgeClassName, statusLabel } from "@/lib/task-display";
+import { formatElapsedAgo, useMinuteClock } from "@/lib/relative-time";
+import {
+  canUnlinkTaskPullRequest,
+  humanDate,
+  statusBadgeClassName,
+  statusLabel,
+} from "@/lib/task-display";
 
 type TaskDetailsSheetHeaderProps = {
   task: TaskCard;
@@ -77,6 +83,42 @@ function TaskPullRequestActions({
   );
 }
 
+function TaskDate({
+  label,
+  value,
+  now,
+}: {
+  label: string;
+  value: string;
+  now: number;
+}): ReactElement {
+  return (
+    <span>
+      {label}{" "}
+      <time dateTime={value} title={humanDate(value)}>
+        {formatElapsedAgo(now - Date.parse(value))}
+      </time>
+    </span>
+  );
+}
+
+function TaskDates({
+  createdAt,
+  updatedAt,
+}: {
+  createdAt: string;
+  updatedAt: string;
+}): ReactElement {
+  const now = useMinuteClock();
+  return (
+    <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <TaskDate label="Created" value={createdAt} now={now} />
+      <span aria-hidden="true">·</span>
+      <TaskDate label="Updated" value={updatedAt} now={now} />
+    </p>
+  );
+}
+
 export function TaskDetailsSheetHeader({
   task,
   subtasksCount,
@@ -113,7 +155,10 @@ export function TaskDetailsSheetHeader({
               {task.title}
             </span>
           </h2>
-          <TaskIdBadge taskId={task.id} />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <TaskIdBadge taskId={task.id} />
+            <TaskDates createdAt={task.createdAt} updatedAt={task.updatedAt} />
+          </div>
         </div>
         <Badge variant="outline" className={statusBadgeClassName(task.status)}>
           {statusLabel(task.status)}

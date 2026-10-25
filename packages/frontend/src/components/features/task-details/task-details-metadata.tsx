@@ -2,7 +2,9 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Layers3 } from "lucide-react";
 import { memo, type ReactElement } from "react";
 
-import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
+import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
+
+const METADATA_ICON = <Layers3 className="size-3.5" />;
 
 type TaskDetailsMetadataProps = {
   task: TaskCard;
@@ -15,24 +17,18 @@ export const TaskDetailsMetadata = memo(
     defaultExpanded = false,
   }: TaskDetailsMetadataProps): ReactElement {
     return (
-      <TaskDetailsCollapsibleCard
-        title="Metadata"
-        icon={<Layers3 className="size-3.5" />}
-        defaultExpanded={defaultExpanded}
-      >
-        <div className="grid gap-3 rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
-          {task.parentId ? (
-            <div className="grid gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Parent
-              </span>
-              <span className="font-mono text-xs text-foreground">{task.parentId}</span>
-            </div>
-          ) : (
-            <span className="text-muted-foreground">No metadata to display.</span>
-          )}
-        </div>
-      </TaskDetailsCollapsibleCard>
+      <CollapsibleCard title="Metadata" icon={METADATA_ICON} defaultExpanded={defaultExpanded}>
+        {task.parentId ? (
+          <div className="grid gap-1 rounded-lg border border-border p-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Parent
+            </span>
+            <span className="font-mono text-xs text-foreground">{task.parentId}</span>
+          </div>
+        ) : (
+          <CollapsibleCardEmpty>No metadata to display.</CollapsibleCardEmpty>
+        )}
+      </CollapsibleCard>
     );
   },
   (previous, next) =>

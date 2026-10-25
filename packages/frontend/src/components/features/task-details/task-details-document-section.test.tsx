@@ -13,7 +13,6 @@ enableReactActEnvironment();
 const ICON = createElement(FileText, { className: "size-3.5" });
 const TITLE = "Description";
 const EMPTY = "No description.";
-const UPDATED_AT = "2026-01-01T00:00:00Z";
 
 describe("TaskDetailsDocumentSection", () => {
   test("renders expand button when document has content", () => {
@@ -22,7 +21,6 @@ describe("TaskDetailsDocumentSection", () => {
         title: TITLE,
         icon: ICON,
         markdown: "# Content",
-        updatedAt: UPDATED_AT,
         empty: EMPTY,
         defaultExpanded: true,
       }),
@@ -36,7 +34,6 @@ describe("TaskDetailsDocumentSection", () => {
         title: TITLE,
         icon: ICON,
         markdown: "",
-        updatedAt: UPDATED_AT,
         empty: EMPTY,
         defaultExpanded: true,
       }),
@@ -67,7 +64,6 @@ describe("TaskDetailsDocumentSection snapshot persistence", () => {
         title: TITLE,
         icon: ICON,
         markdown,
-        updatedAt: UPDATED_AT,
         empty: EMPTY,
         defaultExpanded: true,
       }),
@@ -86,7 +82,6 @@ describe("TaskDetailsDocumentSection snapshot persistence", () => {
         title: TITLE,
         icon: ICON,
         markdown: "",
-        updatedAt: UPDATED_AT,
         empty: EMPTY,
         defaultExpanded: true,
       }),
@@ -112,7 +107,6 @@ describe("TaskDetailsDocumentSection snapshot persistence", () => {
           title: TITLE,
           icon: ICON,
           markdown: "",
-          updatedAt: UPDATED_AT,
           empty: EMPTY,
           defaultExpanded: true,
         }),
