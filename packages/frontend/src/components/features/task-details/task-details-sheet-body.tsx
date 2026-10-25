@@ -29,7 +29,6 @@ export function TaskDetailsSheetBody({
         icon={DESCRIPTION_ICON}
         title="Description"
         markdown={task.description}
-        updatedAt={null}
         empty="No description yet."
         defaultExpanded
         taskId={task.id}
@@ -64,7 +63,9 @@ export function TaskDetailsSheetBody({
         <p className="text-sm text-muted-foreground">Select a workspace to read artifacts.</p>
       )}
       <TaskDetailsMetadata key={`${task.id}:metadata`} task={task} />
-      {shouldRenderSubtasks ? <TaskDetailsSubtasks subtasks={subtasks} /> : null}
+      {shouldRenderSubtasks ? (
+        <TaskDetailsSubtasks key={`${task.id}:subtasks`} subtasks={subtasks} />
+      ) : null}
     </div>
   );
 }

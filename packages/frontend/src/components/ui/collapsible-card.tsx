@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { Activity, type ReactElement, type ReactNode, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./collapsible";
 
 type CollapsibleCardProps = {
@@ -10,8 +11,7 @@ type CollapsibleCardProps = {
   defaultExpanded?: boolean;
   /** Controls at the end of the header. A click on them does not toggle the card. */
   headerAction?: ReactNode;
-  children?: ReactNode;
-  renderChildren?: (context: { isExpanded: boolean }) => ReactNode;
+  children: ReactNode;
 };
 
 /**
@@ -26,11 +26,9 @@ export function CollapsibleCard({
   defaultExpanded = false,
   headerAction,
   children,
-  renderChildren,
 }: CollapsibleCardProps): ReactElement {
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
   const isExpanded = expandedOverride ?? defaultExpanded;
-  const resolvedChildren = renderChildren === undefined ? children : renderChildren({ isExpanded });
 
   return (
     <Collapsible
@@ -65,8 +63,28 @@ export function CollapsibleCard({
       </div>
 
       <CollapsibleContent forceMount className="px-3 pb-3 data-[state=closed]:hidden">
-        <Activity mode={isExpanded ? "visible" : "hidden"}>{resolvedChildren}</Activity>
+        <Activity mode={isExpanded ? "visible" : "hidden"}>{children}</Activity>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+/** The one-line empty state of a card section. */
+export function CollapsibleCardEmpty({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <p
+      className={cn(
+        "rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </p>
   );
 }

@@ -2,7 +2,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { Layers3 } from "lucide-react";
 import { memo, type ReactElement } from "react";
 
-import { CollapsibleCard } from "@/components/ui/collapsible-card";
+import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
 
 const METADATA_ICON = <Layers3 className="size-3.5" />;
 
@@ -26,9 +26,7 @@ export const TaskDetailsMetadata = memo(
             <span className="font-mono text-xs text-foreground">{task.parentId}</span>
           </div>
         ) : (
-          <p className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-            No metadata to display.
-          </p>
+          <CollapsibleCardEmpty>No metadata to display.</CollapsibleCardEmpty>
         )}
       </CollapsibleCard>
     );

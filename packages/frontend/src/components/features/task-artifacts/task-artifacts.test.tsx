@@ -18,13 +18,19 @@ import {
   type TaskDocumentSection,
 } from "@openducktor/frontend-core/queries/documents";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import {
   type ArtifactSelection,
-  TaskArtifacts,
   TaskArtifactsSection,
+  type TaskArtifactsProps,
   TaskArtifactsView,
 } from "./task-artifacts";
+
+/** The session panel with local selection, as its page model owns it. */
+function StatefulPanel(props: TaskArtifactsProps) {
+  const [selection, onSelectionChange] = useState<ArtifactSelection>({ kind: "collection" });
+  return createElement(TaskArtifactsView, { ...props, selection, onSelectionChange });
+}
 
 const freeArtifact = (artifactId = "file-1", name = "Notes"): FreeTaskArtifact => ({
   artifactId,
@@ -46,11 +52,17 @@ const content = (artifact: TaskArtifact) => ({
   nextByteOffset: null,
   totalBytes: 5,
 });
+type SetupOptions = {
+  canManageFree?: boolean;
+  /** A controlled panel selection. Without it, the panel keeps its own selection. */
+  selection?: ArtifactSelection;
+  variant?: "panel" | "section";
+  listError?: Error;
+};
+
 const setup = (
   artifacts: TaskArtifact[],
-  canManageFree = true,
-  selection?: ArtifactSelection,
-  layout: "panel" | "section" = "panel",
+  { canManageFree = true, selection, variant = "panel", listError }: SetupOptions = {},
 ) => {
   const onSelectionChange = mock((_selection: ArtifactSelection) => {});
   const read = mock(async ({ artifactId }: { artifactId: string }) => {
@@ -75,7 +87,10 @@ const setup = (
   });
   const connection = createTestClientConnection({
     client: {
-      taskArtifactsList: async () => ({ artifacts, canManageFree }),
+      taskArtifactsList: async () => {
+        if (listError) throw listError;
+        return { artifacts, canManageFree };
+      },
       taskArtifactRead: read,
       taskWorkflowArtifactGet: readWorkflow,
       taskArtifactDelete: remove,
@@ -92,7 +107,7 @@ const setup = (
             selection,
             onSelectionChange,
           })
-        : createElement(layout === "section" ? TaskArtifactsSection : TaskArtifacts, {
+        : createElement(variant === "section" ? TaskArtifactsSection : StatefulPanel, {
             repoPath: "/repo",
             taskId: "task-1",
           }),
@@ -299,9 +314,8 @@ describe("task artifacts collection", () => {
       workflowKind: "qaReport",
       mediaType: "text/markdown",
     };
-    const view = setup([freeArtifact(), workflow], true, {
-      kind: "workflow",
-      workflowKind: "qaReport",
+    const view = setup([freeArtifact(), workflow], {
+      selection: { kind: "workflow", workflowKind: "qaReport" },
     });
     try {
       expect(await screen.findByText("hello")).toBeTruthy();
@@ -374,7 +388,9 @@ describe("task artifacts collection", () => {
   });
 
   test("keeps an absent workflow selected until its output is created", async () => {
-    const view = setup([freeArtifact()], true, { kind: "workflow", workflowKind: "plan" });
+    const view = setup([freeArtifact()], {
+      selection: { kind: "workflow", workflowKind: "plan" },
+    });
     try {
       expect(await screen.findByText("Implementation Plan has not been created yet.")).toBeTruthy();
       expect(screen.getByRole("heading", { name: "Implementation Plan" })).toBeTruthy();
@@ -619,7 +635,7 @@ describe("task artifacts collection", () => {
         mediaType,
         byteSize: mediaType === "image/png" ? 68 : 5,
       };
-      const view = setup([artifact], false);
+      const view = setup([artifact], { canManageFree: false });
       if (mediaType === "image/png") {
         view.read.mockImplementationOnce(async () => ({
           ...content(artifact),
@@ -692,34 +708,42 @@ describe("task artifacts collection", () => {
   });
 
   describe("section layout", () => {
+    const toggle = () => screen.getByRole("button", { name: /^Artifacts/ });
+
     test("starts collapsed with a count, and Add artifact does not toggle the card", async () => {
-      const view = setup(
-        [freeArtifact(), freeArtifact("file-2", "Other notes")],
-        true,
-        undefined,
-        "section",
-      );
+      const view = setup([freeArtifact(), freeArtifact("file-2", "Other notes")], {
+        variant: "section",
+      });
       try {
-        const toggle = screen.getByRole("button", { name: /^Artifacts/ });
-        expect(toggle.getAttribute("aria-expanded")).toBe("false");
-        await waitFor(() => expect(toggle.textContent).toBe("Artifacts2"));
+        const header = toggle();
+        expect(header.getAttribute("aria-expanded")).toBe("false");
+        expect(await within(header).findByText("2")).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: "Add artifact" }));
         expect(await screen.findByRole("dialog", { name: "Add artifact" })).toBeTruthy();
-        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+        expect(header.getAttribute("aria-expanded")).toBe("false");
       } finally {
         view.unmount();
         view.connection.queryClient.clear();
       }
     });
 
-    test("expands to a list and opens a preview with a way back", async () => {
-      const view = setup([freeArtifact()], true, undefined, "section");
+    test("keeps focus in the artifact flow when opening and returning to the list", async () => {
+      const view = setup([freeArtifact(), freeArtifact("file-2", "Other notes")], {
+        variant: "section",
+      });
       try {
-        fireEvent.click(screen.getByRole("button", { name: /^Artifacts/ }));
-        fireEvent.click(await screen.findByRole("button", { name: /^Notes / }));
+        fireEvent.click(toggle());
+        const row = await screen.findByRole("button", { name: /^Notes / });
+        act(() => row.focus());
+        fireEvent.click(row);
         expect(await screen.findByText("hello")).toBeTruthy();
+        await waitFor(() =>
+          expect(document.activeElement?.getAttribute("aria-label")).toBe("All artifacts"),
+        );
         fireEvent.click(screen.getByRole("button", { name: "All artifacts" }));
-        expect(await screen.findByRole("button", { name: /^Notes / })).toBeTruthy();
+        await waitFor(() =>
+          expect(document.activeElement?.getAttribute("data-artifact-id")).toBe("file-1"),
+        );
       } finally {
         view.unmount();
         view.connection.queryClient.clear();
@@ -727,11 +751,25 @@ describe("task artifacts collection", () => {
     });
 
     test("shows a one-line empty state and no Add artifact on a closed task", async () => {
-      const view = setup([], false, undefined, "section");
+      const view = setup([], { canManageFree: false, variant: "section" });
       try {
+        fireEvent.click(toggle());
+        expect(toggle().getAttribute("aria-expanded")).toBe("true");
         expect(await screen.findByText("No artifacts yet.")).toBeTruthy();
         expect(screen.getByText("This task is closed. Free artifacts are read-only.")).toBeTruthy();
         expect(screen.queryByRole("button", { name: "Add artifact" })).toBeNull();
+      } finally {
+        view.unmount();
+        view.connection.queryClient.clear();
+      }
+    });
+
+    test("opens the card to show a failed read and its retry", async () => {
+      const view = setup([], { variant: "section", listError: new Error("Disk is offline.") });
+      try {
+        expect((await screen.findByRole("alert")).textContent).toContain("Disk is offline.");
+        expect(toggle().getAttribute("aria-expanded")).toBe("true");
+        expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
       } finally {
         view.unmount();
         view.connection.queryClient.clear();

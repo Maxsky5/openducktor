@@ -23,7 +23,6 @@ import {
   Plus,
 } from "lucide-react";
 import {
-  type ComponentType,
   type ReactElement,
   type ReactNode,
   useCallback,
@@ -34,7 +33,7 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CollapsibleCard } from "@/components/ui/collapsible-card";
+import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
 import { useDialogPresence } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -66,24 +65,7 @@ export type TaskArtifactsViewProps = TaskArtifactsProps & {
 const scopeKey = (props: TaskArtifactsProps): string =>
   `${props.workspaceId ?? ""}:${props.repoPath}:${props.taskId}`;
 
-/** Artifacts as a panel that fills its parent, with its own selection. */
-export function TaskArtifacts(props: TaskArtifactsProps): ReactElement {
-  return <TaskArtifactsState key={scopeKey(props)} {...props} view={TaskArtifactsView} />;
-}
-
-/** Artifacts as a collapsible card that grows with its content, with its own selection. */
-export function TaskArtifactsSection(props: TaskArtifactsProps): ReactElement {
-  return <TaskArtifactsState key={scopeKey(props)} {...props} view={TaskArtifactsSectionView} />;
-}
-
-function TaskArtifactsState({
-  view: View,
-  ...props
-}: TaskArtifactsProps & { view: ComponentType<TaskArtifactsViewProps> }): ReactElement {
-  const [selection, onSelectionChange] = useState<ArtifactSelection>({ kind: "collection" });
-  return <View {...props} selection={selection} onSelectionChange={onSelectionChange} />;
-}
-
+/** Artifacts as a panel that fills its parent. The caller owns the selection. */
 export function TaskArtifactsView(props: TaskArtifactsViewProps): ReactElement {
   return (
     <TooltipProvider>
@@ -92,7 +74,8 @@ export function TaskArtifactsView(props: TaskArtifactsViewProps): ReactElement {
   );
 }
 
-function TaskArtifactsSectionView(props: TaskArtifactsViewProps): ReactElement {
+/** Artifacts as a collapsible card that grows with its content, with its own selection. */
+export function TaskArtifactsSection(props: TaskArtifactsProps): ReactElement {
   return (
     <TooltipProvider>
       <ArtifactSection key={scopeKey(props)} {...props} />
@@ -100,10 +83,11 @@ function TaskArtifactsSectionView(props: TaskArtifactsViewProps): ReactElement {
   );
 }
 
+type ArtifactCollectionState = ReturnType<typeof useArtifactCollection>;
+
 function useArtifactCollection({
   repoPath,
   taskId,
-  workspaceId,
   artifactSummary,
   selection,
   onSelectionChange,
@@ -155,32 +139,12 @@ function useArtifactCollection({
     sectionRef,
     collection,
     canManage,
+    selected,
+    selectedId,
     isAbsentWorkflow,
-    openAction,
     select,
-    content: selectedId ? (
-      <ArtifactContent
-        key={selectedId}
-        repoPath={repoPath}
-        taskId={taskId}
-        artifactId={selectedId}
-        title={selected?.name ?? selectionTitle(selection)}
-        {...(workspaceId ? { workspaceId } : {})}
-        artifact={selected}
-        workflowKind={selection.kind === "workflow" ? selection.workflowKind : undefined}
-        canManage={canManage}
-        onBack={back}
-        onAction={openAction}
-      />
-    ) : null,
-    header: (
-      <CollectionHeader
-        selection={selection}
-        canManage={canManage}
-        onBack={back}
-        onAction={openAction}
-      />
-    ),
+    back,
+    openAction,
     dialog:
       actionPresence && action ? (
         <ArtifactActionDialog
@@ -197,6 +161,55 @@ function useArtifactCollection({
   };
 }
 
+/**
+ * The open artifact, or the collection header with `children` as the body, then the notice.
+ * The parent sets the height.
+ */
+function ArtifactBrowser({
+  view,
+  state,
+  children,
+}: {
+  view: TaskArtifactsViewProps;
+  state: ArtifactCollectionState;
+  children: ReactNode;
+}): ReactElement {
+  const { selection } = view;
+  return (
+    <>
+      {state.selectedId ? (
+        <ArtifactContent
+          key={state.selectedId}
+          repoPath={view.repoPath}
+          taskId={view.taskId}
+          artifactId={state.selectedId}
+          title={state.selected?.name ?? selectionTitle(selection)}
+          {...(view.workspaceId ? { workspaceId: view.workspaceId } : {})}
+          artifact={state.selected}
+          workflowKind={selection.kind === "workflow" ? selection.workflowKind : undefined}
+          canManage={state.canManage}
+          onBack={state.back}
+          onAction={state.openAction}
+        />
+      ) : (
+        <>
+          <CollectionHeader
+            selection={selection}
+            canManage={state.canManage}
+            onBack={state.back}
+            onAction={state.openAction}
+          />
+          <div className="min-h-0 flex-1 overflow-auto p-3">{children}</div>
+        </>
+      )}
+      <CollectionNotice
+        collection={state.collection}
+        className="border-t border-border px-3 py-2"
+      />
+    </>
+  );
+}
+
 const PANEL_EMPTY = (
   <div className="flex flex-col items-center gap-3 px-5 py-12 text-center">
     <Files className="size-7 text-muted-foreground" aria-hidden="true" />
@@ -210,60 +223,48 @@ const PANEL_EMPTY = (
 );
 
 const SECTION_EMPTY = (
-  <p className="mx-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-    No artifacts yet.
-  </p>
+  <CollapsibleCardEmpty className="mx-2">No artifacts yet.</CollapsibleCardEmpty>
 );
 
 const SECTION_ICON = <Files className="size-3.5" aria-hidden="true" />;
 
 function ArtifactPanel(props: TaskArtifactsViewProps): ReactElement {
-  const { sectionRef, collection, isAbsentWorkflow, select, content, header, dialog } =
-    useArtifactCollection(props);
+  const state = useArtifactCollection(props);
   return (
-    <section ref={sectionRef} aria-label="Task artifacts" className="flex h-full min-h-0 flex-col">
-      {content ?? (
-        <>
-          {header}
-          <div className="min-h-0 flex-1 overflow-auto p-3">
-            <CollectionBody
-              collection={collection}
-              selection={props.selection}
-              isAbsentWorkflow={isAbsentWorkflow}
-              density="default"
-              empty={PANEL_EMPTY}
-              onSelect={select}
-            />
-          </div>
-        </>
-      )}
-      <CollectionNotice collection={collection} className="border-t border-border px-3 py-2" />
-      {dialog}
+    <section
+      ref={state.sectionRef}
+      aria-label="Task artifacts"
+      className="flex h-full min-h-0 flex-col"
+    >
+      <ArtifactBrowser view={props} state={state}>
+        <CollectionBody
+          collection={state.collection}
+          selection={props.selection}
+          isAbsentWorkflow={state.isAbsentWorkflow}
+          density="default"
+          empty={PANEL_EMPTY}
+          onSelect={state.select}
+        />
+      </ArtifactBrowser>
+      {state.dialog}
     </section>
   );
 }
 
-function ArtifactSection(props: TaskArtifactsViewProps): ReactElement {
-  const {
-    sectionRef,
-    collection,
-    canManage,
-    isAbsentWorkflow,
-    openAction,
-    select,
-    content,
-    header,
-    dialog,
-  } = useArtifactCollection(props);
+function ArtifactSection(props: TaskArtifactsProps): ReactElement {
+  const [selection, onSelectionChange] = useState<ArtifactSelection>({ kind: "collection" });
+  const view = { ...props, selection, onSelectionChange };
+  const state = useArtifactCollection(view);
+  const { collection } = state;
   const count = collection.data?.artifacts.length ?? 0;
   const body = (
     <CollectionBody
       collection={collection}
-      selection={props.selection}
-      isAbsentWorkflow={isAbsentWorkflow}
+      selection={selection}
+      isAbsentWorkflow={state.isAbsentWorkflow}
       density="compact"
       empty={SECTION_EMPTY}
-      onSelect={select}
+      onSelect={state.select}
     />
   );
   return (
@@ -272,10 +273,14 @@ function ArtifactSection(props: TaskArtifactsViewProps): ReactElement {
         title="Artifacts"
         icon={SECTION_ICON}
         summary={count > 0 ? String(count) : null}
-        headerAction={canManage ? <AddArtifactButton size="xs" onAction={openAction} /> : null}
+        // A failed read opens the card, so its alert and Retry show. The count stays after a retry.
+        defaultExpanded={collection.errorUpdateCount > 0}
+        headerAction={
+          state.canManage ? <AddArtifactButton size="xs" onAction={state.openAction} /> : null
+        }
       >
-        <section ref={sectionRef} aria-label="Task artifacts" className="flex flex-col gap-2">
-          {props.selection.kind === "collection" ? (
+        <section ref={state.sectionRef} aria-label="Task artifacts" className="flex flex-col gap-2">
+          {selection.kind === "collection" ? (
             <>
               <div className="-mx-2">{body}</div>
               <CollectionNotice collection={collection} />
@@ -285,24 +290,17 @@ function ArtifactSection(props: TaskArtifactsViewProps): ReactElement {
             <div
               className={cn(
                 "-mx-3 -mb-3 flex flex-col border-t border-border",
-                content && "h-[min(65dvh,40rem)] min-h-64",
+                state.selectedId && "h-[min(65dvh,40rem)] min-h-64",
               )}
             >
-              {content ?? (
-                <>
-                  {header}
-                  <div className="p-3">{body}</div>
-                </>
-              )}
-              <CollectionNotice
-                collection={collection}
-                className="border-t border-border px-3 py-2"
-              />
+              <ArtifactBrowser view={view} state={state}>
+                {body}
+              </ArtifactBrowser>
             </div>
           )}
         </section>
       </CollapsibleCard>
-      {dialog}
+      {state.dialog}
     </>
   );
 }

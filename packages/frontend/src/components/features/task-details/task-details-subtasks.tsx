@@ -4,7 +4,7 @@ import { memo, type ReactElement } from "react";
 import { IssueTypeBadge, PriorityBadge } from "@/components/features/kanban/kanban-task-badges";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
-import { CollapsibleCard } from "@/components/ui/collapsible-card";
+import { CollapsibleCard, CollapsibleCardEmpty } from "@/components/ui/collapsible-card";
 import { statusBadgeClassName, statusLabel } from "@/lib/task-display";
 
 const SUBTASKS_ICON = <GitBranch className="size-3.5" />;
@@ -48,9 +48,7 @@ export const TaskDetailsSubtasks = memo(
             ))}
           </ul>
         ) : (
-          <p className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-            No subtasks yet.
-          </p>
+          <CollapsibleCardEmpty>No subtasks yet.</CollapsibleCardEmpty>
         )}
       </CollapsibleCard>
     );
