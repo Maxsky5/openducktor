@@ -8,12 +8,16 @@ const blocksOf = (markdown: string): string[] =>
     JSON.stringify(block.node, (key, value) => (key === "position" ? undefined : value)),
   );
 
-const expectSameBlocks = (markdown: string, chunks: MarkdownChunks): void => {
+const expectSameBlocks = (
+  markdown: string,
+  chunks: MarkdownChunks,
+  wholeBlocks = blocksOf(markdown),
+): void => {
   expect(chunks.chunks.map((chunk) => chunk.text).join("")).toBe(markdown);
   for (const chunk of chunks.chunks) {
     expect(markdown.slice(chunk.start, chunk.start + chunk.text.length)).toBe(chunk.text);
   }
-  expect(chunks.chunks.flatMap((chunk) => blocksOf(chunk.text))).toEqual(blocksOf(markdown));
+  expect(chunks.chunks.flatMap((chunk) => blocksOf(chunk.text))).toEqual(wholeBlocks);
 };
 
 const SNIPPETS = [
@@ -43,12 +47,6 @@ const SNIPPETS = [
   "2",
   "#",
 ];
-
-/** A seeded generator, so a failure always shows the same text. */
-const random = (seed: number) => () => {
-  seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
-  return seed / 2_147_483_648;
-};
 
 describe("splitMarkdownChunks", () => {
   test("keeps a short text whole", () => {
@@ -93,17 +91,18 @@ describe("splitMarkdownChunks", () => {
     expect(splitMarkdownChunks(text, 1).chunks.at(-1)?.text).toBe("Two.\n\n2");
   });
 
-  test("parses each chunk to the same blocks as the whole text", () => {
-    for (let run = 0; run < 300; run += 1) {
-      const next = random(run + 1);
-      const parts = Array.from(
-        { length: 4 + Math.floor(next() * 10) },
-        () => SNIPPETS[Math.floor(next() * SNIPPETS.length)] ?? "",
-      );
+  // Each snippet stands next to every snippet, so every pair of neighbors meets at a chunk start.
+  test.each(SNIPPETS.map((snippet) => [JSON.stringify(snippet), snippet]))(
+    "parses each chunk to the same blocks as the whole text, around %s",
+    (_label: string, snippet: string) => {
+      const parts = [...SNIPPETS.flatMap((other) => [snippet, other]), snippet];
       const text = `${parts.join("\n\n")}\n`;
-      for (const size of [1, 40]) expectSameBlocks(text, splitMarkdownChunks(text, size));
-    }
-  });
+      const wholeBlocks = blocksOf(text);
+      for (const size of [1, 40]) {
+        expectSameBlocks(text, splitMarkdownChunks(text, size), wholeBlocks);
+      }
+    },
+  );
 
   test("keeps the earlier chunks of a text that grows at its end", () => {
     const first = splitMarkdownChunks("One.\n\nTwo.\n\nThr", 6);

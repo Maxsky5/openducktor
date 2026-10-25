@@ -32,6 +32,8 @@ The workflow is `.github/workflows/dependency-hygiene.yml`.
 
 `bun run deps:audit` fails when one `bun audit --json` response reports a high or critical advisory. It also fails if GHSA-`xh87-mx6m-69f3` or GHSA-`v8w9-8mx6-g223` returns. `hono` must resolve to `>=4.12.7`.
 
+The audit ignores GHSA-`86w9-cpqp-85rv`, because `node-forge` has no fixed release and only the Expo CLI uses it to build the mobile app. `scripts/audit-high-severity-guard.ts` lists this exception. Remove it when a fixed `node-forge` exists.
+
 The audit request fails with a transport error after 30 seconds instead of waiting for Bun's default idle timeout.
 
 ## Update reports

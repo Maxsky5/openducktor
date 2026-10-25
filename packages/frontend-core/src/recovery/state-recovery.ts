@@ -24,6 +24,14 @@ export const synchronizeConnectionState = async (
     predicate: (query: Query) => query.meta?.skipHostRecovery !== true,
   };
   await queryClient.invalidateQueries({ ...workQueries, refetchType: "none" });
+  // A read that started while the host was away waits for this barrier. A refetch of a query
+  // without data joins that read instead of starting another, so cancel it first.
+  await queryClient.cancelQueries({
+    predicate: (query) =>
+      workQueries.predicate(query) &&
+      query.state.data === undefined &&
+      query.state.fetchStatus === "fetching",
+  });
   const started = Date.now();
   await queryClient.refetchQueries({ ...workQueries, type: "active" });
   // A read that the host answers with an error shows that error in its own view. Only a lost

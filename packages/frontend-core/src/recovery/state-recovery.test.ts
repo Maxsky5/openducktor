@@ -29,6 +29,35 @@ test("host recovery refetches active host reads and skips reads marked to skip i
   }
 });
 
+test("recovery reads again a query whose first read waits for the reconnect", async () => {
+  const queryClient = new QueryClient();
+  let calls = 0;
+  let releaseWaitingRead = (): void => {};
+  const stop = new QueryObserver(queryClient, {
+    queryKey: ["first-read"],
+    queryFn: () => {
+      calls += 1;
+      // The first read started while the host was away, so it waits for the end of recovery.
+      if (calls === 1)
+        return new Promise<string>((resolve) => {
+          releaseWaitingRead = () => resolve("late");
+        });
+      return Promise.resolve("recovered");
+    },
+    staleTime: Infinity,
+  }).subscribe(() => {});
+  try {
+    await synchronizeConnectionState(queryClient, [], true);
+
+    expect(calls).toBe(2);
+    expect(queryClient.getQueryData(["first-read"])).toBe("recovered");
+  } finally {
+    releaseWaitingRead();
+    stop();
+    queryClient.clear();
+  }
+});
+
 const observeFailing = (queryClient: QueryClient, error: Error) =>
   new QueryObserver(queryClient, {
     queryKey: ["failing"],

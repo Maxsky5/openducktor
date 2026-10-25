@@ -79,6 +79,115 @@ function WorktreeNotice({
 
 type ArchiveTarget = { workspace: WorkspaceRecord; record: WorkspaceSession };
 
+/** The chat that the sheet archives: its runtime, title, and working directory. */
+function ArchivedChatCard({ record }: { record: WorkspaceSession }): ReactElement {
+  return (
+    <View style={styles.chatCard}>
+      <View style={styles.runtimeTile}>
+        <RuntimeIcon runtimeKind={record.runtimeKind} size={16} />
+      </View>
+      <View style={styles.chatText}>
+        <Text style={styles.chatTitle}>{workspaceSessionTitle(record)}</Text>
+        <Text variant="monoSmall" selectable style={styles.chatPath}>
+          {record.executionTarget.workingDirectory}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** The worktree switch and what happens to the worktree, or the note of a repository chat. */
+function WorktreeChoice({
+  form,
+  checking,
+  disabled,
+  onChange,
+}: {
+  form: ArchiveChatFormModel;
+  checking: boolean;
+  disabled: boolean;
+  onChange: (removeWorktree: boolean) => void;
+}): ReactElement | null {
+  const { notice } = form;
+  if (!form.offersWorktreeRemoval) {
+    if (notice.kind === "delete_branch") return null;
+    return (
+      <Text variant="footnote" style={styles.muted}>
+        {notice.text}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.worktree}>
+      <View style={styles.switchCard}>
+        <SwitchRow
+          label={ARCHIVE_CHAT_TEXT.removeWorktree}
+          value={form.removeWorktree}
+          onValueChange={onChange}
+          disabled={disabled || form.sharedNotice !== null || form.taskNotice !== null}
+        />
+      </View>
+      {form.sharedNotice ? (
+        <Text variant="footnote" style={styles.muted}>
+          {form.sharedNotice}
+        </Text>
+      ) : null}
+      {form.taskNotice ? (
+        <Text variant="footnote" style={styles.muted}>
+          {form.taskNotice}
+        </Text>
+      ) : null}
+      <WorktreeNotice notice={notice} checking={checking} />
+    </View>
+  );
+}
+
+/** A failed worktree check, the worktree warnings, and a failed archive. */
+function ArchiveProblems({
+  checkError,
+  onCheckAgain,
+  warnings,
+  archiveError,
+}: {
+  checkError: unknown;
+  onCheckAgain: () => void;
+  warnings: ArchiveChatFormModel["warnings"];
+  archiveError: unknown;
+}): ReactElement {
+  const theme = useAppTheme();
+  const unknown = archiveError !== null && isOutcomeUnknown(archiveError);
+  return (
+    <>
+      {checkError ? (
+        <Callout
+          tone="destructive"
+          title="Worktree check failed"
+          message={errorMessage(checkError)}
+          action={<Button label="Check Again" size="sm" variant="outline" onPress={onCheckAgain} />}
+        />
+      ) : null}
+      {warnings.map((warning) => (
+        <View key={warning.kind} style={styles.warning} accessible accessibilityRole="alert">
+          {/* As on desktop, only the local changes warning has the alert mark. */}
+          {warning.kind === "local_changes" ? (
+            <Icon name="triangle-alert" size={16} colorValue={theme.desktop.destructiveMuted} />
+          ) : null}
+          <Text variant="footnote" style={styles.warningText}>
+            {warning.text}
+          </Text>
+        </View>
+      ))}
+      {archiveError ? (
+        <Callout
+          tone={unknown ? "warning" : "destructive"}
+          title={unknown ? RESULT_UNKNOWN_TITLE : "The chat was not archived"}
+          message={errorMessage(archiveError)}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function ArchiveChatForm({
   target,
   archive,
@@ -90,7 +199,6 @@ function ArchiveChatForm({
 }): ReactElement {
   const { workspace, record } = target;
   const router = useRouter();
-  const theme = useAppTheme();
   // Worktree removal starts turned on, as on desktop.
   const [wantsWorktreeRemoval, setWantsWorktreeRemoval] = useState(true);
   const preview = useQuery({
@@ -107,8 +215,6 @@ function ArchiveChatForm({
     if (form.canArchive)
       onConfirm(archiveChatInput({ workspace, record, wantsWorktreeRemoval, preview }));
   };
-  const unknown = archive.error !== null && isOutcomeUnknown(archive.error);
-  const { notice } = form;
   return (
     <SheetFrame
       title={TITLE}
@@ -116,84 +222,24 @@ function ArchiveChatForm({
       closable={!archive.isPending}
     >
       <View style={styles.body}>
-        <View style={styles.chatCard}>
-          <View style={styles.runtimeTile}>
-            <RuntimeIcon runtimeKind={record.runtimeKind} size={16} />
-          </View>
-          <View style={styles.chatText}>
-            <Text style={styles.chatTitle}>{workspaceSessionTitle(record)}</Text>
-            <Text variant="monoSmall" selectable style={styles.chatPath}>
-              {record.executionTarget.workingDirectory}
-            </Text>
-          </View>
-        </View>
+        <ArchivedChatCard record={record} />
         <Text variant="footnote" style={styles.muted}>
           {ARCHIVE_CHAT_TEXT.stopsWork}
         </Text>
-        {form.offersWorktreeRemoval ? (
-          <View style={styles.worktree}>
-            <View style={styles.switchCard}>
-              <SwitchRow
-                label={ARCHIVE_CHAT_TEXT.removeWorktree}
-                value={form.removeWorktree}
-                onValueChange={setWantsWorktreeRemoval}
-                disabled={
-                  archive.isPending || form.sharedNotice !== null || form.taskNotice !== null
-                }
-              />
-            </View>
-            {form.sharedNotice ? (
-              <Text variant="footnote" style={styles.muted}>
-                {form.sharedNotice}
-              </Text>
-            ) : null}
-            {form.taskNotice ? (
-              <Text variant="footnote" style={styles.muted}>
-                {form.taskNotice}
-              </Text>
-            ) : null}
-            <WorktreeNotice notice={notice} checking={preview.isFetching} />
-          </View>
-        ) : notice.kind === "delete_branch" ? null : (
-          <Text variant="footnote" style={styles.muted}>
-            {notice.text}
-          </Text>
-        )}
-        {preview.error ? (
-          <Callout
-            tone="destructive"
-            title="Worktree check failed"
-            message={errorMessage(preview.error)}
-            action={
-              <Button
-                label="Check Again"
-                size="sm"
-                variant="outline"
-                onPress={() => {
-                  void preview.refetch();
-                }}
-              />
-            }
-          />
-        ) : null}
-        {form.warnings.map((warning) => (
-          <View key={warning.kind} style={styles.warning} accessible accessibilityRole="alert">
-            {/* As on desktop, only the local changes warning has the alert mark. */}
-            {warning.kind === "local_changes" ? (
-              <Icon name="triangle-alert" size={16} colorValue={theme.desktop.destructiveMuted} />
-            ) : null}
-            <Text variant="footnote" style={styles.warningText}>
-              {warning.text}
-            </Text>
-          </View>
-        ))}
-        {archive.error ? (
-          <Callout
-            tone={unknown ? "warning" : "destructive"}
-            title={unknown ? RESULT_UNKNOWN_TITLE : "The chat was not archived"}
-            message={errorMessage(archive.error)}
-          />
-        ) : null}
+        <WorktreeChoice
+          form={form}
+          checking={preview.isFetching}
+          disabled={archive.isPending}
+          onChange={setWantsWorktreeRemoval}
+        />
+        <ArchiveProblems
+          checkError={preview.error}
+          onCheckAgain={() => {
+            void preview.refetch();
+          }}
+          warnings={form.warnings}
+          archiveError={archive.error}
+        />
         <View style={styles.actions}>
           <Button
             label="Cancel"

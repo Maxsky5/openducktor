@@ -51,6 +51,27 @@ describe("dependency audit checks", () => {
     expect(errors).toContain("[deps:audit:high] HIGH vulnerable: Unsafe package");
   });
 
+  test("accepts a listed advisory that has no fixed release", () => {
+    const exitCode = runDependencyAuditChecks(
+      () => ({
+        parsed: {
+          "node-forge": [
+            {
+              severity: "high",
+              title: "RSA signature verification accepts extra elements",
+              url: "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+              vulnerable_versions: "<=1.4.0",
+            },
+          ],
+        },
+        exitCode: 1,
+      }),
+      silentReporter,
+    );
+
+    expect(exitCode).toBe(0);
+  });
+
   test("blocks the targeted Hono advisories", () => {
     const errors: string[] = [];
 
