@@ -5,7 +5,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Callout } from "@/ui/callout";
 import { Touchable } from "@/ui/touchable";
-import { knownAspectRatio, MAX_IMAGE_HEIGHT, rememberAspectRatio } from "./image-aspect-ratio";
+import { keepAspectRatio, knownAspectRatio, MAX_IMAGE_HEIGHT } from "./image-aspect-ratio";
 
 const DEFAULT_ASPECT_RATIO = 16 / 9;
 
@@ -58,8 +58,7 @@ export const FittedImage = memo(function FittedImage({
     (event: ImageLoadEventData) => {
       const { width, height } = event.source;
       if (width <= 0 || height <= 0) return;
-      rememberAspectRatio(recyclingKey, width / height);
-      setLoaded({ key: recyclingKey, ratio: width / height });
+      setLoaded({ key: recyclingKey, ratio: keepAspectRatio(recyclingKey, width / height) });
     },
     [recyclingKey],
   );
