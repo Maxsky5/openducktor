@@ -14,7 +14,11 @@ const createSession = (messages: AgentChatMessage[]) => ({
 });
 
 describe("agent-orchestrator/support/tool-messages", () => {
-  test("resolves tool message ids by callId and running fallback", () => {
+  test.each([
+    ["call ID", "m2", "call-1"],
+    ["message ID without a call ID", "m1", ""],
+    ["tool name without a call ID", "m2", ""],
+  ])("resolves tool message ids by %s", (_match, messageId, callId) => {
     const messages: AgentChatMessage[] = [
       {
         id: "tool:m1:old",
@@ -32,18 +36,18 @@ describe("agent-orchestrator/support/tool-messages", () => {
       },
     ];
 
-    const byCallId = resolveToolMessageId(
+    const resolvedId = resolveToolMessageId(
       createSession(messages),
       {
-        messageId: "m2",
-        callId: "call-1",
+        messageId,
+        callId,
         tool: "todowrite",
         status: "completed",
       },
       "tool:m2:new",
     );
 
-    expect(byCallId).toBe("tool:m1:old");
+    expect(resolvedId).toBe("tool:m1:old");
   });
 
   test("normalizes session and retry error messages", () => {

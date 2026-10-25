@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { formatBrowserAnnotationsMessage } from "@/features/browser-annotations/browser-annotation-message";
@@ -9,6 +10,9 @@ import {
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { MessageBody } from "./agent-chat-message-card-content";
+import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
+import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
+import { buildMessage } from "./agent-chat-test-fixtures";
 
 enableReactActEnvironment();
 
@@ -81,6 +85,87 @@ const createUserMessageBody = (text: string) =>
   });
 
 describe("MessageBody", () => {
+  test.each([
+    {
+      name: "Plan entry reminders",
+      content: `<system-reminder>
+You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
+/home/user/.opencode/plan
+
+Do not modify any other files or ask a subagent to do so.
+
+You remain in Plan mode until the user switches agents. If the user asks you to implement changes, do not do so. Tell them they need to switch agents.
+</system-reminder>`,
+    },
+    {
+      name: "Plan exit reminders",
+      content: `<system-reminder>
+You are NO LONGER in Plan mode. The previous Plan restrictions no longer apply. Any Plan mode instructions from earlier in this conversation are no longer active.
+</system-reminder>`,
+    },
+    {
+      name: "unclassified system text",
+      content: "Keep **literal** text.\n\n<runtime-note>\n  Preserve the spaces.\n</runtime-note>",
+    },
+  ])("keeps $name in a closed system disclosure with the full text", ({ content }) => {
+    const rendered = render(createMessageCardElement({ message: buildMessage("system", content) }));
+
+    try {
+      const summary = rendered.getByText("Show system message", { selector: "summary" });
+      const disclosure = summary.closest("details");
+      expect(disclosure?.open).toBe(false);
+      expect(disclosure?.querySelector("p")?.textContent).toBe(content);
+
+      fireEvent.click(summary);
+
+      expect(disclosure?.open).toBe(true);
+      expect(disclosure?.querySelector("p")?.textContent).toBe(content);
+    } finally {
+      rendered.unmount();
+    }
+  });
+
+  test.each([CODEX_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR])(
+    "keeps $kind system text outside the OpenCode disclosure",
+    (runtime) => {
+      const content = "<system-reminder>Keep this system text visible.</system-reminder>";
+      const rendered = render(
+        createMessageCardElement({
+          message: buildMessage("system", content),
+          sessionIdentity: { runtimeKind: runtime.kind, workingDirectory: "/repo" },
+          runtimePresentation: resolveAgentChatRuntimePresentation({
+            runtimeDefinitions: [runtime],
+            runtimeKind: runtime.kind,
+          }),
+        }),
+      );
+
+      try {
+        expect(rendered.container.querySelector("details")).toBeNull();
+        expect(rendered.container.querySelector("p")?.textContent).toBe(content);
+      } finally {
+        rendered.unmount();
+      }
+    },
+  );
+
+  test("keeps user reminder text outside the system disclosure", () => {
+    const rendered = render(
+      createMessageCardElement({
+        message: buildMessage("user", "You are in Plan mode. Keep this user text visible."),
+      }),
+    );
+
+    try {
+      expect(rendered.container.querySelector("details")).toBeNull();
+      expect(rendered.container.textContent).toContain(
+        "You are in Plan mode. Keep this user text visible.",
+      );
+    } finally {
+      rendered.unmount();
+    }
+  });
+
   test("shows the browser annotations of a user message as chips, not as their text", async () => {
     const elements = buildCapture().elements.map((element) => ({ ...element, source: null }));
     const block = formatBrowserAnnotationsMessage(

@@ -25,6 +25,13 @@ import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import { deriveToolPreview } from "./tool-preview";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
+import {
+  updateShellTool,
+  isShellNotice,
+  projectShellPart,
+  shellContext,
+  type ShellContext,
+} from "./opencode-shell-projection";
 
 export const modelSelection = (model: ModelRef): AgentTranscriptModelSelection => {
   const selection: AgentTranscriptModelSelection = {
@@ -87,6 +94,7 @@ const nativeToolFileDiffsSchema = z.array(
 );
 
 const nativeWriteInputSchema = z.object({ path: z.string(), content: z.string() });
+const instructionPathsSchema = z.object({ paths: z.array(z.string()) });
 
 type UserAttachmentKind = Extract<
   AgentTranscriptUserMessageDisplayPart,
@@ -246,6 +254,7 @@ export type OpenCodeMessageProjectionContext = {
   readonly completions: ReadonlyMap<string, SubagentCompletion>;
   readonly durations: ReadonlyMap<string, number>;
   readonly completedReplies: ReadonlySet<string>;
+  readonly shells: ShellContext;
 };
 
 export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>): Set<string> => {
@@ -272,17 +281,19 @@ export const messageProjectionContext = (
     completions: subagentCompletions(retained),
     durations: nativeTurnDurations(retained),
     completedReplies: completedOpenCodeReplies(retained),
+    shells: shellContext(retained),
   };
 };
 
-const isVisibleNativeMessage = (message: SessionMessageInfo): boolean =>
+const isVisibleNativeMessage = (message: SessionMessageInfo, shells?: ShellContext): boolean =>
   message.type !== "agent-switched" &&
   !(message.type === "idle" && message.outcome === "succeeded") &&
-  !(message.type === "synthetic" && message.metadata?.source === "subagent");
+  !(message.type === "synthetic" && message.metadata?.source === "subagent") &&
+  !shells?.hidden.has(message.id);
 
 export const projectMessages = (
   messages: SessionMessageInfo[],
-  { completions, durations, completedReplies } = messageProjectionContext(messages),
+  context = messageProjectionContext(messages),
   settledToolInputs?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage[] => {
   let latestUserId: string | undefined;
@@ -294,25 +305,21 @@ export const projectMessages = (
     if (message.type === "assistant" && !runningModel)
       runningModel = { ...modelSelection(message.model), profileId: message.agent };
   }
-  return messages.filter(isVisibleNativeMessage).map((message) => {
-    const projected = projectMessage(
-      message,
-      completions,
-      durations.get(message.id),
-      settledToolInputs,
-      completedReplies,
-    );
-    return projected.role === "user" && projected.messageId === latestUserId && runningModel
-      ? { ...projected, model: runningModel }
-      : projected;
-  });
+  return messages
+    .filter((message) => isVisibleNativeMessage(message, context.shells))
+    .map((message) => {
+      const projected = projectMessage(message, context, settledToolInputs);
+      return projected.role === "user" && projected.messageId === latestUserId && runningModel
+        ? { ...projected, model: runningModel }
+        : projected;
+    });
 };
 
 const projectAssistantContent = (
   message: SessionMessageAssistant,
   content: SessionMessageAssistant["content"][number],
   ordinal: number,
-  completions?: ReadonlyMap<string, SubagentCompletion>,
+  context?: OpenCodeMessageProjectionContext,
   settledToolInputs?: ReadonlySet<string>,
 ): AgentTranscriptStreamPart[] => {
   const part = { messageId: message.id };
@@ -409,11 +416,12 @@ const projectAssistantContent = (
       tool.fileContent = [{ file: input.data.path, content: input.data.content, type: "modified" }];
   }
   if (content.time.completed !== undefined) tool.endedAtMs = content.time.completed;
+  updateShellTool(content, tool, context?.shells);
   if (content.name !== "subagent") return [tool];
   const input = z.record(z.string(), z.json()).safeParse(tool.input).data;
   // Native progress confirms ownership; tool input can name an unrelated session.
   const childID = z.string().safeParse(metadata?.sessionID).data;
-  const completion = completions?.get(content.id);
+  const completion = context?.completions.get(content.id);
   // A completed tool can leave its child running in the background.
   const backgrounded = tool.status === "completed" && metadata?.status === "running";
   let status = completion?.state ?? (backgrounded ? "running" : tool.status);
@@ -447,10 +455,8 @@ const projectAssistantContent = (
 /** History and live events use the same native content order and part IDs. */
 export const projectMessage = (
   message: SessionMessageInfo,
-  completions?: ReadonlyMap<string, SubagentCompletion>,
-  durationMs?: number,
+  context?: OpenCodeMessageProjectionContext,
   settledToolInputs?: ReadonlySet<string>,
-  completedReplies?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage => {
   const base = { messageId: message.id, timestamp: iso(message.time.created) };
   if (message.type === "user")
@@ -472,7 +478,7 @@ export const projectMessage = (
           : content.type === "reasoning"
             ? reasoningOrdinal++
             : 0;
-      return projectAssistantContent(message, content, ordinal, completions, settledToolInputs);
+      return projectAssistantContent(message, content, ordinal, context, settledToolInputs);
     });
     const history: AgentSessionHistoryMessage = {
       ...base,
@@ -493,13 +499,41 @@ export const projectMessage = (
         phase: "finish",
         reason: message.finish,
       });
+      const durationMs = context?.durations.get(message.id);
       if (message.finish === "stop" && !message.error && durationMs !== undefined)
         history.durationMs = durationMs;
     }
     if (message.tokens) history.totalTokens = tokenTotal(message.tokens);
-    if (completedReplies?.has(message.id)) history.forkPoint = { messageId: message.id };
+    if (context?.completedReplies.has(message.id)) history.forkPoint = { messageId: message.id };
     return agentSessionHistoryMessageSchema.parse(history);
   }
+  if (message.type === "shell" || isShellNotice(message))
+    return agentSessionHistoryMessageSchema.parse({
+      ...base,
+      role: "assistant",
+      text: "",
+      parts: [projectShellPart(message, context?.shells)],
+    });
+  if (message.type === "skill")
+    return agentSessionHistoryMessageSchema.parse({
+      ...base,
+      role: "assistant",
+      text: "",
+      parts: [
+        {
+          kind: "tool",
+          messageId: message.id,
+          partId: `${message.id}:skill`,
+          callId: message.id,
+          tool: "skill",
+          toolType: "generic",
+          status: "completed",
+          input: { name: message.name },
+          output: message.text,
+          resultContent: [{ kind: "text", text: message.text }],
+        },
+      ],
+    });
   let text: string;
   switch (message.type) {
     case "system":
@@ -509,13 +543,9 @@ export const projectMessage = (
           : message.text;
       break;
     case "synthetic":
-      text = message.text;
-      break;
-    case "skill":
-      text = `${message.name}\n${message.text}`;
-      break;
-    case "shell":
-      text = `$ ${message.command}\n${message.output?.output ?? ""}\nShell ${message.status}${message.exit !== undefined ? ` (${message.exit})` : ""}${message.output?.truncated ? "\nNative output was truncated." : ""}`;
+      text = instructionPathsSchema.safeParse(message.metadata?.instruction).success
+        ? `${AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX}${message.text}`
+        : message.text;
       break;
     case "compaction":
       text =
@@ -579,7 +609,7 @@ export const assistantPartEvents = (
     message,
     content,
     selection.type === "tool" ? 0 : selection.ordinal,
-    context?.completions,
+    context,
     settledToolInputs,
   ).map((part): AgentEvent => ({
     type: "assistant_part",
@@ -595,14 +625,8 @@ export const messageEvents = (
   context?: OpenCodeMessageProjectionContext,
   settledToolInputs?: ReadonlySet<string>,
 ): AgentEvent[] => {
-  if (!isVisibleNativeMessage(message)) return [];
-  const projected = projectMessage(
-    message,
-    context?.completions,
-    context?.durations.get(message.id),
-    settledToolInputs,
-    context?.completedReplies,
-  );
+  if (!isVisibleNativeMessage(message, context?.shells)) return [];
+  const projected = projectMessage(message, context, settledToolInputs);
   const base = { externalSessionId, timestamp: projected.timestamp };
   if (message.type === "idle" && message.outcome === "interrupted")
     return [

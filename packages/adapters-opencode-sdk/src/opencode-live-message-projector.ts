@@ -18,6 +18,7 @@ import {
   projectInboxUser,
   projectMessages,
 } from "./opencode-message-projection";
+import { isShellNotice } from "./opencode-shell-projection";
 
 export class OpenCodeLiveMessageProjector {
   readonly messages = new Map<string, SessionMessageInfo>();
@@ -45,12 +46,17 @@ export class OpenCodeLiveMessageProjector {
           settledInput.add(part.id);
     }
     const merged = history.map((message) =>
-      keepLiveTools(message, this.messages.get(message.id), this.settledInput),
+      keepLiveMessage(message, this.messages.get(message.id), this.settledInput),
     );
     const ids = new Set(history.map((message) => message.id));
     for (const message of this.messages.values()) {
-      if (message.type !== "assistant" || ids.has(message.id)) continue;
-      if (message.content.some((part) => part.type === "tool")) merged.push(message);
+      if (ids.has(message.id)) continue;
+      if (
+        (message.type === "assistant" && message.content.some((part) => part.type === "tool")) ||
+        message.type === "shell" ||
+        isShellNotice(message)
+      )
+        merged.push(message);
     }
     const context = messageProjectionContext(merged);
     const completions = new Map(context.completions);
@@ -95,7 +101,7 @@ export class OpenCodeLiveMessageProjector {
     for (const snapshot of messages) {
       this.retractedIds.delete(snapshot.id);
       const live = previous.get(snapshot.id);
-      const message = keepLiveTools(structuredClone(snapshot), live, settledInput);
+      const message = keepLiveMessage(structuredClone(snapshot), live, settledInput);
       this.messages.set(message.id, message);
       if (message.type !== "assistant") continue;
       let textOrdinal = 0;
@@ -424,6 +430,7 @@ export class OpenCodeLiveMessageProjector {
           time: { created },
           text: event.data.text,
         };
+        if (event.data.description !== undefined) system.description = event.data.description;
         if (event.data.metadata) system.metadata = event.data.metadata;
         break;
       case "session.instructions.updated":
@@ -622,16 +629,52 @@ export class OpenCodeLiveMessageProjector {
         );
       }
     }
+    if (isShellNotice(message)) {
+      for (const owner of this.messages.values()) {
+        if (
+          owner.type === "shell" &&
+          this.projectionContext.shells.signals.get(owner.shellID)?.noticeId === message.id
+        ) {
+          events.push(
+            ...messageEvents(sessionID, owner, this.projectionContext, this.settledInput),
+          );
+        }
+        if (owner.type !== "assistant") continue;
+        for (const part of owner.content) {
+          if (
+            part.type !== "tool" ||
+            this.projectionContext.shells.results.get(part.id)?.noticeId !== message.id
+          )
+            continue;
+          events.push(
+            ...assistantPartEvents(
+              sessionID,
+              owner,
+              { type: "tool", id: part.id },
+              this.projectionContext,
+              this.settledInput,
+            ),
+          );
+        }
+      }
+    }
     return events;
   }
 }
 
-/** Keep progress that OpenCode does not save, while trusting saved final results. */
-const keepLiveTools = (
+/** Keep unsaved live progress, but use saved final results. */
+const keepLiveMessage = (
   message: SessionMessageInfo,
   live: SessionMessageInfo | undefined,
   settledInput: ReadonlySet<string>,
 ): SessionMessageInfo => {
+  if (
+    message.type === "shell" &&
+    live?.type === "shell" &&
+    message.status === "running" &&
+    live.status !== "running"
+  )
+    return live;
   if (message.type !== "assistant" || live?.type !== "assistant") return message;
   const liveTools = new Map(
     live.content.filter((part) => part.type === "tool").map((part) => [part.id, part] as const),
