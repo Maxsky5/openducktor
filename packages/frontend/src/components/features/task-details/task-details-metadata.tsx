@@ -20,7 +20,7 @@ export const TaskDetailsMetadata = memo(
         icon={<Layers3 className="size-3.5" />}
         defaultExpanded={defaultExpanded}
       >
-        <div className="grid gap-3 rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
+        <div className="grid gap-3 rounded-lg border border-border p-3 text-sm text-foreground">
           {task.parentId ? (
             <div className="grid gap-1">
               <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

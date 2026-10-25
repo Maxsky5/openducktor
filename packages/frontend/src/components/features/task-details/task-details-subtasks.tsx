@@ -46,7 +46,7 @@ export const TaskDetailsSubtasks = memo(
             ))}
           </ul>
         ) : (
-          <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+          <p className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
             No subtasks yet.
           </p>
         )}

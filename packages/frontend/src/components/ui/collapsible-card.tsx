@@ -38,7 +38,7 @@ export function CollapsibleCard({
       className="group/card rounded-xl border border-border/90 bg-card shadow-sm"
     >
       <div className="relative flex min-h-10 items-center gap-2 rounded-xl px-3 py-1.5 transition-colors hover:bg-muted/60 group-data-[state=open]/card:rounded-b-none">
-        <h4 className="min-w-0 flex-1">
+        <h3 className="min-w-0 flex-1">
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -53,7 +53,7 @@ export function CollapsibleCard({
               ) : null}
             </button>
           </CollapsibleTrigger>
-        </h4>
+        </h3>
         {headerAction ? (
           <div className="relative flex shrink-0 items-center gap-1">{headerAction}</div>
         ) : null}

@@ -384,7 +384,7 @@ function CollectionBody({
   if (collection.data.artifacts.length === 0 && collection.isSuccess) {
     if (layout === "section")
       return (
-        <p className="mx-2 rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+        <p className="mx-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
           No artifacts yet.
         </p>
       );

@@ -110,7 +110,7 @@ export const TaskDetailsDocumentSection = memo(
             summary={updatedAt ? humanDate(updatedAt) : null}
             defaultExpanded={defaultExpanded}
           >
-            <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            <p className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
               {empty}
             </p>
           </CollapsibleCard>
