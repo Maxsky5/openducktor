@@ -99,10 +99,22 @@ const projectMessage = (
       ...message,
       meta: { ...message.meta, parts: [...(message.meta.parts ?? []), ...mentions] },
     };
-    projection.revisionKeys = mentions.map(
-      (mention) =>
-        `${message.id}:${mention.skill.id}:${mention.sourceText?.start}:${mention.sourceText?.end}`,
-    );
+    projection.revisionKeys = mentions.map((mention) => {
+      // Cache the metadata digest so streaming updates only hash the short revision key.
+      const skillRevision = updateRevision(
+        0,
+        JSON.stringify([
+          mention.skill.id,
+          mention.skill.name,
+          mention.skill.path,
+          mention.skill.title,
+          mention.skill.displayName,
+          mention.skill.description,
+          mention.skill.color,
+        ]),
+      );
+      return `${message.id}:${mention.skill.id}:${mention.sourceText?.start}:${mention.sourceText?.end}:${skillRevision}`;
+    });
   }
   catalog.messages.set(message, projection);
   return projection;
