@@ -19,6 +19,7 @@ import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openduc
 import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
+import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
 import { useInterruptedTurnResume } from "@/components/features/agents/agent-chat/use-interrupted-turn-resume";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import { useAgentSessionQuestionActions } from "@/components/features/agents/agent-chat/use-agent-session-question-actions";
@@ -64,6 +65,7 @@ type UseAgentStudioSessionActionsArgs = {
   selectedSession: AgentStudioSelectedSessionState;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
+  isSelectionCatalogLoading: boolean;
   supportsAttachments: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
@@ -126,6 +128,7 @@ export function useAgentStudioSessionActions({
   selectedSession,
   runtimeDefinitions,
   selectedModelDescriptor,
+  isSelectionCatalogLoading,
   supportsAttachments,
   sessionsForTask,
   selectedTask,
@@ -186,6 +189,7 @@ export function useAgentStudioSessionActions({
     sessionStartModal,
     humanReviewFeedbackModal,
     startSessionRequest,
+    startPreparedSession,
     startLaunchKickoff,
     handleCreateSession,
     handleQuickAction,
@@ -197,9 +201,16 @@ export function useAgentStudioSessionActions({
     taskId,
     role,
     selectedSessionIdentity: stableSelectedSessionIdentity,
-    isSessionModelCatalogLoading: selectedSession.runtimeData.isLoadingModelCatalog,
+    isCatalogLoading: isSelectionCatalogLoading,
+    launchActionId,
+    selectionForNewSession,
+    selectedTask,
+    startPreparedSession,
+    scheduleQueryUpdate,
+    canStartSession: canStartRole(role),
     assertCanPrepareSession,
-    agentStudioReady: agentStudioReady && selectedSession.preparation.ready,
+    agentStudioReady:
+      agentStudioReady && (selectedSessionIdentity === null || selectedSession.preparation.ready),
     isStarting,
   });
   const messageDelivery = useAgentChatSend({
@@ -225,9 +236,12 @@ export function useAgentStudioSessionActions({
       if (option.disabled || (selectedSessionIdentity !== null && isSessionInteractionBusy)) {
         return false;
       }
-      return canStartRole(option.role);
+      // A draft can choose another runtime before its first Send.
+      return (
+        Boolean(taskId) && isActiveTaskReady && isRoleAvailableForTask(selectedTask, option.role)
+      );
     },
-    [canStartRole, isSessionInteractionBusy, selectedSessionIdentity],
+    [isActiveTaskReady, isSessionInteractionBusy, selectedSessionIdentity, selectedTask, taskId],
   );
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =

@@ -9,7 +9,7 @@ import {
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { createElement, type PropsWithChildren } from "react";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
@@ -42,9 +42,14 @@ import { AgentChatSendProviders } from "@/test-utils/agent-chat-send-providers";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import {
   createChatSettingsFixture,
+  createHostRuntimeStatusContextValue,
+  createHostRuntimeStatusFixture,
+  createRuntimeCatalogFixture,
   createSettingsSnapshotFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
+import type { RuntimeDefinitionsContextValue } from "@/state/app-state-contexts";
+import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import { readyAgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { agentStudioChatDraftScopeKey } from "./agent-studio-chat-draft";
 import {
@@ -412,6 +417,139 @@ describe("task chat speed", () => {
   });
 });
 
+describe("task chat drafts", () => {
+  test("uses the chosen draft runtime when the default runtime is unavailable", async () => {
+    const base = createBaseArgs();
+    const selectedSession = {
+      ...base.selectedSession.selectedSession,
+      identity: null,
+      selectedModel: null,
+      loadedSession: null,
+      runtimeReadiness: {
+        ...base.selectedSession.selectedSession.runtimeReadiness,
+        state: "blocked" as const,
+        message: "OpenCode is unavailable.",
+      },
+      transcriptState: { kind: "runtime_waiting" } as const,
+    };
+    const args = createControllerArgs(base, OPENCODE_RUNTIME_DESCRIPTOR, selectedSession);
+    args.runtimeDefinitions = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
+    args.repoSettings = {
+      worktreeBasePath: "",
+      branchPrefix: "codex/",
+      defaultTargetBranch: { remote: "origin", branch: "main" },
+      postCompleteHooks: [],
+      actions: { items: [], defaultActionId: null },
+      worktreeCopyPaths: [],
+      agentDefaults: { spec: null, planner: null, build: null, qa: null },
+      defaultModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "default-model",
+        variant: "",
+        profileId: "",
+      },
+    };
+    args.selection = {
+      ...args.selection,
+      routeSessionResolution: { kind: "none" },
+      selectedSessionFromRoute: null,
+      resolvedRouteSession: null,
+      sessionsForTask: [],
+      view: { ...args.selection.view, sessionsForTask: [] },
+    };
+    const loadRepoRuntimeCatalog = mock(async () =>
+      createRuntimeCatalogFixture({
+        models: {
+          runtime: CODEX_RUNTIME_DESCRIPTOR,
+          models: [
+            {
+              id: "openai/chosen-model",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "chosen-model",
+              modelName: "Chosen model",
+              variants: [],
+            },
+          ],
+          defaultModelsByProvider: { openai: "chosen-model" },
+        },
+      }),
+    );
+    const connection = createTestClientConnection({
+      client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
+      scheduleTask: () => () => {},
+    });
+    let current!: ReturnType<typeof useAgentStudioOrchestrationController>;
+    const Composer = () => {
+      current = useAgentStudioOrchestrationController(args);
+      return createElement(
+        AgentChatSettingsProvider,
+        { value: current.agentChatModel.chatSettings },
+        createElement(AgentChatComposer, { model: current.agentChatModel.composer }),
+      );
+    };
+    const view = render(
+      createElement(
+        TaskChatProviders,
+        {
+          runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+          runtimeDefinitions: args.runtimeDefinitions,
+          runtimeStatus: createHostRuntimeStatusContextValue({
+            statusByKind: {
+              opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "disabled" }),
+              codex: createHostRuntimeStatusFixture({ kind: "codex", state: "ready" }),
+            },
+          }),
+          loadRepoRuntimeCatalog,
+          connection,
+        },
+        createElement(Composer),
+      ),
+    );
+    try {
+      expect(view.getByRole("button", { name: /^Select model/ }).hasAttribute("disabled")).toBe(
+        false,
+      );
+      await act(async () => current.agentChatModel.composer.modelPicker.onOpenChange(true));
+      await waitFor(() =>
+        expect(
+          current.agentChatModel.composer.modelPicker.runtimes.find(
+            (runtime) => runtime.descriptor.kind === "codex",
+          )?.resource.status,
+        ).toBe("ready"),
+      );
+      await act(async () =>
+        current.agentChatModel.composer.modelPicker.onValueChange({
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "chosen-model",
+        }),
+      );
+      await waitFor(() => expect(current.agentChatModel.composer.isInteractionEnabled).toBe(true));
+      expect(current.agentChatModel.thread.transcript).toEqual(
+        expect.objectContaining({ kind: "empty", notice: null }),
+      );
+      expect(
+        view.getByRole("combobox", { name: "Message composer" }).getAttribute("contenteditable"),
+      ).toBe("true");
+      expect(current.agentChatModel.composer.selectedModelSelection).toEqual({
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "chosen-model",
+      });
+      expect(loadRepoRuntimeCatalog).toHaveBeenCalledWith({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      });
+    } finally {
+      view.unmount();
+      connection.queryClient.clear();
+    }
+  });
+});
+
 describe("task workflow artifact loading", () => {
   test.each([
     { existing: "all workflows", hasPlanAndQa: true },
@@ -510,10 +648,16 @@ describe("task workflow artifact loading", () => {
 
 function TaskChatProviders({
   runtime,
+  runtimeDefinitions = [runtime],
+  runtimeStatus,
+  loadRepoRuntimeCatalog,
   connection,
   children,
 }: PropsWithChildren<{
   runtime: RuntimeDescriptor;
+  runtimeDefinitions?: RuntimeDescriptor[];
+  runtimeStatus?: HostRuntimeStatusContextValue;
+  loadRepoRuntimeCatalog?: RuntimeDefinitionsContextValue["loadRepoRuntimeCatalog"];
   connection?: ClientConnection;
 }>) {
   return createElement(
@@ -526,8 +670,8 @@ function TaskChatProviders({
         RuntimeDefinitionsContext.Provider,
         {
           value: {
-            runtimeDefinitions: [runtime],
-            availableRuntimeDefinitions: [runtime],
+            runtimeDefinitions,
+            availableRuntimeDefinitions: runtimeDefinitions,
             agentRuntimes: DEFAULT_AGENT_RUNTIMES,
             isLoadingRuntimeDefinitions: false,
             runtimeDefinitionsError: null,
@@ -535,10 +679,12 @@ function TaskChatProviders({
             runtimeSettingsError: null,
             hasRuntimeSettingsSnapshot: true,
             refreshRuntimeSettings: async () => {},
-            refreshRuntimeDefinitions: async () => [runtime],
-            loadRepoRuntimeCatalog: async () => {
-              throw new Error("Unexpected catalog load");
-            },
+            refreshRuntimeDefinitions: async () => runtimeDefinitions,
+            loadRepoRuntimeCatalog:
+              loadRepoRuntimeCatalog ??
+              (async () => {
+                throw new Error("Unexpected catalog load");
+              }),
             loadRepoRuntimeFileSearch: async () => [],
           },
         },
@@ -560,7 +706,7 @@ function TaskChatProviders({
               { value: createAgentSessionsStore() },
               createElement(
                 AgentChatSendProviders,
-                null,
+                runtimeStatus ? { runtimeStatus } : null,
                 createElement(MemoryRouter, null, children),
               ),
             ),

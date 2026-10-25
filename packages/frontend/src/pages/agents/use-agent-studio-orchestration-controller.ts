@@ -6,6 +6,8 @@ import type {
   RuntimeDescriptor,
 } from "@openducktor/contracts";
 import { useMemo } from "react";
+import { useAgentSessionReadModelStateContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { deriveSessionlessTaskTranscriptState } from "@openducktor/frontend-core/sessions/agent-orchestrator/transcript/session-transcript-state";
 import type {
   SessionStartModalModel,
   TaskExecutionSelectedFile,
@@ -215,8 +217,7 @@ export function useAgentStudioOrchestrationController({
   const agentModelFavoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const { view } = selection;
   useAgentStudioArtifacts(workspaceRepoPath, view.selectedTask);
-  const selectedSession = view.selectedSession;
-  const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
+  const { sessionReadModelLoadState } = useAgentSessionReadModelStateContext();
   const {
     scheduleQueryUpdate,
     runSessionStartWorkflow,
@@ -232,6 +233,7 @@ export function useAgentStudioOrchestrationController({
     useAgentStudioChatSettings({ workspaceRepoPath });
 
   const {
+    runtimeReadiness,
     selectionForNewSession,
     selectedModelSelection,
     speed,
@@ -270,13 +272,36 @@ export function useAgentStudioOrchestrationController({
     handleSelectVariant,
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
-    selectedSession,
+    selectedSession: view.selectedSession,
     role: view.role,
     reusablePrompts,
     repoSettings,
     favoriteState: agentModelFavoriteState,
     updateAgentSessionModel,
   });
+  const selectedSession = useMemo(
+    () =>
+      view.selectedSession.identity === null &&
+      view.selectedTask !== null &&
+      selection.routeSessionResolution.kind === "none"
+        ? {
+            ...view.selectedSession,
+            runtimeReadiness,
+            transcriptState: deriveSessionlessTaskTranscriptState({
+              readModelLoadState: sessionReadModelLoadState,
+              runtimeReadinessState: runtimeReadiness.state,
+            }),
+          }
+        : view.selectedSession,
+    [
+      runtimeReadiness,
+      selection.routeSessionResolution.kind,
+      sessionReadModelLoadState,
+      view.selectedSession,
+      view.selectedTask,
+    ],
+  );
+  const agentStudioReady = selectedSession.runtimeReadiness.state === "ready";
 
   const {
     isStarting,
@@ -314,6 +339,7 @@ export function useAgentStudioOrchestrationController({
     selectedSession,
     runtimeDefinitions,
     selectedModelDescriptor,
+    isSelectionCatalogLoading,
     supportsAttachments,
     sessionsForTask: view.sessionsForTask,
     selectedTask: view.selectedTask,

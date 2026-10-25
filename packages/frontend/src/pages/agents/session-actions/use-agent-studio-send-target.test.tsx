@@ -23,9 +23,19 @@ import {
   createTestHostConnection,
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import type { HostClient } from "@openducktor/host-client";
+import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import type { PropsWithChildren } from "react";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { createDeferred, enableReactActEnvironment } from "../agent-studio-test-utils";
+import {
+  SessionStartWorkflowError,
+  type RunSessionStartWorkflow,
+  type SessionStartWorkflowResult,
+} from "@/features/session-start";
+import {
+  createDeferred,
+  createTaskCardFixture,
+  enableReactActEnvironment,
+} from "../agent-studio-test-utils";
 import { useAgentStudioSendTarget } from "./use-agent-studio-send-target";
 
 const selectedModelDescriptor: AgentModelCatalog["models"][number] = {
@@ -130,8 +140,21 @@ const createBaseArgs = (): HookArgs => ({
   workspaceId: "workspace-1",
   taskId: "task-1",
   role: "spec",
+  launchActionId: "spec_initial",
+  selectionForNewSession: {
+    runtimeKind: "opencode",
+    providerId: "openai",
+    modelId: "gpt-5",
+  },
+  selectedTask: createTaskCardFixture({ id: "task-1" }),
+  canStartSession: true,
+  startPreparedSession: async () => ({
+    ...sessionIdentity("session-new"),
+    postStartActionError: null,
+  }),
+  scheduleQueryUpdate: () => {},
   selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
-  isSessionModelCatalogLoading: false,
+  isCatalogLoading: false,
 
   assertCanPrepareSession: () => {},
   agentStudioReady: true,
@@ -141,29 +164,37 @@ const createBaseArgs = (): HookArgs => ({
 });
 
 describe("useAgentStudioSendTarget", () => {
-  test("blocks task Send until the required catalog read completes", async () => {
-    const sendAgentMessage = mock(async () => null);
-    const args = {
-      ...createBaseArgs(),
-      isSessionModelCatalogLoading: true,
-      sendAgentMessage,
-    };
-    const harness = createTaskHarness(args);
-    try {
-      await harness.mount();
-      await harness.run(async (state) => {
-        expect(await state.onSend(createDraft("hello"), "default")).toBe(false);
-      });
-      expect(sendAgentMessage).not.toHaveBeenCalled();
-      await harness.update({ ...args, isSessionModelCatalogLoading: false });
-      await harness.run(async (state) => {
-        expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
-      });
-      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    } finally {
-      await harness.unmount();
-    }
-  });
+  test.each([null, "session-existing"])(
+    "blocks task Send until the catalog read completes for %s",
+    async (externalSessionId) => {
+      const sendAgentMessage = mock(async () => null);
+      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
+      const args = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: createSelectedSessionIdentity(externalSessionId),
+        isCatalogLoading: true,
+        sendAgentMessage,
+        startPreparedSession: runSessionStartWorkflow,
+      };
+      const harness = createTaskHarness(args);
+      try {
+        await harness.mount();
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("hello"), "default")).toBe(false);
+        });
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+        expect(runSessionStartWorkflow).not.toHaveBeenCalled();
+        await harness.update({ ...args, isCatalogLoading: false });
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
+        });
+        expect(sendAgentMessage).toHaveBeenCalledTimes(externalSessionId ? 1 : 0);
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(externalSessionId ? 0 : 1);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("checks the send policy after attachment staging", async () => {
     const staged = createDeferred<StagedLocalAttachment>();
@@ -220,20 +251,51 @@ describe("useAgentStudioSendTarget", () => {
     await harness.unmount();
   });
 
+  test.each(["model", "runtime", "start policy"] as const)(
+    "blocks first Send when %s is unavailable",
+    async (missing) => {
+      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
+      const args: HookArgs = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startPreparedSession: runSessionStartWorkflow,
+      };
+      if (missing === "model") args.selectionForNewSession = null;
+      if (missing === "runtime")
+        args.selectionForNewSession = { providerId: "openai", modelId: "gpt-5" };
+      if (missing === "start policy") args.canStartSession = false;
+      const harness = createTaskHarness(args);
+      try {
+        await harness.mount();
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("hello"), "default")).toBe(false);
+        });
+        expect(runSessionStartWorkflow).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
   test("blocks system compaction without a selected session", async () => {
     const sendAgentMessage = mock(async () => null);
+    const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
     const harness = createTaskHarness({
       ...createBaseArgs(),
       selectedSessionIdentity: null,
       sendAgentMessage,
+      startPreparedSession: runSessionStartWorkflow,
     });
 
     await harness.mount();
     await harness.run(async (state) => {
-      expect(await state.onSend(createCompactionDraft(), "default")).toBe(false);
+      await expect(state.onSend(createCompactionDraft(), "default")).rejects.toThrow(
+        "/compact requires an existing selected session.",
+      );
     });
 
     expect(sendAgentMessage).not.toHaveBeenCalled();
+    expect(runSessionStartWorkflow).not.toHaveBeenCalled();
     await harness.unmount();
   });
 
@@ -287,39 +349,273 @@ describe("useAgentStudioSendTarget", () => {
     await harness.unmount();
   });
 
-  test("requires a selected session before sending", async () => {
+  test("blocks duplicate first Sends until selection changes and allows later preparation", async () => {
     const sendAgentMessage = mock(async () => null);
+    const launched = createDeferred<SessionStartWorkflowResult>();
+    const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(() => launched.promise);
+    const scheduleQueryUpdate = mock(() => {});
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
       selectedSessionIdentity: createSelectedSessionIdentity(null),
       sendAgentMessage,
+      startPreparedSession: runSessionStartWorkflow,
+      scheduleQueryUpdate,
     };
     const harness = createTaskHarness(initialArgs);
 
-    await harness.mount();
-    await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("start"), "default")).resolves.toBe(false);
-    });
-
-    expect(sendAgentMessage).not.toHaveBeenCalled();
-
-    await harness.update({
-      ...createBaseArgs(),
-      selectedSessionIdentity: createSelectedSessionIdentity("session-existing"),
-      sendAgentMessage,
-    });
-    await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("follow up"), "default")).resolves.toBe(true);
-    });
-
-    expect(sendAgentMessage).toHaveBeenCalledWith(
-      sessionIdentity("session-existing"),
-      [{ kind: "text", text: "follow up" }],
-      expect.objectContaining({ mode: "default", assertCanSubmit: expect.any(Function) }),
-    );
-
-    await harness.unmount();
+    let firstSend!: Promise<AgentChatSendResult>;
+    try {
+      await harness.mount();
+      await harness.run(async (state) => {
+        firstSend = state.onSend(createDraft("start"), "default");
+        expect(await state.onSend(createDraft("duplicate"), "default")).toBe(false);
+      });
+      await harness.waitFor(() => runSessionStartWorkflow.mock.calls.length === 1);
+      expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      expect(runSessionStartWorkflow).toHaveBeenCalledWith({
+        request: {
+          taskId: "task-1",
+          role: "spec",
+          launchActionId: "spec_initial",
+          postStartAction: "send_message",
+          parts: [{ kind: "text", text: "start" }],
+          assertBeforeLaunch: expect.any(Function),
+        },
+        decision: { startMode: "fresh", selectedModel: initialArgs.selectionForNewSession },
+        task: initialArgs.selectedTask,
+        isCurrent: expect.any(Function),
+      });
+      await harness.run(async () => {
+        launched.resolve({ ...sessionIdentity("session-new"), postStartActionError: null });
+        expect(await firstSend).toBe(true);
+      });
+      expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+        task: "task-1",
+        session: "session-new",
+        agent: "spec",
+      });
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("before selection"), "default")).toBe(false);
+      });
+      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
+      await harness.update({
+        ...initialArgs,
+        selectedSessionIdentity: sessionIdentity("session-new"),
+      });
+      await harness.update(initialArgs);
+      runSessionStartWorkflow.mockResolvedValue({
+        ...sessionIdentity("session-newer"),
+        postStartActionError: null,
+      });
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("new preparation"), "default")).toBe(true);
+      });
+      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(2);
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
   });
+
+  test.each(["old session", "task", "task round trip"] as const)(
+    "allows a new preparation after %s navigation before the launch replies",
+    async (context) => {
+      const launched = createDeferred<SessionStartWorkflowResult>();
+      const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(() => launched.promise);
+      const scheduleQueryUpdate = mock(() => {});
+      const args: HookArgs = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startPreparedSession: runSessionStartWorkflow,
+        scheduleQueryUpdate,
+      };
+      const harness = createTaskHarness(args);
+      let pending!: Promise<AgentChatSendResult>;
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          pending = state.onSend(createDraft("start"), "default");
+        });
+        await harness.waitFor(() => runSessionStartWorkflow.mock.calls.length === 1);
+        const input = runSessionStartWorkflow.mock.calls[0]?.[0];
+        expect(input?.isCurrent?.()).toBe(true);
+        expect(() => input?.request.assertBeforeLaunch?.()).not.toThrow();
+        const nextArgs = { ...args };
+        if (context === "old session")
+          nextArgs.selectedSessionIdentity = sessionIdentity("session-existing");
+        else nextArgs.taskId = "task-2";
+        await harness.update(nextArgs);
+        if (context === "task round trip") await harness.update(args);
+        expect(input?.isCurrent?.()).toBe(false);
+        expect(() => input?.request.assertBeforeLaunch?.()).toThrow(
+          "The original chat is no longer selected.",
+        );
+        await harness.run(async () => {
+          launched.resolve({ ...sessionIdentity("session-new"), postStartActionError: null });
+          expect(await pending).toBe(true);
+        });
+        expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+        if (context !== "task round trip") await harness.update(args);
+        runSessionStartWorkflow.mockResolvedValue({
+          ...sessionIdentity("session-newer"),
+          postStartActionError: null,
+        });
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("new preparation"), "default")).toBe(true);
+        });
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(2);
+        expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+          task: "task-1",
+          session: "session-newer",
+          agent: "spec",
+        });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("keeps a completed launch guard in its own context", async () => {
+    const launched = createDeferred<SessionStartWorkflowResult>();
+    const runSessionStartWorkflow = mock<RunSessionStartWorkflow>((input) =>
+      input.request.taskId === "task-1"
+        ? launched.promise
+        : Promise.resolve({ ...sessionIdentity("session-newer"), postStartActionError: null }),
+    );
+    const scheduleQueryUpdate = mock(() => {});
+    const args: HookArgs = {
+      ...createBaseArgs(),
+      selectedSessionIdentity: null,
+      startPreparedSession: runSessionStartWorkflow,
+      scheduleQueryUpdate,
+    };
+    const harness = createTaskHarness(args);
+    let pending!: Promise<AgentChatSendResult>;
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        pending = state.onSend(createDraft("first task"), "default");
+      });
+      await harness.waitFor(() => runSessionStartWorkflow.mock.calls.length === 1);
+      await harness.update({ ...args, taskId: "task-2" });
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("second task"), "default")).toBe(true);
+      });
+      await harness.run(async () => {
+        launched.resolve({ ...sessionIdentity("session-new"), postStartActionError: null });
+        expect(await pending).toBe(true);
+      });
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("duplicate"), "default")).toBe(false);
+      });
+      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(2);
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
+      expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+        task: "task-2",
+        session: "session-newer",
+        agent: "spec",
+      });
+      await harness.update({
+        ...args,
+        taskId: "task-3",
+        selectedTask: createTaskCardFixture({ id: "task-3" }),
+      });
+      expect(harness.getLatest().canSend).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test.each(["accepted", "unknown"] as const)(
+    "consumes the first draft after a launch error with %s delivery",
+    async (delivery) => {
+      const sendAgentMessage = mock(async () => null);
+      const workflow: SessionStartWorkflowResult = {
+        ...sessionIdentity("session-new"),
+        postStartActionError: new Error("Inspect the session before sending again."),
+      };
+      if (delivery === "accepted")
+        workflow.postStartMessageReceipt = {
+          outcome: "accepted",
+          recipient: sessionIdentity("session-new"),
+          postAcceptanceFailure: workflow.postStartActionError?.message ?? null,
+          acceptedMessage: {
+            type: "user_message",
+            externalSessionId: "session-new",
+            messageId: "message-1",
+            message: "start",
+            parts: [{ kind: "text", text: "start" }],
+            timestamp: "2026-10-25T12:00:00.000Z",
+            state: "read",
+          },
+        };
+      const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(async () => workflow);
+      const harness = createTaskHarness({
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startPreparedSession: runSessionStartWorkflow,
+        sendAgentMessage,
+      });
+      try {
+        await harness.mount();
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("start"), "default")).toBe(true);
+        });
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("duplicate"), "default")).toBe(false);
+        });
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test.each(["outcome_unknown", "connection_expired"] as const)(
+    "retries a rejected first launch only when its admission is known: %s",
+    async (code) => {
+      const error = new SessionStartWorkflowError(
+        new RemoteConnectionError({
+          code,
+          message: "The remote launch did not return.",
+          nextAction: "Read current host state before sending again.",
+        }),
+        true,
+      );
+      const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(async () => {
+        throw error;
+      });
+      const args: HookArgs = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startPreparedSession: runSessionStartWorkflow,
+      };
+      const harness = createTaskHarness(args);
+      try {
+        await harness.mount();
+        await harness.run(async (state) => {
+          await expect(state.onSend(createDraft("start"), "default")).rejects.toBe(error);
+        });
+        await harness.update({ ...args, agentStudioReady: false });
+        await harness.update(args);
+        await harness.update({ ...args, taskId: "task-2" });
+        await harness.update(args);
+        await harness.update({ ...args, role: "planner" });
+        await harness.update(args);
+        await harness.run(async (state) => {
+          const retry = state.onSend(createDraft("start"), "default");
+          if (code === "outcome_unknown") await expect(retry).resolves.toBe(false);
+          else await expect(retry).rejects.toBe(error);
+        });
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(code === "outcome_unknown" ? 1 : 2);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("blocks sends while the selected session model is not sendable", async () => {
     const sendAgentMessage = mock(async () => null);
@@ -404,8 +700,11 @@ describe("useAgentStudioSendTarget", () => {
       const staged = createDeferred<StagedLocalAttachment>();
       const stage = mock(() => staged.promise);
       const sendAgentMessage = mock(async () => null);
+      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
       const args: HookArgs = {
         ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        startPreparedSession: runSessionStartWorkflow,
         sendAgentMessage,
       };
       const harness = createTaskHarness(args, { workspaceStageLocalAttachment: stage });
@@ -428,6 +727,7 @@ describe("useAgentStudioSendTarget", () => {
         });
         expect(stage).toHaveBeenCalledTimes(1);
         expect(sendAgentMessage).not.toHaveBeenCalled();
+        expect(runSessionStartWorkflow).not.toHaveBeenCalled();
       } finally {
         await harness.unmount();
       }

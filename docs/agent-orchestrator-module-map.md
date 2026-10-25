@@ -239,6 +239,8 @@ Files: `packages/host/src/application/agent-sessions/session-turn-preparation.ts
 
 Opening a chat prepares its selected session before enabling Send. Preparation creates or reattaches the session. Send uses current context and accepted settings without creating or reattaching a session.
 
+The Prepare session quick actions select a role without starting a session. The user can choose the runtime and model in the composer. The first Send launches a fresh workflow session with those choices and the typed message through the host. This flow opens no session start dialog and sends no kickoff. Later sends use the selected session. If the host creates the session but cannot send the first message, the composer keeps the draft in that session for the user to send again.
+
 ## Pending input
 
 Files: `session-read-model/agent-session-live-projection.ts`, `handlers/pending-input-actions.ts`, and `packages/host/src/application/agent-sessions/host-approval-policy.ts`.

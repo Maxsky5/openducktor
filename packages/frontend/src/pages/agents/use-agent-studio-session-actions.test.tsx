@@ -284,6 +284,7 @@ const createBaseArgs = (): HookArgs => {
     selectedSession: createSelectedSessionState(),
     runtimeDefinitions: TEST_RUNTIME_DEFINITIONS,
     selectedModelDescriptor: null,
+    isSelectionCatalogLoading: false,
     supportsAttachments: true,
     sessionsForTask: [],
     selectedTask: createTask(),
@@ -532,13 +533,31 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
-  test("prepares a message-first session target without starting or sending", async () => {
+  test("Prepare keeps a draft and first Send creates a fresh Builder with the chosen model", async () => {
     const scheduleQueryUpdate = mock(() => {});
     const selectAgentStudioSelection = mock(() => {});
-    const startAgentSession = mock(async () => sessionIdentity("session-new"));
-    const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness({
+    const createdSession: AgentSessionIdentity = {
+      externalSessionId: "session-new",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktrees/task-1",
+    };
+    const startAgentSession = mock(async () => createdSession);
+    const sendAgentMessage = mock<HookArgs["sendAgentMessage"]>(async () => null);
+    const existingSession = createSession({
+      sessionAssociation: { kind: "workflow", taskId: "task-1", role: "build" },
+      externalSessionId: "builder-old",
+    });
+    const initialArgs: HookArgs = {
       ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_after_qa_rejected",
+      agentStudioReady: false,
+      selectedTask: createTask({
+        status: "in_progress",
+        artifactSummary: { qaReport: { has: true, verdict: "rejected" } },
+      }),
+      selectedSession: selectedSessionFromSession(existingSession),
+      sessionsForTask: summarizeSessions([existingSession]),
       scheduleQueryUpdate,
       selectAgentStudioSelection,
       runSessionStartWorkflow: createRunSessionStartWorkflow({
@@ -546,34 +565,91 @@ describe("useAgentStudioSessionActions", () => {
         sendAgentMessage,
       }),
       sendAgentMessage,
-    });
+    };
+    const harness = createHookHarness(initialArgs);
 
     await harness.mount();
-
-    await harness.run((state) => {
-      state.handlePrepareMessageFirstSession({
-        id: "build:build_implementation_start:message_first",
-        role: "build",
-        launchActionId: "build_implementation_start",
-        label: "Prepare Builder session",
-        description: "Open a Builder composer without sending a kickoff.",
-        disabled: false,
+    try {
+      await harness.run((state) => {
+        state.handlePrepareMessageFirstSession({
+          id: "build:build_after_qa_rejected:message_first",
+          role: "build",
+          launchActionId: "build_after_qa_rejected",
+          label: "Prepare Builder session",
+          description: "Open a Builder composer without sending a kickoff.",
+          disabled: false,
+        });
       });
-    });
 
-    expect(scheduleQueryUpdate).not.toHaveBeenCalled();
-    expect(selectAgentStudioSelection).toHaveBeenCalledWith({
-      taskId: "task-1",
-      sessionExternalId: null,
-      sessionIdentity: null,
-      role: "build",
-      hasExplicitRoleSelection: true,
-      keepSessionless: true,
-    });
-    expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).not.toHaveBeenCalled();
+      expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+      expect(selectAgentStudioSelection).toHaveBeenCalledWith({
+        taskId: "task-1",
+        sessionExternalId: null,
+        sessionIdentity: null,
+        role: "build",
+        hasExplicitRoleSelection: true,
+        keepSessionless: true,
+      });
+      expect(startAgentSession).not.toHaveBeenCalled();
+      expect(sendAgentMessage).not.toHaveBeenCalled();
+      expect(harness.getLatest().sessionStartModal).toBeNull();
 
-    await harness.unmount();
+      const selectedModel = {
+        runtimeKind: "codex" as const,
+        providerId: "openai",
+        modelId: "gpt-5-codex",
+        variant: "high",
+        profileId: "build",
+        speed: "fast",
+      };
+      const draftArgs: HookArgs = {
+        ...initialArgs,
+        agentStudioReady: true,
+        selectedSession: createSelectedSessionState({ preparation: { ready: false, error: null } }),
+        selectionForNewSession: selectedModel,
+      };
+      await harness.update(draftArgs);
+      await harness.run(async (state) => {
+        expect(
+          await state.messageDelivery.onSend(
+            createComposerDraft("Please fix the QA issues."),
+            "default",
+          ),
+        ).toBe(true);
+      });
+
+      expect(harness.getLatest().sessionStartModal).toBeNull();
+      expect(startAgentSession).toHaveBeenCalledTimes(1);
+      expect(startAgentSession).toHaveBeenCalledWith({
+        taskId: "task-1",
+        role: "build",
+        startMode: "fresh",
+        selectedModel,
+      });
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage.mock.calls[0]).toEqual([
+        createdSession,
+        [{ kind: "text", text: "Please fix the QA issues." }],
+      ]);
+      expect(scheduleQueryUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ session: "session-new", agent: "build" }),
+      );
+
+      await harness.update({
+        ...draftArgs,
+        selectedSession: selectedSessionFromIdentity(createdSession),
+      });
+      await harness.run(async (state) => {
+        expect(
+          await state.messageDelivery.onSend(createComposerDraft("One more detail."), "default"),
+        ).toBe(true);
+      });
+      expect(startAgentSession).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage).toHaveBeenCalledTimes(2);
+      expect(sendAgentMessage.mock.calls[1]?.[0]).toEqual(createdSession);
+    } finally {
+      await harness.unmount();
+    }
   });
 
   test("does not prepare a message-first target when parent start policy rejects it", async () => {
@@ -765,26 +841,55 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("Send requires an existing prepared session", async () => {
-    const startAgentSession = mock(async () => sessionIdentity("never"));
-    const sendAgentMessage = mock(async () => null);
-    const harness = createHookHarness({
+  test("keeps an unsent first message in the created session for the next Send", async () => {
+    const createdSession = sessionIdentity("session-new");
+    const startAgentSession = mock(async () => createdSession);
+    const failure = new Error("The runtime refused the first message.");
+    const sendAgentMessage = mock<HookArgs["sendAgentMessage"]>(async () => null);
+    sendAgentMessage.mockRejectedValueOnce(failure);
+    const scheduleQueryUpdate = mock(() => {});
+    const args: HookArgs = {
       ...createBaseArgs(),
+      selectedSession: createSelectedSessionState({ preparation: { ready: false, error: null } }),
       runSessionStartWorkflow: createRunSessionStartWorkflow({
         startAgentSession,
         sendAgentMessage,
       }),
       sendAgentMessage,
-    });
-    await harness.mount();
+      scheduleQueryUpdate,
+    };
+    const harness = createHookHarness(args);
+    const draft = createComposerDraft("Keep this first message.");
     try {
+      await harness.mount();
       await harness.run(async (state) => {
-        expect(await state.messageDelivery.onSend(createComposerDraft("Hello"), "default")).toBe(
-          false,
-        );
+        expect(await state.messageDelivery.onSend(draft, "default")).toMatchObject({
+          kind: "recover_draft",
+          originKey: "workspace-1:task-1:spec:new",
+          recoveryKey:
+            "workspace-1:task-1:spec:session-new|opencode|%2Frepo%2Fworktrees%2Fsession-new",
+          error: expect.objectContaining({ message: failure.message }),
+          inAppFeedbackHandled: true,
+        });
       });
-      expect(startAgentSession).not.toHaveBeenCalled();
-      expect(sendAgentMessage).not.toHaveBeenCalled();
+      expect(startAgentSession).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+      expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+        task: "task-1",
+        session: "session-new",
+        agent: "spec",
+      });
+
+      await harness.update({
+        ...args,
+        selectedSession: selectedSessionFromIdentity(createdSession),
+      });
+      await harness.run(async (state) => {
+        expect(await state.messageDelivery.onSend(draft, "default")).toBe(true);
+      });
+      expect(startAgentSession).toHaveBeenCalledTimes(1);
+      expect(sendAgentMessage).toHaveBeenCalledTimes(2);
+      expect(sendAgentMessage.mock.calls[1]?.[0]).toEqual(createdSession);
     } finally {
       await harness.unmount();
     }
@@ -924,6 +1029,73 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.unmount();
   });
+
+  test.each(["Send", "quick action"] as const)(
+    "first Send shares its starting state and gate when %s starts first",
+    async (first) => {
+      const started = createDeferred<ReturnType<typeof sessionIdentity>>();
+      const startAgentSession = mock(() => started.promise);
+      const harness = createHookHarness({
+        ...createBaseArgs(),
+        runSessionStartWorkflow: createRunSessionStartWorkflow({ startAgentSession }),
+      });
+      const quickAction = {
+        id: "quick:spec_initial",
+        role: "spec",
+        launchActionId: "spec_initial",
+        label: "Start Spec",
+        description: "Start a Spec session.",
+        postStartAction: "kickoff",
+        disabled: false,
+      } as const;
+      let sendPromise: Promise<AgentChatSendResult> | undefined;
+      try {
+        await harness.mount();
+        if (first === "quick action") {
+          await harness.run((state) => state.handleQuickAction(quickAction));
+          await harness.waitFor((state) => {
+            const modal = state.sessionStartModal;
+            return (
+              modal?.selectedModelSelection?.modelId === "gpt-5" && !modal.isKickoffPromptLoading
+            );
+          });
+        }
+        await harness.run((state) => {
+          sendPromise = state.messageDelivery.onSend(createComposerDraft("hello world"), "default");
+        });
+        if (first === "Send") {
+          await harness.waitFor(() => startAgentSession.mock.calls.length === 1);
+          expect(harness.getLatest().isStarting).toBe(true);
+          await harness.run((state) => state.handleQuickAction(quickAction));
+          expect(harness.getLatest().sessionStartModal).toBeNull();
+        } else {
+          expect(startAgentSession).not.toHaveBeenCalled();
+          await harness.run((state) => {
+            state.sessionStartModal?.onConfirm({
+              runInBackground: false,
+              startMode: "fresh",
+              sourceSessionOptionValue: null,
+            });
+          });
+          await harness.waitFor(() => startAgentSession.mock.calls.length === 1);
+          expect(harness.getLatest().isStarting).toBe(true);
+        }
+        expect(startAgentSession).toHaveBeenCalledTimes(1);
+        await harness.run(async () => {
+          started.resolve(sessionIdentity("session-new"));
+          expect(await sendPromise).toBe(first === "Send");
+        });
+        expect(harness.getLatest().isStarting).toBe(false);
+      } finally {
+        await harness.run(async (state) => {
+          state.sessionStartModal?.onOpenChange(false);
+          started.resolve(sessionIdentity("session-new"));
+          await sendPromise;
+        });
+        await harness.unmount();
+      }
+    },
+  );
 
   test("onSend marks the context as sending until the send settles", async () => {
     const sendDeferred = createDeferred<void>();

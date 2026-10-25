@@ -1030,6 +1030,11 @@ describe("useAgentStudioChatComposer", () => {
       }),
       {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeStatus: createHostRuntimeStatusContextValue({
+          statusByKind: {
+            opencode: createHostRuntimeStatusFixture({ kind: "opencode", state: "starting" }),
+          },
+        }),
       },
     );
 

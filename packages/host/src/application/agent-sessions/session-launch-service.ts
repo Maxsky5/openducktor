@@ -35,13 +35,11 @@ type Attempt<Request, Result extends SessionLaunchResult> = {
   /** This launch holds its session as running, so settlement must release it. */
   held: boolean;
   /**
-   * A failed first send. `unsent` keeps the instruction when the runtime did not get it or
-   * rejected it. `uncertain` means that the runtime can have accepted it, for example before a
-   * timeout.
+   * A prepared instruction or failed first send. `unsent` keeps the instruction before delivery
+   * starts or when the runtime did not get it or rejected it. `uncertain` means that the runtime
+   * can have accepted it, for example before a timeout.
    */
-  sendFailure?:
-    | { kind: "unsent"; instruction: AgentSessionUserMessagePart[] }
-    | { kind: "uncertain" };
+  delivery?: { kind: "unsent"; instruction: AgentSessionUserMessagePart[] } | { kind: "uncertain" };
   canceled: boolean;
   /**
    * Stop or launch cleanup already asked the runtime to stop the session, so settlement does not.
@@ -105,6 +103,9 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
     ownershipSaved: () => {
       attempt.ownershipSaved = true;
     },
+    keepInstruction: (instruction) => {
+      attempt.delivery = { kind: "unsent", instruction };
+    },
     setResultFields: (fields) => {
       Object.assign(attempt.result, fields);
     },
@@ -122,6 +123,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
     send: (input, instruction) =>
       Effect.gen(function* () {
         yield* checkCanceled(attempt);
+        delete attempt.delivery;
         let sent = false;
         // The send stays interruptible, so shutdown does not wait for a slow runtime.
         const reply = yield* Effect.result(
@@ -148,7 +150,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
         else if (failure instanceof AgentSessionCommandAcceptedError)
           attempt.result.acceptedMessage = failure.failure.acceptedCommand;
         else
-          attempt.sendFailure =
+          attempt.delivery =
             !sent || failure instanceof AgentSessionMessageRejectedError
               ? { kind: "unsent", instruction }
               : { kind: "uncertain" };
@@ -182,7 +184,7 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
           const message = errorMessage(Cause.squash(outcome.cause));
           result.failure = {
             message:
-              attempt.sendFailure?.kind === "uncertain"
+              attempt.delivery?.kind === "uncertain"
                 ? `${sentence(message)} ${UNCERTAIN_SEND_GUIDANCE}`
                 : message,
             cleanupErrors,
@@ -196,8 +198,8 @@ export const createSessionLaunchService = <Request, Result extends SessionLaunch
             result.failure = { message: "Session launch cleanup failed.", cleanupErrors };
         }
         if (attempt.session && attempt.ownershipSaved) result.session = attempt.session.summary;
-        if (result.status === "failed" && result.session && attempt.sendFailure?.kind === "unsent")
-          result.unsentInstruction = attempt.sendFailure.instruction;
+        if (result.status === "failed" && result.session && attempt.delivery?.kind === "unsent")
+          result.unsentInstruction = attempt.delivery.instruction;
         // The caller can leave before settlement, so the saved session must show the failure.
         if (attempt.session && result.session && result.status === "failed" && result.failure) {
           const reported = yield* Effect.result(

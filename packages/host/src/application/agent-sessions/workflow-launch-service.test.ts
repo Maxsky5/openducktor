@@ -917,16 +917,35 @@ test.each(runtimeKinds)(
   },
 );
 
-test("a publication failure after ownership save returns the saved session without a send", async () => {
+test("a publication failure after ownership save returns the saved session and typed draft without a send", async () => {
   const h = await createLaunchHarness();
   h.setPublishFailure();
-  const result = await Effect.runPromise(h.service.launch(requestFor("codex")));
+  const parts: AgentSessionControlSendInput["parts"] = [
+    { kind: "text", text: "  Review this " },
+    {
+      kind: "file_reference",
+      file: { id: "file", path: "src/main.ts", name: "main.ts", kind: "code" },
+    },
+    {
+      kind: "attachment",
+      attachment: {
+        id: "image",
+        name: "screen.png",
+        path: "/staged/screen.png",
+        kind: "image",
+        mime: "image/png",
+      },
+    },
+  ];
+  const result = await Effect.runPromise(
+    h.service.launch({ ...requestFor("codex"), instruction: { kind: "message", parts } }),
+  );
   expect(result).toMatchObject({
     status: "failed",
     session: { externalSessionId: "session-1" },
     failure: { message: "Ownership publication failed" },
   });
-  expect(result.unsentInstruction).toBeUndefined();
+  expect(result.unsentInstruction).toEqual(parts);
   expect(h.records).toHaveLength(1);
   expect(h.stops).toHaveLength(0);
   expect(h.sends).toHaveLength(0);
