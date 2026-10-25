@@ -388,6 +388,21 @@ OpenDucktor request IDs are opaque handles. Keep native reply IDs inside the ada
 | Queued messages | One user-message ID keeps queued state live and in history. |
 | Compaction | Map requested, started, completed, and failed states without showing synthetic control messages. |
 
+#### Subagent card details
+
+The card title reads the normalized `agent` field. The summary reads `description`, then `prompt`.
+
+| Native source | Card title | Summary |
+|---|---|---|
+| OpenCode subagent tool | Tool input `agent` | Tool input `description` or `prompt` |
+| Claude Agent tool | `subagent_type` or result `agentType` | Tool input `description` or `prompt` |
+| Codex `collabAgentToolCall` | Child thread nickname or role, when known | Short creation `prompt` |
+| Codex V2 `subAgentActivity` | Native `agentPath`, such as `/root/reviewer` | No description or prompt in the activity item |
+
+Codex V2 uses `agentPath` as a task name, not a file path. Keep the full path to distinguish nested agents. Map it to `agent` in live events and loaded history. Keep any description already known for the child, but do not use agent result text as its description.
+
+The [Codex spawn handler](https://github.com/openai/codex/blob/main/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs) emits the task name as `agent_path`. The [app-server item contract](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/src/protocol/v2/item.rs) exposes this field as `agentPath` and supplies no description or prompt for `subAgentActivity`. Do not add transcript reads or runtime probes to manufacture these missing fields.
+
 ### Queue and steering
 
 The host owns the message queue. A runtime is eligible when its adapter can refuse a new turn while native work runs. Steering is optional.
