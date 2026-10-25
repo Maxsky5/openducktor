@@ -1608,6 +1608,9 @@ describe("createElectronHostCommandRouter", () => {
         cursor: { epoch: expect.any(String), sequence: expect.any(Number) },
       });
     }
+  });
+
+  test("deletes and resets a task through the host router", async () => {
     const deleteRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -1635,6 +1638,9 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).toMatchObject({ id: "task-1", status: "open" });
+  });
+
+  test("resets a task implementation through the host router", async () => {
     const resetImplementationTaskStore = createTaskStore();
     const resetImplementationRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1670,6 +1676,9 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).toMatchObject({ id: "task-1", status: "ready_for_dev" });
+  });
+
+  test("unlinks a task pull request through the host router", async () => {
     const pullRequestTaskStore = createTaskStore();
     const pullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -1703,7 +1712,9 @@ describe("createElectronHostCommandRouter", () => {
         taskId: "task-1",
       }),
     ).toBe(true);
+  });
 
+  test("reads the approval context through the host router", async () => {
     const approvalRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -1753,7 +1764,9 @@ describe("createElectronHostCommandRouter", () => {
         uncommittedFileCount: 1,
       },
     });
+  });
 
+  test("detects a task pull request through the host router", async () => {
     const detectPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -1830,7 +1843,9 @@ describe("createElectronHostCommandRouter", () => {
         state: "open",
       },
     });
+  });
 
+  test("creates or updates a task pull request through the host router", async () => {
     const upsertPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: {
@@ -1917,7 +1932,9 @@ describe("createElectronHostCommandRouter", () => {
       number: 77,
       state: "open",
     });
+  });
 
+  test("syncs repository pull requests through the host router", async () => {
     const pullRequestSyncRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -2027,7 +2044,9 @@ describe("createElectronHostCommandRouter", () => {
         repoPath: "/repo",
       }),
     ).toEqual({ ok: true });
+  });
 
+  test("runs review and close commands through the host router", async () => {
     const reviewRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -2174,7 +2193,17 @@ describe("createElectronHostCommandRouter", () => {
       id: "task-1",
       status: "closed",
     });
+  });
 
+  test("runs a direct merge through the host router", async () => {
+    // The default router runs the commands that need no special fakes.
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      settingsConfig: createSettingsConfig(),
+      taskStore: createTaskStore(),
+    });
     const directMergeStartRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: {
@@ -2281,7 +2310,9 @@ describe("createElectronHostCommandRouter", () => {
       status: "in_progress",
       availableActions: expect.arrayContaining(["open_builder"]),
     });
+  });
 
+  test("records a completed build through the host router", async () => {
     const completionRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -2359,7 +2390,9 @@ describe("createElectronHostCommandRouter", () => {
       status: "ai_review",
       availableActions: expect.arrayContaining(["qa_start"]),
     });
+  });
 
+  test("completes a direct merge through the host router", async () => {
     const directMergeRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -2444,7 +2477,9 @@ describe("createElectronHostCommandRouter", () => {
       id: "task-1",
       status: "closed",
     });
+  });
 
+  test("links a merged pull request through the host router", async () => {
     const removedMergedWorktreePaths: string[] = [];
     const mergedPullRequestRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
@@ -2560,7 +2595,17 @@ describe("createElectronHostCommandRouter", () => {
       status: "closed",
     });
     expect(removedMergedWorktreePaths).toEqual(["/home/dev/.openducktor/worktrees/repo/task-1"]);
+  });
 
+  test("blocks a build and updates a task through the host router", async () => {
+    // The default router runs the commands that need no special fakes.
+    const router = await createElectronHostCommandRouter({
+      filesystem: createFilesystem(),
+      git: createGit(),
+      openInTools: createOpenInTools(),
+      settingsConfig: createSettingsConfig(),
+      taskStore: createTaskStore(),
+    });
     const blockRouter = await createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
