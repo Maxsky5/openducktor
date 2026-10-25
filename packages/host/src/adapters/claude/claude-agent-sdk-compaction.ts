@@ -72,6 +72,8 @@ export const settleClaudeManualCompactionResult = ({
     return false;
   }
   if (!activeCompaction.boundaryReceived) {
+    // A Claude result is a status or a no-op reason, not compaction context. Keep
+    // summary unset so the transcript shows this text as the separator label.
     emit({
       type: "session_compacted",
       externalSessionId: session.externalSessionId,

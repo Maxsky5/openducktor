@@ -438,15 +438,10 @@ const SubagentMessage = ({
 
 const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps): ReactElement => {
   const meta = message.meta?.kind === "session_notice" ? message.meta : null;
-  const isRunningCompaction =
-    meta?.reason === "session_compacted" && meta.compactionStatus === "running";
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 space-y-1">
-        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide opacity-80">
-          {isRunningCompaction ? (
-            <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
-          ) : null}
+        <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
           {meta?.title ?? "Notice"}
         </p>
         <AgentChatTranscriptProse className="leading-6 text-inherit">

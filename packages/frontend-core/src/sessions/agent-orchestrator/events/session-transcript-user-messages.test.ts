@@ -275,6 +275,7 @@ describe("agent-orchestrator session transcript events", () => {
       timestamp: "2026-05-18T21:01:00.000Z",
       messageId: "compact-live",
       message: "Session compacted.",
+      summary: "## Summary",
     });
     handleEvent({
       type: "session_compacted",
@@ -282,6 +283,7 @@ describe("agent-orchestrator session transcript events", () => {
       timestamp: "2026-05-18T21:01:00.000Z",
       messageId: "compact-live",
       message: "Session compacted.",
+      summary: "## Summary",
     });
 
     const session = findSession(sessionsRef, "session-1");
@@ -304,6 +306,7 @@ describe("agent-orchestrator session transcript events", () => {
           reason: "session_compacted",
           title: "Compacted",
           compactionStatus: "completed",
+          summary: "## Summary",
         },
       }),
     );

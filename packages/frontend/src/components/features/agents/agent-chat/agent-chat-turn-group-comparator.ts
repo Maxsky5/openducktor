@@ -80,6 +80,11 @@ export const areChatRowsEquivalent = (
       left.label === right.label && left.parentExternalSessionId === right.parentExternalSessionId
     );
   }
+  if (left.kind === "compaction" && right.kind === "compaction") {
+    return (
+      left.status === right.status && left.label === right.label && left.context === right.context
+    );
+  }
   return left.kind === "message" && right.kind === "message" && left.message === right.message;
 };
 

@@ -558,6 +558,18 @@ const mergeSameMessageId = (
   }
 
   if (
+    loadedMessage.meta?.kind === "session_notice" &&
+    loadedMessage.meta.reason === "session_compacted" &&
+    loadedMessage.meta.compactionStatus === "completed" &&
+    currentMessage.meta?.kind === "session_notice" &&
+    currentMessage.meta.reason === "session_compacted" &&
+    currentMessage.meta.compactionStatus === "running" &&
+    (beforeReadById === undefined || beforeRead === currentMessage)
+  ) {
+    return loadedMessage;
+  }
+
+  if (
     loadedMessage.role === "user" &&
     loadedMessage.meta?.kind === "user" &&
     currentMessage.role === "user" &&

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import type { AgentChatRuntimePresentation, AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatTranscriptRow } from "./agent-chat-transcript-model";
+import { AgentCompactionSeparator } from "./agent-compaction-separator";
 import { AgentTranscriptSeparator } from "./agent-transcript-separator";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
 import type { ParentSessionRuntimeContext } from "./subagent-session-key";
@@ -33,6 +34,11 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
     }
     case "fork_boundary": {
       return <AgentTranscriptSeparator label={row.label} />;
+    }
+    case "compaction": {
+      return (
+        <AgentCompactionSeparator status={row.status} label={row.label} context={row.context} />
+      );
     }
     case "message": {
       const isUserMessage = row.message.role === "user";

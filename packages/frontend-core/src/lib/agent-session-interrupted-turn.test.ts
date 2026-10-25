@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentChatMessage } from "../types/agent-orchestrator";
 import {
   canResumeInterruptedTurn,
@@ -46,6 +50,33 @@ const toolOutput = message({
     tool: "bash",
     toolType: "bash",
     status: "completed",
+  },
+});
+const manualCompactionMessage = message({
+  role: "user",
+  content: "/compact",
+  meta: { kind: "user", state: "read" },
+});
+const compactionNotice = message({
+  role: "system",
+  content: "Session compacted.",
+  meta: {
+    kind: "session_notice",
+    tone: "info",
+    reason: "session_compacted",
+    title: "Compacted",
+    compactionStatus: "completed",
+  },
+});
+const runningCompactionNotice = message({
+  role: "system",
+  content: "Session compaction started.",
+  meta: {
+    kind: "session_notice",
+    tone: "info",
+    reason: "session_compacted",
+    title: "Compacting",
+    compactionStatus: "running",
   },
 });
 
@@ -168,5 +199,53 @@ describe("canResumeInterruptedTurn", () => {
         runtimeDescriptor: resumableDescriptor,
       }),
     ).toBe(false);
+  });
+});
+
+describe("manual session compaction", () => {
+  test("settles a manual compaction request only after its completed notice", () => {
+    expect(hasUnfinishedLatestTurn([manualCompactionMessage, compactionNotice])).toBe(false);
+    expect(hasSettledLatestTurn([manualCompactionMessage, compactionNotice])).toBe(true);
+    expect(hasUnfinishedLatestTurn([manualCompactionMessage])).toBe(true);
+    expect(hasSettledLatestTurn([manualCompactionMessage])).toBe(false);
+    expect(hasUnfinishedLatestTurn([manualCompactionMessage, runningCompactionNotice])).toBe(true);
+  });
+
+  test("offers Resume for a typed /compact prompt without a compaction notice", () => {
+    expect(
+      canResumeInterruptedTurn({
+        activityState: "idle",
+        messages: [manualCompactionMessage],
+        runtimeDescriptor: resumableDescriptor,
+      }),
+    ).toBe(true);
+  });
+
+  test("offers no Resume after manual compaction on any runtime", () => {
+    for (const runtimeDescriptor of [
+      CODEX_RUNTIME_DESCRIPTOR,
+      CLAUDE_RUNTIME_DESCRIPTOR,
+      OPENCODE_RUNTIME_DESCRIPTOR,
+    ]) {
+      expect(
+        canResumeInterruptedTurn({
+          activityState: "idle",
+          messages: [manualCompactionMessage, compactionNotice],
+          runtimeDescriptor,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  test("keeps an unfinished normal turn resumable after a compaction notice", () => {
+    for (const runtimeDescriptor of [CODEX_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR]) {
+      expect(
+        canResumeInterruptedTurn({
+          activityState: "idle",
+          messages: [userMessage, compactionNotice],
+          runtimeDescriptor,
+        }),
+      ).toBe(true);
+    }
   });
 });

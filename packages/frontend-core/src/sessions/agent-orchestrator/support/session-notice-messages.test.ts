@@ -7,6 +7,26 @@ import {
   removeRunningSessionCompactionNotices,
 } from "./session-notice-messages";
 
+describe("buildSessionCompactedNoticeMessage", () => {
+  test("keeps the compaction summary on the completed notice", () => {
+    const completed = buildSessionCompactedNoticeMessage(
+      "2026-01-01T00:00:00.000Z",
+      "## Summary",
+      "c1",
+      "## Summary",
+    );
+
+    expect(completed.meta).toEqual({
+      kind: "session_notice",
+      tone: "info",
+      reason: "session_compacted",
+      title: "Compacted",
+      compactionStatus: "completed",
+      summary: "## Summary",
+    });
+  });
+});
+
 describe("removeRunningSessionCompactionNotices", () => {
   test("preserves the same state when there are no running compaction notices", () => {
     const completed = buildSessionCompactedNoticeMessage("2026-01-01T00:00:00.000Z", "done", "c1");

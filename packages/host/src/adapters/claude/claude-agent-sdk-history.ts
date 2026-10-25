@@ -386,6 +386,7 @@ export const toClaudeHistoryMessages = (
             parts: [],
           });
         } else if (!manualCompactionBoundaryReceived) {
+          // A Claude result is a status or a no-op reason, not compaction context.
           history.push({
             messageId: pendingManualCompaction.messageId,
             role: "system",

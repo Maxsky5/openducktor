@@ -1,8 +1,8 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type AgentTranscriptSeparatorProps = {
-  label: string;
+  label: ReactNode;
   className?: string;
 };
 
