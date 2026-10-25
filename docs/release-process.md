@@ -1,6 +1,6 @@
 # Desktop, mobile, web, and MCP release process
 
-GitHub Actions creates OpenDucktor releases. A maintainer starts `Prepare Release`. The workflows create the commit, tag, draft, packages, and desktop files.
+GitHub Actions creates OpenDucktor releases. A maintainer starts `Prepare Release`. The workflows create the commit, tag, draft, packages, desktop files, and Android APK.
 
 ## Workflows
 
@@ -41,7 +41,7 @@ The package build checks that the selected platform and architecture match the h
 
 `Prepare Release` starts `Release Mobile` with the tag. A maintainer can run it again with the same tag. Each run gets a higher store build number.
 
-The iOS job archives a signed build and uploads it to TestFlight. The Android job builds a signed App Bundle and uploads it to the Google Play internal track. A missing or incorrect secret stops the step that uses it.
+The iOS job archives a signed build and uploads it to TestFlight. The Android job builds a signed App Bundle and uploads it to the Google Play internal track. It also attaches a signed APK to the draft as `OpenDucktor-<version>-android.apk`. The APK has the signature of the upload key, not the Google Play signature, so it cannot update an app installed from Google Play, and Google Play cannot update it. A missing or incorrect secret stops the step that uses it.
 
 Public store release stays manual. After the device checks, promote the builds in App Store Connect and Google Play Console. Read [the mobile app release](../apps/mobile/README.md#release) for the first setup of the store records.
 
@@ -125,7 +125,7 @@ MCP and web use npm Trusted Publisher with GitHub Actions OIDC. They do not need
 
 ### Release automation
 
-`RELEASE_AUTOMATION_TOKEN` pushes the release commit and tag. The workflow rejects the default GitHub Actions token. The desktop workflow also uses this token to read the draft and upload files.
+`RELEASE_AUTOMATION_TOKEN` pushes the release commit and tag. The workflow rejects the default GitHub Actions token. The desktop workflow also uses this token to read the draft and upload files. The mobile workflow uses it to attach the APK.
 
 ## Version sources
 
@@ -147,7 +147,7 @@ Stable releases use one version. Beta releases use:
 2. Enter the version and select `stable` or `beta`.
 3. Wait for `Prepare Release` to create the commit, tag, draft, and downstream runs.
 4. Wait for desktop, mobile, MCP, and web workflows to finish.
-5. Open the draft. Check notes and every expected desktop file.
+5. Open the draft. Check notes, every expected desktop file, and the Android APK.
 6. Publish the draft.
 7. For a stable release, wait for the Homebrew workflow to update `Casks/openducktor.rb`.
 8. For a stable release, check the `Deploy Web Client` run summary.
