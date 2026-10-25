@@ -67,11 +67,12 @@ export function useAgentStudioSendTarget({
     session: selectedSessionIdentity,
   });
   const isCurrentContext = useSessionStartContext(activityKey);
+  const completedContext = useRef<(() => boolean) | null>(null);
   // A lost launch reply can still mean that the host started the session.
-  const startedDrafts = useRef(new Set<string>());
+  const unknownStarts = useRef(new Set<string>());
   useEffect(() => {
     if (selectedSessionIdentity)
-      startedDrafts.current.delete(
+      unknownStarts.current.delete(
         buildAgentStudioSessionActivityKey({ workspaceId, taskId, role, session: null }),
       );
   }, [role, selectedSessionIdentity, taskId, workspaceId]);
@@ -87,7 +88,8 @@ export function useAgentStudioSendTarget({
         (selectedSessionIdentity !== null ||
           (canStartSession &&
             selectionForNewSession?.runtimeKind !== undefined &&
-            !startedDrafts.current.has(activityKey) &&
+            completedContext.current !== isCurrentContext &&
+            !unknownStarts.current.has(activityKey) &&
             !activity.hasInFlight(activityKey))) &&
         !isCatalogLoading,
       resolve: async (parts) => {
@@ -137,11 +139,11 @@ export function useAgentStudioSendTarget({
             failure instanceof RemoteConnectionError &&
             failure.failure.code === "outcome_unknown"
           )
-            startedDrafts.current.add(activityKey);
+            unknownStarts.current.add(activityKey);
           throw cause;
         });
-        startedDrafts.current.add(activityKey);
-        if (isCurrentContext())
+        if (isCurrentContext()) {
+          completedContext.current = isCurrentContext;
           scheduleQueryUpdate(
             buildAgentStudioSelectionQueryUpdate({
               taskId,
@@ -149,6 +151,7 @@ export function useAgentStudioSendTarget({
               role,
             }),
           );
+        }
         if (
           !launch.postStartMessageReceipt &&
           launch.postStartActionError &&

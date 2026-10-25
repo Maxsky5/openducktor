@@ -419,9 +419,71 @@ describe("useAgentStudioSendTarget", () => {
     }
   });
 
-  test("keeps an admitted launch after a context switch without selecting its session", async () => {
+  test.each(["old session", "task", "task round trip"] as const)(
+    "allows a new preparation after %s navigation before the launch replies",
+    async (context) => {
+      const launched = createDeferred<SessionStartWorkflowResult>();
+      const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(() => launched.promise);
+      const scheduleQueryUpdate = mock(() => {});
+      const args: HookArgs = {
+        ...createBaseArgs(),
+        selectedSessionIdentity: null,
+        runSessionStartWorkflow,
+        scheduleQueryUpdate,
+      };
+      const harness = createTaskHarness(args);
+      let pending!: Promise<AgentChatSendResult>;
+      try {
+        await harness.mount();
+        await harness.run((state) => {
+          pending = state.onSend(createDraft("start"), "default");
+        });
+        await harness.waitFor(() => runSessionStartWorkflow.mock.calls.length === 1);
+        const input = runSessionStartWorkflow.mock.calls[0]?.[0];
+        expect(input?.isCurrent?.()).toBe(true);
+        expect(() => input?.request.assertBeforeLaunch?.()).not.toThrow();
+        const nextArgs = { ...args };
+        if (context === "old session")
+          nextArgs.selectedSessionIdentity = sessionIdentity("session-existing");
+        else nextArgs.taskId = "task-2";
+        await harness.update(nextArgs);
+        if (context === "task round trip") await harness.update(args);
+        expect(input?.isCurrent?.()).toBe(false);
+        expect(() => input?.request.assertBeforeLaunch?.()).toThrow(
+          "The original chat is no longer selected.",
+        );
+        await harness.run(async () => {
+          launched.resolve({ ...sessionIdentity("session-new"), postStartActionError: null });
+          expect(await pending).toBe(true);
+        });
+        expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+        if (context !== "task round trip") await harness.update(args);
+        runSessionStartWorkflow.mockResolvedValue({
+          ...sessionIdentity("session-newer"),
+          postStartActionError: null,
+        });
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("new preparation"), "default")).toBe(true);
+        });
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(2);
+        expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+          task: "task-1",
+          session: "session-newer",
+          agent: "spec",
+        });
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
+
+  test("keeps a completed launch guard in its own context", async () => {
     const launched = createDeferred<SessionStartWorkflowResult>();
-    const runSessionStartWorkflow = mock<RunSessionStartWorkflow>(() => launched.promise);
+    const runSessionStartWorkflow = mock<RunSessionStartWorkflow>((input) =>
+      input.request.taskId === "task-1"
+        ? launched.promise
+        : Promise.resolve({ ...sessionIdentity("session-newer"), postStartActionError: null }),
+    );
     const scheduleQueryUpdate = mock(() => {});
     const args: HookArgs = {
       ...createBaseArgs(),
@@ -434,22 +496,33 @@ describe("useAgentStudioSendTarget", () => {
     try {
       await harness.mount();
       await harness.run((state) => {
-        pending = state.onSend(createDraft("start"), "default");
+        pending = state.onSend(createDraft("first task"), "default");
       });
       await harness.waitFor(() => runSessionStartWorkflow.mock.calls.length === 1);
-      const input = runSessionStartWorkflow.mock.calls[0]?.[0];
-      expect(input?.isCurrent?.()).toBe(true);
-      expect(() => input?.request.assertBeforeLaunch?.()).not.toThrow();
       await harness.update({ ...args, taskId: "task-2" });
-      expect(input?.isCurrent?.()).toBe(false);
-      expect(() => input?.request.assertBeforeLaunch?.()).toThrow(
-        "The original chat is no longer selected.",
-      );
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("second task"), "default")).toBe(true);
+      });
       await harness.run(async () => {
         launched.resolve({ ...sessionIdentity("session-new"), postStartActionError: null });
         expect(await pending).toBe(true);
       });
-      expect(scheduleQueryUpdate).not.toHaveBeenCalled();
+      await harness.run(async (state) => {
+        expect(await state.onSend(createDraft("duplicate"), "default")).toBe(false);
+      });
+      expect(runSessionStartWorkflow).toHaveBeenCalledTimes(2);
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
+      expect(scheduleQueryUpdate).toHaveBeenCalledWith({
+        task: "task-2",
+        session: "session-newer",
+        agent: "spec",
+      });
+      await harness.update({
+        ...args,
+        taskId: "task-3",
+        selectedTask: createTaskCardFixture({ id: "task-3" }),
+      });
+      expect(harness.getLatest().canSend).toBe(true);
     } finally {
       await harness.unmount();
     }
@@ -490,6 +563,10 @@ describe("useAgentStudioSendTarget", () => {
         await harness.run(async (state) => {
           expect(await state.onSend(createDraft("start"), "default")).toBe(true);
         });
+        await harness.run(async (state) => {
+          expect(await state.onSend(createDraft("duplicate"), "default")).toBe(false);
+        });
+        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(1);
         expect(sendAgentMessage).not.toHaveBeenCalled();
       } finally {
         await harness.unmount();
@@ -525,6 +602,8 @@ describe("useAgentStudioSendTarget", () => {
         await harness.update({ ...args, agentStudioReady: false });
         await harness.update(args);
         await harness.update({ ...args, taskId: "task-2" });
+        await harness.update(args);
+        await harness.update({ ...args, role: "planner" });
         await harness.update(args);
         await harness.run(async (state) => {
           const retry = state.onSend(createDraft("start"), "default");
