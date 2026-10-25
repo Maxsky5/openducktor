@@ -8,6 +8,7 @@ import {
   type KanbanTaskCardView,
   globalConfigSchema,
   type RepoConfig,
+  type RemoteAccessSettings,
   type RepoHooks,
   repoConfigSchema,
   repoHooksSchema,
@@ -49,6 +50,12 @@ export type WorkspaceSettingsError =
   | SettingsConfigError;
 
 export type WorkspaceSettingsService = {
+  /** The stable ID of this host. The first read creates it and saves it in the settings file. */
+  readHostId(): Effect.Effect<string, WorkspaceSettingsError>;
+  readRemoteAccessSettings(): Effect.Effect<RemoteAccessSettings, WorkspaceSettingsError>;
+  saveRemoteAccessSettings(
+    settings: RemoteAccessSettings,
+  ): Effect.Effect<void, WorkspaceSettingsError>;
   listCustomAgentRoles(): Effect.Effect<CustomAgentRole[], WorkspaceSettingsError>;
   createCustomAgentRole(
     input: CustomAgentRoleInput,

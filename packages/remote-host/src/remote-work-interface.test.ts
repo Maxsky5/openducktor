@@ -6,6 +6,8 @@ import os from "node:os";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_CONNECTION_HEADER,
+  REMOTE_STREAM_HEARTBEAT_CAPABILITY,
+  REMOTE_STREAM_HEARTBEAT_INTERVAL_MS,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
   REMOTE_TERMINAL_CONNECTION_PREFIX,
   encodeTerminalProtocolFrame,
@@ -57,6 +59,11 @@ const fixture = async (barrier?: MutationBarrier) => {
     ...router,
     invoke: commands.invoke,
     hostInstanceId: "host-a",
+    hostSettings: {
+      readHostId: () => Effect.succeed("stable-host-a"),
+      readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
+      saveRemoteAccessSettings: () => Effect.void,
+    },
     terminalService: terminal.service,
     taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
     notificationStream: notifications,
@@ -66,6 +73,7 @@ const fixture = async (barrier?: MutationBarrier) => {
   const options = {
     shell: "electron" as const,
     appVersion: "host-3",
+    hostId: "stable-host-a",
     listenHost: "127.0.0.1",
     publicEndpoint: "https://machine.test/api/remote",
     logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },
@@ -414,8 +422,12 @@ test("automatic setup advertises the bound port and serves work without a manual
     expect(url.pathname).toBe("/");
     const discovery = await fetch(endpoint);
     expect(discovery.status).toBe(200);
-    expect(await discovery.json()).toMatchObject({ hostInstanceId: "host-a" });
-    expect(state.configuration!.listenPort).toBe(0);
+    expect(await discovery.json()).toMatchObject({
+      hostInstanceId: "host-a",
+      hostId: "stable-host-a",
+    });
+    // The configuration names the bound port, so the operator saves the address that clients use.
+    expect(state.configuration!.listenPort).toBe(Number(url.port));
     for (const origin of [
       "https://app.openducktor.dev",
       "https://custom-client.test",
@@ -678,6 +690,43 @@ test("ending the listener leaves accepted HTTP work under the host command lifet
     expect(drained).toBe(true);
   } finally {
     release();
+    await f.close();
+  }
+});
+
+test("keeps an idle event stream busy with heartbeat comments", async () => {
+  const f = await fixture();
+  const beats: Array<() => void> = [];
+  const originalInterval = globalThis.setInterval;
+  const intervals = spyOn(globalThis, "setInterval").mockImplementation(
+    (callback, delay, ...args) => {
+      if (delay === REMOTE_STREAM_HEARTBEAT_INTERVAL_MS) beats.push(() => callback(...args));
+      return originalInterval(callback, delay, ...args);
+    },
+  );
+  const abort = new AbortController();
+  try {
+    const { result } = await f.negotiate();
+    const admission = remoteNegotiationResultSchema.parse(result);
+    if (admission.status !== "accepted") throw new Error(admission.failure.message);
+    expect(admission.host.protocols[0]?.capabilities).toContain(REMOTE_STREAM_HEARTBEAT_CAPABILITY);
+    const response = await fetch(`${f.base}/events`, {
+      headers: { [REMOTE_CONNECTION_HEADER]: admission.connectionId },
+      signal: abort.signal,
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    while (!text.includes("replay-complete"))
+      text += decoder.decode((await reader.read()).value, { stream: true });
+    // With no host event, only the heartbeat keeps bytes on the stream.
+    beats.at(-1)!();
+    while (!text.includes(": heartbeat\n\n"))
+      text += decoder.decode((await reader.read()).value, { stream: true });
+    expect(text).toContain(": heartbeat\n\n");
+  } finally {
+    intervals.mockRestore();
+    abort.abort();
     await f.close();
   }
 });

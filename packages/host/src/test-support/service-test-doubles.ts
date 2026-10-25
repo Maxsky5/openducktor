@@ -208,6 +208,15 @@ export const createWorkspaceSettingsServiceTestDouble = <
   ),
   updateRepoConfig: unexpectedEffectCall("workspace settings service", "updateRepoConfig"),
   updateRepoHooks: unexpectedEffectCall("workspace settings service", "updateRepoHooks"),
+  readHostId: unexpectedEffectCall("workspace settings service", "readHostId"),
+  readRemoteAccessSettings: unexpectedEffectCall(
+    "workspace settings service",
+    "readRemoteAccessSettings",
+  ),
+  saveRemoteAccessSettings: unexpectedEffectCall(
+    "workspace settings service",
+    "saveRemoteAccessSettings",
+  ),
   ...overrides,
 });
 

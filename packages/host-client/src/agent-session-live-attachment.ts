@@ -8,9 +8,21 @@ type AgentSessionLiveAttachment = {
   accept: (envelope: AgentSessionLiveEnvelope) => void;
   /** Installs a host snapshot, then delivers the changes it does not cover. */
   install: (snapshot: AgentSessionLiveSnapshotEnvelope) => void;
+  /**
+   * Holds new changes, as when the connection drops. A reconnect then decides: `resume` after a
+   * replay that has every missed change of the repository, `restart` after a gap.
+   */
+  suspend: () => void;
+  /** Delivers the held changes in order and the next ones at once. */
+  resume: () => void;
   /** Drops held changes and holds new ones until the next `install`. */
   restart: () => void;
 };
+
+/** The host event stream name of the live changes of a repository. Its replay gaps name it. */
+export const liveSessionStreamEventName = (repoPath: string): string =>
+  // JSON escaping keeps repository paths on one SSE field line, including unusual path characters.
+  `agent-session-live:${JSON.stringify(repoPath)}`;
 
 export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
   switch (envelope.type) {
@@ -50,6 +62,7 @@ export const createAgentSessionLiveAttachment = (
   listener: (envelope: AgentSessionLiveEnvelope) => void,
 ): AgentSessionLiveAttachment => {
   let awaitingSnapshot = true;
+  let suspended = false;
   let pending: AgentSessionLiveEnvelope[] = [];
   let coveredSequence = -1;
   let historyReplayGap = false;
@@ -75,7 +88,11 @@ export const createAgentSessionLiveAttachment = (
       if (envelopeRepoPath(envelope) !== repoPath) {
         return;
       }
-      if (awaitingSnapshot && envelope.type !== "fault" && envelope.type !== "runtime_notice") {
+      if (
+        (awaitingSnapshot || suspended) &&
+        envelope.type !== "fault" &&
+        envelope.type !== "runtime_notice"
+      ) {
         pending.push(envelope);
         return;
       }
@@ -88,6 +105,7 @@ export const createAgentSessionLiveAttachment = (
         );
       }
       awaitingSnapshot = false;
+      suspended = false;
       // A new host starts a new sequence, so the latest snapshot sets the bound.
       coveredSequence = snapshot.sequence;
       const buffered = pending;
@@ -101,9 +119,21 @@ export const createAgentSessionLiveAttachment = (
       historyReplayGap = false;
       for (const envelope of buffered) deliver(envelope);
     },
+    suspend: () => {
+      suspended = true;
+    },
+    resume: () => {
+      suspended = false;
+      // Before the first snapshot, the held changes wait for it.
+      if (awaitingSnapshot) return;
+      const held = pending;
+      pending = [];
+      for (const envelope of held) deliver(envelope);
+    },
     restart: () => {
       // The next snapshot and history reload replace everything received before the restart.
       awaitingSnapshot = true;
+      suspended = false;
       pending = [];
       historyReplayGap = true;
     },

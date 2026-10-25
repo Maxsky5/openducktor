@@ -169,6 +169,11 @@ const unexpectedTerminalOperation = (operation: string): Effect.Effect<never> =>
 const createTestNodeHostCommandRouter = (): EffectNodeHostCommandRouter => ({
   ...createTestHostCommandRouter(),
   hostInstanceId: "test-host",
+  hostSettings: {
+    readHostId: () => Effect.succeed("stable-host-a"),
+    readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
+    saveRemoteAccessSettings: () => Effect.void,
+  },
   taskAssetReadService: missingTaskAssetReadService,
   notificationStream: {
     publishOccurrence: () => {},

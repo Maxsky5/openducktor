@@ -19,7 +19,7 @@ bun run browser:dev
 
 Both commands start a loopback-only host and serve the shared frontend. The launcher binds both servers to `127.0.0.1`, and the browser config uses that loopback URL. See [the remote host protocol](remote-host-protocol.md) for Electron and web remote enablement, QR discovery, mobile contracts, proxy setup, and recovery.
 
-Select Settings, Remote control to let clients reach this host. Use the host icon at the bottom of the workspace rail, left of Settings, to choose the host this client uses. Sharing starts disabled and changes take effect without a restart.
+Select Settings, Remote control to let clients reach this host. Use the host icon at the bottom of the workspace rail, left of Settings, to choose the host this client uses. Sharing is off until you turn it on. Changes take effect without a restart. The host keeps the setting, so sharing that is on starts again at the same address when the host restarts.
 
 ## Test a standalone client
 

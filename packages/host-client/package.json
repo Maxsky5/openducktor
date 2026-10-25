@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./remote": "./src/remote/index.ts"
+    "./remote": "./src/remote/index.ts",
+    "./remote/terminal-socket": "./src/remote/terminal-socket.ts"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",

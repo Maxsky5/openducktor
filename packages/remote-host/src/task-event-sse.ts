@@ -1,5 +1,6 @@
 import type { TaskEventStreamFrame } from "@openducktor/contracts";
 import type { TaskEventLeaseManager } from "./task-event-leases";
+import { startStreamHeartbeat } from "./stream-heartbeat";
 const TASK_SSE_READY_COMMENT = new TextEncoder().encode(": openducktor-ready\n\n");
 export const writeTaskFrameSseEvent = (frame: TaskEventStreamFrame): Uint8Array => {
   const { cursor } = frame;
@@ -21,8 +22,10 @@ export const createTaskEventSseResponse = (
   signal: AbortSignal,
 ): Response => {
   let generation = 0;
+  let stopHeartbeat: (() => void) | null = null;
   const detach = (): void => {
     signal.removeEventListener("abort", detach);
+    stopHeartbeat?.();
     const lease = leaseManager.get(subscriptionId);
     if (lease) leaseManager.detach(lease, generation);
   };
@@ -35,6 +38,7 @@ export const createTaskEventSseResponse = (
       }
       controller.enqueue(TASK_SSE_READY_COMMENT);
       generation = leaseManager.attach(lease, controller);
+      stopHeartbeat = startStreamHeartbeat(controller);
       signal.addEventListener("abort", detach, { once: true });
       if (signal.aborted) detach();
     },

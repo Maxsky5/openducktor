@@ -1,11 +1,59 @@
 import { abortableBody, remoteError } from "./transport";
 
 export type SseFrame = { event: string; data: string; id?: string };
+
+export type ReadSseOptions = {
+  /** Runs when the stream sends its ready comment. */
+  onReady?: (() => void) | undefined;
+  /** Runs for each chunk of bytes, heartbeats included. */
+  onBytes?: (() => void) | undefined;
+  /**
+   * A stream that sends no bytes for this time fails: the host writes heartbeats, so a silent
+   * stream went down on the way without closing. Null keeps a quiet stream.
+   */
+  silenceLimitMs?: number | null | undefined;
+};
+
 /** Incremental UTF-8 and SSE line parsing works without DOM or EventSource. */
 export async function* readSse(
   body: AsyncIterable<Uint8Array>,
   signal: AbortSignal,
-  onReady?: () => void,
+  { onReady, onBytes, silenceLimitMs = null }: ReadSseOptions = {},
+): AsyncGenerator<SseFrame> {
+  const silence = new AbortController();
+  let silenceTimer: ReturnType<typeof setTimeout> | undefined;
+  const watch = () => {
+    if (silenceLimitMs === null) return;
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(
+      () =>
+        silence.abort(
+          remoteError(
+            "transport_failure",
+            "The host stream went silent.",
+            "Reconnect to the selected host.",
+          ),
+        ),
+      silenceLimitMs,
+    );
+  };
+  watch();
+  try {
+    yield* readFrames(body, AbortSignal.any([signal, silence.signal]), onReady, () => {
+      watch();
+      onBytes?.();
+    });
+  } finally {
+    clearTimeout(silenceTimer);
+  }
+  signal.throwIfAborted();
+}
+
+async function* readFrames(
+  body: AsyncIterable<Uint8Array>,
+  signal: AbortSignal,
+  onReady: (() => void) | undefined,
+  onBytes: () => void,
 ): AsyncGenerator<SseFrame> {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let buffer = "";
@@ -34,8 +82,12 @@ export async function* readSse(
     else if (field === "id" && !valuePart.includes("\0")) id = valuePart;
     return null;
   };
+  // Lines are read from an offset, and the buffer is cut once per chunk. Hermes copies each
+  // substring, so a cut for each line would copy a large chunk once for each of its lines.
+  const lineEnd = /[\r\n]/g;
   for await (const bytes of abortableBody(body, signal)) {
     signal.throwIfAborted();
+    onBytes();
     try {
       buffer += decoder.decode(bytes, { stream: true });
     } catch {
@@ -51,15 +103,18 @@ export async function* readSse(
         "Remote event exceeds the size limit.",
         "Reconnect or update the host.",
       );
+    let start = 0;
     while (true) {
-      const index = buffer.search(/[\r\n]/);
+      lineEnd.lastIndex = start;
+      const index = lineEnd.exec(buffer)?.index ?? -1;
+      // A final "\r" can be the first half of "\r\n", so it waits for the next chunk.
       if (index < 0 || (buffer[index] === "\r" && index === buffer.length - 1)) break;
-      const value = buffer.slice(0, index);
-      const count = buffer[index] === "\r" && buffer[index + 1] === "\n" ? 2 : 1;
-      buffer = buffer.slice(index + count);
+      const value = buffer.slice(start, index);
+      start = index + (buffer[index] === "\r" && buffer[index + 1] === "\n" ? 2 : 1);
       const frame = line(value);
       if (frame) yield frame;
     }
+    buffer = buffer.slice(start);
   }
   try {
     decoder.decode();

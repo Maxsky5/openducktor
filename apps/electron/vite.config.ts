@@ -52,6 +52,10 @@ export default defineConfig({
         replacement: path.join(packagesRoot, "adapters-opencode-sdk/src/index.ts"),
       },
       {
+        find: "@openducktor/host-client/remote/terminal-socket",
+        replacement: path.join(packagesRoot, "host-client/src/remote/terminal-socket.ts"),
+      },
+      {
         find: "@openducktor/host-client/remote",
         replacement: path.join(packagesRoot, "host-client/src/remote/index.ts"),
       },

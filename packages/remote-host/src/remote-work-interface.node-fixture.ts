@@ -75,6 +75,11 @@ for (const shell of ["electron", "web"] as const) {
       {
         ...router,
         hostInstanceId: "host-body-test",
+        hostSettings: {
+          readHostId: () => Effect.succeed("stable-host-a"),
+          readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
+          saveRemoteAccessSettings: () => Effect.void,
+        },
         taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
         notificationStream: notifications,
         taskAssetReadService: { read: () => Effect.succeed(null) },
@@ -86,6 +91,7 @@ for (const shell of ["electron", "web"] as const) {
       {
         shell,
         appVersion: "host-test",
+        hostId: "stable-host-a",
         listenHost: "127.0.0.1",
         publicEndpoint: "https://machine.test/api/remote",
         logger: { error: () => Effect.void, info: () => Effect.void, success: () => Effect.void },

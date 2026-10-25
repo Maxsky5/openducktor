@@ -9,13 +9,28 @@ export const REMOTE_BASELINE_CAPABILITIES = [
   "terminal.v2",
   "work.resources.v1",
 ] as const;
+/**
+ * The optional capability of a host that writes a heartbeat comment on each event stream. A
+ * network path can drop an idle stream without closing it, so the heartbeat keeps the path busy
+ * and lets the client see a silent stream.
+ */
+export const REMOTE_STREAM_HEARTBEAT_CAPABILITY = "streams.heartbeat.v1";
+/** The host writes a heartbeat comment on each event stream at this interval. */
+export const REMOTE_STREAM_HEARTBEAT_INTERVAL_MS = 15_000;
 export const REMOTE_CONNECTION_HEADER = "x-openducktor-connection-id";
+/** The port that remote control offers first. The host keeps the port of each enable. */
+export const DEFAULT_REMOTE_PORT = 14328;
 export const REMOTE_TERMINAL_CONNECTION_PREFIX = "openducktor-connection.";
 
 export const remoteHostDescriptorSchema = z.object({
   shell: z.enum(["electron", "web"]),
   appVersion: z.string().min(1),
   hostInstanceId: z.string().min(1),
+  /**
+   * The ID of this host in its settings file. It stays the same across restarts, so a client
+   * knows a saved host at a new address. Older hosts send none.
+   */
+  hostId: z.string().min(1).optional(),
   accessPolicy: z.literal("network_reach"),
   protocols: z.array(
     z.object({ version: z.number().int().positive(), capabilities: z.array(z.string()) }),
@@ -43,6 +58,7 @@ export const remoteFailureSchema = z.object({
     "synchronization_failed",
     "outcome_unknown",
     "consumer_overflow",
+    "port_in_use",
   ]),
   message: z.string(),
   nextAction: z.string(),
@@ -154,6 +170,20 @@ export const remoteAccessEnableInputSchema = remoteAccessFieldsSchema.superRefin
     }
   },
 );
+/**
+ * The remote control settings in the settings file. `configuration` is the listener of the last
+ * enable with the port that it bound, so a restart and the next enable keep the same address.
+ */
+export const remoteAccessSettingsSchema = z.strictObject({
+  enabled: z.boolean(),
+  configuration: remoteAccessEnableInputSchema
+    .refine((configuration) => configuration.listenPort > 0, {
+      path: ["listenPort"],
+      message: "A saved remote control listener has a fixed port.",
+    })
+    .nullable(),
+});
+export const DEFAULT_REMOTE_ACCESS_SETTINGS = { enabled: false, configuration: null } as const;
 export const remoteAccessConfigurationSchema = remoteAccessFieldsSchema.extend({
   publicEndpoint: remoteEndpointSchema,
 });
@@ -178,6 +208,7 @@ export type RemoteAccessEnableInput = z.infer<typeof remoteAccessEnableInputSche
 export type RemoteAccessConfiguration = z.infer<typeof remoteAccessConfigurationSchema>;
 export type RemoteAccessNetwork = z.infer<typeof remoteAccessNetworksSchema>[number];
 export type RemoteAccessState = z.infer<typeof remoteAccessStateSchema>;
+export type RemoteAccessSettings = z.infer<typeof remoteAccessSettingsSchema>;
 export type RemoteTaskLease = z.infer<typeof remoteTaskLeaseSchema>;
 export interface RemoteAccessBridge {
   readState(): Promise<RemoteAccessState>;

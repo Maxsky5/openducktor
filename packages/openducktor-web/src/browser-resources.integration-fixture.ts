@@ -57,6 +57,11 @@ const work = createRemoteWorkInterface(
   {
     ...router,
     hostInstanceId: "host-a",
+    hostSettings: {
+      readHostId: () => Effect.succeed("stable-host-a"),
+      readRemoteAccessSettings: () => Effect.succeed({ enabled: false, configuration: null }),
+      saveRemoteAccessSettings: () => Effect.void,
+    },
     eventBus: new BufferedHostEventBus({ report: () => {} }),
     notificationStream: notifications,
     taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
@@ -79,6 +84,7 @@ const work = createRemoteWorkInterface(
   {
     shell: "web",
     appVersion: "test-host",
+    hostId: "stable-host-a",
     listenHost: "127.0.0.1",
     publicEndpoint: "http://machine.test/remote",
     logger: { info: () => Effect.void, error: () => Effect.void, success: () => Effect.void },

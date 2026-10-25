@@ -1,8 +1,9 @@
 import {
   BufferedHostEventBus,
   createRemoteAccessController,
-  enableRemoteAccessFromEnvironment,
+  createRemoteAccessOperator,
   type RemoteAccessController,
+  type RemoteAccessOperator,
 } from "@openducktor/remote-host";
 import { registerElectronRemoteAccessIpc } from "./electron-remote-access-ipc";
 import { registerElectronHostSelectionIpc } from "./electron-host-selection-ipc";
@@ -193,6 +194,7 @@ const hostEventBus = new BufferedHostEventBus({
     ),
 });
 let remoteAccess: RemoteAccessController | null = null;
+let remoteAccessOperator: RemoteAccessOperator | null = null;
 const browserRuntime = createElectronBrowserRuntime({
   reportFailure: (operation, cause) =>
     reportElectronNonFatalFailure(`OpenDucktor browser operation '${operation}' failed.`, cause),
@@ -389,7 +391,15 @@ const prepareElectronPreReadyRuntimeEffect = (): Effect.Effect<
         reportFailure: (cause) => reportElectronNonFatalFailure("Remote transport failed", cause),
       },
     );
-    yield* enableRemoteAccessFromEnvironment(remoteAccess, process.env);
+    remoteAccessOperator = createRemoteAccessOperator(
+      remoteAccess,
+      hostCommandRouter.hostSettings,
+      {
+        reportFailure: (cause) =>
+          reportElectronNonFatalFailure("Remote control could not start", cause),
+      },
+    );
+    yield* remoteAccessOperator.restore(process.env);
     yield* browserRuntime.start(ipcMain, hostCommandRouter.browserService);
     return { hostCommandRouter };
   });
@@ -757,10 +767,10 @@ const registerIpcHandlers = (
       ),
     shutdownController.isHostShutdownStarted,
   );
-  if (remoteAccess)
+  if (remoteAccessOperator)
     registerElectronRemoteAccessIpc(
       ipcMain,
-      remoteAccess,
+      remoteAccessOperator,
       shutdownController.isHostShutdownStarted,
     );
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
