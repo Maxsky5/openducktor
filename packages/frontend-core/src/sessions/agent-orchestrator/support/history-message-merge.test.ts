@@ -66,6 +66,33 @@ const imageUserMessage = ({
   },
 });
 
+const compactionNotice = (
+  content: string,
+  status: "running" | "completed",
+  timestamp: string,
+): AgentChatMessage => {
+  const meta: Extract<
+    NonNullable<AgentChatMessage["meta"]>,
+    { kind: "session_notice"; reason: "session_compacted" }
+  > = {
+    kind: "session_notice",
+    tone: "info",
+    reason: "session_compacted",
+    title: status === "running" ? "Compacting" : "Compacted",
+    compactionStatus: status,
+  };
+  if (status === "completed") {
+    meta.summary = content;
+  }
+  return {
+    id: "session-compaction:session-1",
+    role: "system",
+    content,
+    timestamp,
+    meta,
+  };
+};
+
 describe("agent-orchestrator/support/history-message-merge", () => {
   test("deduplicates a live turn failure when hydration returns the same result", () => {
     const errorNotice = {
@@ -82,6 +109,39 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     };
 
     expect(mergedMessages([errorNotice], [errorNotice])).toEqual([errorNotice]);
+  });
+
+  test("replaces a running compaction notice with completed history", () => {
+    const running = compactionNotice("Compacting...", "running", "2026-03-01T09:00:00.000Z");
+    const completed = compactionNotice(
+      "Context after compaction",
+      "completed",
+      "2026-03-01T09:00:05.000Z",
+    );
+
+    expect(mergedMessages([completed], [running])).toEqual([completed]);
+  });
+
+  test("keeps a newer live compaction update when history completes an older notice", () => {
+    const runningAtReadStart = compactionNotice(
+      "Compacting...",
+      "running",
+      "2026-03-01T09:00:00.000Z",
+    );
+    const runningAfterRead = { ...runningAtReadStart, content: "Still compacting..." };
+    const completed = compactionNotice(
+      "Context after compaction",
+      "completed",
+      "2026-03-01T09:00:05.000Z",
+    );
+    const merged = mergeHistoryMessages(
+      EXTERNAL_SESSION_ID,
+      createSessionMessagesState(EXTERNAL_SESSION_ID, [completed]),
+      createSessionMessagesState(EXTERNAL_SESSION_ID, [runningAfterRead]),
+      createSessionMessagesState(EXTERNAL_SESSION_ID, [runningAtReadStart]),
+    );
+
+    expect(sessionMessagesToArray(createSession(merged))).toEqual([runningAfterRead]);
   });
 
   test("commits loaded history as one transcript revision", () => {
