@@ -6,7 +6,12 @@ import { z } from "zod";
 
 const workspaceRoot = process.cwd();
 
-const desktopPackageJsonPaths = new Set(["apps/electron/package.json"]);
+// App stores and desktop installers accept only numeric versions, so these packages use the base
+// version of a prerelease.
+const numericVersionPackageJsonPaths = new Set([
+  "apps/electron/package.json",
+  "apps/mobile/package.json",
+]);
 
 type Mode = "check" | "set";
 
@@ -65,7 +70,7 @@ export function deriveDesktopVersion(releaseVersion: string): string {
 }
 
 export function expectedVersionForEntry(file: string, releaseVersion: string): string {
-  if (desktopPackageJsonPaths.has(file)) {
+  if (numericVersionPackageJsonPaths.has(file)) {
     return deriveDesktopVersion(releaseVersion);
   }
 
@@ -174,7 +179,7 @@ function checkVersions(expectedReleaseVersion: string): void {
   }
 
   console.log(
-    `All release versions match ${expectedReleaseVersion}; desktop package version matches ${desktopVersion}.`,
+    `All release versions match ${expectedReleaseVersion}; Electron and mobile package versions match ${desktopVersion}.`,
   );
 }
 
@@ -191,7 +196,7 @@ function setVersions(version: string): void {
   }
 
   console.log(
-    `Updated release version to ${version}; Electron desktop package version uses ${desktopVersion}.`,
+    `Updated release version to ${version}; Electron and mobile package versions use ${desktopVersion}.`,
   );
 }
 
