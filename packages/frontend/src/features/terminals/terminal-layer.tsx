@@ -31,6 +31,8 @@ type TerminalLayerProps = {
   /** The mount key of the selected terminal, or null when the panel shows another tab. */
   activeKey: string | null;
   isVisible: boolean;
+  /** A shown view can paint before its content becomes ready for input and focus. */
+  isInteractive: boolean;
   focusRequest: number;
   /** The ID base of the panel tabs, so each viewport links to its tab. */
   tabIdBase: string;
@@ -48,6 +50,7 @@ export function TerminalLayer({
   mounts,
   activeKey,
   isVisible,
+  isInteractive,
   focusRequest,
   tabIdBase,
 }: TerminalLayerProps): ReactElement {
@@ -78,8 +81,8 @@ export function TerminalLayer({
             scopeKey={mount.scopeKey}
             tab={mount.tab}
             controller={terminals.controller}
-            focusRequest={active ? focusRequest : 0}
-            active={active}
+            focusRequest={active && isInteractive ? focusRequest : 0}
+            active={active && isInteractive}
             platform={terminals.platform}
             onRetryCreate={retryTerminalCreation}
             onLifecycle={terminals.onLifecycle}
@@ -98,7 +101,7 @@ export function TerminalLayer({
             data-terminal-viewport
             data-viewport-state={active ? "active" : "inactive"}
             aria-hidden={!active}
-            inert={!active}
+            inert={!active || !isInteractive}
             className={viewportClassName}
           >
             {viewport}

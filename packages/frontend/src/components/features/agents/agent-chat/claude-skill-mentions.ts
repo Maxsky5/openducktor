@@ -5,6 +5,16 @@ import type { AgentChatTranscriptSession } from "./agent-chat.types";
 const REFERENCE_START_BOUNDARY_PATTERN = /[\s([{"']/u;
 const REFERENCE_END_BOUNDARY_PATTERN = /[\s,.;!?)}\]}"']/u;
 
+type SkillMention = Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>;
+type SkillToken = { skill: AgentSkillReference; value: string };
+type MessageProjection = { message: AgentChatMessage; revisionKeys: string[] };
+type CatalogProjection = {
+  tokens: SkillToken[];
+  messages: WeakMap<AgentChatMessage, MessageProjection>;
+};
+
+const catalogProjections = new WeakMap<readonly AgentSkillReference[], CatalogProjection>();
+
 const hasStartBoundary = (text: string, start: number): boolean =>
   start === 0 || REFERENCE_START_BOUNDARY_PATTERN.test(text[start - 1] ?? "");
 
@@ -13,8 +23,8 @@ const hasEndBoundary = (text: string, end: number): boolean =>
 
 const readSkillMentions = (
   message: AgentChatMessage,
-  skills: readonly AgentSkillReference[],
-): Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>[] => {
+  tokens: readonly SkillToken[],
+): SkillMention[] => {
   if (message.role !== "user" || message.meta?.kind !== "user") {
     return [];
   }
@@ -33,10 +43,7 @@ const readSkillMentions = (
       });
     }
   }
-  const tokens = skills
-    .map((skill) => ({ skill, value: `/${skill.name}` }))
-    .sort((left, right) => right.value.length - left.value.length);
-  const mentions: Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>[] = [];
+  const mentions: SkillMention[] = [];
 
   for (let start = 0; start < message.content.length; start += 1) {
     if (message.content[start] !== "/" || !hasStartBoundary(message.content, start)) {
@@ -78,6 +85,29 @@ const updateRevision = (revision: number, value: string): number => {
   return nextRevision;
 };
 
+const projectMessage = (
+  message: AgentChatMessage,
+  catalog: CatalogProjection,
+): MessageProjection => {
+  const cached = catalog.messages.get(message);
+  if (cached) return cached;
+
+  const mentions = readSkillMentions(message, catalog.tokens);
+  const projection: MessageProjection = { message, revisionKeys: [] };
+  if (mentions.length > 0 && message.meta?.kind === "user") {
+    projection.message = {
+      ...message,
+      meta: { ...message.meta, parts: [...(message.meta.parts ?? []), ...mentions] },
+    };
+    projection.revisionKeys = mentions.map(
+      (mention) =>
+        `${message.id}:${mention.skill.id}:${mention.sourceText?.start}:${mention.sourceText?.end}`,
+    );
+  }
+  catalog.messages.set(message, projection);
+  return projection;
+};
+
 export const withClaudeSkillMentions = (
   session: AgentChatTranscriptSession,
   skills: readonly AgentSkillReference[],
@@ -86,27 +116,29 @@ export const withClaudeSkillMentions = (
     return session;
   }
 
+  let catalog = catalogProjections.get(skills);
+  if (!catalog) {
+    catalog = {
+      tokens: skills
+        .map((skill) => ({ skill, value: `/${skill.name}` }))
+        .sort((left, right) => right.value.length - left.value.length),
+      messages: new WeakMap(),
+    };
+    catalogProjections.set(skills, catalog);
+  }
+
   let changed = false;
   let version = session.messages.version;
   const items = session.messages.items.map((message) => {
-    const mentions = readSkillMentions(message, skills);
-    if (mentions.length === 0 || message.meta?.kind !== "user") {
+    const projection = projectMessage(message, catalog);
+    if (projection.message === message) {
       return message;
     }
     changed = true;
-    for (const mention of mentions) {
-      version = updateRevision(
-        version,
-        `${message.id}:${mention.skill.id}:${mention.sourceText?.start}:${mention.sourceText?.end}`,
-      );
+    for (const key of projection.revisionKeys) {
+      version = updateRevision(version, key);
     }
-    return {
-      ...message,
-      meta: {
-        ...message.meta,
-        parts: [...(message.meta.parts ?? []), ...mentions],
-      },
-    };
+    return projection.message;
   });
 
   if (!changed) {

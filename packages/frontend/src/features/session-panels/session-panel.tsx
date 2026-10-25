@@ -46,10 +46,7 @@ import type { PanelDragData } from "./session-panel-drop";
 import { useSessionPanelMoves } from "./session-panels-root";
 import type { SessionPanelModel } from "./use-session-panels";
 import { SessionTerminalSurface } from "./session-terminal-host";
-import {
-  useSessionViewActive,
-  useSessionViewVisit,
-} from "../session-navigation/session-view-context";
+import { useSessionViewVisit } from "../session-navigation/session-view-context";
 import { SessionViewShownActivity } from "../session-navigation/session-view-visibility";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";
@@ -83,7 +80,6 @@ export const SessionPanel = memo(function SessionPanel({
   // The content stays mounted with its kept view and hides with it, so a switch paints the panel
   // without a mount. Each visit gets fresh content, so its dialogs do not open again on return.
   const visit = useSessionViewVisit();
-  const isActive = useSessionViewActive() && isShown;
   const hasTerminalTabs = model.tabs.some((tab) => tab.kind === "terminal");
   const showsTerminalStatus = model.panel === "bottom" || hasTerminalTabs;
   return (
@@ -98,13 +94,7 @@ export const SessionPanel = memo(function SessionPanel({
           {isShown && <SessionPanelTabStrip model={model} toolTabs={toolTabs} />}
         </SessionViewShownActivity>
         {showsTerminalStatus ? <TerminalStatusMessages terminals={model.terminals} /> : null}
-        <SessionPanelBody
-          model={model}
-          toolTabs={toolTabs}
-          isShown={isShown}
-          isActive={isActive}
-          visit={visit}
-        />
+        <SessionPanelBody model={model} toolTabs={toolTabs} isShown={isShown} visit={visit} />
       </Tabs>
     </TooltipProvider>
   );
@@ -114,13 +104,11 @@ function SessionPanelBody({
   model,
   toolTabs,
   isShown,
-  isActive,
   visit,
 }: {
   model: SessionPanelModel;
   toolTabs: ToolTabViews | undefined;
   isShown: boolean;
-  isActive: boolean;
   visit: number;
 }): ReactElement {
   // A panel that slides out after its last tab closed keeps its empty area blank.
@@ -128,8 +116,8 @@ function SessionPanelBody({
   const isLoadingEmptyBottom = isEmpty && model.panel === "bottom" && model.terminals.isLoading;
   // The terminal host keeps a surface only while its model stays the same object.
   const surfaceModel = useMemo(
-    () => (isActive || !model.isVisible ? model : { ...model, isVisible: false }),
-    [isActive, model],
+    () => (isShown || !model.isVisible ? model : { ...model, isVisible: false }),
+    [isShown, model],
   );
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">

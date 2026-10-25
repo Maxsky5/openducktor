@@ -38,29 +38,43 @@ const tab: TerminalTab = {
   },
 };
 
-test("task views share one viewport through owner eviction and panel closure", () => {
+test("task views share one viewport from the first shown frame through eviction and panel closure", () => {
   const model = createSessionPanelFixture({
+    panel: "bottom",
+    tabs: [{ id: tab.tabId, kind: "terminal", terminal: tab }],
     selectedTabId: tab.tabId,
     terminals: createTerminalSessionsFixture({ scopeKey }),
     terminalMounts: [{ key: "terminal", scopeKey, tab, value: tab.tabId }],
     activeTerminalKey: "terminal",
   });
-  const content = (ids: string[], active: string, panelOpen = true) => (
-    <SessionTerminalHost viewIds={ids}>
-      {ids.map((id) => (
-        <SessionViewContext key={id} value={{ id, isActive: id === active }}>
-          <div data-testid={id}>{panelOpen && <SessionTerminalSurface model={model} />}</div>
-        </SessionViewContext>
-      ))}
-    </SessionTerminalHost>
+  const content = (ids: string[], active: string, panelOpen = true, shown = active) => (
+    <QueryProvider>
+      <SessionTerminalHost viewIds={ids}>
+        {ids.map((id) => (
+          <SessionViewContext key={id} value={{ id, isActive: id === active }}>
+            <SessionViewShownContext value={id === shown}>
+              <div data-testid={id} style={{ display: id === shown ? undefined : "none" }}>
+                {panelOpen && <SessionPanel model={model} />}
+              </div>
+            </SessionViewShownContext>
+          </SessionViewContext>
+        ))}
+      </SessionTerminalHost>
+    </QueryProvider>
   );
   const view = render(content(["planner", "build"], "planner"));
   try {
     const viewport = view.container.querySelector("[data-terminal-viewport]");
     expect(view.container.querySelectorAll("[data-terminal-viewport]")).toHaveLength(1);
     expect(view.getByTestId("planner").contains(viewport)).toBe(true);
+    // Retained session views show immediately, then change content activity after that paint.
+    view.rerender(content(["planner", "build"], "planner", true, "build"));
+    expect(view.getByTestId("build").contains(viewport)).toBe(true);
+    expect(viewport?.getAttribute("data-viewport-state")).toBe("active");
+    expect(viewport?.hasAttribute("inert")).toBe(true);
     view.rerender(content(["planner", "build"], "build"));
     expect(view.getByTestId("build").contains(viewport)).toBe(true);
+    expect(viewport?.hasAttribute("inert")).toBe(false);
     view.rerender(content(["build"], "build"));
     expect(viewport?.isConnected).toBe(true);
     view.rerender(content(["build"], "build", false));
@@ -280,7 +294,9 @@ test.each(["discovered", "created", "stale-failed", "evict-created"] as const)(
         <SessionTerminalHost viewIds={ids}>
           {ids.map((id) => (
             <SessionViewContext key={id} value={{ id, isActive: id === active }}>
-              <Conversation id={id} />
+              <SessionViewShownContext value={id === active}>
+                <Conversation id={id} />
+              </SessionViewShownContext>
             </SessionViewContext>
           ))}
         </SessionTerminalHost>
