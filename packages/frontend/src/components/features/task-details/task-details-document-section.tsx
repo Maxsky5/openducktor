@@ -9,7 +9,8 @@ import {
   useIssueImageComponents,
 } from "@/components/features/issue-source/issue-markdown-renderer";
 
-import { TaskDetailsCollapsibleCard } from "./task-details-collapsible-card";
+import { CollapsibleCard } from "@/components/ui/collapsible-card";
+import { humanDate } from "@/lib/task-display";
 
 const TaskDetailsMarkdownContent = lazy(async () => {
   const module = await import("./task-details-markdown-content");
@@ -63,10 +64,10 @@ export const TaskDetailsDocumentSection = memo(
     return (
       <>
         {hasContent ? (
-          <TaskDetailsCollapsibleCard
+          <CollapsibleCard
             title={title}
             icon={icon}
-            updatedAt={updatedAt}
+            summary={updatedAt ? humanDate(updatedAt) : null}
             defaultExpanded={defaultExpanded}
             renderChildren={({ isExpanded }) => (
               <Suspense
@@ -103,16 +104,16 @@ export const TaskDetailsDocumentSection = memo(
             }
           />
         ) : (
-          <TaskDetailsCollapsibleCard
+          <CollapsibleCard
             title={title}
             icon={icon}
-            updatedAt={updatedAt}
+            summary={updatedAt ? humanDate(updatedAt) : null}
             defaultExpanded={defaultExpanded}
           >
             <p className="rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
               {empty}
             </p>
-          </TaskDetailsCollapsibleCard>
+          </CollapsibleCard>
         )}
         {modalSnapshot ? (
           <MarkdownPreviewModal

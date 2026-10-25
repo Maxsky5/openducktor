@@ -25,6 +25,7 @@ import {
 import {
   type ReactElement,
   type ReactNode,
+  type RefObject,
   useCallback,
   useMemo,
   useRef,
@@ -33,11 +34,13 @@ import {
 } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CollapsibleCard } from "@/components/ui/collapsible-card";
 import { useDialogPresence } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { formatElapsedAgo, useMinuteClock } from "@/lib/relative-time";
 import { humanDate } from "@/lib/task-display";
+import { cn } from "@/lib/utils";
 import { ArtifactActionDialog, type ArtifactAction } from "./artifact-action-dialog";
 import { formatFileSize } from "./artifact-file-info";
 import { TaskArtifactPreview } from "./task-artifact-preview";
@@ -48,6 +51,8 @@ export type TaskArtifactsProps = {
   taskId: string;
   workspaceId?: string;
   artifactSummary?: TaskCard["artifactSummary"];
+  /** `panel` fills its parent. `section` is a collapsible card that grows with its content. */
+  layout?: "panel" | "section";
 };
 
 export type ArtifactSelection =
@@ -92,6 +97,7 @@ function ArtifactCollection({
   taskId,
   workspaceId,
   artifactSummary,
+  layout = "panel",
   selection,
   onSelectionChange,
 }: TaskArtifactsViewProps): ReactElement {
@@ -131,41 +137,54 @@ function ArtifactCollection({
       target?.focus();
     });
   }, [selectedId, onSelectionChange]);
-  return (
-    <section ref={section} aria-label="Task artifacts" className="flex h-full min-h-0 flex-col">
-      {selectedId ? (
-        <ArtifactContent
-          key={selectedId}
-          repoPath={repoPath}
-          taskId={taskId}
-          artifactId={selectedId}
-          title={selected?.name ?? selectionTitle(selection)}
-          {...(workspaceId ? { workspaceId } : {})}
-          artifact={selected}
-          workflowKind={selection.kind === "workflow" ? selection.workflowKind : undefined}
-          canManage={canManage}
-          onBack={back}
-          onAction={openAction}
-        />
-      ) : (
-        <>
-          <CollectionHeader
-            selection={selection}
-            canManage={canManage}
-            onBack={back}
-            onAction={openAction}
-          />
-          <div className="min-h-0 flex-1 overflow-auto p-3">
-            {isAbsentWorkflow ? (
-              <UnavailableSelection selection={selection} />
-            ) : (
-              <CollectionBody collection={collection} selection={selection} onSelect={select} />
-            )}
-          </div>
-        </>
-      )}
-      <CollectionNotice collection={collection} />
-      {actionPresence && action ? (
+  const content = selectedId ? (
+    <ArtifactContent
+      key={selectedId}
+      repoPath={repoPath}
+      taskId={taskId}
+      artifactId={selectedId}
+      title={selected?.name ?? selectionTitle(selection)}
+      {...(workspaceId ? { workspaceId } : {})}
+      artifact={selected}
+      workflowKind={selection.kind === "workflow" ? selection.workflowKind : undefined}
+      canManage={canManage}
+      onBack={back}
+      onAction={openAction}
+    />
+  ) : null;
+  const body = isAbsentWorkflow ? (
+    <UnavailableSelection selection={selection} />
+  ) : (
+    <CollectionBody
+      collection={collection}
+      selection={selection}
+      layout={layout}
+      onSelect={select}
+    />
+  );
+  const header = (
+    <CollectionHeader
+      selection={selection}
+      canManage={canManage}
+      onBack={back}
+      onAction={openAction}
+    />
+  );
+  const restoreActionFocus = useCallback((event: Event) => {
+    event.preventDefault();
+    const target = actionTrigger.current?.isConnected
+      ? actionTrigger.current
+      : section.current?.querySelector<HTMLButtonElement>("button");
+    target?.focus();
+  }, []);
+  const frame: ArtifactFrameProps = {
+    sectionRef: section,
+    content,
+    header,
+    body,
+    collection,
+    dialog:
+      actionPresence && action ? (
         <ArtifactActionDialog
           key={action.kind === "create" ? "create" : `${action.kind}:${action.artifact.artifactId}`}
           action={action}
@@ -174,16 +193,116 @@ function ArtifactCollection({
           canManage={canManage}
           open={actionOpen}
           onOpenChange={setActionOpen}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            const target = actionTrigger.current?.isConnected
-              ? actionTrigger.current
-              : section.current?.querySelector<HTMLButtonElement>("button");
-            target?.focus();
-          }}
+          onCloseAutoFocus={restoreActionFocus}
         />
-      ) : null}
+      ) : null,
+  };
+  if (layout === "section")
+    return (
+      <ArtifactSectionFrame
+        {...frame}
+        isCollection={selection.kind === "collection"}
+        headerAction={canManage ? <AddArtifactButton size="xs" onAction={openAction} /> : null}
+      />
+    );
+  return <ArtifactPanelFrame {...frame} />;
+}
+
+type ArtifactFrameProps = {
+  sectionRef: RefObject<HTMLElement | null>;
+  content: ReactElement | null;
+  header: ReactElement;
+  body: ReactElement;
+  collection: UseQueryResult<TaskArtifactCollection>;
+  dialog: ReactElement | null;
+};
+
+function ArtifactPanelFrame({
+  sectionRef,
+  content,
+  header,
+  body,
+  collection,
+  dialog,
+}: ArtifactFrameProps): ReactElement {
+  return (
+    <section ref={sectionRef} aria-label="Task artifacts" className="flex h-full min-h-0 flex-col">
+      {content ?? (
+        <>
+          {header}
+          <div className="min-h-0 flex-1 overflow-auto p-3">{body}</div>
+        </>
+      )}
+      <CollectionNotice collection={collection} className="border-t border-border px-3 py-2" />
+      {dialog}
     </section>
+  );
+}
+
+function ArtifactSectionFrame({
+  sectionRef,
+  content,
+  header,
+  body,
+  collection,
+  dialog,
+  isCollection,
+  headerAction,
+}: ArtifactFrameProps & {
+  isCollection: boolean;
+  headerAction: ReactElement | null;
+}): ReactElement {
+  const count = collection.data?.artifacts.length ?? 0;
+  return (
+    <>
+      <CollapsibleCard
+        title="Artifacts"
+        icon={<Files className="size-3.5" aria-hidden="true" />}
+        summary={count > 0 ? String(count) : null}
+        headerAction={headerAction}
+      >
+        <section ref={sectionRef} aria-label="Task artifacts" className="flex flex-col gap-2">
+          {isCollection ? (
+            <div className="-mx-2">{body}</div>
+          ) : (
+            <div
+              className={cn(
+                "flex flex-col overflow-hidden rounded-lg border border-border",
+                content && "h-[min(60dvh,36rem)] min-h-64",
+              )}
+            >
+              {content ?? (
+                <>
+                  {header}
+                  <div className="p-3">{body}</div>
+                </>
+              )}
+            </div>
+          )}
+          <CollectionNotice collection={collection} />
+        </section>
+      </CollapsibleCard>
+      {dialog}
+    </>
+  );
+}
+
+function AddArtifactButton({
+  size,
+  onAction,
+}: {
+  size: "xs" | "sm";
+  onAction: (action: ArtifactAction, trigger: HTMLElement) => void;
+}): ReactElement {
+  return (
+    <Button
+      variant="ghost"
+      size={size}
+      onClick={(event) => onAction({ kind: "create" }, event.currentTarget)}
+    >
+      <Plus aria-hidden="true" />
+      Add artifact
+    </Button>
   );
 }
 
@@ -203,30 +322,23 @@ function CollectionHeader({
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
       {hasSelection ? <BackButton onClick={onBack} /> : null}
       <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{selectionTitle(selection)}</h2>
-      {canManage && !hasSelection ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(event) => onAction({ kind: "create" }, event.currentTarget)}
-        >
-          <Plus aria-hidden="true" />
-          Add artifact
-        </Button>
-      ) : null}
+      {canManage && !hasSelection ? <AddArtifactButton size="sm" onAction={onAction} /> : null}
     </div>
   );
 }
 
 function CollectionNotice({
   collection,
+  className,
 }: {
   collection: UseQueryResult<TaskArtifactCollection>;
+  className?: string;
 }): ReactElement | null {
   if (collection.error)
     return (
       <div
         role="alert"
-        className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2 text-xs text-destructive"
+        className={cn("flex shrink-0 items-center gap-2 text-xs text-destructive", className)}
       >
         <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           Cannot load artifacts. {collection.error.message}
@@ -244,7 +356,9 @@ function CollectionNotice({
     );
   if (collection.data && !collection.data.canManageFree)
     return (
-      <p className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+      <p
+        className={cn("flex shrink-0 items-center gap-2 text-xs text-muted-foreground", className)}
+      >
         <Lock className="size-3" aria-hidden="true" />
         This task is closed. Free artifacts are read-only.
       </p>
@@ -255,17 +369,25 @@ function CollectionNotice({
 function CollectionBody({
   collection,
   selection,
+  layout,
   onSelect,
 }: {
   collection: UseQueryResult<TaskArtifactCollection>;
   selection: ArtifactSelection;
+  layout: NonNullable<TaskArtifactsProps["layout"]>;
   onSelect: (id: string) => void;
 }): ReactElement | null {
   if (collection.isPending) return <CollectionLoading />;
   if (selection.kind !== "collection")
     return collection.isSuccess ? <UnavailableSelection selection={selection} /> : null;
   if (!collection.data) return null;
-  if (collection.data.artifacts.length === 0 && collection.isSuccess)
+  if (collection.data.artifacts.length === 0 && collection.isSuccess) {
+    if (layout === "section")
+      return (
+        <p className="mx-2 rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+          No artifacts yet.
+        </p>
+      );
     return (
       <div className="flex flex-col items-center gap-3 px-5 py-12 text-center">
         <Files className="size-7 text-muted-foreground" aria-hidden="true" />
@@ -277,7 +399,14 @@ function CollectionBody({
         </div>
       </div>
     );
-  return <ArtifactList artifacts={collection.data.artifacts} onSelect={onSelect} />;
+  }
+  return (
+    <ArtifactList
+      artifacts={collection.data.artifacts}
+      compact={layout === "section"}
+      onSelect={onSelect}
+    />
+  );
 }
 
 function UnavailableSelection({ selection }: { selection: ArtifactSelection }): ReactElement {
@@ -292,9 +421,11 @@ function UnavailableSelection({ selection }: { selection: ArtifactSelection }): 
 
 function ArtifactList({
   artifacts,
+  compact,
   onSelect,
 }: {
   artifacts: TaskArtifact[];
+  compact: boolean;
   onSelect: (id: string) => void;
 }): ReactElement {
   const workflowOrder = { spec: 0, plan: 1, qaReport: 2 };
@@ -313,23 +444,32 @@ function ArtifactList({
     },
   ];
   return (
-    <div className="flex flex-col gap-5">
+    <div className={cn("flex flex-col", compact ? "gap-2" : "gap-5")}>
       {groups.map(({ name, items }) => {
         if (items.length === 0) return null;
         return (
           <div key={name} className="flex flex-col gap-1">
-            <h3 className="px-2 pb-1 text-xs font-medium text-muted-foreground">{name}</h3>
+            <h3
+              className={cn("px-2 text-xs font-medium text-muted-foreground", !compact && "pb-1")}
+            >
+              {name}
+            </h3>
             <ul className="flex flex-col gap-0.5">
               {items.map((artifact) => (
                 <li key={artifact.artifactId}>
                   <Button
                     variant="ghost"
                     data-artifact-id={artifact.artifactId}
-                    className="h-auto w-full min-w-0 justify-start gap-3 px-2 py-2.5 text-left"
+                    className={cn(
+                      "h-auto w-full min-w-0 justify-start gap-3 px-2 text-left",
+                      compact ? "py-1.5" : "py-2.5",
+                    )}
                     onClick={() => onSelect(artifact.artifactId)}
                   >
                     <ArtifactIcon artifact={artifact} />
-                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span
+                      className={cn("flex min-w-0 flex-1 flex-col", compact ? "gap-0.5" : "gap-1")}
+                    >
                       <span className="truncate text-sm font-medium">{artifact.name}</span>
                       <ArtifactMetadata artifact={artifact} />
                     </span>

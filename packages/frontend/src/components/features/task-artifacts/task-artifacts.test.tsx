@@ -41,7 +41,12 @@ const content = (artifact: TaskArtifact) => ({
   nextByteOffset: null,
   totalBytes: 5,
 });
-const setup = (artifacts: TaskArtifact[], canManageFree = true, selection?: ArtifactSelection) => {
+const setup = (
+  artifacts: TaskArtifact[],
+  canManageFree = true,
+  selection?: ArtifactSelection,
+  layout: "panel" | "section" = "panel",
+) => {
   const onSelectionChange = mock((_selection: ArtifactSelection) => {});
   const read = mock(async ({ artifactId }: { artifactId: string }) => {
     const artifact = artifacts.find((item) => item.artifactId === artifactId);
@@ -82,7 +87,7 @@ const setup = (artifacts: TaskArtifact[], canManageFree = true, selection?: Arti
             selection,
             onSelectionChange,
           })
-        : createElement(TaskArtifacts, { repoPath: "/repo", taskId: "task-1" }),
+        : createElement(TaskArtifacts, { repoPath: "/repo", taskId: "task-1", layout }),
     ),
   );
   const select = (next: ArtifactSelection) =>
@@ -676,5 +681,53 @@ describe("task artifacts collection", () => {
       view.unmount();
       view.connection.queryClient.clear();
     }
+  });
+
+  describe("section layout", () => {
+    test("starts collapsed with a count, and Add artifact does not toggle the card", async () => {
+      const view = setup(
+        [freeArtifact(), freeArtifact("file-2", "Other notes")],
+        true,
+        undefined,
+        "section",
+      );
+      try {
+        const toggle = screen.getByRole("button", { name: /^Artifacts/ });
+        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+        await waitFor(() => expect(toggle.textContent).toBe("Artifacts2"));
+        fireEvent.click(screen.getByRole("button", { name: "Add artifact" }));
+        expect(await screen.findByRole("dialog", { name: "Add artifact" })).toBeTruthy();
+        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      } finally {
+        view.unmount();
+        view.connection.queryClient.clear();
+      }
+    });
+
+    test("expands to a list and opens a preview with a way back", async () => {
+      const view = setup([freeArtifact()], true, undefined, "section");
+      try {
+        fireEvent.click(screen.getByRole("button", { name: /^Artifacts/ }));
+        fireEvent.click(await screen.findByRole("button", { name: /^Notes / }));
+        expect(await screen.findByText("hello")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "All artifacts" }));
+        expect(await screen.findByRole("button", { name: /^Notes / })).toBeTruthy();
+      } finally {
+        view.unmount();
+        view.connection.queryClient.clear();
+      }
+    });
+
+    test("shows a one-line empty state and no Add artifact on a closed task", async () => {
+      const view = setup([], false, undefined, "section");
+      try {
+        expect(await screen.findByText("No artifacts yet.")).toBeTruthy();
+        expect(screen.getByText("This task is closed. Free artifacts are read-only.")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Add artifact" })).toBeNull();
+      } finally {
+        view.unmount();
+        view.connection.queryClient.clear();
+      }
+    });
   });
 });

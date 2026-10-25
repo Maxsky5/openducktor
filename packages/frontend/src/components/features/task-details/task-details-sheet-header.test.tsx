@@ -6,6 +6,18 @@ import { createGitProviderContextFixture } from "@/test-utils/shared-test-fixtur
 import { TaskDetailsSheetHeader } from "./task-details-sheet-header";
 
 describe("TaskDetailsSheetHeader", () => {
+  test("shows when the task was created and last updated", () => {
+    const task = createTaskCardFixture({
+      createdAt: "2026-03-10T08:00:00.000Z",
+      updatedAt: "2026-03-12T12:24:09.000Z",
+    });
+    const html = renderToStaticMarkup(
+      createElement(TaskDetailsSheetHeader, { task, subtasksCount: 0, taskLabels: [] }),
+    );
+    expect(html).toContain('Created <time dateTime="2026-03-10T08:00:00.000Z"');
+    expect(html).toContain('Updated <time dateTime="2026-03-12T12:24:09.000Z"');
+  });
+
   test("hides Detect PR without provider support", () => {
     const task = createTaskCardFixture({ id: "TASK-3", status: "human_review" });
     const html = renderToStaticMarkup(

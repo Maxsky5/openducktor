@@ -23,7 +23,7 @@ export function TaskDetailsSheetBody({
   subtasks,
 }: TaskDetailsSheetBodyProps): ReactElement {
   return (
-    <div className="space-y-3 px-5 py-4">
+    <div className="space-y-2 px-5 py-4">
       <TaskDetailsDocumentSection
         key={`${task.id}:description`}
         icon={DESCRIPTION_ICON}
@@ -55,13 +55,12 @@ export function TaskDetailsSheetBody({
           : {})}
       />
       {repoPath ? (
-        <div className="h-[min(60dvh,36rem)] min-h-64 overflow-hidden rounded-lg border border-border">
-          <TaskArtifacts
-            repoPath={repoPath}
-            taskId={task.id}
-            {...(workspaceId ? { workspaceId } : {})}
-          />
-        </div>
+        <TaskArtifacts
+          layout="section"
+          repoPath={repoPath}
+          taskId={task.id}
+          {...(workspaceId ? { workspaceId } : {})}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">Select a workspace to read artifacts.</p>
       )}
