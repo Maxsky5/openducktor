@@ -1,27 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import {
+  createLoadTimeFixtureFolder,
+  writeCheckedExecutable,
+} from "../../test-support/checked-executable";
 import { createDefaultGitRunner, GIT_OUTPUT_ENCODING_FIELD } from "./git-command-runner";
+
+// The fake Git command is written while this file loads, as `writeCheckedExecutable` explains.
+const fakeGitFolder = await createLoadTimeFixtureFolder("odt-git-runner-command-");
+const fakeGitCommand = path.join(fakeGitFolder, process.platform === "win32" ? "git.cmd" : "git");
+if (process.platform === "win32") {
+  await writeFile(fakeGitCommand, "@echo off\r\necho fake-git:%~1:%~2:%GIT_TERMINAL_PROMPT%\r\n");
+} else {
+  await writeCheckedExecutable(
+    fakeGitCommand,
+    '#!/bin/sh\nprintf \'fake-git:%s:%s:%s\\n\' "$1" "$2" "$GIT_TERMINAL_PROMPT"\n',
+  );
+}
 
 const withFakeGitCommand = async (run: (root: string, command: string) => Promise<void>) => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-git-runner-"));
   try {
-    const command =
-      process.platform === "win32" ? path.join(root, "git.cmd") : path.join(root, "git");
-
-    if (process.platform === "win32") {
-      await writeFile(command, "@echo off\r\necho fake-git:%~1:%~2:%GIT_TERMINAL_PROMPT%\r\n");
-    } else {
-      await writeFile(
-        command,
-        '#!/bin/sh\nprintf \'fake-git:%s:%s:%s\\n\' "$1" "$2" "$GIT_TERMINAL_PROMPT"\n',
-      );
-      await chmod(command, 0o755);
-    }
-
-    await run(root, command);
+    await run(root, fakeGitCommand);
   } finally {
     await rm(root, { force: true, recursive: true });
   }

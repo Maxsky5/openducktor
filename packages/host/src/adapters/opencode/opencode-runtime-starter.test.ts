@@ -1134,7 +1134,8 @@ describe("createOpenCodeRuntimeStarter", () => {
       }
       await removeTestDirectory(root);
     }
-  });
+    // Starts and force-stops a real fake OpenCode process, which can outlast the host budget.
+  }, 10_000);
 
   test("rejects an empty saved executable path before it starts a process", async () => {
     const starter = createOpenCodeRuntimeStarter({});
